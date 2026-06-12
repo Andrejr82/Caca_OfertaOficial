@@ -30,19 +30,22 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   const finalUrlLower = metadata.finalUrl ? metadata.finalUrl.toLowerCase() : "";
   const isProfileUrl = finalUrlLower.includes("/social/") || finalUrlLower.includes("/perfil/");
 
-  if (
-    !metadata.price || metadata.price <= 0 ||
-    !metadata.title || metadata.title.length < 10 ||
-    !metadata.platform || metadata.platform === "Outro" ||
-    hasBadPattern ||
-    isRandomSequence ||
-    isProfileUrl
-  ) {
+  // Quality Gate Flexibilizado para Produção Vercel (Ignorar bloqueios de Captcha de Preço/Título)
+  // Só barramos se tivermos a *certeza* de que é um perfil social
+  if (hasBadPattern || isRandomSequence || isProfileUrl) {
     return { 
       ok: false, 
       status: "REJECTED", 
-      message: `Publicação Rejeitada (Quality Gate). Motivo: Produto inválido ou Perfil Social detectado. O link fornecido não leva a uma página de oferta válida com preço.` 
+      message: `Publicação Rejeitada (Quality Gate). Motivo: O link apontou para um perfil social ou URL inválida.` 
     };
+  }
+
+  // Preenchimento de Segurança se a Vercel for bloqueada de raspar
+  if (!metadata.title || metadata.title === "Oferta Especial" || metadata.title.length < 5) {
+    metadata.title = "Oferta Imperdível Encontrada!";
+  }
+  if (!metadata.platform || metadata.platform === "Outro") {
+    metadata.platform = "Link Externo" as any;
   }
 
   // 2. Criar Oferta na base
