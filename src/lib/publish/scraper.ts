@@ -19,42 +19,19 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
     
-    // Use Googlebot user agent to bypass Mercado Livre Captcha / Account Verification
+    // Use WhatsApp user agent to bypass Mercado Livre Cloudflare/WAF block on Vercel IPs
+    // Social media crawlers usually bypass aggressive bot checks and receive OGP data perfectly.
     const response = await fetch(url, {
       redirect: "follow",
       signal: controller.signal,
       headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        "User-Agent": "WhatsApp/2.21.19.21 A",
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
       }
     });
     
     clearTimeout(timeoutId);
-
-    // Bypassing explícito para links Mercado Livre usando a API oficial do Meli
-    // A Vercel é barrada pelo Captcha (403), então evitamos o parser HTML.
-    const decodedUrl = decodeURIComponent(url);
-    const mlbMatch = decodedUrl.match(/MLB-?\d+/i);
-    
-    if (mlbMatch) {
-      const mlbId = mlbMatch[0].replace("-", "").toUpperCase();
-      try {
-        const mlApiRes = await fetch(`https://api.mercadolibre.com/items/${mlbId}`);
-        if (mlApiRes.ok) {
-          const mlData = await mlApiRes.json();
-          return {
-            title: mlData.title,
-            platform: "Mercado Livre",
-            imageUrl: mlData.pictures && mlData.pictures.length > 0 ? mlData.pictures[0].url : undefined,
-            price: mlData.price,
-            finalUrl: url // Mantém original
-          };
-        }
-      } catch (e) {
-        console.error("Falha ao usar ML API bypass", e);
-      }
-    }
 
     if (response.ok) {
       finalUrl = response.url;
@@ -105,6 +82,16 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
         const mlPriceMatch = html.match(/<span\s+class=["']andes-money-amount__fraction["']>([^<]+)<\/span>/i);
         if (mlPriceMatch && mlPriceMatch[1]) {
           price = parseFloat(mlPriceMatch[1].replace(/\./g, "").replace(",", "."));
+        }
+      }
+
+      // Se o ML retornou a versão Light/OGP para o WhatsApp, o preço não estará no HTML body
+      // Mas sim injetado no final do title: "Nome do Produto - R$ 99,90"
+      if (!price && title) {
+        const titlePriceMatch = title.match(/-\s*R\$\s*(\d+(?:[.,]\d+)?)/i);
+        if (titlePriceMatch) {
+           price = parseFloat(titlePriceMatch[1].replace(/\./g, "").replace(",", "."));
+           title = title.replace(titlePriceMatch[0], "").trim();
         }
       }
     }
