@@ -32,6 +32,30 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
     
     clearTimeout(timeoutId);
 
+    // Bypassing explícito para links Mercado Livre usando a API oficial do Meli
+    // A Vercel é barrada pelo Captcha (403), então evitamos o parser HTML.
+    const decodedUrl = decodeURIComponent(url);
+    const mlbMatch = decodedUrl.match(/MLB-?\d+/i);
+    
+    if (mlbMatch) {
+      const mlbId = mlbMatch[0].replace("-", "").toUpperCase();
+      try {
+        const mlApiRes = await fetch(`https://api.mercadolibre.com/items/${mlbId}`);
+        if (mlApiRes.ok) {
+          const mlData = await mlApiRes.json();
+          return {
+            title: mlData.title,
+            platform: "Mercado Livre",
+            imageUrl: mlData.pictures && mlData.pictures.length > 0 ? mlData.pictures[0].url : undefined,
+            price: mlData.price,
+            finalUrl: url // Mantém original
+          };
+        }
+      } catch (e) {
+        console.error("Falha ao usar ML API bypass", e);
+      }
+    }
+
     if (response.ok) {
       finalUrl = response.url;
       const html = await response.text();
