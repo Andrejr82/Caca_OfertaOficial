@@ -1,0 +1,187 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import {
+  BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
+  Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
+  PanelLeftOpen, LogOut, Sparkles, Zap
+} from "lucide-react";
+import { signOutAction } from "@/lib/auth/actions";
+import { officialBrand } from "@/lib/env";
+import { useSidebar } from "./sidebar-provider";
+
+const navSections = [
+  {
+    title: "Principal",
+    items: [
+      { href: "/dashboard", label: "Dashboard", icon: BarChart3 }
+    ]
+  },
+  {
+    title: "Canais",
+    items: [
+      { href: "/instagram", label: "Instagram", icon: Instagram },
+      { href: "/telegram", label: "Telegram", icon: Bot },
+      { href: "/facebook", label: "Facebook", icon: Facebook },
+      { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle }
+    ]
+  },
+  {
+    title: "Marketing",
+    items: [
+      { href: "/publish", label: "Publicação Expressa", icon: Zap },
+      { href: "/offers", label: "Ofertas", icon: ShoppingBag },
+      { href: "/tracking", label: "Tracking", icon: Link2 },
+      { href: "/sales", label: "Vendas", icon: Wallet }
+    ]
+  },
+  {
+    title: "Sistema",
+    items: [
+      { href: "/messages", label: "Mensagens", icon: MessageSquareText },
+      { href: "/settings", label: "Configurações", icon: Settings }
+    ]
+  }
+];
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const { isOpen, toggle } = useSidebar();
+  const pathname = usePathname();
+
+  return (
+    <div className="flex min-h-screen">
+      {/* ─── Sidebar ─── */}
+      <aside
+        className="glass-sidebar fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200 ease-in-out"
+        style={{ width: isOpen ? "var(--sidebar-width)" : "var(--sidebar-collapsed)" }}
+      >
+        {/* Logo Area */}
+        <div className="flex h-16 items-center gap-3 border-b border-white/[0.04] px-4">
+          <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-sm font-black text-white shadow-lg shadow-emerald-500/20">
+            <Sparkles size={18} />
+          </span>
+          {isOpen && (
+            <span className="animate-slideRight overflow-hidden">
+              <span className="block text-sm font-extrabold tracking-tight text-white">
+                {officialBrand.appName}
+              </span>
+              <span className="block text-[10px] font-medium text-white/40">
+                {officialBrand.instagram}
+              </span>
+            </span>
+          )}
+        </div>
+
+        {/* Navigation */}
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
+          {navSections.map((section) => (
+            <div key={section.title} className="mb-5">
+              {isOpen && (
+                <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.12em] text-white/25">
+                  {section.title}
+                </p>
+              )}
+              <ul className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = pathname === item.href;
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        title={!isOpen ? item.label : undefined}
+                        className={`
+                          group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold
+                          transition-all duration-150
+                          ${isActive
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
+                          }
+                        `}
+                      >
+                        {/* Active indicator bar */}
+                        {isActive && (
+                          <span className="absolute left-0 top-1/2 h-5 w-[3px] -translate-y-1/2 rounded-r-full bg-emerald-400 shadow-lg shadow-emerald-400/30" />
+                        )}
+                        <Icon
+                          size={18}
+                          className={`flex-shrink-0 transition-colors ${isActive ? "text-emerald-400" : "text-white/35 group-hover:text-white/60"}`}
+                        />
+                        {isOpen && (
+                          <span className="truncate">{item.label}</span>
+                        )}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        {/* Bottom Actions */}
+        <div className="border-t border-white/[0.04] p-3 space-y-1">
+          {/* Collapse Toggle */}
+          <button
+            onClick={toggle}
+            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold text-white/40 transition-colors hover:bg-white/[0.04] hover:text-white/70"
+            title={isOpen ? "Recolher menu" : "Expandir menu"}
+          >
+            {isOpen ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+            {isOpen && <span>Recolher</span>}
+          </button>
+
+          {/* Sign Out */}
+          <form action={signOutAction}>
+            <button
+              type="submit"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold text-white/40 transition-colors hover:bg-red-500/10 hover:text-red-400"
+              title="Sair"
+            >
+              <LogOut size={18} />
+              {isOpen && <span>Sair</span>}
+            </button>
+          </form>
+        </div>
+      </aside>
+
+      {/* ─── Main Content ─── */}
+      <div
+        className="flex-1 min-w-0 overflow-hidden transition-all duration-200 ease-in-out"
+        style={{ marginLeft: isOpen ? "var(--sidebar-width)" : "var(--sidebar-collapsed)" }}
+      >
+        {/* Top Bar */}
+        <header
+          className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.04] px-6"
+          style={{
+            height: "var(--topbar-height)",
+            background: "rgba(6, 10, 19, 0.75)",
+            backdropFilter: "blur(16px)"
+          }}
+        >
+          <div className="flex items-center gap-2 text-sm text-white/40">
+            <BarChart3 size={14} />
+            <span className="font-medium">Caça Oferta</span>
+            <span className="text-white/15">/</span>
+            <span className="font-semibold text-white/70 capitalize">
+              {pathname.split("/").filter(Boolean).pop() || "dashboard"}
+            </span>
+          </div>
+          <div className="text-xs font-medium text-white/30 tabular-nums">
+            {new Date().toLocaleDateString("pt-BR", {
+              weekday: "long",
+              day: "numeric",
+              month: "long"
+            })}
+          </div>
+        </header>
+
+        {/* Page Content */}
+        <main className="p-6 lg:p-8 overflow-x-hidden overflow-y-auto" style={{ maxHeight: 'calc(100vh - var(--topbar-height))' }}>
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}

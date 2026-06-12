@@ -1,0 +1,22 @@
+.next/
+node_modules/
+out/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+__pycache__/
+*.pyc
+.vercel/
+
+# OS and Caches
+.DS_Store
+desktop.ini
+tsconfig.tsbuildinfo
+.eslintcache
+
+# App specific
+**/.baileys_auth/
+**/auth_info_baileys/

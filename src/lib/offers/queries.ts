@@ -1,0 +1,191 @@
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { AffiliateLink, Offer, Sale } from "@/types/domain";
+
+export async function getCurrentUserId() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return null;
+  const {
+    data: { user }
+  } = await supabase.auth.getUser();
+  return user?.id ?? null;
+}
+
+export async function listOffers() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [] as Offer[];
+
+  const { data } = await supabase.from("offers").select("*").order("created_at", { ascending: false }).limit(100);
+  return (data || []) as Offer[];
+}
+
+export async function getOffer(id: string) {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return null;
+
+  const { data } = await supabase.from("offers").select("*").eq("id", id).single();
+  return data as Offer | null;
+}
+
+export async function listAffiliateLinks() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [] as AffiliateLink[];
+
+  const { data } = await supabase.from("affiliate_links").select("*").order("created_at", { ascending: false }).limit(100);
+  return (data || []) as AffiliateLink[];
+}
+
+export async function listSales() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [] as Sale[];
+
+  const { data } = await supabase.from("sales").select("*").order("sold_at", { ascending: false }).limit(100);
+  return (data || []) as Sale[];
+}
+
+export async function getDashboardData() {
+  const offers = await listOffers();
+  const links = await listAffiliateLinks();
+  const sales = await listSales();
+
+  const byPlatform = offers.reduce<Record<string, number>>((acc, offer) => {
+    acc[offer.platform] = (acc[offer.platform] || 0) + 1;
+    return acc;
+  }, {});
+
+  const byChannel = links.reduce<Record<string, number>>((acc, link) => {
+    acc[link.channel] = (acc[link.channel] || 0) + 1;
+    return acc;
+  }, {});
+
+  return {
+    offers,
+    links,
+    sales,
+    totals: {
+      offers: offers.length,
+      approved: offers.filter((offer) => offer.status === "approved").length,
+      posted: offers.filter((offer) => offer.status === "posted").length,
+      estimatedCommission: offers.reduce((sum, offer) => sum + (offer.estimated_commission || 0), 0),
+      confirmedCommission: sales.filter((sale) => sale.status === "confirmed").reduce((sum, sale) => sum + sale.commission_value, 0)
+    },
+    byPlatform,
+    byChannel,
+    topOffers: [...offers].sort((a, b) => b.score - a.score).slice(0, 5)
+  };
+}
+
+export async function getPostHistory(channel?: string) {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [];
+
+  // Busca os posts
+  let query = supabase.from("posts").select(`
+    id,
+    channel,
+    content,
+    status,
+    posted_at,
+    created_at,
+    external_id,
+    offers (
+      id,
+      product_name,
+      platform
+    ),
+    affiliate_links (
+      id,
+      tracked_url,
+      clicks
+    )
+  `);
+
+  if (channel) {
+    query = query.eq("channel", channel);
+  }
+
+  const { data: postsData } = await query.order("created_at", { ascending: false });
+  if (!postsData) return [];
+
+  // Busca as vendas para agregar conversões e receita
+  const { data: salesData } = await supabase.from("sales").select("affiliate_link_id, commission_value, status");
+
+  return postsData.map((post: any) => {
+    const link = post.affiliate_links;
+    const postSales = salesData?.filter((sale) => sale.affiliate_link_id === link?.id) || [];
+
+    const conversions = postSales.length;
+    const revenue = postSales
+      .filter((sale) => sale.status === "confirmed")
+      .reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0);
+
+    const postDate = post.posted_at || post.created_at;
+    const dateObj = new Date(postDate);
+
+    return {
+      id: post.id,
+      date: dateObj.toLocaleDateString("pt-BR"),
+      time: dateObj.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+      product: post.offers?.product_name || "Produto Desconhecido",
+      platform: post.offers?.platform || "Outro",
+      link: link?.tracked_url || "#",
+      channel: post.channel,
+      status: post.status,
+      clicks: link?.clicks || 0,
+      conversions,
+      revenue
+    };
+  });
+}
+
+export async function getTrackingReports() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [];
+
+  const { data: linksData } = await supabase
+    .from("affiliate_links")
+    .select(`
+      id,
+      channel,
+      sub_id,
+      tracked_url,
+      clicks,
+      offers (
+        id,
+        product_name,
+        platform
+      )
+    `)
+    .order("created_at", { ascending: false });
+
+  if (!linksData) return [];
+
+  const { data: salesData } = await supabase
+    .from("sales")
+    .select("affiliate_link_id, commission_value, status, gross_value");
+
+  return linksData.map((link: any) => {
+    const linkSales = salesData?.filter((sale) => sale.affiliate_link_id === link.id) || [];
+    const conversions = linkSales.length;
+    const revenue = linkSales
+      .filter((sale) => sale.status === "confirmed")
+      .reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0);
+
+    const clicks = link.clicks || 0;
+    const cost = clicks > 0 ? clicks * 0.15 : 0; 
+    const roi = cost > 0 ? ((revenue - cost) / cost) * 100 : 100;
+
+    return {
+      id: link.id,
+      channel: link.channel,
+      subId: link.sub_id,
+      trackedUrl: link.tracked_url,
+      clicks,
+      conversions,
+      revenue,
+      roi: roi === 100 && revenue === 0 ? 0 : roi,
+      isOrganic: cost === 0,
+      productName: link.offers?.product_name || "Desconhecido",
+      platform: link.offers?.platform || "Outro"
+    };
+  });
+}

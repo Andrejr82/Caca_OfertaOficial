@@ -1,0 +1,460 @@
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getCurrentUserId } from "@/lib/offers/queries";
+import type { Offer } from "@/types/domain";
+
+const USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
+
+export interface ScrapedProduct {
+  product_name: string;
+  original_url: string;
+  image_url: string | null;
+  current_price: number;
+  old_price: number | null;
+  rating: number | null;
+}
+
+/**
+ * Coleta os links e detalhes dos produtos mais vendidos no Mercado Livre diretamente da página principal
+ * Evita fazer requisições extras para páginas individuais de produtos, contornando bloqueios de captcha.
+ */
+export async function fetchTrendingProductsFromLanding(limit = 5): Promise<ScrapedProduct[]> {
+  try {
+    const url = "https://www.mercadolivre.com.br/mais-vendidos";
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "pt-BR,pt;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      },
+      next: { revalidate: 3600 } // cache de 1 hora
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao carregar a página de mais vendidos. Status: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const chunks = html.split('<div class="dynamic-carousel__item-container">');
+    const results: ScrapedProduct[] = [];
+
+    // Ignora a primeira parte, que é o cabeçalho antes dos cards de produtos
+    for (let i = 1; i < chunks.length; i++) {
+      const chunk = chunks[i];
+
+      // 1. URL do Produto
+      const linkMatch = chunk.match(/href="([^"]+)"/);
+      const link = linkMatch ? linkMatch[1] : null;
+
+      // 2. Imagem
+      const imgMatch = chunk.match(/<img[^>]+src="([^"]+)"/);
+      const image = imgMatch ? imgMatch[1] : null;
+
+      // 3. Título do Produto
+      const titleMatch = chunk.match(/<h3 class="dynamic-carousel__title">([^<]+)<\/h3>/) ||
+                         chunk.match(/alt="([^"]+)"/);
+      const title = titleMatch ? titleMatch[1].trim() : null;
+
+      // 4. Preço Atual e Antigo
+      const priceBlockMatch = chunk.match(/class="dynamic-carousel__price-block">([\s\S]*?)<\/h3>/) ||
+                              chunk.match(/class="dynamic-carousel__price-block">([\s\S]*?)<\/div>/);
+      let currentPrice = 0;
+      let oldPrice: number | null = null;
+
+      if (priceBlockMatch) {
+        const priceHtml = priceBlockMatch[1];
+        // Encontra todas as ocorrências de preços estruturados R$ X.YY
+        const priceMatches = [...priceHtml.matchAll(/R\$\s*(\d+(?:\.\d+)?(?:,\d+)?)/g)];
+        if (priceMatches.length > 0) {
+          if (priceMatches.length === 1) {
+            currentPrice = parseFloat(priceMatches[0][1].replace(/\./g, "").replace(",", "."));
+          } else {
+            const vals = priceMatches.map(m => parseFloat(m[1].replace(/\./g, "").replace(",", ".")));
+            currentPrice = vals[1] || vals[0];
+            oldPrice = vals[0] > currentPrice ? vals[0] : null;
+          }
+        }
+      }
+
+      if (title && link && currentPrice > 0) {
+        results.push({
+          product_name: title,
+          original_url: link,
+          image_url: image,
+          current_price: currentPrice,
+          old_price: oldPrice,
+          rating: 4.5 // nota padrão mockada para itens do topo de vendas
+        });
+      }
+
+      if (results.length >= limit) break;
+    }
+
+    return results;
+  } catch (error) {
+    console.error("Erro ao buscar tendências do Mercado Livre:", error);
+    return [];
+  }
+}
+
+/**
+ * Raspa detalhes de um produto individual do Mercado Livre
+ * Nota: Pode sofrer redirecionamento para tela de tráfego suspeito dependendo do IP/Rate Limit.
+ */
+async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  try {
+    const response = await fetch(productUrl, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "pt-BR,pt;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao obter o produto. Status: ${response.status}`);
+    }
+
+    const html = await response.text();
+
+    // 1. Extração do título (OpenGraph)
+    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
+    let title = titleMatch ? titleMatch[1] : "";
+    if (!title) {
+      const tagTitleMatch = html.match(/<title>([^<]+)<\/title>/i);
+      title = tagTitleMatch ? tagTitleMatch[1].replace("- Mercado Livre", "").trim() : "Produto sem nome";
+    }
+
+    // 2. Extração da Imagem (OpenGraph)
+    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    const image = imageMatch ? imageMatch[1] : null;
+
+    // Valores padrão
+    let currentPrice = 0;
+    let oldPrice: number | null = null;
+    let rating: number | null = null;
+
+    // 3. Extração via JSON-LD
+    const ldJsonMatches = html.match(/<script\s+type=["']application\/ld\+json["']>([\s\S]*?)<\/script>/gi);
+    if (ldJsonMatches) {
+      for (const scriptTag of ldJsonMatches) {
+        try {
+          const jsonContent = scriptTag.replace(/<script\s+type=["']application\/ld\+json["']>/i, "").replace(/<\/script>/i, "").trim();
+          const parsed = JSON.parse(jsonContent);
+          
+          if (parsed["@type"] === "Product" || parsed["@context"]?.includes("schema.org")) {
+            if (parsed.name && !title) title = parsed.name;
+            if (parsed.offers) {
+              const offer = Array.isArray(parsed.offers) ? parsed.offers[0] : parsed.offers;
+              if (offer.price) {
+                currentPrice = parseFloat(offer.price);
+              } else if (offer.lowPrice) {
+                currentPrice = parseFloat(offer.lowPrice);
+              }
+            }
+            if (parsed.aggregateRating && parsed.aggregateRating.ratingValue) {
+              rating = parseFloat(parsed.aggregateRating.ratingValue);
+            }
+            break;
+          }
+        } catch {
+          // Ignora JSONs malformados
+        }
+      }
+    }
+
+    // 4. Fallback de preço
+    if (currentPrice === 0) {
+      const metaPriceMatch = html.match(/<meta\s+property=["']product:preconfigured_price:amount["']\s+content=["']([^"']+)["']/i) ||
+                         html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+      if (metaPriceMatch) {
+        currentPrice = parseFloat(metaPriceMatch[1]);
+      } else {
+        const priceRegex = /"price":\s*(\d+(?:\.\d+)?)/i;
+        const priceMatch = html.match(priceRegex);
+        if (priceMatch) {
+          currentPrice = parseFloat(priceMatch[1]);
+        }
+      }
+    }
+
+    // 5. Extração de Preço Antigo
+    const oldPriceMatch = html.match(/<span\s+class=["']ui-pdp-price__original-value["'][\s\S]*?<span\s+class=["']andes-money-amount__fraction["']>([^<]+)<\/span>/i) ||
+                        html.match(/<del[^>]*>[\s\S]*?<span\s+class=["']andes-money-amount__fraction["']>([^<]+)<\/span>/i);
+    if (oldPriceMatch) {
+      const valStr = oldPriceMatch[1].replace(/\./g, "").replace(",", ".");
+      oldPrice = parseFloat(valStr);
+    }
+
+    if (currentPrice > 0) {
+      return {
+        product_name: title.trim(),
+        original_url: productUrl,
+        image_url: image,
+        current_price: currentPrice,
+        old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
+        rating: rating
+      };
+    }
+
+    return null;
+  } catch (error) {
+    console.error(`Erro ao raspar produto ML ${productUrl}:`, error);
+    return null;
+  }
+}
+
+async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  try {
+    // Para Shein, usamos redirecionamento automático (para links shein.top) e headers padrão
+    const response = await fetch(productUrl, {
+      redirect: 'follow',
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept-Language": "pt-BR,pt;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Falha ao obter produto SHEIN. Status: ${response.status}`);
+    }
+
+    const html = await response.text();
+
+    // 1. Extração do título (OpenGraph)
+    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) || 
+                       html.match(/<title>([^<]+)<\/title>/i);
+    let title = titleMatch ? titleMatch[1].replace(/\| SHEIN.*$/i, "").trim() : "Produto SHEIN";
+
+    // 2. Extração da Imagem (OpenGraph)
+    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+    let image = imageMatch ? imageMatch[1] : null;
+
+    // Se a imagem iniciar com //, adicionar https:
+    if (image && image.startsWith("//")) {
+      image = "https:" + image;
+    }
+
+    // 3. Extração de preço (Pode estar oculto por SSR/JS, então usamos fallback 0 caso não encontre)
+    let currentPrice = 0;
+    
+    // Tentar achar price na meta tag og:price:amount ou property similar
+    const metaPriceMatch = html.match(/<meta\s+property=["']og:price:amount["']\s+content=["']([^"']+)["']/i) ||
+                           html.match(/<meta\s+property=["']product:price:amount["']\s+content=["']([^"']+)["']/i);
+    if (metaPriceMatch) {
+      currentPrice = parseFloat(metaPriceMatch[1]);
+    } else {
+      // Tentar no JSON-LD da Shein
+      const ldJsonMatches = html.match(/<script\s+type=["']application\/ld\+json["']>([\s\S]*?)<\/script>/gi);
+      if (ldJsonMatches) {
+        for (const scriptTag of ldJsonMatches) {
+          try {
+            const jsonContent = scriptTag.replace(/<script\s+type=["']application\/ld\+json["']>/i, "").replace(/<\/script>/i, "").trim();
+            const parsed = JSON.parse(jsonContent);
+            if (parsed.offers && parsed.offers.price) {
+              currentPrice = parseFloat(parsed.offers.price);
+              break;
+            }
+          } catch {}
+        }
+      }
+    }
+
+    // Mesmo que não ache o preço (currentPrice == 0), vamos retornar para aproveitar a Imagem e Título
+    // O usuário poderá preencher o preço manualmente.
+    return {
+      product_name: title.trim(),
+      original_url: productUrl,
+      image_url: image,
+      current_price: currentPrice,
+      old_price: null,
+      rating: 4.8 // Mock para Shein
+    };
+
+  } catch (error) {
+    console.error(`Erro ao raspar produto SHEIN ${productUrl}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Raspa detalhes de um produto individual
+ * Identifica a loja pelo domínio e direciona para a função correta
+ */
+export async function scrapeProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  if (productUrl.includes("shein.com") || productUrl.includes("shein.top")) {
+    return scrapeSheinProductDetails(productUrl);
+  }
+  
+  // Default fallback (Mercado Livre)
+  return scrapeMercadoLivreProductDetails(productUrl);
+}
+
+/**
+ * Roda o fluxo completo de descoberta de tendências para as fontes selecionadas, raspa os detalhes de até N produtos,
+ * e os salva como ofertas rascunho no Supabase.
+ */
+export async function discoverAndIngestTrendingOffers(
+  limit = 5,
+  sources: string[] = ["Mercado Livre"],
+  targetUserId?: string
+): Promise<Offer[]> {
+  let supabase;
+  let userId = targetUserId || null;
+
+  if (targetUserId) {
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    supabase = createSupabaseAdminClient();
+  } else {
+    supabase = await createServerSupabaseClient();
+    if (supabase) {
+      userId = await getCurrentUserId();
+    }
+  }
+
+  if (!supabase || !userId) {
+    throw new Error("Supabase ou usuário não autenticado.");
+  }
+
+  const ingestedOffers: Offer[] = [];
+
+  for (const source of sources) {
+    let scrapedProducts: ScrapedProduct[] = [];
+
+    if (source === "Mercado Livre") {
+      scrapedProducts = await fetchTrendingProductsFromLanding(limit);
+    } else if (source === "Shopee") {
+      // Mock realista de tendências da Shopee
+      scrapedProducts = [
+        {
+          product_name: "Fone de Ouvido Bluetooth Sem Fio TWS i12 - Alta Fidelidade",
+          original_url: "https://shopee.com.br/product-fone-tws-i12",
+          image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop",
+          current_price: 34.90,
+          old_price: 69.90,
+          rating: 4.6
+        },
+        {
+          product_name: "Smartwatch Relógio Inteligente D20 Android iOS",
+          original_url: "https://shopee.com.br/product-smartwatch-d20",
+          image_url: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=500&auto=format&fit=crop",
+          current_price: 29.90,
+          old_price: 59.90,
+          rating: 4.3
+        },
+        {
+          product_name: "Tripé de Celular Ring Light Iluminador LED 20cm",
+          original_url: "https://shopee.com.br/product-tripe-ringlight",
+          image_url: "https://images.unsplash.com/photo-1589254065878-42c9da997008?w=500&auto=format&fit=crop",
+          current_price: 49.90,
+          old_price: 99.90,
+          rating: 4.5
+        }
+      ].slice(0, limit);
+    } else if (source === "Shein") {
+      // Mock realista de tendências da Shein
+      scrapedProducts = [
+        {
+          product_name: "Vestido Feminino Elegante Manga Bufante Casual Verão",
+          original_url: "https://shein.com.br/product-vestido-bufante",
+          image_url: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=500&auto=format&fit=crop",
+          current_price: 79.90,
+          old_price: 159.90,
+          rating: 4.8
+        },
+        {
+          product_name: "Blusa Moletom Masculina Estampa Streetwear com Capuz",
+          original_url: "https://shein.com.br/product-moletom-capuz",
+          image_url: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=500&auto=format&fit=crop",
+          current_price: 89.90,
+          old_price: 189.90,
+          rating: 4.7
+        },
+        {
+          product_name: "Bolsa Transversal Couro Sintético com Alça Ajustável",
+          original_url: "https://shein.com.br/product-bolsa-transversal",
+          image_url: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=500&auto=format&fit=crop",
+          current_price: 54.90,
+          old_price: 110.00,
+          rating: 4.9
+        }
+      ].slice(0, limit);
+    }
+
+    for (const product of scrapedProducts) {
+      // Verificar se este produto já foi cadastrado antes
+      const { data: existingOffer } = await supabase
+        .from("offers")
+        .select("id")
+        .eq("original_url", product.original_url)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existingOffer) {
+        continue; // Pula se já existe
+      }
+
+      let platformValue = source;
+      let notesValue = `Importado automaticamente via Robô de Tendências (${source}).`;
+
+      if (source === "Shein") {
+        // Tenta salvar como Shein no banco. Se a constraint rejeitar, o erro será capturado e inserido como "Outro".
+        const { data: newOffer, error: insertError } = await supabase
+          .from("offers")
+          .insert({
+            user_id: userId,
+            platform: "Shein",
+            product_name: product.product_name,
+            original_url: product.original_url,
+            image_url: product.image_url,
+            current_price: product.current_price,
+            old_price: product.old_price,
+            rating: product.rating,
+            score: 5.0,
+            status: "draft",
+            notes: notesValue
+          })
+          .select("*")
+          .maybeSingle();
+
+        if (!insertError && newOffer) {
+          ingestedOffers.push(newOffer as Offer);
+          continue;
+        } else {
+          platformValue = "Outro";
+          notesValue = `Plataforma original: Shein. ${notesValue}`;
+        }
+      }
+
+      // Salvar no banco como draft
+      const { data: newOffer, error: insertError } = await supabase
+        .from("offers")
+        .insert({
+          user_id: userId,
+          platform: platformValue,
+          product_name: product.product_name,
+          original_url: product.original_url,
+          image_url: product.image_url,
+          current_price: product.current_price,
+          old_price: product.old_price,
+          rating: product.rating,
+          score: 5.0, // nota padrão inicial
+          status: "draft",
+          notes: notesValue
+        })
+        .select("*")
+        .maybeSingle();
+
+      if (insertError) {
+        console.error(`Erro ao salvar oferta raspada no banco (${source}): ${insertError.message}`);
+        continue;
+      }
+
+      if (newOffer) {
+        ingestedOffers.push(newOffer as Offer);
+      }
+    }
+  }
+
+  return ingestedOffers;
+}
