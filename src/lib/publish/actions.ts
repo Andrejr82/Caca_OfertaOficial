@@ -4,6 +4,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { fetchLinkMetadata } from "@/lib/publish/scraper";
+import { evaluateQualityGate } from "@/lib/publish/quality-gate";
+import { logger } from "@/lib/utils/logger";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
 import type { Channel, Offer } from "@/types/domain";
 
@@ -20,23 +22,33 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   }
 
   // 1. Scraping do link
+  const startScrapeTime = Date.now();
   const metadata = await fetchLinkMetadata(affiliateUrl);
+  const processingTimeMs = Date.now() - startScrapeTime;
 
-  // Quality Gate Definitivo
-  const titleLower = metadata.title ? metadata.title.toLowerCase() : "";
-  const badPatterns = ["perfil social", "user", "username", "profile", "instagram", "facebook"];
-  const hasBadPattern = badPatterns.some(pattern => titleLower.includes(pattern));
-  const isRandomSequence = /^[a-z0-9]{15,}$/i.test(metadata.title ? metadata.title.split(" | ")[0] : "");
-  const finalUrlLower = metadata.finalUrl ? metadata.finalUrl.toLowerCase() : "";
-  const isProfileUrl = finalUrlLower.includes("/social/") || finalUrlLower.includes("/perfil/");
+  // Quality Gate Avaliação Flexível
+  const qualityGate = evaluateQualityGate(metadata);
 
-  // Quality Gate Flexibilizado para Produção Vercel (Ignorar bloqueios de Captcha de Preço/Título)
-  // Só barramos se tivermos a *certeza* de que é um perfil social
-  if (hasBadPattern || isRandomSequence || isProfileUrl) {
+  // Observabilidade Estruturada
+  logger.info("Processamento de Link Finalizado", {
+    event: "LINK_PROCESSED",
+    originalUrl: affiliateUrl,
+    finalUrl: metadata.finalUrl,
+    marketplace: metadata.platform,
+    pageType: qualityGate.classification,
+    imageFound: !!metadata.imageUrl,
+    imageSource: metadata.imageSource || "none",
+    priceFound: !!metadata.price && metadata.price > 0,
+    qualityGateResult: qualityGate.status,
+    rejectionReason: qualityGate.reason || "none",
+    processingTimeMs
+  });
+
+  if (qualityGate.status === "REJECTED") {
     return { 
       ok: false, 
       status: "REJECTED", 
-      message: `Publicação Rejeitada (Quality Gate). Motivo: O link apontou para um perfil social ou URL inválida.` 
+      message: `Publicação Rejeitada (Quality Gate). Motivo: ${qualityGate.reason}` 
     };
   }
 

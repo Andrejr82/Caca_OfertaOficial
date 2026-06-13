@@ -1,4 +1,5 @@
 import { Platform } from "@/types/domain";
+import { logger } from "@/lib/utils/logger";
 
 export interface LinkMetadata {
   title: string;
@@ -6,6 +7,31 @@ export interface LinkMetadata {
   imageUrl?: string;
   price?: number;
   finalUrl?: string;
+  imageSource?: string;
+}
+
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
+
+async function resolveFinalUrl(urlStr: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+    const response = await fetch(urlStr, {
+      method: "GET",
+      redirect: "follow",
+      signal: controller.signal,
+      headers: {
+        "User-Agent": USER_AGENT,
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+      }
+    });
+    clearTimeout(timeoutId);
+    return response.url || urlStr;
+  } catch (error) {
+    logger.warn(`Erro ao resolver redirects para ${urlStr}`, { error });
+    return urlStr;
+  }
 }
 
 export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
@@ -14,96 +40,197 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
   let finalUrl = url;
   let platform: Platform = "Outro";
   let price = 0;
+  let html = "";
+  let imageSource = "none";
+  let firecrawlMetadata: any = null;
 
-  try {
-    let html = "";
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  logger.info("Iniciando extração de metadados", { url });
 
-    // Se tivermos a chave do Firecrawl configurada, usamos ele como nosso Proxy Residencial "Zero Clique"
-    if (firecrawlKey) {
-      try {
-        const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${firecrawlKey}`
-          },
-          body: JSON.stringify({ url: url, formats: ["html"] })
-        });
-        
-        if (fcRes.ok) {
-          const fcData = await fcRes.json();
-          if (fcData.success && fcData.data?.html) {
-            html = fcData.data.html;
-            // Pegamos também um atalho direto dos metadados extraídos pelo próprio LLM do Firecrawl
-            if (fcData.data.metadata?.title) title = fcData.data.metadata.title;
-            if (fcData.data.metadata?.ogImage) imageUrl = fcData.data.metadata.ogImage;
-          }
-        }
-      } catch (err) {
-        console.error("Erro no Firecrawl:", err);
-      }
-    }
+  // 1. Resolver URL final para identificar a plataforma corretamente
+  finalUrl = await resolveFinalUrl(url);
+  logger.info("URL Final resolvida", { finalUrl });
 
-    // Se o Firecrawl não rodou ou não temos a chave, usamos o plano de contingência (WA Agent)
-    if (!html) {
+  // 2. Detectar Plataforma
+  const lowerUrl = finalUrl.toLowerCase();
+  if (lowerUrl.includes("shope") || lowerUrl.includes("shopee")) platform = "Shopee";
+  else if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon")) platform = "Amazon";
+  else if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu")) platform = "Magalu";
+  else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml") || lowerUrl.includes("meli.la")) platform = "Mercado Livre";
+  else if (lowerUrl.includes("shein")) platform = "Shein";
+
+  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+
+  // 3. Extração via Firecrawl
+  if (firecrawlKey) {
+    try {
+      logger.info("Tentando extração via Firecrawl", { finalUrl });
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
       
-      try {
-        const response = await fetch(url, {
-          redirect: "follow",
-          signal: controller.signal,
-          headers: {
-            "User-Agent": "WhatsApp/2.21.19.21 A",
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
-          }
-        });
-        
-        if (response.ok) {
-          finalUrl = response.url;
-          html = await response.text();
-        }
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    }
+      const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${firecrawlKey}`
+        },
+        body: JSON.stringify({ url: finalUrl, formats: ["html", "extract"], extract: {
+            schema: {
+                type: "object",
+                properties: {
+                    price: { type: "number" },
+                    title: { type: "string" },
+                    image: { type: "string" }
+                }
+            }
+        } }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
 
-    if (html) {
-      // Etapa 3: Detectar Marketplace pela URL final
-      const lowerUrl = finalUrl.toLowerCase();
-      if (lowerUrl.includes("shope") || lowerUrl.includes("shopee")) platform = "Shopee";
-      else if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon")) platform = "Amazon";
-      else if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu")) platform = "Magalu";
-      else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml")) platform = "Mercado Livre";
+      if (fcRes.ok) {
+        const fcData = await fcRes.json();
+        if (fcData.success && fcData.data) {
+          html = fcData.data.html || "";
+          
+          // Fallback extraction block from LLM extract
+          if (fcData.data.extract) {
+              if (fcData.data.extract.title) title = fcData.data.extract.title;
+              if (fcData.data.extract.price) price = fcData.data.extract.price;
+              if (fcData.data.extract.image) {
+                  imageUrl = fcData.data.extract.image;
+                  imageSource = "firecrawl_extract";
+              }
+          }
+
+          // Meta tag extraction directly from FC
+          if (fcData.data.metadata) {
+            firecrawlMetadata = fcData.data.metadata;
+            if (!title || title === "Oferta Especial") title = fcData.data.metadata.title;
+            if (!imageUrl && fcData.data.metadata.ogImage) {
+              imageUrl = fcData.data.metadata.ogImage;
+              imageSource = "firecrawl_og";
+            }
+          }
+          logger.info("Firecrawl sucesso", { finalUrl, hasHtml: !!html });
+        }
+      } else {
+        logger.warn("Firecrawl retornou erro", { status: fcRes.status });
+      }
+    } catch (err) {
+      logger.error("Falha ao comunicar com Firecrawl", err);
+    }
+  }
+
+  // 4. Fallback: Fetch HTTP simples se Firecrawl falhou em trazer o HTML
+  if (!html) {
+    logger.info("Usando fetch simples como fallback", { finalUrl });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    
+    try {
+      const response = await fetch(finalUrl, {
+        redirect: "follow",
+        signal: controller.signal,
+        headers: {
+          "User-Agent": USER_AGENT,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+          "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+        }
+      });
       
-      // Extract <title>
+      if (response.ok) {
+        html = await response.text();
+      }
+    } catch (err) {
+      logger.error("Falha no fetch HTTP simples", err);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // 5. Parse de HTML (Se Firecrawl não extraiu os dados ou não usamos FC)
+  if (html) {
+    // 5.1 Extract Title
+    if (title === "Oferta Especial") {
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch && titleMatch[1]) {
-        // Basic cleanup
         let rawTitle = titleMatch[1]
           .replace(/&amp;/g, "&")
           .replace(/&quot;/g, '"')
           .replace(/&#39;/g, "'")
           .trim();
-          
-        // Remove common platform suffixes from title
         rawTitle = rawTitle.replace(/\s*[-|]\s*(Shopee Brasil|Amazon\.com\.br|Magazine Luiza|Mercado Livre).*$/i, "");
         if (rawTitle.length > 5) {
           title = rawTitle;
         }
       }
+    }
 
-      // Extract og:image
-      const imageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) || 
-                         html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["'][^>]*>/i);
-                         
-      if (imageMatch && imageMatch[1]) {
-        imageUrl = imageMatch[1];
+    // 5.2 Image Fallback Cascade
+    if (!imageUrl) {
+      // 1. og:image:secure_url
+      let imgMatch = html.match(/<meta[^>]*property=["']og:image:secure_url["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+      if (imgMatch && imgMatch[1]) {
+        imageUrl = imgMatch[1];
+        imageSource = "og:image:secure_url";
       }
 
-      // Extract price
+      // 2. og:image
+      if (!imageUrl) {
+        imgMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) || 
+                   html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["'][^>]*>/i);
+        if (imgMatch && imgMatch[1]) {
+          imageUrl = imgMatch[1];
+          imageSource = "og:image";
+        }
+      }
+
+      // 3. twitter:image
+      if (!imageUrl) {
+        imgMatch = html.match(/<meta[^>]*name=["']twitter:image["'][^>]*content=["']([^"']+)["'][^>]*>/i);
+        if (imgMatch && imgMatch[1]) {
+          imageUrl = imgMatch[1];
+          imageSource = "twitter:image";
+        }
+      }
+
+      // 4. JSON-LD (Schema.org)
+      if (!imageUrl) {
+        const ldJsonMatches = html.match(/<script\s+type=["']application\/ld\+json["']>([\s\S]*?)<\/script>/gi);
+        if (ldJsonMatches) {
+          for (const scriptTag of ldJsonMatches) {
+            try {
+              const jsonContent = scriptTag.replace(/<script\s+type=["']application\/ld\+json["']>/i, "").replace(/<\/script>/i, "").trim();
+              const parsed = JSON.parse(jsonContent);
+              if (parsed.image) {
+                imageUrl = Array.isArray(parsed.image) ? parsed.image[0] : parsed.image;
+                if (typeof imageUrl === "object" && (imageUrl as any).url) {
+                    imageUrl = (imageUrl as any).url;
+                }
+                if (typeof imageUrl === "string") {
+                  imageSource = "json-ld";
+                  break;
+                }
+              }
+            } catch (e) {}
+          }
+        }
+      }
+
+      // 5. Gallery fallback (Mercado Livre)
+      if (!imageUrl && platform === "Mercado Livre") {
+        imgMatch = html.match(/<img[^>]*class=["'][^"']*ui-pdp-image[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/i) ||
+                   html.match(/<img[^>]*class=["'][^"']*ui-pdp-gallery__figure__image[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/i);
+        if (imgMatch && imgMatch[1]) {
+          imageUrl = imgMatch[1];
+          imageSource = "gallery_fallback";
+        }
+      }
+    }
+
+    // 5.3 Price Fallback
+    if (!price || price === 0) {
       const priceMatch = html.match(/<meta[^>]*property=["']product:price:amount["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
                          html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']product:price:amount["'][^>]*>/i) ||
                          html.match(/"price":\s*(\d+(?:\.\d+)?)/i) ||
@@ -111,16 +238,19 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
       
       if (priceMatch && priceMatch[1]) {
         price = parseFloat(priceMatch[1]);
-      } else {
-        // Fallback for Mercado Livre visible price
+      } else if (platform === "Mercado Livre") {
         const mlPriceMatch = html.match(/<span\s+class=["']andes-money-amount__fraction["']>([^<]+)<\/span>/i);
         if (mlPriceMatch && mlPriceMatch[1]) {
           price = parseFloat(mlPriceMatch[1].replace(/\./g, "").replace(",", "."));
         }
+      } else if (platform === "Amazon") {
+         const amzPriceMatch = html.match(/<span\s+class=["']a-price-whole["']>([^<]+)<\/span>/i);
+         if (amzPriceMatch && amzPriceMatch[1]) {
+             price = parseFloat(amzPriceMatch[1].replace(/\./g, "").replace(",", "."));
+         }
       }
 
-      // Se o ML retornou a versão Light/OGP para o WhatsApp, o preço não estará no HTML body
-      // Mas sim injetado no final do title: "Nome do Produto - R$ 99,90"
+      // Injected price in title fallback
       if (!price && title) {
         const titlePriceMatch = title.match(/-\s*R\$\s*(\d+(?:[.,]\d+)?)/i);
         if (titlePriceMatch) {
@@ -129,16 +259,23 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
         }
       }
     }
-  } catch (error) {
-    console.error("Erro ao fazer scraping da URL:", error);
-    // Ignora o erro e retorna os valores padrão se falhar
   }
 
-  return {
+  // Cleanup imageUrl if it starts with //
+  if (imageUrl && imageUrl.startsWith("//")) {
+      imageUrl = "https:" + imageUrl;
+  }
+
+  const result = {
     title,
     platform,
     imageUrl,
     price,
-    finalUrl
+    finalUrl,
+    imageSource
   };
+
+  logger.info("Extração concluída", { ...result, url });
+
+  return result;
 }
