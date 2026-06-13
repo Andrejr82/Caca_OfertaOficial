@@ -16,27 +16,61 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
   let price = 0;
 
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000);
-    
-    // Use WhatsApp user agent to bypass Mercado Livre Cloudflare/WAF block on Vercel IPs
-    // Social media crawlers usually bypass aggressive bot checks and receive OGP data perfectly.
-    const response = await fetch(url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "WhatsApp/2.21.19.21 A",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+    let html = "";
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+
+    // Se tivermos a chave do Firecrawl configurada, usamos ele como nosso Proxy Residencial "Zero Clique"
+    if (firecrawlKey) {
+      try {
+        const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${firecrawlKey}`
+          },
+          body: JSON.stringify({ url: url, formats: ["html"] })
+        });
+        
+        if (fcRes.ok) {
+          const fcData = await fcRes.json();
+          if (fcData.success && fcData.data?.html) {
+            html = fcData.data.html;
+            // Pegamos também um atalho direto dos metadados extraídos pelo próprio LLM do Firecrawl
+            if (fcData.data.metadata?.title) title = fcData.data.metadata.title;
+            if (fcData.data.metadata?.ogImage) imageUrl = fcData.data.metadata.ogImage;
+          }
+        }
+      } catch (err) {
+        console.error("Erro no Firecrawl:", err);
       }
-    });
-    
-    clearTimeout(timeoutId);
+    }
 
-    if (response.ok) {
-      finalUrl = response.url;
-      const html = await response.text();
+    // Se o Firecrawl não rodou ou não temos a chave, usamos o plano de contingência (WA Agent)
+    if (!html) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      
+      try {
+        const response = await fetch(url, {
+          redirect: "follow",
+          signal: controller.signal,
+          headers: {
+            "User-Agent": "WhatsApp/2.21.19.21 A",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
+          }
+        });
+        
+        if (response.ok) {
+          finalUrl = response.url;
+          html = await response.text();
+        }
+      } finally {
+        clearTimeout(timeoutId);
+      }
+    }
 
+    if (html) {
       // Etapa 3: Detectar Marketplace pela URL final
       const lowerUrl = finalUrl.toLowerCase();
       if (lowerUrl.includes("shope") || lowerUrl.includes("shopee")) platform = "Shopee";
