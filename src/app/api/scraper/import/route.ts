@@ -23,11 +23,12 @@ export async function POST(request: Request) {
 
     const isMercadoLivre = url.includes("mercadolivre.com.br") || url.includes("mercadolivre.com");
     const isShein = url.includes("shein.com") || url.includes("shein.top");
+    const isMagalu = url.includes("magazineluiza.com.br") || url.includes("magazinevoce.com.br") || url.includes("magazineluiza.onelink.me");
 
-    if (!isMercadoLivre && !isShein) {
+    if (!isMercadoLivre && !isShein && !isMagalu) {
       return NextResponse.json({ 
         ok: false, 
-        message: "O robô atualmente suporta apenas links do Mercado Livre e da SHEIN." 
+        message: "O robô atualmente suporta apenas links do Mercado Livre, SHEIN e Magalu." 
       }, { status: 400 });
     }
 

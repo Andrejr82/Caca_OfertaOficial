@@ -1,75 +1,104 @@
 import { NextResponse } from "next/server";
-import { generateTelegramMessage } from "@/lib/messages/generate";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { sendTelegramMessage } from "@/lib/telegram/client";
-import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
-import type { AffiliateLink, Offer } from "@/types/domain";
 
 export async function POST(request: Request) {
-  const { offerId } = (await request.json()) as { offerId?: string };
-  if (!offerId) return NextResponse.json({ ok: false, message: "offerId obrigatório." }, { status: 400 });
-
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
-
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-  if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
-
-  const { data: offer, error: offerError } = await supabase.from("offers").select("*").eq("id", offerId).single();
-  if (offerError || !offer) return NextResponse.json({ ok: false, message: "Oferta não encontrada." }, { status: 404 });
-
-  const typedOffer = offer as Offer;
-  if (typedOffer.status !== "approved") {
-    return NextResponse.json({ ok: false, message: "Apenas ofertas aprovadas podem ser publicadas." }, { status: 422 });
-  }
-
-  const subId = createSubId("telegram", typedOffer.product_name, typedOffer.id);
-  const trackedUrl = createTrackedUrl(typedOffer.original_url, subId);
-  const { data: linkData, error: linkError } = await supabase
-    .from("affiliate_links")
-    .upsert(
-      {
-        user_id: user.id,
-        offer_id: typedOffer.id,
-        channel: "telegram",
-        original_url: typedOffer.original_url,
-        tracked_url: trackedUrl,
-        sub_id: subId
-      },
-      { onConflict: "offer_id,channel" }
-    )
-    .select("*")
-    .single();
-
-  if (linkError || !linkData) return NextResponse.json({ ok: false, message: "Falha ao criar link rastreado." }, { status: 500 });
-
-  const typedLink = linkData as AffiliateLink;
-  const content = generateTelegramMessage(typedOffer, typedLink);
-  
-  let telegramPost;
   try {
-    telegramPost = await sendTelegramMessage(content);
-  } catch (error: any) {
-    console.error("Telegram API Error:", error);
-    return NextResponse.json({ ok: false, message: `Erro ao enviar para o Telegram: ${error.message || 'Timeout/Conexão'}` }, { status: 502 });
+    const { postId, content } = (await request.json()) as { postId?: string; content?: string };
+    if (!postId) {
+      return NextResponse.json({ ok: false, message: "postId é obrigatório." }, { status: 400 });
+    }
+
+    const supabase = await createServerSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
+    }
+
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (!user) {
+      return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
+    }
+
+    // 1. Carrega o post e a oferta associada
+    const { data: post, error: postError } = await supabase
+      .from("posts")
+      .select("*, offers(*)")
+      .eq("id", postId)
+      .single();
+
+    if (postError || !post) {
+      return NextResponse.json({ ok: false, message: "Post não encontrado." }, { status: 404 });
+    }
+
+    if (post.channel !== "telegram") {
+      return NextResponse.json({ ok: false, message: "Este post não é do canal Telegram." }, { status: 400 });
+    }
+
+    const offer = post.offers;
+    if (!offer) {
+      return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
+    }
+
+    // O usuário pode ter editado o texto na tela antes de aprovar
+    const finalContent = content || post.content;
+
+    // Se o conteúdo foi alterado, atualiza primeiro no banco de dados
+    if (content && content !== post.content) {
+      await supabase
+        .from("posts")
+        .update({ content: finalContent })
+        .eq("id", post.id);
+    }
+
+    // 2. Executa a publicação real via Telegram API
+    let telegramPost;
+    try {
+      if (offer.image_url) {
+        // Envia foto com a legenda
+        const { sendTelegramPhoto } = await import("@/lib/telegram/client");
+        telegramPost = await sendTelegramPhoto(finalContent, offer.image_url);
+      } else {
+        // Fallback: só texto
+        telegramPost = await sendTelegramMessage(finalContent);
+      }
+    } catch (error: any) {
+      console.error("Telegram API Error:", error);
+      return NextResponse.json({ ok: false, message: `Erro ao enviar para o Telegram: ${error.message || 'Timeout/Conexão'}` }, { status: 502 });
+    }
+
+    // 3. Atualiza o status do post para published
+    const now = telegramPost.date ? new Date(telegramPost.date * 1000).toISOString() : new Date().toISOString();
+    const { error: postUpdateError } = await supabase
+      .from("posts")
+      .update({
+        status: "published",
+        external_id: String(telegramPost.message_id),
+        posted_at: now
+      })
+      .eq("id", post.id);
+
+    if (postUpdateError) {
+      return NextResponse.json({ ok: false, message: "Erro ao atualizar status do post." }, { status: 500 });
+    }
+
+    // 4. Atualiza o status da oferta para posted
+    await supabase
+      .from("offers")
+      .update({
+        status: "posted",
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", offer.id);
+
+    return NextResponse.json({ ok: true, messageId: telegramPost.message_id });
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : "Falha na publicação no Telegram.";
+    console.error("Erro ao publicar no Telegram:", error);
+    return NextResponse.json({ 
+      ok: false, 
+      message: errorMessage 
+    }, { status: 500 });
   }
-
-  const { error: postError } = await supabase.from("posts").insert({
-    user_id: user.id,
-    offer_id: typedOffer.id,
-    affiliate_link_id: typedLink.id,
-    channel: "telegram",
-    content,
-    external_id: String(telegramPost.message_id),
-    status: "published",
-    posted_at: new Date(telegramPost.date * 1000).toISOString()
-  });
-
-  if (postError) return NextResponse.json({ ok: false, message: postError.message }, { status: 500 });
-
-  await supabase.from("offers").update({ status: "posted", updated_at: new Date().toISOString() }).eq("id", typedOffer.id);
-
-  return NextResponse.json({ ok: true, messageId: telegramPost.message_id });
 }

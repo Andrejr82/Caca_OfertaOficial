@@ -1,5 +1,5 @@
 export interface LogMetadata {
-  event: string;
+  event?: string;
   [key: string]: any;
 }
 

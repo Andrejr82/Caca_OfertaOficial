@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Caça Oferta Injector",
+  "version": "1.0",
+  "description": "Extrai dados de produtos do Magazine Luiza e envia para o Caça Oferta, sem ser bloqueado.",
+  "permissions": ["activeTab", "scripting", "storage"],
+  "host_permissions": [
+    "*://*.magazineluiza.com.br/*",
+    "*://*.magazinevoce.com.br/*",
+    "*://localhost:*/*",
+    "https://caca-oferta-oficial.vercel.app/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Caça Oferta"
+  }
+}

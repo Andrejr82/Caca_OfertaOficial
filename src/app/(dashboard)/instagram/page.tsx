@@ -4,6 +4,8 @@ import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { getPostHistory } from "@/lib/offers/queries";
 import { Instagram } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
 export default async function InstagramDashboardPage() {
   const supabase = await createServerSupabaseClient();
   interface PostWithOffer {

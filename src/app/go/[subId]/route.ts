@@ -44,13 +44,53 @@ export async function GET(request: Request, { params }: { params: Promise<{ subI
     .eq("id", link.id);
 
   // Redirect cleanly to the original affiliate URL.
-  // Validate URL format before redirecting to avoid Next.js 404 errors on relative paths
   try {
     const originalUrl = link.original_url.startsWith('http') 
       ? link.original_url 
       : `https://${link.original_url}`;
     
-    return NextResponse.redirect(originalUrl);
+    // Instead of a 302 redirect, return an HTML page with Open Graph tags and an instant redirect.
+    // This allows WhatsApp and Telegram to scrape the metadata and generate HIGH-QUALITY Link Previews!
+    const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oferta Especial</title>
+    
+    <!-- Open Graph / WhatsApp / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="🔥 Oferta Exclusiva!">
+    <meta property="og:description" content="Toque para acessar a página de compras">
+    <meta property="og:image" content="${link.image_url || 'https://caca-oferta-oficial.vercel.app/og-image.jpg'}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="🔥 Oferta Exclusiva!">
+    <meta name="twitter:description" content="Toque para acessar a página de compras">
+    <meta name="twitter:image" content="${link.image_url || 'https://caca-oferta-oficial.vercel.app/og-image.jpg'}">
+
+    <!-- Redirecionamentos Automáticos -->
+    <meta http-equiv="refresh" content="0; url=${originalUrl}">
+    <script>
+        window.location.href = "${originalUrl}";
+    </script>
+</head>
+<body>
+    <p>Redirecionando para a oferta... <a href="${originalUrl}">Clique aqui se não for redirecionado.</a></p>
+</body>
+</html>`;
+
+    return new NextResponse(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-store, max-age=0',
+      },
+    });
   } catch (err) {
     console.error("URL original inválida:", link.original_url);
     return NextResponse.json({ error: "URL de redirecionamento inválida" }, { status: 400 });

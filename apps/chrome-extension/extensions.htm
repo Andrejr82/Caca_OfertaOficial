@@ -1,0 +1,7108 @@
+
+
+
+
+
+
+
+
+
+<!doctype html>
+<html 
+      lang="pt-BR-x-mtfrom-en"
+      dir="ltr">
+  <head>
+    <meta name="google-signin-client-id" content="157101835696-ooapojlodmuabs2do2vuhhnf90bccmoi.apps.googleusercontent.com"><meta name="google-signin-scope"
+          content="profile email https://www.googleapis.com/auth/developerprofiles https://www.googleapis.com/auth/developerprofiles.award https://www.googleapis.com/auth/devprofiles.full_control.firstparty"><meta property="og:site_name" content="Chrome for Developers">
+    <meta property="og:type" content="website"><meta name="theme-color" content="#1a73e8"><meta charset="utf-8">
+    <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    
+
+    <link rel="manifest" href="/_pwa/chrome/manifest.json"
+          crossorigin="use-credentials">
+    <link rel="preconnect" href="//www.gstatic.com" crossorigin>
+    <link rel="preconnect" href="//fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="//www.google-analytics.com" crossorigin><link rel="stylesheet" href="//fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap">
+      <link rel="stylesheet"
+            href="//fonts.googleapis.com/css2?family=Material+Icons&family=Material+Symbols+Outlined&display=block"><link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/css/app.css">
+      
+        <link rel="stylesheet" href="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/css/dark-theme.css" disabled>
+      <link rel="shortcut icon" href="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/favicon.png">
+    <link rel="apple-touch-icon" href="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/touchicon-180.png"><link rel="canonical" href="https://developer.chrome.com/docs/extensions?hl=pt-br"><link rel="search" type="application/opensearchdescription+xml"
+            title="Chrome for Developers" href="https://developer.chrome.com/s/opensearch.xml?hl=pt-br">
+      <link rel="alternate" hreflang="en"
+          href="https://developer.chrome.com/docs/extensions" /><link rel="alternate" hreflang="x-default" href="https://developer.chrome.com/docs/extensions" /><link rel="alternate" hreflang="ar"
+          href="https://developer.chrome.com/docs/extensions?hl=ar" /><link rel="alternate" hreflang="bn"
+          href="https://developer.chrome.com/docs/extensions?hl=bn" /><link rel="alternate" hreflang="zh-Hans"
+          href="https://developer.chrome.com/docs/extensions?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant"
+          href="https://developer.chrome.com/docs/extensions?hl=zh-tw" /><link rel="alternate" hreflang="nl"
+          href="https://developer.chrome.com/docs/extensions?hl=nl" /><link rel="alternate" hreflang="fa"
+          href="https://developer.chrome.com/docs/extensions?hl=fa" /><link rel="alternate" hreflang="fr"
+          href="https://developer.chrome.com/docs/extensions?hl=fr" /><link rel="alternate" hreflang="de"
+          href="https://developer.chrome.com/docs/extensions?hl=de" /><link rel="alternate" hreflang="he"
+          href="https://developer.chrome.com/docs/extensions?hl=he" /><link rel="alternate" hreflang="hi"
+          href="https://developer.chrome.com/docs/extensions?hl=hi" /><link rel="alternate" hreflang="id"
+          href="https://developer.chrome.com/docs/extensions?hl=id" /><link rel="alternate" hreflang="it"
+          href="https://developer.chrome.com/docs/extensions?hl=it" /><link rel="alternate" hreflang="ja"
+          href="https://developer.chrome.com/docs/extensions?hl=ja" /><link rel="alternate" hreflang="ko"
+          href="https://developer.chrome.com/docs/extensions?hl=ko" /><link rel="alternate" hreflang="pl"
+          href="https://developer.chrome.com/docs/extensions?hl=pl" /><link rel="alternate" hreflang="pt-BR"
+          href="https://developer.chrome.com/docs/extensions?hl=pt-br" /><link rel="alternate" hreflang="ru"
+          href="https://developer.chrome.com/docs/extensions?hl=ru" /><link rel="alternate" hreflang="es-419"
+          href="https://developer.chrome.com/docs/extensions?hl=es-419" /><link rel="alternate" hreflang="th"
+          href="https://developer.chrome.com/docs/extensions?hl=th" /><link rel="alternate" hreflang="tr"
+          href="https://developer.chrome.com/docs/extensions?hl=tr" /><link rel="alternate" hreflang="vi"
+          href="https://developer.chrome.com/docs/extensions?hl=vi" /><link rel="alternate" hreflang="en-cn"
+          href="https://developer.chrome.google.cn/docs/extensions" /><link rel="alternate" hreflang="x-default" href="https://developer.chrome.google.cn/docs/extensions" /><link rel="alternate" hreflang="ar-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=ar" /><link rel="alternate" hreflang="bn-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=bn" /><link rel="alternate" hreflang="zh-Hans-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=zh-cn" /><link rel="alternate" hreflang="zh-Hant-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=zh-tw" /><link rel="alternate" hreflang="nl-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=nl" /><link rel="alternate" hreflang="fa-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=fa" /><link rel="alternate" hreflang="fr-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=fr" /><link rel="alternate" hreflang="de-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=de" /><link rel="alternate" hreflang="he-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=he" /><link rel="alternate" hreflang="hi-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=hi" /><link rel="alternate" hreflang="id-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=id" /><link rel="alternate" hreflang="it-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=it" /><link rel="alternate" hreflang="ja-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=ja" /><link rel="alternate" hreflang="ko-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=ko" /><link rel="alternate" hreflang="pl-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=pl" /><link rel="alternate" hreflang="pt-BR-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=pt-br" /><link rel="alternate" hreflang="ru-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=ru" /><link rel="alternate" hreflang="es-419-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=es-419" /><link rel="alternate" hreflang="th-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=th" /><link rel="alternate" hreflang="tr-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=tr" /><link rel="alternate" hreflang="vi-cn"
+          href="https://developer.chrome.google.cn/docs/extensions?hl=vi" /><title>Extensões do Chrome &nbsp;|&nbsp; Chrome Extensions &nbsp;|&nbsp; Chrome for Developers</title>
+
+<meta property="og:title" content="Extensões do Chrome &nbsp;|&nbsp; Chrome Extensions &nbsp;|&nbsp; Chrome for Developers"><meta name="description" content="Aprenda a desenvolver extensões do Chrome.">
+  <meta property="og:description" content="Aprenda a desenvolver extensões do Chrome."><meta property="og:url" content="https://developer.chrome.com/docs/extensions?hl=pt-br"><meta property="og:locale" content="pt_br"><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    
+    "headline": "Extensões do Chrome"
+  }
+</script><script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [{
+      "@type": "ListItem",
+      "position": 1,
+      "name": "Docs",
+      "item": "https://developer.chrome.com/docs"
+    },{
+      "@type": "ListItem",
+      "position": 2,
+      "name": "Chrome Extensions",
+      "item": "https://developer.chrome.com/docs/extensions"
+    }]
+  }
+  </script><link rel="alternate machine-translated-from" hreflang="en"
+        href="https://developer.chrome.com/docs/extensions?hl=en">
+    </head>
+  <body class="color-scheme--light"
+        template="landing"
+        theme="chrome-theme"
+        type="article"
+        
+        appearance
+        
+        layout="full"
+        
+        
+        
+        
+        
+        
+        pending>
+  
+    <devsite-progress type="indeterminate" id="app-progress"></devsite-progress>
+  
+  
+    <a href="#main-content" class="skip-link button">
+      
+      Ir para o conteúdo principal
+    </a>
+    <section class="devsite-wrapper">
+      <devsite-cookie-notification-bar></devsite-cookie-notification-bar>
+        <devsite-header role="banner">
+  
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-header--inner" data-nosnippet>
+  <div class="devsite-top-logo-row-wrapper-wrapper">
+    <div class="devsite-top-logo-row-wrapper">
+      <div class="devsite-top-logo-row">
+        <button type="button" id="devsite-hamburger-menu"
+          class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+          data-category="Site-Wide Custom Events"
+          data-label="Navigation menu button"
+          visually-hidden
+          aria-label="Abrir menu">
+        </button>
+        
+<div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event"
+   data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav"
+   track-name="chromeForDevelopers" track-metadata-position="nav"
+   track-metadata-eventDetail="nav">
+  
+  <picture>
+    
+    <source srcset="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/lockup-dark-theme.svg"
+            media="(prefers-color-scheme: dark)"
+            class="devsite-dark-theme">
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/lockup.svg" class="devsite-site-logo" alt="Chrome for Developers">
+  </picture>
+  
+</a>
+
+
+
+</div>
+        <div class="devsite-top-logo-row-middle">
+          <div class="devsite-header-upper-tabs">
+            
+              
+              
+  <devsite-tabs class="upper-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Guias superiores">
+      
+        
+          <tab class="devsite-dropdown
+    devsite-dropdown-full
+    devsite-active
+    
+    ">
+  
+    <a href="https://developer.chrome.com/docs?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - documentos"
+       track-metadata-module="primary nav"
+       aria-label="Documentos, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Documentos"
+         
+           track-name="documentos"
+         
+       >
+    Documentos
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Menu suspenso de Documentos"
+         track-type="nav"
+         track-metadata-eventdetail="https://developer.chrome.com/docs?hl=pt-br"
+         track-metadata-position="nav - documentos"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Documentos"
+          
+            track-name="documentos"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       build-icon dcc-subnav">
+              
+                <li class="devsite-nav-title" role="heading" tooltip>Crie com o Chrome</li>
+              
+              
+                <li class="devsite-nav-description">Saiba como o Chrome funciona, participe de testes de origem e crie com o Chrome em qualquer lugar.
+</li>
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/web-platform?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/web-platform?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Plataforma da Web
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/capabilities?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/capabilities?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Recursos
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/chromedriver?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/chromedriver?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      ChromeDriver
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/extensions?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/extensions?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Extensions
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/webstore?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/webstore?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Chrome Web Store
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/chromium?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/chromium?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Chromium
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/android?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/android?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Web no Android
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/origintrials/?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/origintrials/?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Testes de origem
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/release-notes?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/release-notes?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="crie com o chrome"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Notas da versão
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       productivity-icon dcc-subnav">
+              
+                <li class="devsite-nav-title" role="heading" tooltip>Produtividade</li>
+              
+              
+                <li class="devsite-nav-description">Crie a melhor experiência para seus usuários com as melhores ferramentas da Web.</li>
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/devtools?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/devtools?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      DevTools
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/lighthouse?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/lighthouse?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Lighthouse
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/crux?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/crux?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Relatório de UX do Chrome
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/accessibility?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/accessibility?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Acessibilidade
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/modern-web-guidance?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/modern-web-guidance?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Orientação para a Web moderna
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+            <ul class="devsite-tabs-dropdown-section
+                       dcc-subnav second-column-list">
+              
+              
+                <li class="devsite-nav-description">Faça as tarefas de forma mais rápida e organizada com nossas bibliotecas prontas.
+</li>
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/workbox?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/workbox?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Workbox
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/puppeteer?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/puppeteer?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="produtividade"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Animador de fantoches
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       experience-icon dcc-subnav">
+              
+                <li class="devsite-nav-title" role="heading" tooltip>Experiência</li>
+              
+              
+                <li class="devsite-nav-description">Crie uma Web bonita e de alto desempenho com o Chrome.
+</li>
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/ai?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/ai?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="experiência"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      AI
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/performance?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/performance?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="experiência"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Desempenho
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/css-ui?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/css-ui?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="experiência"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      CSS e interface
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/identity?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/identity?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="experiência"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Identidade
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/payments?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/payments?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="experiência"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Pagamentos
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/privacy-security?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/privacy-security?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="experiência"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Privacidade e segurança
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       resources-icon dcc-subnav">
+              
+                <li class="devsite-nav-title" role="heading" tooltip>Recursos</li>
+              
+              
+                <li class="devsite-nav-description">Mais do Chrome e do Google.
+</li>
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="recursos"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Toda a documentação
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://web.dev/baseline?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://web.dev/baseline?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="recursos"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Valor de referência
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://web.dev?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://web.dev?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="recursos"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      web.dev
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://pagespeed.web.dev?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://pagespeed.web.dev?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="recursos"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Auditoria do PageSpeed Insights
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developers.google.com/privacy-sandbox?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developers.google.com/privacy-sandbox?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="recursos"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Sandbox de privacidade
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/iwa?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/iwa?hl=pt-br"
+                     track-metadata-position="nav - documentos"
+                     track-metadata-module="tertiary nav"
+                     
+                       track-metadata-module_headline="recursos"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Apps isolados da Web (AIW)
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/case-studies?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/case-studies?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - estudos de caso"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Estudos de caso"
+         
+           track-name="estudos de caso"
+         
+       >
+    Estudos de caso
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/blog?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/blog?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - blog"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Blog"
+         
+           track-name="blog"
+         
+       >
+    Blog
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/new?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/new?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - novidades no chrome"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Novidades no Chrome"
+         
+           track-name="novidades no chrome"
+         
+       >
+    Novidades no Chrome
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+            
+           </div>
+          
+<devsite-search
+    enable-signin
+    enable-search
+    enable-suggestions
+      enable-query-completion
+    
+    enable-search-summaries
+    project-name="Chrome Extensions"
+    tenant-name="Chrome for Developers"
+    
+    
+    
+    
+    
+    >
+  <form class="devsite-search-form" action="https://developer.chrome.com/s/results?hl=pt-br" method="GET">
+    <div class="devsite-search-container">
+      <button type="button"
+              search-open
+              class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+              
+              aria-label="Abrir pesquisa"></button>
+      <div class="devsite-searchbox">
+        <input
+          aria-activedescendant=""
+          aria-autocomplete="list"
+          
+          aria-label="Pesquisa"
+          aria-expanded="false"
+          aria-haspopup="listbox"
+          autocomplete="off"
+          class="devsite-search-field devsite-search-query"
+          name="q"
+          
+          placeholder="Pesquisa"
+          role="combobox"
+          type="text"
+          value=""
+          >
+          <div class="devsite-search-image material-icons" aria-hidden="true">
+            
+              <svg class="devsite-search-ai-image" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <g clip-path="url(#clip0_6641_386)">
+                    <path d="M19.6 21L13.3 14.7C12.8 15.1 12.225 15.4167 11.575 15.65C10.925 15.8833 10.2333 16 9.5 16C7.68333 16 6.14167 15.375 4.875 14.125C3.625 12.8583 3 11.3167 3 9.5C3 7.68333 3.625 6.15 4.875 4.9C6.14167 3.63333 7.68333 3 9.5 3C10.0167 3 10.5167 3.05833 11 3.175C11.4833 3.275 11.9417 3.43333 12.375 3.65L10.825 5.2C10.6083 5.13333 10.3917 5.08333 10.175 5.05C9.95833 5.01667 9.73333 5 9.5 5C8.25 5 7.18333 5.44167 6.3 6.325C5.43333 7.19167 5 8.25 5 9.5C5 10.75 5.43333 11.8167 6.3 12.7C7.18333 13.5667 8.25 14 9.5 14C10.6667 14 11.6667 13.625 12.5 12.875C13.35 12.1083 13.8417 11.15 13.975 10H15.975C15.925 10.6333 15.7833 11.2333 15.55 11.8C15.3333 12.3667 15.05 12.8667 14.7 13.3L21 19.6L19.6 21ZM17.5 12C17.5 10.4667 16.9667 9.16667 15.9 8.1C14.8333 7.03333 13.5333 6.5 12 6.5C13.5333 6.5 14.8333 5.96667 15.9 4.9C16.9667 3.83333 17.5 2.53333 17.5 0.999999C17.5 2.53333 18.0333 3.83333 19.1 4.9C20.1667 5.96667 21.4667 6.5 23 6.5C21.4667 6.5 20.1667 7.03333 19.1 8.1C18.0333 9.16667 17.5 10.4667 17.5 12Z" fill="#5F6368"/>
+                  </g>
+                <defs>
+                <clipPath id="clip0_6641_386">
+                <rect width="24" height="24" fill="white"/>
+                </clipPath>
+                </defs>
+              </svg>
+            
+          </div>
+          <div class="devsite-search-shortcut-icon-container" aria-hidden="true">
+            <kbd class="devsite-search-shortcut-icon">/</kbd>
+          </div>
+      </div>
+    </div>
+  </form>
+  <button type="button"
+          search-close
+          class="devsite-search-button devsite-header-icon-button button-flat material-icons"
+          
+          aria-label="Fechar pesquisa"></button>
+</devsite-search>
+
+        </div>
+
+        
+
+          
+
+          
+
+          
+
+          <devsite-appearance-selector></devsite-appearance-selector>
+
+          
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="nl"
+        >Nederlands</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pl"
+        >Polski</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="vi"
+        >Tiếng Việt</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="tr"
+        >Türkçe</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ru"
+        >Русский</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ar"
+        >العربيّة</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fa"
+        >فارسی</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="hi"
+        >हिंदी</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="bn"
+        >বাংলা</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="th"
+        >ภาษาไทย</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+
+          
+
+        
+
+        
+          <devsite-user 
+                        
+                        
+                          enable-profiles
+                        
+                        
+                        id="devsite-user">
+            
+              
+              <span class="button devsite-top-button" aria-hidden="true" visually-hidden>Fazer login</span>
+            
+          </devsite-user>
+        
+        
+        
+      </div>
+    </div>
+  </div>
+
+
+
+  <div class="devsite-collapsible-section
+    ">
+    <div class="devsite-header-background">
+      
+        
+          <div class="devsite-product-id-row"
+           >
+            <div class="devsite-product-description-row">
+              
+                
+                <div class="devsite-product-id">
+                  
+                  
+                  
+                    <ul class="devsite-breadcrumb-list"
+  
+    aria-label="Navegação estrutural no cabeçalho inferior">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://developer.chrome.com/docs?hl=pt-br"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Lower Header"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail="Docs"
+      
+    >
+    
+          Docs
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://developer.chrome.com/docs/extensions?hl=pt-br"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Lower Header"
+      
+        data-value="2"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="2"
+      
+        track-metadata-eventdetail="Chrome Extensions"
+      
+    >
+    
+          Chrome Extensions
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+                </div>
+                
+              
+              
+            </div>
+            
+          </div>
+          
+        
+      
+      
+        <div class="devsite-doc-set-nav-row">
+          
+          
+            
+            
+  <devsite-tabs class="lower-tabs">
+
+    <nav class="devsite-tabs-wrapper" aria-label="Guias inferiores">
+      
+        
+          <tab  class="devsite-active">
+            
+    <a href="https://developer.chrome.com/docs/extensions?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - visão geral"
+       track-metadata-module="primary nav"
+       aria-label="Visão geral, selected" 
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Visão geral"
+         
+           track-name="visão geral"
+         
+       >
+    Visão geral
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/docs/extensions/get-started?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/get-started?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - começar"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Começar"
+         
+           track-name="começar"
+         
+       >
+    Começar
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/docs/extensions/develop?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/develop?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - desenvolver"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Desenvolver"
+         
+           track-name="desenvolver"
+         
+       >
+    Desenvolver
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/docs/extensions/how-to?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/how-to?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - tutoriais"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Tutoriais"
+         
+           track-name="tutoriais"
+         
+       >
+    Tutoriais
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/docs/extensions/ai?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/ai?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - ai"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: AI"
+         
+           track-name="ai"
+         
+       >
+    AI
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab class="devsite-dropdown
+    
+    
+    
+    ">
+  
+    <a href="https://developer.chrome.com/docs/extensions/reference?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/reference?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - referência"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Referência"
+         
+           track-name="referência"
+         
+       >
+    Referência
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Menu suspenso de Referência"
+         track-type="nav"
+         track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/reference?hl=pt-br"
+         track-metadata-position="nav - referência"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Referência"
+          
+            track-name="referência"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/extensions/reference/api?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/reference/api?hl=pt-br"
+                     track-metadata-position="nav - referência"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      API
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/extensions/reference/permissions-list?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/reference/permissions-list?hl=pt-br"
+                     track-metadata-position="nav - referência"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Permissões
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/extensions/reference/manifest?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/reference/manifest?hl=pt-br"
+                     track-metadata-position="nav - referência"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Manifesto
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+        
+          <tab  >
+            
+    <a href="https://developer.chrome.com/docs/extensions/samples?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/extensions/samples?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - exemplos"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Exemplos"
+         
+           track-name="exemplos"
+         
+       >
+    Exemplos
+  
+    </a>
+    
+  
+          </tab>
+        
+      
+        
+          <tab class="devsite-dropdown
+    
+    
+    
+    ">
+  
+    <a href="https://developer.chrome.com/docs/webstore?hl=pt-br"
+    class="devsite-tabs-content gc-analytics-event "
+      track-metadata-eventdetail="https://developer.chrome.com/docs/webstore?hl=pt-br"
+    
+       track-type="nav"
+       track-metadata-position="nav - chrome web store"
+       track-metadata-module="primary nav"
+       
+       
+         
+           data-category="Site-Wide Custom Events"
+         
+           data-label="Tab: Chrome Web Store"
+         
+           track-name="chrome web store"
+         
+       >
+    Chrome Web Store
+  
+    </a>
+    
+      <button
+         aria-haspopup="menu"
+         aria-expanded="false"
+         aria-label="Menu suspenso de Chrome Web Store"
+         track-type="nav"
+         track-metadata-eventdetail="https://developer.chrome.com/docs/webstore?hl=pt-br"
+         track-metadata-position="nav - chrome web store"
+         track-metadata-module="primary nav"
+         
+          
+            data-category="Site-Wide Custom Events"
+          
+            data-label="Tab: Chrome Web Store"
+          
+            track-name="chrome web store"
+          
+        
+         class="devsite-tabs-dropdown-toggle devsite-icon devsite-icon-arrow-drop-down"></button>
+    
+  
+  <div class="devsite-tabs-dropdown" role="menu" aria-label="submenu" hidden>
+    <div class="devsite-tabs-dropdown-content">
+      
+      
+        <div class="devsite-tabs-dropdown-column
+                    ">
+          
+            <ul class="devsite-tabs-dropdown-section
+                       ">
+              
+              
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/webstore/prepare?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/webstore/prepare?hl=pt-br"
+                     track-metadata-position="nav - chrome web store"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Preparar sua extensão
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/webstore/publish?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/webstore/publish?hl=pt-br"
+                     track-metadata-position="nav - chrome web store"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Publicar na Chrome Web Store
+                    </div>
+                    
+                  </a>
+                </li>
+              
+                <li class="devsite-nav-item">
+                  <a href="https://developer.chrome.com/docs/webstore/program-policies?hl=pt-br"
+                    
+                     track-type="nav"
+                     track-metadata-eventdetail="https://developer.chrome.com/docs/webstore/program-policies?hl=pt-br"
+                     track-metadata-position="nav - chrome web store"
+                     track-metadata-module="tertiary nav"
+                     
+                     tooltip
+                  >
+                    
+                    <div class="devsite-nav-item-title">
+                      Políticas do programa
+                    </div>
+                    
+                  </a>
+                </li>
+              
+            </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+</tab>
+        
+      
+    </nav>
+
+  </devsite-tabs>
+
+          
+          
+        </div>
+      
+    </div>
+  </div>
+
+</div>
+
+
+
+  
+
+  
+</devsite-header>
+        <devsite-book-nav scrollbars hidden>
+          
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div class="devsite-book-nav-filter"
+     hidden>
+  <span class="filter-list-icon material-icons" aria-hidden="true"></span>
+  <input type="text"
+         placeholder="Filtrar"
+         
+         aria-label="Digite para filtrar"
+         role="searchbox">
+  
+  <span class="filter-clear-button hidden"
+        data-title="Limpar filtro"
+        aria-label="Limpar filtro"
+        role="button"
+        tabindex="0"></span>
+</div>
+
+<nav class="devsite-book-nav devsite-nav nocontent" data-nosnippet
+     aria-label="Menu lateral">
+  <div class="devsite-mobile-header">
+    <button type="button"
+            id="devsite-close-nav"
+            class="devsite-header-icon-button button-flat material-icons gc-analytics-event"
+            data-category="Site-Wide Custom Events"
+            data-label="Close navigation"
+            aria-label="Fechar navegação">
+    </button>
+    <div class="devsite-product-name-wrapper">
+
+  <a href="/" class="devsite-site-logo-link gc-analytics-event"
+   data-category="Site-Wide Custom Events" data-label="Site logo" track-type="globalNav"
+   track-name="chromeForDevelopers" track-metadata-position="nav"
+   track-metadata-eventDetail="nav">
+  
+  <picture>
+    
+    <source srcset="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/lockup-dark-theme.svg"
+            media="(prefers-color-scheme: dark)"
+            class="devsite-dark-theme">
+    
+    <img src="https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/lockup.svg" class="devsite-site-logo" alt="Chrome for Developers">
+  </picture>
+  
+</a>
+
+
+</div>
+  </div>
+
+  <div class="devsite-book-nav-wrapper">
+    <div class="devsite-mobile-nav-top">
+      
+        <ul class="devsite-nav-list">
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/docs"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Documentos"
+      
+        track-name="documentos"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Documentos"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Documentos
+   </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+               ">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Documentos"
+      
+        track-name="documentos"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Documentos">
+      Mais
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Documentos">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+              
+                <ul class="devsite-nav-responsive-tabs">
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              devsite-nav-active"
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Visão geral"
+      
+        track-name="visão geral"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Visão geral"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip menu="_book">
+      Visão geral
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions/get-started"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Começar"
+      
+        track-name="começar"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Começar"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Começar
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions/develop"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Desenvolver"
+      
+        track-name="desenvolver"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Desenvolver"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Desenvolver
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions/how-to"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Tutoriais"
+      
+        track-name="tutoriais"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Tutoriais"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Tutoriais
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions/ai"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: AI"
+      
+        track-name="ai"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: AI"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      AI
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions/reference"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Referência"
+      
+        track-name="referência"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Referência"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Referência
+   </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+                devsite-lower-tab-item">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Referência"
+      
+        track-name="referência"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Referência">
+      Mais
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Referência">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/extensions/samples"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Exemplos"
+      
+        track-name="exemplos"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Exemplos"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Exemplos
+   </span>
+    
+  
+  </a>
+  
+
+  
+                    </li>
+                  
+                    
+                    
+                    
+                    <li class="devsite-nav-item">
+                      
+  
+  <a href="/docs/webstore"
+    
+       class="devsite-nav-title gc-analytics-event
+              devsite-nav-has-children
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Chrome Web Store"
+      
+        track-name="chrome web store"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Chrome Web Store"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Chrome Web Store
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          >
+    </span>
+    
+  
+  </a>
+  
+
+  
+    <ul class="devsite-nav-responsive-tabs devsite-nav-has-menu
+                devsite-lower-tab-item">
+      
+<li class="devsite-nav-item">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Chrome Web Store"
+      
+        track-name="chrome web store"
+      
+    >
+  
+    <span class="devsite-nav-text" tooltip menu="Chrome Web Store">
+      Mais
+   </span>
+    
+    <span class="devsite-nav-icon material-icons" data-icon="forward"
+          menu="Chrome Web Store">
+    </span>
+    
+  
+  </span>
+  
+
+</li>
+
+    </ul>
+  
+                    </li>
+                  
+                </ul>
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/case-studies"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Estudos de caso"
+      
+        track-name="estudos de caso"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Estudos de caso"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Estudos de caso
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/blog"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Blog"
+      
+        track-name="blog"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Blog"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Blog
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+            <li class="devsite-nav-item">
+              
+  
+  <a href="/new"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Tab: Novidades no Chrome"
+      
+        track-name="novidades no chrome"
+      
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Novidades no Chrome"
+     track-type="globalNav"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Novidades no Chrome
+   </span>
+    
+  
+  </a>
+  
+
+  
+              
+            </li>
+          
+          
+          
+        </ul>
+      
+    </div>
+    
+      <div class="devsite-mobile-nav-bottom">
+        
+        
+          
+    
+      
+      <ul class="devsite-nav-list" menu="Documentos"
+          aria-label="Menu lateral" hidden>
+        
+          
+            
+              
+<li class="devsite-nav-item devsite-nav-heading">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    >
+  
+    <span class="devsite-nav-text" tooltip >
+      Crie com o Chrome
+   </span>
+    
+  
+  </span>
+  
+
+</li>
+
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/web-platform"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Plataforma da Web"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Plataforma da Web
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/capabilities"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Recursos"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Recursos
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/chromedriver"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: ChromeDriver"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      ChromeDriver
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/extensions"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Extensions"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Extensions
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/webstore"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Chrome Web Store"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Chrome Web Store
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/chromium"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Chromium"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Chromium
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/android"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Web no Android"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Web no Android
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="https://developer.chrome.com/origintrials/"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Testes de origem"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Testes de origem
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/release-notes"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Notas da versão"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Notas da versão
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+          
+            
+              
+<li class="devsite-nav-item devsite-nav-heading">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    >
+  
+    <span class="devsite-nav-text" tooltip >
+      Produtividade
+   </span>
+    
+  
+  </span>
+  
+
+</li>
+
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/devtools"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: DevTools"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      DevTools
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/lighthouse"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Lighthouse"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Lighthouse
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/crux"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Relatório de UX do Chrome"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Relatório de UX do Chrome
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/accessibility"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Acessibilidade"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Acessibilidade
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/modern-web-guidance"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Orientação para a Web moderna"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Orientação para a Web moderna
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/workbox"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Workbox"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Workbox
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/puppeteer"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Animador de fantoches"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Animador de fantoches
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+          
+            
+              
+<li class="devsite-nav-item devsite-nav-heading">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    >
+  
+    <span class="devsite-nav-text" tooltip >
+      Experiência
+   </span>
+    
+  
+  </span>
+  
+
+</li>
+
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/ai"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: AI"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      AI
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/performance"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Desempenho"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Desempenho
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/css-ui"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: CSS e interface"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      CSS e interface
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/identity"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Identidade"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Identidade
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/payments"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Pagamentos"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Pagamentos
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/privacy-security"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Privacidade e segurança"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Privacidade e segurança
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+          
+            
+              
+<li class="devsite-nav-item devsite-nav-heading">
+
+  
+  <span
+    
+       class="devsite-nav-title"
+       tooltip
+    
+    >
+  
+    <span class="devsite-nav-text" tooltip >
+      Recursos
+   </span>
+    
+  
+  </span>
+  
+
+</li>
+
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Toda a documentação"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Toda a documentação
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="https://web.dev/baseline"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Valor de referência"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Valor de referência
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="https://web.dev"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: web.dev"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      web.dev
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="https://pagespeed.web.dev"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Auditoria do PageSpeed Insights"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Auditoria do PageSpeed Insights
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="https://developers.google.com/privacy-sandbox"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Sandbox de privacidade"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Sandbox de privacidade
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/iwa"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Apps isolados da Web (AIW)"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Apps isolados da Web (AIW)
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+    
+  
+    
+  
+    
+  
+        
+        
+          
+    
+  
+    
+  
+    
+  
+    
+  
+    
+  
+    
+      
+      <ul class="devsite-nav-list" menu="Referência"
+          aria-label="Menu lateral" hidden>
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/extensions/reference/api"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: API"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      API
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/extensions/reference/permissions-list"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Permissões"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Permissões
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/extensions/reference/manifest"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Manifesto"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Manifesto
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+    
+  
+    
+      
+      <ul class="devsite-nav-list" menu="Chrome Web Store"
+          aria-label="Menu lateral" hidden>
+        
+          
+            
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/webstore/prepare"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Preparar sua extensão"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Preparar sua extensão
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/webstore/publish"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Publicar na Chrome Web Store"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Publicar na Chrome Web Store
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+              
+<li class="devsite-nav-item">
+
+  
+  <a href="/docs/webstore/program-policies"
+    
+       class="devsite-nav-title gc-analytics-event
+              
+              "
+    
+
+    
+     data-category="Site-Wide Custom Events"
+     data-label="Responsive Tab: Políticas do programa"
+     track-type="navMenu"
+     track-metadata-eventDetail="globalMenu"
+     track-metadata-position="nav">
+  
+    <span class="devsite-nav-text" tooltip >
+      Políticas do programa
+   </span>
+    
+  
+  </a>
+  
+
+</li>
+
+            
+          
+        
+      </ul>
+    
+  
+        
+      </div>
+    
+  </div>
+</nav>
+          
+        </devsite-book-nav>
+      
+      <section id="gc-wrapper">
+        <main role="main" id="main-content" class="devsite-main-content"
+            
+              
+              
+            >
+          <div class="devsite-sidebar">
+            <div class="devsite-sidebar-content">
+                
+                <devsite-toc class="devsite-nav"
+                            role="navigation"
+                            aria-label="Nesta página"
+                            depth="2"
+                            scrollbars
+                            data-nosnippet
+                  disabled></devsite-toc>
+                <devsite-recommendations-sidebar class="nocontent devsite-nav" data-nosnippet>
+                </devsite-recommendations-sidebar>
+            </div>
+          </div>
+          <devsite-content>
+            
+              
+
+
+
+
+
+
+
+
+
+
+<article class="devsite-article"><style>
+      /* Styles inlined from /css/landing.css */
+/* Temporary style changes for landing pages */
+
+.devsite-card-summary {
+  max-height: initial;
+}
+
+.devsite-landing-row-item-list-item-buttons {
+  text-overflow: ellipsis;
+  overflow: hidden;
+}
+
+.devsite-landing-row-item-list-item-buttons a.button-white {
+  width: 100%;
+  text-align: left;
+}
+
+fieldset.catalog-checkbox-controls-group:after {
+  display: none;
+}
+
+.dcc-hero-heading h2 {
+  font-size: 600%;
+  line-height: 1.1;
+  color: var(--chrome-primary);
+}
+      </style>
+  
+  
+  
+  
+  
+    <div class="devsite-banner devsite-banner-translated nocontent">
+      <div class="devsite-banner-message">
+        <div class="devsite-banner-message-text">
+          <img src="https://developer.chrome.com/_static/images/translated.svg?hl=pt-br"
+               class="devsite-banner-translated-image invert"
+               alt="">
+          <span class="devsite-banner-translated-text">
+            
+            Google uses AI technology to translate content into your preferred language. AI translations can contain errors.
+          </span>
+        </div>
+        <devsite-switch-to-english-button></devsite-switch-to-english-button>
+      </div>
+    </div>
+  
+
+  <div class="devsite-article-meta nocontent" role="navigation" data-nosnippet>
+    
+    
+    <ul class="devsite-breadcrumb-list"
+  
+    aria-label="Localização atual">
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+    
+    
+      
+        
+  <a href="https://developer.chrome.com/?hl=pt-br"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="1"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="1"
+      
+        track-metadata-eventdetail=""
+      
+    >
+    
+          Página inicial
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://developer.chrome.com/docs?hl=pt-br"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="2"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="2"
+      
+        track-metadata-eventdetail="Docs"
+      
+    >
+    
+          Docs
+        
+  </a>
+  
+      
+    
+  </li>
+  
+  <li class="devsite-breadcrumb-item
+             ">
+    
+      
+      <div class="devsite-breadcrumb-guillemet material-icons" aria-hidden="true"></div>
+    
+    
+    
+      
+        
+  <a href="https://developer.chrome.com/docs/extensions?hl=pt-br"
+      
+        class="devsite-breadcrumb-link gc-analytics-event"
+      
+        data-category="Site-Wide Custom Events"
+      
+        data-label="Breadcrumbs"
+      
+        data-value="3"
+      
+        track-type="globalNav"
+      
+        track-name="breadcrumb"
+      
+        track-metadata-position="3"
+      
+        track-metadata-eventdetail="Chrome Extensions"
+      
+    >
+    
+          Chrome Extensions
+        
+  </a>
+  
+      
+    
+  </li>
+  
+</ul>
+    
+  </div>
+  <devsite-actions hidden data-nosnippet><devsite-feature-tooltip
+      ack-key="AckCollectionsBookmarkTooltipDismiss"
+      analytics-category="Site-Wide Custom Events"
+      analytics-action-show="Callout Profile displayed"
+      analytics-action-close="Callout Profile dismissed"
+      analytics-label="Create Collection Callout"
+      class="devsite-page-bookmark-tooltip nocontent"
+      data-nosnippet
+      dismiss-button="true"
+      id="devsite-collections-dropdown"
+      
+      dismiss-button-text="Dispensar"
+
+      
+      close-button-text="Ok">
+
+    
+    
+      <devsite-bookmark></devsite-bookmark>
+    
+
+    <span slot="popout-heading">
+      
+      Mantenha tudo organizado com as coleções
+    </span>
+    <span slot="popout-contents">
+      
+      Salve e categorize o conteúdo com base nas suas preferências.
+    </span>
+  </devsite-feature-tooltip></devsite-actions>
+  
+    
+  
+
+  <devsite-toc class="devsite-nav"
+    depth="2"
+    devsite-toc-embedded
+    disabled>
+  </devsite-toc>
+  
+    
+  <div class="devsite-article-body clearfix
+  ">
+
+  
+    
+  <section class="devsite-landing-row devsite-landing-row-1-up devsite-landing-row-67 devsite-landing-row-hero devsite-landing-row-no-image-background"
+           
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+<div class="devsite-landing-row-item-media
+            ">
+  
+    <figure class="devsite-landing-row-item-image">
+  
+    
+  
+  <picture>
+    
+    <img alt=""
+         
+         src="https://developer.chrome.com/static/docs/extensions/images/home-hero.svg?hl=pt-br"
+         srcset="https://developer.chrome.com/static/docs/extensions/images/home-hero.svg?hl=pt-br"
+         
+         
+         sizes="(max-width: 600px) 100vw, (max-width: 840px) 50vw, 464px"
+         
+         
+         fetchpriority="high">
+  </picture>
+  
+  
+</figure>
+  
+</div>
+
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="este-e-o-extensions"
+        data-text="Este é o Extensions!"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+    
+        Este é o Extensions!
+      
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Personalize o navegador de acordo com suas necessidades para tornar o Chrome mais eficiente.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/get-started?hl=pt-br"
+  
+    class="button button-primary
+      "
+    
+    
+    >Comece a criar</a>
+
+  
+  <a href="https://developer.chrome.com/docs/webstore?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Publicar na loja on-line</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-2-up devsite-landing-row-cards devsite-landing-row-no-image-background"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-card-blue-grey"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+          <div class="devsite-landing-row-item-labels">
+  
+
+  
+  <span
+  
+    
+      class="devsite-label
+             
+             "
+    
+    
+    >Em destaque</span>
+
+</div>
+        
+
+        
+    <h3 id="extensoes-e-ia"
+        data-text="Extensões e IA"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+    
+        Extensões e IA
+      
+  
+    </h3>
+  
+
+        
+
+        
+          <ul class="devsite-landing-row-item-list">
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="a-api-prompt-nas-extensoes-do-chrome"
+        data-text="A API Prompt nas extensões do Chrome"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/ai/prompt-api?hl=pt-br">
+    
+        A API Prompt nas extensões do Chrome
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="amostras-de-extensoes-com-tecnologia-de-ia"
+        data-text="Amostras de extensões com tecnologia de IA"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/ai?hl=pt-br#ai-powered-extensions-in-action">
+    
+        Amostras de extensões com tecnologia de IA
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="programa-de-pre-lancamento"
+        data-text="Programa de pré-lançamento"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/ai/built-in?hl=pt-br">
+    
+        Programa de pré-lançamento
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="participar-do-desafio-de-ia-integrada"
+        data-text="Participar do desafio de IA integrada"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/blog/ai-challenge?hl=pt-br">
+    
+        Participar do desafio de IA integrada
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+          </ul>
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/ai?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Começar</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-card-blue-grey"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+          <div class="devsite-landing-row-item-labels">
+  
+
+  
+  <span
+  
+    
+      class="devsite-label
+             
+             "
+    
+    
+    >Mais recentes</span>
+
+</div>
+        
+
+        
+    <h3 id="novidades"
+        data-text="Novidades"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+    
+        Novidades
+      
+  
+    </h3>
+  
+
+        
+
+        
+          <ul class="devsite-landing-row-item-list">
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="chrome-148-o-namespace-do-navegador"
+        data-text="Chrome 148: o namespace do navegador"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/whats-new?hl=pt-br#transition_to_browser_namespace">
+    
+        Chrome 148: o namespace do navegador
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="postagem-do-blog-capacite-sua-equipe-com-funcoes-expandidas-no-painel-de-controle-do-desenvolvedor"
+        data-text="Postagem do blog: capacite sua equipe com funções expandidas no Painel de controle do desenvolvedor"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/whats-new?hl=pt-br#blog_post_empower_your_team_with_expanded_roles_in_the_developer_dashboard">
+    
+        Postagem do blog: capacite sua equipe com funções expandidas no Painel de controle do desenvolvedor
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="postagem-no-blog-desbloquear-a-clonagem-estruturada-para-mensagens-de-extensoes-do-chrome"
+        data-text="Postagem no blog: desbloquear a clonagem estruturada para mensagens de extensões do Chrome"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/whats-new?hl=pt-br#blog_post_unlock_structured_clone_for_chrome_extension_messaging">
+    
+        Postagem no blog: desbloquear a clonagem estruturada para mensagens de extensões do Chrome
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       >
+
+    
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+    <h4 id="postagem-no-blog-publicar-para-organizacoes-externas"
+        data-text="Postagem no blog: publicar para organizações externas"
+        class=" no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/whats-new?hl=pt-br#blog_post_publish_to_external_organizations">
+    
+        Postagem no blog: publicar para organizações externas
+      
+  </a>
+  
+    </h4>
+  
+
+      
+
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+          </ul>
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/whats-new?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Mostrar tudo</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-3-up devsite-landing-row-cards devsite-landing-row-no-image-background dcc-pillars"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+      <header class="devsite-landing-row-header"
+              >
+
+        
+
+        
+        <div class="devsite-landing-row-header-text">
+
+          
+    <h2 id="ampliar-a-web"
+        data-text="Ampliar a Web"
+        
+        tabindex="0">
+      
+    
+        Ampliar a Web
+      
+  
+    </h2>
+  
+
+          
+            <div class="devsite-landing-row-description">
+              Saiba por que as extensões são tão poderosas e como você pode personalizar a navegação no Chrome de acordo com suas necessidades.
+
+            </div>
+          
+        </div>
+        
+
+        
+          <div class="devsite-landing-row-header-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop?hl=pt-br"
+  
+    class="button button-primary
+      "
+    
+    
+    >Saiba mais</a>
+
+</div>
+        
+      </header>
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="personalizar-a-interface-do-usuario"
+        data-text="Personalizar a interface do usuário"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+    
+        Personalizar a interface do usuário
+      
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Explore várias maneiras de adicionar interações à sua extensão.
+
+          </div>
+        
+
+        
+          <ul class="devsite-landing-row-item-list">
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/sidePanel?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      view_sidebar
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/sidePanel?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Painel lateral</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop/ui/themes?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      wallpaper
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop/ui/themes?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Temas</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop/ui/override-chrome-pages?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      edit_document
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop/ui/override-chrome-pages?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Substituir páginas</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+          </ul>
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="modificar-e-observar-o-navegador"
+        data-text="Modificar e observar o navegador"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+    
+        Modificar e observar o navegador
+      
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Explore maneiras de personalizar e reagir ao navegador.
+
+          </div>
+        
+
+        
+          <ul class="devsite-landing-row-item-list">
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/tabs?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      tabs
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/tabs?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Gerenciar guias</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/bookmarks?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      bookmarks
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/bookmarks?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Personalizar favoritos</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/downloads?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      download
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/downloads?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Monitorar downloads</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+          </ul>
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-services-card"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="modificar-e-observar-a-web"
+        data-text="Modificar e observar a Web"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+    
+        Modificar e observar a Web
+      
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Conheça maneiras de mudar e modificar páginas da Web
+
+          </div>
+        
+
+        
+          <ul class="devsite-landing-row-item-list">
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      javascript
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop/concepts/content-scripts?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Injetar scripts de conteúdo</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/webNavigation?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      web
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/webNavigation?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Observar as solicitações de navegação da Web</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+              <li class="devsite-landing-row-item-list-item">
+  
+
+  <div class="devsite-landing-row-item-list-item-content"
+       
+    icon-position="left"
+  >
+
+    
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/cookies?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-list-item-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="small"
+  >
+  
+    <div class="devsite-landing-row-item-list-item-icon material-icons" aria-hidden="true">
+      cookie
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+    <div class="devsite-landing-row-item-list-item-description">
+      
+
+      
+
+      
+        <div class="devsite-landing-row-item-list-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference/api/cookies?hl=pt-br"
+  
+    
+      class="button
+             button-white
+             "
+    
+    
+    >Consultar e modificar cookies</a>
+
+</div>
+      
+    </div>
+  </div>
+
+  
+</li>
+            
+          </ul>
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-3-up devsite-landing-row-cards"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+      <header class="devsite-landing-row-header"
+              >
+
+        
+
+        
+        <div class="devsite-landing-row-header-text">
+
+          
+    <h2 id="extensoes-no-youtube"
+        data-text="Extensões no YouTube"
+        
+        tabindex="0">
+      
+    
+        Extensões no YouTube
+      
+  
+    </h2>
+  
+
+          
+            <div class="devsite-landing-row-description">
+              Insights e notícias do ecossistema de extensões.
+
+            </div>
+          
+        </div>
+        
+
+        
+      </header>
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+<div class="devsite-landing-row-item-media
+            ">
+  
+    <devsite-video
+  autohide="1"
+  showinfo="0"
+  video-id="gO0TRIYO5v4"
+  
+></devsite-video>
+  
+</div>
+
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="como-saber-se-as-permissoes-sao-seguras-para-solicitar-na-sua-extensao-do-chrome"
+        data-text="Como saber se as permissões são seguras para solicitar na sua extensão do Chrome"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://www.youtube.com/watch?v=gO0TRIYO5v4&amp%3Bhl=pt-br&hl=pt-br">
+    
+        Como saber se as permissões são seguras para solicitar na sua extensão do Chrome
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Oliver explica o que você precisa considerar ao solicitar novas permissões na sua extensão.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://www.youtube.com/watch?v=gO0TRIYO5v4&amp%3Bhl=pt-br&hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Assistir no YouTube</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+<div class="devsite-landing-row-item-media
+            ">
+  
+    <devsite-video
+  autohide="1"
+  showinfo="0"
+  video-id="nOfyMlIu4jc"
+  
+></devsite-video>
+  
+</div>
+
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="tudo-o-que-aconteceu-com-as-extensoes-do-chrome-em-2025"
+        data-text="Tudo o que aconteceu com as extensões do Chrome em 2025"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://www.youtube.com/watch?v=nOfyMlIu4jc&amp%3Bhl=pt-br&hl=pt-br">
+    
+        Tudo o que aconteceu com as extensões do Chrome em 2025
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Confira um resumo de tudo o que aconteceu em 2025 com as extensões do Chrome.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://www.youtube.com/watch?v=nOfyMlIu4jc&amp%3Bhl=pt-br&hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Assistir no YouTube</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+<div class="devsite-landing-row-item-media
+            ">
+  
+    <devsite-video
+  autohide="1"
+  showinfo="0"
+  video-id="PW2u2IZWjtk"
+  
+></devsite-video>
+  
+</div>
+
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="e-possivel-criar-uma-extensao-do-chrome-para-varios-navegadores"
+        data-text="É possível criar uma extensão do Chrome para vários navegadores?"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://www.youtube.com/watch?v=PW2u2IZWjtk&amp%3Bhl=pt-br&hl=pt-br">
+    
+        É possível criar uma extensão do Chrome para vários navegadores?
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Saiba como criar uma extensão para vários navegadores.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://www.youtube.com/watch?v=PW2u2IZWjtk&amp%3Bhl=pt-br&hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Assistir no YouTube</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-4-up devsite-landing-row-cards devsite-landing-row-no-image-background"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+      <header class="devsite-landing-row-header"
+              >
+
+        
+
+        
+        <div class="devsite-landing-row-header-text">
+
+          
+    <h2 id="extensoes-em-acao"
+        data-text="Extensões em ação"
+        
+        tabindex="0">
+      
+    
+        Extensões em ação
+      
+  
+    </h2>
+  
+
+          
+            <div class="devsite-landing-row-description">
+              Carregue essas extensões de exemplo no seu computador local.
+            </div>
+          
+        </div>
+        
+
+        
+          <div class="devsite-landing-row-header-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/samples?hl=pt-br"
+  
+    class="button button-primary
+      "
+    
+    
+    >Conferir todas as amostras</a>
+
+</div>
+        
+      </header>
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-docs-card"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/action">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-blue"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      install_desktop
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="demonstracao-da-api-action"
+        data-text="Demonstração da API Action"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/action">
+    
+        Demonstração da API Action
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Este exemplo demonstra o uso da API Action, que muda o ícone, o selo do ícone, o texto flutuante ou a página pop-up, dependendo da escolha ou ação do usuário.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/action"
+  
+    class="button button-white
+      "
+    
+    
+    >Acessar a amostra</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-docs-card"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/userScripts">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-green"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      install_desktop
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="demonstracao-da-api-userscript"
+        data-text="Demonstração da API UserScript"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/userScripts">
+    
+        Demonstração da API UserScript
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Os usuários podem criar um script de usuário ou fazer o download dele em um repositório de scripts. Esse exemplo
+ permite injetar arquivos e código arbitrário adicionados em uma página de opções.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/userScripts"
+  
+    class="button button-white
+      "
+    
+    
+    >Acessar a amostra</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-docs-card"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/scripting">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-yellow"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      install_desktop
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="demonstracao-da-api-scripting"
+        data-text="Demonstração da API Scripting"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/scripting">
+    
+        Demonstração da API Scripting
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Este exemplo demonstra como injetar JavaScript em páginas da Web usando a API Scripting.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/api-samples/scripting"
+  
+    class="button button-white
+      "
+    
+    
+    >Acessar a amostra</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media dcc-docs-card"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/functional-samples/cookbook.sidepanel-open">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-red"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      install_desktop
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="demonstracao-da-api-sidepanel"
+        data-text="Demonstração da API SidePanel"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/functional-samples/cookbook.sidepanel-open">
+    
+        Demonstração da API SidePanel
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Este exemplo demonstra como criar um painel lateral que é aberto quando o usuário clica em um botão em uma página ou abre um menu de contexto.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://github.com/GoogleChrome/chrome-extensions-samples/tree/main/functional-samples/cookbook.sidepanel-open"
+  
+    class="button button-white
+      "
+    
+    
+    >Acessar a amostra</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-4-up devsite-landing-row-cards devsite-landing-row-no-image-background"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+      <header class="devsite-landing-row-header"
+              >
+
+        
+
+        
+        <div class="devsite-landing-row-header-text">
+
+          
+    <h2 id="documentacao"
+        data-text="Documentação"
+        
+        tabindex="0">
+      
+    
+        Documentação
+      
+  
+    </h2>
+  
+
+          
+            <div class="devsite-landing-row-description">
+              Tudo o que você precisa saber sobre as extensões do Chrome.
+            </div>
+          
+        </div>
+        
+
+        
+      </header>
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://developer.chrome.com/docs/extensions/get-started?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-blue"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      article
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="comecar"
+        data-text="Começar"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/get-started?hl=pt-br">
+    
+        Começar
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Crie sua primeira extensão.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/get-started?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Saiba mais</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-blue"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      article
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="desenvolver"
+        data-text="Desenvolver"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/develop?hl=pt-br">
+    
+        Desenvolver
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Saiba como as extensões do Chrome funcionam e o que elas podem fazer.
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/develop?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Saiba mais</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://developer.chrome.com/docs/extensions/how-to?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-blue"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      article
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="instrucoes"
+        data-text="Instruções"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/how-to?hl=pt-br">
+    
+        Instruções
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Aprenda a resolver casos de uso específicos nas extensões do Chrome.
+
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/how-to?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Saiba mais</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         
+    icon-position="top"
+  >
+
+      
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference?hl=pt-br">
+    
+  <div class="devsite-landing-row-item-icon-container"
+       
+       
+    foreground="google-blue"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-item-icon material-icons" aria-hidden="true">
+      article
+    </div>
+  
+  </div>
+  
+  </a>
+  
+
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="referencia"
+        data-text="Referência"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/reference?hl=pt-br">
+    
+        Referência
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Documentação de referência para APIs Extensions, chaves de manifesto e permissões.
+          </div>
+        
+
+        
+
+        
+          <div class="devsite-landing-row-item-buttons">
+  
+
+  
+  <a href="https://developer.chrome.com/docs/extensions/reference?hl=pt-br"
+  
+    class="button
+      "
+    
+    
+    >Saiba mais</a>
+
+</div>
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-1-up devsite-landing-row-cards"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+      <header class="devsite-landing-row-header"
+              >
+
+        
+
+        
+        <div class="devsite-landing-row-header-text">
+
+          
+    <h2 id="postagens-de-extensoes"
+        data-text="Postagens de extensões"
+        
+        tabindex="0">
+      
+    
+        Postagens de extensões
+      
+  
+    </h2>
+  
+
+          
+            <div class="devsite-landing-row-description">
+              Leia as postagens mais recentes do blog de Extensões do Chrome
+            </div>
+          
+        </div>
+        
+
+        
+      </header>
+      
+
+      
+      
+
+      
+
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-1-up"
+           
+    background="grey"
+  
+           
+           
+    header-position="top"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+        <div class="devsite-landing-row-html">
+          
+    <devsite-dynamic-content initial-results="3" items-across="3" maxresults="3000" query="type:blog+product:ChromeExtensions" template="card"></devsite-dynamic-content>
+  
+
+        </div>
+      
+    
+    </div>
+  </section>
+
+  <section class="devsite-landing-row devsite-landing-row-4-up devsite-landing-row-no-image-background devsite-landing-row-padding-medium"
+           
+    background="grey"
+  
+           
+           
+    header-position="left"
+  >
+    <div class="devsite-landing-row-inner">
+
+    
+      
+      <header class="devsite-landing-row-header"
+              
+    icon-position="top"
+  >
+
+        
+  
+    
+  <div class="devsite-landing-row-header-icon-container"
+       
+       
+    foreground="theme"
+  
+       
+    size="medium"
+  >
+  
+    <div class="devsite-landing-row-header-icon material-icons" aria-hidden="true">
+      help
+    </div>
+  
+  </div>
+  
+  
+
+
+        
+        <div class="devsite-landing-row-header-text">
+
+          
+    <h2 id="suporte-e-feedback"
+        data-text="Suporte e feedback"
+        
+        tabindex="0">
+      
+    
+        Suporte e feedback
+      
+  
+    </h2>
+  
+
+          
+            <div class="devsite-landing-row-description">
+              Receba ajuda para desenvolver sua extensão e nos ajude a melhorar as extensões do Chrome.
+
+            </div>
+          
+        </div>
+        
+
+        
+      </header>
+      
+
+      
+      
+
+      
+
+        <div class="devsite-landing-row-group">
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="receber-ajuda-com-as-extensoes-do-chrome"
+        data-text="Receber ajuda com as extensões do Chrome"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/support/get-help?hl=pt-br">
+    
+        Receber ajuda com as extensões do Chrome
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Receba respostas para perguntas não abordadas pela documentação.
+
+          </div>
+        
+
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="informar-um-bug"
+        data-text="Informar um bug"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/support/file-a-bug?hl=pt-br">
+    
+        Informar um bug
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Informe bugs de extensão ou problemas com a documentação.
+
+          </div>
+        
+
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="solicitar-um-recurso"
+        data-text="Solicitar um recurso"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/support/request-feature?hl=pt-br">
+    
+        Solicitar um recurso
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Envie uma solicitação de um recurso que você acredita que poderia melhorar a plataforma de extensão.
+
+          </div>
+        
+
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+          <div class="devsite-landing-row-item devsite-landing-row-item-no-media"
+     
+     
+     
+    description-position="bottom"
+  >
+
+  
+    
+
+    
+    <div class="devsite-landing-row-item-description"
+         >
+
+      
+
+      <div class="devsite-landing-row-item-body">
+        
+
+        
+    <h3 id="encontrar-e-seguir-um-relatorio-do-bug"
+        data-text="Encontrar e seguir um relatório do bug"
+        class="hide-from-toc no-link"
+        tabindex="0">
+      
+  <a href="https://developer.chrome.com/docs/extensions/support/find-a-bug?hl=pt-br">
+    
+        Encontrar e seguir um relatório do bug
+      
+  </a>
+  
+    </h3>
+  
+
+        
+          <div class="devsite-landing-row-item-description-content">
+            Verifique se um bug ou uma solicitação de recurso já foi informado.
+
+          </div>
+        
+
+        
+
+        
+      </div>
+    </div>
+    
+  
+
+</div>
+        
+        </div>
+      
+
+    
+    </div>
+  </section>
+
+  
+
+  
+</div>
+
+  
+
+  <div class="devsite-floating-action-buttons"></div></article>
+
+
+
+<devsite-notification
+>
+</devsite-notification>
+
+
+  
+<div class="devsite-content-data">
+  
+  
+    <template class="devsite-content-data-template">
+      [[["Fácil de entender","easyToUnderstand","thumb-up"],["Meu problema foi resolvido","solvedMyProblem","thumb-up"],["Outro","otherUp","thumb-up"]],[["Não contém as informações de que eu preciso","missingTheInformationINeed","thumb-down"],["Muito complicado / etapas demais","tooComplicatedTooManySteps","thumb-down"],["Desatualizado","outOfDate","thumb-down"],["Problema na tradução","translationIssue","thumb-down"],["Problema com as amostras / o código","samplesCodeIssue","thumb-down"],["Outro","otherDown","thumb-down"]],[],[],[]]
+    </template>
+  
+</div>
+            
+          </devsite-content>
+        </main>
+        <devsite-footer-promos class="devsite-footer">
+          
+            
+          
+        </devsite-footer-promos>
+        <devsite-footer-linkboxes class="devsite-footer">
+          
+            
+<nav class="devsite-footer-linkboxes nocontent"
+     aria-label="Links do rodapé"
+     data-nosnippet>
+  
+  <ul class="devsite-footer-linkboxes-list">
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Contribuir</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://issuetracker.google.com/issues/new?component=1400036&amp;template=1897236"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            >
+            
+          
+            Registre um bug
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://issuetracker.google.com/issues?q=status:open%20componentid:1400036&amp;s=created_time:desc"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            >
+            
+              
+              
+            
+          
+            Veja as questões em aberto
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Conteúdo relacionado</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://blog.chromium.org/"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            >
+            
+          
+            Atualizações do Chromium
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/case-studies"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            >
+            
+          
+            Estudos de caso
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/deprecated"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            >
+            
+          
+            Arquivar
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://web.dev/shows"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            >
+            
+              
+              
+            
+          
+            Podcasts e programas
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+    <li class="devsite-footer-linkbox ">
+    <h3 class="devsite-footer-linkbox-heading no-link">Seguir</h3>
+      <ul class="devsite-footer-linkbox-list">
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://twitter.com/ChromiumDev"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 1)"
+            >
+            
+          
+            @ChromiumDev no X
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://www.youtube.com/user/ChromeDevelopers"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 2)"
+            >
+            
+          
+            YouTube
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="https://www.linkedin.com/showcase/chrome-for-developers"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 3)"
+            >
+            
+          
+            Chrome for Developers no LinkedIn
+          
+          </a>
+          
+          
+        </li>
+        
+        <li class="devsite-footer-linkbox-item">
+          
+          <a href="/static/blog/feed.xml"
+             class="devsite-footer-linkbox-link gc-analytics-event"
+             data-category="Site-Wide Custom Events"
+            
+             data-label="Footer Link (index 4)"
+            >
+            
+              
+              
+            
+          
+            RSS
+          
+          </a>
+          
+          
+        </li>
+        
+      </ul>
+    </li>
+    
+  </ul>
+  
+</nav>
+          
+        </devsite-footer-linkboxes>
+        <devsite-footer-utility class="devsite-footer">
+          
+            
+
+<div class="devsite-footer-utility nocontent" data-nosnippet>
+  
+
+  
+  <nav class="devsite-footer-utility-links" aria-label="Links utilitários">
+    
+    <ul class="devsite-footer-utility-list">
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/terms?hl=pt-br"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Terms link"
+         >
+          Termos de Serviço
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 ">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="//policies.google.com/privacy?hl=pt-br"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Privacy link"
+         >
+          Privacidade
+        </a>
+        
+      </li>
+      
+      <li class="devsite-footer-utility-item
+                 glue-cookie-notification-bar-control">
+        
+        
+        <a class="devsite-footer-utility-link gc-analytics-event"
+           href="#"
+           data-category="Site-Wide Custom Events"
+           data-label="Footer Manage cookies link"
+         
+           aria-hidden="true"
+         >
+          Manage cookies
+        </a>
+        
+      </li>
+      
+    </ul>
+    
+    
+<devsite-language-selector>
+  <ul role="presentation">
+    
+    
+    <li role="presentation">
+      <a role="menuitem" lang="en"
+        >English</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="de"
+        >Deutsch</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="es_419"
+        >Español – América Latina</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fr"
+        >Français</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="id"
+        >Indonesia</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="it"
+        >Italiano</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="nl"
+        >Nederlands</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pl"
+        >Polski</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="pt_br"
+        >Português – Brasil</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="vi"
+        >Tiếng Việt</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="tr"
+        >Türkçe</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ru"
+        >Русский</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="he"
+        >עברית</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ar"
+        >العربيّة</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="fa"
+        >فارسی</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="hi"
+        >हिंदी</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="bn"
+        >বাংলা</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="th"
+        >ภาษาไทย</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_cn"
+        >中文 – 简体</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="zh_tw"
+        >中文 – 繁體</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ja"
+        >日本語</a>
+    </li>
+    
+    <li role="presentation">
+      <a role="menuitem" lang="ko"
+        >한국어</a>
+    </li>
+    
+  </ul>
+</devsite-language-selector>
+
+  </nav>
+</div>
+          
+        </devsite-footer-utility>
+        <devsite-panel>
+          
+        </devsite-panel>
+        
+      </section>
+      </section>
+    <devsite-sitemask></devsite-sitemask>
+    <devsite-snackbar></devsite-snackbar>
+    <devsite-tooltip ></devsite-tooltip>
+    <devsite-heading-link></devsite-heading-link>
+    <devsite-analytics>
+      
+        <script type="application/json" analytics>[]</script>
+<script type="application/json" tag-management>{&#34;at&#34;: &#34;True&#34;, &#34;ga4&#34;: [], &#34;ga4p&#34;: [], &#34;gtm&#34;: [{&#34;id&#34;: &#34;GTM-5QF3RT2&#34;, &#34;purpose&#34;: 0}], &#34;parameters&#34;: {&#34;internalUser&#34;: &#34;False&#34;, &#34;language&#34;: {&#34;machineTranslated&#34;: &#34;True&#34;, &#34;requested&#34;: &#34;pt-br&#34;, &#34;served&#34;: &#34;pt-br&#34;}, &#34;pageType&#34;: &#34;article&#34;, &#34;projectName&#34;: &#34;Chrome Extensions&#34;, &#34;signedIn&#34;: &#34;False&#34;, &#34;tenant&#34;: &#34;chrome&#34;, &#34;recommendations&#34;: {&#34;sourcePage&#34;: &#34;&#34;, &#34;sourceType&#34;: 0, &#34;sourceRank&#34;: 0, &#34;sourceIdenticalDescriptions&#34;: 0, &#34;sourceTitleWords&#34;: 0, &#34;sourceDescriptionWords&#34;: 0, &#34;experiment&#34;: &#34;&#34;}, &#34;experiment&#34;: {&#34;ids&#34;: &#34;&#34;}}}</script>
+      
+    </devsite-analytics>
+    
+      <devsite-badger></devsite-badger>
+    
+    
+    
+    
+<script nonce="XnJtqX0X5VdTj8uteWgeuwNbPSiPrD">
+  
+  (function(d,e,v,s,i,t,E){d['GoogleDevelopersObject']=i;
+    t=e.createElement(v);t.async=1;t.src=s;E=e.getElementsByTagName(v)[0];
+    E.parentNode.insertBefore(t,E);})(window, document, 'script',
+    'https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/js/app_loader.js', '[53,"pt_br",null,"/js/devsite_app_module.js","https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5","https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome","https://chrome-dot-devsite-v2-prod-3p.appspot.com",1,null,["/_pwa/chrome/manifest.json","https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/images/video-placeholder.svg","https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/favicon.png","https://www.gstatic.com/devrel-devsite/prod/v20cdb2337f656fc22df509b6d5402b3836a1b55334a8eea3301423a87970c4d5/chrome/images/lockup.svg","https://fonts.googleapis.com/css?family=Google+Sans:400,500|Roboto:400,400italic,500,500italic,700,700italic|Roboto+Mono:400,500,700&display=swap"],1,null,[1,6,8,12,14,17,21,25,50,52,63,70,75,76,80,87,91,92,93,97,98,100,101,102,103,104,105,107,108,109,110,112,113,116,117,118,120,122,124,125,126,127,129,130,131,132,133,134,135,136,138,140,141,147,148,149,151,152,156,157,158,159,161,163,164,168,169,170,179,180,182,183,186,191,193,196],"AIzaSyCNm9YxQumEXwGJgTDjxoxXK6m1F-9720Q","AIzaSyCc76DZePGtoyUjqKrLdsMGk_ry7sljLbY","developer.chrome.com","AIzaSyB9bqgQ2t11WJsOX8qNsCQ6U-w91mmqF-I","AIzaSyAdYnStPdzjcJJtQ0mvIaeaMKj7_t6J_Fg",null,null,null,["Profiles__enable_developer_profiles_callout","Cloud__cache_serialized_dynamic_content","Concierge__enable_devsite_llm_tools","Cloud__enable_cloudx_experiment_ids","DevPro__enable_g1_ineligible_redirect","EngEduTelemetry__enable_engedu_telemetry","Profiles__enable_join_program_group_endpoint","Search__enable_ai_search_summaries_for_all","Cloud__enable_cloud_shell","Profiles__enable_release_notes_notifications","MiscFeatureFlags__enable_appearance_cookies","DevPro__enable_vertex_credit_card","DevPro__enable_google_one_card","DevPro__enable_free_benefits","Concierge__enable_pushui","DevPro__enable_nvidia_credits_card","MiscFeatureFlags__remove_cross_domain_tracking_params","Profiles__enable_page_saving","Concierge__enable_remove_info_panel_tags","Search__enable_suggestions_from_borg","MiscFeatureFlags__gdp_dashboard_reskin_enabled","DevPro__enable_devsite_captcha","MiscFeatureFlags__enable_explicit_template_dependencies","CloudShell__cloud_code_overflow_menu","Profiles__enable_completecodelab_endpoint","MiscFeatureFlags__developers_footer_dark_image","DevPro__enable_embed_profile_creation","Concierge__enable_actions_menu","DevPro__enable_g1_integration","BookNav__enable_tenant_cache_key","MiscFeatureFlags__enable_view_transitions","OnSwitch__enable","TpcFeatures__enable_unmirrored_page_left_nav","Search__enable_dynamic_content_confidential_banner","Analytics__enable_clearcut_logging","Profiles__enable_recognition_badges","DevPro__enable_devpro_offers","Profiles__enable_public_developer_profiles","Profiles__enable_purchase_prompts","Profiles__require_profile_eligibility_for_signin","MiscFeatureFlags__enable_llms_txt","Cloud__enable_cloud_shell_fte_user_flow","Profiles__enable_profile_collections","Profiles__enable_callout_notifications","Profiles__enable_stripe_subscription_management","Cloud__enable_llm_concierge_chat","Profiles__enable_user_type","DevPro__remove_eu_tax_intake_form","DevPro__enable_enterprise","DevPro__enable_credits_banner","Profiles__enable_developer_profile_pages_as_content","Profiles__enable_playlist_community_acl","Profiles__enable_developer_profile_benefits_ui_redesign","Cloud__fast_free_trial","MiscFeatureFlags__enable_framebox_badge_methods","DevPro__enable_code_assist","DevPro__enable_developer_subscriptions","MiscFeatureFlags__enable_variable_operator","Search__enable_page_map","Search__enable_ai_eligibility_checks","DevPro__enable_cloud_innovators_plus","TpcFeatures__proxy_prod_host","Profiles__enable_complete_playlist_endpoint","MiscFeatureFlags__fix_lower_breadcrumbs","MiscFeatureFlags__enable_explain_this_code","MiscFeatureFlags__enable_project_variables","Profiles__enable_awarding_url","MiscFeatureFlags__developers_footer_image","MiscFeatureFlags__enable_variable_operator_index_yaml","SignIn__enable_l1_signup_flow","DevPro__enable_firebase_workspaces_card","Cloud__enable_legacy_calculator_redirect","Analytics__enable_devpro_interaction_logging","Profiles__enable_completequiz_endpoint","DevPro__enable_google_payments_buyflow","Experiments__reqs_query_experiments","Cloud__enable_free_trial_server_call","Profiles__enable_targeted_hero","Cloud__enable_cloud_dlp_service","Profiles__enable_auto_apply_credits","Profiles__enable_dashboard_curated_recommendations","MiscFeatureFlags__enable_firebase_utm","DevPro__enable_payments_second_batch","CloudShell__cloud_shell_button"],null,null,"AIzaSyA58TaKli1DculwmAmbpzLVGuWc8eCQgQc","https://developerscontentserving-pa.googleapis.com","AIzaSyDWBU60w0P9hEkr29kkksYs8Z7gvZ8u_wc","https://developerscontentsearch-pa.googleapis.com",2,4,null,"https://developerprofiles-pa.googleapis.com",[53,"chrome","Chrome for Developers","developer.chrome.com",null,"chrome-dot-devsite-v2-prod-3p.appspot.com",null,null,[null,null,null,null,null,null,null,null,null,null,null,[1],null,null,null,null,null,null,[1],null,null,null,null,[1,null,1],[1,1,null,1,1],null,null,null,null,null,[1]],null,[69,null,null,null,null,null,"/images/lockup.svg","/images/touchicon-180.png",null,null,null,1,1,null,null,null,null,null,null,null,null,2,null,null,null,"/images/lockup-dark-theme.svg",[]],[],null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,[[],[1,1]],[[null,null,null,null,null,["GTM-5QF3RT2"],null,null,null,null,null,[["GTM-5QF3RT2",1]],1]],null,4],null,null,1,1,"https://developerscontentinsights-pa.googleapis.com","AIzaSyC11xEGtFhkmSh_iF6l_itbxnFz2GrIBOg","AIzaSyAXJ10nRF73mmdSDINgkCNX5bbd2KPcWm8","https://developers.googleapis.com",null,null,"AIzaSyCjP0KOnHfv8mwe38sfzZJMOnqE3HvrD4A",null,null,"https://developers.googleapis.com"]')
+  
+</script>
+
+    <devsite-a11y-announce></devsite-a11y-announce>
+  </body>
+</html>

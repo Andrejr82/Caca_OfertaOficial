@@ -28,7 +28,6 @@ export interface BuildPostParams {
 
 export class PostBuilder {
   static buildInstagramPost({ copy, copyContext, offer, affiliateLink }: BuildPostParams): string {
-    const buyText = getMarketplaceText(copyContext.marketplace || offer.platform, "Comprar agora");
     const hashtagsStr = copyContext.hashtags && copyContext.hashtags.length > 0 ? copyContext.hashtags.join(" ") : "";
     const priceBlock = formatPriceBlock(offer.current_price, offer.old_price);
 
@@ -38,8 +37,9 @@ export class PostBuilder {
 
 ${priceBlock}
 
-${buyText}
-${affiliateLink}
+👉 Comente "EU QUERO" para receber o link no direct ou acesse o link na nossa BIO!
+
+
 
 ━━━━━━━━━━━━━━━
 

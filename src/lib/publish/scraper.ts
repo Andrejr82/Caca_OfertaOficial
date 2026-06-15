@@ -8,6 +8,8 @@ export interface LinkMetadata {
   price?: number;
   finalUrl?: string;
   imageSource?: string;
+  confidenceScore?: number;
+  extractionDate?: string;
 }
 
 const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
@@ -91,28 +93,36 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
       if (fcRes.ok) {
         const fcData = await fcRes.json();
         if (fcData.success && fcData.data) {
-          html = fcData.data.html || "";
+          const fcStatusCode = fcData.data.metadata?.statusCode || 200;
+          const fcTitle = fcData.data.metadata?.title || "";
           
-          // Fallback extraction block from LLM extract
-          if (fcData.data.extract) {
-              if (fcData.data.extract.title) title = fcData.data.extract.title;
-              if (fcData.data.extract.price) price = fcData.data.extract.price;
-              if (fcData.data.extract.image) {
-                  imageUrl = fcData.data.extract.image;
-                  imageSource = "firecrawl_extract";
-              }
-          }
-
-          // Meta tag extraction directly from FC
-          if (fcData.data.metadata) {
-            firecrawlMetadata = fcData.data.metadata;
-            if (!title || title === "Oferta Especial") title = fcData.data.metadata.title;
-            if (!imageUrl && fcData.data.metadata.ogImage) {
-              imageUrl = fcData.data.metadata.ogImage;
-              imageSource = "firecrawl_og";
+          if (fcStatusCode === 403 || fcStatusCode === 401 || fcStatusCode === 503 || fcTitle.includes("Não é possível acessar a página")) {
+             logger.warn("Firecrawl foi bloqueado pelo anti-bot do site", { statusCode: fcStatusCode, title: fcTitle });
+             html = ""; // Força o fallback
+          } else {
+            html = fcData.data.html || "";
+            
+            // Fallback extraction block from LLM extract
+            if (fcData.data.extract) {
+                if (fcData.data.extract.title) title = fcData.data.extract.title;
+                if (fcData.data.extract.price) price = fcData.data.extract.price;
+                if (fcData.data.extract.image) {
+                    imageUrl = fcData.data.extract.image;
+                    imageSource = "firecrawl_extract";
+                }
             }
+
+            // Meta tag extraction directly from FC
+            if (fcData.data.metadata) {
+              firecrawlMetadata = fcData.data.metadata;
+              if (!title || title === "Oferta Especial") title = fcData.data.metadata.title;
+              if (!imageUrl && fcData.data.metadata.ogImage) {
+                imageUrl = fcData.data.metadata.ogImage;
+                imageSource = "firecrawl_og";
+              }
+            }
+            logger.info("Firecrawl sucesso", { finalUrl, hasHtml: !!html });
           }
-          logger.info("Firecrawl sucesso", { finalUrl, hasHtml: !!html });
         }
       } else {
         logger.warn("Firecrawl retornou erro", { status: fcRes.status });
@@ -266,13 +276,27 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
       imageUrl = "https:" + imageUrl;
   }
 
+  // 6. Cálculo do Confidence Score (Origem e Qualidade)
+  let score = 0;
+  if (price && price > 0) score += 40; // Preço é essencial
+  if (title && title !== "Oferta Especial") score += 30; // Título válido
+  if (imageUrl) {
+    score += 20; // Imagem presente
+    // Bônus se imagem vem de fontes estruturadas fortes
+    if (imageSource === "firecrawl_extract" || imageSource === "json-ld") {
+      score += 10;
+    }
+  }
+
   const result = {
     title,
     platform,
     imageUrl,
     price,
     finalUrl,
-    imageSource
+    imageSource,
+    confidenceScore: Math.min(100, score),
+    extractionDate: new Date().toISOString()
   };
 
   logger.info("Extração concluída", { ...result, url });

@@ -1,12 +1,46 @@
-import { PublishTelegramButton } from "@/components/telegram/telegram-actions";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
 import { officialBrand, hasTelegramEnv } from "@/lib/env";
-import { listOffers, getPostHistory } from "@/lib/offers/queries";
+import { getPostHistory } from "@/lib/offers/queries";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
-import { Bot } from "lucide-react";
+import { Bot, AlertTriangle } from "lucide-react";
 
-export default async function TelegramPage() {
+export const dynamic = "force-dynamic";
+
+export default async function TelegramDashboardPage() {
+  const supabase = await createServerSupabaseClient();
   const configured = hasTelegramEnv();
-  const offers = (await listOffers()).filter((offer) => offer.status === "approved");
+  
+  interface PostWithOffer {
+    id: string;
+    content: string;
+    status: string;
+    external_id: string | null;
+    posted_at: string | null;
+    created_at: string;
+    offers: {
+      id: string;
+      product_name: string;
+      platform: string;
+      current_price: number;
+      old_price: number | null;
+      image_url: string | null;
+    };
+  }
+
+  let draftPosts: PostWithOffer[] = [];
+
+  if (supabase) {
+    const { data: drafts } = await supabase
+      .from("posts")
+      .select("*, offers(*)")
+      .eq("channel", "telegram")
+      .eq("status", "draft")
+      .order("created_at", { ascending: false });
+
+    draftPosts = drafts || [];
+  }
+
   const historyData = await getPostHistory("telegram");
 
   return (
@@ -18,31 +52,41 @@ export default async function TelegramPage() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Telegram</h1>
-          <p className="text-xs text-white/35">{officialBrand.telegramName} - {officialBrand.telegramUrl}</p>
+          <p className="text-xs text-white/35">{officialBrand.telegramName} - Aprovação de mensagens e histórico de envios.</p>
         </div>
       </header>
 
-      {/* Approved offers ready for posting */}
-      <section className="glass-card p-5">
-        <div className="flex items-center gap-2 border-b border-white/[0.04] pb-3 mb-4">
-          <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">Prontas para Postagem</h2>
+      {!configured && (
+        <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-4 flex items-center gap-3 text-yellow-500">
+          <AlertTriangle size={20} />
+          <p className="text-sm">O bot do Telegram não está configurado. Cadastre os tokens nas configurações para permitir o envio real.</p>
+        </div>
+      )}
+
+      {/* Draft Posts */}
+      <section className="grid gap-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">
+            Aguardando Aprovação
+          </h2>
           <span className="grid h-5 min-w-5 place-items-center rounded-md bg-sky-500/15 px-1.5 text-[10px] font-extrabold text-sky-400">
-            {offers.length}
+            {draftPosts.length}
           </span>
         </div>
-        <div className="space-y-2">
-          {offers.length ? offers.map((offer) => (
-            <div key={offer.id} className="flex items-center justify-between gap-3 rounded-lg border border-white/[0.03] p-3 transition-colors hover:bg-white/[0.02]">
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white/80 truncate">{offer.product_name}</p>
-                <p className="text-[11px] text-white/35">Score {offer.score}/10</p>
-              </div>
-              <PublishTelegramButton disabled={!configured} offerId={offer.id} />
-            </div>
-          )) : (
-            <p className="py-4 text-center text-sm text-white/30">Nenhuma oferta aprovada para publicar.</p>
-          )}
-        </div>
+        
+        {draftPosts.length > 0 ? (
+          <div className="grid gap-4">
+            {draftPosts.map((post) => (
+              <TelegramPostApprovalCard key={post.id} post={post} />
+            ))}
+          </div>
+        ) : (
+          <div className="glass-card p-6 text-center">
+            <p className="text-sm text-white/30">
+              Nenhuma mensagem no Telegram aguardando aprovação. Use o Robô de Tendências no Dashboard.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Post History */}

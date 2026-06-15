@@ -8,6 +8,18 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// API Key Middleware
+const API_KEY = process.env.WHATSAPP_ENGINE_API_KEY || 'local-dev-key';
+
+app.use((req, res, next) => {
+    // Permitir status check sem key se desejar, mas vamos proteger tudo
+    const key = req.headers['x-api-key'];
+    if (!key || key !== API_KEY) {
+        return res.status(401).json({ ok: false, message: 'Não autorizado. API Key ausente ou incorreta.' });
+    }
+    next();
+});
+
 let sock = null;
 let isConnected = false;
 let connectionPromise = null;
@@ -19,6 +31,7 @@ async function connectToWhatsApp() {
         auth: state,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
+        generateHighQualityLinkPreview: true,
     });
 
     // Create a promise that resolves when connection is open
@@ -111,31 +124,34 @@ app.post('/send', async (req, res) => {
                 const imgRes = await fetch(imageUrl);
                 if (!imgRes.ok) throw new Error(`Falha ao baixar imagem: ${imgRes.statusText}`);
                 const arrayBuffer = await imgRes.arrayBuffer();
-                let buffer = Buffer.from(arrayBuffer);
-                console.log('  → Baixando imagem para Envio Nativo...');
+                const buffer = Buffer.from(arrayBuffer);
+                
+                console.log('  → Convertendo imagem para thumbnail de Link Preview (Alta Resolução - 1200x630)...');
                 const sharp = require('sharp');
-                
-                // Converter para JPEG e obter dimensões
                 const imageBuffer = await sharp(buffer)
-                    .jpeg({ quality: 85, force: true })
+                    .resize({ width: 1200, height: 630, fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+                    .jpeg({ quality: 80, force: true })
                     .toBuffer();
+
+                console.log('  → Enviando texto com Link Preview Forçado...');
                 
-                const metadata = await sharp(imageBuffer).metadata();
+                // Extrai o primeiro link do texto (geralmente o link da Vercel/Shopee/ML)
+                const urlMatch = text.match(/https?:\/\/[^\s]+/g);
+                const firstUrl = urlMatch && urlMatch.length > 0 ? urlMatch[urlMatch.length - 1] : 'https://caca-oferta-oficial.vercel.app';
                 
-                // Gerar thumbnail (obrigatório para Newsletters)
-                const thumbnail = await sharp(imageBuffer)
-                    .resize({ width: 300, height: 300, fit: 'inside' })
-                    .jpeg({ quality: 50 })
-                    .toBuffer();
-                
-                console.log('  → Enviando imagem nativa com dimensões explícitas (Bypass de restrição)...');
+                let extractedTitle = text.split('\n')[0].replace(/[\*🚨_~]/g, '').trim();
+                if (extractedTitle.length > 60) extractedTitle = extractedTitle.substring(0, 57) + '...';
+
                 result = await sock.sendMessage(jid, {
-                    image: imageBuffer,
-                    caption: text,
-                    mimetype: 'image/jpeg',
-                    width: metadata.width,
-                    height: metadata.height,
-                    jpegThumbnail: thumbnail
+                    text: text,
+                    linkPreview: {
+                        'canonical-url': firstUrl,
+                        'matched-text': firstUrl,
+                        title: extractedTitle,
+                        description: 'Acesse para ver a oferta completa!',
+                        jpegThumbnail: imageBuffer,
+                        previewType: 'PHOTO' // Força o formato de imagem grande
+                    }
                 });
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);

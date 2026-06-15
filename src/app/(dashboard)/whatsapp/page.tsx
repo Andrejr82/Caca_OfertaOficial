@@ -1,23 +1,85 @@
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions";
+import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
-import { officialBrand } from "@/lib/env";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, AlertTriangle } from "lucide-react";
 
-export default async function WhatsappPage() {
+export const dynamic = "force-dynamic";
+
+export default async function WhatsappDashboardPage() {
+  const supabase = await createServerSupabaseClient();
+  
+  interface PostWithOffer {
+    id: string;
+    content: string;
+    status: string;
+    external_id: string | null;
+    posted_at: string | null;
+    created_at: string;
+    offers: {
+      id: string;
+      product_name: string;
+      platform: string;
+      current_price: number;
+      old_price: number | null;
+      image_url: string | null;
+    };
+  }
+
+  let draftPosts: PostWithOffer[] = [];
+
+  if (supabase) {
+    const { data: drafts } = await supabase
+      .from("posts")
+      .select("*, offers(*)")
+      .eq("channel", "whatsapp")
+      .eq("status", "draft")
+      .order("created_at", { ascending: false });
+
+    draftPosts = drafts || [];
+  }
+
   const historyData = await getPostHistory("whatsapp");
 
   return (
     <div className="grid gap-6 animate-fadeIn">
       {/* Header */}
       <header className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/20">
+        <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 shadow-lg shadow-emerald-500/20">
           <MessageCircle size={20} className="text-white" />
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">WhatsApp</h1>
-          <p className="text-xs text-white/35">{officialBrand.whatsappName} - Lista de postagens enviadas para grupos e canais.</p>
+          <p className="text-xs text-white/35">{officialBrand.whatsappName} - Aprovação de envios e histórico de grupos/canais.</p>
         </div>
       </header>
+
+      {/* Draft Posts */}
+      <section className="grid gap-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">
+            Aguardando Aprovação
+          </h2>
+          <span className="grid h-5 min-w-5 place-items-center rounded-md bg-emerald-500/15 px-1.5 text-[10px] font-extrabold text-emerald-400">
+            {draftPosts.length}
+          </span>
+        </div>
+        
+        {draftPosts.length > 0 ? (
+          <div className="grid gap-4">
+            {draftPosts.map((post) => (
+              <WhatsappPostApprovalCard key={post.id} post={post} />
+            ))}
+          </div>
+        ) : (
+          <div className="glass-card p-6 text-center">
+            <p className="text-sm text-white/30">
+              Nenhuma mensagem de WhatsApp aguardando aprovação. Use o Robô de Tendências no Dashboard.
+            </p>
+          </div>
+        )}
+      </section>
 
       {/* Post History */}
       <section className="grid gap-4">

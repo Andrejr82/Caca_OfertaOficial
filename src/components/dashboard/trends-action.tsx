@@ -8,6 +8,7 @@ export function TrendsAction() {
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState({
     mercadolivre: true,
+    magalu: false,
     shopee: false,
     shein: false
   });
@@ -30,6 +31,7 @@ export function TrendsAction() {
     // Mapeamento interno de nomes amigáveis para a API
     const selectedSources = [];
     if (sources.mercadolivre) selectedSources.push("Mercado Livre");
+    if (sources.magalu) selectedSources.push("Magalu");
     if (sources.shopee) selectedSources.push("Shopee");
     if (sources.shein) selectedSources.push("Shein");
 
@@ -85,6 +87,15 @@ export function TrendsAction() {
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Mercado Livre
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sources.magalu}
+                onChange={(e) => setSources({ ...sources, magalu: e.target.checked })}
+                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
+              />
+              Magalu
             </label>
             <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
               <input

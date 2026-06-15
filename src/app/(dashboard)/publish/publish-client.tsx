@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import Image from "next/image";
 import { generateQuickPostAction, publishToTelegramAction, publishToInstagramAction, publishToWhatsAppAction } from "@/lib/publish/actions";
 import { channels, type Channel } from "@/types/domain";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Field, Select } from "@/components/ui/field";
 import {
   Zap, Send, AlertCircle, CheckCircle2, Loader2,
@@ -315,8 +317,15 @@ export function PublishClient() {
             >
               <div className="h-12 w-12 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 flex items-center justify-center">
                 {post.imageUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={post.imageUrl} alt="" className="h-full w-full object-cover" />
+                  <div className="relative h-full w-full">
+                    <Image 
+                      src={post.imageUrl} 
+                      alt="" 
+                      fill 
+                      className="object-cover" 
+                      sizes="48px"
+                    />
+                  </div>
                 ) : (
                   <ImageIcon size={20} className="text-white/20" />
                 )}
@@ -377,9 +386,14 @@ export function PublishClient() {
                 <div className="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4">
                   {/* Image preview */}
                   {post.imageUrl && (
-                    <div className="rounded-lg overflow-hidden bg-white/5 border border-white/[0.05]">
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={post.imageUrl} alt={post.productName} className="w-full h-auto object-contain max-h-[280px]" />
+                    <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full">
+                      <Image 
+                        src={post.imageUrl} 
+                        alt={post.productName} 
+                        fill 
+                        className="object-contain" 
+                        sizes="(max-width: 768px) 100vw, 400px"
+                      />
                     </div>
                   )}
 

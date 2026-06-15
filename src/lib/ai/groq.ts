@@ -70,7 +70,7 @@ async function executeGroqRequest(
   if (mode === "balanced") expectedStrategies = "benefit e curiosity";
   if (mode === "economy") expectedStrategies = "apenas default";
 
-  const jsonSchemaStr = JSON.stringify({
+  const jsonSchemaObj = {
     type: "object",
     properties: {
       strategies: {
@@ -85,7 +85,8 @@ async function executeGroqRequest(
             cta: { type: "string", description: "Chamada para ação curta" },
             score: { type: "number", description: "Nota de persuasão desta estratégia (0 a 10)" }
           },
-          required: ["type", "headline", "hook", "body", "cta", "score"]
+          required: ["type", "headline", "hook", "body", "cta", "score"],
+          additionalProperties: false
         }
       },
       winner_type: { type: "string" },
@@ -95,39 +96,47 @@ async function executeGroqRequest(
       audience: { type: "string" },
       category: { type: "string" }
     },
-    required: ["strategies", "winner_type", "justification", "hashtags", "audience", "category"]
-  }, null, 2);
+    required: ["strategies", "winner_type", "justification", "hashtags", "marketplace", "audience", "category"],
+    additionalProperties: false
+  };
 
   const baseSystemPrompt = `Você é um Copywriter de ELITE especializado em marketing de afiliados de alta conversão no Brasil. Você trabalha para a marca "${brandName}".
 
 ## SUA MISSÃO
 Gerar ${expectedStrategies} estratégias de copy competitivas que VENDEM.
-Você não se preocupa com formatação de redes sociais, apenas com o texto persuasivo: Headline, Gancho, Corpo, e CTA curto.
+Foque exclusivamente no texto persuasivo: Headline, Gancho, Corpo e CTA curto.
 
 ## REGRAS INQUEBRÁVEIS (CRÍTICAS)
-1. PROIBIDO gerar URLs, links ou formatação especial de markdown.
-2. NÃO crie hashtags no meio do texto, coloque-as apenas no array de hashtags.
-3. NÃO inclua preços monetários. O sistema injetará preços automaticamente depois.
-4. Sua resposta DEVE ser EXATAMENTE um objeto JSON válido seguindo estritamente este Schema:
-${jsonSchemaStr}
-5. Assegure que as chamadas para ação (CTA) sejam neutras em relação a plataforma (Ex: "Aproveite", "Clique para ver").
+1. Escreva os textos ignorando a criação de URLs ou links, pois o sistema injetará automaticamente o link de afiliado rastreado no final.
+2. Coloque as hashtags exclusivamentes no array designado para elas. Mantenha o texto principal limpo de hashtags.
+3. Escreva os textos ignorando preços monetários numéricos, pois o sistema injetará automaticamente os valores dinâmicos reais posteriormente.
+4. Assegure que as chamadas para ação (CTA) sejam neutras em relação à plataforma (Ex: "Aproveite", "Clique para ver a oferta").
+5. Utilize a estrutura de dados JSON rigorosamente conforme estipulado.
 
 ## TÉCNICAS DE COPYWRITING OBRIGATÓRIAS
-- Gancho (hook) nos primeiros 125 caracteres
-- Diferentes abordagens por estratégia.
-- Emojis estratégicos.
+- Engaje o leitor com o Gancho (hook) nos primeiros 125 caracteres.
+- Empregue abordagens distintas e únicas para cada estratégia.
+- Utilize emojis estrategicamente para destacar pontos chave e aumentar a retenção visual.
 `;
 
   const hasDiscount = offer.old_price && offer.old_price > offer.current_price;
   const discountPct = hasDiscount ? Math.round(((offer.old_price! - offer.current_price) / offer.old_price!) * 100) : 0;
 
-  const userPrompt = `Analise e gere estratégias de copy para este produto:
+  const userPrompt = `Analise e gere estratégias de copy para o produto delimitado pelas tags <produto> e <dados>:
 
-PRODUTO: ${offer.product_name}
-PLATAFORMA (Marketplace): ${offer.platform || "Loja Online"}
-${hasDiscount ? "DESCONTO: " + discountPct + "%" : ""}
-${offer.category ? "CATEGORIA: " + offer.category : ""}
-${offer.notes ? "OBSERVAÇÕES: " + offer.notes : ""}
+<produto>
+Nome: ${offer.product_name}
+</produto>
+
+<dados>
+- Marketplace Original: ${offer.platform || "Loja Online"}
+${hasDiscount ? "- Desconto Detectado: " + discountPct + "% OFF" : ""}
+${offer.category ? "- Categoria: " + offer.category : ""}
+${offer.notes ? "- Observações do Operador: " + offer.notes : ""}
+</dados>
+
+Sua resposta DEVE ser EXATAMENTE um objeto JSON válido seguindo estritamente este Schema:
+${JSON.stringify(jsonSchemaObj, null, 2)}
 
 RETORNE APENAS JSON VÁLIDO.`;
 

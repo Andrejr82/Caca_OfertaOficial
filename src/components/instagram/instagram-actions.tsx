@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Bot, Send, CheckCircle2, AlertTriangle, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Image from "next/image";
 
 export function InstagramTestButton({ hasToken }: { hasToken: boolean }) {
   const [loading, setLoading] = useState(false);
@@ -120,14 +121,12 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
       {/* Coluna da Imagem */}
       <div className="relative aspect-square w-full rounded-md border border-moss/10 bg-paper overflow-hidden flex items-center justify-center">
         {post.offers.image_url ? (
-          <img 
+          <Image 
             src={post.offers.image_url} 
             alt={post.offers.product_name} 
-            className="object-contain h-full w-full"
-            onError={(e) => {
-              // Fallback se a imagem quebrar
-              (e.target as HTMLElement).style.display = "none";
-            }}
+            fill
+            className="object-contain"
+            sizes="(max-width: 768px) 100vw, 200px"
           />
         ) : (
           <div className="text-ink/40 flex flex-col items-center gap-1">

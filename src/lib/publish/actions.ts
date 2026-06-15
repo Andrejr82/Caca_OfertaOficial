@@ -209,23 +209,8 @@ export async function publishToWhatsAppAction(text: string, imageUrl?: string) {
   }
 
   try {
-    const response = await fetch('http://localhost:3001/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        number: channelId,
-        text: text,
-        imageUrl: imageUrl
-      }),
-      signal: AbortSignal.timeout(10000)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return { ok: false, message: `O motor WhatsApp retornou erro: ${errorData.message || response.statusText}` };
-    }
+    const { whatsappService } = await import("@/lib/integrations/whatsapp");
+    const result = await whatsappService.sendChannelMedia(channelId, text, imageUrl);
 
     return { ok: true, message: "Publicado com sucesso no WhatsApp via Baileys Local!" };
   } catch (error: unknown) {
