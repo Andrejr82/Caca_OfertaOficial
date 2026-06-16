@@ -30,29 +30,59 @@ export async function POST(request: Request) {
 
     // Verifica se é um evento do Instagram
     if (body.object === "instagram") {
-      // Logamos TODO e QUALQUER evento do Instagram no Telegram temporariamente para debug
+      // Log de debug: todo evento recebido
       await sendTelegramMessage(`[Webhook] Evento recebido: ${JSON.stringify(body).slice(0, 1000)}`).catch(() => {});
 
       for (const entry of body.entry) {
         const instagramAccountId = entry.id;
 
-        for (const change of entry.changes) {
+        // A Meta pode enviar em dois formatos:
+        // 1. Facebook Login: entry.changes[] com field/value
+        // 2. Business Login: field/value direto no entry (sem changes[])
+        const changes = entry.changes || [{ field: entry.field, value: entry.value }].filter((c: any) => c.field);
+
+        for (const change of changes) {
           if (change.field === "comments") {
             const commentValue = change.value;
+
+            // Verificação de segurança: payload válido?
+            if (!commentValue || !commentValue.from) {
+              await sendTelegramMessage(`[Webhook AVISO] Payload de comentário inválido (sem 'from'): ${JSON.stringify(commentValue).slice(0, 300)}`).catch(() => {});
+              continue;
+            }
             
-            // Ignorar respostas do próprio bot/usuário da conta ou deletados
+            // Ignorar respostas do próprio bot/usuário da conta
             if (commentValue.from.id === instagramAccountId) continue;
 
-            const commentId = commentValue.id;
+            // CORREÇÃO: A Meta usa "comment_id" no payload de Facebook Login,
+            // e "id" no payload de Business Login. Cobrimos ambos.
+            const commentId = commentValue.comment_id || commentValue.id;
             const commentText = commentValue.text ? commentValue.text.toLowerCase() : "";
-            const mediaId = commentValue.media.id;
+            const mediaId = commentValue.media?.id;
 
-            const triggers = ["quero", "link", "eu quero", "manda"];
+            // Log de debug detalhado
+            await sendTelegramMessage(
+              `[Webhook Debug] comment_id=${commentId} | from=${commentValue.from.username || commentValue.from.id} | text="${commentText}" | media_id=${mediaId}`
+            ).catch(() => {});
+
+            // Validar campos obrigatórios
+            if (!commentId) {
+              await sendTelegramMessage(`[Webhook ERRO] comment_id está VAZIO! Payload: ${JSON.stringify(commentValue).slice(0, 300)}`).catch(() => {});
+              continue;
+            }
+            if (!mediaId) {
+              await sendTelegramMessage(`[Webhook ERRO] media.id está VAZIO! Payload: ${JSON.stringify(commentValue).slice(0, 300)}`).catch(() => {});
+              continue;
+            }
+
+            const triggers = ["quero", "link", "eu quero", "manda", "comprar"];
             const isTrigger = triggers.some(trigger => commentText.includes(trigger));
 
             if (isTrigger) {
-              await sendTelegramMessage(`[Webhook] Gatilho '${commentText}' detectado no media ${mediaId}. Processando...`).catch(() => {});
+              await sendTelegramMessage(`[Webhook] ✅ Gatilho '${commentText}' detectado! media=${mediaId}. Processando...`).catch(() => {});
               await processCommentReply(commentId, mediaId, instagramAccountId);
+            } else {
+              await sendTelegramMessage(`[Webhook] Comentário '${commentText}' NÃO é gatilho. Ignorando.`).catch(() => {});
             }
           }
         }
@@ -121,7 +151,10 @@ async function sendPrivateReply(igUserId: string, commentId: string, message: st
     return;
   }
 
+  // Para Facebook Login, o host é graph.facebook.com
+  // O igUserId deve ser o Instagram Business Account ID (entry.id do webhook)
   const url = `https://graph.facebook.com/v21.0/${igUserId}/messages`;
+  await sendTelegramMessage(`[Webhook] Enviando Private Reply: URL=${url} | comment_id=${commentId}`).catch(() => {});
   
   const payload = {
     recipient: {
