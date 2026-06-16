@@ -23,6 +23,7 @@ interface PreparedPost {
   status: "ready" | "publishing" | "published" | "error";
   publishMessage: string;
   expanded: boolean;
+  offerId?: string;
 }
 
 // ─── Component ───
@@ -75,6 +76,7 @@ export function PublishClient() {
             status: "ready",
             publishMessage: "",
             expanded: i === 0, // Expand first post by default
+            offerId: res.offer.id,
           });
         } else {
           errors.push(`Link ${i + 1}: ${res.message || "Erro desconhecido"}`);
@@ -115,7 +117,7 @@ export function PublishClient() {
           );
           return;
         }
-        res = await publishToInstagramAction(post.copy, post.imageUrl);
+        res = await publishToInstagramAction(post.copy, post.imageUrl, post.offerId);
       } else if (channel === "whatsapp") {
         res = await publishToWhatsAppAction(post.copy, post.imageUrl || undefined);
       } else {

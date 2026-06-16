@@ -153,7 +153,7 @@ export async function publishToTelegramAction(text: string, imageUrl?: string) {
   }
 }
 
-export async function publishToInstagramAction(caption: string, imageUrl?: string) {
+export async function publishToInstagramAction(caption: string, imageUrl: string, offerId?: string) {
   const supabase = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
 
@@ -182,6 +182,19 @@ export async function publishToInstagramAction(caption: string, imageUrl?: strin
 
     console.log("[PublishAction] Conexão OK. Publicando...");
     const postId = await publishToInstagram(imageUrl, caption);
+
+    if (offerId) {
+      await supabase.from("posts").insert({
+        offer_id: offerId,
+        user_id: userId,
+        channel: "instagram",
+        content: caption,
+        status: "published",
+        external_id: postId,
+        posted_at: new Date().toISOString()
+      });
+    }
+
     return { ok: true, message: `Publicado com sucesso no Instagram! (Post ID: ${postId})` };
   } catch (error: unknown) {
     console.error("[PublishAction] Erro ao publicar no Instagram:", error);
