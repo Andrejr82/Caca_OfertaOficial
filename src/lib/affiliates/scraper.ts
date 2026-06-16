@@ -15,6 +15,33 @@ export interface ScrapedProduct {
 }
 
 /**
+ * Função utilitária para forçar a maior resolução e compatibilidade possível
+ * das imagens das lojas, garantindo ótima qualidade no Instagram.
+ */
+function enhanceImageUrl(url: string | null): string | null {
+  if (!url) return null;
+  let enhanced = url;
+
+  // Força HTTPS
+  if (enhanced.startsWith("//")) {
+    enhanced = "https:" + enhanced;
+  }
+
+  // Mercado Livre: Força JPEG e imagem de alta resolução (-O)
+  if (enhanced.includes("mlstatic.com")) {
+    enhanced = enhanced.replace(/\.webp$/i, ".jpg");
+    enhanced = enhanced.replace(/-[a-zA-Z]\.jpg$/i, "-O.jpg");
+  }
+
+  // Magalu: Remove as dimensões fixas baixas da URL para pegar a original
+  if (enhanced.includes("mlcdn.com.br")) {
+    enhanced = enhanced.replace(/\/\d+x\d+\//, "/orig/");
+  }
+
+  return enhanced;
+}
+
+/**
  * Coleta os links e detalhes dos produtos mais vendidos no Mercado Livre diretamente da página principal
  * Evita fazer requisições extras para páginas individuais de produtos, contornando bloqueios de captcha.
  * Híbrido: Extrai os dados publicamente e depois injeta a tag de afiliado.
@@ -114,7 +141,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
         results.push({
           product_name: title,
           original_url: link,
-          image_url: image,
+          image_url: enhanceImageUrl(image),
           current_price: currentPrice,
           old_price: oldPrice,
           rating: 4.8 // nota padrão alta
@@ -248,7 +275,7 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
       return {
         product_name: title.trim(),
         original_url: productUrl,
-        image_url: image,
+        image_url: enhanceImageUrl(image),
         current_price: currentPrice,
         old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
         rating: rating
@@ -335,7 +362,7 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
     return {
       product_name: extract.title,
       original_url: finalProductUrl,
-      image_url: extract.image || null,
+      image_url: enhanceImageUrl(extract.image || null),
       current_price: extract.current_price,
       old_price: extract.old_price || null,
       rating: 4.8 // Nota padrão alta
@@ -409,7 +436,7 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
     return {
       product_name: title.trim(),
       original_url: productUrl,
-      image_url: image,
+      image_url: enhanceImageUrl(image),
       current_price: currentPrice,
       old_price: null,
       rating: 4.8 // Mock para Shein
@@ -488,7 +515,7 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
     return {
       product_name: extract.title,
       original_url: finalProductUrl,
-      image_url: extract.image || null,
+      image_url: enhanceImageUrl(extract.image || null),
       current_price: extract.current_price,
       old_price: extract.old_price || null,
       rating: 4.8 // Nota padrão alta
@@ -579,7 +606,7 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
     return fcData.data.extract.products.slice(0, limit).map((p: any) => ({
       product_name: p.title,
       original_url: p.url.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url}`,
-      image_url: p.image || null,
+      image_url: enhanceImageUrl(p.image || null),
       current_price: p.price,
       old_price: p.old_price || null,
       rating: 4.8
