@@ -26,6 +26,10 @@ const nextConfig: NextConfig = {
       },
       {
         protocol: 'https',
+        hostname: '**.images-amazon.com',
+      },
+      {
+        protocol: 'https',
         hostname: '**.amazon.com.br',
       },
     ],

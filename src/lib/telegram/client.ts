@@ -63,7 +63,12 @@ export async function sendTelegramPhoto(text: string, photoUrl: string) {
 
   if (isAmazonImage) {
     console.log("[Telegram] Baixando imagem da Amazon localmente via multipart/form-data...");
-    const imageRes = await fetch(photoUrl);
+    const imageRes = await fetch(photoUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
+      }
+    });
     if (!imageRes.ok) {
       throw new Error(`Falha ao baixar imagem da Amazon. HTTP ${imageRes.status}`);
     }
