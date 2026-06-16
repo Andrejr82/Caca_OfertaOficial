@@ -121,7 +121,12 @@ app.post('/send', async (req, res) => {
         if (imageUrl) {
             console.log('  → Baixando imagem...');
             try {
-                const imgRes = await fetch(imageUrl);
+                const imgRes = await fetch(imageUrl, {
+                    headers: {
+                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
+                    }
+                });
                 if (!imgRes.ok) throw new Error(`Falha ao baixar imagem: ${imgRes.statusText}`);
                 const arrayBuffer = await imgRes.arrayBuffer();
                 const buffer = Buffer.from(arrayBuffer);
