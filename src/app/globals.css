@@ -305,6 +305,11 @@ textarea:focus {
   box-shadow: 0 0 0 2px var(--accent-glow), var(--shadow-glow) !important;
 }
 
+option {
+  background-color: var(--bg-elevated) !important;
+  color: var(--text-primary) !important;
+}
+
 /* ═══════════════════════════════════════════════
    TABLES
    ═══════════════════════════════════════════════ */
