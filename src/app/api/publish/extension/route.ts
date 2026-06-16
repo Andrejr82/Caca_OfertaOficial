@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     }
 
     // 2. Criar Tracking para todos os canais selecionados
-    const aiLinks: Record<string, string> = {
+    const aiLinks: { telegram: string; whatsapp: string; instagram: string } = {
       telegram: "",
       whatsapp: "",
       instagram: ""
@@ -79,7 +79,10 @@ export async function POST(req: Request) {
     for (const channel of selectedChannels) {
       const subId = createSubId(channel, newOffer.product_name, newOffer.id);
       const trackedUrl = createTrackedUrl(finalUrl, subId, channel, "social", "caca_oferta_extension");
-      aiLinks[channel] = trackedUrl;
+      // Mapear "instagram" para a chave "instagram"
+      if (channel === "telegram" || channel === "whatsapp" || channel === "instagram") {
+        aiLinks[channel as keyof typeof aiLinks] = trackedUrl;
+      }
 
       await adminSupabase.from("affiliate_links").upsert(
         {

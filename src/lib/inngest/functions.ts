@@ -7,7 +7,7 @@ import { publisher } from "@/lib/publisher";
  * Retira o bloqueio síncrono do front-end/cron ao publicar nas redes.
  */
 export const publishPostBackground = inngest.createFunction(
-  { id: "publish-post", retries: 3, event: "post/publish" },
+  { id: "publish-post", retries: 3, triggers: [{ event: "post/publish" }] },
   async ({ event, step }: any) => {
     logger.info("Executando fila Inngest: post/publish", { eventId: event.id });
     
@@ -30,7 +30,7 @@ export const publishPostBackground = inngest.createFunction(
  * Preparado para substituir o processamento síncrono no Cron
  */
 export const processOfferBackground = inngest.createFunction(
-  { id: "process-offer", retries: 2, event: "offer/process" },
+  { id: "process-offer", retries: 2, triggers: [{ event: "offer/process" }] },
   async ({ event, step }: any) => {
     logger.info("Processando oferta em background", { url: event.data.url });
     // TODO: Invocar scraper + gerador de copy da Groq aqui
@@ -42,7 +42,7 @@ export const processOfferBackground = inngest.createFunction(
  * Função de Fila: Analytics (STUB)
  */
 export const syncAnalyticsBackground = inngest.createFunction(
-  { id: "sync-analytics", event: "analytics/sync" },
+  { id: "sync-analytics", triggers: [{ event: "analytics/sync" }] },
   async ({ event, step }: any) => {
     logger.info("Sincronizando analytics em background", { source: event.data.source });
     return { synced: true };
