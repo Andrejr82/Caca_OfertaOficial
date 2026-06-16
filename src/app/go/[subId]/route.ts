@@ -23,12 +23,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ subI
   // Create admin client to bypass RLS for public link redirection
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  // Find the affiliate link by sub_id
-  const { data: link, error } = await supabase
+  // Find the affiliate link by sub_id (using ilike to account for campaign suffixes like -benefit)
+  const { data: links, error } = await supabase
     .from("affiliate_links")
     .select("*")
-    .eq("sub_id", subId)
-    .single();
+    .ilike("sub_id", `${subId}%`)
+    .limit(1);
+
+  const link = links && links.length > 0 ? links[0] : null;
 
   if (error || !link) {
     console.error("Link não encontrado para o subId:", subId, error);
