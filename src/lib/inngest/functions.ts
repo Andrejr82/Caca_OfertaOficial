@@ -8,7 +8,6 @@ import { publisher } from "@/lib/publisher";
  */
 export const publishPostBackground = inngest.createFunction(
   { id: "publish-post", retries: 3, event: "post/publish" },
-  // @ts-expect-error type inference from inngest can be tricky
   async ({ event, step }: any) => {
     logger.info("Executando fila Inngest: post/publish", { eventId: event.id });
     
@@ -32,7 +31,6 @@ export const publishPostBackground = inngest.createFunction(
  */
 export const processOfferBackground = inngest.createFunction(
   { id: "process-offer", retries: 2, event: "offer/process" },
-  // @ts-expect-error inngest type inference issue
   async ({ event, step }: any) => {
     logger.info("Processando oferta em background", { url: event.data.url });
     // TODO: Invocar scraper + gerador de copy da Groq aqui
@@ -45,7 +43,6 @@ export const processOfferBackground = inngest.createFunction(
  */
 export const syncAnalyticsBackground = inngest.createFunction(
   { id: "sync-analytics", event: "analytics/sync" },
-  // @ts-expect-error inngest type inference issue
   async ({ event, step }: any) => {
     logger.info("Sincronizando analytics em background", { source: event.data.source });
     return { synced: true };
