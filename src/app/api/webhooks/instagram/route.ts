@@ -30,8 +30,8 @@ export async function POST(request: Request) {
 
     // Verifica se é um evento do Instagram
     if (body.object === "instagram") {
-      // Opcional: Descomente para logar no Telegram que o evento chegou
-      // await sendTelegramMessage(`[Webhook] Evento recebido: ${JSON.stringify(body).slice(0, 500)}`).catch(() => {});
+      // Logamos TODO e QUALQUER evento do Instagram no Telegram temporariamente para debug
+      await sendTelegramMessage(`[Webhook] Evento recebido: ${JSON.stringify(body).slice(0, 1000)}`).catch(() => {});
 
       for (const entry of body.entry) {
         const instagramAccountId = entry.id;
