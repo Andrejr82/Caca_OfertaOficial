@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createTrackedUrl } from "@/lib/tracking/sub-id";
 
+export const dynamic = 'force-dynamic';
+
 // O Meta envia um desafio GET para confirmar a URL do Webhook
 export async function GET(request: Request) {
   const url = new URL(request.url);
