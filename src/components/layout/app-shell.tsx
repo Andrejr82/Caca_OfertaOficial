@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
   Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
-  PanelLeftOpen, LogOut, Sparkles, Zap
+  PanelLeftOpen, LogOut, Sparkles, Zap, Menu
 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { officialBrand } from "@/lib/env";
@@ -51,10 +51,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen">
+      {/* ─── Mobile Overlay ─── */}
+      {isOpen && (
+        <div 
+          className="fixed inset-0 z-30 bg-black/60 backdrop-blur-sm lg:hidden"
+          onClick={toggle}
+        />
+      )}
+
       {/* ─── Sidebar ─── */}
       <aside
-        className="glass-sidebar fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-200 ease-in-out"
-        style={{ width: isOpen ? "var(--sidebar-width)" : "var(--sidebar-collapsed)" }}
+        className={`
+          glass-sidebar fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out
+          ${isOpen 
+            ? "translate-x-0 w-[var(--sidebar-width)]" 
+            : "-translate-x-full lg:translate-x-0 w-[var(--sidebar-width)] lg:w-[var(--sidebar-collapsed)]"}
+        `}
       >
         {/* Logo Area */}
         <div className="flex h-16 items-center gap-3 border-b border-white/[0.04] px-4">
@@ -148,8 +160,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ─── Main Content ─── */}
       <div
-        className="flex-1 min-w-0 overflow-hidden transition-all duration-200 ease-in-out"
-        style={{ marginLeft: isOpen ? "var(--sidebar-width)" : "var(--sidebar-collapsed)" }}
+        className={`
+          flex-1 min-w-0 overflow-hidden transition-all duration-300 ease-in-out
+          ml-0
+          ${isOpen ? "lg:ml-[var(--sidebar-width)]" : "lg:ml-[var(--sidebar-collapsed)]"}
+        `}
       >
         {/* Top Bar */}
         <header
@@ -161,9 +176,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           }}
         >
           <div className="flex items-center gap-2 text-sm text-white/40">
-            <BarChart3 size={14} />
-            <span className="font-medium">Caça Oferta</span>
-            <span className="text-white/15">/</span>
+            <button 
+              onClick={toggle}
+              className="mr-2 p-1.5 -ml-2 rounded-md hover:bg-white/10 lg:hidden text-white/70"
+            >
+              <Menu size={18} />
+            </button>
+            <BarChart3 size={14} className="hidden sm:block" />
+            <span className="font-medium hidden sm:inline-block">Caça Oferta</span>
+            <span className="text-white/15 hidden sm:inline-block">/</span>
             <span className="font-semibold text-white/70 capitalize">
               {pathname.split("/").filter(Boolean).pop() || "dashboard"}
             </span>

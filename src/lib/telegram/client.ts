@@ -58,6 +58,36 @@ export async function sendTelegramPhoto(text: string, photoUrl: string) {
     throw new Error("Telegram não configurado.");
   }
 
+  // Verifica se a imagem vem da Amazon (que bloqueia bots do Telegram)
+  const isAmazonImage = photoUrl.includes("amazon.com") || photoUrl.includes("media-amazon.com");
+
+  if (isAmazonImage) {
+    console.log("[Telegram] Baixando imagem da Amazon localmente via multipart/form-data...");
+    const imageRes = await fetch(photoUrl);
+    if (!imageRes.ok) {
+      throw new Error(`Falha ao baixar imagem da Amazon. HTTP ${imageRes.status}`);
+    }
+    const imageBlob = await imageRes.blob();
+    
+    const formData = new FormData();
+    formData.append("chat_id", process.env.TELEGRAM_CHANNEL_ID!);
+    formData.append("photo", imageBlob, "offer-image.jpg");
+    formData.append("caption", text);
+
+    const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
+      method: "POST",
+      body: formData
+    });
+
+    const payload = (await response.json()) as TelegramSendMessageResponse;
+    if (!payload.ok || !payload.result) {
+      throw new Error(payload.description || "Falha ao publicar foto no Telegram via FormData.");
+    }
+
+    return payload.result;
+  }
+
+  // Fluxo normal via URL para Mercado Livre, etc.
   const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

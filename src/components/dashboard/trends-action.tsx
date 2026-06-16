@@ -10,11 +10,14 @@ export function TrendsAction() {
     mercadolivre: true,
     magalu: false,
     shopee: false,
-    shein: false
+    shein: false,
+    amazon: false
   });
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const activeSourcesCount = Object.values(sources).filter(Boolean).length;
+
+  const [limit, setLimit] = useState<number>(10);
 
   async function handleFetchTrends() {
     if (activeSourcesCount === 0) {
@@ -34,12 +37,13 @@ export function TrendsAction() {
     if (sources.magalu) selectedSources.push("Magalu");
     if (sources.shopee) selectedSources.push("Shopee");
     if (sources.shein) selectedSources.push("Shein");
+    if (sources.amazon) selectedSources.push("Amazon");
 
     try {
       const response = await fetch("/api/scraper/trends", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sources: selectedSources })
+        body: JSON.stringify({ sources: selectedSources, limit })
       });
       const data = await response.json();
 
@@ -48,7 +52,6 @@ export function TrendsAction() {
           success: true,
           message: data.message || "Tendências importadas com sucesso!"
         });
-        // Recarrega a página para atualizar a lista de ofertas no dashboard
         window.location.reload();
       } else {
         setResult({
@@ -115,6 +118,28 @@ export function TrendsAction() {
               />
               Shein
             </label>
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sources.amazon}
+                onChange={(e) => setSources({ ...sources, amazon: e.target.checked })}
+                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
+              />
+              Amazon
+            </label>
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <label className="text-sm font-medium text-white/70">Itens por loja:</label>
+            <select
+              value={limit}
+              onChange={(e) => setLimit(Number(e.target.value))}
+              className="bg-ink border border-moss/20 rounded-md text-sm text-white px-2 py-1 focus:ring-moss focus:border-moss"
+            >
+              <option value={5}>5 produtos</option>
+              <option value={10}>10 produtos</option>
+              <option value={15}>15 produtos</option>
+              <option value={20}>20 produtos</option>
+            </select>
           </div>
         </div>
         <div className="flex shrink-0 items-start">

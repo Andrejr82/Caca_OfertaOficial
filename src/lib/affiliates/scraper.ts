@@ -421,6 +421,85 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
   }
 }
 
+async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  try {
+    let finalProductUrl = productUrl;
+    if (productUrl.includes("amzn.to")) {
+      try {
+        const redirectRes = await fetch(productUrl, { method: "GET", redirect: "follow" });
+        finalProductUrl = redirectRes.url;
+        if (finalProductUrl.includes("?")) {
+           finalProductUrl = finalProductUrl.split("?")[0];
+        }
+      } catch (e) {
+        console.warn("Falha ao resolver shortlink da Amazon:", e);
+      }
+    }
+
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      console.warn("FIRECRAWL_API_KEY não encontrada, Amazon bloqueará o fetch comum. Retornando mock.");
+      return {
+        product_name: "Produto Amazon (Requer Firecrawl)",
+        original_url: finalProductUrl,
+        image_url: null,
+        current_price: 0,
+        old_price: null,
+        rating: 4.8
+      };
+    }
+
+    console.log(`[Scraper] Usando Firecrawl Extract para Amazon: ${productUrl}`);
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        url: finalProductUrl, 
+        formats: ["extract"],
+        extract: {
+          prompt: "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null.",
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              image: { type: "string" },
+              current_price: { type: "number" },
+              old_price: { type: "number", nullable: true }
+            },
+            required: ["title", "current_price"]
+          }
+        }
+      })
+    });
+
+    if (!fcResponse.ok) {
+      throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+    }
+
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data || !fcData.data.extract) {
+      throw new Error("Firecrawl não retornou dados de extração válidos.");
+    }
+
+    const extract = fcData.data.extract;
+    return {
+      product_name: extract.title,
+      original_url: finalProductUrl,
+      image_url: extract.image || null,
+      current_price: extract.current_price,
+      old_price: extract.old_price || null,
+      rating: 4.8 // Nota padrão alta
+    };
+
+  } catch (error) {
+    console.error(`Erro ao raspar produto Amazon ${productUrl}:`, error);
+    return null;
+  }
+}
+
 /**
  * Raspa detalhes de um produto individual
  * Identifica a loja pelo domínio e direciona para a função correta
@@ -432,9 +511,83 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
   if (productUrl.includes("magazineluiza.com.br") || productUrl.includes("magazinevoce.com.br") || productUrl.includes("magazineluiza.onelink.me")) {
     return scrapeMagaluProductDetails(productUrl);
   }
+  if (productUrl.includes("amazon.com.br") || productUrl.includes("amzn.to")) {
+    return scrapeAmazonProductDetails(productUrl);
+  }
   
   // Default fallback (Mercado Livre)
   return scrapeMercadoLivreProductDetails(productUrl);
+}
+
+export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+  try {
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      console.warn("Sem chave Firecrawl. Usando fallback Mock para Tendências da Amazon.");
+      return [
+        {
+          product_name: "Echo Dot 5ª Geração (Requer Firecrawl para ofertas reais)",
+          original_url: "https://www.amazon.com.br/dp/B09B8VGCR8",
+          image_url: null,
+          current_price: 299.00,
+          old_price: null,
+          rating: 4.9
+        }
+      ];
+    }
+
+    console.log("[Scraper] Usando Firecrawl para buscar tendências da Amazon...");
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        url: "https://www.amazon.com.br/gp/bestsellers/", 
+        formats: ["extract"],
+        extract: {
+          prompt: `Extraia os top ${limit} produtos mais vendidos. Para cada produto, precisamos do título, url original da amazon do produto, url da imagem e o preço atual promocional como número (ex: 99.90). Se tiver preço antigo cortado, traga também.`,
+          schema: {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" },
+                    old_price: { type: "number", nullable: true }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          }
+        }
+      })
+    });
+    
+    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Amazon Trends: ${fcResponse.status}`);
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos");
+
+    return fcData.data.extract.products.slice(0, limit).map((p: any) => ({
+      product_name: p.title,
+      original_url: p.url.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url}`,
+      image_url: p.image || null,
+      current_price: p.price,
+      old_price: p.old_price || null,
+      rating: 4.8
+    }));
+  } catch (error) {
+    console.error("Erro Amazon Trends:", error);
+    return [];
+  }
 }
 
 /**
@@ -554,6 +707,8 @@ export async function discoverAndIngestTrendingOffers(
           rating: 4.7
         }
       ].slice(0, limit);
+    } else if (source === "Amazon") {
+      scrapedProducts = await fetchAmazonTrendingProducts(limit);
     }
 
     for (const product of scrapedProducts) {
@@ -617,6 +772,17 @@ export async function discoverAndIngestTrendingOffers(
             finalUrl = urlObj.toString();
           } catch (e) {
             // Falha silenciosa no URL parser
+          }
+        }
+      } else if (source === "Amazon") {
+        const amazonTag = process.env.AMAZON_PARTNER_TAG || "";
+        if (amazonTag) {
+          try {
+            const urlObj = new URL(product.original_url);
+            urlObj.searchParams.set("tag", amazonTag);
+            finalUrl = urlObj.toString();
+          } catch (e) {
+            // Falha silenciosa
           }
         }
       }

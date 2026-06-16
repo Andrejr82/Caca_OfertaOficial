@@ -14,3 +14,11 @@ export function hasSupabasePublicEnv() {
 export function hasTelegramEnv() {
   return Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHANNEL_ID);
 }
+
+export function hasAmazonCreatorsEnv() {
+  return Boolean(
+    process.env.AMAZON_CLIENT_ID &&
+    process.env.AMAZON_CLIENT_SECRET &&
+    process.env.AMAZON_PARTNER_TAG
+  );
+}
