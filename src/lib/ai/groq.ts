@@ -272,3 +272,129 @@ function runFallback(
   return mapGeneratedCopyToLegacyResult(copyContext, links, offer);
 }
 
+// ==========================================
+// AI CURATION ENGINE (FASE 3)
+// ==========================================
+
+export interface AICurationResult {
+  ai_score_boost: number; // 0 a 10
+  conversion_justification: string;
+  strong_points: string[];
+  weak_points: string[];
+}
+
+/**
+ * Motor Quente (IA) - Analisa ofertas que JÁ PASSARAM pelo filtro frio (> 5).
+ * A IA NÃO pode aprovar um produto ruim nem inventar métricas (Alucinação Zero).
+ */
+export async function analyzeConversionPotential(offer: Offer, coldScore: number): Promise<AICurationResult> {
+  const apiKey = process.env.GROQ_API_KEY;
+  // O sistema é unificado sob "gemini-2.5-flash-lite", se for nulo cai no fallback de groq-adapter existente
+  const model = process.env.GROQ_MODEL || "gemini-2.5-flash-lite";
+
+  // Se a chave for inexistente, bypass seguro retornando 0 boost
+  if (!apiKey) {
+    return {
+      ai_score_boost: 0,
+      conversion_justification: "Ignorado (API Key ausente).",
+      strong_points: [],
+      weak_points: []
+    };
+  }
+
+  const jsonSchemaObj = {
+    type: "object",
+    properties: {
+      ai_score_boost: { type: "number", description: "Bônus de pontuação baseado no apelo orgânico de 0 a 5. Se não tiver apelo, 0." },
+      conversion_justification: { type: "string", description: "Justificativa comercial profunda do porquê o produto venderá ou não." },
+      strong_points: { type: "array", items: { type: "string" } },
+      weak_points: { type: "array", items: { type: "string" } }
+    },
+    required: ["ai_score_boost", "conversion_justification", "strong_points", "weak_points"],
+    additionalProperties: false
+  };
+
+  const hasDiscount = offer.old_price && offer.old_price > offer.current_price;
+  const discountPct = hasDiscount ? Math.round(((offer.old_price! - offer.current_price) / offer.old_price!) * 100) : 0;
+
+  const systemPrompt = `Você é um Arquiteto de E-commerce e Estrategista de Afiliados. 
+Sua missão é atuar como CURADOR FINAL. Você receberá um produto que já passou por um Filtro Frio de qualidade (Score de ${coldScore}).
+
+REGRAS DE OURO:
+1. ANTI-ALUCINAÇÃO ABSOLUTA: Baseie-se EXCLUSIVAMENTE nos dados fornecidos abaixo. Não invente CTR, Vendas, Cliques ou Comissões que não estão escritas. Se faltar dados, diga "Dado não disponível" nos pontos fracos.
+2. A IA NÃO DEVE REPROVAR PRODUTOS, apenas dar um BOOSTER de 0 a 5 com base no apelo visual orgânico, urgência da categoria, e ticket percebido de compra por impulso.
+3. Foque sua justificativa na "Probabilidade do Consumidor Clicar e Comprar no Impulso".`;
+
+  const userPrompt = `DADOS DA OFERTA AVALIADA:
+- Nome: ${offer.product_name}
+- Preço Atual: R$ ${offer.current_price}
+- Categoria do Motor Frio: ${offer.category || "Dado não disponível"}
+- Plataforma/Marketplace: ${offer.platform}
+- Avaliação: ${offer.rating ? offer.rating + " estrelas" : "Dado não disponível"}
+- Desconto Detectado: ${hasDiscount ? discountPct + "%" : "Dado não disponível"}
+- Score Matemático Base: ${coldScore} de 10
+
+RESPONDA ESTRITAMENTE NESTE FORMATO JSON:
+${JSON.stringify(jsonSchemaObj, null, 2)}`;
+
+  let retries = 2;
+  while (retries >= 0) {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userPrompt }
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.2, // Baixa temperatura para zero alucinação
+          max_tokens: 1000
+        }),
+        signal: AbortSignal.timeout(15000)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro na IA Curadora: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const raw = JSON.parse(data.choices[0].message.content.trim());
+      
+      // Validação rápida de schema (Duck typing)
+      if (typeof raw.ai_score_boost !== 'number' || !raw.conversion_justification) {
+        throw new Error("Payload de curadoria inválido ou corrompido.");
+      }
+
+      return {
+        ai_score_boost: Math.max(0, Math.min(5, raw.ai_score_boost)), // Trava dura do Teto de 5
+        conversion_justification: raw.conversion_justification,
+        strong_points: raw.strong_points || [],
+        weak_points: raw.weak_points || []
+      };
+
+    } catch (err: any) {
+      if (retries > 0) {
+        retries--;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        continue;
+      }
+      console.warn("Falha na IA de Curadoria após tentativas. Fallback neutro.");
+      return {
+        ai_score_boost: 0,
+        conversion_justification: "Falha técnica na API de IA. Bônus neutro aplicado para não quebrar pipeline.",
+        strong_points: [],
+        weak_points: []
+      };
+    }
+  }
+
+  // Falha silenciosa pra n quebrar a listagem de ofertas
+  return { ai_score_boost: 0, conversion_justification: "Fallback", strong_points: [], weak_points: [] };
+}
+

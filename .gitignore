@@ -20,3 +20,6 @@ tsconfig.tsbuildinfo
 # App specific
 **/.baileys_auth/
 **/auth_info_baileys/
+
+.vercel
+cloudflared.exe

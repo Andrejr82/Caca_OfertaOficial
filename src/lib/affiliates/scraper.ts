@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Offer } from "@/types/domain";
 import { mlClient } from "@/lib/integrations/mercadolivre/client";
+import { curateOfferScore } from "@/lib/offers/curation-engine";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
@@ -754,6 +755,14 @@ export async function discoverAndIngestTrendingOffers(
       let platformValue = source;
       let notesValue = `Importado automaticamente via Robô de Tendências (${source}).`;
 
+      // Aplica o Motor Frio para ter o Rating + Shadow Mode
+      const curation = curateOfferScore({
+        current_price: product.current_price,
+        old_price: product.old_price,
+        rating: product.rating,
+        category: "Geral" // O bot de tendencias n traz categoria ainda
+      });
+
       if (source === "Shein") {
         // Tenta salvar como Shein no banco. Se a constraint rejeitar, o erro será capturado e inserido como "Outro".
         const { data: newOffer, error: insertError } = await supabase
@@ -767,7 +776,10 @@ export async function discoverAndIngestTrendingOffers(
             current_price: product.current_price,
             old_price: product.old_price,
             rating: product.rating,
-            score: 5.0,
+            score: curation.score,
+            legacy_score: curation.legacy_score,
+            new_score: curation.new_score,
+            explainability: curation.explainability,
             status: "draft",
             notes: notesValue
           })

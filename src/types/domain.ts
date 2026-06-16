@@ -23,6 +23,9 @@ export interface Offer {
   estimated_commission: number | null;
   commission_rate: number | null;
   score: number;
+  legacy_score?: number | null;
+  new_score?: number | null;
+  explainability?: any;
   status: OfferStatus;
   notes: string | null;
   seasonality: number | null;
