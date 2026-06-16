@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { discoverAndIngestTrendingOffers } from "@/lib/affiliates/scraper";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { rankOffersBatch } from "@/lib/offers/curation-engine";
 
 export async function POST(request: Request) {
   try {
@@ -36,12 +37,16 @@ export async function POST(request: Request) {
     // Executa o robô de descoberta
     const offers = await discoverAndIngestTrendingOffers(limit, sources);
 
+    // Filtra e ordena comercialmente usando o Curation V2 (Cold Ranking + Quality Gate >= 5.0)
+    const rankedOffers = await rankOffersBatch(offers);
+
+    // Apenas as Top 3 ofertas passam para a geração de IA (Top 3 real)
+    const top3Offers = rankedOffers.slice(0, 3);
+
     // Se houver chave da API do Groq configurada, podemos gerar as copys automaticamente
-    if (process.env.GROQ_API_KEY && offers.length > 0) {
-      // Chamar a API interna ou rodar a função diretamente para cada oferta inserida
-      // Criaremos a função de geração no passo seguinte, mas podemos prever a chamada
+    if (process.env.GROQ_API_KEY && top3Offers.length > 0) {
       const baseUrl = new URL(request.url).origin;
-      for (const offer of offers) {
+      for (const offer of top3Offers) {
         try {
           await fetch(`${baseUrl}/api/ai/generate`, {
             method: "POST",

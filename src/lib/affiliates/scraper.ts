@@ -838,7 +838,10 @@ export async function discoverAndIngestTrendingOffers(
           current_price: product.current_price,
           old_price: product.old_price,
           rating: product.rating,
-          score: 5.0, // nota padrão inicial
+          score: curation.score,
+          legacy_score: curation.legacy_score,
+          new_score: curation.new_score,
+          explainability: curation.explainability,
           status: "draft",
           notes: notesValue
         })

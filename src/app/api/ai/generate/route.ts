@@ -101,12 +101,27 @@ export async function POST(request: Request) {
     }
 
     // 4. Atualiza o score e o status da oferta
-    // Se o score for bom (ex: >= 7.0), podemos já aprovar a oferta para facilitar, caso contrário, mantemos rascunho
-    const newStatus = analysis.score >= 7.0 ? "approved" : offer.status;
+    const commercialScore = Number(offer.new_score || offer.score || 0);
+    const conversionScore = Number(offer.explainability?.conversion_score || 5.0);
+    const aiCopyScore = Number(analysis.score || 0);
+
+    // Fórmula Explícita: 70% commercial_score, 20% conversion_score, 10% ai_copy_score
+    const finalRankScore = Number(((0.70 * commercialScore) + (0.20 * conversionScore) + (0.10 * aiCopyScore)).toFixed(2));
+
+    const updatedExplainability = {
+      ...(offer.explainability || {}),
+      ai_copy_score: aiCopyScore,
+      final_rank_score: finalRankScore,
+      commercial_score: commercialScore,
+      conversion_score: conversionScore
+    };
+
+    const newStatus = finalRankScore >= 7.0 ? "approved" : offer.status;
     const { error: updateError } = await supabase
       .from("offers")
       .update({
-        score: analysis.score,
+        score: finalRankScore,
+        explainability: updatedExplainability,
         status: newStatus,
         updated_at: new Date().toISOString()
       })

@@ -62,9 +62,16 @@ async function handleCron(request: Request) {
         
         const offersProcessed: any[] = [];
 
+        // Filtra e ordena comercialmente usando o Curation V2 (Cold Ranking + Quality Gate >= 5.0)
+        const { rankOffersBatch } = await import("@/lib/offers/curation-engine");
+        const rankedOffers = await rankOffersBatch(offers);
+
+        // Apenas as Top 3 ofertas passam para a geração de IA
+        const top3Offers = rankedOffers.slice(0, 3);
+
         // Se houver novas ofertas e a chave da Groq estiver disponível, gera copys
-        if (process.env.GROQ_API_KEY && offers.length > 0) {
-          for (const offer of offers) {
+        if (process.env.GROQ_API_KEY && top3Offers.length > 0) {
+          for (const offer of top3Offers) {
             try {
               // 3.1. Criar ou recuperar os links de afiliados
               const channels = ["telegram", "instagram", "whatsapp"] as const;
