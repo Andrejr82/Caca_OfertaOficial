@@ -57,76 +57,8 @@ export function SalesDashboard({ initialSales, offers, links, createSaleAction }
     return new Map(offers.map(o => [o.id, o]));
   }, [offers]);
 
-  // Vendas reais no banco ou mockadas se vazio
-  const sales = useMemo(() => {
-    if (initialSales.length > 0) return initialSales;
-
-    // Se o banco estiver vazio, fornece um histórico mockado rico e completo de alta fidelidade
-    const now = new Date();
-    const oneDay = 24 * 60 * 60 * 1000;
-    return [
-      {
-        id: "s-1",
-        offer_id: offers[0]?.id || "mock-off",
-        affiliate_link_id: "link-1",
-        channel: "instagram",
-        gross_value: 199.90,
-        commission_value: 19.99,
-        status: "confirmed",
-        sold_at: new Date(now.getTime() - 0.2 * oneDay).toISOString()
-      },
-      {
-        id: "s-2",
-        offer_id: offers[1]?.id || offers[0]?.id || "mock-off",
-        affiliate_link_id: "link-2",
-        channel: "telegram",
-        gross_value: 89.90,
-        commission_value: 9.00,
-        status: "confirmed",
-        sold_at: new Date(now.getTime() - 1 * oneDay).toISOString()
-      },
-      {
-        id: "s-3",
-        offer_id: offers[0]?.id || "mock-off",
-        affiliate_link_id: "link-1",
-        channel: "instagram",
-        gross_value: 199.90,
-        commission_value: 19.99,
-        status: "confirmed",
-        sold_at: new Date(now.getTime() - 3 * oneDay).toISOString()
-      },
-      {
-        id: "s-4",
-        offer_id: offers[2]?.id || offers[0]?.id || "mock-off",
-        affiliate_link_id: "link-3",
-        channel: "whatsapp",
-        gross_value: 299.00,
-        commission_value: 45.00,
-        status: "confirmed",
-        sold_at: new Date(now.getTime() - 4 * oneDay).toISOString()
-      },
-      {
-        id: "s-5",
-        offer_id: offers[0]?.id || "mock-off",
-        affiliate_link_id: "link-4",
-        channel: "facebook",
-        gross_value: 199.90,
-        commission_value: 19.99,
-        status: "confirmed",
-        sold_at: new Date(now.getTime() - 6 * oneDay).toISOString()
-      },
-      {
-        id: "s-6",
-        offer_id: offers[1]?.id || "mock-off",
-        affiliate_link_id: "link-2",
-        channel: "telegram",
-        gross_value: 89.90,
-        commission_value: 9.00,
-        status: "pending",
-        sold_at: new Date(now.getTime() - 15 * oneDay).toISOString()
-      }
-    ];
-  }, [initialSales, offers]);
+  // Vendas reais do banco
+  const sales = initialSales;
 
   // Filtrar vendas por período
   const filteredByDateSales = useMemo(() => {
