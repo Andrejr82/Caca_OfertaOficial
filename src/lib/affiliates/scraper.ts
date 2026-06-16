@@ -257,8 +257,6 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
 
     return null;
   } catch (error) {
-    return null;
-  } catch (error) {
     console.error(`Erro ao raspar produto ML ${productUrl}:`, error);
     return null;
   }
