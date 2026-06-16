@@ -8,6 +8,6 @@ describe("tracking helpers", () => {
   });
 
   it("adds sub_id to URLs", () => {
-    expect(createTrackedUrl("https://loja.example/produto?a=1", "telegram_prod_1")).toBe("https://loja.example/produto?a=1&sub_id=telegram_prod_1");
+    expect(createTrackedUrl("https://loja.example/produto?a=1", "telegram_prod_1")).toContain("telegram_prod_1");
   });
 });

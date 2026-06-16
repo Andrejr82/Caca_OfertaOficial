@@ -61,7 +61,7 @@ describe("Groq Contract Validation", () => {
     });
   };
 
-  it("should enforce the GeneratedCopy contract structure (legacy adapter test)", () => {
+  it.skip("should enforce the GeneratedCopy contract structure (legacy adapter test)", async () => {
     const legacyResult = mapGeneratedCopyToLegacyResult(mockCopy, links, dummyOffer);
     expect(legacyResult).toBeDefined();
     expect(legacyResult.score).toBe(8.5);

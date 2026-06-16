@@ -41,8 +41,8 @@ describe("PostBuilder and Multi-Marketplace Tests", () => {
     });
     
     expect(post).toContain("Produto Teste");
-    expect(post).toContain("🛒 Comprar agora:");
-    expect(post).toContain(fakeLink);
+    expect(post).toContain("EU QUERO");
+    expect(post).not.toContain(fakeLink); // Instagram não tem link na legenda
     expect(post).toContain(SOCIALS.telegram);
     expect(post).toContain(SOCIALS.whatsapp);
   });

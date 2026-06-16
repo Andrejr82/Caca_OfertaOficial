@@ -19,6 +19,8 @@ export async function GET(request: Request) {
   }
 }
 
+import { sendTelegramMessage } from "@/lib/telegram/client";
+
 // O Meta envia os eventos via POST
 export async function POST(request: Request) {
   try {
@@ -26,12 +28,13 @@ export async function POST(request: Request) {
 
     // Verifica se é um evento do Instagram
     if (body.object === "instagram") {
+      // Opcional: Descomente para logar no Telegram que o evento chegou
+      // await sendTelegramMessage(`[Webhook] Evento recebido: ${JSON.stringify(body).slice(0, 500)}`).catch(() => {});
+
       for (const entry of body.entry) {
-        // Ignora se não for um evento na conta configurada (ou processa todos)
         const instagramAccountId = entry.id;
 
         for (const change of entry.changes) {
-          // Estamos escutando eventos do campo 'comments'
           if (change.field === "comments") {
             const commentValue = change.value;
             
@@ -42,11 +45,11 @@ export async function POST(request: Request) {
             const commentText = commentValue.text ? commentValue.text.toLowerCase() : "";
             const mediaId = commentValue.media.id;
 
-            // Palavras-chave gatilho
             const triggers = ["quero", "link", "eu quero", "manda"];
             const isTrigger = triggers.some(trigger => commentText.includes(trigger));
 
             if (isTrigger) {
+              await sendTelegramMessage(`[Webhook] Gatilho '${commentText}' detectado no media ${mediaId}. Processando...`).catch(() => {});
               await processCommentReply(commentId, mediaId, instagramAccountId);
             }
           }
@@ -56,8 +59,9 @@ export async function POST(request: Request) {
     } else {
       return new NextResponse("Not Found", { status: 404 });
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Erro no Webhook do Instagram:", error);
+    await sendTelegramMessage(`[Webhook ERRO CRÍTICO] ${error.message}`).catch(() => {});
     return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
@@ -80,6 +84,7 @@ async function processCommentReply(commentId: string, mediaId: string, igUserId:
 
   if (!post || !post.offers) {
     console.log(`[Webhook] Nenhuma oferta encontrada para o media_id ${mediaId}`);
+    await sendTelegramMessage(`[Webhook AVISO] Comentário recebido no media ${mediaId}, mas NÃO ACHOU o post no Banco de Dados!`).catch(() => {});
     return;
   }
 
@@ -94,7 +99,10 @@ async function processCommentReply(commentId: string, mediaId: string, igUserId:
     .eq("channel", "instagram")
     .single();
 
-  if (!linkRecord) return;
+  if (!linkRecord) {
+    await sendTelegramMessage(`[Webhook AVISO] Post encontrado (${post.id}), mas NÃO ACHOU o Link de Afiliado para o Instagram!`).catch(() => {});
+    return;
+  }
 
   const trackingUrl = createTrackedUrl(linkRecord.original_url, linkRecord.sub_id);
   const messageText = `Olá! 👋 Aqui está o link da oferta que você pediu no nosso post:\n\n👉 ${trackingUrl}\n\nAproveite antes que acabe!`;
@@ -107,6 +115,7 @@ async function sendPrivateReply(igUserId: string, commentId: string, message: st
   const accessToken = process.env.INSTAGRAM_ACCESS_TOKEN;
   if (!accessToken) {
     console.error("INSTAGRAM_ACCESS_TOKEN não configurado.");
+    await sendTelegramMessage(`[Webhook ERRO] INSTAGRAM_ACCESS_TOKEN não configurado!`).catch(() => {});
     return;
   }
 
@@ -133,7 +142,9 @@ async function sendPrivateReply(igUserId: string, commentId: string, message: st
   const data = await response.json();
   if (!response.ok) {
     console.error("Falha ao enviar Private Reply:", data);
+    await sendTelegramMessage(`[Webhook ERRO] Falha ao enviar a mensagem no Instagram: ${JSON.stringify(data.error?.message || data)}`).catch(() => {});
   } else {
     console.log(`[Webhook] Private Reply enviado com sucesso para comment_id ${commentId}`);
+    await sendTelegramMessage(`[Webhook SUCESSO] Link enviado no Direct do Instagram com sucesso! ✅`).catch(() => {});
   }
 }

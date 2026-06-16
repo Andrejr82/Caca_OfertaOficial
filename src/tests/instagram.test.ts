@@ -63,15 +63,27 @@ describe("Instagram Meta Graph API Client", () => {
 
     vi.spyOn(global, "fetch").mockImplementation(async (url) => {
       const urlStr = String(url);
+      
+      // Mock para Etapa 2 (Polling status) - precisa vir antes de /media
+      if (urlStr.includes("fields=status_code")) {
+        return {
+          ok: true,
+          text: async () => JSON.stringify({ status_code: "FINISHED" }),
+          json: async () => ({ status_code: "FINISHED" })
+        } as Response;
+      }
+      
       if (urlStr.includes("/media") && !urlStr.includes("/media_publish")) {
         return {
           ok: true,
+          text: async () => JSON.stringify(mockContainerResponse),
           json: async () => mockContainerResponse
         } as Response;
       }
       if (urlStr.includes("/media_publish")) {
         return {
           ok: true,
+          text: async () => JSON.stringify(mockPublishResponse),
           json: async () => mockPublishResponse
         } as Response;
       }
