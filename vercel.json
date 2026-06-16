@@ -1,9 +1,11 @@
 {
-  "framework": "nextjs",
+  "version": 2,
+  "buildCommand": "next build",
+  "installCommand": "npm install",
   "crons": [
     {
       "path": "/api/instagram/poll-comments",
-      "schedule": "*/2 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
