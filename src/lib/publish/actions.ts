@@ -8,6 +8,7 @@ import { evaluateQualityGate } from "@/lib/publish/quality-gate";
 import { logger } from "@/lib/utils/logger";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
 import type { Channel, Offer } from "@/types/domain";
+import { curateOfferScore } from "@/lib/offers/curation-engine";
 
 export async function generateQuickPostAction(affiliateUrl: string, channel: Channel) {
   const supabase = await createServerSupabaseClient();
@@ -60,6 +61,12 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     metadata.platform = "Link Externo" as any;
   }
 
+  // Processamento do Score pelo Curation Engine
+  const curation = curateOfferScore({
+    current_price: metadata.price || 0,
+    category: "Geral" // fallback até extrairmos categoria rica
+  });
+
   // 2. Criar Oferta na base
   const { data: newOffer, error: offerError } = await supabase
     .from("offers")
@@ -71,7 +78,10 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
       image_url: metadata.imageUrl || null,
       current_price: metadata.price || 0,
       status: "approved",
-      score: 0,
+      score: curation.score,
+      legacy_score: curation.legacy_score,
+      new_score: curation.new_score,
+      explainability: curation.explainability,
     })
     .select()
     .single<Offer>();
