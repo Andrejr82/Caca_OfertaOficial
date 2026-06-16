@@ -37,7 +37,8 @@ export class PostBuilder {
 
 ${priceBlock}
 
-👉 Comente "EU QUERO" para receber o link no direct ou acesse o link na nossa BIO!
+👉 Comente "EU QUERO" para receber o link no direct ou acesse nossa vitrine no Link da BIO:
+🔗 caca-oferta-oficial.vercel.app/bio
 
 
 
