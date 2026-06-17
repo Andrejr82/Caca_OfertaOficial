@@ -1452,8 +1452,6 @@ export async function discoverAndIngestTrendingOffers(
           console.log(`[SCRAPER][${source.toUpperCase()}][TRENDS] Atualizando oferta existente ${existingOffer.id} devido a mudança nos dados.`);
           const updateNotes = `Atualizado via Robô de Tendências (${source}). Preço anterior: R$ ${existingOffer.current_price} -> Novo: R$ ${product.current_price}.`;
 
-          const extendedNotes = updateNotes + `\n\nCuration V2 Info:\nScore Anterior: ${curation.legacy_score}\nNovo Score: ${curation.new_score}\nMotivo: ${curation.explainability?.chosen_reason || "N/A"}`;
-
           const { data: updatedOffer, error: updateError } = await supabase
             .from("offers")
             .update({
@@ -1463,8 +1461,11 @@ export async function discoverAndIngestTrendingOffers(
               old_price: product.old_price,
               rating: product.rating,
               score: curation.score,
+              legacy_score: curation.legacy_score,
+              new_score: curation.new_score,
+              explainability: curation.explainability,
               status: "draft", // reseta para draft se mudou preço/dados
-              notes: extendedNotes,
+              notes: updateNotes,
               updated_at: new Date().toISOString()
             })
             .eq("id", existingOffer.id)
@@ -1492,7 +1493,6 @@ export async function discoverAndIngestTrendingOffers(
 
       if (source === "Shein") {
         // Tenta salvar como Shein no banco. Se a constraint rejeitar, o erro será capturado e inserido como "Outro".
-        const extendedNotes = notesValue + `\n\nCuration V2 Info:\nScore Anterior: ${curation.legacy_score}\nNovo Score: ${curation.new_score}\nMotivo: ${curation.explainability?.chosen_reason || "N/A"}`;
 
         const { data: newOffer, error: insertError } = await supabase
           .from("offers")
@@ -1506,8 +1506,11 @@ export async function discoverAndIngestTrendingOffers(
             old_price: product.old_price,
             rating: product.rating,
             score: curation.score,
+            legacy_score: curation.legacy_score,
+            new_score: curation.new_score,
+            explainability: curation.explainability,
             status: "draft",
-            notes: extendedNotes
+            notes: notesValue
           })
           .select("*")
           .maybeSingle();
@@ -1523,7 +1526,6 @@ export async function discoverAndIngestTrendingOffers(
       }
 
       // Salvar no banco como draft
-      const extendedNotes = notesValue + `\n\nCuration V2 Info:\nScore Anterior: ${curation.legacy_score}\nNovo Score: ${curation.new_score}\nMotivo: ${curation.explainability?.chosen_reason || "N/A"}`;
 
       const { data: newOffer, error: insertError } = await supabase
         .from("offers")
@@ -1537,8 +1539,11 @@ export async function discoverAndIngestTrendingOffers(
           old_price: product.old_price,
           rating: product.rating,
           score: curation.score,
+          legacy_score: curation.legacy_score,
+          new_score: curation.new_score,
+          explainability: curation.explainability,
           status: "draft",
-          notes: extendedNotes
+          notes: notesValue
         })
         .select("*")
         .maybeSingle();

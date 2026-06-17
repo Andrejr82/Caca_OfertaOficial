@@ -22,6 +22,9 @@ create table if not exists public.offers (
   estimated_commission numeric(12,2) check (estimated_commission is null or estimated_commission >= 0),
   commission_rate numeric(5,2) check (commission_rate is null or commission_rate >= 0),
   score numeric(4,2) not null default 0 check (score >= 0 and score <= 10),
+  legacy_score numeric(4,2) check (legacy_score is null or (legacy_score >= 0 and legacy_score <= 10)),
+  new_score numeric(4,2) check (new_score is null or (new_score >= 0 and new_score <= 10)),
+  explainability jsonb default '{}'::jsonb,
   status text not null default 'draft' check (status in ('draft', 'approved', 'posted', 'rejected')),
   notes text,
   seasonality numeric(4,2) check (seasonality is null or (seasonality >= 0 and seasonality <= 2)),
@@ -92,6 +95,7 @@ create table if not exists public.app_settings (
 create index if not exists offers_user_status_idx on public.offers(user_id, status);
 create index if not exists offers_user_platform_idx on public.offers(user_id, platform);
 create index if not exists offers_user_score_idx on public.offers(user_id, score desc);
+create index if not exists offers_new_score_idx on public.offers(new_score desc);
 create index if not exists affiliate_links_user_offer_idx on public.affiliate_links(user_id, offer_id);
 create index if not exists posts_user_channel_idx on public.posts(user_id, channel);
 create index if not exists sales_user_sold_at_idx on public.sales(user_id, sold_at desc);
