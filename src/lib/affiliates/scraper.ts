@@ -707,15 +707,9 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
 
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("[SCRAPER][MAGALU][PRODUCT] FIRECRAWL_API_KEY não encontrada, usando mock de fallback");
-      return {
-        product_name: "Produto Magalu (Mock - Cadastre a API Key do Firecrawl)",
-        original_url: productUrl,
-        image_url: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop",
-        current_price: 99.90,
-        old_price: 199.90,
-        rating: 4.5
-      };
+      console.error("[SCRAPER][MAGALU][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+      updateMetrics("Magalu", "failures", 1);
+      return null;
     }
 
     console.log(`[SCRAPER][MAGALU][PRODUCT] Usando Firecrawl Extract para Magalu: ${productUrl}`);
@@ -958,15 +952,9 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
 
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("[SCRAPER][SHOPEE][PRODUCT] FIRECRAWL_API_KEY não encontrada, usando mock de fallback");
-      return {
-        product_name: "Produto Shopee (Requer Firecrawl)",
-        original_url: finalProductUrl,
-        image_url: null,
-        current_price: 99.90,
-        old_price: 199.90,
-        rating: 4.8
-      };
+      console.error("[SCRAPER][SHOPEE][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+      updateMetrics("Shopee", "failures", 1);
+      return null;
     }
 
     let retries = 3;
@@ -1049,16 +1037,7 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[SCRAPER][SHOPEE][PRODUCT] Falha ao raspar produto Shopee ${productUrl}: ${errorMsg}`);
     updateMetrics("Shopee", "failures", 1);
-    
-    // Fallback Mock controlado para evitar que o robô quebre em lote
-    return {
-      product_name: "Produto Shopee (Fallback)",
-      original_url: productUrl,
-      image_url: null,
-      current_price: 49.99,
-      old_price: null,
-      rating: 4.5
-    };
+    return null;
   }
 }
 
@@ -1067,15 +1046,9 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("[SCRAPER][SHEIN][PRODUCT] FIRECRAWL_API_KEY não encontrada, usando mock de fallback");
-      return {
-        product_name: "Produto SHEIN (Requer Firecrawl)",
-        original_url: productUrl,
-        image_url: null,
-        current_price: 0,
-        old_price: null,
-        rating: 4.8
-      };
+      console.error("[SCRAPER][SHEIN][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+      updateMetrics("Shein", "failures", 1);
+      return null;
     }
 
     let retries = 3;
@@ -1180,15 +1153,8 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
 
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("[SCRAPER][AMAZON][PRODUCT] FIRECRAWL_API_KEY não encontrada, retornando mock");
-      return {
-        product_name: "Produto Amazon (Requer Firecrawl)",
-        original_url: finalProductUrl,
-        image_url: null,
-        current_price: 0,
-        old_price: null,
-        rating: 4.8
-      };
+      console.error("[SCRAPER][AMAZON][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+      return null;
     }
 
     console.log(`[SCRAPER][AMAZON][PRODUCT] Usando Firecrawl Extract para Amazon: ${productUrl}`);
