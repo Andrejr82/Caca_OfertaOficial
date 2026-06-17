@@ -121,12 +121,11 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
       {/* Coluna da Imagem */}
       <div className="relative aspect-square w-full rounded-md border border-moss/10 bg-paper overflow-hidden flex items-center justify-center">
         {post.offers.image_url ? (
-          <Image 
+          <img 
             src={post.offers.image_url} 
             alt={post.offers.product_name} 
-            fill
-            className="object-contain"
-            sizes="(max-width: 768px) 100vw, 200px"
+            className="object-contain w-full h-full p-2"
+            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="text-ink/40 flex flex-col items-center gap-1">

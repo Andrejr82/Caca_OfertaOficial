@@ -94,12 +94,11 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
     <article className="rounded-lg border border-sky-500/10 bg-white p-5 shadow-panel grid gap-4 lg:grid-cols-[200px_1fr] items-start">
       <div className="relative aspect-square w-full rounded-md border border-sky-500/10 bg-paper overflow-hidden flex items-center justify-center">
         {post.offers.image_url ? (
-          <Image 
+          <img 
             src={post.offers.image_url} 
             alt={post.offers.product_name} 
-            fill
-            className="object-contain"
-            sizes="(max-width: 768px) 100vw, 200px"
+            className="object-contain w-full h-full p-2"
+            referrerPolicy="no-referrer"
           />
         ) : (
           <div className="text-ink/40 flex flex-col items-center gap-1">

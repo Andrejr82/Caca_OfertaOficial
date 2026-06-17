@@ -319,13 +319,12 @@ export function PublishClient() {
             >
               <div className="h-12 w-12 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 flex items-center justify-center">
                 {post.imageUrl ? (
-                  <div className="relative h-full w-full">
-                    <Image 
+                  <div className="relative h-full w-full flex items-center justify-center">
+                    <img 
                       src={post.imageUrl} 
                       alt="" 
-                      fill 
-                      className="object-cover" 
-                      sizes="48px"
+                      className="object-cover w-full h-full" 
+                      referrerPolicy="no-referrer"
                     />
                   </div>
                 ) : (
@@ -388,13 +387,12 @@ export function PublishClient() {
                 <div className="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4">
                   {/* Image preview */}
                   {post.imageUrl && (
-                    <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full">
-                      <Image 
+                    <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full flex items-center justify-center">
+                      <img 
                         src={post.imageUrl} 
                         alt={post.productName} 
-                        fill 
-                        className="object-contain" 
-                        sizes="(max-width: 768px) 100vw, 400px"
+                        className="object-contain w-full h-full p-2" 
+                        referrerPolicy="no-referrer"
                       />
                     </div>
                   )}

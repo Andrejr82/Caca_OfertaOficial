@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen w-full overflow-hidden bg-base">
       {/* ─── Mobile Overlay ─── */}
       {isOpen && (
         <div 
@@ -62,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* ─── Sidebar ─── */}
       <aside
         className={`
-          glass-sidebar fixed inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out
+          glass-sidebar absolute inset-y-0 left-0 z-40 flex flex-col transition-all duration-300 ease-in-out lg:relative
           ${isOpen 
             ? "translate-x-0 w-[var(--sidebar-width)]" 
             : "-translate-x-full lg:translate-x-0 w-[var(--sidebar-width)] lg:w-[var(--sidebar-collapsed)]"}
@@ -160,15 +160,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       {/* ─── Main Content ─── */}
       <div
-        className={`
-          flex-1 min-w-0 overflow-hidden transition-all duration-300 ease-in-out
-          ml-0
-          ${isOpen ? "lg:ml-[var(--sidebar-width)]" : "lg:ml-[var(--sidebar-collapsed)]"}
-        `}
+        className="flex-1 min-w-0 flex flex-col h-full relative"
       >
         {/* Top Bar */}
         <header
-          className="sticky top-0 z-30 flex items-center justify-between border-b border-white/[0.04] px-6"
+          className="flex-shrink-0 z-30 flex items-center justify-between border-b border-white/[0.04] px-6"
           style={{
             height: "var(--topbar-height)",
             background: "rgba(6, 10, 19, 0.75)",
@@ -199,7 +195,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="p-6 lg:p-8 overflow-x-hidden overflow-y-auto" style={{ maxHeight: 'calc(100vh - var(--topbar-height))' }}>
+        <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 lg:p-8">
           {children}
         </main>
       </div>
