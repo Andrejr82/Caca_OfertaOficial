@@ -345,8 +345,8 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Firecrawl Extract (IA)...");
       const targetUrl = category ? `https://lista.mercadolivre.com.br/${encodeURIComponent(category.replace(/ /g, "-"))}` : "https://www.mercadolivre.com.br/mais-vendidos";
       const promptText = category
-        ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto lista.mercadolivre.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se tiver preço antigo riscado, traga também.`
-        : `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
+        ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto lista.mercadolivre.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se tiver preço antigo riscado, traga também. IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como bebidas ou imagens de example/unsplash).`
+        : `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como bebidas ou imagens de example/unsplash).`;
 
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
@@ -389,7 +389,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
         const fcData = await fcResponse.json();
         if (fcData.success && fcData.data?.extract?.products?.length > 0) {
           const products = fcData.data.extract.products
-            .filter((p: any) => p.title && p.price > 0)
+            .filter((p: any) => p.title && p.price > 0 && !p.image?.includes("unsplash.com") && !p.image?.includes("example.com") && !p.image?.includes("mock"))
             .slice(0, limit)
             .map((p: any) => {
               const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
@@ -1441,9 +1441,9 @@ export async function discoverAndIngestTrendingOffers(
 
   let activeCategorySearch = categorySearchQuery;
   if (!activeCategorySearch || activeCategorySearch === "Geral") {
-    const randomIndex = Math.floor(Math.random() * MAIN_CATEGORY_NAMES.length);
-    activeCategorySearch = MAIN_CATEGORY_NAMES[randomIndex];
-    console.log(`[SCRAPER][TRENDS] Modo Roleta: Categoria sorteada -> ${activeCategorySearch}`);
+    // Quando 'Geral' é selecionado, busca na página principal de mais vendidos em vez de sortear uma categoria
+    activeCategorySearch = "";
+    console.log(`[SCRAPER][TRENDS] Busca Geral (Todas as categorias principais)`);
   }
 
   const ingestedOffers: Offer[] = [];

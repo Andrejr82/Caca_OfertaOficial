@@ -32,6 +32,26 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: '**.amazon.com.br',
       },
+      {
+        protocol: 'https',
+        hostname: '**.mlcdn.com.br',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.shopee.com.br',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.susercontent.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.ltwebstatic.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '**',
+      }
     ],
   },
   turbopack: {

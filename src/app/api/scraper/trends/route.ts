@@ -40,13 +40,13 @@ export async function POST(request: Request) {
     // Filtra e ordena comercialmente usando o Curation V2 (Cold Ranking + Quality Gate >= 5.0)
     const rankedOffers = await rankOffersBatch(offers);
 
-    // Apenas as Top 3 ofertas passam para a geração de IA (Top 3 real)
-    const top3Offers = rankedOffers.slice(0, 3);
+    // Sem limite de 3: processamos todas as ofertas retornadas e aprovadas no rank
+    const offersToProcess = rankedOffers;
 
-    // Se houver chave da API do Groq configurada, podemos gerar as copys automaticamente
-    if (process.env.GROQ_API_KEY && top3Offers.length > 0) {
+    // Se houver chave da API de IA configurada, geramos as copys automaticamente
+    if ((process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) && offersToProcess.length > 0) {
       const baseUrl = new URL(request.url).origin;
-      for (const offer of top3Offers) {
+      for (const offer of offersToProcess) {
         try {
           await fetch(`${baseUrl}/api/ai/generate`, {
             method: "POST",

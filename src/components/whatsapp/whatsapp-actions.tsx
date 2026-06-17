@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MessageCircle, Send, CheckCircle2, AlertTriangle, Image as ImageIcon } from "lucide-react";
+import { MessageCircle, Send, CheckCircle2, AlertTriangle, Image as ImageIcon, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Image from "next/image";
 
@@ -64,6 +64,44 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
     }
   }
 
+  async function handleReject() {
+    if (!confirm("Tem certeza que deseja excluir esta sugestão? Ela será removida de todas as redes sociais.")) return;
+    
+    setLoading(true);
+    setStatus(null);
+
+    try {
+      const response = await fetch("/api/offers/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offerId: post.offers.id })
+      });
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        setStatus({
+          success: true,
+          message: data.message
+        });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        setStatus({
+          success: false,
+          message: data.message || "Erro desconhecido ao tentar excluir."
+        });
+        setLoading(false);
+      }
+    } catch {
+      setStatus({
+        success: false,
+        message: "Ocorreu um erro de conexão."
+      });
+      setLoading(false);
+    }
+  }
+
   const formattedPrice = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(post.offers.current_price);
   const formattedOldPrice = post.offers.old_price 
     ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(post.offers.old_price) 
@@ -112,15 +150,28 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <Button
-            disabled={loading}
-            onClick={handleApproveAndPublish}
-            type="button"
-            className="bg-emerald-500 hover:bg-emerald-600 text-white"
-          >
-            {loading ? "Enviando..." : "Aprovar e Enviar no WhatsApp"}
-            <Send size={14} />
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              disabled={loading}
+              onClick={handleApproveAndPublish}
+              type="button"
+              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+            >
+              {loading ? "Enviando..." : "Aprovar e Enviar no WhatsApp"}
+              <Send size={14} />
+            </Button>
+            
+            <Button
+              disabled={loading}
+              onClick={handleReject}
+              type="button"
+              variant="ghost"
+              className="border-red-200 text-red-600 hover:bg-red-50"
+            >
+              Excluir Sugestão
+              <Trash2 size={14} className="ml-1" />
+            </Button>
+          </div>
         </div>
 
         {status && (
