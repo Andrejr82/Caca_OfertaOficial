@@ -203,55 +203,89 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
 
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: "https://www.magazineluiza.com.br/selecao/mais-vendidos/", 
-        formats: ["extract"],
-        extract: {
-          prompt: `Extraia os top ${limit} produtos mais vendidos. Para cada produto, traga o título, url original do produto magazineluiza.com.br, imagem e o preço promocional (somente número).`,
-          schema: {
-            type: "object",
-            properties: {
-              products: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    url: { type: "string" },
-                    image: { type: "string" },
-                    price: { type: "number" }
-                  },
-                  required: ["title", "url", "price"]
-                }
+    // Tenta múltiplas URLs — Magalu muda frequentemente a estrutura
+    const urls = [
+      "https://www.magazineluiza.com.br/selecao/ofertasdodia/",
+      "https://www.magazineluiza.com.br/selecao/mais-vendidos/",
+      "https://www.magazineluiza.com.br/busca/mais+vendidos/"
+    ];
+
+    for (const url of urls) {
+      try {
+        console.log(`[SCRAPER][MAGALU][TRENDS] Tentando URL: ${url}`);
+        const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${firecrawlKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            url,
+            formats: ["extract"],
+            waitFor: 5000,
+            extract: {
+              prompt: `Extraia os top ${limit} produtos em destaque nesta página do Magazine Luiza. Para cada produto, traga o título completo, a URL completa do produto (começando com https://www.magazineluiza.com.br/), a URL da imagem do produto e o preço promocional atual como número (ex: 1299.00). Se houver preço antigo riscado, traga também.`,
+              schema: {
+                type: "object",
+                properties: {
+                  products: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        url: { type: "string" },
+                        image: { type: "string" },
+                        price: { type: "number" },
+                        old_price: { type: "number", nullable: true }
+                      },
+                      required: ["title", "url", "price"]
+                    }
+                  }
+                },
+                required: ["products"]
               }
-            },
-            required: ["products"]
-          }
+            }
+          })
+        });
+
+        if (!fcResponse.ok) {
+          console.warn(`[SCRAPER][MAGALU][TRENDS] Firecrawl retornou status ${fcResponse.status} para ${url}`);
+          continue;
         }
-      })
-    });
 
-    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Magalu Trends: ${fcResponse.status}`);
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos do Magalu");
+        const fcData = await fcResponse.json();
+        console.log(`[SCRAPER][MAGALU][TRENDS] Firecrawl success=${fcData.success}, products=${fcData.data?.extract?.products?.length ?? 0}`);
 
-    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
-      product_name: p.title,
-      original_url: p.url.startsWith("http") ? p.url : `https://www.magazineluiza.com.br${p.url}`,
-      image_url: enhanceImageUrl(p.image || null),
-      current_price: p.price,
-      old_price: null,
-      rating: 4.8
-    }));
+        if (!fcData.success || !fcData.data?.extract?.products?.length) {
+          console.warn(`[SCRAPER][MAGALU][TRENDS] Sem produtos extraídos de ${url}. Tentando próxima URL...`);
+          continue;
+        }
 
-    console.log(`[SCRAPER][MAGALU][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
-    return products;
+        const products = fcData.data.extract.products
+          .filter((p: any) => p.title && p.price > 0 && !(p.title || "").toLowerCase().includes("protected by"))
+          .slice(0, limit)
+          .map((p: any) => ({
+            product_name: p.title,
+            original_url: p.url?.startsWith("http") ? p.url : `https://www.magazineluiza.com.br${p.url || ""}`,
+            image_url: enhanceImageUrl(p.image || null),
+            current_price: p.price,
+            old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+            rating: 4.8
+          }));
+
+        if (products.length > 0) {
+          console.log(`[SCRAPER][MAGALU][TRENDS] Sucesso: ${products.length} tendências encontradas via ${url}.`);
+          return products;
+        }
+      } catch (urlError) {
+        const msg = urlError instanceof Error ? urlError.message : String(urlError);
+        console.warn(`[SCRAPER][MAGALU][TRENDS] Erro na URL ${url}: ${msg}`);
+      }
+    }
+
+    console.warn("[SCRAPER][MAGALU][TRENDS] Nenhuma URL retornou produtos.");
+    return [];
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[SCRAPER][MAGALU][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
@@ -267,94 +301,165 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
  */
 export async function fetchTrendingProductsFromLanding(limit = 5): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Iniciando busca de tendências do Mercado Livre...");
-  try {
-    const url = "https://www.mercadolivre.com.br/mais-vendidos";
-    let html = "";
+  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
 
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-
-    if (firecrawlKey) {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Usando Firecrawl para contornar bloqueio do Mercado Livre...");
+  // === ESTRATÉGIA 1: Firecrawl Extract (IA) — mais resiliente ===
+  if (firecrawlKey) {
+    try {
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Firecrawl Extract (IA)...");
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${firecrawlKey}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ url: url, formats: ["html"] })
+        body: JSON.stringify({
+          url: "https://www.mercadolivre.com.br/mais-vendidos",
+          formats: ["extract"],
+          waitFor: 3000,
+          extract: {
+            prompt: `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também.`,
+            schema: {
+              type: "object",
+              properties: {
+                products: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      title: { type: "string" },
+                      url: { type: "string" },
+                      image: { type: "string" },
+                      price: { type: "number" },
+                      old_price: { type: "number", nullable: true }
+                    },
+                    required: ["title", "url", "price"]
+                  }
+                }
+              },
+              required: ["products"]
+            }
+          }
+        })
+      });
+
+      if (fcResponse.ok) {
+        const fcData = await fcResponse.json();
+        if (fcData.success && fcData.data?.extract?.products?.length > 0) {
+          const products = fcData.data.extract.products
+            .filter((p: any) => p.title && p.price > 0)
+            .slice(0, limit)
+            .map((p: any) => ({
+              product_name: p.title,
+              original_url: p.url?.startsWith("http") ? p.url : `https://www.mercadolivre.com.br${p.url || ""}`,
+              image_url: enhanceImageUrl(p.image || null),
+              current_price: p.price,
+              old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+              rating: 4.8
+            }));
+
+          if (products.length > 0) {
+            console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 (Extract) OK: ${products.length} produtos.`);
+            return products;
+          }
+        }
+        console.warn("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 retornou 0 produtos. Tentando fallback HTML...");
+      } else {
+        console.warn(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 falhou com status ${fcResponse.status}. Tentando fallback HTML...`);
+      }
+    } catch (extractError) {
+      const msg = extractError instanceof Error ? extractError.message : String(extractError);
+      console.warn(`[SCRAPER][MERCADO LIVRE][TRENDS] Erro na Estratégia 1: ${msg}. Tentando fallback HTML...`);
+    }
+  }
+
+  // === ESTRATÉGIA 2: Firecrawl HTML + Regex Parsing (fallback) ===
+  try {
+    const url = "https://www.mercadolivre.com.br/mais-vendidos";
+    let html = "";
+
+    if (firecrawlKey) {
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Firecrawl HTML + Regex...");
+      const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${firecrawlKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ url, formats: ["html"], waitFor: 3000 })
       });
 
       if (!fcResponse.ok) {
-        throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+        throw new Error(`Falha no Firecrawl HTML. Status: ${fcResponse.status}`);
       }
 
       const fcData = await fcResponse.json();
-      if (!fcData.success || !fcData.data || !fcData.data.html) {
+      if (!fcData.success || !fcData.data?.html) {
         throw new Error("Firecrawl não retornou HTML válido.");
       }
       html = fcData.data.html;
+      console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] HTML recebido: ${html.length} bytes.`);
     } else {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Tentando fetch direto (sujeito a bloqueio)...");
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Fetch direto (sujeito a bloqueio)...");
       const response = await fetch(url, {
         headers: {
           "User-Agent": USER_AGENT,
           "Accept-Language": "pt-BR,pt;q=0.9",
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
         },
-        next: { revalidate: 3600 } // cache de 1 hora
+        next: { revalidate: 3600 }
       });
 
       if (!response.ok) {
-        throw new Error(`Falha ao carregar a página de mais vendidos. Status: ${response.status}`);
+        throw new Error(`Falha ao carregar a página. Status: ${response.status}`);
       }
       html = await response.text();
+    }
+
+    // Detecta bloqueio/captcha
+    if (html.length < 5000 || html.includes("captcha") || html.includes("robot") || html.includes("tráfego suspeito")) {
+      console.warn("[SCRAPER][MERCADO LIVRE][TRENDS] HTML parece ser captcha ou bloqueio. Abortando fallback HTML.");
+      return [];
     }
 
     const chunks = html.split('<div class="dynamic-carousel__item-container">');
     const results: ScrapedProduct[] = [];
 
-    // Ignora a primeira parte, que é o cabeçalho antes dos cards de produtos
     for (let i = 1; i < chunks.length; i++) {
       const chunk = chunks[i];
-
-      // 1. URL do Produto
       const linkMatch = chunk.match(/href="([^"]+)"/);
       const link = linkMatch ? linkMatch[1] : null;
 
-      // 2. Imagem (Tratamento robusto contra Lazy Loading)
       let image: string | null = null;
       const dataSrcMatch = chunk.match(/data-src="([^"]+)"/);
       const srcMatch = chunk.match(/<img[^>]+src="([^"]+)"/);
-
       if (dataSrcMatch && dataSrcMatch[1].startsWith("http")) {
         image = dataSrcMatch[1];
       } else if (srcMatch && srcMatch[1].startsWith("http")) {
         image = srcMatch[1];
       }
 
-      // 3. Título do Produto
       const titleMatch = chunk.match(/<h3 class="dynamic-carousel__title">([^<]+)<\/h3>/) ||
                          chunk.match(/alt="([^"]+)"/);
       const title = titleMatch ? titleMatch[1].trim() : null;
 
-      // 4. Preço Atual e Antigo
-      const priceBlockMatch = chunk.match(/class="dynamic-carousel__price-block">([\s\S]*?)<\/h3>/) ||
-                              chunk.match(/class="dynamic-carousel__price-block">([\s\S]*?)<\/div>/);
+      // Preço: captura o inteiro do span principal e os decimais do sup
       let currentPrice = 0;
       let oldPrice: number | null = null;
 
-      if (priceBlockMatch) {
-        const priceHtml = priceBlockMatch[1];
-        const priceMatches = [...priceHtml.matchAll(/R\$\s*(\d+(?:\.\d+)?(?:,\d+)?)/g)];
-        if (priceMatches.length > 0) {
-          if (priceMatches.length === 1) {
-            currentPrice = parseFloat(priceMatches[0][1].replace(/\./g, "").replace(",", "."));
-          } else {
-            const vals = priceMatches.map(m => parseFloat(m[1].replace(/\./g, "").replace(",", ".")));
-            currentPrice = vals[1] || vals[0];
-            oldPrice = vals[0] > currentPrice ? vals[0] : null;
-          }
-        }
+      // Tenta extrair preço antigo riscado
+      const oldPriceMatch = chunk.match(/dynamic-carousel__oldprice[^>]*>R\$\s*(\d+(?:[.,]\d+)?)/);
+      if (oldPriceMatch) {
+        oldPrice = parseFloat(oldPriceMatch[1].replace(/\./g, "").replace(",", "."));
+      }
+
+      // Preço atual: inteiro + decimais
+      const priceIntMatch = chunk.match(/dynamic-carousel__price[^-][^>]*><span>R\$\s*(\d+(?:\.\d+)?)/);
+      const priceDecMatch = chunk.match(/dynamic-carousel__price-decimals[^>]*>(\d+)/);
+      if (priceIntMatch) {
+        const intPart = priceIntMatch[1].replace(/\./g, "");
+        const decPart = priceDecMatch ? priceDecMatch[1] : "00";
+        currentPrice = parseFloat(`${intPart}.${decPart}`);
       }
 
       if (title && link && currentPrice > 0) {
@@ -363,19 +468,19 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
           original_url: link,
           image_url: enhanceImageUrl(image),
           current_price: currentPrice,
-          old_price: oldPrice,
-          rating: 4.8 // nota padrão alta
+          old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
+          rating: 4.8
         });
       }
 
       if (results.length >= limit) break;
     }
 
-    console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Sucesso: ${results.length} tendências encontradas.`);
+    console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2 (HTML): ${results.length} produtos.`);
     return results;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[SCRAPER][MERCADO LIVRE][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    console.error(`[SCRAPER][MERCADO LIVRE][TRENDS] Falha total: ${errorMsg}`);
     return [];
   }
 }
@@ -1182,69 +1287,99 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("[SCRAPER][AMAZON][TRENDS] Sem chave Firecrawl. Usando fallback Mock.");
-      return [
-        {
-          product_name: "Echo Dot 5ª Geração (Requer Firecrawl para ofertas reais)",
-          original_url: "https://www.amazon.com.br/dp/B09B8VGCR8",
-          image_url: null,
-          current_price: 299.00,
-          old_price: null,
-          rating: 4.9
-        }
-      ];
+      console.warn("[SCRAPER][AMAZON][TRENDS] FIRECRAWL_API_KEY não configurada.");
+      return [];
     }
 
-    console.log("[SCRAPER][AMAZON][TRENDS] Usando Firecrawl para buscar tendências da Amazon...");
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: "https://www.amazon.com.br/gp/bestsellers/", 
-        formats: ["extract"],
-        extract: {
-          prompt: `Extraia os top ${limit} produtos mais vendidos. Para cada produto, precisamos do título, url original da amazon do produto, url da imagem e o preço atual promocional como número (ex: 99.90). Se tiver preço antigo cortado, traga também.`,
-          schema: {
-            type: "object",
-            properties: {
-              products: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    url: { type: "string" },
-                    image: { type: "string" },
-                    price: { type: "number" },
-                    old_price: { type: "number", nullable: true }
-                  },
-                  required: ["title", "url", "price"]
-                }
-              }
-            },
-            required: ["products"]
-          }
-        }
-      })
-    });
-    
-    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Amazon Trends: ${fcResponse.status}`);
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos");
+    // Amazon muda frequentemente. Tenta múltiplas URLs
+    const urls = [
+      "https://www.amazon.com.br/gp/bestsellers/",
+      "https://www.amazon.com.br/gp/movers-and-shakers/",
+      "https://www.amazon.com.br/deals"
+    ];
 
-    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
-      product_name: p.title,
-      original_url: p.url.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url}`,
-      image_url: enhanceImageUrl(p.image || null),
-      current_price: p.price,
-      old_price: p.old_price || null,
-      rating: 4.8
-    }));
-    console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
-    return products;
+    for (const url of urls) {
+      try {
+        console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL: ${url}`);
+        const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${firecrawlKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            url,
+            formats: ["extract"],
+            waitFor: 5000,
+            extract: {
+              prompt: `Extraia os top ${limit} produtos em destaque nesta página da Amazon Brasil. Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto e o preço atual como número (ex: 299.00). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`,
+              schema: {
+                type: "object",
+                properties: {
+                  products: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        title: { type: "string" },
+                        url: { type: "string" },
+                        image: { type: "string" },
+                        price: { type: "number" },
+                        old_price: { type: "number", nullable: true }
+                      },
+                      required: ["title", "url", "price"]
+                    }
+                  }
+                },
+                required: ["products"]
+              }
+            }
+          })
+        });
+      
+        if (!fcResponse.ok) {
+          console.warn(`[SCRAPER][AMAZON][TRENDS] Firecrawl retornou status ${fcResponse.status} para ${url}`);
+          continue;
+        }
+
+        const fcData = await fcResponse.json();
+        console.log(`[SCRAPER][AMAZON][TRENDS] Firecrawl success=${fcData.success}, products=${fcData.data?.extract?.products?.length ?? 0}`);
+
+        if (!fcData.success || !fcData.data?.extract?.products?.length) {
+          console.warn(`[SCRAPER][AMAZON][TRENDS] Sem produtos extraídos de ${url}. Tentando próxima URL...`);
+          continue;
+        }
+
+        const products = fcData.data.extract.products
+          .filter((p: any) => {
+            const titleLower = (p.title || "").toLowerCase();
+            return p.title && p.price > 0 &&
+              !titleLower.includes("cachorros da amazon") &&
+              !titleLower.includes("página não encontrada") &&
+              !titleLower.includes("sorry");
+          })
+          .slice(0, limit)
+          .map((p: any) => ({
+            product_name: p.title,
+            original_url: p.url?.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url || ""}`,
+            image_url: enhanceImageUrl(p.image || null),
+            current_price: p.price,
+            old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+            rating: 4.8
+          }));
+
+        if (products.length > 0) {
+          console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso: ${products.length} tendências encontradas via ${url}.`);
+          return products;
+        }
+      } catch (urlError) {
+        const msg = urlError instanceof Error ? urlError.message : String(urlError);
+        console.warn(`[SCRAPER][AMAZON][TRENDS] Erro na URL ${url}: ${msg}`);
+      }
+    }
+
+    console.warn("[SCRAPER][AMAZON][TRENDS] Nenhuma URL retornou produtos.");
+    return [];
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[SCRAPER][AMAZON][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
