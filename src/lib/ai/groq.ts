@@ -289,11 +289,17 @@ RETORNE APENAS JSON VÁLIDO.`;
                                err.message.includes("JSON") ||
                                err.message.includes("validation");
 
+      let waitTime = delay;
+      const rateLimitMatch = err.message.match(/try again in ([\d\.]+)s/);
+      if (rateLimitMatch && rateLimitMatch[1]) {
+        waitTime = Math.ceil(parseFloat(rateLimitMatch[1]) * 1000) + 1000; // Add 1s buffer
+      }
+
       if (retries > 0 && !isValidationError) {
         console.warn(`[AI Service] Falha na tentativa. Tentativas restantes: ${retries}. Erro: ${err.message}`);
         retries--;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 1.5;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        delay = waitTime > 5000 ? 5000 : waitTime * 1.5;
         continue;
       }
       
@@ -458,11 +464,17 @@ ${JSON.stringify(jsonSchemaObj, null, 2)}`;
       };
 
     } catch (err: any) {
+      let waitTime = delay;
+      const rateLimitMatch = err.message.match(/try again in ([\d\.]+)s/);
+      if (rateLimitMatch && rateLimitMatch[1]) {
+        waitTime = Math.ceil(parseFloat(rateLimitMatch[1]) * 1000) + 1000;
+      }
+
       if (retries > 0) {
         console.warn(`[AI Service] Falha na curadoria quente. Tentativas restantes: ${retries}. Erro: ${err.message}`);
         retries--;
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        delay = waitTime > 5000 ? 5000 : waitTime * 2;
         continue;
       }
       
