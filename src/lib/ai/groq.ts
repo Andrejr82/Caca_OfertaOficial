@@ -1,6 +1,8 @@
 import type { AffiliateLink, Offer } from "@/types/domain";
 import { PostBuilder } from "@/lib/post-builder";
 import { GeneratedCopySchema, type GeneratedCopyInput, type CopyStrategy } from "@/lib/ai/schemas/generated-copy.schema";
+import { GoogleGenerativeAI } from "@google/generative-ai";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export interface AIAnalysisResult {
   score: number;
@@ -17,6 +19,126 @@ export interface AIAnalysisResult {
 let groqQueue = Promise.resolve();
 const offerCache = new Map<string, { result: AIAnalysisResult; timestamp: number }>();
 const CACHE_TTL = 1000 * 60 * 60; // 1 hora
+
+/**
+ * Registra logs de erro detalhados de chamadas de IA no Supabase para fins de auditoria e observabilidade.
+ */
+async function persistErrorLog(userId: string | null, action: string, error: any, payload: any) {
+  try {
+    const supabase = createSupabaseAdminClient();
+    if (!supabase) {
+      console.warn("[AI Service] Supabase Admin não configurado para persistência de logs de erro.");
+      return;
+    }
+    
+    await supabase.from("integration_logs").insert({
+      user_id: userId || "00000000-0000-0000-0000-000000000000",
+      integration: "AI Service",
+      action: action,
+      status: "error",
+      message: error instanceof Error ? error.message : String(error),
+      metadata: {
+        error_stack: error instanceof Error ? error.stack : null,
+        payload: payload,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (logError) {
+    console.error("[AI Service] Falha ao persistir log de erro da IA no Supabase:", logError);
+  }
+}
+
+/**
+ * Interface unificada para invocar LLMs (Groq ou Google Gemini) com Structured Outputs
+ */
+async function callLLM(
+  systemPrompt: string,
+  userPrompt: string,
+  jsonSchemaObj: any,
+  temperature: number,
+  maxTokens: number
+): Promise<string> {
+  const isGoogle = (process.env.LLM_PROVIDER === "google" || 
+                    (process.env.GROQ_MODEL || "").startsWith("gemini-")) &&
+                   (!!process.env.GEMINI_API_KEY || !!process.env.GOOGLE_API_KEY);
+
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY;
+
+  if (isGoogle && geminiKey) {
+    console.log(`[AI Service] Direcionando para Google Gemini...`);
+    const genAI = new GoogleGenerativeAI(geminiKey);
+    const geminiModel = process.env.GROQ_MODEL && process.env.GROQ_MODEL.startsWith("gemini-")
+      ? process.env.GROQ_MODEL
+      : "gemini-2.5-flash"; // Fallback seguro para modelo Gemini
+
+    const modelInstanceWithSystem = genAI.getGenerativeModel({
+      model: geminiModel,
+      systemInstruction: systemPrompt,
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: jsonSchemaObj,
+        temperature: temperature,
+        maxOutputTokens: maxTokens
+      }
+    });
+
+    const response = await modelInstanceWithSystem.generateContent(userPrompt);
+    const text = response.response.text();
+    if (!text) {
+      throw new Error("Resposta em branco do Google Gemini");
+    }
+    return text;
+  }
+
+  // Caso contrário, usa Groq
+  if (!groqKey) {
+    throw new Error("Nenhuma API Key (Groq ou Gemini) configurada no ambiente.");
+  }
+
+  let groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  if (groqModel.startsWith("gemini-")) {
+    console.warn(`[AI Service] Modelo '${groqModel}' é incompatível com a Groq. Usando fallback 'llama-3.1-8b-instant'.`);
+    groqModel = "llama-3.1-8b-instant";
+  }
+
+  console.log(`[AI Service] Direcionando para Groq com modelo: ${groqModel}`);
+
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${groqKey}`
+    },
+    body: JSON.stringify({
+      model: groqModel,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
+      response_format: { type: "json_object" },
+      temperature: temperature,
+      max_tokens: maxTokens
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+
+  if (!response) {
+    throw new Error("Resposta de rede nula ou indefinida (mock ou rede).");
+  }
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Sem detalhes");
+    throw new Error(`Erro na API do Groq: status ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  if (!data.choices?.[0]?.message?.content) {
+    throw new Error(`Resposta vazia ou corrompida da Groq: ${JSON.stringify(data)}`);
+  }
+
+  return data.choices[0].message.content.trim();
+}
 
 /**
  * Envia as informações da oferta para a IA da Groq para gerar copys e calcular score
@@ -147,41 +269,7 @@ RETORNE APENAS JSON VÁLIDO.`;
 
   while (retries >= 0) {
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: "system", content: baseSystemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          response_format: responseFormat,
-          temperature: 0.7,
-          max_tokens: 2500
-        }),
-        signal: AbortSignal.timeout(30000)
-      });
-
-      if (response.status === 429 && retries > 0) {
-        console.warn(`[Groq AI] Limite de requisições atingido (429). Aguardando ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
-        retries--;
-        delay *= 2;
-        continue;
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => "Sem detalhes");
-        throw new Error(`Erro na API do Groq: status ${response.status} - ${errorText}`);
-      }
-
-      const data = await response.json();
-      const responseText = data.choices[0].message.content.trim();
-      
+      const responseText = await callLLM(baseSystemPrompt, userPrompt, jsonSchemaObj, 0.7, 2500);
       const raw = JSON.parse(responseText);
 
       const validationResult = GeneratedCopySchema.safeParse(raw);
@@ -196,17 +284,31 @@ RETORNE APENAS JSON VÁLIDO.`;
       return mapGeneratedCopyToLegacyResult(parsed, links, offer);
       
     } catch (err: any) {
-      if (retries > 0 && (err.message.includes("Invalid JSON") || err.message.includes("Invalid Schema"))) {
-        console.warn(`[Groq AI] Falha na validação/parse. Tentativas restantes: ${retries}. Erro: ${err.message}`);
+      const isValidationError = err.message.includes("Invalid Schema") || 
+                               err.message.includes("SyntaxError") || 
+                               err.message.includes("JSON") ||
+                               err.message.includes("validation");
+
+      if (retries > 0 && !isValidationError) {
+        console.warn(`[AI Service] Falha na tentativa. Tentativas restantes: ${retries}. Erro: ${err.message}`);
         retries--;
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 1.5;
         continue;
       }
+      
+      // Registra o log detalhado no banco de dados para evitar falha silenciosa
+      console.error("[AI Service] Erro definitivo na geração de copy:", err);
+      await persistErrorLog(offer.user_id || null, "Geração de Copy por IA", err, {
+        offer_id: offer.id,
+        product_name: offer.product_name,
+        system_prompt: baseSystemPrompt,
+        user_prompt: userPrompt
+      });
       throw err;
     }
   }
-  throw new Error("Falha após múltiplas tentativas de contornar erros (Groq).");
+  throw new Error("Falha após múltiplas tentativas de contornar erros (AI).");
 }
 
 /**
@@ -288,15 +390,14 @@ export interface AICurationResult {
  * A IA NÃO pode aprovar um produto ruim nem inventar métricas (Alucinação Zero).
  */
 export async function analyzeConversionPotential(offer: Offer, coldScore: number): Promise<AICurationResult> {
-  const apiKey = process.env.GROQ_API_KEY;
-  // O sistema é unificado sob "gemini-2.5-flash-lite", se for nulo cai no fallback de groq-adapter existente
-  const model = process.env.GROQ_MODEL || "gemini-2.5-flash-lite";
+  const groqKey = process.env.GROQ_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
-  // Se a chave for inexistente, bypass seguro retornando 0 boost
-  if (!apiKey) {
+  // Se nenhuma chave estiver configurada, bypass seguro com bônus neutro
+  if (!groqKey && !geminiKey) {
     return {
       ai_score_boost: 0,
-      conversion_justification: "Ignorado (API Key ausente).",
+      conversion_justification: "Ignorado (Chaves de API ausentes no ambiente).",
       strong_points: [],
       weak_points: []
     };
@@ -338,33 +439,11 @@ RESPONDA ESTRITAMENTE NESTE FORMATO JSON:
 ${JSON.stringify(jsonSchemaObj, null, 2)}`;
 
   let retries = 2;
+  let delay = 1000;
   while (retries >= 0) {
     try {
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userPrompt }
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.2, // Baixa temperatura para zero alucinação
-          max_tokens: 1000
-        }),
-        signal: AbortSignal.timeout(15000)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Erro na IA Curadora: ${response.status}`);
-      }
-
-      const data = await response.json();
-      const raw = JSON.parse(data.choices[0].message.content.trim());
+      const responseText = await callLLM(systemPrompt, userPrompt, jsonSchemaObj, 0.2, 1000);
+      const raw = JSON.parse(responseText);
       
       // Validação rápida de schema (Duck typing)
       if (typeof raw.ai_score_boost !== 'number' || !raw.conversion_justification) {
@@ -380,11 +459,22 @@ ${JSON.stringify(jsonSchemaObj, null, 2)}`;
 
     } catch (err: any) {
       if (retries > 0) {
+        console.warn(`[AI Service] Falha na curadoria quente. Tentativas restantes: ${retries}. Erro: ${err.message}`);
         retries--;
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
         continue;
       }
-      console.warn("Falha na IA de Curadoria após tentativas. Fallback neutro.");
+      
+      // Persiste o erro detalhado no Supabase para observabilidade avançada
+      console.error("[AI Service] Erro definitivo na curadoria quente por IA:", err);
+      await persistErrorLog(offer.user_id || null, "Curadoria Quente por IA", err, {
+        offer_id: offer.id,
+        product_name: offer.product_name,
+        system_prompt: systemPrompt,
+        user_prompt: userPrompt
+      });
+
       return {
         ai_score_boost: 0,
         conversion_justification: "Falha técnica na API de IA. Bônus neutro aplicado para não quebrar pipeline.",
@@ -394,7 +484,6 @@ ${JSON.stringify(jsonSchemaObj, null, 2)}`;
     }
   }
 
-  // Falha silenciosa pra n quebrar a listagem de ofertas
   return { ai_score_boost: 0, conversion_justification: "Fallback", strong_points: [], weak_points: [] };
 }
 

@@ -833,6 +833,130 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
   }
 }
 
+async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  console.log(`[SCRAPER][SHOPEE][PRODUCT] Iniciando raspagem de produto com Firecrawl: ${productUrl}`);
+  try {
+    let finalProductUrl = productUrl;
+    
+    // Resolve shortlinks da Shopee (shp.ee)
+    if (productUrl.includes("shp.ee")) {
+      try {
+        const redirectRes = await fetch(productUrl, { method: "GET", redirect: "follow" });
+        finalProductUrl = redirectRes.url;
+        if (finalProductUrl.includes("?")) {
+           finalProductUrl = finalProductUrl.split("?")[0];
+        }
+      } catch (e) {
+        console.warn("[SCRAPER][SHOPEE][PRODUCT] Falha ao resolver shortlink da Shopee:", e);
+      }
+    }
+
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      console.warn("[SCRAPER][SHOPEE][PRODUCT] FIRECRAWL_API_KEY não encontrada, usando mock de fallback");
+      return {
+        product_name: "Produto Shopee (Requer Firecrawl)",
+        original_url: finalProductUrl,
+        image_url: null,
+        current_price: 99.90,
+        old_price: 199.90,
+        rating: 4.8
+      };
+    }
+
+    let retries = 3;
+    let delay = 1000;
+    let fcResponse = null;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} de raspagem Shopee...`);
+        fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${firecrawlKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            url: finalProductUrl, 
+            formats: ["extract"],
+            extract: {
+              prompt: "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.",
+              schema: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  image: { type: "string" },
+                  current_price: { type: "number" },
+                  old_price: { type: "number", nullable: true }
+                },
+                required: ["title", "current_price"]
+              }
+            }
+          }),
+          signal: AbortSignal.timeout(20000)
+        });
+
+        if (fcResponse.status === 429) {
+          throw new Error("HTTP 429 Too Many Requests");
+        }
+        
+        if (fcResponse.ok) {
+          break; // Sucesso
+        }
+        
+        throw new Error(`HTTP Status ${fcResponse.status}`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} falhou: ${msg}`);
+        if (attempt === retries) {
+          throw error;
+        }
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
+      }
+    }
+
+    if (!fcResponse || !fcResponse.ok) {
+      throw new Error("Falha ao obter resposta do Firecrawl após retries");
+    }
+
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data || !fcData.data.extract) {
+      throw new Error("Firecrawl não retornou dados de extração válidos para Shopee.");
+    }
+
+    const extract = fcData.data.extract;
+    const scraped = {
+      product_name: extract.title.trim(),
+      original_url: finalProductUrl,
+      image_url: enhanceImageUrl(extract.image || null),
+      current_price: extract.current_price,
+      old_price: extract.old_price && extract.old_price > extract.current_price ? extract.old_price : null,
+      rating: 4.8
+    };
+
+    console.log(`[SCRAPER][SHOPEE][PRODUCT] Sucesso ao raspar produto Shopee: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+    updateMetrics("Shopee", "found", 1);
+    return scraped;
+
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][SHOPEE][PRODUCT] Falha ao raspar produto Shopee ${productUrl}: ${errorMsg}`);
+    updateMetrics("Shopee", "failures", 1);
+    
+    // Fallback Mock controlado para evitar que o robô quebre em lote
+    return {
+      product_name: "Produto Shopee (Fallback)",
+      original_url: productUrl,
+      image_url: null,
+      current_price: 49.99,
+      old_price: null,
+      rating: 4.5
+    };
+  }
+}
+
 async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
   console.log(`[SCRAPER][SHEIN][PRODUCT] Iniciando raspagem de produto com Firecrawl: ${productUrl}`);
   try {
@@ -1036,6 +1160,9 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
  * Identifica a loja pelo domínio e direciona para a função correta
  */
 export async function scrapeProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  if (productUrl.includes("shopee.com.br") || productUrl.includes("shp.ee")) {
+    return scrapeShopeeProductDetails(productUrl);
+  }
   if (productUrl.includes("shein.com") || productUrl.includes("shein.top")) {
     return scrapeSheinProductDetails(productUrl);
   }

@@ -3,6 +3,7 @@ import { generateOfferAnalysis } from "@/lib/ai/groq";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import type { AffiliateLink, Offer } from "@/types/domain";
+import { calculateFinalRankScore } from "@/lib/offers/score-v2";
 
 export async function POST(request: Request) {
   try {
@@ -100,13 +101,12 @@ export async function POST(request: Request) {
       });
     }
 
-    // 4. Atualiza o score e o status da oferta
+    // 4. Atualiza o score e o status da oferta usando a função unificada
     const commercialScore = Number(offer.new_score || offer.score || 0);
     const conversionScore = Number(offer.explainability?.conversion_score || 5.0);
     const aiCopyScore = Number(analysis.score || 0);
 
-    // Fórmula Explícita: 70% commercial_score, 20% conversion_score, 10% ai_copy_score
-    const finalRankScore = Number(((0.70 * commercialScore) + (0.20 * conversionScore) + (0.10 * aiCopyScore)).toFixed(2));
+    const finalRankScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
 
     const updatedExplainability = {
       ...(offer.explainability || {}),

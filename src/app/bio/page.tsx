@@ -20,12 +20,19 @@ type BioPost = {
   };
 };
 
-export default async function BioPage() {
+export default async function BioPage({
+  searchParams
+}: {
+  searchParams: Promise<{ userId?: string; user_id?: string }>;
+}) {
+  const params = await searchParams;
+  const targetUserId = params.userId || params.user_id;
+
   const supabase = createSupabaseAdminClient();
   let posts: BioPost[] = [];
 
   if (supabase) {
-    const { data, error } = await supabase
+    let query = supabase
       .from("posts")
       .select(`
         id,
@@ -46,9 +53,16 @@ export default async function BioPage() {
       .order("posted_at", { ascending: false })
       .limit(200);
 
+    if (targetUserId) {
+      query = query.eq("user_id", targetUserId);
+    } else {
+      // Isolamento de segurança: se não for informado um userId, retorna vazio para evitar vazamento
+      query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
+    }
+
+    const { data, error } = await query;
+
     if (!error && data) {
-      // O Supabase retorna os joins como array ou objeto dependendo da FK. 
-      // Como posts pertence a 1 offer e 1 affiliate_link, tipamos asssim:
       posts = data as unknown as BioPost[];
     }
   }

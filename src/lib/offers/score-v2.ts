@@ -206,3 +206,17 @@ export function calculateOfferScoreV2(input: ScoreInput): ScoreV2Output {
     }
   };
 }
+
+/**
+ * Calcula a pontuação final ponderada de ranqueamento (Curadoria V2)
+ * Formula: 70% score comercial + 20% score de conversão + 10% score de persuasão de IA
+ */
+export function calculateFinalRankScore(
+  commercialScore: number,
+  conversionScore: number,
+  aiCopyScore: number
+): number {
+  const score = (0.70 * commercialScore) + (0.20 * conversionScore) + (0.10 * aiCopyScore);
+  return Number(Math.max(0, Math.min(10, score)).toFixed(2));
+}
+

@@ -1,6 +1,6 @@
 import { featureFlags } from "./flags";
 import { calculateOfferScore, type ScoreInput } from "./score";
-import { calculateOfferScoreV2 } from "./score-v2";
+import { calculateOfferScoreV2, calculateFinalRankScore } from "./score-v2";
 import { analyzeConversionPotential } from "@/lib/ai/groq";
 import { logger } from "@/lib/utils/logger";
 import type { Offer } from "@/types/domain";
@@ -92,8 +92,11 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
       // Bate no motor quente
       const aiResult = await analyzeConversionPotential(offer, offer.score);
       
-      // Merge seguro
-      const totalScore = offer.score + aiResult.ai_score_boost;
+      // Cálculo consistente com o rank ponderado da Curadoria V2
+      const commercialScore = offer.new_score || offer.score || 0;
+      const conversionScore = offer.explainability?.conversion_score || 5.0;
+      const aiCopyScore = aiResult.ai_score_boost * 2; // Escala 0-5 do boost mapeada para 0-10
+      const totalScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
       
       return {
         ...offer,
@@ -101,6 +104,10 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
         explainability: {
           ...(offer.explainability || {}),
           ai_score_boost: aiResult.ai_score_boost,
+          ai_copy_score: aiCopyScore,
+          commercial_score: commercialScore,
+          conversion_score: conversionScore,
+          final_rank_score: totalScore,
           ai_justification: aiResult.conversion_justification,
           ai_strong_points: aiResult.strong_points,
           ai_weak_points: aiResult.weak_points

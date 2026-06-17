@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { discoverAndIngestTrendingOffers } from "@/lib/affiliates/scraper";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
+import { calculateFinalRankScore } from "@/lib/offers/score-v2";
 
 export async function GET(request: Request) {
   return handleCron(request);
@@ -19,10 +20,18 @@ async function handleCron(request: Request) {
     const { searchParams } = new URL(request.url);
     const tokenParam = searchParams.get("token");
 
-    const expectedSecret = process.env.CRON_SECRET || "desenvolvimento-local-caca-oferta";
+    const expectedSecret = process.env.CRON_SECRET;
+    const isProduction = process.env.NODE_ENV === "production";
+
+    if (isProduction && !expectedSecret) {
+      console.error("[CRON] CRON_SECRET não configurado no ambiente de produção!");
+      return NextResponse.json({ ok: false, message: "Erro de configuração do servidor." }, { status: 500 });
+    }
+
+    const secretToUse = expectedSecret || "desenvolvimento-local-caca-oferta";
     const token = authHeader ? authHeader.replace("Bearer ", "") : tokenParam;
 
-    if (token !== expectedSecret) {
+    if (token !== secretToUse) {
       return NextResponse.json({ ok: false, message: "Não autorizado." }, { status: 401 });
     }
 
@@ -50,166 +59,23 @@ async function handleCron(request: Request) {
       return NextResponse.json({ ok: true, message: "Nenhum usuário com cron de scraping ativado." });
     }
 
-    const report: any[] = [];
+    // 3. Agendar processamento em background via Inngest para cada usuário ativo
+    const { inngest } = await import("@/lib/inngest/client");
 
-    // 3. Executar para cada usuário ativo
-    for (const userId of activeUsers) {
-      try {
-        console.log(`[CRON] Iniciando scraping para o usuário: ${userId}`);
-        
-        // Executa o robô de descoberta
-        const offers = await discoverAndIngestTrendingOffers(5, ["Mercado Livre", "Shopee", "Shein"], userId);
-        
-        const offersProcessed: any[] = [];
+    const events = activeUsers.map((userId: string) => ({
+      name: "cron/run-scraping",
+      data: { userId }
+    }));
 
-        // Filtra e ordena comercialmente usando o Curation V2 (Cold Ranking + Quality Gate >= 5.0)
-        const { rankOffersBatch } = await import("@/lib/offers/curation-engine");
-        const rankedOffers = await rankOffersBatch(offers);
-
-        // Apenas as Top 3 ofertas passam para a geração de IA
-        const top3Offers = rankedOffers.slice(0, 3);
-
-        // Se houver novas ofertas e a chave da Groq estiver disponível, gera copys
-        if (process.env.GROQ_API_KEY && top3Offers.length > 0) {
-          for (const offer of top3Offers) {
-            try {
-              // 3.1. Criar ou recuperar os links de afiliados
-              const channels = ["telegram", "instagram", "whatsapp"] as const;
-              const links: Record<string, any> = {};
-
-              for (const channel of channels) {
-                const subId = createSubId(channel, offer.product_name, offer.id);
-                const trackedUrl = createTrackedUrl(offer.original_url, subId);
-
-                const { data: linkData, error: linkError } = await supabase
-                  .from("affiliate_links")
-                  .upsert(
-                    {
-                      user_id: userId,
-                      offer_id: offer.id,
-                      channel,
-                      original_url: offer.original_url,
-                      tracked_url: trackedUrl,
-                      sub_id: subId
-                    },
-                    { onConflict: "offer_id,channel" }
-                  )
-                  .select("*")
-                  .single();
-
-                if (linkError) throw linkError;
-                links[channel] = linkData;
-              }
-
-              // 3.2. Gerar copys
-              const analysis = await generateOfferAnalysis(offer, {
-                telegram: links.telegram.tracked_url,
-                instagram: links.instagram.tracked_url,
-                whatsapp: links.whatsapp.tracked_url
-              });
-
-              // 3.3. Atualizar score e status
-              const newStatus = analysis.score >= 7.0 ? "approved" : offer.status;
-              await supabase
-                .from("offers")
-                .update({
-                  score: analysis.score,
-                  status: newStatus,
-                  updated_at: new Date().toISOString()
-                })
-                .eq("id", offer.id);
-
-              // 3.4. Deletar rascunhos de posts antigos
-              await supabase.from("posts").delete().eq("offer_id", offer.id).eq("status", "draft");
-
-              // 3.5. Salvar novos posts
-              const instagramContent = [
-                analysis.instagram_feed,
-                "",
-                "=== STORIES SUGERIDOS ===",
-                ...analysis.instagram_stories.map((s) => `• ${s}`),
-                "",
-                "=== REELS SUGERIDO ===",
-                ...analysis.instagram_reels.map((r) => `- ${r}`),
-                "",
-                "=== CARROSSEL SUGERIDO ===",
-                ...analysis.instagram_carousel.map((c) => `- ${c}`)
-              ].join("\n");
-
-              const postsToInsert = [
-                {
-                  user_id: userId,
-                  offer_id: offer.id,
-                  affiliate_link_id: links.telegram.id,
-                  channel: "telegram",
-                  content: analysis.telegram,
-                  status: "draft"
-                },
-                {
-                  user_id: userId,
-                  offer_id: offer.id,
-                  affiliate_link_id: links.instagram.id,
-                  channel: "instagram",
-                  content: instagramContent,
-                  status: "draft"
-                },
-                {
-                  user_id: userId,
-                  offer_id: offer.id,
-                  affiliate_link_id: links.whatsapp.id,
-                  channel: "whatsapp",
-                  content: analysis.whatsapp,
-                  status: "draft"
-                }
-              ];
-
-              await supabase.from("posts").insert(postsToInsert);
-
-              offersProcessed.push({
-                id: offer.id,
-                product_name: offer.product_name,
-                score: analysis.score,
-                status: newStatus
-              });
-
-            } catch (offerError) {
-              console.error(`Erro ao processar copys da oferta ${offer.id} no cron:`, offerError);
-              offersProcessed.push({
-                id: offer.id,
-                product_name: offer.product_name,
-                error: true
-              });
-            }
-          }
-        } else {
-          for (const offer of offers) {
-            offersProcessed.push({
-              id: offer.id,
-              product_name: offer.product_name,
-              status: "draft"
-            });
-          }
-        }
-
-        report.push({
-          user_id: userId,
-          scraped_count: offers.length,
-          offers: offersProcessed
-        });
-
-      } catch (userError) {
-        console.error(`Erro ao executar scraping para usuário ${userId}:`, userError);
-        report.push({
-          user_id: userId,
-          error: true
-        });
-      }
+    if (events.length > 0) {
+      await inngest.send(events);
+      console.log(`[CRON] Enfileirados eventos cron/run-scraping para ${events.length} usuários.`);
     }
 
     return NextResponse.json({
       ok: true,
-      message: "Cron executado com sucesso.",
-      report
+      message: `Scraping agendado via Inngest com sucesso para ${activeUsers.length} usuários ativos.`,
+      activeUsersCount: activeUsers.length
     });
 
   } catch (error) {
