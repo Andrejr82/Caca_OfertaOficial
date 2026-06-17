@@ -1,7 +1,6 @@
 import type { AffiliateLink, Offer } from "@/types/domain";
 import { PostBuilder } from "@/lib/post-builder";
 import { GeneratedCopySchema, type GeneratedCopyInput, type CopyStrategy } from "@/lib/ai/schemas/generated-copy.schema";
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export interface AIAnalysisResult {
@@ -49,7 +48,7 @@ async function persistErrorLog(userId: string | null, action: string, error: any
 }
 
 /**
- * Interface unificada para invocar LLMs (Groq ou Google Gemini) com Structured Outputs
+ * Interface unificada para invocar a Groq com Structured Outputs
  */
 async function callLLM(
   systemPrompt: string,
@@ -58,49 +57,13 @@ async function callLLM(
   temperature: number,
   maxTokens: number
 ): Promise<string> {
-  const isGoogle = (process.env.LLM_PROVIDER === "google" || 
-                    (process.env.GROQ_MODEL || "").startsWith("gemini-")) &&
-                   (!!process.env.GEMINI_API_KEY || !!process.env.GOOGLE_API_KEY);
-
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const groqKey = process.env.GROQ_API_KEY;
 
-  if (isGoogle && geminiKey) {
-    console.log(`[AI Service] Direcionando para Google Gemini...`);
-    const genAI = new GoogleGenerativeAI(geminiKey);
-    const geminiModel = process.env.GROQ_MODEL && process.env.GROQ_MODEL.startsWith("gemini-")
-      ? process.env.GROQ_MODEL
-      : "gemini-2.5-flash"; // Fallback seguro para modelo Gemini
-
-    const modelInstanceWithSystem = genAI.getGenerativeModel({
-      model: geminiModel,
-      systemInstruction: systemPrompt,
-      generationConfig: {
-        responseMimeType: "application/json",
-        responseSchema: jsonSchemaObj,
-        temperature: temperature,
-        maxOutputTokens: maxTokens
-      }
-    });
-
-    const response = await modelInstanceWithSystem.generateContent(userPrompt);
-    const text = response.response.text();
-    if (!text) {
-      throw new Error("Resposta em branco do Google Gemini");
-    }
-    return text;
-  }
-
-  // Caso contrário, usa Groq
   if (!groqKey) {
-    throw new Error("Nenhuma API Key (Groq ou Gemini) configurada no ambiente.");
+    throw new Error("Nenhuma API Key configurada no ambiente.");
   }
 
   let groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
-  if (groqModel.startsWith("gemini-")) {
-    console.warn(`[AI Service] Modelo '${groqModel}' é incompatível com a Groq. Usando fallback 'llama-3.1-8b-instant'.`);
-    groqModel = "llama-3.1-8b-instant";
-  }
 
   console.log(`[AI Service] Direcionando para Groq com modelo: ${groqModel}`);
 
@@ -397,10 +360,9 @@ export interface AICurationResult {
  */
 export async function analyzeConversionPotential(offer: Offer, coldScore: number): Promise<AICurationResult> {
   const groqKey = process.env.GROQ_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   // Se nenhuma chave estiver configurada, bypass seguro com bônus neutro
-  if (!groqKey && !geminiKey) {
+  if (!groqKey) {
     return {
       ai_score_boost: 0,
       conversion_justification: "Ignorado (Chaves de API ausentes no ambiente).",

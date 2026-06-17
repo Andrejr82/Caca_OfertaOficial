@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const offersToProcess = rankedOffers;
 
     // Se houver chave da API de IA configurada, geramos as copys automaticamente
-    if ((process.env.GROQ_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY) && offersToProcess.length > 0) {
+    if (process.env.GROQ_API_KEY && offersToProcess.length > 0) {
       const baseUrl = new URL(request.url).origin;
       for (const offer of offersToProcess) {
         try {
