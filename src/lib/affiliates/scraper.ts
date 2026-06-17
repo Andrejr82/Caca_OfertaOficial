@@ -3,6 +3,7 @@ import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Offer } from "@/types/domain";
 import { mlClient } from "@/lib/integrations/mercadolivre/client";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
+import { normalizeCategory, MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
@@ -38,6 +39,8 @@ export interface ScrapedProduct {
   current_price: number;
   old_price: number | null;
   rating: number | null;
+  category?: string | null;
+  subcategory?: string | null;
 }
 
 /**
@@ -67,13 +70,18 @@ function enhanceImageUrl(url: string | null): string | null {
   return enhanced;
 }
 
-export async function fetchShopeeTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+export async function fetchShopeeTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca de tendências da Shopee via Firecrawl...");
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
+
+    const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category)}` : "https://shopee.com.br/m/ofertas-do-dia";
+    const promptText = category 
+      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto shopee.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`
+      : `Extraia os top ${limit} produtos em destaque da página. Para cada produto, traga o título, url original do produto shopee.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
 
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -82,10 +90,10 @@ export async function fetchShopeeTrendingProducts(limit = 5): Promise<ScrapedPro
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ 
-        url: "https://shopee.com.br/m/ofertas-do-dia", 
+        url: targetUrl, 
         formats: ["extract"],
         extract: {
-          prompt: `Extraia os top ${limit} produtos em destaque da página. Para cada produto, traga o título, url original do produto shopee.com.br, imagem e o preço promocional (somente número).`,
+          prompt: promptText,
           schema: {
             type: "object",
             properties: {
@@ -97,7 +105,8 @@ export async function fetchShopeeTrendingProducts(limit = 5): Promise<ScrapedPro
                     title: { type: "string" },
                     url: { type: "string" },
                     image: { type: "string" },
-                    price: { type: "number" }
+                    price: { type: "number" },
+                    category: { type: "string" }
                   },
                   required: ["title", "url", "price"]
                 }
@@ -113,14 +122,19 @@ export async function fetchShopeeTrendingProducts(limit = 5): Promise<ScrapedPro
     const fcData = await fcResponse.json();
     if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shopee");
 
-    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
-      product_name: p.title,
-      original_url: p.url.startsWith("http") ? p.url : `https://shopee.com.br${p.url}`,
-      image_url: enhanceImageUrl(p.image || null),
-      current_price: p.price,
-      old_price: null,
-      rating: 4.8
-    }));
+    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => {
+      const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+      return {
+        product_name: p.title,
+        original_url: p.url.startsWith("http") ? p.url : `https://shopee.com.br${p.url}`,
+        image_url: enhanceImageUrl(p.image || null),
+        current_price: p.price,
+        old_price: null,
+        rating: 4.8,
+        category: cat,
+        subcategory: sub
+      };
+    });
 
     console.log(`[SCRAPER][SHOPEE][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
     return products;
@@ -131,13 +145,18 @@ export async function fetchShopeeTrendingProducts(limit = 5): Promise<ScrapedPro
   }
 }
 
-export async function fetchSheinTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+export async function fetchSheinTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][SHEIN][TRENDS] Iniciando busca de tendências da Shein via Firecrawl...");
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
+
+    const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category)}/` : "https://br.shein.com/campaigns/best_sellers";
+    const promptText = category
+      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, precisamos do título, url original do produto shein, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`
+      : `Extraia os top ${limit} produtos mais vendidos. Para cada produto, precisamos do título, url original do produto shein, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
 
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -146,10 +165,10 @@ export async function fetchSheinTrendingProducts(limit = 5): Promise<ScrapedProd
         "Content-Type": "application/json"
       },
       body: JSON.stringify({ 
-        url: "https://br.shein.com/campaigns/best_sellers", 
+        url: targetUrl, 
         formats: ["extract"],
         extract: {
-          prompt: `Extraia os top ${limit} produtos mais vendidos. Para cada produto, precisamos do título, url original do produto shein, imagem e o preço promocional (somente número).`,
+          prompt: promptText,
           schema: {
             type: "object",
             properties: {
@@ -161,7 +180,8 @@ export async function fetchSheinTrendingProducts(limit = 5): Promise<ScrapedProd
                     title: { type: "string" },
                     url: { type: "string" },
                     image: { type: "string" },
-                    price: { type: "number" }
+                    price: { type: "number" },
+                    category: { type: "string" }
                   },
                   required: ["title", "url", "price"]
                 }
@@ -177,14 +197,19 @@ export async function fetchSheinTrendingProducts(limit = 5): Promise<ScrapedProd
     const fcData = await fcResponse.json();
     if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shein");
 
-    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
-      product_name: p.title,
-      original_url: p.url.startsWith("http") ? p.url : `https://br.shein.com${p.url}`,
-      image_url: enhanceImageUrl(p.image || null),
-      current_price: p.price,
-      old_price: null,
-      rating: 4.8
-    }));
+    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => {
+      const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+      return {
+        product_name: p.title,
+        original_url: p.url.startsWith("http") ? p.url : `https://br.shein.com${p.url}`,
+        image_url: enhanceImageUrl(p.image || null),
+        current_price: p.price,
+        old_price: null,
+        rating: 4.8,
+        category: cat,
+        subcategory: sub
+      };
+    });
 
     console.log(`[SCRAPER][SHEIN][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
     return products;
@@ -195,7 +220,7 @@ export async function fetchSheinTrendingProducts(limit = 5): Promise<ScrapedProd
   }
 }
 
-export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+export async function fetchMagaluTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][MAGALU][TRENDS] Iniciando busca de tendências do Magalu via Firecrawl...");
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
@@ -203,12 +228,17 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
 
-    // Tenta múltiplas URLs — Magalu muda frequentemente a estrutura
-    const urls = [
-      "https://www.magazineluiza.com.br/selecao/ofertasdodia/",
-      "https://www.magazineluiza.com.br/selecao/mais-vendidos/",
-      "https://www.magazineluiza.com.br/busca/mais+vendidos/"
-    ];
+    const urls = category
+      ? [`https://www.magazineluiza.com.br/busca/${encodeURIComponent(category)}/`]
+      : [
+          "https://www.magazineluiza.com.br/selecao/ofertasdodia/",
+          "https://www.magazineluiza.com.br/selecao/mais-vendidos/",
+          "https://www.magazineluiza.com.br/busca/mais+vendidos/"
+        ];
+
+    const promptText = category
+      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto magazineluiza.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também.`
+      : `Extraia os top ${limit} produtos em destaque nesta página do Magazine Luiza. Para cada produto, traga o título completo, a URL completa do produto (começando com https://www.magazineluiza.com.br/), a URL da imagem do produto e o preço promocional atual como número (ex: 1299.00). Se houver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
 
     for (const url of urls) {
       try {
@@ -224,7 +254,7 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
             formats: ["extract"],
             waitFor: 5000,
             extract: {
-              prompt: `Extraia os top ${limit} produtos em destaque nesta página do Magazine Luiza. Para cada produto, traga o título completo, a URL completa do produto (começando com https://www.magazineluiza.com.br/), a URL da imagem do produto e o preço promocional atual como número (ex: 1299.00). Se houver preço antigo riscado, traga também.`,
+              prompt: promptText,
               schema: {
                 type: "object",
                 properties: {
@@ -237,7 +267,8 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
                         url: { type: "string" },
                         image: { type: "string" },
                         price: { type: "number" },
-                        old_price: { type: "number", nullable: true }
+                        old_price: { type: "number", nullable: true },
+                        category: { type: "string" }
                       },
                       required: ["title", "url", "price"]
                     }
@@ -265,14 +296,19 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
         const products = fcData.data.extract.products
           .filter((p: any) => p.title && p.price > 0 && !(p.title || "").toLowerCase().includes("protected by"))
           .slice(0, limit)
-          .map((p: any) => ({
-            product_name: p.title,
-            original_url: p.url?.startsWith("http") ? p.url : `https://www.magazineluiza.com.br${p.url || ""}`,
-            image_url: enhanceImageUrl(p.image || null),
-            current_price: p.price,
-            old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-            rating: 4.8
-          }));
+          .map((p: any) => {
+            const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+            return {
+              product_name: p.title,
+              original_url: p.url?.startsWith("http") ? p.url : `https://www.magazineluiza.com.br${p.url || ""}`,
+              image_url: enhanceImageUrl(p.image || null),
+              current_price: p.price,
+              old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+              rating: 4.8,
+              category: cat,
+              subcategory: sub
+            };
+          });
 
         if (products.length > 0) {
           console.log(`[SCRAPER][MAGALU][TRENDS] Sucesso: ${products.length} tendências encontradas via ${url}.`);
@@ -299,7 +335,7 @@ export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedPro
  * Evita fazer requisições extras para páginas individuais de produtos, contornando bloqueios de captcha.
  * Híbrido: Extrai os dados publicamente e depois injeta a tag de afiliado.
  */
-export async function fetchTrendingProductsFromLanding(limit = 5): Promise<ScrapedProduct[]> {
+export async function fetchTrendingProductsFromLanding(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Iniciando busca de tendências do Mercado Livre...");
   const firecrawlKey = process.env.FIRECRAWL_API_KEY;
 
@@ -307,6 +343,11 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
   if (firecrawlKey) {
     try {
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Firecrawl Extract (IA)...");
+      const targetUrl = category ? `https://lista.mercadolivre.com.br/${encodeURIComponent(category.replace(/ /g, "-"))}` : "https://www.mercadolivre.com.br/mais-vendidos";
+      const promptText = category
+        ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto lista.mercadolivre.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se tiver preço antigo riscado, traga também.`
+        : `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
+
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
         headers: {
@@ -314,11 +355,11 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
           "Content-Type": "application/json"
         },
         body: JSON.stringify({
-          url: "https://www.mercadolivre.com.br/mais-vendidos",
+          url: targetUrl,
           formats: ["extract"],
           waitFor: 3000,
           extract: {
-            prompt: `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também.`,
+            prompt: promptText,
             schema: {
               type: "object",
               properties: {
@@ -331,7 +372,8 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
                       url: { type: "string" },
                       image: { type: "string" },
                       price: { type: "number" },
-                      old_price: { type: "number", nullable: true }
+                      old_price: { type: "number", nullable: true },
+                      category: { type: "string" }
                     },
                     required: ["title", "url", "price"]
                   }
@@ -349,14 +391,19 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
           const products = fcData.data.extract.products
             .filter((p: any) => p.title && p.price > 0)
             .slice(0, limit)
-            .map((p: any) => ({
-              product_name: p.title,
-              original_url: p.url?.startsWith("http") ? p.url : `https://www.mercadolivre.com.br${p.url || ""}`,
-              image_url: enhanceImageUrl(p.image || null),
-              current_price: p.price,
-              old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-              rating: 4.8
-            }));
+            .map((p: any) => {
+              const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+              return {
+                product_name: p.title,
+                original_url: p.url?.startsWith("http") ? p.url : `https://www.mercadolivre.com.br${p.url || ""}`,
+                image_url: enhanceImageUrl(p.image || null),
+                current_price: p.price,
+                old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+                rating: 4.8,
+                category: cat,
+                subcategory: sub
+              };
+            });
 
           if (products.length > 0) {
             console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 (Extract) OK: ${products.length} produtos.`);
@@ -1248,7 +1295,7 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
   return scrapeMercadoLivreProductDetails(productUrl);
 }
 
-export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon...");
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
@@ -1257,12 +1304,17 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
       return [];
     }
 
-    // Amazon muda frequentemente. Tenta múltiplas URLs
-    const urls = [
-      "https://www.amazon.com.br/gp/bestsellers/",
-      "https://www.amazon.com.br/gp/movers-and-shakers/",
-      "https://www.amazon.com.br/deals"
-    ];
+    const urls = category
+      ? [`https://www.amazon.com.br/s?k=${encodeURIComponent(category)}`]
+      : [
+          "https://www.amazon.com.br/gp/bestsellers/",
+          "https://www.amazon.com.br/gp/movers-and-shakers/",
+          "https://www.amazon.com.br/deals"
+        ];
+
+    const promptText = category
+      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto, o preço atual como número (ex: 299.00) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`
+      : `Extraia os top ${limit} produtos em destaque nesta página da Amazon Brasil. Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto, o preço atual como número (ex: 299.00) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`;
 
     for (const url of urls) {
       try {
@@ -1278,7 +1330,7 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
             formats: ["extract"],
             waitFor: 5000,
             extract: {
-              prompt: `Extraia os top ${limit} produtos em destaque nesta página da Amazon Brasil. Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto e o preço atual como número (ex: 299.00). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`,
+              prompt: promptText,
               schema: {
                 type: "object",
                 properties: {
@@ -1291,7 +1343,8 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
                         url: { type: "string" },
                         image: { type: "string" },
                         price: { type: "number" },
-                        old_price: { type: "number", nullable: true }
+                        old_price: { type: "number", nullable: true },
+                        category: { type: "string" }
                       },
                       required: ["title", "url", "price"]
                     }
@@ -1325,14 +1378,19 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
               !titleLower.includes("sorry");
           })
           .slice(0, limit)
-          .map((p: any) => ({
-            product_name: p.title,
-            original_url: p.url?.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url || ""}`,
-            image_url: enhanceImageUrl(p.image || null),
-            current_price: p.price,
-            old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-            rating: 4.8
-          }));
+          .map((p: any) => {
+            const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+            return {
+              product_name: p.title,
+              original_url: p.url?.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url || ""}`,
+              image_url: enhanceImageUrl(p.image || null),
+              current_price: p.price,
+              old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+              rating: 4.8,
+              category: cat,
+              subcategory: sub
+            };
+          });
 
         if (products.length > 0) {
           console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso: ${products.length} tendências encontradas via ${url}.`);
@@ -1360,7 +1418,8 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
 export async function discoverAndIngestTrendingOffers(
   limit = 5,
   sources: string[] = ["Mercado Livre"],
-  targetUserId?: string
+  targetUserId?: string,
+  categorySearchQuery?: string
 ): Promise<Offer[]> {
   console.log(`[SCRAPER][TRENDS] Iniciando descobrimento e ingestão para fontes: ${sources.join(", ")}`);
   let supabase;
@@ -1380,21 +1439,28 @@ export async function discoverAndIngestTrendingOffers(
     throw new Error("Supabase ou usuário não autenticado.");
   }
 
+  let activeCategorySearch = categorySearchQuery;
+  if (!activeCategorySearch || activeCategorySearch === "Geral") {
+    const randomIndex = Math.floor(Math.random() * MAIN_CATEGORY_NAMES.length);
+    activeCategorySearch = MAIN_CATEGORY_NAMES[randomIndex];
+    console.log(`[SCRAPER][TRENDS] Modo Roleta: Categoria sorteada -> ${activeCategorySearch}`);
+  }
+
   const ingestedOffers: Offer[] = [];
 
   for (const source of sources) {
     let scrapedProducts: ScrapedProduct[] = [];
 
     if (source === "Mercado Livre") {
-      scrapedProducts = await fetchTrendingProductsFromLanding(limit);
+      scrapedProducts = await fetchTrendingProductsFromLanding(limit, activeCategorySearch);
     } else if (source === "Shopee") {
-      scrapedProducts = await fetchShopeeTrendingProducts(limit);
+      scrapedProducts = await fetchShopeeTrendingProducts(limit, activeCategorySearch);
     } else if (source === "Shein") {
-      scrapedProducts = await fetchSheinTrendingProducts(limit);
+      scrapedProducts = await fetchSheinTrendingProducts(limit, activeCategorySearch);
     } else if (source === "Magalu") {
-      scrapedProducts = await fetchMagaluTrendingProducts(limit);
+      scrapedProducts = await fetchMagaluTrendingProducts(limit, activeCategorySearch);
     } else if (source === "Amazon") {
-      scrapedProducts = await fetchAmazonTrendingProducts(limit);
+      scrapedProducts = await fetchAmazonTrendingProducts(limit, activeCategorySearch);
     }
 
     for (const product of scrapedProducts) {
@@ -1439,7 +1505,7 @@ export async function discoverAndIngestTrendingOffers(
         current_price: product.current_price,
         old_price: product.old_price,
         rating: product.rating,
-        category: "Geral"
+        category: product.category || "Geral"
       });
 
       if (existingOffer) {
@@ -1460,6 +1526,8 @@ export async function discoverAndIngestTrendingOffers(
               current_price: product.current_price,
               old_price: product.old_price,
               rating: product.rating,
+              category: product.category || "Geral",
+              subcategory: product.subcategory || null,
               score: curation.score,
               legacy_score: curation.legacy_score,
               new_score: curation.new_score,
@@ -1505,6 +1573,8 @@ export async function discoverAndIngestTrendingOffers(
             current_price: product.current_price,
             old_price: product.old_price,
             rating: product.rating,
+            category: product.category || "Geral",
+            subcategory: product.subcategory || null,
             score: curation.score,
             legacy_score: curation.legacy_score,
             new_score: curation.new_score,
@@ -1538,6 +1608,8 @@ export async function discoverAndIngestTrendingOffers(
           current_price: product.current_price,
           old_price: product.old_price,
           rating: product.rating,
+          category: product.category || "Geral",
+          subcategory: product.subcategory || null,
           score: curation.score,
           legacy_score: curation.legacy_score,
           new_score: curation.new_score,

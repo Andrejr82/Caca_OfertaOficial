@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
 
 export function TrendsAction() {
   const router = useRouter();
@@ -48,7 +49,8 @@ export function TrendsAction() {
 
   const activeSourcesCount = Object.values(sources).filter(Boolean).length;
 
-  const [limit, setLimit] = useState<number>(10);
+  const [limit, setLimit] = useState<number>(20);
+  const [category, setCategory] = useState<string>("Geral");
 
   async function handleFetchTrends() {
     if (activeSourcesCount === 0) {
@@ -74,7 +76,7 @@ export function TrendsAction() {
       const response = await fetch("/api/scraper/trends", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sources: selectedSources, limit })
+        body: JSON.stringify({ sources: selectedSources, limit, category })
       });
       const data = await response.json();
 
@@ -159,18 +161,31 @@ export function TrendsAction() {
               Amazon
             </label>
           </div>
-          <div className="mt-4 flex items-center gap-3">
-            <label className="text-sm font-medium text-white/70">Itens por loja:</label>
-            <select
-              value={limit}
-              onChange={(e) => setLimit(Number(e.target.value))}
-              className="bg-ink border border-moss/20 rounded-md text-sm text-white px-2 py-1 focus:ring-moss focus:border-moss"
-            >
-              <option value={5}>5 produtos</option>
-              <option value={10}>10 produtos</option>
-              <option value={15}>15 produtos</option>
-              <option value={20}>20 produtos</option>
-            </select>
+          <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-white/70">Categoria Alvo:</label>
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                className="bg-ink border border-moss/20 rounded-md text-sm text-white px-2 py-1.5 focus:ring-moss focus:border-moss outline-none w-48"
+              >
+                <option value="Geral">Geral (Roleta Aleatória)</option>
+                {MAIN_CATEGORY_NAMES.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-white/70">Itens por loja:</label>
+              <input
+                type="number"
+                min="1"
+                max="100"
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value) || 1)}
+                className="bg-ink border border-moss/20 rounded-md text-sm text-white px-2 py-1.5 focus:ring-moss focus:border-moss outline-none w-20"
+              />
+            </div>
           </div>
         </div>
         <div className="flex shrink-0 items-start">

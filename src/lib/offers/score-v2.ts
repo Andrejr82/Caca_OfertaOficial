@@ -4,29 +4,67 @@ import { calculateConversionScore } from "./conversion-engine";
 import type { Offer } from "@/types/domain";
 
 const categoryBoosts: Record<string, number> = {
-  casa: 1.15,
-  cozinha: 1.15,
-  pet: 1.15,
-  infantil: 1.15,
-  beleza: 1.15,
-  "organização": 1.15,
-  organizacao: 1.15,
-  utilidades: 1.15,
-  celulares: 1.15,
-  "acessórios": 1.15,
-  acessorios: 1.15,
+  // Tier S (1.20) — Alta demanda impulsiva, alto giro
+  "telefonia":              1.20,
+  "games":                  1.20,
+  "eletroportateis":        1.18,
+  "eletroportáteis":        1.18,
+  // Tier A (1.15) — Demanda constante, boa comissão
+  "casa":                   1.15,
+  "cozinha":                1.15,
+  "pet":                    1.15,
+  "petshop":                1.15,
+  "infantil":               1.15,
+  "criancas":               1.15,
+  "crianças":               1.15,
+  "beleza":                 1.15,
+  "moda":                   1.15,
+  "saude":                  1.15,
+  "saúde":                  1.15,
+  "organização":            1.15,
+  "organizacao":            1.15,
+  "utilidades":             1.15,
+  "celulares":              1.15,
+  "acessórios":             1.15,
+  "acessorios":             1.15,
+  "eletronicos":            1.15,
+  "eletrônicos":            1.15,
+  "informatica":            1.15,
+  "informática":            1.15,
+  "televisao":              1.15,
+  "televisão":              1.15,
+  "eletrodomesticos":       1.15,
+  "eletrodomésticos":       1.15,
+  // Tier B (1.10) — Boa demanda sazonal
+  "esporte":                1.10,
+  "supermercado":           1.10,
+  "livros":                 1.10,
+  "ar e ventilacao":        1.10,
+  "ar e ventilação":        1.10,
+  "moveis":                 1.10,
+  "móveis":                 1.10,
+  "cama":                   1.10,
+  "decoracao":              1.10,
+  "decoração":              1.10,
 };
 
 const categoryPenalties: Record<string, number> = {
-  "construção": 0.70,
-  construcao: 0.70,
-  "agrícola": 0.70,
-  agricola: 0.70,
-  industrial: 0.70,
-  "ferramentas profissionais": 0.70,
-  "autopeças técnicas": 0.70,
-  autopecas: 0.70,
-  b2b: 0.70,
+  // Nicho B2B / Baixa conversão no consumidor final
+  "construção":             0.72,
+  "construcao":             0.72,
+  "agrícola":               0.70,
+  "agricola":               0.70,
+  "industrial":             0.70,
+  "ferramentas profissionais": 0.72,
+  "autopeças técnicas":     0.72,
+  "autopecas":              0.72,
+  "b2b":                    0.68,
+  // Categorias de ticket muito alto / baixo giro
+  "viagens":                0.80,
+  "papelaria":              0.85,
+  "bebidas":                0.88,
+  "grátis":                 1.05, // Grátis tem boa conversão mas comissão zero — leve boost
+  "gratis":                 1.05,
 };
 
 export interface ScoreV2Output {
@@ -80,7 +118,19 @@ export function calculateOfferScoreV2(input: ScoreInput): ScoreV2Output {
   // 3. Potencial de Compra (Purchase Potential) - Peso Máx 2.0 (20%)
   // Critérios: categoria prioritária, utilidade, demanda orgânica.
   let purchasePotentialScore = 5; // Base neutra
-  const isPriorityCategory = ["casa", "cozinha", "pet", "infantil", "beleza", "utilidades", "celulares", "acessórios"].some(cat => category.includes(cat));
+  const isPriorityCategory = [
+    // Tier S
+    "telefonia", "games", "eletroportáteis", "eletroportateis",
+    // Tier A
+    "casa", "cozinha", "pet", "petshop", "infantil", "crianças", "criancas",
+    "beleza", "moda", "saúde", "saude",
+    "utilidades", "celulares", "acessórios", "acessorios",
+    "eletrônicos", "eletronicos", "informática", "informatica",
+    "televisão", "televisao", "eletrodomésticos", "eletrodomesticos",
+    // Tier B
+    "esporte", "supermercado", "livros", "ar e ventilação", "ar e ventilacao",
+    "móveis", "moveis", "cama", "decoração", "decoracao"
+  ].some(cat => category.includes(cat));
   if (isPriorityCategory) {
     purchasePotentialScore += 3;
   }

@@ -3,7 +3,7 @@ import { MetricCard } from "@/components/dashboard/metric-card";
 import { ConversionFunnel } from "@/components/dashboard/conversion-funnel";
 import { TrendsAction } from "@/components/dashboard/trends-action";
 import { getDashboardData } from "@/lib/offers/queries";
-import { ShoppingBag, CheckCircle2, Send, Coins, Star } from "lucide-react";
+import { ShoppingBag, CheckCircle2, Send, Coins, Star, Tag } from "lucide-react";
 
 function money(value: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
@@ -133,7 +133,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {/* Platform & Channel Distribution — 2 columns */}
+        {/* Platform & Channel & Category Distribution */}
         <div className="space-y-4 lg:col-span-2">
           {/* By Platform */}
           <div className="glass-card p-5 animate-slideUp stagger-2">
@@ -206,6 +206,43 @@ export default async function DashboardPage() {
           </div>
         </div>
       </section>
+
+      {/* Category Distribution — full width */}
+      {Object.keys(data.byCategory).length > 0 && (
+        <section className="glass-card p-5 animate-slideUp">
+          <div className="flex items-center gap-2 border-b border-white/[0.04] pb-3 mb-4">
+            <Tag size={16} className="text-violet-400" />
+            <h2 className="text-sm font-bold text-white/70">Ofertas por Categoria</h2>
+            <span className="ml-auto text-[10px] font-bold text-white/25 uppercase tracking-wider">
+              {Object.keys(data.byCategory).length} categorias
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Object.entries(data.byCategory)
+              .sort(([, a], [, b]) => b - a)
+              .map(([category, count]) => {
+                const percentage = data.totals.offers > 0 ? (count / data.totals.offers) * 100 : 0;
+                return (
+                  <div key={category}>
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <span className="text-xs font-semibold text-white/60 truncate">{category}</span>
+                      <span className="flex-shrink-0 text-xs font-bold tabular-nums text-violet-400">
+                        {count}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-violet-500 to-purple-400 transition-all duration-700"
+                        style={{ width: `${Math.max(percentage, 2)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })
+            }
+          </div>
+        </section>
+      )}
     </div>
   );
 }

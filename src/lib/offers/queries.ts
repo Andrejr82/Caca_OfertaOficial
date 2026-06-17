@@ -57,6 +57,13 @@ export async function getDashboardData() {
     return acc;
   }, {});
 
+  // Agrega por categoria (somente ofertas com categoria preenchida)
+  const byCategory = offers.reduce<Record<string, number>>((acc, offer) => {
+    const cat = (offer as any).category || "Sem categoria";
+    acc[cat] = (acc[cat] || 0) + 1;
+    return acc;
+  }, {});
+
   return {
     offers,
     links,
@@ -70,6 +77,7 @@ export async function getDashboardData() {
     },
     byPlatform,
     byChannel,
+    byCategory,
     topOffers: [...offers].sort((a, b) => b.score - a.score).slice(0, 5)
   };
 }
@@ -188,4 +196,45 @@ export async function getTrackingReports() {
       platform: link.offers?.platform || "Outro"
     };
   });
+}
+
+/**
+ * Lista ofertas filtradas por categoria principal.
+ */
+export async function listOffersByCategory(category: string) {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [] as Offer[];
+
+  const { data } = await supabase
+    .from("offers")
+    .select("*")
+    .ilike("category", `%${category}%`)
+    .order("score", { ascending: false })
+    .limit(100);
+  return (data || []) as Offer[];
+}
+
+/**
+ * Retorna todas as categorias distintas presentes no banco com contagem de ofertas.
+ */
+export async function getCategoryStats() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [] as { category: string; count: number }[];
+
+  const { data } = await supabase
+    .from("offers")
+    .select("category")
+    .not("category", "is", null);
+
+  if (!data) return [];
+
+  const counts: Record<string, number> = {};
+  for (const row of data) {
+    const cat = (row as any).category || "Sem categoria";
+    counts[cat] = (counts[cat] || 0) + 1;
+  }
+
+  return Object.entries(counts)
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
 }
