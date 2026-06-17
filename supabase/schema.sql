@@ -10,7 +10,7 @@ create table if not exists public.profiles (
 create table if not exists public.offers (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  platform text not null check (platform in ('Shopee', 'Amazon', 'Magalu', 'Mercado Livre', 'Outro')),
+  platform text not null check (platform in ('Shopee', 'Amazon', 'Magalu', 'Mercado Livre', 'Shein', 'Outro')),
   product_name text not null,
   category text,
   original_url text not null,

@@ -1,10 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Sparkles, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 
 export function TrendsAction() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [sources, setSources] = useState({
     mercadolivre: true,
@@ -14,6 +16,35 @@ export function TrendsAction() {
     amazon: false
   });
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  // Carrega seleção do localStorage ao montar no cliente
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("caca_oferta_selected_sources");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          setSources(prev => ({
+            ...prev,
+            ...parsed
+          }));
+        }
+      }
+    } catch (error) {
+      console.error("[localStorage] Erro ao carregar fontes selecionadas:", error);
+    }
+  }, []);
+
+  // Handler para persistir no localStorage
+  const handleSourceChange = (key: keyof typeof sources, checked: boolean) => {
+    const updated = { ...sources, [key]: checked };
+    setSources(updated);
+    try {
+      localStorage.setItem("caca_oferta_selected_sources", JSON.stringify(updated));
+    } catch (error) {
+      console.error("[localStorage] Erro ao salvar fontes selecionadas:", error);
+    }
+  };
 
   const activeSourcesCount = Object.values(sources).filter(Boolean).length;
 
@@ -52,7 +83,7 @@ export function TrendsAction() {
           success: true,
           message: data.message || "Tendências importadas com sucesso!"
         });
-        window.location.reload();
+        router.refresh();
       } else {
         setResult({
           success: false,
@@ -86,7 +117,7 @@ export function TrendsAction() {
               <input
                 type="checkbox"
                 checked={sources.mercadolivre}
-                onChange={(e) => setSources({ ...sources, mercadolivre: e.target.checked })}
+                onChange={(e) => handleSourceChange("mercadolivre", e.target.checked)}
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Mercado Livre
@@ -95,7 +126,7 @@ export function TrendsAction() {
               <input
                 type="checkbox"
                 checked={sources.magalu}
-                onChange={(e) => setSources({ ...sources, magalu: e.target.checked })}
+                onChange={(e) => handleSourceChange("magalu", e.target.checked)}
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Magalu
@@ -104,7 +135,7 @@ export function TrendsAction() {
               <input
                 type="checkbox"
                 checked={sources.shopee}
-                onChange={(e) => setSources({ ...sources, shopee: e.target.checked })}
+                onChange={(e) => handleSourceChange("shopee", e.target.checked)}
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Shopee
@@ -113,7 +144,7 @@ export function TrendsAction() {
               <input
                 type="checkbox"
                 checked={sources.shein}
-                onChange={(e) => setSources({ ...sources, shein: e.target.checked })}
+                onChange={(e) => handleSourceChange("shein", e.target.checked)}
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Shein
@@ -122,7 +153,7 @@ export function TrendsAction() {
               <input
                 type="checkbox"
                 checked={sources.amazon}
-                onChange={(e) => setSources({ ...sources, amazon: e.target.checked })}
+                onChange={(e) => handleSourceChange("amazon", e.target.checked)}
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Amazon

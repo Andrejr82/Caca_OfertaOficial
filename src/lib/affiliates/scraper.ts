@@ -6,6 +6,31 @@ import { curateOfferScore } from "@/lib/offers/curation-engine";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
+export interface MarketplaceMetrics {
+  found: number;
+  discarded: number;
+  captchas: number;
+  failures: number;
+  successRate: number;
+}
+
+export const scraperMetrics: Record<string, MarketplaceMetrics> = {
+  "Mercado Livre": { found: 0, discarded: 0, captchas: 0, failures: 0, successRate: 100 },
+  "Amazon": { found: 0, discarded: 0, captchas: 0, failures: 0, successRate: 100 },
+  "Shopee": { found: 0, discarded: 0, captchas: 0, failures: 0, successRate: 100 },
+  "Shein": { found: 0, discarded: 0, captchas: 0, failures: 0, successRate: 100 },
+  "Magalu": { found: 0, discarded: 0, captchas: 0, failures: 0, successRate: 100 }
+};
+
+export function updateMetrics(marketplace: string, type: keyof Omit<MarketplaceMetrics, "successRate">, count = 1) {
+  const m = scraperMetrics[marketplace];
+  if (m) {
+    m[type] += count;
+    const total = m.found + m.failures + m.captchas;
+    m.successRate = total > 0 ? Math.round((m.found / total) * 100) : 100;
+  }
+}
+
 export interface ScrapedProduct {
   product_name: string;
   original_url: string;
@@ -42,12 +67,206 @@ function enhanceImageUrl(url: string | null): string | null {
   return enhanced;
 }
 
+export async function fetchShopeeTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca de tendências da Shopee via Firecrawl...");
+  try {
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      throw new Error("FIRECRAWL_API_KEY não configurada.");
+    }
+
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        url: "https://shopee.com.br/m/ofertas-do-dia", 
+        formats: ["extract"],
+        extract: {
+          prompt: `Extraia os top ${limit} produtos em destaque da página. Para cada produto, traga o título, url original do produto shopee.com.br, imagem e o preço promocional (somente número).`,
+          schema: {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          }
+        }
+      })
+    });
+
+    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Shopee Trends: ${fcResponse.status}`);
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shopee");
+
+    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
+      product_name: p.title,
+      original_url: p.url.startsWith("http") ? p.url : `https://shopee.com.br${p.url}`,
+      image_url: enhanceImageUrl(p.image || null),
+      current_price: p.price,
+      old_price: null,
+      rating: 4.8
+    }));
+
+    console.log(`[SCRAPER][SHOPEE][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
+    return products;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][SHOPEE][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    return [];
+  }
+}
+
+export async function fetchSheinTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][SHEIN][TRENDS] Iniciando busca de tendências da Shein via Firecrawl...");
+  try {
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      throw new Error("FIRECRAWL_API_KEY não configurada.");
+    }
+
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        url: "https://br.shein.com/campaigns/best_sellers", 
+        formats: ["extract"],
+        extract: {
+          prompt: `Extraia os top ${limit} produtos mais vendidos. Para cada produto, precisamos do título, url original do produto shein, imagem e o preço promocional (somente número).`,
+          schema: {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          }
+        }
+      })
+    });
+
+    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Shein Trends: ${fcResponse.status}`);
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shein");
+
+    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
+      product_name: p.title,
+      original_url: p.url.startsWith("http") ? p.url : `https://br.shein.com${p.url}`,
+      image_url: enhanceImageUrl(p.image || null),
+      current_price: p.price,
+      old_price: null,
+      rating: 4.8
+    }));
+
+    console.log(`[SCRAPER][SHEIN][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
+    return products;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][SHEIN][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    return [];
+  }
+}
+
+export async function fetchMagaluTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][MAGALU][TRENDS] Iniciando busca de tendências do Magalu via Firecrawl...");
+  try {
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      throw new Error("FIRECRAWL_API_KEY não configurada.");
+    }
+
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        url: "https://www.magazineluiza.com.br/selecao/mais-vendidos/", 
+        formats: ["extract"],
+        extract: {
+          prompt: `Extraia os top ${limit} produtos mais vendidos. Para cada produto, traga o título, url original do produto magazineluiza.com.br, imagem e o preço promocional (somente número).`,
+          schema: {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          }
+        }
+      })
+    });
+
+    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Magalu Trends: ${fcResponse.status}`);
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos do Magalu");
+
+    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
+      product_name: p.title,
+      original_url: p.url.startsWith("http") ? p.url : `https://www.magazineluiza.com.br${p.url}`,
+      image_url: enhanceImageUrl(p.image || null),
+      current_price: p.price,
+      old_price: null,
+      rating: 4.8
+    }));
+
+    console.log(`[SCRAPER][MAGALU][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
+    return products;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][MAGALU][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    return [];
+  }
+}
+
 /**
  * Coleta os links e detalhes dos produtos mais vendidos no Mercado Livre diretamente da página principal
+>>>>,StartLine:45,TargetContent:
  * Evita fazer requisições extras para páginas individuais de produtos, contornando bloqueios de captcha.
  * Híbrido: Extrai os dados publicamente e depois injeta a tag de afiliado.
  */
 export async function fetchTrendingProductsFromLanding(limit = 5): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Iniciando busca de tendências do Mercado Livre...");
   try {
     const url = "https://www.mercadolivre.com.br/mais-vendidos";
     let html = "";
@@ -55,7 +274,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
 
     if (firecrawlKey) {
-      console.log("[Scraper] Usando Firecrawl para contornar bloqueio do Mercado Livre...");
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Usando Firecrawl para contornar bloqueio do Mercado Livre...");
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
         headers: {
@@ -75,7 +294,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
       }
       html = fcData.data.html;
     } else {
-      console.log("[Scraper] Tentando fetch direto (sujeito a bloqueio do Mercado Livre)...");
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Tentando fetch direto (sujeito a bloqueio)...");
       const response = await fetch(url, {
         headers: {
           "User-Agent": USER_AGENT,
@@ -152,9 +371,11 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
       if (results.length >= limit) break;
     }
 
+    console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Sucesso: ${results.length} tendências encontradas.`);
     return results;
   } catch (error) {
-    console.error("Erro ao buscar tendências do Mercado Livre:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][MERCADO LIVRE][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
     return [];
   }
 }
@@ -164,12 +385,13 @@ export async function fetchTrendingProductsFromLanding(limit = 5): Promise<Scrap
  * Nota: Pode sofrer redirecionamento para tela de tráfego suspeito dependendo do IP/Rate Limit.
  */
 async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
   try {
     let html = "";
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
 
     if (firecrawlKey) {
-      console.log(`[Scraper] Usando Firecrawl para produto ML: ${productUrl}`);
+      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando Firecrawl para produto ML: ${productUrl}`);
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
         headers: {
@@ -189,6 +411,7 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
       }
       html = fcData.data.html;
     } else {
+      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando fetch direto para produto ML: ${productUrl}`);
       const response = await fetch(productUrl, {
         headers: {
           "User-Agent": USER_AGENT,
@@ -273,7 +496,7 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
     }
 
     if (currentPrice > 0) {
-      return {
+      const scraped = {
         product_name: title.trim(),
         original_url: productUrl,
         image_url: enhanceImageUrl(image),
@@ -281,16 +504,82 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
         old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
         rating: rating
       };
+      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso ao raspar produto: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+      updateMetrics("Mercado Livre", "found", 1);
+      return scraped;
     }
 
+    // Se falhou ao extrair o preço (pode ser captcha do ML)
+    const isSuspectedCaptcha = html.length < 10000 || html.includes("captcha") || html.includes("robot") || html.includes("tráfego suspeito");
+    if (isSuspectedCaptcha) {
+      updateMetrics("Mercado Livre", "captchas", 1);
+      console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Captcha ou bloqueio detectado no HTML. Iniciando retry com Firecrawl Extract...`);
+      
+      if (firecrawlKey) {
+        try {
+          const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${firecrawlKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ 
+              url: productUrl, 
+              formats: ["extract"],
+              extract: {
+                prompt: "Extraia o nome do produto, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.",
+                schema: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    image: { type: "string" },
+                    current_price: { type: "number" },
+                    old_price: { type: "number", nullable: true }
+                  },
+                  required: ["title", "current_price"]
+                }
+              }
+            })
+          });
+
+          if (fcResponse.ok) {
+            const fcData: any = await fcResponse.json();
+            if (fcData.success && fcData.data?.extract) {
+              const ext = fcData.data.extract;
+              if (ext.current_price > 0 && ext.title) {
+                const scraped = {
+                  product_name: ext.title.trim(),
+                  original_url: productUrl,
+                  image_url: enhanceImageUrl(ext.image || null),
+                  current_price: ext.current_price,
+                  old_price: ext.old_price && ext.old_price > ext.current_price ? ext.old_price : null,
+                  rating: 4.8
+                };
+                console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso via Firecrawl Extract Retry: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+                updateMetrics("Mercado Livre", "found", 1);
+                return scraped;
+              }
+            }
+          }
+        } catch (retryError) {
+          console.error("[SCRAPER][MERCADO LIVRE][PRODUCT] Erro no retry do Firecrawl Extract:", retryError);
+        }
+      }
+    }
+
+    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao extrair preço do produto: ${productUrl}`);
+    updateMetrics("Mercado Livre", "failures", 1);
     return null;
   } catch (error) {
-    console.error(`Erro ao raspar produto ML ${productUrl}:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao raspar produto ${productUrl}: ${errorMsg}`);
+    updateMetrics("Mercado Livre", "failures", 1);
     return null;
   }
 }
 
 async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  console.log(`[SCRAPER][MAGALU][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
   try {
     // Resolver redirects de links curtos de app (onelink.me)
     let finalProductUrl = productUrl;
@@ -307,13 +596,13 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
            finalProductUrl = productUrl;
         }
       } catch (e) {
-        console.warn("Falha ao resolver shortlink do magalu:", e);
+        console.warn("[SCRAPER][MAGALU][PRODUCT] Falha ao resolver shortlink do magalu:", e);
       }
     }
 
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("FIRECRAWL_API_KEY não encontrada, usando mock de fallback para Magalu");
+      console.warn("[SCRAPER][MAGALU][PRODUCT] FIRECRAWL_API_KEY não encontrada, usando mock de fallback");
       return {
         product_name: "Produto Magalu (Mock - Cadastre a API Key do Firecrawl)",
         original_url: productUrl,
@@ -324,7 +613,7 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
       };
     }
 
-    console.log(`[Scraper] Usando Firecrawl Extract para Magalu: ${productUrl}`);
+    console.log(`[SCRAPER][MAGALU][PRODUCT] Usando Firecrawl Extract para Magalu: ${productUrl}`);
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: {
@@ -360,96 +649,292 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const extract = fcData.data.extract;
-    return {
-      product_name: extract.title,
-      original_url: finalProductUrl,
-      image_url: enhanceImageUrl(extract.image || null),
-      current_price: extract.current_price,
-      old_price: extract.old_price || null,
-      rating: 4.8 // Nota padrão alta
-    };
+    const isAkamaiBlock = extract && (extract.title || "").toLowerCase().includes("protected by");
 
+    // Fallback se a extração estruturada falhou (título vazio ou preço zerado ou bloqueio Akamai)
+    if (!extract || !extract.title || extract.current_price === 0 || isAkamaiBlock) {
+      console.log("[SCRAPER][MAGALU][PRODUCT] Extração estruturada falhou ou foi bloqueada. Tentando fallbacks via HTML...");
+      const fcHtmlResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${firecrawlKey}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ url: finalProductUrl, formats: ["html"] })
+      });
+
+      if (fcHtmlResponse.ok) {
+        const fcHtmlData: any = await fcHtmlResponse.json();
+        if (fcHtmlData.success && fcHtmlData.data?.html) {
+          const html = fcHtmlData.data.html;
+
+          // 1. Título via og:title ou <title>
+          const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) || 
+                             html.match(/<title>([^<]+)<\/title>/i);
+          const fallbackTitle = titleMatch ? titleMatch[1].replace("- Magazine Luiza", "").trim() : "";
+
+          // 2. Imagem via og:image
+          const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+          const fallbackImage = imageMatch ? imageMatch[1] : null;
+
+          // 3. Preço promocional e preço original via JSON-LD ou regexes
+          let fallbackPrice = 0;
+          let fallbackOldPrice: number | null = null;
+
+          const ldJsonMatches = html.match(/<script\s+type=["']application\/ld\+json["']>([\s\S]*?)<\/script>/gi);
+          if (ldJsonMatches) {
+            for (const scriptTag of ldJsonMatches) {
+              try {
+                const jsonContent = scriptTag.replace(/<script\s+type=["']application\/ld\+json["']>/i, "").replace(/<\/script>/i, "").trim();
+                const parsed = JSON.parse(jsonContent);
+                if (parsed["@type"] === "Product" || parsed.offers) {
+                  const offer = Array.isArray(parsed.offers) ? parsed.offers[0] : parsed.offers;
+                  if (offer && offer.price) {
+                    fallbackPrice = parseFloat(offer.price);
+                    break;
+                  }
+                }
+              } catch {}
+            }
+          }
+
+          if (fallbackPrice === 0) {
+            const metaPrice = html.match(/<meta\s+property=["']product:price:amount["']\s+content=["']([^"']+)["']/i) ||
+                              html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i) ||
+                              html.match(/<meta\s+property=["']og:price:amount["']\s+content=["']([^"']+)["']/i);
+            if (metaPrice) {
+              fallbackPrice = parseFloat(metaPrice[1]);
+            } else {
+              // Tenta extrair de variáveis JSON no script (ex: "price": 949.05)
+              const priceJsonMatch = html.match(/"price"\s*:\s*(\d+(?:\.\d+)?)/i);
+              if (priceJsonMatch) {
+                fallbackPrice = parseFloat(priceJsonMatch[1]);
+              } else {
+                // Tenta extrair formato string (ex: "price": "949,05")
+                const priceStringMatch = html.match(/"price"\s*:\s*"([^"]+)"/i);
+                if (priceStringMatch) {
+                  fallbackPrice = parseFloat(priceStringMatch[1].replace(/\./g, "").replace(",", "."));
+                }
+              }
+            }
+          }
+
+          // Tenta extrair o old_price
+          const oldPriceMatch = html.match(/"oldPrice"\s*:\s*(\d+(?:\.\d+)?)/i) || 
+                                html.match(/"listPrice"\s*:\s*(\d+(?:\.\d+)?)/i);
+          if (oldPriceMatch) {
+            fallbackOldPrice = parseFloat(oldPriceMatch[1]);
+          }
+
+          if (fallbackTitle && fallbackPrice > 0) {
+            const scraped = {
+              product_name: fallbackTitle,
+              original_url: finalProductUrl,
+              image_url: enhanceImageUrl(fallbackImage),
+              current_price: fallbackPrice,
+              old_price: fallbackOldPrice,
+              rating: 4.8
+            };
+            console.log(`[SCRAPER][MAGALU][PRODUCT] Sucesso via HTML Fallback: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+            updateMetrics("Magalu", "found", 1);
+            return scraped;
+          }
+        }
+      }
+
+      // Último recurso: Fetch simples direto (caso o Firecrawl HTML dê timeout ou falhe)
+      console.log("[SCRAPER][MAGALU][PRODUCT] Firecrawl HTML falhou ou deu timeout. Tentando fetch direto simples...");
+      try {
+        const directRes = await fetch(finalProductUrl, {
+          headers: {
+            "User-Agent": USER_AGENT,
+            "Accept-Language": "pt-BR,pt;q=0.9",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+          },
+          signal: AbortSignal.timeout(5000)
+        });
+        if (directRes.ok) {
+          const html = await directRes.text();
+          
+          const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) || 
+                             html.match(/<title>([^<]+)<\/title>/i);
+          const fallbackTitle = titleMatch ? titleMatch[1].replace("- Magazine Luiza", "").trim() : "";
+
+          const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+          const fallbackImage = imageMatch ? imageMatch[1] : null;
+
+          let directPrice = 0;
+          let directOldPrice: number | null = null;
+
+          const metaPrice = html.match(/<meta\s+property=["']product:price:amount["']\s+content=["']([^"']+)["']/i) ||
+                            html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i) ||
+                            html.match(/<meta\s+property=["']og:price:amount["']\s+content=["']([^"']+)["']/i);
+          if (metaPrice) {
+            directPrice = parseFloat(metaPrice[1]);
+          } else {
+            const priceJsonMatch = html.match(/"price"\s*:\s*(\d+(?:\.\d+)?)/i);
+            if (priceJsonMatch) {
+              directPrice = parseFloat(priceJsonMatch[1]);
+            } else {
+              const priceStringMatch = html.match(/"price"\s*:\s*"([^"]+)"/i);
+              if (priceStringMatch) {
+                directPrice = parseFloat(priceStringMatch[1].replace(/\./g, "").replace(",", "."));
+              }
+            }
+          }
+
+          const oldPriceMatch = html.match(/"oldPrice"\s*:\s*(\d+(?:\.\d+)?)/i) || 
+                                html.match(/"listPrice"\s*:\s*(\d+(?:\.\d+)?)/i);
+          if (oldPriceMatch) {
+            directOldPrice = parseFloat(oldPriceMatch[1]);
+          }
+
+          if (fallbackTitle && directPrice > 0) {
+            const scraped = {
+              product_name: fallbackTitle,
+              original_url: finalProductUrl,
+              image_url: enhanceImageUrl(fallbackImage),
+              current_price: directPrice,
+              old_price: directOldPrice,
+              rating: 4.8
+            };
+            console.log(`[SCRAPER][MAGALU][PRODUCT] Sucesso via Fetch Direto Simples: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+            updateMetrics("Magalu", "found", 1);
+            return scraped;
+          }
+        }
+      } catch (e) {
+        console.warn("[SCRAPER][MAGALU][PRODUCT] Falha no fetch direto de último recurso:", e);
+      }
+    }
+
+    if (extract && extract.title && extract.current_price > 0) {
+      const scraped = {
+        product_name: extract.title,
+        original_url: finalProductUrl,
+        image_url: enhanceImageUrl(extract.image || null),
+        current_price: extract.current_price,
+        old_price: extract.old_price || null,
+        rating: 4.8
+      };
+      console.log(`[SCRAPER][MAGALU][PRODUCT] Sucesso ao raspar produto: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+      updateMetrics("Magalu", "found", 1);
+      return scraped;
+    }
+
+    console.warn(`[SCRAPER][MAGALU][PRODUCT] Falha ao extrair dados válidos do produto: ${productUrl}`);
+    updateMetrics("Magalu", "failures", 1);
+    return null;
   } catch (error) {
-    console.error(`Erro ao raspar produto Magalu ${productUrl}:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][MAGALU][PRODUCT] Falha ao raspar produto ${productUrl}: ${errorMsg}`);
+    updateMetrics("Magalu", "failures", 1);
     return null;
   }
 }
 
 async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  console.log(`[SCRAPER][SHEIN][PRODUCT] Iniciando raspagem de produto com Firecrawl: ${productUrl}`);
   try {
-    // Para Shein, usamos redirecionamento automático (para links shein.top) e headers padrão
-    const response = await fetch(productUrl, {
-      redirect: 'follow',
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Accept-Language": "pt-BR,pt;q=0.9",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Falha ao obter produto SHEIN. Status: ${response.status}`);
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      console.warn("[SCRAPER][SHEIN][PRODUCT] FIRECRAWL_API_KEY não encontrada, usando mock de fallback");
+      return {
+        product_name: "Produto SHEIN (Requer Firecrawl)",
+        original_url: productUrl,
+        image_url: null,
+        current_price: 0,
+        old_price: null,
+        rating: 4.8
+      };
     }
 
-    const html = await response.text();
+    let retries = 3;
+    let delay = 1000;
+    let fcResponse = null;
 
-    // 1. Extração do título (OpenGraph)
-    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) || 
-                       html.match(/<title>([^<]+)<\/title>/i);
-    let title = titleMatch ? titleMatch[1].replace(/\| SHEIN.*$/i, "").trim() : "Produto SHEIN";
-
-    // 2. Extração da Imagem (OpenGraph)
-    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-    let image = imageMatch ? imageMatch[1] : null;
-
-    // Se a imagem iniciar com //, adicionar https:
-    if (image && image.startsWith("//")) {
-      image = "https:" + image;
-    }
-
-    // 3. Extração de preço (Pode estar oculto por SSR/JS, então usamos fallback 0 caso não encontre)
-    let currentPrice = 0;
-    
-    // Tentar achar price na meta tag og:price:amount ou property similar
-    const metaPriceMatch = html.match(/<meta\s+property=["']og:price:amount["']\s+content=["']([^"']+)["']/i) ||
-                           html.match(/<meta\s+property=["']product:price:amount["']\s+content=["']([^"']+)["']/i);
-    if (metaPriceMatch) {
-      currentPrice = parseFloat(metaPriceMatch[1]);
-    } else {
-      // Tentar no JSON-LD da Shein
-      const ldJsonMatches = html.match(/<script\s+type=["']application\/ld\+json["']>([\s\S]*?)<\/script>/gi);
-      if (ldJsonMatches) {
-        for (const scriptTag of ldJsonMatches) {
-          try {
-            const jsonContent = scriptTag.replace(/<script\s+type=["']application\/ld\+json["']>/i, "").replace(/<\/script>/i, "").trim();
-            const parsed = JSON.parse(jsonContent);
-            if (parsed.offers && parsed.offers.price) {
-              currentPrice = parseFloat(parsed.offers.price);
-              break;
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} de raspagem Shein...`);
+        fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${firecrawlKey}`,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ 
+            url: productUrl, 
+            formats: ["extract"],
+            extract: {
+              prompt: "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também.",
+              schema: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  image: { type: "string" },
+                  current_price: { type: "number" },
+                  old_price: { type: "number", nullable: true }
+                },
+                required: ["title", "current_price"]
+              }
             }
-          } catch {}
+          })
+        });
+
+        if (fcResponse.status === 429) {
+          throw new Error("HTTP 429 Too Many Requests");
         }
+        
+        if (fcResponse.ok) {
+          break; // Sucesso
+        }
+        
+        throw new Error(`HTTP Status ${fcResponse.status}`);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        console.warn(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} falhou: ${msg}`);
+        if (attempt === retries) {
+          throw error;
+        }
+        // Backoff exponencial
+        await new Promise(resolve => setTimeout(resolve, delay));
+        delay *= 2;
       }
     }
 
-    // Mesmo que não ache o preço (currentPrice == 0), vamos retornar para aproveitar a Imagem e Título
-    // O usuário poderá preencher o preço manualmente.
-    return {
-      product_name: title.trim(),
+    if (!fcResponse || !fcResponse.ok) {
+      throw new Error("Falha ao obter resposta do Firecrawl após retries");
+    }
+
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data || !fcData.data.extract) {
+      throw new Error("Firecrawl não retornou dados de extração válidos.");
+    }
+
+    const extract = fcData.data.extract;
+    const scraped = {
+      product_name: extract.title.trim(),
       original_url: productUrl,
-      image_url: enhanceImageUrl(image),
-      current_price: currentPrice,
-      old_price: null,
-      rating: 4.8 // Mock para Shein
+      image_url: enhanceImageUrl(extract.image || null),
+      current_price: extract.current_price,
+      old_price: extract.old_price || null,
+      rating: 4.8
     };
 
+    console.log(`[SCRAPER][SHEIN][PRODUCT] Sucesso ao raspar produto Shein: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+    updateMetrics("Shein", "found", 1);
+    return scraped;
+
   } catch (error) {
-    console.error(`Erro ao raspar produto SHEIN ${productUrl}:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][SHEIN][PRODUCT] Falha ao raspar produto Shein ${productUrl}: ${errorMsg}`);
+    updateMetrics("Shein", "failures", 1);
     return null;
   }
 }
 
 async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  console.log(`[SCRAPER][AMAZON][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
   try {
     let finalProductUrl = productUrl;
     if (productUrl.includes("amzn.to")) {
@@ -460,13 +945,13 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
            finalProductUrl = finalProductUrl.split("?")[0];
         }
       } catch (e) {
-        console.warn("Falha ao resolver shortlink da Amazon:", e);
+        console.warn("[SCRAPER][AMAZON][PRODUCT] Falha ao resolver shortlink da Amazon:", e);
       }
     }
 
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("FIRECRAWL_API_KEY não encontrada, Amazon bloqueará o fetch comum. Retornando mock.");
+      console.warn("[SCRAPER][AMAZON][PRODUCT] FIRECRAWL_API_KEY não encontrada, retornando mock");
       return {
         product_name: "Produto Amazon (Requer Firecrawl)",
         original_url: finalProductUrl,
@@ -477,7 +962,7 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
       };
     }
 
-    console.log(`[Scraper] Usando Firecrawl Extract para Amazon: ${productUrl}`);
+    console.log(`[SCRAPER][AMAZON][PRODUCT] Usando Firecrawl Extract para Amazon: ${productUrl}`);
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: {
@@ -513,7 +998,22 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const extract = fcData.data.extract;
-    return {
+    const titleLower = (extract.title || "").toLowerCase();
+    
+    // Proteção contra erro 404 / Cachorros da Amazon / Indisponível
+    if (
+      titleLower.includes("cachorros da amazon") || 
+      titleLower.includes("página não encontrada") || 
+      titleLower.includes("sorry, we couldn't find that page") || 
+      titleLower.includes("cão da amazon") ||
+      extract.current_price === 0 || 
+      !extract.title
+    ) {
+      console.warn(`[SCRAPER][AMAZON][PRODUCT] Ignorando página inválida da Amazon (404/Erro): ${extract.title}`);
+      return null;
+    }
+
+    const scraped = {
       product_name: extract.title,
       original_url: finalProductUrl,
       image_url: enhanceImageUrl(extract.image || null),
@@ -521,9 +1021,12 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
       old_price: extract.old_price || null,
       rating: 4.8 // Nota padrão alta
     };
+    console.log(`[SCRAPER][AMAZON][PRODUCT] Sucesso ao raspar produto: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+    return scraped;
 
   } catch (error) {
-    console.error(`Erro ao raspar produto Amazon ${productUrl}:`, error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][AMAZON][PRODUCT] Falha ao raspar produto ${productUrl}: ${errorMsg}`);
     return null;
   }
 }
@@ -548,10 +1051,11 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
 }
 
 export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon...");
   try {
     const firecrawlKey = process.env.FIRECRAWL_API_KEY;
     if (!firecrawlKey) {
-      console.warn("Sem chave Firecrawl. Usando fallback Mock para Tendências da Amazon.");
+      console.warn("[SCRAPER][AMAZON][TRENDS] Sem chave Firecrawl. Usando fallback Mock.");
       return [
         {
           product_name: "Echo Dot 5ª Geração (Requer Firecrawl para ofertas reais)",
@@ -564,7 +1068,7 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
       ];
     }
 
-    console.log("[Scraper] Usando Firecrawl para buscar tendências da Amazon...");
+    console.log("[SCRAPER][AMAZON][TRENDS] Usando Firecrawl para buscar tendências da Amazon...");
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
       headers: {
@@ -604,7 +1108,7 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
     const fcData = await fcResponse.json();
     if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos");
 
-    return fcData.data.extract.products.slice(0, limit).map((p: any) => ({
+    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => ({
       product_name: p.title,
       original_url: p.url.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url}`,
       image_url: enhanceImageUrl(p.image || null),
@@ -612,8 +1116,11 @@ export async function fetchAmazonTrendingProducts(limit = 5): Promise<ScrapedPro
       old_price: p.old_price || null,
       rating: 4.8
     }));
+    console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
+    return products;
   } catch (error) {
-    console.error("Erro Amazon Trends:", error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][AMAZON][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
     return [];
   }
 }
@@ -627,6 +1134,7 @@ export async function discoverAndIngestTrendingOffers(
   sources: string[] = ["Mercado Livre"],
   targetUserId?: string
 ): Promise<Offer[]> {
+  console.log(`[SCRAPER][TRENDS] Iniciando descobrimento e ingestão para fontes: ${sources.join(", ")}`);
   let supabase;
   let userId = targetUserId || null;
 
@@ -652,105 +1160,48 @@ export async function discoverAndIngestTrendingOffers(
     if (source === "Mercado Livre") {
       scrapedProducts = await fetchTrendingProductsFromLanding(limit);
     } else if (source === "Shopee") {
-      // Mock realista de tendências da Shopee
-      scrapedProducts = [
-        {
-          product_name: "Fone de Ouvido Bluetooth Sem Fio TWS i12 - Alta Fidelidade",
-          original_url: "https://shopee.com.br/product-fone-tws-i12",
-          image_url: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=500&auto=format&fit=crop",
-          current_price: 34.90,
-          old_price: 69.90,
-          rating: 4.6
-        },
-        {
-          product_name: "Smartwatch Relógio Inteligente D20 Android iOS",
-          original_url: "https://shopee.com.br/product-smartwatch-d20",
-          image_url: "https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=500&auto=format&fit=crop",
-          current_price: 29.90,
-          old_price: 59.90,
-          rating: 4.3
-        },
-        {
-          product_name: "Tripé de Celular Ring Light Iluminador LED 20cm",
-          original_url: "https://shopee.com.br/product-tripe-ringlight",
-          image_url: "https://images.unsplash.com/photo-1589254065878-42c9da997008?w=500&auto=format&fit=crop",
-          current_price: 49.90,
-          old_price: 99.90,
-          rating: 4.5
-        }
-      ].slice(0, limit);
+      scrapedProducts = await fetchShopeeTrendingProducts(limit);
     } else if (source === "Shein") {
-      // Mock realista de tendências da Shein
-      scrapedProducts = [
-        {
-          product_name: "Vestido Feminino Elegante Manga Bufante Casual Verão",
-          original_url: "https://shein.com.br/product-vestido-bufante",
-          image_url: "https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=500&auto=format&fit=crop",
-          current_price: 79.90,
-          old_price: 159.90,
-          rating: 4.8
-        },
-        {
-          product_name: "Blusa Moletom Masculina Estampa Streetwear com Capuz",
-          original_url: "https://shein.com.br/product-moletom-capuz",
-          image_url: "https://images.unsplash.com/photo-1556821840-3a63f95609a7?w=500&auto=format&fit=crop",
-          current_price: 89.90,
-          old_price: 189.90,
-          rating: 4.7
-        },
-        {
-          product_name: "Bolsa Transversal Couro Sintético com Alça Ajustável",
-          original_url: "https://shein.com.br/product-bolsa-transversal",
-          image_url: "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=500&auto=format&fit=crop",
-          current_price: 54.90,
-          old_price: 110.00,
-          rating: 4.9
-        }
-      ].slice(0, limit);
+      scrapedProducts = await fetchSheinTrendingProducts(limit);
     } else if (source === "Magalu") {
-      // Mock realista de tendências do Magalu
-      scrapedProducts = [
-        {
-          product_name: "Fritadeira Elétrica sem Óleo Air Fryer Mondial",
-          original_url: "https://www.magazineluiza.com.br/fritadeira-eletrica-sem-oleo-air-fryer-mondial/p/12345/ud/frel",
-          image_url: "https://images.unsplash.com/photo-1628840042765-356cda07504e?w=500&auto=format&fit=crop",
-          current_price: 349.90,
-          old_price: 599.90,
-          rating: 4.8
-        },
-        {
-          product_name: "Smart TV 50\" 4K UHD LED Samsung",
-          original_url: "https://www.magazineluiza.com.br/smart-tv-50-4k/p/67890/et/tv4k",
-          image_url: "https://images.unsplash.com/photo-1593305841991-05c297ba4575?w=500&auto=format&fit=crop",
-          current_price: 2199.00,
-          old_price: 2899.00,
-          rating: 4.9
-        },
-        {
-          product_name: "Smartphone Samsung Galaxy A54 5G 128GB",
-          original_url: "https://www.magazineluiza.com.br/smartphone-samsung/p/11223/te/ga54",
-          image_url: "https://images.unsplash.com/photo-1610945264803-c22b6272faa0?w=500&auto=format&fit=crop",
-          current_price: 1599.00,
-          old_price: 2199.00,
-          rating: 4.7
-        }
-      ].slice(0, limit);
+      scrapedProducts = await fetchMagaluTrendingProducts(limit);
     } else if (source === "Amazon") {
       scrapedProducts = await fetchAmazonTrendingProducts(limit);
     }
 
     for (const product of scrapedProducts) {
-      // Verificar se este produto já foi cadastrado antes
+      // Processamento de URL de Afiliado para as respectivas plataformas ANTES da busca de duplicados
+      let finalUrl = product.original_url;
+      if (source === "Mercado Livre") {
+        finalUrl = mlClient.generateAffiliateLink(product.original_url, userId);
+      } else if (source === "Magalu") {
+        const magaluId = process.env.MAGALU_PARTNER_ID || "";
+        if (magaluId) {
+          try {
+            const urlObj = new URL(product.original_url);
+            urlObj.hostname = "www.magazinevoce.com.br";
+            urlObj.pathname = `/${magaluId}${urlObj.pathname}`;
+            finalUrl = urlObj.toString();
+          } catch (e) {}
+        }
+      } else if (source === "Amazon") {
+        const amazonTag = process.env.AMAZON_PARTNER_TAG || "";
+        if (amazonTag) {
+          try {
+            const urlObj = new URL(product.original_url);
+            urlObj.searchParams.set("tag", amazonTag);
+            finalUrl = urlObj.toString();
+          } catch (e) {}
+        }
+      }
+
+      // Verificar se este produto já foi cadastrado antes (usando o finalUrl)
       const { data: existingOffer } = await supabase
         .from("offers")
-        .select("id")
-        .eq("original_url", product.original_url)
+        .select("id, current_price, old_price, score, status")
+        .eq("original_url", finalUrl)
         .eq("user_id", userId)
         .maybeSingle();
-
-      if (existingOffer) {
-        continue; // Pula se já existe
-      }
 
       let platformValue = source;
       let notesValue = `Importado automaticamente via Robô de Tendências (${source}).`;
@@ -760,8 +1211,57 @@ export async function discoverAndIngestTrendingOffers(
         current_price: product.current_price,
         old_price: product.old_price,
         rating: product.rating,
-        category: "Geral" // O bot de tendencias n traz categoria ainda
+        category: "Geral"
       });
+
+      if (existingOffer) {
+        // Lógica inteligente de duplicidade: se mudou preço, desconto ou score, atualiza e marca como draft
+        const priceChanged = Number(existingOffer.current_price) !== product.current_price;
+        const oldPriceChanged = Number(existingOffer.old_price) !== (product.old_price || null);
+        const scoreChanged = Number(existingOffer.score) !== curation.score;
+
+        if (priceChanged || oldPriceChanged || scoreChanged) {
+          console.log(`[SCRAPER][${source.toUpperCase()}][TRENDS] Atualizando oferta existente ${existingOffer.id} devido a mudança nos dados.`);
+          const updateNotes = `Atualizado via Robô de Tendências (${source}). Preço anterior: R$ ${existingOffer.current_price} -> Novo: R$ ${product.current_price}.`;
+
+          const { data: updatedOffer, error: updateError } = await supabase
+            .from("offers")
+            .update({
+              product_name: product.product_name,
+              image_url: product.image_url,
+              current_price: product.current_price,
+              old_price: product.old_price,
+              rating: product.rating,
+              score: curation.score,
+              legacy_score: curation.legacy_score,
+              new_score: curation.new_score,
+              explainability: curation.explainability,
+              status: "draft", // reseta para draft se mudou preço/dados
+              notes: updateNotes,
+              updated_at: new Date().toISOString()
+            })
+            .eq("id", existingOffer.id)
+            .select("*")
+            .maybeSingle();
+
+          if (!updateError && updatedOffer) {
+            ingestedOffers.push(updatedOffer as Offer);
+            updateMetrics(source, "found", 1);
+          } else if (updateError) {
+            console.error(`[SCRAPER][${source.toUpperCase()}][TRENDS] Erro ao atualizar oferta ${existingOffer.id}: ${updateError.message}`);
+            updateMetrics(source, "failures", 1);
+          }
+        } else {
+          // Apenas atualiza a data de detecção nas tendências sem alterar dados ou status
+          console.log(`[SCRAPER][${source.toUpperCase()}][TRENDS] Oferta existente ${existingOffer.id} sem alterações. Ignorando re-ingestão.`);
+          updateMetrics(source, "discarded", 1);
+          await supabase
+            .from("offers")
+            .update({ updated_at: new Date().toISOString() })
+            .eq("id", existingOffer.id);
+        }
+        continue; // Segue para o próximo produto
+      }
 
       if (source === "Shein") {
         // Tenta salvar como Shein no banco. Se a constraint rejeitar, o erro será capturado e inserido como "Outro".
@@ -771,7 +1271,7 @@ export async function discoverAndIngestTrendingOffers(
             user_id: userId,
             platform: "Shein",
             product_name: product.product_name,
-            original_url: product.original_url,
+            original_url: finalUrl,
             image_url: product.image_url,
             current_price: product.current_price,
             old_price: product.old_price,
@@ -788,41 +1288,11 @@ export async function discoverAndIngestTrendingOffers(
 
         if (!insertError && newOffer) {
           ingestedOffers.push(newOffer as Offer);
+          updateMetrics(source, "found", 1);
           continue;
         } else {
           platformValue = "Outro";
           notesValue = `Plataforma original: Shein. ${notesValue}`;
-        }
-      }
-
-      // Processamento de URL de Afiliado para Mercado Livre e Magalu
-      let finalUrl = product.original_url;
-      if (source === "Mercado Livre") {
-        finalUrl = mlClient.generateAffiliateLink(product.original_url, userId);
-      } else if (source === "Magalu") {
-        // Formata link do Magalu com a credencial
-        const magaluId = process.env.MAGALU_PARTNER_ID || "";
-        if (magaluId) {
-          try {
-            const urlObj = new URL(product.original_url);
-            // Substitui o path inicial para usar o magazine afiliado
-            urlObj.hostname = "www.magazinevoce.com.br";
-            urlObj.pathname = `/${magaluId}${urlObj.pathname}`;
-            finalUrl = urlObj.toString();
-          } catch (e) {
-            // Falha silenciosa no URL parser
-          }
-        }
-      } else if (source === "Amazon") {
-        const amazonTag = process.env.AMAZON_PARTNER_TAG || "";
-        if (amazonTag) {
-          try {
-            const urlObj = new URL(product.original_url);
-            urlObj.searchParams.set("tag", amazonTag);
-            finalUrl = urlObj.toString();
-          } catch (e) {
-            // Falha silenciosa
-          }
         }
       }
 
@@ -849,15 +1319,36 @@ export async function discoverAndIngestTrendingOffers(
         .maybeSingle();
 
       if (insertError) {
-        console.error(`Erro ao salvar oferta raspada no banco (${source}): ${insertError.message}`);
+        console.error(`[SCRAPER][${source.toUpperCase()}][TRENDS] Erro ao salvar oferta no banco: ${insertError.message}`);
+        updateMetrics(source, "failures", 1);
         continue;
       }
 
       if (newOffer) {
         ingestedOffers.push(newOffer as Offer);
+        updateMetrics(source, "found", 1);
       }
     }
   }
 
+  // Registra as estatísticas agregadas na tabela integration_logs para observabilidade avançada
+  try {
+    await supabase.from("integration_logs").insert({
+      user_id: userId,
+      integration: "Robô de Tendências",
+      action: "Ingestão Completa",
+      status: "success",
+      message: `Descoberta e ingestão executadas para fontes: ${sources.join(", ")}. Ingeridas/atualizadas: ${ingestedOffers.length} ofertas.`,
+      metadata: {
+        sources,
+        metrics: scraperMetrics,
+        ingested_count: ingestedOffers.length
+      }
+    });
+  } catch (metricsError) {
+    console.error("[SCRAPER][TRENDS] Falha ao registrar log de integração:", metricsError);
+  }
+
+  console.log(`[SCRAPER][TRENDS] Descobrimento concluído. Ofertas ingeridas/atualizadas nesta rodada: ${ingestedOffers.length}`);
   return ingestedOffers;
 }
