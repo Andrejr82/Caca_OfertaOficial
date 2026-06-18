@@ -160,7 +160,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
       <div className="relative aspect-square w-full rounded-md border border-moss/10 bg-paper overflow-hidden flex items-center justify-center">
         {post.offers.image_url ? (
           <img 
-            src={`/api/img?url=${encodeURIComponent(post.offers.image_url)}`} 
+            src={post.offers.image_url} referrerPolicy="no-referrer"
             alt={post.offers.product_name} 
             className="object-contain w-full h-full p-2"
           />

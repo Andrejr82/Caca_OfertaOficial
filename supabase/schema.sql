@@ -224,3 +224,15 @@ begin
       using (bucket_id = 'offer-images' and auth.uid()::text = (storage.foldername(name))[1]);
   end if;
 end $$;
+
+create table if not exists public.ai_copy_logs (
+    id uuid default gen_random_uuid() primary key,
+    offer_id uuid references public.offers(id) on delete cascade,
+    user_id uuid references auth.users(id) on delete cascade,
+    winner_strategy text,
+    score numeric,
+    model text,
+    created_at timestamptz default now()
+);
+
+alter table public.ai_copy_logs enable row level security;
