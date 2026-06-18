@@ -1448,9 +1448,10 @@ export async function discoverAndIngestTrendingOffers(
 
   let activeCategorySearch = categorySearchQuery;
   if (!activeCategorySearch || activeCategorySearch === "Geral") {
-    // Quando 'Geral' é selecionado, busca na página principal de mais vendidos em vez de sortear uma categoria
-    activeCategorySearch = "";
-    console.log(`[SCRAPER][TRENDS] Busca Geral (Todas as categorias principais)`);
+    // Sorteio de Categoria (Roleta Aleatória)
+    const randomIndex = Math.floor(Math.random() * MAIN_CATEGORY_NAMES.length);
+    activeCategorySearch = MAIN_CATEGORY_NAMES[randomIndex];
+    console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória: Categoria sorteada -> ${activeCategorySearch}`);
   }
 
   const ingestedOffers: Offer[] = [];

@@ -20,6 +20,7 @@ export async function POST(request: Request) {
     // Lê limite de itens e fontes opcionais do corpo da requisição
     let limit = 5;
     let sources = ["Mercado Livre"];
+    let category = "Geral";
     try {
       const body = await request.json();
       if (body) {
@@ -29,13 +30,16 @@ export async function POST(request: Request) {
         if (Array.isArray(body.sources)) {
           sources = body.sources;
         }
+        if (typeof body.category === "string") {
+          category = body.category;
+        }
       }
     } catch {
       // Ignora erro se não houver corpo na requisição
     }
 
     // Executa o robô de descoberta
-    const offers = await discoverAndIngestTrendingOffers(limit, sources);
+    const offers = await discoverAndIngestTrendingOffers(limit, sources, undefined, category);
 
     // Filtra e ordena comercialmente usando o Curation V2 (Cold Ranking + Quality Gate >= 5.0)
     const rankedOffers = await rankOffersBatch(offers);
