@@ -357,7 +357,10 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
         body: JSON.stringify({
           url: targetUrl,
           formats: ["extract"],
-          waitFor: 3000,
+          waitFor: 5000,
+          mobile: true,
+          proxy: "stealth",
+          blockAds: true,
           extract: {
             prompt: promptText,
             schema: {
@@ -433,7 +436,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
           "Authorization": `Bearer ${firecrawlKey}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ url, formats: ["html"], waitFor: 3000 })
+        body: JSON.stringify({ url, formats: ["html"], waitFor: 5000, mobile: true, proxy: "stealth", blockAds: true })
       });
 
       if (!fcResponse.ok) {
@@ -550,7 +553,7 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
           "Authorization": `Bearer ${firecrawlKey}`,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({ url: productUrl, formats: ["html"] })
+        body: JSON.stringify({ url: productUrl, formats: ["html"], waitFor: 3000, mobile: true, proxy: "stealth", blockAds: true })
       });
 
       if (!fcResponse.ok) {
@@ -678,6 +681,10 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
             body: JSON.stringify({ 
               url: productUrl, 
               formats: ["extract"],
+              waitFor: 4000,
+              mobile: true,
+              proxy: "stealth",
+              blockAds: true,
               extract: {
                 prompt: "Extraia o nome do produto, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.",
                 schema: {
