@@ -1324,57 +1324,76 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
       : `Extraia os top ${limit} produtos em destaque nesta página da Amazon Brasil. Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto, o preço atual como número (ex: 299.00) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`;
 
     for (const url of urls) {
-      try {
-        console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL: ${url}`);
-        const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${firecrawlKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            url,
-            formats: ["extract"],
-            waitFor: 5000,
-            extract: {
-              prompt: promptText,
-              schema: {
-                type: "object",
-                properties: {
-                  products: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string" },
-                        url: { type: "string" },
-                        image: { type: "string" },
-                        price: { type: "number" },
-                        old_price: { type: "number", nullable: true },
-                        category: { type: "string" }
-                      },
-                      required: ["title", "url", "price"]
+      let retries = 3;
+      let delay = 1500;
+      let fcData = null;
+
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL (Tentativa ${attempt}): ${url}`);
+          const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${firecrawlKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ 
+              url,
+              formats: ["extract"],
+              waitFor: 5000,
+              timeout: 60000,
+              extract: {
+                prompt: promptText,
+                schema: {
+                  type: "object",
+                  properties: {
+                    products: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          title: { type: "string" },
+                          url: { type: "string" },
+                          image: { type: "string" },
+                          price: { type: "number" },
+                          old_price: { type: "number", nullable: true },
+                          category: { type: "string" }
+                        },
+                        required: ["title", "url", "price"]
+                      }
                     }
-                  }
-                },
-                required: ["products"]
+                  },
+                  required: ["products"]
+                }
               }
+            }),
+            signal: AbortSignal.timeout(65000)
+          });
+        
+          if (!fcResponse.ok) {
+            console.warn(`[SCRAPER][AMAZON][TRENDS] Firecrawl retornou status ${fcResponse.status} para ${url}`);
+            if (fcResponse.status === 408 || fcResponse.status === 401 || fcResponse.status === 403 || fcResponse.status === 500 || fcResponse.status === 429) {
+              throw new Error(`HTTP Status ${fcResponse.status}`);
             }
-          })
-        });
-      
-        if (!fcResponse.ok) {
-          console.warn(`[SCRAPER][AMAZON][TRENDS] Firecrawl retornou status ${fcResponse.status} para ${url}`);
-          continue;
-        }
+            break; // Se não for um erro de antibot/timeout/limite, interrompe os retries para esta URL
+          }
 
-        const fcData = await fcResponse.json();
-        console.log(`[SCRAPER][AMAZON][TRENDS] Firecrawl success=${fcData.success}, products=${fcData.data?.extract?.products?.length ?? 0}`);
-
-        if (!fcData.success || !fcData.data?.extract?.products?.length) {
-          console.warn(`[SCRAPER][AMAZON][TRENDS] Sem produtos extraídos de ${url}. Tentando próxima URL...`);
-          continue;
+          fcData = await fcResponse.json();
+          console.log(`[SCRAPER][AMAZON][TRENDS] Firecrawl success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
+          break;
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error);
+          console.warn(`[SCRAPER][AMAZON][TRENDS] Tentativa ${attempt} falhou: ${msg}`);
+          if (attempt === retries) break;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
         }
+      }
+
+      if (!fcData || !fcData.success || !fcData.data?.extract?.products?.length) {
+        console.warn(`[SCRAPER][AMAZON][TRENDS] Sem produtos extraídos de ${url}. Tentando próxima URL...`);
+        continue;
+      }
 
         const products = fcData.data.extract.products
           .filter((p: any) => {
@@ -1403,10 +1422,6 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
           console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso: ${products.length} tendências encontradas via ${url}.`);
           return products;
         }
-      } catch (urlError) {
-        const msg = urlError instanceof Error ? urlError.message : String(urlError);
-        console.warn(`[SCRAPER][AMAZON][TRENDS] Erro na URL ${url}: ${msg}`);
-      }
     }
 
     console.warn("[SCRAPER][AMAZON][TRENDS] Nenhuma URL retornou produtos.");
