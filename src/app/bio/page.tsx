@@ -55,9 +55,6 @@ export default async function BioPage({
 
     if (targetUserId) {
       query = query.eq("user_id", targetUserId);
-    } else {
-      // Isolamento de segurança: se não for informado um userId, retorna vazio para evitar vazamento
-      query = query.eq("user_id", "00000000-0000-0000-0000-000000000000");
     }
 
     const { data, error } = await query;
