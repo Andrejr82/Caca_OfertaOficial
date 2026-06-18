@@ -59,7 +59,12 @@ export class WhatsAppService {
       });
 
       if (!response.ok) {
-        throw new Error(`Engine falhou com status HTTP ${response.status}`);
+        let errorMsg = `Engine falhou com status HTTP ${response.status}`;
+        try {
+          const errData = await response.json();
+          if (errData.message) errorMsg = `Engine: ${errData.message}`;
+        } catch (e) {}
+        throw new Error(errorMsg);
       }
 
       const data = await response.json();
