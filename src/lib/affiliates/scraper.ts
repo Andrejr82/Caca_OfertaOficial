@@ -56,11 +56,7 @@ function enhanceImageUrl(url: string | null): string | null {
     enhanced = "https:" + enhanced;
   }
 
-  // Mercado Livre: Força JPEG e imagem de alta resolução (-O)
-  if (enhanced.includes("mlstatic.com")) {
-    enhanced = enhanced.replace(/\.webp$/i, ".jpg");
-    enhanced = enhanced.replace(/-[a-zA-Z]\.jpg$/i, "-O.jpg");
-  }
+  // Removida a substituição de formato -O.jpg do ML, pois algumas imagens recentes da CDN retornam 404 (Broken Image) se a tag alta resolução não existir. Usamos a URL extraída originalmente.
 
   // Magalu: Remove as dimensões fixas baixas da URL para pegar a original
   if (enhanced.includes("mlcdn.com.br")) {
