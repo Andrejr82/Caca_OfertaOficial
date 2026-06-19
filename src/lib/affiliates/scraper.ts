@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Offer } from "@/types/domain";
-import { mlClient } from "@/lib/integrations/mercadolivre/client";
+import { generateMLAffiliateLink } from "@/lib/platforms/mercadolivre";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
 import { normalizeCategory, MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
 
@@ -357,7 +357,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
         body: JSON.stringify({
           url: targetUrl,
           formats: ["extract"],
-          waitFor: 5000,
+          waitFor: 1000,
           mobile: true,
           proxy: "stealth",
           blockAds: true,
@@ -1490,7 +1490,7 @@ export async function discoverAndIngestTrendingOffers(
       // Processamento de URL de Afiliado para as respectivas plataformas ANTES da busca de duplicados
       let finalUrl = product.original_url;
       if (source === "Mercado Livre") {
-        finalUrl = mlClient.generateAffiliateLink(product.original_url, userId);
+        finalUrl = generateMLAffiliateLink(product.original_url, userId);
       } else if (source === "Magalu") {
         const magaluId = process.env.MAGALU_PARTNER_ID || "";
         if (magaluId) {
