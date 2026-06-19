@@ -24,7 +24,7 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
 
   // 1. Scraping do link
   const startScrapeTime = Date.now();
-  const metadata = await fetchLinkMetadata(affiliateUrl);
+  const metadata = await fetchLinkMetadata(affiliateUrl, userId);
   const processingTimeMs = Date.now() - startScrapeTime;
 
   // Quality Gate Avaliação Flexível
@@ -97,15 +97,22 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   const utmMedium = "social";
   const utmCampaign = "caca_oferta_express";
   
+  // Se for Mercado Livre, injeta parâmetros de afiliado
+  let finalAffiliateUrl = affiliateUrl;
+  if (metadata.platform === "Mercado Livre") {
+    const { generateMLAffiliateLink } = await import("@/lib/platforms/mercadolivre");
+    finalAffiliateUrl = generateMLAffiliateLink(metadata.finalUrl || affiliateUrl, userId);
+  }
+
   const subId = createSubId(channel, newOffer.product_name, newOffer.id);
-  const trackedUrl = createTrackedUrl(affiliateUrl, subId, utmSource, utmMedium, utmCampaign);
+  const trackedUrl = createTrackedUrl(finalAffiliateUrl, subId, utmSource, utmMedium, utmCampaign);
 
   const { error: linkError } = await supabase.from("affiliate_links").upsert(
     {
       user_id: userId,
       offer_id: newOffer.id,
       channel,
-      original_url: affiliateUrl,
+      original_url: finalAffiliateUrl,
       tracked_url: trackedUrl,
       sub_id: subId
     },
@@ -120,9 +127,9 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   // Na Publish Express, queremos o post especificamente para 1 canal ou pra todos? 
   // O ideal é a IA gerar pra todos, pois ela já retorna o JSON completo.
   const aiLinks = {
-    telegram: channel === "telegram" ? trackedUrl : createTrackedUrl(affiliateUrl, createSubId("telegram", newOffer.product_name, newOffer.id), "telegram", utmMedium, utmCampaign),
-    instagram: channel === "instagram" ? trackedUrl : createTrackedUrl(affiliateUrl, createSubId("instagram", newOffer.product_name, newOffer.id), "instagram", utmMedium, utmCampaign),
-    whatsapp: channel === "whatsapp" ? trackedUrl : createTrackedUrl(affiliateUrl, createSubId("whatsapp", newOffer.product_name, newOffer.id), "whatsapp", utmMedium, utmCampaign),
+    telegram: channel === "telegram" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("telegram", newOffer.product_name, newOffer.id), "telegram", utmMedium, utmCampaign),
+    instagram: channel === "instagram" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("instagram", newOffer.product_name, newOffer.id), "instagram", utmMedium, utmCampaign),
+    whatsapp: channel === "whatsapp" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("whatsapp", newOffer.product_name, newOffer.id), "whatsapp", utmMedium, utmCampaign),
   };
 
   // 4. Invocar a IA (Groq / Gemini via fallback ou integração)

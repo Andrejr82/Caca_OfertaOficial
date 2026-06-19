@@ -107,14 +107,21 @@ export async function generateAffiliateLinkAction(
     offer = fetchedOffer;
   }
 
+  // Se for Mercado Livre, injeta parâmetros de afiliado
+  let finalAffiliateUrl = affiliateUrl;
+  if (offer.platform === "Mercado Livre") {
+    const { generateMLAffiliateLink } = await import("@/lib/platforms/mercadolivre");
+    finalAffiliateUrl = generateMLAffiliateLink(affiliateUrl, userId);
+  }
+
   const subId = createSubId(channel, offer.product_name, offer.id);
-  const trackedUrl = createTrackedUrl(affiliateUrl, subId, utmSource, utmMedium, utmCampaign);
+  const trackedUrl = createTrackedUrl(finalAffiliateUrl, subId, utmSource, utmMedium, utmCampaign);
   const { error } = await supabase.from("affiliate_links").upsert(
     {
       user_id: userId,
       offer_id: offer.id,
       channel,
-      original_url: affiliateUrl,
+      original_url: finalAffiliateUrl,
       tracked_url: trackedUrl,
       sub_id: subId
     },

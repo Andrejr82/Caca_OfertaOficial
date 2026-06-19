@@ -1,39 +1,31 @@
-# Security
+# Segurança
 
-## Env Local
+Práticas de segurança adotadas para proteger a infraestrutura e a plataforma Caça Oferta Oficial.
 
-Use `.env.local`. Nunca versionar `.env.local`, `.env` ou arquivos de produção.
+## Supabase RLS (Row Level Security)
 
-## Vercel Environment Variables
+Nenhum usuário pode ler ou modificar dados de outros usuários através do painel client-side. Todas as tabelas ativam proteção rígida ao nível da linha (`ENABLE ROW LEVEL SECURITY`). 
 
-Configure secrets no painel da Vercel. Não coloque tokens em código, README com valores reais ou logs.
+Exemplo de Política Aplicada (`schema.sql`):
+```sql
+create policy "offers select own" on public.offers for select using (auth.uid() = user_id);
+create policy "offers insert own" on public.offers for insert with check (auth.uid() = user_id);
+```
 
-## Supabase Auth
+## Gestão de Segredos e Chaves
 
-Use e-mail/senha no MVP. Configure URLs permitidas para localhost e produção.
+A plataforma adota o isolamento da Vercel para credenciais.
 
-## Supabase RLS
+1. **Nunca comite chaves:** O `.env.local` está no `.gitignore`.
+2. **Separação de Chaves Supabase:**
+   - O `NEXT_PUBLIC_SUPABASE_ANON_KEY` é repassado ao navegador para autenticação via Cookies / SSR.
+   - O `SUPABASE_SERVICE_ROLE_KEY` vive **exclusivamente** no lado Node.js, sendo usado nos arquivos de `src/lib/supabase/admin.ts`. Essa chave nunca deve ser enviada via JSON nas respostas de API.
 
-Execute `supabase/schema.sql`. Todas as tabelas privadas têm RLS e policies por `auth.uid()`.
+## Prevenção em APIs e Server Actions
 
-## Service Role
+- Todos os endpoints em `src/app/api/` executam autenticação mandatória via `createServerSupabaseClient()`. Se o objeto `user` não for validado contra a sessão real do banco, a API retorna erro `401 Unauthorized` imediatamente.
+- Todo payload (JSON body) nas Server Actions idealmente passa por Parsing via Zod para checar inferência de tipos em tempo de execução e prevenir Injeções baseadas em Objetos (NoSQL / JSON Injection no `explainability`).
 
-`SUPABASE_SERVICE_ROLE_KEY` é server-side only. Não usar no frontend. No MVP, preferir não usar.
-
-## Telegram Bot Token
-
-`TELEGRAM_BOT_TOKEN` fica apenas em env server-side. Se vazar, revogue no BotFather e gere outro.
-
-## Futuras APIs
-
-- Shopee, Instagram e WhatsApp devem usar APIs oficiais.
-- Não automatizar login.
-- Não usar WhatsApp Web automatizado.
-- Não contratar plano pago sem aprovação.
-
-## Rotação
-
-1. Revogue o token antigo.
-2. Configure o novo token em `.env.local` e na Vercel.
-3. Rode `npm run security:check`.
-4. Faça novo deploy.
+## Infraestrutura do Scraper e WhatsApp
+- Scripts autônomos (`whatsapp-engine.cjs`) se baseiam na verificação mútua de Hash nos cookies e nos tokens para evitar roubo de sessão. 
+- Acesso à API de Copy (Groq) ocorre restritamente no Servidor para evitar vazamento da API Key de pagamento e prevenir manipulação de prompts (Prompt Injection) por parte de usuários mal-intencionados.

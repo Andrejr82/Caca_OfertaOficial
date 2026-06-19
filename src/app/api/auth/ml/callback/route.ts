@@ -59,21 +59,36 @@ export async function GET(req: NextRequest) {
     const systemUserId = userData?.user?.id;
 
     if (!systemUserId) {
-      console.warn("[ML OAuth] Usuário do sistema não logado. O token será salvo apenas se o backend suportar associação por cookies ou se for global.");
-      // Se precisarmos do token global, podemos salvá-lo em uma tabela de configurações.
-      // Por enquanto, apenas registramos o sucesso.
-      console.log(`[ML OAuth] Token obtido para ML User: ${user_id}`);
-    } else {
-      // Futuro: Salvar os tokens na tabela affiliate_settings
-      // await supabase.from('affiliate_settings').upsert({
-      //   user_id: systemUserId,
-      //   platform: 'Mercado Livre',
-      //   access_token,
-      //   refresh_token,
-      //   expires_at: new Date(Date.now() + expires_in * 1000).toISOString()
-      // });
-      console.log(`[ML OAuth] Token salvo para o usuário do sistema: ${systemUserId}`);
+      console.warn("[ML OAuth] Usuário do sistema não logado no callback.");
+      return NextResponse.redirect(new URL("/dashboard?error=ml_no_session", req.url));
     }
+
+    const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
+    const { error: upsertError } = await supabase
+      .from("app_settings")
+      .upsert(
+        {
+          user_id: systemUserId,
+          key: "ml_credentials",
+          value: {
+            access_token,
+            refresh_token,
+            expires_at: expiresAt,
+            ml_user_id: user_id
+          },
+          updated_at: new Date().toISOString()
+        },
+        {
+          onConflict: "user_id,key"
+        }
+      );
+
+    if (upsertError) {
+      console.error("[ML OAuth] Erro ao salvar credenciais no banco:", upsertError);
+      return NextResponse.redirect(new URL("/dashboard?error=ml_save_failed", req.url));
+    }
+
+    console.log(`[ML OAuth] Token salvo com sucesso para o usuário: ${systemUserId}`);
 
     return NextResponse.redirect(new URL("/dashboard?success=ml_connected", req.url));
   } catch (err) {

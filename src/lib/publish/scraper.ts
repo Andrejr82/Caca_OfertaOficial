@@ -36,7 +36,7 @@ async function resolveFinalUrl(urlStr: string): Promise<string> {
   }
 }
 
-export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
+export async function fetchLinkMetadata(url: string, userId?: string): Promise<LinkMetadata> {
   let title = "Oferta Especial";
   let imageUrl: string | undefined;
   let finalUrl = url;
@@ -59,6 +59,21 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
   else if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu")) platform = "Magalu";
   else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml") || lowerUrl.includes("meli.la")) platform = "Mercado Livre";
   else if (lowerUrl.includes("shein")) platform = "Shein";
+
+  // Se a plataforma for Mercado Livre, tenta obter pela API oficial
+  if (platform === "Mercado Livre") {
+    try {
+      const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
+      const mlMetadata = await fetchMLProductDetails(finalUrl, userId);
+      if (mlMetadata) {
+        logger.info("Extração via Mercado Livre API realizada com sucesso", { finalUrl });
+        return mlMetadata;
+      }
+      logger.warn("Falha ao extrair dados via API do Mercado Livre, caindo de volta para Firecrawl/Scraper.");
+    } catch (err) {
+      logger.error("Erro ao chamar API do Mercado Livre no fetchLinkMetadata:", err);
+    }
+  }
 
   const firecrawlKey = process.env.FIRECRAWL_API_KEY;
 
