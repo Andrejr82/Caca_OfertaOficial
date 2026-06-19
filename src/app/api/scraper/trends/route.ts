@@ -3,6 +3,8 @@ import { discoverAndIngestTrendingOffers } from "@/lib/affiliates/scraper";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { rankOffersBatch } from "@/lib/offers/curation-engine";
 
+export const maxDuration = 60; // Limite de 60s para Vercel Serverless (útil para Pro/Enterprise ou evitar corte abrupto antes da resposta)
+
 export async function POST(request: Request) {
   try {
     const supabase = await createServerSupabaseClient();
@@ -66,9 +68,17 @@ export async function POST(request: Request) {
       }
     }
 
+    let debugInfo = "";
+    if (offers.length === 0) {
+      const hasFirecrawl = !!process.env.FIRECRAWL_API_KEY;
+      const hasML = !!process.env.MERCADO_LIVRE_CLIENT_SECRET;
+      const hasAdmitad = !!process.env.ADMITAD_CLIENT_SECRET;
+      debugInfo = ` [DEBUG VERCEL] Chaves carregadas na nuvem: Firecrawl: ${hasFirecrawl ? 'SIM' : 'NÃO'} | ML: ${hasML ? 'SIM' : 'NÃO'} | Admitad: ${hasAdmitad ? 'SIM' : 'NÃO'} | URL: ${process.env.NEXT_PUBLIC_SITE_URL || 'N/A'}`;
+    }
+
     return NextResponse.json({
       ok: true,
-      message: `Robô concluído. ${offers.length} novas ofertas de tendências foram importadas.`,
+      message: `Robô concluído. ${offers.length} novas ofertas de tendências foram importadas.${debugInfo}`,
       count: offers.length,
       offers
     });
