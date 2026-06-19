@@ -1336,7 +1336,7 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
             body: JSON.stringify({ 
               url,
               formats: ["extract"],
-              waitFor: 5000,
+              waitFor: 1000,
               timeout: 60000,
               extract: {
                 prompt: promptText,
