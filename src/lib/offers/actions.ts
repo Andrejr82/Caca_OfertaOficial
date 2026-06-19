@@ -107,11 +107,14 @@ export async function generateAffiliateLinkAction(
     offer = fetchedOffer;
   }
 
-  // Se for Mercado Livre, injeta parâmetros de afiliado
+  // Injeta parâmetros de afiliado oficiais (Mercado Livre e Shein)
   let finalAffiliateUrl = affiliateUrl;
   if (offer.platform === "Mercado Livre") {
     const { generateMLAffiliateLink } = await import("@/lib/platforms/mercadolivre");
     finalAffiliateUrl = generateMLAffiliateLink(affiliateUrl, userId);
+  } else if (offer.platform === "Shein") {
+    const { generateSheinAffiliateLink } = await import("@/lib/platforms/shein");
+    finalAffiliateUrl = await generateSheinAffiliateLink(affiliateUrl, userId);
   }
 
   const subId = createSubId(channel, offer.product_name, offer.id);

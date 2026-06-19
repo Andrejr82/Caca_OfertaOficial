@@ -97,11 +97,14 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   const utmMedium = "social";
   const utmCampaign = "caca_oferta_express";
   
-  // Se for Mercado Livre, injeta parâmetros de afiliado
+  // Injeta parâmetros de afiliado oficiais (Mercado Livre e Shein)
   let finalAffiliateUrl = affiliateUrl;
   if (metadata.platform === "Mercado Livre") {
     const { generateMLAffiliateLink } = await import("@/lib/platforms/mercadolivre");
     finalAffiliateUrl = generateMLAffiliateLink(metadata.finalUrl || affiliateUrl, userId);
+  } else if (metadata.platform === "Shein") {
+    const { generateSheinAffiliateLink } = await import("@/lib/platforms/shein");
+    finalAffiliateUrl = await generateSheinAffiliateLink(metadata.finalUrl || affiliateUrl, userId);
   }
 
   const subId = createSubId(channel, newOffer.product_name, newOffer.id);

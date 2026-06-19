@@ -72,8 +72,8 @@ export async function POST(request: Request) {
     if (offers.length === 0) {
       const hasFirecrawl = !!process.env.FIRECRAWL_API_KEY;
       const hasML = !!process.env.MERCADO_LIVRE_CLIENT_SECRET;
-      const hasAdmitad = !!process.env.ADMITAD_CLIENT_SECRET;
-      debugInfo = ` [DEBUG VERCEL] Chaves carregadas na nuvem: Firecrawl: ${hasFirecrawl ? 'SIM' : 'NÃO'} | ML: ${hasML ? 'SIM' : 'NÃO'} | Admitad: ${hasAdmitad ? 'SIM' : 'NÃO'} | URL: ${process.env.NEXT_PUBLIC_SITE_URL || 'N/A'}`;
+      const hasSupa = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+      debugInfo = ` [RAIO-X VERCEL] Firecrawl=${hasFirecrawl ? 'OK' : 'FALTA'} | ML=${hasML ? 'OK' : 'FALTA'} | Supabase=${hasSupa ? 'OK' : 'FALTA'} | URL=${process.env.NEXT_PUBLIC_SITE_URL ? 'OK' : 'FALTA'}`;
     }
 
     return NextResponse.json({
