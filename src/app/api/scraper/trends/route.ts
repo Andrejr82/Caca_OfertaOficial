@@ -3,7 +3,7 @@ import { discoverAndIngestTrendingOffers } from "@/lib/affiliates/scraper";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { rankOffersBatch } from "@/lib/offers/curation-engine";
 
-export const maxDuration = 60; // Limite de 60s para Vercel Serverless (útil para Pro/Enterprise ou evitar corte abrupto antes da resposta)
+export const maxDuration = 300; // Limite de 5 minutos para Vercel Pro (Evita o Timeout 504 no scraping pesado)
 
 export async function POST(request: Request) {
   try {
