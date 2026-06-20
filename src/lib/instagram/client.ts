@@ -120,7 +120,17 @@ export async function publishToInstagram(imageUrl: string, caption: string): Pro
 
   // ─── Etapa 1: Criar o Container de Mídia ───
   console.log("[Instagram] Etapa 1: Criando container de mídia...");
-  console.log("[Instagram] Image URL:", imageUrl.slice(0, 120));
+  
+  // O Instagram rejeita imagens muito altas (fora da proporção 4:5 a 1.91:1).
+  // Para contornar, usamos nossa própria API (Next.js na Vercel) com a biblioteca Sharp,
+  // que converte qualquer imagem num quadrado perfeito (1080x1080) com fundo branco.
+  // Usamos o domínio de produção absoluto para garantir que a Meta consiga enxergar a imagem
+  // mesmo quando estamos testando e clicando em "Publicar" rodando em Localhost.
+  const appDomain = process.env.NEXT_PUBLIC_APP_URL || "https://caca-oferta-oficial.vercel.app";
+  const safeImageUrl = `${appDomain}/api/images/proxy?url=${encodeURIComponent(imageUrl)}`;
+
+  console.log("[Instagram] Image URL original:", imageUrl.slice(0, 120));
+  console.log("[Instagram] Image URL processada (1:1):", safeImageUrl);
 
   const mediaUrl = `${BASE_GRAPH_URL}/${businessAccountId}/media`;
   let mediaRes: Response;
@@ -129,7 +139,7 @@ export async function publishToInstagram(imageUrl: string, caption: string): Pro
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        image_url: imageUrl,
+        image_url: safeImageUrl,
         caption: caption,
         access_token: token,
       }),
