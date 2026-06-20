@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { publishToFacebook } from "@/lib/platforms/facebook";
 import { logger } from "@/lib/utils/logger";
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createClient();
+    const supabase = await createServerSupabaseClient();
+    if (!supabase) {
+      return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
+    }
     const {
       data: { user },
     } = await supabase.auth.getUser();
