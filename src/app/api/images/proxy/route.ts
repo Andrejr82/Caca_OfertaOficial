@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+// @ts-ignore - O Sharp v0.35 possui um conflito conhecido de tipagem com algumas versões do TypeScript
 import sharp from "sharp";
 
 export const maxDuration = 60; // Limite padrão da Vercel Hobby
