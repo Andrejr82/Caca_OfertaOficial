@@ -22,3 +22,10 @@ export function hasAmazonCreatorsEnv() {
     process.env.AMAZON_PARTNER_TAG
   );
 }
+
+export function hasFacebookEnv() {
+  return Boolean(
+    process.env.FACEBOOK_PAGE_ID &&
+    process.env.FACEBOOK_ACCESS_TOKEN
+  );
+}

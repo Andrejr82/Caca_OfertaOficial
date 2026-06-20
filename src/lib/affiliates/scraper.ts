@@ -341,8 +341,8 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Firecrawl Extract (IA)...");
       const targetUrl = category ? `https://lista.mercadolivre.com.br/${encodeURIComponent(category.replace(/ /g, "-"))}` : "https://www.mercadolivre.com.br/mais-vendidos";
       const promptText = category
-        ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto lista.mercadolivre.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se tiver preço antigo riscado, traga também. IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como bebidas ou imagens de example/unsplash).`
-        : `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como bebidas ou imagens de example/unsplash).`;
+        ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto lista.mercadolivre.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se tiver preço antigo riscado, traga também. IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como imagens de example/unsplash).`
+        : `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como imagens de example/unsplash).`;
 
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
@@ -463,7 +463,10 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
     }
 
     // Detecta bloqueio/captcha
-    if (html.length < 5000 || html.includes("captcha") || html.includes("robot") || html.includes("tráfego suspeito")) {
+    const isSmall = html.length < 50000;
+    const hasBlockKeywords = html.includes("captcha") || html.includes("tráfego suspeito") || html.includes("verifique que você não é um robô");
+    
+    if (isSmall && hasBlockKeywords) {
       console.warn("[SCRAPER][MERCADO LIVRE][TRENDS] HTML parece ser captcha ou bloqueio. Abortando fallback HTML.");
       return [];
     }
@@ -1457,13 +1460,28 @@ export async function discoverAndIngestTrendingOffers(
     throw new Error("Supabase ou usuário não autenticado.");
   }
 
+  // Lista VIP do Modelo Pechinchou (Alta Conversão por Impulso)
+  const HIGH_CONVERSION_CATEGORIES = [
+    "Eletrodomésticos",
+    "Eletroportáteis",
+    "Telefonia",
+    "Televisão",
+    "Eletrônicos",
+    "Moda, Beleza e Perfumaria",
+    "Utilidades Domésticas"
+  ];
+
   let activeCategorySearch = categorySearchQuery;
   if (!activeCategorySearch || activeCategorySearch === "Geral") {
-    // Sorteio de Categoria (Roleta Aleatória)
-    const randomIndex = Math.floor(Math.random() * MAIN_CATEGORY_NAMES.length);
-    activeCategorySearch = MAIN_CATEGORY_NAMES[randomIndex];
-    console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória: Categoria sorteada -> ${activeCategorySearch}`);
+    // Sorteio de Categoria (Roleta Aleatória VIP)
+    const randomIndex = Math.floor(Math.random() * HIGH_CONVERSION_CATEGORIES.length);
+    activeCategorySearch = HIGH_CONVERSION_CATEGORIES[randomIndex];
+    console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória VIP: Categoria sorteada -> ${activeCategorySearch}`);
   }
+
+  // Over-fetching: Multiplicamos por 3 para garantir margem de sobra para o filtro de curadoria
+  const overFetchLimit = limit * 3;
+  console.log(`[SCRAPER][TRENDS] Over-fetching ativado: Solicitado ${limit}, Buscando até ${overFetchLimit} brutos.`);
 
   const ingestedOffers: Offer[] = [];
 
@@ -1471,15 +1489,15 @@ export async function discoverAndIngestTrendingOffers(
     let scrapedProducts: ScrapedProduct[] = [];
 
     if (source === "Mercado Livre") {
-      scrapedProducts = await fetchTrendingProductsFromLanding(limit, activeCategorySearch);
+      scrapedProducts = await fetchTrendingProductsFromLanding(overFetchLimit, activeCategorySearch);
     } else if (source === "Shopee") {
-      scrapedProducts = await fetchShopeeTrendingProducts(limit, activeCategorySearch);
+      scrapedProducts = await fetchShopeeTrendingProducts(overFetchLimit, activeCategorySearch);
     } else if (source === "Shein") {
-      scrapedProducts = await fetchSheinTrendingProducts(limit, activeCategorySearch);
+      scrapedProducts = await fetchSheinTrendingProducts(overFetchLimit, activeCategorySearch);
     } else if (source === "Magalu") {
-      scrapedProducts = await fetchMagaluTrendingProducts(limit, activeCategorySearch);
+      scrapedProducts = await fetchMagaluTrendingProducts(overFetchLimit, activeCategorySearch);
     } else if (source === "Amazon") {
-      scrapedProducts = await fetchAmazonTrendingProducts(limit, activeCategorySearch);
+      scrapedProducts = await fetchAmazonTrendingProducts(overFetchLimit, activeCategorySearch);
     }
 
     for (const product of scrapedProducts) {

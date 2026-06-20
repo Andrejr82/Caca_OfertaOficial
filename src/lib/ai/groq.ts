@@ -29,7 +29,7 @@ async function persistErrorLog(userId: string | null, action: string, error: any
       console.warn("[AI Service] Supabase Admin não configurado para persistência de logs de erro.");
       return;
     }
-    
+
     await supabase.from("integration_logs").insert({
       user_id: userId || "00000000-0000-0000-0000-000000000000",
       integration: "AI Service",
@@ -48,7 +48,49 @@ async function persistErrorLog(userId: string | null, action: string, error: any
 }
 
 /**
- * Interface unificada para invocar a Groq com Structured Outputs
+ * Motor Secundário (Fallback) usando Google Gemini 2.5 Flash
+ */
+async function callGeminiLLM(
+  systemPrompt: string,
+  userPrompt: string,
+  temperature: number
+): Promise<string> {
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) throw new Error("GEMINI_API_KEY ausente para fallback.");
+
+  console.log(`[AI Service] 🔄 Acionando Motor Secundário (Gemini 2.5 Flash)...`);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
+
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: [{ parts: [{ text: userPrompt }] }],
+      generationConfig: {
+        temperature: temperature,
+        responseMimeType: "application/json"
+      }
+    }),
+    signal: AbortSignal.timeout(30000)
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => "Sem detalhes");
+    throw new Error(`Erro na API do Gemini: status ${response.status} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!content) {
+    throw new Error(`Resposta vazia ou corrompida do Gemini: ${JSON.stringify(data)}`);
+  }
+
+  return content.trim();
+}
+
+/**
+ * Interface unificada para invocar a Groq com Structured Outputs (E Motor Duplo Integrado)
  */
 async function callLLM(
   systemPrompt: string,
@@ -60,12 +102,14 @@ async function callLLM(
   const groqKey = process.env.GROQ_API_KEY;
 
   if (!groqKey) {
+    if (process.env.GEMINI_API_KEY) {
+      return callGeminiLLM(systemPrompt, userPrompt, temperature);
+    }
     throw new Error("Nenhuma API Key configurada no ambiente.");
   }
 
   let groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
-
-  console.log(`[AI Service] Direcionando para Groq com modelo: ${groqModel}`);
+  console.log(`[AI Service] ⚡ Direcionando para Groq (Motor Principal) com modelo: ${groqModel}`);
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -86,12 +130,15 @@ async function callLLM(
     signal: AbortSignal.timeout(30000)
   });
 
-  if (!response) {
-    throw new Error("Resposta de rede nula ou indefinida (mock ou rede).");
-  }
-
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Sem detalhes");
+    
+    // FAILOVER INSTANTÂNEO PARA O GEMINI
+    if (response.status === 429 && process.env.GEMINI_API_KEY) {
+      console.warn(`[AI Service] 🛑 Groq Rate Limit (429) detectado. Redirecionando requisição...`);
+      return callGeminiLLM(systemPrompt, userPrompt, temperature);
+    }
+
     throw new Error(`Erro na API do Groq: status ${response.status} - ${errorText}`);
   }
 
@@ -128,7 +175,7 @@ export async function generateOfferAnalysis(
 
   // 2. Enfileirar requisição (Rate Limit 1 por vez para manter throughput limpo)
   const task = groqQueue.then(() => executeGroqRequest(offer, links, apiKey, model));
-  
+
   // Garantir que a fila ande mesmo se houver erro
   groqQueue = task.catch(() => ({} as any));
 
@@ -249,12 +296,12 @@ RETORNE APENAS JSON VÁLIDO.`;
       // Adicionando um pequeno delay de backoff natural entre requests pra evitar spikes no limit
       await new Promise(resolve => setTimeout(resolve, 500));
       return mapGeneratedCopyToLegacyResult(parsed, links, offer);
-      
+
     } catch (err: any) {
-      const isValidationError = err.message.includes("Invalid Schema") || 
-                               err.message.includes("SyntaxError") || 
-                               err.message.includes("JSON") ||
-                               err.message.includes("validation");
+      const isValidationError = err.message.includes("Invalid Schema") ||
+        err.message.includes("SyntaxError") ||
+        err.message.includes("JSON") ||
+        err.message.includes("validation");
 
       let waitTime = delay;
       const rateLimitMatch = err.message.match(/try again in ([\d\.]+)s/);
@@ -269,7 +316,7 @@ RETORNE APENAS JSON VÁLIDO.`;
         delay = waitTime > 5000 ? 5000 : waitTime * 1.5;
         continue;
       }
-      
+
       // Registra o log detalhado no banco de dados para evitar falha silenciosa
       console.error("[AI Service] Erro definitivo na geração de copy:", err);
       await persistErrorLog(offer.user_id || null, "Geração de Copy por IA", err, {
@@ -294,7 +341,7 @@ export function mapGeneratedCopyToLegacyResult(
   offer: Offer
 ): AIAnalysisResult {
   const winner = copyContext.strategies.find(s => s.type === copyContext.winner_type) || copyContext.strategies[0];
-  
+
   if (copyContext.hashtags) {
     copyContext.hashtags = copyContext.hashtags.map(h => h.startsWith('#') ? h : `#${h}`);
   }
@@ -305,7 +352,7 @@ export function mapGeneratedCopyToLegacyResult(
     telegram: PostBuilder.buildTelegramPost({ copy: winner, copyContext, offer, affiliateLink: links.telegram }),
     instagram_feed: PostBuilder.buildInstagramPost({ copy: winner, copyContext, offer, affiliateLink: links.instagram }),
     instagram_stories: ["Veja essa oferta incrível!", "Arraste para cima!"], // Fallback estático, já que a AI não gera mais formatos
-    instagram_reels: ["Oferta Imperdível!"], 
+    instagram_reels: ["Oferta Imperdível!"],
     instagram_carousel: [],
     whatsapp: PostBuilder.buildWhatsappPost({ copy: winner, copyContext, offer, affiliateLink: links.whatsapp })
   };
@@ -416,7 +463,7 @@ ${JSON.stringify(jsonSchemaObj, null, 2)}`;
     try {
       const responseText = await callLLM(systemPrompt, userPrompt, jsonSchemaObj, 0.2, 1000);
       const raw = JSON.parse(responseText);
-      
+
       // Validação rápida de schema (Duck typing)
       if (typeof raw.ai_score_boost !== 'number' || !raw.conversion_justification) {
         throw new Error("Payload de curadoria inválido ou corrompido.");
@@ -443,7 +490,7 @@ ${JSON.stringify(jsonSchemaObj, null, 2)}`;
         delay = waitTime > 5000 ? 5000 : waitTime * 2;
         continue;
       }
-      
+
       // Persiste o erro detalhado no Supabase para observabilidade avançada
       console.error("[AI Service] Erro definitivo na curadoria quente por IA:", err);
       await persistErrorLog(offer.user_id || null, "Curadoria Quente por IA", err, {

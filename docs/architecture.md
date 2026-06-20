@@ -1,60 +1,72 @@
 # Arquitetura do Sistema
 
-O Caça Oferta Oficial é desenhado como um monolito modular na Vercel utilizando Next.js (App Router) como core, aliado a serviços de banco de dados e mensageria distribuída.
+O **Caça Oferta Oficial** possui uma arquitetura Serverless fortemente acoplada, desenhada para ser elástica na Vercel e robusta com processamento assíncrono via Inngest e persistência transacional via Supabase.
 
-## Visão Geral
+## Diagrama Geral de Arquitetura
 
 ```mermaid
 graph TD;
-    subgraph Frontend [Next.js Client Components]
-        Dashboard[Painel do Operador]
-        Login[Autenticação]
+    subgraph Frontend [Next.js App Router Client]
+        Dashboard[UI do Painel / Componentes]
     end
 
     subgraph Backend [Next.js Server / API Routes]
         API_AI[Geração de Copy via IA]
-        API_Publish[Disparo de Mensagens]
-        API_Tracking[Geração de SubIDs]
+        API_Publish[Aprovação / Envio]
+        API_Inngest[Inngest Endpoint]
+        API_Scraper[Motor de Importação/Trends]
+    end
+
+    subgraph Orchestration [Inngest Cloud]
+        BackgroundScraper[Worker de Scraping]
+        BackgroundPublish[Worker de Postagem]
     end
 
     subgraph Database [Supabase]
-        Auth[Autenticação]
-        Postgres[PostgreSQL]
-        Storage[Armazenamento Imagens]
+        Auth[Gerenciamento JWT]
+        Postgres[Banco Relacional / RLS]
+        Storage[Buckets de Imagens]
     end
 
-    subgraph Background [Workers & Filas]
-        Inngest[Orquestração Assíncrona]
+    subgraph NodeWorkers [Background Services Persistentes]
         Baileys[Motor WhatsApp Web]
     end
 
-    subgraph ThirdParty [Integrações Externas]
+    subgraph External [Integrações de Terceiros]
         Telegram[Telegram Bot API]
-        Groq[Groq / Gemini LLM]
-        Scraping[APIs Scraper]
+        Meta[Instagram Graph API]
+        Groq[API Groq / Llama]
     end
 
-    Dashboard -->|Server Actions| Backend
-    Login -->|JWT| Auth
-    Backend -->|RLS| Postgres
-    Backend -->|Upload| Storage
-    Backend -->|Prompt| Groq
-    Backend -->|Queue Event| Inngest
-    Backend -->|Webhook| Telegram
-    Baileys -->|Polls| Postgres
-    Baileys -->|Sends| WhatsApp
+    Dashboard -->|Autenticado| Backend
+    Dashboard -->|Login| Auth
+    Backend -->|RLS Policies| Postgres
+    Backend -->|Imagens| Storage
+    Backend -->|Prompts Restritos| Groq
+    
+    Backend -->|Dispara Eventos| Orchestration
+    Orchestration -->|Invoca via HTTP| API_Inngest
+    
+    API_Inngest -->|Telegram API| Telegram
+    API_Inngest -->|Instagram API| Meta
+    API_Inngest -->|PostgreSQL Update| Postgres
+    
+    Baileys -->|Faz Polling Contínuo| Postgres
+    Baileys -->|Websockets| WhatsApp
 ```
 
-## Componentes Principais
+## Separação de Componentes
 
-### Frontend (Next.js 16)
-Utiliza a nova infraestrutura do React 19 e App Router (`src/app`). As páginas principais interagem com componentes isolados (`src/components`) utilizando Tailwind CSS para estilos.
+### 1. Camada de Apresentação (Frontend)
+Construído sobre o App Router do Next.js 16 (`/src/app/(dashboard)`).
+Nesta camada não há segredos vazeados. Ela lê dados passados por Server Components ou faz mutações por Server Actions/API Routes com tokens protegidos.
 
-### Banco de Dados (Supabase)
-Atua como camada de persistência definitiva. As chaves de acesso são separadas em "Anon Key" (com segurança a nível de linha - RLS) para clientes, e "Service Role Key" exclusiva do ambiente Node.js.
+### 2. Camada API e Orquestração
+Sediada em `/src/app/api`, expõe módulos separados por domínio (ex: `/api/ai/`, `/api/instagram/`, `/api/inngest/`).
+- O **Inngest** age como uma cola assíncrona. Quando a API quer processar ofertas de uma lista longa, ela dispara um evento para a nuvem da Inngest, que bate de volta no endpoint `POST /api/inngest` fazendo o processamento real sem derrubar o cliente ou estourar timeouts da Vercel.
 
-### Motor de Copywriting (IA)
-A geração de persuasão (`src/lib/ai/`) constrói um payload baseado no desconto e dados brutos, enviando para LLMs como o Groq/Gemini, que retornam em um schema JSON predeterminado com `headline`, `hook`, `body` e `cta`.
+### 3. Camada de Persistência (Supabase)
+Todo o estado vive no Supabase. O RLS (Row Level Security) garante que um cliente chamando o supabase diretamente pelo Client-side SDK só veja os dados atrelados ao seu próprio JWT.
 
-### Distribuição (Publishing)
-Cada oferta possui N links de afiliado rastreados (um para cada canal). A postagem no Telegram ocorre imediatamente pela sua API HTTP nativa. A postagem no WhatsApp exige um processo persistente (`scripts/whatsapp-engine.cjs`) utilizando websockets via biblioteca `baileys` para se conectar a um aparelho celular.
+### 4. Camada de Trabalhadores Contínuos
+O envio para o WhatsApp exige um socket ativo, incompatível com Serverless Functions. Para isso, o script Node puro `/scripts/whatsapp-engine.cjs` lê as mensagens autorizadas pela tabela `posts` e entrega via protocolo `baileys` nativo.

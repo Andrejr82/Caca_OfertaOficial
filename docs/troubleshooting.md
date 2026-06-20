@@ -1,27 +1,28 @@
-# Troubleshooting (Resolução de Problemas)
+# Resolução de Problemas Frequentes (Troubleshooting)
 
-## 1. Engine do WhatsApp Desconecta ("Socket Closed")
-**Sintoma:** O envio não ocorre. Ao logar no console do motor (`npm run whatsapp`), existem mensagens repetidas de "Websocket closed" ou "Not authorized".
-**Solução:** 
-A pasta de credenciais salvas `.baileys_auth/` pode estar corrompida.
-1. Interrompa o Worker (Ctrl+C).
-2. Delete a pasta completa: `rm -rf .baileys_auth/`.
-3. Inicie o Worker de novo (`npm run whatsapp`).
-4. Leia o QRCode com o aparelho celular.
+Este guia apresenta soluções para os problemas técnicos mais corriqueiros encontrados pelos operadores ou infraestrutura.
 
-## 2. API do Groq (IA) Falha Consistentemente
-**Sintoma:** As mensagens estão saindo pobres e genéricas e o Painel marca `Score: 5.0` (O Fallback acionou).
+## 1. Problemas com o WhatsApp (`baileys`)
+
+**Sintoma:** O painel indica que a oferta foi postada, mas o celular nunca mandou.
+**Diagnóstico:** O processo em background (`npm run whatsapp` ou o deploy na Render) parou.
 **Solução:**
-- O ambiente não possui a chave do Groq. Crie ou edite `.env.local` e valide a chave `GROQ_API_KEY`.
-- Se a chave está certa, a conta Groq pode estar com Rate Limit estourado de Requisições por minuto. Basta aguardar 5 minutos que o painel retornará aos textos ricos automaticamente.
+- Se o script reiniciou infinitamente informando "Logged out", apague a pasta `.baileys_auth` ou a tabela de sessão do banco de dados (se estiver usando DBMigration), reinicie a aplicação e leia novamente o QR Code.
+- O Baileys pode engasgar se a internet do aparelho hospedeiro da conta WhatsApp cair. Verifique a conexão Wi-Fi/4G do aparelho.
 
-## 3. Disparo no Telegram Não Acontece
-**Sintoma:** O frontend avisa "Enviado com sucesso" e status atualiza para "published", mas a foto e mensagem não aparecem no App.
+## 2. Problemas na Geração de IA
+
+**Sintoma:** Ao clicar em "Gerar Textos", a tela carrega e acusa falha.
+**Diagnóstico:** Timeout de Vercel ou Excedeu as cotas de token da Groq (Rate limit - HTTP 429).
 **Solução:**
-- Verifique se a chave de `TELEGRAM_BOT_TOKEN` confere com o BotFather.
-- Verifique o CHAT ID (`@seu_canal_de_ofertas`).
-- O mais importante: O bot DEVE ser promovido a Administrador dentro das configurações do grupo/canal do Telegram para poder enviar mensagens públicas.
+- Se o sistema bater na restrição `429 Too Many Requests`, o Inngest fará o backup com Backoff. Se estiver testando manualmente via dashboard, será preciso aguardar o limite voltar a encher.
+- Opcionamente, altere nas configurações do painel ou no código fonte a LLM ativa de Groq para Gemini (via Google AI SDK) configurando a chave `GEMINI_API_KEY`.
 
-## 4. Ofertas Não Aparecem para um Novo Operador (Problema RLS)
-**Sintoma:** Um usuário logo cria uma conta e vai para o `/dashboard/offers` e a lista é vazia, mesmo o admin tendo dezenas de cadastros.
-**Causa:** É o comportamento intencional. As tabelas do Supabase têm regras de Row Level Security vinculadas ao `auth.uid()`. Nenhum operador comum pode ver ou modificar a listagem do outro, garantindo integridade e sigilo comercial.
+## 3. Problemas com o Supabase (Dados não aparecem)
+
+**Sintoma:** Você adiciona a oferta no banco pelo painel SQL Supabase e ela não aparece no Frontend.
+**Diagnóstico:** Você adicionou a oferta esquecendo de preencher o `user_id` na tabela.
+**Solução:** O RLS filtra as ofertas por `user_id`. Uma oferta recém-criada sem ID ou com ID do Admin não aparece pra usuários logados. Ao manipular manualmente o SQL, certifique-se de associar `user_id` válido.
+
+## 4. Onde encontrar Logs?
+O painel contém uma tabela oculta (SQL) chamada `integration_logs`. Acesse seu painel do Supabase -> Table Editor -> `integration_logs`. Você verá o payload exato retornado por erros do Telegram e Instagram, facilitando o debug.

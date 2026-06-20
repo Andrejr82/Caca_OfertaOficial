@@ -1,8 +1,19 @@
 const express = require('express');
 const cors = require('cors');
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason } = require('@whiskeysockets/baileys');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
+const { useSupabaseAuthState } = require('./supabase-auth-state.cjs');
+const { createClient } = require('@supabase/supabase-js');
+require('dotenv').config({ path: '.env.local' });
+
+// Supabase no Node.js 20 exige 'ws' nativamente para conexões Realtime
+global.WebSocket = require('ws');
+
+const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 const app = express();
 app.use(cors());
@@ -25,7 +36,7 @@ let isConnected = false;
 let connectionPromise = null;
 
 async function connectToWhatsApp() {
-    const { state, saveCreds } = await useMultiFileAuthState('.baileys_auth');
+    const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
 
     sock = makeWASocket({
         auth: state,

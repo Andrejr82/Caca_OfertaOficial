@@ -1,27 +1,31 @@
-# Configurações do Ambiente
+# Configurações e Variáveis de Ambiente
 
-O projeto é guiado pelas variáveis de ambiente contidas no arquivo `.env.local`. Este arquivo **jamais** deve ser commitado no repositório.
+O arquivo base de desenvolvimento é `.env.local`. Em produção, injete estas variáveis no painel da Vercel ou do provedor de deploy.
 
-## Supabase
-- `NEXT_PUBLIC_SUPABASE_URL`: A URL do seu projeto no Supabase. É exposta para o client-side.
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`: A chave pública anônima. Operações de leitura/escrita são limitadas pelas políticas de RLS.
-- `SUPABASE_SERVICE_ROLE_KEY`: A chave mestre do banco. **Uso Exclusivo no Backend/Servidor**. Ultrapassa qualquer regra RLS (Row Level Security). Nunca passe para o frontend.
+## Tabela de Variáveis Necessárias
 
-## Inteligência Artificial
-- `GROQ_API_KEY`: Token de autenticação da plataforma Groq (usada para o modelo llama-3.1). 
-- `GROQ_MODEL`: Sobrescreve o modelo padrão. Omissão assume `llama-3.1-8b-instant`.
-- `COPY_ENGINE_MODE`: Ajusta a complexidade das estratégias (`full`, `balanced`, `economy`).
+| Chave | Descrição | Onde Conseguir |
+| :--- | :--- | :--- |
+| `NEXT_PUBLIC_SUPABASE_URL` | URL da API do seu Banco de Dados Supabase. | Dashboard Supabase -> Project Settings -> API |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave pública para autenticar acessos do front (Com RLS). | Dashboard Supabase -> Project Settings -> API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave administrativa (ROOT) de uso EXCLUSIVO do backend. | Dashboard Supabase -> Project Settings -> API |
+| `GROQ_API_KEY` | Token do modelo Groq / Llama-3 para geração rápida de Copys. | https://console.groq.com/keys |
+| `GEMINI_API_KEY` | (Opcional/Fallback) Token da Google AI. | Google AI Studio |
+| `INNGEST_EVENT_KEY` | Chave de envio de eventos do Inngest. | Inngest Dashboard -> Event Keys |
+| `INNGEST_SIGNING_KEY` | Assinatura para proteger o endpoint `/api/inngest`. | Inngest Dashboard -> Signing Key |
+| `TELEGRAM_BOT_TOKEN` | Token do bot responsável pelo disparo no canal. | BotFather (Telegram) |
+| `NEXT_PUBLIC_APP_URL` | URL base do seu sistema (ex: `http://localhost:3000`). | - |
 
-## Telegram
-- `TELEGRAM_BOT_TOKEN`: Gerado pelo BotFather. Utilizado pelo backend para efetuar `sendMessage` ou `sendPhoto`.
-- `TELEGRAM_CHANNEL_ID`: O nome de usuário do canal destino (ex: `@caca_ofertaoficial`). O Bot precisa ser Administrador deste canal.
+## Tabela de Variáveis Secundárias e Extensões
+A aplicação também integra Scrapers e o Instagram Graph API.
 
-## Automação em Background
-- `INNGEST_EVENT_KEY`: Chave de roteamento para orquestração de trabalhos pesados.
-- `INNGEST_SIGNING_KEY`: Para garantir que a comunicação webhooks/inngest é segura.
+| Chave | Descrição |
+| :--- | :--- |
+| `INSTAGRAM_ACCESS_TOKEN` | Token de longo prazo gerado no Facebook Developer Console para a página Meta Business associada. |
+| `INSTAGRAM_BUSINESS_ACCOUNT_ID` | ID da conta do IG atrelada à página do Facebook. |
+| `SCRAPER_API_KEY` | Token estático ou serviço de Proxy (ScrapingBee/ZenRows) para driblar bloqueios de Captcha ao raspar Mercado Livre/Shopee. |
 
-## Estrutura do App_Settings
-No banco de dados (tabela `app_settings`), os usuários guardam configurações exclusivas não-ambientais:
-- Credenciais e Hash de Sessão do Baileys.
-- Status do Scraper da conta.
-Esses dados são restritos ao `user_id` correspondente graças às policies ativas no RLS.
+## Segurança
+
+> [!WARNING]  
+> **Nunca comite o seu `.env.local`**. As únicas chaves que podem ser lidas pelo navegador são as prefixadas por `NEXT_PUBLIC_`. Injetar `SUPABASE_SERVICE_ROLE_KEY` no front-end exporia seu banco de dados inteiro para exclusão e corrupção não autorizada.

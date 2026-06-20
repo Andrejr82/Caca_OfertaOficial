@@ -1,47 +1,53 @@
-# Modelagem do Banco de Dados
+# Modelagem do Banco de Dados (Supabase)
 
-A persistência do Caça Oferta Oficial é feita integralmente no **Supabase** (PostgreSQL).
+O esquema central é gerido e migrado primariamente em `supabase/schema.sql`.
 
-## Estrutura de Tabelas
+## ER Diagram
 
-A criação de tabelas é descrita oficialmente no arquivo `supabase/schema.sql`.
+```mermaid
+erDiagram
+    profiles ||--o{ offers : "creates"
+    profiles ||--o{ app_settings : "owns"
+    profiles ||--o{ integration_logs : "owns"
+    offers ||--o{ affiliate_links : "has"
+    offers ||--o{ posts : "has"
+    offers ||--o{ sales : "generates"
+    offers ||--o{ ai_copy_logs : "evaluated in"
+    affiliate_links ||--o{ posts : "used in"
+    affiliate_links ||--o{ sales : "tracked in"
+```
 
-### 1. `profiles`
-Estende os dados dos usuários do Supabase Auth.
-- `id` (UUID): FK para `auth.users(id)`
-- `full_name`: Nome completo.
+## Tabelas Principais
 
-### 2. `offers`
-A tabela central do sistema.
-- Armazena metadados raw raspados do produto (`product_name`, `platform`, `current_price`, `old_price`, `image_url`).
-- Possui o campo `explainability` (JSONB) para guardar informações analíticas detalhadas do cálculo do Score comercial.
-- Possui o `score` geral de conversão para ranking da IA.
-- Status permitidos: `'draft'`, `'approved'`, `'posted'`, `'rejected'`.
+### `profiles`
+Espelho da tabela `auth.users` interna do Supabase. Guarda informações extras como `full_name`. Relacionada 1:1 via gatilhos.
 
-### 3. `affiliate_links`
-Tabela de rastreamento. Uma `Offer` possui vários `affiliate_links` (um para Telegram, um para Instagram, etc).
-- `original_url`: URL bruta da loja.
-- `tracked_url`: URL já encurtada com a tag de afiliado.
-- `sub_id`: Tag UTM específica gerada (ex: `tg-tenis-nike`).
-- O sistema obriga a chave única `(offer_id, channel)`.
+### `offers`
+A tabela base do produto.
+- Colunas Chave: `platform`, `product_name`, `original_url`, `current_price`, `old_price`, `score` (calculado), `status` (draft, approved, posted, rejected).
+- `explainability`: Um campo `jsonb` onde são guardados os dados do motor de curadoria justificando a nota comercial da oferta.
 
-### 4. `posts`
-Registra mensagens preparadas para as redes ou já despachadas.
-- `content`: O texto persuasivo gerado pela IA.
-- `status`: `'draft'`, `'published'`, `'failed'`.
-- Possui FKs para `offer_id` e `affiliate_link_id` do respectivo canal.
+### `affiliate_links`
+Sistema de Rastreamento. Mapeia a oferta para os canais, contendo SubIDs únicos.
+- O sistema obriga a restrição `unique (offer_id, channel)`. Portanto, para 1 oferta há no máximo 1 link pra Telegram, 1 pra Insta, etc.
+- Armazena a contagem de cliques.
 
-### 5. `sales`
-Registro de comissões atrelado ao `affiliate_link_id` e `offer_id`. Auxilia no cálculo do ROI do afiliado.
+### `posts`
+As cópias de persuasão de fato (texto completo pronto para envio).
+- Coluna Chave: `content`, `channel`, `status` (draft, published, failed).
+- O Worker do Whatsapp verifica os `posts` não publicados e os marca como `published`.
 
-### 6. `integration_logs` e `ai_copy_logs`
-Tabelas essenciais de observabilidade do sistema.
-- `integration_logs`: Loga erros e eventos de comunicação (falha com Telegram, erro de webhook, falha no Scraper). Guarda payloads brutos em `metadata` (JSONB).
-- `ai_copy_logs`: Loga o desempenho da IA. Qual estratégia venceu o teste da Groq/Gemini, pontuação de copy e o modelo utilizado.
+### `sales`
+Para tracking de conversões diretas baseados nos retornos de webhooks dos Afiliados.
+- Contém o `gross_value` e o `commission_value`.
 
-### 7. `app_settings`
-Configurações isoladas do usuário. O campo `value` é JSONB para permitir o armazenamento dinâmico das variáveis do motor WhatsApp ou chaves isoladas.
+### `integration_logs` e `ai_copy_logs`
+Tabelas vitais para observabilidade.
+- `integration_logs`: Log de comunicação REST externa (sucessos/erros e raw bodies).
+- `ai_copy_logs`: Log de testes A/B e performance de Prompts da LLM, contendo notas e a estratégia que venceu na geração.
 
-## Políticas de RLS (Row Level Security)
-**Todas** as tabelas acima ativam o RLS. Para acessar dados lidos a partir de chaves clientes, é imperativo que a query contenha o `auth.uid() = user_id`.
-Scripts isolados (`scripts/*.cjs`) que utilizam a Service Role bypassam o RLS para atualizar status.
+### `app_settings`
+Repositório central para tokens e integrações particulares do usuário, salvas em `jsonb` puro para escalabilidade horizontal.
+
+## Segurança e Acesso
+Todo o banco possui **Row Level Security (RLS)** ativo. Nenhuma *query* vinda do cliente contendo apenas a JWT (Token do Supabase Auth) retornará `offers` de outro `user_id`. O Supabase Admin (via backend Node) sobrescreve essa política usando a **Service Role Key** para processamentos de Workers/Inngest.

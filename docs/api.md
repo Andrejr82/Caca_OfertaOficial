@@ -1,59 +1,50 @@
-# Documentação de API Interna
+# Referência de APIs Internas
 
-Este documento lista as rotas expostas em `/src/app/api/` construídas em Next.js (App Router).
+A aplicação utiliza as `API Routes` nativas do Next.js (em `src/app/api/`) para expor lógicas complexas e integrar com plataformas externas. A autenticação geralmente baseia-se na captura de Sessões ativas do Supabase no lado do servidor.
 
-## 1. Geração de Copywriting e Rastreamento (`/api/ai/generate`)
+## Endpoints de Scraping e Entrada de Dados
 
-**Método:** `POST`
+### `POST /api/scraper/import`
+- **Uso:** Importa uma oferta bruscamente, normalmente chamado pela Extensão do Chrome ou integrações de terceiros.
+- **Payload:** `{ original_url: string }`
 
-**Descrição:** 
-Dada uma oferta bruta recém inserida, recupera seus metadados, aciona a IA (Groq/Gemini) para formatar opções de persuasão e injeta os links (SubIDs) atrelados à oferta na tabela `affiliate_links`. Salva os rascunhos gerados na tabela `posts`.
+### `POST /api/scraper/trends`
+- **Uso:** Busca dados de ofertas "quentes" de redes de afiliados em lote e armazena os metadados raw.
 
-**Autenticação:**
-Sessão válida do Supabase exigida via cabeçalho ou cookies (App Router resolve nativamente).
+### `GET/POST /api/scraper/cron`
+- **Uso:** Acionador programado para agendar e coordenar varreduras. (Pode estar sob transição total para o Inngest).
 
-**Corpo da Requisição (JSON):**
-```json
-{
-  "offerId": "uuid-da-oferta"
-}
-```
+## Endpoints de Inteligência Artificial
 
-**Retorno de Sucesso (Exemplo):**
-```json
-{
-  "ok": true,
-  "message": "Copys e rascunhos de posts gerados com sucesso!",
-  "score": 8.5,
-  "status": "approved"
-}
-```
+### `POST /api/ai/generate`
+- **Uso:** Transforma o metadado raw de uma oferta (já inserida) em copys persuasivas, gerando e rastreando os *Affiliate Links* no processo.
+- **Payload:** `{ offerId: string }`
+- **Resumo:** Recupera o `offerId`, cria rastreio para Telegram, WhatsApp e Instagram, atrela UTMs, pede à IA a cópia formatada, salva os novos `posts` como draft e devolve as opções de postagem ao frontend.
 
-## 2. Publicação via Telegram (`/api/publish/telegram`)
+## Endpoints de Publishing (Disparo)
 
-**Método:** `POST`
+### `POST /api/publish/extension`
+- **Uso:** Endpoint auxiliar para que a extensão envie publicações diretamente a partir de um JSON mastigado.
 
-**Descrição:** 
-Recupera um rascunho em formato de mensagem (tabela `posts`), concatena com o link rastreado ou imagem do produto e executa o disparo para o bot na API oficial do Telegram usando o `TELEGRAM_BOT_TOKEN`.
+### `POST /api/telegram/publish`
+- **Uso:** Aprova e efetua o envio de um post via REST para o Canal do Telegram do usuário logado.
 
-**Corpo da Requisição (JSON):**
-```json
-{
-  "postId": "uuid-do-post"
-}
-```
+### `POST /api/instagram/publish`
+- **Uso:** Aciona a API Oficial Graph do Instagram, postando a oferta já validada pelo sistema.
 
-**Comportamento:** Atualiza a tabela de `posts` para status `published` e `posted_at` = hora atual caso a API do Telegram retorne 200 OK.
+### `POST /api/whatsapp/publish`
+- **Uso:** Atualmente atualiza a fila (tabela `posts` ou webhook associado) para que o Worker independente dispare o push.
 
-## 3. Webhooks Scraper (Em desenvolvimento) (`/api/webhooks/scraper`)
+## Endpoints de Orquestração (Inngest)
 
-**Método:** `POST`
+### `GET / POST / PUT /api/inngest`
+- **Uso:** Usado inteiramente pelos servidores da Inngest. Contém funções registradas (como `publishPostBackground`, `runUserScrapingBackground`). 
+- **Aviso:** Nunca chame este endpoint do cliente. Acione os eventos da Inngest usando a biblioteca padrão.
 
-**Descrição:**
-Endpoint utilizado por ferramentas auxiliares (Extensão Chrome ou Puppeteer Serverless) para jogar dados de produto raspados diretamente no painel do usuário, populando a tabela `offers`.
+## Endpoints Utilitários
 
-## Notas Gerais sobre Erros (Status HTTP)
-- `401 Unauthorized`: O usuário não enviou o Token de sessão válido na requisição.
-- `400 Bad Request`: Payload ausente ou incompleto (zod parser failure).
-- `404 Not Found`: Recurso/Oferta solicitada foi apagada do Supabase ou o ID é incorreto.
-- `500/503`: Falha temporária da integração (ex: Groq Rate Limit) ou Supabase Down.
+### `GET /api/img`
+- **Uso:** Usado como proxy reverso para contornar problemas de CORS ao renderizar imagens externas (de marketplaces) em canvas locais.
+
+### `GET / POST / PUT /api/settings/*`
+- **Uso:** Gestão de tokens de acesso (users, configs, connection-tests, audit logs).

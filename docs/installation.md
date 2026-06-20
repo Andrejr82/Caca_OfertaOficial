@@ -1,49 +1,49 @@
-# Instalação e Setup Local
+# Guia de Instalação Local
 
-Siga os passos abaixo para preparar o ambiente de desenvolvimento na sua máquina.
+O Caça Oferta Oficial foi desenvolvido para ser executado num ambiente Node.js moderno, utilizando pnpm ou npm.
 
-## 1. Pré-requisitos
-- Node.js (v20 ou superior).
-- Git.
-- Uma conta no [Supabase](https://supabase.com).
+## Pré-requisitos
 
-## 2. Clonando o Repositório
+- Node.js (v20 ou superior). Recomendamos usar NVM (`nvm use 20`).
+- Gerenciador de Pacotes (`npm`).
+- Uma conta no [Supabase](https://supabase.com/) com um projeto em branco para aplicar as migrações.
+- Uma conta no [Inngest](https://www.inngest.com/) para testar processamentos em background.
+
+## Passos para Instalação
+
+1. **Clone o repositório:**
 ```bash
 git clone https://github.com/Andrejr82/Caca_OfertaOficial.git
 cd Caca_OfertaOficial
 ```
 
-## 3. Instalando as Dependências
-Nós utilizamos `npm` neste projeto para garantir compatibilidade com `package-lock.json`.
+2. **Instale as dependências principais:**
 ```bash
 npm install
 ```
 
-## 4. Configuração do Banco de Dados
-1. No seu projeto do Supabase, vá na aba **SQL Editor**.
-2. Copie o conteúdo de `supabase/schema.sql` e execute-o.
-3. Certifique-se de que o **Auth** está habilitado e o Bucket **offer-images** foi criado como Privado.
-
-## 5. Variáveis de Ambiente
-Crie um arquivo `.env.local` copiando o exemplo:
+3. **Configure as Variáveis de Ambiente:**
+Copie o template de ambiente:
 ```bash
 cp .env.example .env.local
 ```
-Preencha as chaves principais:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `GROQ_API_KEY` (Para a IA)
+Edite o arquivo `.env.local` para incluir suas credenciais (veja `docs/configuration.md` para detalhes).
 
-## 6. Inicializando o Servidor Principal
+4. **Inicie o servidor de Desenvolvimento Next.js:**
 ```bash
 npm run dev
 ```
-O frontend estará acessível em `http://localhost:3000`.
 
-## 7. Inicializando o Motor do WhatsApp (Opcional)
-Se você for testar a integração com WhatsApp, é necessário rodar o worker num terminal separado:
+### Rodando o Simulador Local do Inngest (Opcional, mas recomendado)
+Para testar a orquestração em background localmente sem acessar a nuvem da Inngest:
+```bash
+npx inngest-cli@latest dev
+```
+O Inngest detectará o Next.js localmente e proverá um dashboard em `http://localhost:8288/`.
+
+### Rodando o Worker do WhatsApp
+O Next.js por si só não dispara o Whatsapp. É necessário ligar o motor à parte. Em um segundo terminal:
 ```bash
 npm run whatsapp
 ```
-Aguarde a geração do QRCode no terminal e escaneie com seu celular de disparos.
+Aguarde a geração do QR Code no console, e escaneie com seu celular. Mantenha esse console aberto.

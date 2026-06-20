@@ -1,21 +1,17 @@
-# Automação (Inngest & Schedulers)
+# Automação
 
-O projeto está sendo configurado para que a dependência de um clique manual do operador caia a zero nas fases avançadas.
+No projeto, a "automação" separa o processo criativo manual do envio em massa. Existem dois vetores centrais de automação.
 
-## Inngest
-A biblioteca `inngest` é o hub de controle e orquestração Serverless do app.
+## Orquestração com Inngest
+A biblioteca Inngest muda o paradigma de crons falhos do Linux para um sistema baseado em Eventos.
 
-**Onde os arquivos residem:** `src/app/api/inngest/`
+- Em `src/lib/inngest/functions.ts`, temos a função `processOfferBackground`. Quando um sistema manda o evento `offer/process`, a Inngest gerencia os *retries*.
+- Exemplo prático: O scraping falhou porque a página do Mercado Livre bloqueou o IP. A Inngest captura o timeout/exceção do Next.js e faz backup recursivo usando *Exponential Backoff* garantindo que a rotina vai tentar importar a oferta 2, 4 ou 8 horas depois, e nunca se perde no banco.
 
-### Qual o papel do Inngest no projeto?
-A Vercel impõe um limite máximo de 10 a 60 segundos de processamento para funções em seu plano Hobby/Pro.
-Ações complexas, como processar Lotes Massivos de Ofertas, esperar o rate limit da IA (Groq/Gemini), validar URLs e despachar mensagens de 1 em 1 minuto para o WhatsApp exigiriam o bloqueio da interface do usuário e explodiriam o timeout do Vercel.
+## Engine Persistente do WhatsApp
+Automatizar o Whatsapp sem pagar a API Oficial cara (Business API) requer a biblioteca Baileys, que funciona como um client Web em Node.
+- Como rodar automação constante? O script `whatsapp-engine.cjs` usa `setInterval` ou gatilhos de banco (Polling) para ler novos posts.
+- Para automação de resposta (em desenvolvimento), o próprio script consegue injetar mensagens lidas em um LLM Chat e auto-responder os usuários (ex: Bot FAQ).
 
-**Com Inngest:**
-1. A API de captura (ex: vinda da Extensão Web) acerta o Backend.
-2. O Backend só emite um Evento (`oferta.recebida`) para a Inngest e desliga a rota rapidamente em 1 segundo.
-3. A infra da Inngest entra em ação, chamando as funções do worker registradas em Background pelo app, uma a uma.
-4. Ela possui recurso nativo de "Sleep()", permitindo programar delays entre mensagens postadas.
-
-## Polling Legado do WhatsApp
-A versão nativa do "Engine" (`scripts/whatsapp-engine.cjs`) hoje pode agir como um simples loop "while true" com intervalos (setInterval) rodando num servidor persistente, checando se a tabela de `posts` e `offers` do Supabase possui coisas com status `aprovado_esperando_postagem`. Se sim, a engine posta e muda o status.
+## Rotinas Agendadas ("Cronjobs")
+A plataforma não usa CRONTAB ou schedulers primitivos, toda a cadência de raspagem automática e publicação programada é ditada nos arquivos das rotas Inngest que oferecem a função `inngest.createFunction({ cron: '0 * * * *' }, ... )`.

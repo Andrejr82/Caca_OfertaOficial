@@ -87,8 +87,9 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
   if (isAiCurationEnabled) {
     const topTier = sortedOffers.slice(0, limitToAi);
     
-    // Processamento da IA Paralelo mas seguro
-    const aiPromises = topTier.map(async (offer) => {
+    // Processamento da IA Sequencial para respeitar o Rate Limit (Tokens per Minute)
+    const aiEvaluated = [];
+    for (const offer of topTier) {
       // Bate no motor quente
       const aiResult = await analyzeConversionPotential(offer, offer.score);
       
@@ -98,7 +99,7 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
       const aiCopyScore = aiResult.ai_score_boost * 2; // Escala 0-5 do boost mapeada para 0-10
       const totalScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
       
-      return {
+      aiEvaluated.push({
         ...offer,
         score: totalScore,
         explainability: {
@@ -112,10 +113,10 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
           ai_strong_points: aiResult.strong_points,
           ai_weak_points: aiResult.weak_points
         }
-      };
-    });
-
-    const aiEvaluated = await Promise.all(aiPromises);
+      });
+      // Pequeno delay entre as chamadas para não estourar os limits da Groq
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
 
     // Substituir no array original as ofertas que foram turbinadas pela IA e re-ordenar o geral (Ranking Final)
     const remainingOffers = sortedOffers.slice(limitToAi);

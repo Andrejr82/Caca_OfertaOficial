@@ -1,15 +1,24 @@
-# Changelog
+# Histórico de Mudanças (Changelog)
 
-Anotações cronológicas da evolução principal do sistema Caça Oferta Oficial.
+Todas as atualizações mais vitais do **Caça Oferta Oficial** estão listadas aqui. O versionamento da documentação acompanha as tags principais de release da branch `main`.
 
-## [v0.1.0] - Geração do Monolito Next.js
-- Início da construção da documentação padrão corporativa.
-- FASE DE DESCOBERTA: Identificada divergência maciça de documentações legadas referenciando projeto "Agent Solution BI" / "Python". Todo conteúdo obsoleto movido para a subpasta `docs/archive/`.
-- Limpeza dos diretórios e implementação da `docs/` hierárquica baseada no código atual e real.
+## [0.1.0] - Geração Atual (Estado Validado)
+**Data de Documentação da Auditoria Principal**
 
-## [Pre-v0.1.0] - Migração Arquitetural do Python para Node
-- Abandono do modelo engessado no Streamlit com Python local.
-- Criação e aprovação do projeto em React/Next.js focando em orquestração na web de forma escalável.
-- Criação das APIs isoladas e schema global no Supabase (Postgres).
-- Implementação massiva de Prompt Engeneering dinâmico no `src/lib/ai/groq.ts` para estruturação de Copys perfeitas em formato JSON via chamadas a LLMs.
-- Desenvolvimento da abstração Baileys para motor nativo de automação de envios no WhatsApp sem onerar custos por disparo da Cloud API da Meta.
+### Adições:
+- Implementação extensiva e mapeada do `Inngest` para processos assíncronos (evitando timeout na Vercel).
+- Conclusão do módulo de API do Instagram (agora implementado nativamente nos endpoints `/api/instagram`).
+- Refatoração dos cálculos de IA: Criação do pipeline de avaliações com tabelas `ai_copy_logs`.
+- Geração inteligente via Groq Llama-3 garantindo baixa latência.
+- Extensão Scraper Chrome validada, chamando os importadores diretos.
+
+### Alterações:
+- O painel de Autenticação passou por upgrades de pacotes, adotando a API moderna SSR do `@supabase/ssr`.
+- Todo o envio de WhatsApp foi isolado num processo Daemon `whatsapp-engine.cjs` via `baileys` para estabilidade.
+- Atualização em lote de todas as docs para representar fidedignamente o código e não *desejos* passados.
+
+## [MVP] - Legado
+### Adições Iniciais:
+- Tabela `offers` simples com inputs diretos.
+- Gerador de textos simples com Prompt estático.
+- Conexão inicial com o bot do Telegram para alertas unidirecionais rápidos.

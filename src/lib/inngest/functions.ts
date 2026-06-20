@@ -45,13 +45,48 @@ export const processOfferBackground = inngest.createFunction(
 );
 
 /**
- * Função de Fila: Analytics (STUB)
+ * Função de Fila: Sincronização de Analytics (Sales Webhooks)
+ * Acionado quando uma plataforma externa (ex: Shopee, Eduzz) envia um postback de comissão.
  */
 export const syncAnalyticsBackground = inngest.createFunction(
   { id: "sync-analytics", triggers: [{ event: "analytics/sync" }] },
   async ({ event, step }: any) => {
-    logger.info("Sincronizando analytics em background", { source: event.data.source });
-    return { synced: true };
+    logger.info("Iniciando sincronização de analytics em background", { source: event.data.source });
+
+    const supabase = createSupabaseAdminClient();
+    if (!supabase) {
+      throw new Error("Supabase Admin client não configurado.");
+    }
+
+    const {
+      userId,
+      offerId,
+      affiliateLinkId,
+      channel,
+      grossValue,
+      commissionValue,
+      status = 'pending'
+    } = event.data;
+
+    // Persiste a venda na tabela sales
+    const result = await step.run("insert-sale", async () => {
+      const { data, error } = await supabase.from("sales").insert({
+        user_id: userId,
+        offer_id: offerId,
+        affiliate_link_id: affiliateLinkId,
+        channel: channel || 'telegram', // fallback
+        gross_value: grossValue,
+        commission_value: commissionValue,
+        status: status,
+        sold_at: new Date().toISOString()
+      }).select().single();
+
+      if (error) throw error;
+      return data;
+    });
+
+    logger.info("Conversão sincronizada com sucesso", { saleId: result.id });
+    return { synced: true, saleId: result.id };
   }
 );
 

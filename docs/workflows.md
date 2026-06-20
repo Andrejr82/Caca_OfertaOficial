@@ -1,25 +1,27 @@
 # Fluxos Operacionais (Workflows)
 
-Esta documentação descreve as principais trilhas do usuário (Jornadas) desde o momento da curadoria da oferta até o pós-venda.
+Esta documentação descreve as trilhas do sistema do ponto de vista sistêmico e do usuário.
 
-## Workflow de Cadastro e Geração de Rascunho
+## Workflow 1: Entrada e Avaliação Comercial (Scraping)
 
-1. **Entrada de Dados:** O Operador copia a URL bruta de uma oferta de marketplace (Shopee, Amazon).
-2. **Scraping Raw:** Ele entra no painel, aba "Publicar Oferta". O sistema busca os metadados dessa oferta (Nome, Preço de R$ 100 para R$ 80, Categoria).
-3. **Trigger da Inteligência Artificial:** Ao apertar "Gerar Textos", a requisição bate na `POST /api/ai/generate`.
-4. **Resolução de Rastreamento (SubIDs):** O backend imediatamente atrela aquela `offer_id` aos canais habilitados no painel do usuário e gera os `SubIDs` da UTM. Ele aciona o motor gerador das URLs em formato "Shopee Affiliates" por exemplo.
-5. **Geração Mágica:** O Groq/Gemini processa os metadados do passo 2 sob o Prompt Restrito de Gatilhos. Ele devolve o JSON.
-6. **Gravação e Retorno:** Os posts são salvos em estado "Rascunho" na base de dados. A resposta volta para o Dashboard listando 4 opções de botões.
+1. **Trigger Manual ou Cron:** O usuário cola a URL da Amazon no dashboard OU o Inngest engatilha `runUserScrapingBackground` e roda a API `/api/scraper/trends`.
+2. **Coleta de Metadados:** O sistema desce no HTML e extrai `<meta tags>`, preços antigos, preços novos e título.
+3. **Cálculo de Score V2:** A função `calculateFinalRankScore` é ativada. Com base na discrepância de preço (desconto) e sazonalidade, a oferta recebe uma nota comercial de 0 a 10. Se a nota final for baixa, ela é marcada como rejeitada pelo filtro anti-lixo. Se for alta, é qualificada.
 
-## Workflow de Disparo ao Vivo (Publishing)
+## Workflow 2: Geração Assíncrona e Rastreamento
 
-1. **Aprovação Manual (MVP):** O usuário lê as opções geradas pela IA no painel e clica em "Postar esta Copy".
-2. **Roteamento:** A requisição é feita pro `POST /api/publish/[canal]`.
-3. **Se Telegram:** 
-   - Backend carrega a foto original e o texto formatado.
-   - Dispara na Telegram Bot API em milisegundos.
-4. **Se WhatsApp:**
-   - O Backend joga o ID da oferta numa "Fila Temporária no Banco" (ex: mudando o status na tabela `posts`).
-   - O Worker Node (`whatsapp-engine.cjs`) rodando na máquina que está conectada com o QRCode está sondando (polling) o banco de dados a cada N segundos ou ouvindo Webhooks Inngest.
-   - Ele baixa o texto, a foto, processa na engine `baileys` e faz o envio.
-5. **Logs:** A coluna `status` de todas as mensagens na tabela `posts` muda de "draft" para "published".
+1. **Geração de SubIDs:** A oferta atinge o servidor e antes da AI trabalhar, criam-se `tracked_url`s na tabela `affiliate_links` para Telegram, WhatsApp e Insta. 
+2. **Groq/Llama-3 (Inteligência Artificial):** Uma *Server Action* / Inngest invoca a `generateOfferAnalysis`. A IA usa as URLs rastreadas geradas no passo 1.
+3. **Escrita no BD:** A IA produz os textos, separa em categorias e grava múltiplos *Drafts* na tabela `posts` (Rascunhos). A avaliação da resposta da IA é listada na tabela `ai_copy_logs` para auditar a eficácia do prompt.
+
+## Workflow 3: O Funil de Distribuição (Publishing)
+
+O usuário vê os Drafts na interface (`src/app/(dashboard)/publish`). Ele tem botões individuais de cada canal ou o botão de disparo "All".
+- **Telegram / Instagram:** Ao clicar "Postar Telegram", um evento `/api/publish/telegram` avisa o Inngest (`publishPostBackground`) -> que avisa a API REST nativa da plataforma.
+- **WhatsApp:** Ao clicar "Postar WhatsApp", a coluna `status` do Post muda para `published` com a timestamp preenchida. Imediatamente o cronjob dentro de `scripts/whatsapp-engine.cjs` detecta a nova entrada na base de dados, realiza o processamento de delay "humanizado" para anti-ban e envia via Socket `baileys` para as listas de transmissão configuradas.
+
+## Workflow 4: Resgate de Rendimentos (Sales Analytics)
+
+1. **Webhook de Conversão:** Um link de afiliado da Shopee ou Magalu, rastreado via `sub_id`, gera uma venda no mundo real.
+2. Plataformas conectadas (futuro/parcialmente implementado) farão um `POST /api/webhooks/sales`.
+3. A API pega a venda pelo `sub_id`, localiza a oferta na tabela `offers`, calcula o ROI e preenche a tabela `sales`. O painel do operador é alimentado via SQL Aggregate Functions.
