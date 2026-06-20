@@ -1479,9 +1479,10 @@ export async function discoverAndIngestTrendingOffers(
     console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória VIP: Categoria sorteada -> ${activeCategorySearch}`);
   }
 
-  // Over-fetching: Multiplicamos por 3 para garantir margem de sobra para o filtro de curadoria
-  const overFetchLimit = limit * 3;
-  console.log(`[SCRAPER][TRENDS] Over-fetching ativado: Solicitado ${limit}, Buscando até ${overFetchLimit} brutos.`);
+  // Sem over-fetching agressivo para evitar Timeouts na Vercel Free (Hobby)
+  // Como o usuário está travado em 60s, o Firecrawl precisa ser o mais rápido possível.
+  const overFetchLimit = limit;
+  console.log(`[SCRAPER][TRENDS] Buscando ${overFetchLimit} produtos para evitar Timeout na Vercel.`);
 
   const ingestedOffers: Offer[] = [];
 
