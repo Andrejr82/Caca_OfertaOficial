@@ -114,8 +114,8 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
           ai_weak_points: aiResult.weak_points
         }
       });
-      // Pequeno delay entre as chamadas para não estourar os limits da Groq
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Delay maior de 10s entre as chamadas para não estourar os limites da Groq (Rate Limit 429)
+      await new Promise(resolve => setTimeout(resolve, 10000));
     }
 
     // Substituir no array original as ofertas que foram turbinadas pela IA e re-ordenar o geral (Ranking Final)

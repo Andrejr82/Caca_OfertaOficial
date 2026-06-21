@@ -47,46 +47,14 @@ async function persistErrorLog(userId: string | null, action: string, error: any
   }
 }
 
-/**
- * Motor Secundário (Fallback) usando Google Gemini 2.5 Flash
- */
-async function callGeminiLLM(
-  systemPrompt: string,
-  userPrompt: string,
-  temperature: number
-): Promise<string> {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey) throw new Error("GEMINI_API_KEY ausente para fallback.");
 
-  console.log(`[AI Service] 🔄 Acionando Motor Secundário (Gemini 2.5 Flash)...`);
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`;
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: systemPrompt }] },
-      contents: [{ parts: [{ text: userPrompt }] }],
-      generationConfig: {
-        temperature: temperature,
-        responseMimeType: "application/json"
-      }
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "Sem detalhes");
-    throw new Error(`Erro na API do Gemini: status ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  const content = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (!content) {
-    throw new Error(`Resposta vazia ou corrompida do Gemini: ${JSON.stringify(data)}`);
-  }
-
-  return content.trim();
+function cleanJsonString(str: string): string {
+  let cleaned = str.trim();
+  // Remove blocos de código Markdown de JSON
+  cleaned = cleaned.replace(/^```json\s*/i, "");
+  cleaned = cleaned.replace(/^```\s*/, "");
+  cleaned = cleaned.replace(/\s*```$/, "");
+  return cleaned.trim();
 }
 
 /**
@@ -102,9 +70,6 @@ async function callLLM(
   const groqKey = process.env.GROQ_API_KEY;
 
   if (!groqKey) {
-    if (process.env.GEMINI_API_KEY) {
-      return callGeminiLLM(systemPrompt, userPrompt, temperature);
-    }
     throw new Error("Nenhuma API Key configurada no ambiente.");
   }
 
@@ -133,10 +98,8 @@ async function callLLM(
   if (!response.ok) {
     const errorText = await response.text().catch(() => "Sem detalhes");
     
-    // FAILOVER INSTANTÂNEO PARA O GEMINI
-    if (response.status === 429 && process.env.GEMINI_API_KEY) {
-      console.warn(`[AI Service] 🛑 Groq Rate Limit (429) detectado. Redirecionando requisição...`);
-      return callGeminiLLM(systemPrompt, userPrompt, temperature);
+    if (response.status === 429) {
+      console.warn(`[AI Service] 🛑 Groq Rate Limit (429) detectado. O retry loop tentará novamente em breve.`);
     }
 
     throw new Error(`Erro na API do Groq: status ${response.status} - ${errorText}`);
@@ -278,13 +241,79 @@ RETORNE APENAS JSON VÁLIDO.`;
 
   const responseFormat = { type: "json_object" };
 
-  let retries = 3;
-  let delay = 2000;
+  let retries = 15;
+  let delay = 5000;
 
   while (retries >= 0) {
     try {
-      const responseText = await callLLM(baseSystemPrompt, userPrompt, jsonSchemaObj, 0.7, 2500);
-      const raw = JSON.parse(responseText);
+      // Restaurando maxTokens para 1500 para evitar erro 400 (JSON truncado)
+      const responseText = await callLLM(baseSystemPrompt, userPrompt, jsonSchemaObj, 0.7, 1500);
+      
+      let raw: any;
+      try {
+        const cleanedText = cleanJsonString(responseText);
+        raw = JSON.parse(cleanedText);
+      } catch (parseErr) {
+        throw new Error("Erro ao fazer parse do JSON de copy retornado pela IA.");
+      }
+
+      // Se não for um objeto válido ou for nulo, cria um objeto padrão
+      if (!raw || typeof raw !== "object") {
+        raw = { strategies: [] };
+      }
+
+      // Se a IA retornar um array diretamente na raiz, encapsula no objeto esperado
+      if (Array.isArray(raw)) {
+        raw = {
+          strategies: raw
+        };
+      }
+
+      // Higienização para garantir validação do Zod
+      if (!raw.strategies || !Array.isArray(raw.strategies)) {
+        raw.strategies = [];
+      }
+
+      const validTypes = ["urgency", "benefit", "emotion", "curiosity", "default"];
+      raw.strategies = raw.strategies.map((strategy: any) => {
+        let type = strategy.type;
+        if (!validTypes.includes(type)) {
+          type = "default";
+        }
+        return {
+          type: type,
+          headline: String(strategy.headline || "").trim() || "Oferta Imperdível",
+          hook: String(strategy.hook || "").trim() || "Veja essa oportunidade!",
+          body: String(strategy.body || "").trim() || "Desconto especial disponível por tempo limitado.",
+          cta: String(strategy.cta || "").trim() || "Garanta o seu antes que acabe!",
+          score: typeof strategy.score === 'number' ? strategy.score : parseFloat(String(strategy.score)) || 5.0
+        };
+      });
+
+      if (raw.strategies.length === 0) {
+        raw.strategies.push({
+          type: "default",
+          headline: `Oferta: ${offer.product_name}`,
+          hook: `Confira essa oferta incrível!`,
+          body: "Excelente produto com um preço especial.",
+          cta: "Compre agora antes que acabe!",
+          score: 5.0
+        });
+      }
+
+      if (!validTypes.includes(raw.winner_type)) {
+        raw.winner_type = raw.strategies[0].type;
+      }
+
+      raw.justification = String(raw.justification || raw.winner_justification || "Melhor estratégia selecionada.").trim();
+      raw.audience = String(raw.audience || "Público Geral").trim();
+      raw.category = String(raw.category || offer.category || "Geral").trim();
+
+      if (!raw.hashtags || !Array.isArray(raw.hashtags)) {
+        raw.hashtags = ["#oferta", "#promocao"];
+      } else {
+        raw.hashtags = raw.hashtags.map(String).map((h: string) => h.replace(/#/g, "").trim()).filter(Boolean);
+      }
 
       const validationResult = GeneratedCopySchema.safeParse(raw);
       if (!validationResult.success) {
@@ -343,7 +372,7 @@ export function mapGeneratedCopyToLegacyResult(
   const winner = copyContext.strategies.find(s => s.type === copyContext.winner_type) || copyContext.strategies[0];
 
   if (copyContext.hashtags) {
-    copyContext.hashtags = copyContext.hashtags.map(h => h.startsWith('#') ? h : `#${h}`);
+    copyContext.hashtags = copyContext.hashtags.map((h: string) => h.startsWith('#') ? h : `#${h}`);
   }
 
   return {
@@ -457,23 +486,41 @@ REGRAS DE OURO:
 RESPONDA ESTRITAMENTE NESTE FORMATO JSON:
 ${JSON.stringify(jsonSchemaObj, null, 2)}`;
 
-  let retries = 2;
-  let delay = 1000;
+  let retries = 15;
+  let delay = 5000;
   while (retries >= 0) {
     try {
-      const responseText = await callLLM(systemPrompt, userPrompt, jsonSchemaObj, 0.2, 1000);
-      const raw = JSON.parse(responseText);
-
-      // Validação rápida de schema (Duck typing)
-      if (typeof raw.ai_score_boost !== 'number' || !raw.conversion_justification) {
-        throw new Error("Payload de curadoria inválido ou corrompido.");
+      const responseText = await callLLM(systemPrompt, userPrompt, jsonSchemaObj, 0.2, 500);
+      
+      let raw: any;
+      try {
+        const cleanedText = cleanJsonString(responseText);
+        raw = JSON.parse(cleanedText);
+      } catch (parseErr) {
+        throw new Error("Erro ao fazer parse do JSON retornado pela IA.");
       }
 
+      // Higienização robusta e duck typing tolerante
+      let scoreBoost = 0;
+      if (raw.ai_score_boost !== undefined && raw.ai_score_boost !== null) {
+        scoreBoost = typeof raw.ai_score_boost === 'number'
+          ? raw.ai_score_boost
+          : parseFloat(String(raw.ai_score_boost)) || 0;
+      } else if (raw.score_boost !== undefined) {
+        scoreBoost = typeof raw.score_boost === 'number'
+          ? raw.score_boost
+          : parseFloat(String(raw.score_boost)) || 0;
+      }
+
+      const justification = raw.conversion_justification || raw.justification || "Avaliação de apelo comercial da IA.";
+      const strongPoints = Array.isArray(raw.strong_points) ? raw.strong_points.map(String) : [];
+      const weakPoints = Array.isArray(raw.weak_points) ? raw.weak_points.map(String) : [];
+
       return {
-        ai_score_boost: Math.max(0, Math.min(5, raw.ai_score_boost)), // Trava dura do Teto de 5
-        conversion_justification: raw.conversion_justification,
-        strong_points: raw.strong_points || [],
-        weak_points: raw.weak_points || []
+        ai_score_boost: Math.max(0, Math.min(5, scoreBoost)), // Trava dura do Teto de 5
+        conversion_justification: justification,
+        strong_points: strongPoints,
+        weak_points: weakPoints
       };
 
     } catch (err: any) {

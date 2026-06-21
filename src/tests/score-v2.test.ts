@@ -4,6 +4,15 @@ import { calculateOfferScoreV2 } from "@/lib/offers/score-v2";
 import { curateOfferScore, rankOffersBatch } from "@/lib/offers/curation-engine";
 import type { Offer } from "@/types/domain";
 
+vi.mock("@/lib/ai/groq", () => ({
+  analyzeConversionPotential: vi.fn().mockResolvedValue({
+    ai_score_boost: 2.5,
+    conversion_justification: "Mocked justification",
+    strong_points: ["Mocked point"],
+    weak_points: []
+  })
+}));
+
 describe("Curation V2 Engine - Forensic Verification", () => {
   const mockOffer: Offer = {
     id: "off-123",
@@ -94,6 +103,16 @@ describe("Curation V2 Engine - Forensic Verification", () => {
   });
 
   describe("4. Batch Ranking & Curation Governance (Top 3 Limit)", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      vi.stubEnv("ENABLE_AI_CURATION", "true");
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.unstubAllEnvs();
+    });
+
     it("filters cold ranking >= 5 and slices top 3 for AI evaluation", async () => {
       // 5 mock offers, 3 with score >= 5.0, 2 with score < 5.0
       const offersList: Offer[] = [
@@ -104,9 +123,12 @@ describe("Curation V2 Engine - Forensic Verification", () => {
         { ...mockOffer, id: "5", score: 3.5 }  // filtered out
       ];
 
-      vi.stubEnv("ENABLE_AI_CURATION", "true");
+      const rankedPromise = rankOffersBatch(offersList, { minColdScore: 5.0 });
 
-      const ranked = await rankOffersBatch(offersList, { minColdScore: 5.0 });
+      // Avança os timers virtuais para resolver os delays de 2s de forma instantânea
+      await vi.runAllTimersAsync();
+
+      const ranked = await rankedPromise;
 
       // Should contain only the 3 offers that are >= 5.0
       expect(ranked.length).toBe(3);

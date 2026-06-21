@@ -53,20 +53,22 @@ export async function POST(request: Request) {
     // Se houver chave da API de IA configurada, geramos as copys automaticamente
     if (process.env.GROQ_API_KEY && offersToProcess.length > 0) {
       const baseUrl = new URL(request.url).origin;
-      const generatePromises = offersToProcess.map(offer => {
-        return fetch(`${baseUrl}/api/ai/generate`, {
-          method: "POST",
-          headers: { 
-            "Content-Type": "application/json",
-            "Cookie": request.headers.get("Cookie") || "" // mantém sessão
-          },
-          body: JSON.stringify({ offerId: offer.id })
-        }).catch(generateError => {
+      for (const offer of offersToProcess) {
+        try {
+          await fetch(`${baseUrl}/api/ai/generate`, {
+            method: "POST",
+            headers: { 
+              "Content-Type": "application/json",
+              "Cookie": request.headers.get("Cookie") || "" // mantém sessão
+            },
+            body: JSON.stringify({ offerId: offer.id })
+          });
+          // Delay maior de 10s entre requisições para mitigar proativamente o Rate Limit 429 da Groq
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        } catch (generateError) {
           console.error(`Falha ao gerar criativos por IA para oferta ${offer.id}:`, generateError);
-        });
-      });
-      // Executa as gerações em paralelo para poupar tempo precioso da Vercel (Hobby limite = 60s)
-      await Promise.all(generatePromises);
+        }
+      }
     }
 
     if (offers.length === 0) {

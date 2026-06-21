@@ -14,14 +14,12 @@ describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
     vi.restoreAllMocks();
   });
 
-  it("deve retornar mock de fallback seguro se a chave FIRECRAWL_API_KEY não estiver definida", async () => {
+  it("deve retornar null se a chave FIRECRAWL_API_KEY não estiver definida", async () => {
     process.env.FIRECRAWL_API_KEY = "";
     
     const result = await scrapeProductDetails("https://shopee.com.br/produto-teste-i.123.456");
     
-    expect(result).not.toBeNull();
-    expect(result?.product_name).toContain("Shopee");
-    expect(result?.current_price).toBe(99.90);
+    expect(result).toBeNull();
   });
 
   it("deve tentar raspar e estruturar os dados usando a API do Firecrawl se a chave estiver configurada", async () => {
@@ -53,7 +51,7 @@ describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
     expect(result?.image_url).toBe("https://cf.shopee.com.br/file/img1");
   });
 
-  it("deve acionar o fallback controlado em caso de erro definitivo do Firecrawl", async () => {
+  it("deve retornar null em caso de erro definitivo do Firecrawl", async () => {
     process.env.FIRECRAWL_API_KEY = "fc-fake-key";
 
     // Simula falha do Firecrawl nas tentativas
@@ -61,8 +59,6 @@ describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
 
     const result = await scrapeProductDetails("https://shopee.com.br/dry-fit-i.123.456");
 
-    expect(result).not.toBeNull();
-    expect(result?.product_name).toContain("Fallback");
-    expect(result?.current_price).toBe(49.99);
+    expect(result).toBeNull();
   });
 });

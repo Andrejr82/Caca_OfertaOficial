@@ -1,17 +1,18 @@
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 import { generateSheinAffiliateLink } from "@/lib/platforms/shein";
 
 // Mocking dependencies
-jest.mock("@/lib/supabase/server", () => ({
-  createServerSupabaseClient: jest.fn().mockResolvedValue({
-    from: jest.fn().mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          eq: jest.fn().mockReturnValue({
-            maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null })
+vi.mock("@/lib/supabase/server", () => ({
+  createServerSupabaseClient: vi.fn().mockResolvedValue({
+    from: vi.fn().mockReturnValue({
+      select: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          eq: vi.fn().mockReturnValue({
+            maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
           })
         })
       }),
-      upsert: jest.fn().mockResolvedValue({ error: null })
+      upsert: vi.fn().mockResolvedValue({ error: null })
     })
   })
 }));
@@ -20,7 +21,7 @@ describe("Integração Admitad / Shein", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
-    jest.resetModules();
+    vi.resetModules();
     process.env = { ...originalEnv };
   });
 
@@ -41,7 +42,7 @@ describe("Integração Admitad / Shein", () => {
     process.env.ADMITAD_WEBSITE_ID = "123456";
 
     // Mock do fetch global
-    global.fetch = jest.fn().mockImplementation(async (url: string) => {
+    global.fetch = vi.fn().mockImplementation(async (url: string) => {
       if (url.includes("/token/")) {
         return {
           ok: true,
@@ -55,7 +56,7 @@ describe("Integração Admitad / Shein", () => {
         };
       }
       return { ok: false };
-    }) as jest.Mock;
+    }) as any;
 
     const result = await generateSheinAffiliateLink("https://br.shein.com/produto-teste", "user123");
     expect(result).toBe("https://ad.admitad.com/g/fake-link/");

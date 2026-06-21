@@ -59,7 +59,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ subI
     // Instead of a 302 redirect, return an HTML page with Open Graph tags and an instant redirect.
     // This allows WhatsApp and Telegram to scrape the metadata and generate HIGH-QUALITY Link Previews!
     const title = link.offers?.product_name || "Oferta Especial";
-    const image = link.offers?.image_url || 'https://caca-oferta-oficial.vercel.app/og-image.jpg';
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://caca-oferta-oficial.vercel.app";
+    const rawImage = link.offers?.image_url || `${appUrl}/og-image.jpg`;
+    const image = rawImage.includes('http2.mlstatic.com') 
+      ? `${appUrl}/api/images/proxy?url=${encodeURIComponent(rawImage)}`
+      : rawImage;
 
     const html = `
 <!DOCTYPE html>

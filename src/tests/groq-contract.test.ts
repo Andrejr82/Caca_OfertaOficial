@@ -94,7 +94,7 @@ describe("Groq Contract Validation", () => {
       const invalidCopy = { strategies: [] };
       mockGroqResponse(invalidCopy);
       const result = await generateOfferAnalysis(offer, links);
-      expect(result.score).toBe(10);
+      expect(result.score).toBe(5);
       expect(result.telegram).toContain("Produto Teste");
       expect(result.telegram).not.toContain("Fone Sem Fio Bluetooth");
     });
@@ -104,7 +104,7 @@ describe("Groq Contract Validation", () => {
       const invalidCopy = { ...mockCopy, strategies: "teste" }; 
       mockGroqResponse(invalidCopy);
       const result = await generateOfferAnalysis(offer, links);
-      expect(result.score).toBe(10);
+      expect(result.score).toBe(5);
       expect(result.telegram).toContain("Produto Teste");
     });
 
@@ -112,7 +112,7 @@ describe("Groq Contract Validation", () => {
       const offer = { ...dummyOffer, id: "invalid-null" } as unknown as Offer;
       mockGroqResponse("null");
       const result = await generateOfferAnalysis(offer, links);
-      expect(result.score).toBe(10);
+      expect(result.score).toBe(5);
       expect(result.telegram).toContain("Produto Teste");
     });
 
@@ -120,7 +120,7 @@ describe("Groq Contract Validation", () => {
       const offer = { ...dummyOffer, id: "invalid-empty" } as unknown as Offer;
       mockGroqResponse({});
       const result = await generateOfferAnalysis(offer, links);
-      expect(result.score).toBe(10);
+      expect(result.score).toBe(5);
       expect(result.telegram).toContain("Produto Teste");
     });
     
