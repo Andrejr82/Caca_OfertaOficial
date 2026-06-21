@@ -42,37 +42,15 @@ export async function GET(request: Request) {
     originalBuffer = await imageRes.arrayBuffer();
     originalContentType = imageRes.headers.get("content-type") || "image/webp";
 
-    // Tenta processar com o Sharp (Node.js)
-    try {
-      const processedImage = await sharp(Buffer.from(originalBuffer))
-        .resize({
-          width: 1080,
-          height: 1080,
-          fit: "contain",
-          background: { r: 255, g: 255, b: 255, alpha: 1 }
-        })
-        .jpeg({ quality: 90 })
-        .toBuffer();
-
-      return new NextResponse(processedImage, {
-        status: 200,
-        headers: {
-          "Content-Type": "image/jpeg",
-          "Cache-Control": "public, max-age=31536000, immutable",
-        }
-      });
-    } catch (sharpError) {
-      console.warn("[IMAGE PROXY] Erro ao processar imagem com sharp. Repassando original em modo Fallback:", sharpError);
-      
-      // Fallback: se o sharp falhar (por ex na Vercel), repassamos a imagem original diretamente.
-      return new NextResponse(originalBuffer, { 
-        status: 200, 
-        headers: { 
-          "Content-Type": originalContentType,
-          "Cache-Control": "public, max-age=31536000, immutable"
-        }
-      });
-    }
+    // Retorna a imagem original repassada (Bypass direto)
+    // Isso evita completamente o uso do Sharp na Vercel e o Erro 500
+    return new NextResponse(originalBuffer, { 
+      status: 200, 
+      headers: { 
+        "Content-Type": originalContentType,
+        "Cache-Control": "public, max-age=31536000, immutable"
+      }
+    });
 
   } catch (error) {
     console.error("[IMAGE PROXY] Falha crítica de rede ou servidor:", error);
