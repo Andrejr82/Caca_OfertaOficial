@@ -53,7 +53,8 @@ export class WhatsAppService {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": API_KEY
+          "x-api-key": API_KEY,
+          "Bypass-Tunnel-Reminder": "true"
         },
         body: JSON.stringify(payload)
       });

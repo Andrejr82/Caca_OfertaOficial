@@ -70,8 +70,11 @@ async function connectToWhatsApp() {
                     console.log('🔄 Reconectando em 3 segundos...');
                     setTimeout(connectToWhatsApp, 3000);
                 } else {
-                    console.log('❌ Você deslogou o aparelho no celular.');
-                    console.log('Apague a pasta ".baileys_auth" e rode novamente para gerar um novo QR Code.');
+                    console.log('❌ Você deslogou o aparelho no celular ou a conexão expirou.');
+                    console.log('🧹 Limpando as chaves velhas do banco de dados automaticamente...');
+                    supabase.from('baileys_sessions').delete().neq('id', '0').then(() => {
+                        console.log('✅ Banco limpo! Por favor, pare o servidor (Ctrl+C) e rode "npm run whatsapp" novamente para gerar um novo QR Code.');
+                    });
                 }
             } else if (connection === 'open') {
                 console.log('\n✅ CONECTADO AO WHATSAPP COM SUCESSO!');
