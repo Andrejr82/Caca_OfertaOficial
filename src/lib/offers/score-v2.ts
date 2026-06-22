@@ -209,16 +209,16 @@ export function calculateOfferScoreV2(input: ScoreInput): ScoreV2Output {
   }
 
   // Soma Ponderada Fria (Total: 10)
-  // Pesos: Impulse (15%), Purchase Potential (20%), Preço (20%), Conversão (15%), Rating (10%), Desconto (10%), Histórico (10%)
+  // Pesos: Desconto (30%), Preço (20%), Impulse (10%), Purchase Potential (10%), Conversão (10%), Rating (10%), Histórico (10%)
   const historicalScore = input.seasonality ? Math.min(input.seasonality * 5, 10) : 5;
 
   let rawScore = 
-    (impulseScore * 0.15) +
-    (purchasePotentialScore * 0.20) +
+    (impulseScore * 0.10) +
+    (purchasePotentialScore * 0.10) +
     (priceScore * 0.20) +
-    (conversionScore * 0.15) +
+    (conversionScore * 0.10) +
     (ratingScore * 0.10) +
-    (discountScore * 0.10) +
+    (discountScore * 0.30) +
     (historicalScore * 0.10);
 
   // Aplica Categoria

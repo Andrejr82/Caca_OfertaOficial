@@ -2,11 +2,11 @@ import { SOCIALS } from "@/config/socials";
 import type { Offer } from "@/types/domain";
 import type { CopyStrategy, GeneratedCopyInput } from "@/lib/ai/schemas/generated-copy.schema";
 
-function getMarketplaceText(marketplace?: string, action: string = "Comprar"): string {
+function getMarketplaceText(marketplace?: string, action: string = "Achado"): string {
   if (!marketplace || marketplace.trim() === "" || marketplace.toLowerCase() === "loja online" || marketplace.toLowerCase() === "nenhum") {
-    return `🛒 ${action}:`;
+    return `🛒 ${action} 👇🏼`;
   }
-  return `🛒 ${action} na ${marketplace}:`;
+  return `🛒 ${action} ${marketplace} 👇🏼`;
 }
 
 function formatPriceBlock(currentPrice: number, oldPrice?: number | null): string {
@@ -14,9 +14,9 @@ function formatPriceBlock(currentPrice: number, oldPrice?: number | null): strin
     val.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 
   if (oldPrice && oldPrice > currentPrice) {
-    return `🔥 De ${formatCurrency(oldPrice)}\n💰 Por ${formatCurrency(currentPrice)}`;
+    return `de ${formatCurrency(oldPrice)}\n🔥 por ${formatCurrency(currentPrice)}`;
   }
-  return `💰 Apenas ${formatCurrency(currentPrice)}`;
+  return `🔥 Apenas ${formatCurrency(currentPrice)}`;
 }
 
 export interface BuildPostParams {
@@ -30,75 +30,94 @@ export class PostBuilder {
   static buildInstagramPost({ copy, copyContext, offer, affiliateLink }: BuildPostParams): string {
     const hashtagsStr = copyContext.hashtags && copyContext.hashtags.length > 0 ? copyContext.hashtags.join(" ") : "";
     const priceBlock = formatPriceBlock(offer.current_price, offer.old_price);
+    const couponBlock = offer.coupon ? `\n🎫 Use o cupom: ${offer.coupon}\n` : '';
 
     const mainText = `🚨 ${copy.headline}\n\n${copy.hook}\n\n${copy.body}\n\n${copy.cta}`;
 
     return `${mainText}
 
 ${priceBlock}
-
+${couponBlock}
 👉 Para comprar, acesse nossa vitrine no Link da BIO:
 🔗 caca-oferta-oficial.vercel.app/bio
-
-
-
-━━━━━━━━━━━━━━━
-
-📲 MAIS OFERTAS
-
-📢 Telegram
-${SOCIALS.telegram}
-
-💬 WhatsApp
-${SOCIALS.whatsapp}
-
-━━━━━━━━━━━━━━━
 
 ${hashtagsStr}`;
   }
 
   static buildTelegramPost({ copy, copyContext, offer, affiliateLink }: BuildPostParams): string {
-    const buyText = getMarketplaceText(copyContext.marketplace || offer.platform, "Comprar");
+    const buyText = getMarketplaceText(copyContext.marketplace || offer.platform, "Achado");
     const priceBlock = formatPriceBlock(offer.current_price, offer.old_price);
+    const couponBlock = offer.coupon ? `\n🎫 Use o cupom: ${offer.coupon}\n` : '';
 
     const mainText = `🚨 *${copy.headline}*\n\n${copy.hook}\n\n${copy.body}\n\n${copy.cta}`;
 
     return `${mainText}
 
 ${priceBlock}
-
+${couponBlock}
 ${buyText}
-${affiliateLink}
+🔗 ${affiliateLink}
 
-━━━━━━━━━━━━━━━
-
-📸 Instagram
-${SOCIALS.instagram}
-
-💬 WhatsApp
-${SOCIALS.whatsapp}`;
+🚨 CHAMA seus amigos para receber promoções
+${SOCIALS.telegram}`;
   }
 
   static buildWhatsappPost({ copy, copyContext, offer, affiliateLink }: BuildPostParams): string {
-    const buyText = getMarketplaceText(copyContext.marketplace || offer.platform, "Comprar");
+    const buyText = getMarketplaceText(copyContext.marketplace || offer.platform, "Achado");
     const priceBlock = formatPriceBlock(offer.current_price, offer.old_price);
+    const couponBlock = offer.coupon ? `\n🎫 Use o cupom: ${offer.coupon}\n` : '';
 
     const mainText = `🚨 *${copy.headline}*\n\n${copy.hook}\n\n${copy.body}\n\n${copy.cta}`;
 
     return `${mainText}
 
 ${priceBlock}
-
+${couponBlock}
 ${buyText}
-${affiliateLink}
+🔗 ${affiliateLink}
 
-━━━━━━━━━━━━━━━
+🚨 CHAMA seus amigos para receber promoções
+${SOCIALS.whatsapp}`;
+  }
 
-📢 Telegram
-${SOCIALS.telegram}
+  static buildCouponTelegramPost({ offer, affiliateLink }: Omit<BuildPostParams, "copy" | "copyContext">): string {
+    const discountText = offer.product_name.replace('[CUPOM] ', '');
+    return `🚨 *CUPONS FRESQUINHOS LIBERADOS!*
 
-📸 Instagram
-${SOCIALS.instagram}`;
+🎫 Cupom: *${offer.coupon}*
+💰 Benefício: ${discountText}
+
+🏃‍♀️ Corre que esgota rápido:
+🔗 ${affiliateLink}
+
+🚨 CHAMA seus amigos para receber promoções
+${SOCIALS.telegram}`;
+  }
+
+  static buildCouponWhatsappPost({ offer, affiliateLink }: Omit<BuildPostParams, "copy" | "copyContext">): string {
+    const discountText = offer.product_name.replace('[CUPOM] ', '');
+    return `🚨 *CUPONS FRESQUINHOS LIBERADOS!*
+
+🎫 Cupom: *${offer.coupon}*
+💰 Benefício: ${discountText}
+
+🏃‍♀️ Corre que esgota rápido:
+🔗 ${affiliateLink}
+
+🚨 CHAMA seus amigos para receber promoções
+${SOCIALS.whatsapp}`;
+  }
+
+  static buildCouponInstagramPost({ offer, affiliateLink }: Omit<BuildPostParams, "copy" | "copyContext">): string {
+    const discountText = offer.product_name.replace('[CUPOM] ', '');
+    return `🚨 CUPONS FRESQUINHOS LIBERADOS!
+
+🎫 Cupom: ${offer.coupon}
+💰 Benefício: ${discountText}
+
+👉 Para resgatar, acesse o Link da BIO:
+🔗 caca-oferta-oficial.vercel.app/bio
+
+#cupomdesconto #promocao #achadinhos`;
   }
 }
-

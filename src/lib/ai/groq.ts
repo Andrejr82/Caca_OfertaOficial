@@ -120,6 +120,20 @@ export async function generateOfferAnalysis(
   offer: Offer,
   links: { telegram: string; instagram: string; whatsapp: string }
 ): Promise<AIAnalysisResult> {
+  
+  if (offer.category === "Cupons") {
+    return {
+      score: 10,
+      winner_strategy_type: "urgency",
+      telegram: PostBuilder.buildCouponTelegramPost({ offer, affiliateLink: links.telegram }),
+      whatsapp: PostBuilder.buildCouponWhatsappPost({ offer, affiliateLink: links.whatsapp }),
+      instagram_feed: PostBuilder.buildCouponInstagramPost({ offer, affiliateLink: links.instagram }),
+      instagram_stories: ["Cupom Liberado!", "Arraste para resgatar!"],
+      instagram_reels: ["Cupom Liberado!"],
+      instagram_carousel: []
+    };
+  }
+
   const apiKey = process.env.GROQ_API_KEY;
   const model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 

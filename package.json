@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next dev",
     "whatsapp": "concurrently \"node scripts/whatsapp-engine.cjs\" \"npx ngrok http --domain=reasonably-droughtier-kyla.ngrok-free.dev 3001\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
@@ -45,6 +45,7 @@
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.22",
     "concurrently": "^9.2.3",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.2.2",
     "jsdom": "^27.2.0",

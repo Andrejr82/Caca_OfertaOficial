@@ -38,6 +38,7 @@ export interface ScrapedProduct {
   image_url: string | null;
   current_price: number;
   old_price: number | null;
+  discount_badge?: string | null;
   rating: number | null;
   category?: string | null;
   subcategory?: string | null;
@@ -74,10 +75,9 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
 
-    const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category)}` : "https://shopee.com.br/m/ofertas-do-dia";
-    const promptText = category 
-      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto shopee.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`
-      : `Extraia os top ${limit} produtos em destaque da página. Para cada produto, traga o título, url original do produto shopee.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
+    const fetchLimit = limit * 4;
+    const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category + " oferta relâmpago")}` : "https://shopee.com.br/m/ofertas-do-dia";
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -102,6 +102,8 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
                     url: { type: "string" },
                     image: { type: "string" },
                     price: { type: "number" },
+                    old_price: { type: "number", nullable: true },
+                    discount_badge: { type: "string", nullable: true },
                     category: { type: "string" }
                   },
                   required: ["title", "url", "price"]
@@ -118,14 +120,18 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
     const fcData = await fcResponse.json();
     if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shopee");
 
-    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => {
+    const validProducts = fcData.data.extract.products
+      .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+
+    const products = validProducts.slice(0, limit).map((p: any) => {
       const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
       return {
         product_name: p.title,
         original_url: p.url.startsWith("http") ? p.url : `https://shopee.com.br${p.url}`,
         image_url: enhanceImageUrl(p.image || null),
         current_price: p.price,
-        old_price: null,
+        old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+        discount_badge: p.discount_badge || null,
         rating: 4.8,
         category: cat,
         subcategory: sub
@@ -149,10 +155,9 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
 
-    const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category)}/` : "https://br.shein.com/campaigns/best_sellers";
-    const promptText = category
-      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, precisamos do título, url original do produto shein, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`
-      : `Extraia os top ${limit} produtos mais vendidos. Para cada produto, precisamos do título, url original do produto shein, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
+    const fetchLimit = limit * 4;
+    const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/campaigns/best_sellers";
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -177,6 +182,8 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
                     url: { type: "string" },
                     image: { type: "string" },
                     price: { type: "number" },
+                    old_price: { type: "number", nullable: true },
+                    discount_badge: { type: "string", nullable: true },
                     category: { type: "string" }
                   },
                   required: ["title", "url", "price"]
@@ -193,14 +200,18 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     const fcData = await fcResponse.json();
     if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shein");
 
-    const products = fcData.data.extract.products.slice(0, limit).map((p: any) => {
+    const validProducts = fcData.data.extract.products
+      .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+
+    const products = validProducts.slice(0, limit).map((p: any) => {
       const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
       return {
         product_name: p.title,
         original_url: p.url.startsWith("http") ? p.url : `https://br.shein.com${p.url}`,
         image_url: enhanceImageUrl(p.image || null),
         current_price: p.price,
-        old_price: null,
+        old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+        discount_badge: p.discount_badge || null,
         rating: 4.8,
         category: cat,
         subcategory: sub
@@ -224,17 +235,14 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
       throw new Error("FIRECRAWL_API_KEY não configurada.");
     }
 
+    const fetchLimit = limit * 4;
     const urls = category
-      ? [`https://www.magazineluiza.com.br/busca/${encodeURIComponent(category)}/`]
+      ? [`https://www.magazineluiza.com.br/busca/${encodeURIComponent(category + " oferta do dia")}/`]
       : [
-          "https://www.magazineluiza.com.br/selecao/ofertasdodia/",
-          "https://www.magazineluiza.com.br/selecao/mais-vendidos/",
-          "https://www.magazineluiza.com.br/busca/mais+vendidos/"
+          "https://www.magazineluiza.com.br/selecao/ofertasdodia/"
         ];
 
-    const promptText = category
-      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto magazineluiza.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também.`
-      : `Extraia os top ${limit} produtos em destaque nesta página do Magazine Luiza. Para cada produto, traga o título completo, a URL completa do produto (começando com https://www.magazineluiza.com.br/), a URL da imagem do produto e o preço promocional atual como número (ex: 1299.00). Se houver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}).`;
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
     for (const url of urls) {
       try {
@@ -264,6 +272,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
                         image: { type: "string" },
                         price: { type: "number" },
                         old_price: { type: "number", nullable: true },
+                        discount_badge: { type: "string", nullable: true },
                         category: { type: "string" }
                       },
                       required: ["title", "url", "price"]
@@ -289,9 +298,10 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
           continue;
         }
 
-        const products = fcData.data.extract.products
-          .filter((p: any) => p.title && p.price > 0 && !(p.title || "").toLowerCase().includes("protected by"))
-          .slice(0, limit)
+        const validProducts = fcData.data.extract.products
+          .filter((p: any) => p.title && p.price > 0 && !(p.title || "").toLowerCase().includes("protected by") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+
+        const products = validProducts.slice(0, limit)
           .map((p: any) => {
             const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
             return {
@@ -300,6 +310,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
               image_url: enhanceImageUrl(p.image || null),
               current_price: p.price,
               old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+              discount_badge: p.discount_badge || null,
               rating: 4.8,
               category: cat,
               subcategory: sub
@@ -339,10 +350,9 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
   if (firecrawlKey) {
     try {
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Firecrawl Extract (IA)...");
-      const targetUrl = category ? `https://lista.mercadolivre.com.br/${encodeURIComponent(category.replace(/ /g, "-"))}` : "https://www.mercadolivre.com.br/mais-vendidos";
-      const promptText = category
-        ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título, url original do produto lista.mercadolivre.com.br, imagem, o preço promocional (somente número) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se tiver preço antigo riscado, traga também. IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como imagens de example/unsplash).`
-        : `Extraia os top ${limit} produtos mais vendidos desta página. Para cada produto, traga o título completo do produto, a URL completa do produto (href do link, começando com https://www.mercadolivre.com.br/), a URL da imagem principal do produto e o preço atual como número (ex: 329.90). Se tiver preço antigo riscado, traga também. e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). IMPORTANTE: Se não houver produtos, retorne products como vazio. Não invente ou crie produtos falsos (como imagens de example/unsplash).`;
+      const fetchLimit = limit * 4;
+      const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : "https://www.mercadolivre.com.br/ofertas";
+      const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
       const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
         method: "POST",
@@ -372,6 +382,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
                       image: { type: "string" },
                       price: { type: "number" },
                       old_price: { type: "number", nullable: true },
+                      discount_badge: { type: "string", nullable: true },
                       category: { type: "string" }
                     },
                     required: ["title", "url", "price"]
@@ -387,9 +398,10 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
       if (fcResponse.ok) {
         const fcData = await fcResponse.json();
         if (fcData.success && fcData.data?.extract?.products?.length > 0) {
-          const products = fcData.data.extract.products
-            .filter((p: any) => p.title && p.price > 0 && !p.image?.includes("unsplash.com") && !p.image?.includes("example.com") && !p.image?.includes("mock"))
-            .slice(0, limit)
+          const validProducts = fcData.data.extract.products
+            .filter((p: any) => p.title && p.price > 0 && !p.image?.includes("unsplash.com") && !p.image?.includes("example.com") && !p.image?.includes("mock") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+
+          const products = validProducts.slice(0, limit)
             .map((p: any) => {
               const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
               return {
@@ -398,6 +410,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
                 image_url: enhanceImageUrl(p.image || null),
                 current_price: p.price,
                 old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+                discount_badge: p.discount_badge || null,
                 rating: 4.8,
                 category: cat,
                 subcategory: sub
@@ -1310,17 +1323,14 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
       return [];
     }
 
+    const fetchLimit = limit * 4;
     const urls = category
-      ? [`https://www.amazon.com.br/s?k=${encodeURIComponent(category)}`]
+      ? [`https://www.amazon.com.br/s?k=${encodeURIComponent(category + " oferta")}`]
       : [
-          "https://www.amazon.com.br/gp/bestsellers/",
-          "https://www.amazon.com.br/gp/movers-and-shakers/",
           "https://www.amazon.com.br/deals"
         ];
 
-    const promptText = category
-      ? `Extraia os top ${limit} produtos dos resultados de busca para "${category}". Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto, o preço atual como número (ex: 299.00) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`
-      : `Extraia os top ${limit} produtos em destaque nesta página da Amazon Brasil. Para cada produto, traga o título completo, a URL completa do produto na Amazon (começando com https://www.amazon.com.br/), a URL da imagem do produto, o preço atual como número (ex: 299.00) e a categoria do produto (exemplos: ${MAIN_CATEGORY_NAMES.slice(0,8).join(", ")}). Se houver preço antigo riscado, traga também. Ignore produtos sem preço.`;
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
     for (const url of urls) {
       let retries = 3;
@@ -1356,6 +1366,7 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
                           image: { type: "string" },
                           price: { type: "number" },
                           old_price: { type: "number", nullable: true },
+                          discount_badge: { type: "string", nullable: true },
                           category: { type: "string" }
                         },
                         required: ["title", "url", "price"]
@@ -1394,15 +1405,17 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
         continue;
       }
 
-        const products = fcData.data.extract.products
+        const validProducts = fcData.data.extract.products
           .filter((p: any) => {
             const titleLower = (p.title || "").toLowerCase();
             return p.title && p.price > 0 &&
               !titleLower.includes("cachorros da amazon") &&
               !titleLower.includes("página não encontrada") &&
-              !titleLower.includes("sorry");
-          })
-          .slice(0, limit)
+              !titleLower.includes("sorry") &&
+              ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0));
+          });
+
+        const products = validProducts.slice(0, limit)
           .map((p: any) => {
             const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
             return {
@@ -1411,6 +1424,7 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
               image_url: enhanceImageUrl(p.image || null),
               current_price: p.price,
               old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+              discount_badge: p.discount_badge || null,
               rating: 4.8,
               category: cat,
               subcategory: sub
@@ -1430,6 +1444,117 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
     console.error(`[SCRAPER][AMAZON][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
     return [];
   }
+}
+
+import { fetchMarketplaceCoupons, ScrapedCoupon } from "./coupon-scraper";
+
+/**
+ * Roda o fluxo completo de descoberta de Cupons para as fontes selecionadas
+ * e os salva como ofertas rascunho no Supabase.
+ */
+export async function discoverAndIngestCoupons(
+  limit = 5,
+  sources: string[] = ["Mercado Livre"],
+  targetUserId?: string
+): Promise<Offer[]> {
+  console.log(`[SCRAPER][COUPONS] Iniciando descobrimento e ingestão para fontes: ${sources.join(", ")}`);
+  let supabase;
+  let userId = targetUserId || null;
+
+  if (targetUserId) {
+    const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    supabase = createSupabaseAdminClient();
+  } else {
+    supabase = await createServerSupabaseClient();
+    if (supabase) {
+      userId = await getCurrentUserId();
+    }
+  }
+
+  if (!supabase || !userId) {
+    throw new Error("Supabase ou usuário não autenticado.");
+  }
+
+  const ingestedCoupons: Offer[] = [];
+
+  for (const source of sources) {
+    const scrapedCoupons = await fetchMarketplaceCoupons(source, limit);
+
+    for (const coupon of scrapedCoupons) {
+      let finalUrl = coupon.link;
+      if (source === "Mercado Livre") {
+        finalUrl = generateMLAffiliateLink(coupon.link, userId);
+      } else if (source === "Magalu") {
+        const magaluId = process.env.MAGALU_PARTNER_ID || "";
+        if (magaluId) {
+          try {
+            const urlObj = new URL(coupon.link);
+            urlObj.hostname = "www.magazinevoce.com.br";
+            urlObj.pathname = `/${magaluId}${urlObj.pathname}`;
+            finalUrl = urlObj.toString();
+          } catch (e) {}
+        }
+      } else if (source === "Amazon") {
+        const amazonTag = process.env.AMAZON_PARTNER_TAG || "";
+        if (amazonTag) {
+          try {
+            const urlObj = new URL(coupon.link);
+            urlObj.searchParams.set("tag", amazonTag);
+            finalUrl = urlObj.toString();
+          } catch (e) {}
+        }
+      }
+
+      const { data: existingOffer } = await supabase
+        .from("offers")
+        .select("id")
+        .eq("coupon", coupon.code)
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existingOffer) {
+        console.log(`[SCRAPER][${source}][COUPONS] Cupom ${coupon.code} já existe.`);
+        continue;
+      }
+
+      let platformValue = source;
+      let notesValue = `Importado automaticamente via Robô de Cupons (${source}). Regras: ${coupon.rules}`;
+
+      const { data: newOffer, error: insertError } = await supabase
+        .from("offers")
+        .insert({
+          user_id: userId,
+          platform: platformValue === "Shein" ? "Outro" : platformValue,
+          product_name: `[CUPOM] ${coupon.discount}`,
+          original_url: finalUrl,
+          image_url: null,
+          current_price: 0,
+          old_price: null,
+          rating: null,
+          coupon: coupon.code,
+          category: "Cupons",
+          subcategory: null,
+          score: 10,
+          legacy_score: 10,
+          new_score: 10,
+          explainability: {},
+          status: "draft",
+          notes: platformValue === "Shein" ? `Plataforma original: Shein. ${notesValue}` : notesValue
+        })
+        .select("*")
+        .maybeSingle();
+
+      if (!insertError && newOffer) {
+        ingestedCoupons.push(newOffer as Offer);
+        updateMetrics(source, "found", 1);
+      } else if (insertError) {
+        console.error(`[SCRAPER][${source}][COUPONS] Erro ao cadastrar cupom ${coupon.code}: ${insertError.message}`);
+        updateMetrics(source, "failures", 1);
+      }
+    }
+  }
+
+  return ingestedCoupons;
 }
 
 /**

@@ -5,12 +5,12 @@ import path from "path";
 dotenv.config({ path: path.resolve(process.cwd(), ".env.local") });
 
 import {
-  fetchTrendingProductsFromLanding,
-  fetchShopeeTrendingProducts,
-  fetchSheinTrendingProducts,
   fetchMagaluTrendingProducts,
+  fetchShopeeTrendingProducts,
+  fetchTrendingProductsFromLanding,
+  fetchSheinTrendingProducts,
   fetchAmazonTrendingProducts
-} from "../src/lib/affiliates/scraper";
+} from "../../src/lib/affiliates/scraper";
 
 async function runTest() {
   console.log("=== INICIANDO TESTE DOS MARKETPLACES ===");
