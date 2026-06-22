@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "whatsapp": "concurrently \"node scripts/whatsapp-engine.cjs\" \"npx localtunnel --port 3001 --subdomain motor-cacaoferta-andrejr\"",
+    "whatsapp": "concurrently \"node scripts/whatsapp-engine.cjs\" \"npx ngrok http --domain=reasonably-droughtier-kyla.ngrok-free.dev 3001\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
