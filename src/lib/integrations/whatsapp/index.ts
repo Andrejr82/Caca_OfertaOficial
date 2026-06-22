@@ -13,7 +13,7 @@ export class WhatsAppService {
   private engineUrl: string;
 
   constructor() {
-    this.engineUrl = process.env.WHATSAPP_ENGINE_URL || "http://localhost:3001";
+    this.engineUrl = (process.env.WHATSAPP_ENGINE_URL || "http://localhost:3001").replace(/\/+$/, "");
   }
 
   async getChannelStatus() {
