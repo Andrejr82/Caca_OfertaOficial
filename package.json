@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "whatsapp": "node scripts/whatsapp-engine.cjs",
+    "whatsapp": "concurrently \"node scripts/whatsapp-engine.cjs\" \"npx localtunnel --port 3001 --subdomain motor-cacaoferta-01\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -44,6 +44,7 @@
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
     "autoprefixer": "^10.4.22",
+    "concurrently": "^9.2.3",
     "eslint": "^9.39.1",
     "eslint-config-next": "^16.2.2",
     "jsdom": "^27.2.0",
