@@ -4,7 +4,8 @@ import {
   publishPostBackground, 
   processOfferBackground, 
   syncAnalyticsBackground,
-  runUserScrapingBackground
+  runUserScrapingBackground,
+  processClickBackground
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -13,6 +14,7 @@ export const { GET, POST, PUT } = serve({
     publishPostBackground,
     processOfferBackground,
     syncAnalyticsBackground,
-    runUserScrapingBackground
+    runUserScrapingBackground,
+    processClickBackground
   ],
 });

@@ -241,3 +241,5 @@ export const runUserScrapingBackground = inngest.createFunction(
     return { status: "completed", processedCount: processedOffers.length };
   }
 );
+
+export * from "./tracking";

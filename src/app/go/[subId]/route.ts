@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { inngest } from "@/lib/inngest/client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -43,12 +44,26 @@ export async function GET(request: Request, { params }: { params: Promise<{ subI
     return NextResponse.json({ error: "Link não encontrado ou bloqueado por RLS", subId, supabaseError: error }, { status: 404 });
   }
 
-  // Increment clicks. Using an RPC would be better to avoid race conditions,
-  // but a simple update is acceptable for the MVP.
-  await supabase
-    .from("affiliate_links")
-    .update({ clicks: (link.clicks || 0) + 1 })
-    .eq("id", link.id);
+  // Extrair metadados para analytics (anonimizados)
+  const userAgent = request.headers.get("user-agent") || "";
+  const referer = request.headers.get("referer") || "";
+  
+  let deviceType = "desktop";
+  if (/mobile|android|iphone|ipod/i.test(userAgent)) deviceType = "mobile";
+  else if (/ipad|tablet/i.test(userAgent)) deviceType = "tablet";
+  
+  const source = referer || link.channel || "direct";
+
+  // Dispara o tracking assíncrono para Inngest (Fire and forget)
+  // Isso insere no click_events e atualiza o affiliate_links paralelamente sem bloquear o redirect
+  inngest.send({
+    name: "tracking/click.registered",
+    data: {
+      affiliateLinkId: link.id,
+      source: source,
+      deviceType: deviceType
+    }
+  }).catch(err => console.error("Erro ao enfileirar tracking:", err));
 
   // Redirect cleanly to the original affiliate URL.
   try {

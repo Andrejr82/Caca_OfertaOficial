@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
   Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
-  PanelLeftOpen, LogOut, Sparkles, Zap, Menu
+  PanelLeftOpen, LogOut, Sparkles, Zap, Menu, Activity
 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { officialBrand } from "@/lib/env";
@@ -15,7 +15,8 @@ const navSections = [
   {
     title: "Principal",
     items: [
-      { href: "/dashboard", label: "Dashboard", icon: BarChart3 }
+      { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+      { href: "/growth", label: "Growth", icon: Activity }
     ]
   },
   {
