@@ -397,6 +397,17 @@ export function PublishClient() {
 
                   {/* Copy editor */}
                   <div className="min-w-0 space-y-3">
+                    
+                    {/* Alerta Semi-Automático Shein */}
+                    {(post.url.includes("shein.com") || post.trackedUrl.includes("caca_oferta_manual_link")) && (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                        <AlertCircle className="text-amber-500 mt-0.5 flex-shrink-0" size={16} />
+                        <div className="text-xs text-amber-500/90 leading-relaxed">
+                          <strong>Ação Manual Necessária:</strong> Este é um produto da Shein. Pegue o link que está no texto abaixo, abra no <strong>App Oficial da Shein</strong> para gerar seu link curto de afiliado e cole no lugar do link longo antes de clicar em Publicar!
+                        </div>
+                      </div>
+                    )}
+
                     <textarea
                       value={post.copy}
                       onChange={(e) => updateCopy(post.id, e.target.value)}

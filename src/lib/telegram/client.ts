@@ -1,4 +1,5 @@
 import { hasTelegramEnv } from "@/lib/env";
+import https from "https";
 
 interface TelegramSendMessageResponse {
   ok: boolean;
@@ -58,55 +59,62 @@ export async function sendTelegramPhoto(text: string, photoUrl: string) {
     throw new Error("Telegram não configurado.");
   }
 
-  // Verifica se a imagem vem da Amazon (que bloqueia bots do Telegram)
+  // Verifica se a imagem vem da Amazon ou Netshoes (que bloqueiam bots do Telegram)
   const isAmazonImage = photoUrl.includes("amazon.com") || photoUrl.includes("media-amazon.com");
+  const isNetshoesImage = photoUrl.includes("netshoes.com.br") || photoUrl.includes("zattini.com.br");
 
-  if (isAmazonImage) {
-    console.log("[Telegram] Baixando imagem da Amazon localmente via multipart/form-data...");
-    const imageRes = await fetch(photoUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
-      }
-    });
-    if (!imageRes.ok) {
-      throw new Error(`Falha ao baixar imagem da Amazon. HTTP ${imageRes.status}`);
-    }
-    const imageBlob = await imageRes.blob();
-    
-    const formData = new FormData();
-    formData.append("chat_id", process.env.TELEGRAM_CHANNEL_ID!);
-    formData.append("photo", imageBlob, "offer-image.jpg");
-    formData.append("caption", text);
+  // Se for protegida, passa pelo Proxy Público (wsrv.nl) para que o Telegram consiga acessar
+  const finalPhotoUrl = (isAmazonImage || isNetshoesImage) 
+    ? `https://wsrv.nl/?url=${encodeURIComponent(photoUrl)}` 
+    : photoUrl;
 
-    const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-      method: "POST",
-      body: formData
-    });
-
-    const payload = (await response.json()) as TelegramSendMessageResponse;
-    if (!payload.ok || !payload.result) {
-      throw new Error(payload.description || "Falha ao publicar foto no Telegram via FormData.");
-    }
-
-    return payload.result;
+  if (isAmazonImage || isNetshoesImage) {
+    console.log(`[Telegram] Imagem protegida. Usando Proxy WSRV.NL via HTTPS IPv4 para máxima velocidade...`);
   }
 
-  // Fluxo normal via URL para Mercado Livre, etc.
-  const response = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
+  // O envio em formato JSON (ao invés de buffer) garante que o payload tenha apenas ~300 bytes,
+  // evitando que a conexão caia por Timeout (ETIMEDOUT) em redes com limites de MTU (Upload)
+  return new Promise((resolve, reject) => {
+    const payload = JSON.stringify({
       chat_id: process.env.TELEGRAM_CHANNEL_ID,
-      photo: photoUrl,
+      photo: finalPhotoUrl,
       caption: text
-    })
+    });
+
+    const options = {
+      hostname: 'api.telegram.org',
+      port: 443,
+      path: `/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`,
+      method: 'POST',
+      family: 4, // FORÇAR IPv4 - Corrige bug crítico do Node.js (ETIMEDOUT / ENETUNREACH)
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data) as TelegramSendMessageResponse;
+          if (!result.ok || !result.result) {
+            reject(new Error(result.description || "Falha ao publicar foto."));
+          } else {
+            resolve(result.result);
+          }
+        } catch (e) {
+          reject(new Error("Resposta inválida da API do Telegram."));
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      reject(new Error(`Erro de Conexão HTTPS com o Telegram: ${e.message}`));
+    });
+
+    req.write(payload);
+    req.end();
   });
-
-  const payload = (await response.json()) as TelegramSendMessageResponse;
-  if (!payload.ok || !payload.result) {
-    throw new Error(payload.description || "Falha ao publicar foto no Telegram.");
-  }
-
-  return payload.result;
 }

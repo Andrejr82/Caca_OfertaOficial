@@ -64,6 +64,11 @@ function enhanceImageUrl(url: string | null): string | null {
     enhanced = enhanced.replace(/\/\d+x\d+\//, "/orig/");
   }
 
+  // Netshoes: Remove parâmetros da query para pegar a imagem original de alta resolução
+  if (enhanced.includes("netshoes.com.br") && enhanced.includes("?")) {
+    enhanced = enhanced.split("?")[0];
+  }
+
   return enhanced;
 }
 
@@ -1292,6 +1297,83 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
   }
 }
 
+async function scrapeNetshoesProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
+  console.log(`[SCRAPER][NETSHOES][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
+  try {
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      console.error("[SCRAPER][NETSHOES][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+      return null;
+    }
+
+    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${firecrawlKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({ 
+        url: productUrl, 
+        formats: ["extract"],
+        extract: {
+          prompt: "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site.",
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              image: { type: "string" },
+              current_price: { type: "string" },
+              old_price: { type: "string", nullable: true },
+              discount_badge: { type: "string", nullable: true }
+            },
+            required: ["title", "current_price"]
+          }
+        }
+      })
+    });
+
+    if (!fcResponse.ok) {
+      throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+    }
+
+    const fcData = await fcResponse.json();
+    if (!fcData.success || !fcData.data || !fcData.data.extract) {
+      throw new Error("Firecrawl não retornou dados de extração válidos para Netshoes.");
+    }
+
+    const extract = fcData.data.extract;
+
+    // Converte os valores extraídos de string para número
+    const parsePrice = (priceStr: string | number | null | undefined): number | null => {
+      if (!priceStr) return null;
+      if (typeof priceStr === "number") return priceStr;
+      const match = priceStr.match(/\d+(?:[.,]\d+)?/);
+      if (match) {
+        return parseFloat(match[0].replace(/\./g, "").replace(",", "."));
+      }
+      return null;
+    };
+
+    const currentPriceNum = parsePrice(extract.current_price) || 0;
+    const oldPriceNum = parsePrice(extract.old_price);
+
+    const scraped = {
+      product_name: extract.title,
+      original_url: productUrl,
+      image_url: enhanceImageUrl(extract.image || null),
+      current_price: currentPriceNum,
+      old_price: oldPriceNum,
+      rating: 4.8
+    };
+    console.log(`[SCRAPER][NETSHOES][PRODUCT] Sucesso: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+    return scraped;
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][NETSHOES][PRODUCT] Falha ao raspar produto ${productUrl}: ${errorMsg}`);
+    return null;
+  }
+}
+
 /**
  * Raspa detalhes de um produto individual
  * Identifica a loja pelo domínio e direciona para a função correta
@@ -1308,6 +1390,9 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
   }
   if (productUrl.includes("amazon.com.br") || productUrl.includes("amzn.to")) {
     return scrapeAmazonProductDetails(productUrl);
+  }
+  if (productUrl.includes("netshoes.com.br")) {
+    return scrapeNetshoesProductDetails(productUrl);
   }
   
   // Default fallback (Mercado Livre)
@@ -1442,6 +1527,118 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[SCRAPER][AMAZON][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    return [];
+  }
+}
+
+export async function fetchNetshoesTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][NETSHOES][TRENDS] Iniciando busca de tendências da Netshoes...");
+  try {
+    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    if (!firecrawlKey) {
+      console.warn("[SCRAPER][NETSHOES][TRENDS] FIRECRAWL_API_KEY não configurada.");
+      return [];
+    }
+
+    const fetchLimit = limit * 4;
+    const urls = category
+      ? [`https://www.netshoes.com.br/busca?q=${encodeURIComponent(category + " oferta")}`]
+      : ["https://www.netshoes.com.br/busca?q=oferta", "https://www.netshoes.com.br/lst/promocoes", "https://www.netshoes.com.br/especial/outlet"];
+
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. 
+Critérios rígidos:
+1. O produto DEVE ter um preço antigo riscado ou um selo percentual de desconto.
+2. Para a IMAGEM (image), extraia a URL de alta resolução (frequentemente no atributo data-src, src ou srcset). NUNCA extraia placeholders (imagens vazias, base64 ou de carregamento).
+3. Para o SELO (discount_badge), extraia EXATAMENTE o que está escrito no site (ex: '30% OFF'). NUNCA invente palavras ou traduções.
+Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge e category.`;
+
+    for (const url of urls) {
+      let retries = 3;
+      let delay = 1500;
+      let fcData = null;
+
+      for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+          console.log(`[SCRAPER][NETSHOES][TRENDS] Tentando URL (Tentativa ${attempt}): ${url}`);
+          const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${firecrawlKey}`,
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ 
+              url,
+              formats: ["extract"],
+              timeout: 60000,
+              extract: {
+                prompt: promptText,
+                schema: {
+                  type: "object",
+                  properties: {
+                    products: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          title: { type: "string" },
+                          url: { type: "string" },
+                          image: { type: "string" },
+                          price: { type: "number" },
+                          old_price: { type: "number", nullable: true },
+                          discount_badge: { type: "string", nullable: true },
+                          category: { type: "string" }
+                        },
+                        required: ["title", "url", "price"]
+                      }
+                    }
+                  },
+                  required: ["products"]
+                }
+              }
+            }),
+            signal: AbortSignal.timeout(65000)
+          });
+        
+          if (!fcResponse.ok) {
+            if (fcResponse.status === 408 || fcResponse.status >= 500) throw new Error(`HTTP Status ${fcResponse.status}`);
+            break;
+          }
+
+          fcData = await fcResponse.json();
+          break;
+        } catch (error) {
+          if (attempt === retries) break;
+          await new Promise(resolve => setTimeout(resolve, delay));
+          delay *= 2;
+        }
+      }
+
+      if (!fcData || !fcData.success || !fcData.data?.extract?.products?.length) continue;
+
+      const validProducts = fcData.data.extract.products
+        .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+
+      const products = validProducts.slice(0, limit).map((p: any) => {
+        const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+        return {
+          product_name: p.title,
+          original_url: p.url?.startsWith("http") ? p.url : `https://www.netshoes.com.br${p.url || ""}`,
+          image_url: enhanceImageUrl(p.image || null),
+          current_price: p.price,
+          old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+          discount_badge: p.discount_badge || null,
+          rating: 4.8,
+          category: cat,
+          subcategory: sub
+        };
+      });
+
+      if (products.length > 0) return products;
+    }
+    return [];
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[SCRAPER][NETSHOES][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
     return [];
   }
 }
@@ -1596,14 +1793,6 @@ export async function discoverAndIngestTrendingOffers(
     "Utilidades Domésticas"
   ];
 
-  let activeCategorySearch = categorySearchQuery;
-  if (!activeCategorySearch || activeCategorySearch === "Geral") {
-    // Sorteio de Categoria (Roleta Aleatória VIP)
-    const randomIndex = Math.floor(Math.random() * HIGH_CONVERSION_CATEGORIES.length);
-    activeCategorySearch = HIGH_CONVERSION_CATEGORIES[randomIndex];
-    console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória VIP: Categoria sorteada -> ${activeCategorySearch}`);
-  }
-
   // Over-fetching: Multiplicamos por 3 para garantir margem de sobra para o filtro de curadoria
   const overFetchLimit = limit * 3;
   console.log(`[SCRAPER][TRENDS] Over-fetching ativado: Solicitado ${limit}, Buscando até ${overFetchLimit} brutos.`);
@@ -1612,6 +1801,21 @@ export async function discoverAndIngestTrendingOffers(
 
   for (const source of sources) {
     let scrapedProducts: ScrapedProduct[] = [];
+    
+    // Determinar categoria ativa por fonte
+    let activeCategorySearch = categorySearchQuery;
+    if (!activeCategorySearch || activeCategorySearch === "Geral") {
+      if (source === "Netshoes") {
+        const NETSHOES_CATEGORIES = ["Tênis", "Suplementos", "Roupas Esportivas", "Whey Protein", "Academia", "Camisa de Time"];
+        const randomIndex = Math.floor(Math.random() * NETSHOES_CATEGORIES.length);
+        activeCategorySearch = NETSHOES_CATEGORIES[randomIndex];
+        console.log(`[SCRAPER][TRENDS] Modo Roleta Netshoes: Categoria sorteada -> ${activeCategorySearch}`);
+      } else {
+        const randomIndex = Math.floor(Math.random() * HIGH_CONVERSION_CATEGORIES.length);
+        activeCategorySearch = HIGH_CONVERSION_CATEGORIES[randomIndex];
+        console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória VIP: Categoria sorteada -> ${activeCategorySearch}`);
+      }
+    }
 
     if (source === "Mercado Livre") {
       scrapedProducts = await fetchTrendingProductsFromLanding(overFetchLimit, activeCategorySearch);
@@ -1623,6 +1827,8 @@ export async function discoverAndIngestTrendingOffers(
       scrapedProducts = await fetchMagaluTrendingProducts(overFetchLimit, activeCategorySearch);
     } else if (source === "Amazon") {
       scrapedProducts = await fetchAmazonTrendingProducts(overFetchLimit, activeCategorySearch);
+    } else if (source === "Netshoes") {
+      scrapedProducts = await fetchNetshoesTrendingProducts(overFetchLimit, activeCategorySearch);
     }
 
     for (const product of scrapedProducts) {
@@ -1648,6 +1854,12 @@ export async function discoverAndIngestTrendingOffers(
             urlObj.searchParams.set("tag", amazonTag);
             finalUrl = urlObj.toString();
           } catch (e) {}
+        }
+      } else if (source === "Netshoes") {
+        const rakutenId = process.env.RAKUTEN_AFFILIATE_ID || "";
+        const rakutenMid = process.env.RAKUTEN_NETSHOES_MID || "43984";
+        if (rakutenId) {
+          finalUrl = `https://click.linksynergy.com/deeplink?id=${rakutenId}&mid=${rakutenMid}&murl=${encodeURIComponent(product.original_url)}`;
         }
       }
 

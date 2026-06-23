@@ -12,7 +12,16 @@ export function slugifyProductName(productName: string) {
 
 export function createSubId(channel: Channel, productName: string, offerId: string) {
   const shortId = offerId.replace(/-/g, "").slice(0, 8);
-  return `${channel}_${slugifyProductName(productName)}_${shortId}`;
+  const channelPrefix = {
+    telegram: "tg",
+    instagram: "ig",
+    whatsapp: "wp",
+    facebook: "fb",
+    site: "st",
+    blog: "bg"
+  }[channel] || "x";
+  
+  return `${channelPrefix}_${shortId}`;
 }
 
 export function createTrackedUrl(

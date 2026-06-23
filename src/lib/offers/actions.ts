@@ -86,6 +86,7 @@ export async function generateAffiliateLinkAction(
     else if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon")) platform = "Amazon";
     else if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu")) platform = "Magalu";
     else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml")) platform = "Mercado Livre";
+    else if (lowerUrl.includes("netshoes")) platform = "Netshoes" as any;
 
     const { data: newOffer, error: createError } = await supabase.from("offers").insert({
       user_id: userId,
@@ -115,6 +116,9 @@ export async function generateAffiliateLinkAction(
   } else if (offer.platform === "Shein") {
     const { generateSheinAffiliateLink } = await import("@/lib/platforms/shein");
     finalAffiliateUrl = await generateSheinAffiliateLink(affiliateUrl, userId);
+  } else if (offer.platform === "Netshoes" as any) {
+    const { generateNetshoesAffiliateLink } = await import("@/lib/platforms/netshoes");
+    finalAffiliateUrl = generateNetshoesAffiliateLink(affiliateUrl);
   }
 
   const subId = createSubId(channel, offer.product_name, offer.id);

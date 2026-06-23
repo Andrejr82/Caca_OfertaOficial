@@ -105,6 +105,9 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   } else if (metadata.platform === "Shein") {
     const { generateSheinAffiliateLink } = await import("@/lib/platforms/shein");
     finalAffiliateUrl = await generateSheinAffiliateLink(metadata.finalUrl || affiliateUrl, userId);
+  } else if (metadata.platform === "Netshoes" as any) {
+    const { generateNetshoesAffiliateLink } = await import("@/lib/platforms/netshoes");
+    finalAffiliateUrl = generateNetshoesAffiliateLink(metadata.finalUrl || affiliateUrl);
   }
 
   const subId = createSubId(channel, newOffer.product_name, newOffer.id);

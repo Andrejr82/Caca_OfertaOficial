@@ -14,7 +14,8 @@ export function TrendsAction() {
     magalu: false,
     shopee: false,
     shein: false,
-    amazon: false
+    amazon: false,
+    netshoes: false
   });
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -72,6 +73,7 @@ export function TrendsAction() {
     if (sources.shopee) selectedSources.push("Shopee");
     if (sources.shein) selectedSources.push("Shein");
     if (sources.amazon) selectedSources.push("Amazon");
+    if (sources.netshoes) selectedSources.push("Netshoes");
 
     try {
       const endpoint = mode === "products" ? "/api/scraper/trends" : "/api/scraper/coupons";
@@ -184,6 +186,15 @@ export function TrendsAction() {
                 className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
               />
               Amazon
+            </label>
+            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sources.netshoes}
+                onChange={(e) => handleSourceChange("netshoes", e.target.checked)}
+                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
+              />
+              Netshoes
             </label>
           </div>
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">

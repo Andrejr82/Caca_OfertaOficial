@@ -59,6 +59,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   else if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu")) platform = "Magalu";
   else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml") || lowerUrl.includes("meli.la")) platform = "Mercado Livre";
   else if (lowerUrl.includes("shein")) platform = "Shein";
+  else if (lowerUrl.includes("netshoes")) platform = "Netshoes" as any;
 
   // Se a plataforma for Mercado Livre, tenta obter pela API oficial
   if (platform === "Mercado Livre") {
@@ -72,6 +73,30 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
       logger.warn("Falha ao extrair dados via API do Mercado Livre, caindo de volta para Firecrawl/Scraper.");
     } catch (err) {
       logger.error("Erro ao chamar API do Mercado Livre no fetchLinkMetadata:", err);
+    }
+  }
+
+  // Utiliza o scraper robusto para Netshoes, pois o extrator genérico falha em capturar o preço.
+  if (platform === "Netshoes") {
+    try {
+      const { scrapeProductDetails } = await import("@/lib/affiliates/scraper");
+      const nsMetadata = await scrapeProductDetails(finalUrl);
+      if (nsMetadata && nsMetadata.current_price > 0) {
+        logger.info("Extração via Scraper Dedicado da Netshoes realizada com sucesso", { finalUrl });
+        return {
+          title: nsMetadata.product_name,
+          platform: "Netshoes",
+          imageUrl: nsMetadata.image_url || undefined,
+          price: nsMetadata.current_price,
+          finalUrl: finalUrl,
+          imageSource: "firecrawl_custom",
+          confidenceScore: 95,
+          extractionDate: new Date().toISOString()
+        };
+      }
+      logger.warn("Falha ao extrair dados via Scraper da Netshoes, caindo de volta para Firecrawl/Scraper genérico.");
+    } catch (err) {
+      logger.error("Erro ao chamar Scraper Dedicado da Netshoes:", err);
     }
   }
 

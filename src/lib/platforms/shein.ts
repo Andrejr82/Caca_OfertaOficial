@@ -87,50 +87,27 @@ export async function getValidAdmitadAccessToken(userId: string): Promise<string
 }
 
 /**
- * Gera um Deeplink de afiliado para a Shein através da API da Admitad.
- * Caso haja falha (credenciais faltando, não aprovado, erro de API),
- * a função retorna graciosamente a urlOriginal como fallback de segurança.
+ * Gera um Deeplink de afiliado para a Shein.
+ * Devido à migração da Shein para o seu próprio app (Agosto/2024)
+ * e o desligamento do CPA em redes terceirizadas para o Brasil,
+ * essa função opera agora em modo SEMI-AUTOMÁTICO.
+ * Retorna o link original limpo para que a IA crie a copy perfeitamente,
+ * e o usuário substitui manualmente pelo seu link do app na hora da postagem.
  */
 export async function generateSheinAffiliateLink(productUrl: string, userId: string): Promise<string> {
-  const websiteId = process.env.ADMITAD_WEBSITE_ID;
-  if (!websiteId) {
-    console.warn("[ADMITAD API] ADMITAD_WEBSITE_ID não configurado. Retornando link original.");
-    return productUrl;
-  }
-
-  const token = await getValidAdmitadAccessToken(userId);
-  if (!token) {
-    console.warn("[ADMITAD API] Não foi possível obter token da Admitad. Retornando link original.");
-    return productUrl;
-  }
-
+  console.info(`[SHEIN API] Operando em modo semi-automático. Retornando link raw: ${productUrl}`);
+  
+  // Apenas limpa a URL se houver parâmetros sujos de rastreio de outros afiliados
   try {
-    // API de Deeplink:
-    const urlWithParams = `https://api.admitad.com/deeplink/${websiteId}/new/?ulp=${encodeURIComponent(productUrl)}`;
+    const urlObj = new URL(productUrl);
+    // Removemos os params UTM/affiliate comuns que vêm raspados (se houver)
+    urlObj.searchParams.delete('admitad_uid');
+    urlObj.searchParams.delete('affiliateID');
     
-    const deeplinkRes = await fetch(urlWithParams, {
-      method: "GET",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Accept": "application/json"
-      }
-    });
-
-    const deeplinkData = await deeplinkRes.json();
-
-    if (!deeplinkRes.ok) {
-      console.error("[ADMITAD API] Falha ao gerar deeplink (Possível Ad Space não aprovado na campanha Shein):", deeplinkData);
-      return productUrl;
-    }
-
-    if (Array.isArray(deeplinkData) && deeplinkData.length > 0) {
-      return deeplinkData[0]; // Retorna a URL final da Admitad (ex: https://ad.admitad.com/g/...)
-    }
-
-    console.warn("[ADMITAD API] Retorno inesperado da API ao gerar deeplink:", deeplinkData);
-    return productUrl;
-  } catch (error) {
-    console.error("[ADMITAD API] Erro na chamada do gerador de deeplink:", error);
+    // Adiciona uma flag visual na URL final apenas para sabermos que passou pelo backend
+    urlObj.searchParams.set('caca_oferta_manual_link', 'true');
+    return urlObj.toString();
+  } catch (e) {
     return productUrl;
   }
 }
