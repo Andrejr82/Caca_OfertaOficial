@@ -1,7 +1,8 @@
 import { PublishClient } from "./publish-client";
 import { Zap } from "lucide-react";
 
-export default function PublishPage({ searchParams }: { searchParams: { url?: string } }) {
+export default async function PublishPage({ searchParams }: { searchParams: Promise<{ url?: string }> }) {
+  const params = await searchParams;
   return (
     <div className="grid gap-6 animate-fadeIn w-full max-w-4xl mx-auto min-w-0">
       {/* Header */}
@@ -17,7 +18,7 @@ export default function PublishPage({ searchParams }: { searchParams: { url?: st
 
       {/* Main Client Area */}
       <section className="glass-card p-5 md:p-8 min-w-0 overflow-hidden">
-        <PublishClient initialUrl={searchParams.url || ""} />
+        <PublishClient initialUrl={params.url || ""} />
       </section>
     </div>
   );
