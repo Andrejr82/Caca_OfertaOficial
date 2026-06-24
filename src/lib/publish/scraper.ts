@@ -327,7 +327,17 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   // 6. Cálculo do Confidence Score (Origem e Qualidade)
   let score = 0;
   if (price && price > 0) score += 40; // Preço é essencial
-  if (title && title !== "Oferta Especial") score += 30; // Título válido
+  if (title && title !== "Oferta Especial") {
+    score += 30; // Título válido
+    
+    // Proteção de Privacidade: Ocultar dados sigilosos do Perfil Social do ML
+    if (title.toLowerCase().includes("perfil social no mercado livre")) {
+      title = "Coleção Especial de Ofertas";
+    }
+    // Regex genérico para remover IDs de usuário padrão (nome + muitos números)
+    title = title.replace(/[a-zA-Z]+\d{10,}/gi, "Oferta Selecionada");
+  }
+
   if (imageUrl) {
     score += 20; // Imagem presente
     // Bônus se imagem vem de fontes estruturadas fortes
