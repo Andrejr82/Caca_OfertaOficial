@@ -323,7 +323,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                 {post.imageUrl ? (
                   <div className="relative h-full w-full flex items-center justify-center">
                     <img 
-                      src={post.imageUrl} referrerPolicy="no-referrer"
+                      src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} referrerPolicy="no-referrer"
                       alt="" 
                       className="object-cover w-full h-full" 
                     />
@@ -390,7 +390,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                   {post.imageUrl && (
                     <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full flex items-center justify-center">
                       <img 
-                        src={post.imageUrl} referrerPolicy="no-referrer"
+                        src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} referrerPolicy="no-referrer"
                         alt={post.productName} 
                         className="object-contain w-full h-full p-2" 
                       />
