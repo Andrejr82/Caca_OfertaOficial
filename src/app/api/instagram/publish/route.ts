@@ -75,8 +75,7 @@ export async function POST(request: Request) {
     }
 
     // O format do original price e current price precisa vir da oferta.
-    // offer.price é o preco atual e offer.regular_price (ou algo do tipo) é o antigo.
-    const currentPrice = offer.price ? offer.price.toFixed(2).replace('.', ',') : "0,00";
+    const currentPrice = offer.current_price ? offer.current_price.toFixed(2).replace('.', ',') : "0,00";
     const originalPrice = offer.original_price ? offer.original_price.toFixed(2).replace('.', ',') : "";
 
     const repoOwner = "Andrejr82"; // Substitua pelo usuário correto se necessário, mas em repositórios pessoais é o owner do repo
