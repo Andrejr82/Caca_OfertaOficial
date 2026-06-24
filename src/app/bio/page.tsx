@@ -77,6 +77,23 @@ export default async function BioPage({
         <p className="text-sm text-gray-400 mb-6">
           Encontre aqui todas as ofertas e achadinhos postados recentemente no nosso Instagram.
         </p>
+
+        {/* Links das Redes Sociais */}
+        <div className="flex items-center justify-center gap-5 mb-4">
+          <Link href={`https://instagram.com/${officialBrand.instagram}`} target="_blank" className="hover:scale-110 transition-transform" title="Instagram">
+            <img src="/icons/instagram.svg" alt="Instagram" className="w-9 h-9" />
+          </Link>
+          {officialBrand.telegramUrl && (
+            <Link href={officialBrand.telegramUrl} target="_blank" className="hover:scale-110 transition-transform" title="Telegram">
+              <img src="/icons/telegram.svg" alt="Telegram" className="w-9 h-9" />
+            </Link>
+          )}
+          {officialBrand.whatsappUrl && (
+            <Link href={officialBrand.whatsappUrl} target="_blank" className="hover:scale-110 transition-transform" title="WhatsApp">
+              <img src="/icons/whatsapp.svg" alt="WhatsApp" className="w-9 h-9" />
+            </Link>
+          )}
+        </div>
       </header>
 
       {/* Grid de Produtos */}
