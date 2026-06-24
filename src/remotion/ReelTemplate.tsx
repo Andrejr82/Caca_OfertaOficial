@@ -27,7 +27,7 @@ export const ReelTemplate: React.FC<ReelTemplateProps> = ({
 
   // Animação de Surgimento
   const popIn = spring({ frame: frame - 5, fps, config: { damping: 14 } });
-  const slideUp = spring({ frame: frame - 15, fps, config: { damping: 14 } });
+  const pricePop = spring({ frame: frame - 10, fps, config: { damping: 12 } });
   
   // Efeito de pulso para a oferta
   const pulse = interpolate(Math.sin(frame / 6), [-1, 1], [0.95, 1.05]);
@@ -65,7 +65,7 @@ export const ReelTemplate: React.FC<ReelTemplateProps> = ({
       </Sequence>
 
       {/* 2. Tag: Oferta Imperdível */}
-      <Sequence from={10}>
+      <Sequence from={5}>
         <div style={{ 
           width: '100%', display: 'flex', justifyContent: 'center', marginTop: 320, zIndex: 2, transform: `scale(${popIn})`
         }}>
@@ -83,10 +83,10 @@ export const ReelTemplate: React.FC<ReelTemplateProps> = ({
       </Sequence>
 
       {/* 3. Bloco Central Integrado (Card + Preços + Tag) */}
-      <Sequence from={15}>
+      <Sequence from={0}>
         <div style={{ 
           position: 'absolute', top: 430, left: '50%', 
-          transform: `translateX(-50%) translateY(${interpolate(slideUp, [0, 1], [300, 0])}px)`, 
+          transform: `translateX(-50%)`, 
           width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', zIndex: 3
         }}>
           
@@ -110,7 +110,7 @@ export const ReelTemplate: React.FC<ReelTemplateProps> = ({
           <div style={{ 
             width: 900, backgroundColor: '#0A1128', borderRadius: 40, padding: '40px 20px 60px 20px', 
             display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 20px 40px rgba(0,0,0,0.8)',
-            border: '2px solid rgba(255,255,255,0.1)', marginTop: -60, zIndex: 4
+            border: '2px solid rgba(255,255,255,0.1)', marginTop: -60, zIndex: 4, transform: `scale(${pricePop})`
           }}>
             {originalPrice && originalPrice !== currentPrice && (
               <div style={{ color: '#888888', fontSize: 40, fontWeight: 'bold', textDecoration: 'line-through' }}>
@@ -127,7 +127,7 @@ export const ReelTemplate: React.FC<ReelTemplateProps> = ({
 
           {/* Tag de Escassez (Amarela) */}
           <div style={{ 
-            transform: `scale(${pulse})`, 
+            transform: `scale(${interpolate(pricePop, [0, 1], [0, pulse])})`, 
             backgroundColor: '#FFD700', borderRadius: 20, padding: '15px 70px', 
             display: 'flex', flexDirection: 'column', alignItems: 'center', boxShadow: '0 10px 40px rgba(255,215,0,0.5)',
             clipPath: 'polygon(5% 0%, 100% 0%, 95% 100%, 0% 100%)', marginTop: -40, zIndex: 5
