@@ -35,10 +35,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Este post não é do canal Instagram." }, { status: 400 });
     }
 
-    const offer = post.offers;
-    if (!offer) {
+    const offerData = post.offers;
+    if (!offerData) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
     }
+
+    // O Supabase pode retornar a relação como um array dependendo de como a foreign key foi resolvida.
+    const offer = Array.isArray(offerData) ? offerData[0] : offerData;
 
     const imageUrl = offer.image_url;
     if (!imageUrl) {
@@ -74,9 +77,12 @@ export async function POST(request: Request) {
       }, { status: 500 });
     }
 
-    // O format do original price e current price precisa vir da oferta.
-    const currentPrice = offer.current_price ? offer.current_price.toFixed(2).replace('.', ',') : "0,00";
-    const originalPrice = offer.original_price ? offer.original_price.toFixed(2).replace('.', ',') : "";
+    // O format do original price e current price precisa vir da oferta de forma segura
+    const currentPriceNum = Number(offer.current_price);
+    const currentPrice = !isNaN(currentPriceNum) && currentPriceNum > 0 ? currentPriceNum.toFixed(2).replace('.', ',') : "0,00";
+
+    const originalPriceNum = Number(offer.original_price || offer.old_price);
+    const originalPrice = !isNaN(originalPriceNum) && originalPriceNum > 0 ? originalPriceNum.toFixed(2).replace('.', ',') : "";
 
     const repoOwner = "Andrejr82"; // Substitua pelo usuário correto se necessário, mas em repositórios pessoais é o owner do repo
     const repoName = "Caca_OfertaOficial";
