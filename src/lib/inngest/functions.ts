@@ -169,7 +169,11 @@ export const runUserScrapingBackground = inngest.createFunction(
           const aiCopyScore = Number(analysis.score || 0);
           
           const finalRankScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
-          const newStatus = finalRankScore >= 7.0 ? "approved" : offer.status;
+          // APPROVAL_THRESHOLD = 7.3 — ajuste de qualidade (era 7.0).
+          // Revisão prevista após 15 dias de coleta de dados.
+          const APPROVAL_THRESHOLD = 7.3;
+          const newStatus = finalRankScore >= APPROVAL_THRESHOLD ? "approved" : offer.status;
+          console.log(`[APPROVAL_THRESHOLD] finalRankScore=${finalRankScore} threshold=${APPROVAL_THRESHOLD} → status="${finalRankScore >= APPROVAL_THRESHOLD ? "approved" : offer.status}"`);
 
           const updatedExplainability = {
             ...(offer.explainability || {}),

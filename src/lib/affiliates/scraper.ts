@@ -4,6 +4,7 @@ import type { Offer } from "@/types/domain";
 import { generateMLAffiliateLink } from "@/lib/platforms/mercadolivre";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
 import { normalizeCategory, MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
+import { getNextViralTarget } from "@/lib/offers/discovery-config";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
@@ -82,7 +83,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
 
     const fetchLimit = limit * 4;
     const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category + " oferta relâmpago")}` : "https://shopee.com.br/m/ofertas-do-dia";
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -109,6 +110,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
                     price: { type: "number" },
                     old_price: { type: "number", nullable: true },
                     discount_badge: { type: "string", nullable: true },
+                    rating: { type: "number", nullable: true },
                     category: { type: "string" }
                   },
                   required: ["title", "url", "price"]
@@ -137,7 +139,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
         current_price: p.price,
         old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
         discount_badge: p.discount_badge || null,
-        rating: 4.8,
+        rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
         category: cat,
         subcategory: sub
       };
@@ -161,8 +163,10 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     }
 
     const fetchLimit = limit * 4;
-    const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/campaigns/best_sellers";
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
+    // Corrigido: era /campaigns/best_sellers (best sellers ≠ promoções).
+    // Agora usa /promotion/flash-sale: página de vendas relâmpago com preço antigo riscado real.
+    const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/promotion/flash-sale";
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
     const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
       method: "POST",
@@ -189,6 +193,7 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
                     price: { type: "number" },
                     old_price: { type: "number", nullable: true },
                     discount_badge: { type: "string", nullable: true },
+                    rating: { type: "number", nullable: true },
                     category: { type: "string" }
                   },
                   required: ["title", "url", "price"]
@@ -217,7 +222,7 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
         current_price: p.price,
         old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
         discount_badge: p.discount_badge || null,
-        rating: 4.8,
+        rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
         category: cat,
         subcategory: sub
       };
@@ -247,7 +252,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
           "https://www.magazineluiza.com.br/selecao/ofertasdodia/"
         ];
 
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
     for (const url of urls) {
       try {
@@ -278,6 +283,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
                         price: { type: "number" },
                         old_price: { type: "number", nullable: true },
                         discount_badge: { type: "string", nullable: true },
+                        rating: { type: "number", nullable: true },
                         category: { type: "string" }
                       },
                       required: ["title", "url", "price"]
@@ -316,7 +322,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
               current_price: p.price,
               old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
               discount_badge: p.discount_badge || null,
-              rating: 4.8,
+              rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
               category: cat,
               subcategory: sub
             };
@@ -388,6 +394,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
                       price: { type: "number" },
                       old_price: { type: "number", nullable: true },
                       discount_badge: { type: "string", nullable: true },
+                      rating: { type: "number", nullable: true },
                       category: { type: "string" }
                     },
                     required: ["title", "url", "price"]
@@ -416,7 +423,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
                 current_price: p.price,
                 old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
                 discount_badge: p.discount_badge || null,
-                rating: 4.8,
+                rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
                 category: cat,
                 subcategory: sub
               };
@@ -536,7 +543,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
           image_url: enhanceImageUrl(image),
           current_price: currentPrice,
           old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
-          rating: 4.8
+          rating: null // rating não disponível via HTML parsing (sem hardcode)
         });
       }
 
@@ -1409,13 +1416,23 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
     }
 
     const fetchLimit = limit * 4;
+    // URLs de descoberta Amazon: Deals (principal) + Movers & Shakers + Best Sellers
+    // NOTA: Amazon tem anti-bot agressivo. Falhas são esperadas; o sistema tem fallback interno.
     const urls = category
       ? [`https://www.amazon.com.br/s?k=${encodeURIComponent(category + " oferta")}`]
       : [
-          "https://www.amazon.com.br/deals"
+          "https://www.amazon.com.br/deals",
+          "https://www.amazon.com.br/gp/movers-and-shakers/electronics", // Trending: crescimento rápido
+          "https://www.amazon.com.br/gp/bestsellers/electronics"          // Best Sellers Eletrônicos
         ];
 
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
+    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. 
+Critérios rígidos:
+1. O produto DEVE ter um preço antigo riscado ou um selo percentual de desconto.
+2. Para a IMAGEM (image), extraia a URL de alta resolução (frequentemente no atributo data-src, src ou srcset). NUNCA extraia placeholders.
+3. Para o SELO (discount_badge), extraia EXATAMENTE o que está escrito no site (ex: '30% OFF'). NUNCA invente.
+4. Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal.
+Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge, rating (se houver) e category.`;
 
     for (const url of urls) {
       let retries = 3;
@@ -1510,7 +1527,7 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
               current_price: p.price,
               old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
               discount_badge: p.discount_badge || null,
-              rating: 4.8,
+              rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
               category: cat,
               subcategory: sub
             };
@@ -1550,7 +1567,8 @@ Critérios rígidos:
 1. O produto DEVE ter um preço antigo riscado ou um selo percentual de desconto.
 2. Para a IMAGEM (image), extraia a URL de alta resolução (frequentemente no atributo data-src, src ou srcset). NUNCA extraia placeholders (imagens vazias, base64 ou de carregamento).
 3. Para o SELO (discount_badge), extraia EXATAMENTE o que está escrito no site (ex: '30% OFF'). NUNCA invente palavras ou traduções.
-Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge e category.`;
+4. Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal.
+Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge, rating (se houver) e category.`;
 
     for (const url of urls) {
       let retries = 3;
@@ -1586,6 +1604,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
                           price: { type: "number" },
                           old_price: { type: "number", nullable: true },
                           discount_badge: { type: "string", nullable: true },
+                          rating: { type: "number", nullable: true },
                           category: { type: "string" }
                         },
                         required: ["title", "url", "price"]
@@ -1627,7 +1646,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
           current_price: p.price,
           old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
           discount_badge: p.discount_badge || null,
-          rating: 4.8,
+          rating: p.rating ? parseFloat(String(p.rating)) : null,
           category: cat,
           subcategory: sub
         };
@@ -1768,18 +1787,28 @@ export async function discoverAndIngestTrendingOffers(
   let supabase;
   let userId = targetUserId || null;
 
-  if (targetUserId) {
+  try {
+    if (targetUserId) {
+      const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
+      supabase = createSupabaseAdminClient();
+    } else {
+      supabase = await createServerSupabaseClient();
+      if (supabase) {
+        userId = await getCurrentUserId();
+      }
+    }
+  } catch (err) {
+    // Fallback para Admin Client se não houver contexto de request (Inngest Cron / Testes CLI)
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
     supabase = createSupabaseAdminClient();
-  } else {
-    supabase = await createServerSupabaseClient();
-    if (supabase) {
-      userId = await getCurrentUserId();
-    }
+    userId = "98906817-5ff5-4956-a35b-88737339def5"; // UUID real do Admin
   }
 
-  if (!supabase || !userId) {
-    throw new Error("Supabase ou usuário não autenticado.");
+  if (!supabase) {
+    throw new Error("Supabase não configurado.");
+  }
+  if (!userId) {
+     userId = "98906817-5ff5-4956-a35b-88737339def5"; // Fallback de segurança para persistência
   }
 
   // Lista VIP do Modelo Pechinchou (Alta Conversão por Impulso)
@@ -1802,19 +1831,23 @@ export async function discoverAndIngestTrendingOffers(
   for (const source of sources) {
     let scrapedProducts: ScrapedProduct[] = [];
     
-    // Determinar categoria ativa por fonte
+    // ── Modo Viral Target: substitui a roleta aleatória de categorias genéricas ───────────────
+    // Usa getNextViralTarget() que rotaciona queries curadas por viralScore (Pelando/Promobit model)
     let activeCategorySearch = categorySearchQuery;
     if (!activeCategorySearch || activeCategorySearch === "Geral") {
       if (source === "Netshoes") {
-        const NETSHOES_CATEGORIES = ["Tênis", "Suplementos", "Roupas Esportivas", "Whey Protein", "Academia", "Camisa de Time"];
-        const randomIndex = Math.floor(Math.random() * NETSHOES_CATEGORIES.length);
-        activeCategorySearch = NETSHOES_CATEGORIES[randomIndex];
-        console.log(`[SCRAPER][TRENDS] Modo Roleta Netshoes: Categoria sorteada -> ${activeCategorySearch}`);
+        // Netshoes tem targets específicos no discovery-config (tênis, suplementos, etc.)
+        const target = getNextViralTarget("Netshoes");
+        activeCategorySearch = target.query;
+        console.log(`[VIRAL_TARGET] Netshoes → query="${target.query}" viralScore=${target.viralScore}`);
       } else {
-        const randomIndex = Math.floor(Math.random() * HIGH_CONVERSION_CATEGORIES.length);
-        activeCategorySearch = HIGH_CONVERSION_CATEGORIES[randomIndex];
-        console.log(`[SCRAPER][TRENDS] Modo Roleta Aleatória VIP: Categoria sorteada -> ${activeCategorySearch}`);
+        const target = getNextViralTarget(source);
+        activeCategorySearch = target.query;
+        // category do target é usada como hint mas normalizeCategory() decide o valor final
+        console.log(`[VIRAL_TARGET] ${source} → query="${target.query}" category="${target.category}" viralScore=${target.viralScore}`);
       }
+    } else {
+      console.log(`[SCRAPER][TRENDS] Categoria explícita recebida: "${activeCategorySearch}" (override do viral target)`);
     }
 
     if (source === "Mercado Livre") {
@@ -1879,7 +1912,8 @@ export async function discoverAndIngestTrendingOffers(
         current_price: product.current_price,
         old_price: product.old_price,
         rating: product.rating,
-        category: product.category || "Geral"
+        category: product.category || "Geral",
+        product_name: product.product_name  // passa product_name para brand_score real
       });
 
       if (existingOffer) {

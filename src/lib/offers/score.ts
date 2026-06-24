@@ -16,6 +16,8 @@ export interface ScoreInput {
   estimated_commission?: number | null;
   category?: string | null;
   seasonality?: number | null;
+  /** Nome do produto — usado para calcular brand_score real no score-v2.ts */
+  product_name?: string | null;
 }
 
 export function calculateOfferScore(input: ScoreInput) {

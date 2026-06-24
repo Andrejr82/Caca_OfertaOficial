@@ -4,6 +4,7 @@ import { calculateOfferScoreV2, calculateFinalRankScore } from "./score-v2";
 import { analyzeConversionPotential } from "@/lib/ai/groq";
 import { logger } from "@/lib/utils/logger";
 import type { Offer } from "@/types/domain";
+import { MINIMUM_DISCOUNT_BY_CATEGORY } from "./viral-intelligence";
 
 export interface CurationResult {
   score: number;
@@ -81,7 +82,29 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
   // 2. Filtro de Corte de Qualidade Base >= 5 (Obrigatório)
   sortedOffers = sortedOffers.filter(o => o.score >= minScoreThreshold);
 
-  // 3. Corte de Top 3 se IA ativa, para não estourar rate limit. Exigência estrita: limitToAi = 3.
+  // 3. Filtro de Desconto Mínimo por Categoria (Fase 2 — MINIMUM_DISCOUNT_BY_CATEGORY)
+  // REGRA: Aplica APENAS quando old_price está disponível.
+  //        Produtos sem old_price NÃO são descartados (podem ter desconto via cupom ou badge).
+  //        Registra motivo em log [DISCOUNT_FILTER] para auditoria.
+  sortedOffers = sortedOffers.filter(offer => {
+    // Sem old_price: não é possível calcular desconto real — mantém a oferta
+    if (!offer.old_price || offer.old_price <= offer.current_price) {
+      return true;
+    }
+    const cat = (offer.category || "default").toLowerCase();
+    const minDiscount = MINIMUM_DISCOUNT_BY_CATEGORY[cat] ?? MINIMUM_DISCOUNT_BY_CATEGORY["default"];
+    const actualDiscount = (offer.old_price - offer.current_price) / offer.old_price;
+    const passes = actualDiscount >= minDiscount;
+    if (!passes) {
+      console.log(
+        `[DISCOUNT_FILTER] Rejeitado: "${(offer.product_name || "").substring(0, 50)}" | ` +
+        `desconto real=${(actualDiscount * 100).toFixed(1)}% < mínimo=${(minDiscount * 100).toFixed(0)}% (cat: ${cat})`
+      );
+    }
+    return passes;
+  });
+
+  // 4. Corte de Top 3 se IA ativa, para não estourar rate limit. Exigência estrita: limitToAi = 3.
   const limitToAi = 3;
   
   if (isAiCurationEnabled) {
