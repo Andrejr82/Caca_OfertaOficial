@@ -208,8 +208,23 @@ export async function publishToInstagramAction(caption: string, imageUrl: string
       return { ok: false, message: `Instagram desconectado: ${connTest.message}. Verifique se o token da Meta Graph API não expirou.` };
     }
 
-    console.log("[PublishAction] Conexão OK. Publicando...");
-    const postId = await publishToInstagram(imageUrl, caption);
+    console.log("[PublishAction] Conexão OK. Preparando mídia...");
+    
+    // NOVIDADE: Em vez de postar a imagem crua, vamos gerar o Reels no Cloudinary!
+    const { uploadImageAndGenerateVideo } = await import("@/lib/cloudinary");
+    const videoResult = await uploadImageAndGenerateVideo(imageUrl);
+    
+    let postId: string;
+    
+    if (videoResult.success && videoResult.videoUrl) {
+      console.log("[PublishAction] Vídeo gerado no Cloudinary. Publicando como Reels...");
+      const { publishVideoToInstagram } = await import("@/lib/instagram/client");
+      postId = await publishVideoToInstagram(videoResult.videoUrl, caption);
+    } else {
+      console.log("[PublishAction] Falha ao gerar vídeo, fazendo fallback para post estático...");
+      const { publishToInstagram } = await import("@/lib/instagram/client");
+      postId = await publishToInstagram(imageUrl, caption);
+    }
 
     if (offerId) {
       await supabase.from("posts").insert({
