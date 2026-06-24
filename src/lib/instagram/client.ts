@@ -243,3 +243,131 @@ export async function publishToInstagram(imageUrl: string, caption: string): Pro
   return postId;
 }
 
+/**
+ * Publica um vídeo (Reels) na conta comercial do Instagram.
+ */
+export async function publishVideoToInstagram(videoUrl: string, caption: string): Promise<string> {
+  const token = process.env.INSTAGRAM_ACCESS_TOKEN;
+  if (!token) {
+    throw new Error("INSTAGRAM_ACCESS_TOKEN não configurado.");
+  }
+
+  let businessAccountId: string;
+  try {
+    businessAccountId = await discoverInstagramBusinessId();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro desconhecido";
+    throw new Error(`Não foi possível descobrir sua conta do Instagram Business: ${msg}`);
+  }
+
+  console.log("[Instagram] Etapa 1: Criando container de vídeo (Reels)...");
+  console.log("[Instagram] Video URL:", videoUrl);
+
+  const mediaUrl = `${BASE_GRAPH_URL}/${businessAccountId}/media`;
+  let mediaRes: Response;
+  try {
+    mediaRes = await fetch(mediaUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        media_type: "REELS",
+        video_url: videoUrl,
+        caption: caption,
+        access_token: token,
+      }),
+    });
+  } catch (fetchError) {
+    throw new Error(`Erro de rede ao criar container de vídeo: ${fetchError instanceof Error ? fetchError.message : "timeout"}`);
+  }
+
+  const mediaRaw = await mediaRes.text();
+  let mediaData: Record<string, unknown>;
+  try {
+    mediaData = JSON.parse(mediaRaw);
+  } catch {
+    throw new Error(`Instagram retornou resposta inválida na Etapa 1 do Vídeo: ${mediaRaw.slice(0, 200)}`);
+  }
+
+  if (!mediaRes.ok || (mediaData as { error?: { message?: string } }).error) {
+    const errMsg = (mediaData as { error?: { message?: string } }).error?.message || mediaRaw.slice(0, 300);
+    throw new Error(`Falha ao criar container de vídeo (Etapa 1): ${errMsg}`);
+  }
+
+  const creationId = mediaData.id as string | undefined;
+  if (!creationId) {
+    throw new Error(`Nenhum creationId retornado. Resposta: ${JSON.stringify(mediaData).slice(0, 300)}`);
+  }
+
+  console.log("[Instagram] Container de Vídeo criado:", creationId);
+
+  console.log("[Instagram] Etapa 2: Aguardando processamento do vídeo no Instagram...");
+  
+  // Vídeos demoram mais para processar que imagens, aumentamos o timeout
+  const maxAttempts = 20;
+  const pollIntervalMs = 5000; // 5 segundos entre checks
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+
+    const statusUrl = `${BASE_GRAPH_URL}/${creationId}?fields=status_code,status&access_token=${token}`;
+    const statusRes = await fetch(statusUrl);
+    const statusRaw = await statusRes.text();
+
+    let statusData: Record<string, unknown>;
+    try {
+      statusData = JSON.parse(statusRaw);
+    } catch {
+      continue;
+    }
+
+    const statusCode = statusData.status_code as string | undefined;
+    console.log(`[Instagram] Polling de Vídeo ${attempt}/${maxAttempts}: status = ${statusCode}`);
+
+    if (statusCode === "FINISHED") {
+      break;
+    }
+
+    if (statusCode === "ERROR") {
+      const statusMsg = statusData.status as string || "Erro desconhecido no processamento do vídeo.";
+      throw new Error(`Instagram rejeitou o vídeo: ${statusMsg}. Verifique a URL do vídeo.`);
+    }
+
+    if (attempt === maxAttempts) {
+      throw new Error(`Timeout: o vídeo não ficou pronto após ${maxAttempts * pollIntervalMs / 1000}s. Status: ${statusCode || "desconhecido"}`);
+    }
+  }
+
+  console.log("[Instagram] Etapa 3: Publicando o Vídeo (Reels)...");
+  const publishUrl = `${BASE_GRAPH_URL}/${businessAccountId}/media_publish`;
+  let publishRes: Response;
+  try {
+    publishRes = await fetch(publishUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        creation_id: creationId,
+        access_token: token,
+      }),
+    });
+  } catch (fetchError) {
+    throw new Error(`Erro de rede ao publicar Reels: ${fetchError instanceof Error ? fetchError.message : "timeout"}`);
+  }
+
+  const publishRaw = await publishRes.text();
+  let publishData: Record<string, unknown>;
+  try {
+    publishData = JSON.parse(publishRaw);
+  } catch {
+    throw new Error(`Instagram retornou resposta inválida na Etapa 3 do Vídeo: ${publishRaw.slice(0, 200)}`);
+  }
+
+  if (!publishRes.ok || (publishData as { error?: { message?: string } }).error) {
+    const errMsg = (publishData as { error?: { message?: string } }).error?.message || publishRaw.slice(0, 300);
+    throw new Error(`Falha ao publicar Reels (Etapa 3): ${errMsg}`);
+  }
+
+  const postId = publishData.id as string;
+  console.log("[Instagram] Reels publicado com sucesso! Post ID:", postId);
+  return postId;
+}
+

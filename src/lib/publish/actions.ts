@@ -146,9 +146,14 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     ok: true,
     offer: newOffer,
     trackedUrl,
+    copies: {
+      telegram: aiResult.telegram,
+      whatsapp: aiResult.whatsapp,
+      instagram: aiResult.instagram_feed,
+    },
     copy: channel === "telegram" ? aiResult.telegram 
         : channel === "whatsapp" ? aiResult.whatsapp 
-        : aiResult.instagram_feed // Para instagram pegamos o feed por padrão
+        : aiResult.instagram_feed // Retrocompatibilidade
   };
 }
 

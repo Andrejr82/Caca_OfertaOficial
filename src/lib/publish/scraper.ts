@@ -311,9 +311,16 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     }
   }
 
-  // Cleanup imageUrl if it starts with //
-  if (imageUrl && imageUrl.startsWith("//")) {
+  // Cleanup imageUrl se necessário
+  if (imageUrl) {
+    if (imageUrl.startsWith("//")) {
       imageUrl = "https:" + imageUrl;
+    }
+    // Forçar imagens do ML a serem JPEG (necessário para Instagram) e em alta resolução
+    if (imageUrl.includes("mlstatic.com")) {
+      imageUrl = imageUrl.replace(/\.webp($|\?)/i, ".jpg$1");
+      imageUrl = imageUrl.replace(/-[a-zA-Z]\.jpg($|\?)/i, "-O.jpg$1");
+    }
   }
 
   // 6. Cálculo do Confidence Score (Origem e Qualidade)

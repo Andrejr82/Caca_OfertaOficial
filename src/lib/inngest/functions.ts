@@ -7,6 +7,7 @@ import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
 import { calculateFinalRankScore } from "@/lib/offers/score-v2";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { pollAndReplyComments } from "@/lib/instagram/comment-polling";
 
 /**
  * Função de Fila: Publicação
@@ -239,6 +240,25 @@ export const runUserScrapingBackground = inngest.createFunction(
     }
 
     return { status: "completed", processedCount: processedOffers.length };
+  }
+);
+
+/**
+ * Função de Fila: Varredura de Comentários do Instagram (Crescimento)
+ * Executa a cada 5 minutos para identificar comentários com gatilhos (ex: "quero")
+ * e enviar DMs automatizadas com o link de afiliado.
+ */
+export const instagramPollingBackground = inngest.createFunction(
+  { id: "instagram-polling", retries: 1, triggers: [{ cron: "*/5 * * * *" }] },
+  async ({ step }: any) => {
+    logger.info("[Inngest] Iniciando varredura de comentários do Instagram...");
+    
+    const result = await step.run("poll-comments", async () => {
+      return await pollAndReplyComments();
+    });
+
+    logger.info("[Inngest] Varredura concluída", result);
+    return result;
   }
 );
 

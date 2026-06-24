@@ -38,8 +38,7 @@ export class PostBuilder {
 
 ${priceBlock}
 ${couponBlock}
-👉 Para comprar, acesse nossa vitrine no Link da BIO:
-🔗 caca-oferta-oficial.vercel.app/bio
+👉 O link de afiliado rastreado desta oferta está nos nossos STORIES e no LINK DA BIO! 🔗
 
 ${hashtagsStr}`;
   }
@@ -115,8 +114,7 @@ ${SOCIALS.whatsapp}`;
 🎫 Cupom: ${offer.coupon}
 💰 Benefício: ${discountText}
 
-👉 Para resgatar, acesse o Link da BIO:
-🔗 caca-oferta-oficial.vercel.app/bio
+👉 O cupom secreto desta oferta está nos nossos STORIES e no LINK DA BIO! 🔗
 
 #cupomdesconto #promocao #achadinhos`;
   }

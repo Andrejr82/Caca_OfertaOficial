@@ -48,7 +48,14 @@ export default async function OffersPage() {
               </div>
               <Badge label={offer.platform} />
               <Badge label={offer.status} tone={offer.status === "approved" || offer.status === "posted" ? "good" : "neutral"} />
-              <span className="text-sm font-extrabold tabular-nums text-emerald-400">{offer.score}/10</span>
+              <span className="text-sm font-extrabold tabular-nums text-emerald-400 mr-2">{offer.score}/10</span>
+              
+              <a 
+                href={`/publish?url=${encodeURIComponent(offer.original_url || "")}`}
+                className="grid h-8 place-items-center rounded-lg bg-blue-600 hover:bg-blue-500 px-3 text-xs font-bold text-white transition-colors"
+              >
+                Publicar
+              </a>
             </div>
           )) : (
             <p className="py-6 text-center text-sm text-white/30">Nenhuma oferta cadastrada.</p>

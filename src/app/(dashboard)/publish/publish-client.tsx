@@ -20,16 +20,18 @@ interface PreparedPost {
   imageUrl: string;
   trackedUrl: string;
   copy: string;
-  status: "ready" | "publishing" | "published" | "error";
+  copies?: { telegram: string; whatsapp: string; instagram: string; };
+  status: "ready" | "publishing" | "published" | "error" | "partial_error";
   publishMessage: string;
   expanded: boolean;
   offerId?: string;
+  targetChannels: string[];
 }
 
 // ─── Component ───
-export function PublishClient() {
-  const [linksInput, setLinksInput] = useState("");
-  const [channel, setChannel] = useState<Channel>("telegram");
+export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
+  const [linksInput, setLinksInput] = useState(initialUrl);
+  const [channel, setChannel] = useState<Channel | "omnichannel">("omnichannel");
 
   // Batch processing
   const [isProcessing, setIsProcessing] = useState(false);
@@ -64,7 +66,7 @@ export function PublishClient() {
       setProcessProgress({ current: i + 1, total: links.length });
 
       try {
-        const res = await generateQuickPostAction(links[i], channel);
+        const res = await generateQuickPostAction(links[i], channel === "omnichannel" ? "telegram" : channel);
         if (res.ok && res.copy) {
           newPosts.push({
             id: `post-${Date.now()}-${i}`,
@@ -73,6 +75,8 @@ export function PublishClient() {
             imageUrl: res.offer?.image_url || "",
             trackedUrl: res.trackedUrl || "",
             copy: res.copy,
+            copies: res.copies,
+            targetChannels: channel === "omnichannel" ? ["telegram", "instagram", "whatsapp"] : [channel],
             status: "ready",
             publishMessage: "",
             expanded: i === 0, // Expand first post by default
@@ -102,43 +106,34 @@ export function PublishClient() {
     if (!post) return;
 
     try {
-      let res: { ok: boolean; message?: string };
-
-      if (channel === "telegram") {
-        res = await publishToTelegramAction(post.copy, post.imageUrl || undefined);
-      } else if (channel === "instagram") {
-        if (!post.imageUrl) {
-          setPosts((prev) =>
-            prev.map((p) =>
-              p.id === postId
-                ? { ...p, status: "error" as const, publishMessage: "Instagram exige imagem. Esse link não tinha imagem." }
-                : p
-            )
-          );
-          return;
+      let results = [];
+      for (const ch of post.targetChannels) {
+        let copyToUse = post.copies ? (post.copies as any)[ch] : post.copy;
+        
+        if (ch === "telegram") {
+          results.push(await publishToTelegramAction(copyToUse, post.imageUrl || undefined));
+        } else if (ch === "instagram") {
+          if (!post.imageUrl) {
+            results.push({ ok: false, message: "Instagram exige imagem. Pulado." });
+          } else {
+            results.push(await publishToInstagramAction(copyToUse, post.imageUrl, post.offerId));
+          }
+        } else if (ch === "whatsapp") {
+          results.push(await publishToWhatsAppAction(copyToUse, post.imageUrl || undefined));
         }
-        res = await publishToInstagramAction(post.copy, post.imageUrl, post.offerId);
-      } else if (channel === "whatsapp") {
-        res = await publishToWhatsAppAction(post.copy, post.imageUrl || undefined);
-      } else {
-        await navigator.clipboard.writeText(post.copy);
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId
-              ? { ...p, status: "published" as const, publishMessage: `Texto copiado! Cole no ${channel.toUpperCase()}.` }
-              : p
-          )
-        );
-        return;
       }
+
+      const allOk = results.every(r => r.ok);
+      const someOk = results.some(r => r.ok);
+      const msg = results.map(r => r.message).join(" | ");
 
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId
             ? {
                 ...p,
-                status: res.ok ? ("published" as const) : ("error" as const),
-                publishMessage: res.message || (res.ok ? "Publicado!" : "Falha"),
+                status: allOk ? ("published" as const) : someOk ? ("partial_error" as const) : ("error" as const),
+                publishMessage: msg || (allOk ? "Publicado em todos!" : "Falha geral"),
               }
             : p
         )
@@ -170,9 +165,15 @@ export function PublishClient() {
   }
 
   // ─── Update copy ───
-  function updateCopy(postId: string, newCopy: string) {
+  function updateCopy(postId: string, newCopy: string, targetChannel?: string) {
     setPosts((prev) =>
-      prev.map((p) => (p.id === postId ? { ...p, copy: newCopy } : p))
+      prev.map((p) => {
+        if (p.id !== postId) return p;
+        if (targetChannel && p.copies) {
+          return { ...p, copies: { ...p.copies, [targetChannel]: newCopy } };
+        }
+        return { ...p, copy: newCopy };
+      })
     );
   }
 
@@ -206,10 +207,11 @@ export function PublishClient() {
             <Field label="Canal de destino">
               <Select
                 value={channel}
-                onChange={(e) => setChannel(e.target.value as Channel)}
+                onChange={(e) => setChannel(e.target.value as Channel | "omnichannel")}
                 disabled={isProcessing}
                 className="py-3"
               >
+                <option value="omnichannel">🔥 Omnichannel (Simultâneo)</option>
                 {channels.map((ch) => (
                   <option key={ch} value={ch}>{ch.toUpperCase()}</option>
                 ))}
@@ -408,13 +410,30 @@ export function PublishClient() {
                       </div>
                     )}
 
-                    <textarea
-                      value={post.copy}
-                      onChange={(e) => updateCopy(post.id, e.target.value)}
-                      className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[200px] overflow-auto whitespace-pre-wrap break-all"
-                      style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
-                      disabled={post.status === "publishing"}
-                    />
+                    {post.targetChannels.length > 1 && post.copies ? (
+                      <div className="grid gap-3">
+                        {post.targetChannels.map((ch) => (
+                          <div key={ch} className="space-y-1">
+                            <div className="text-[10px] text-white/50 font-bold uppercase">{ch}</div>
+                            <textarea
+                              value={(post.copies as any)[ch]}
+                              onChange={(e) => updateCopy(post.id, e.target.value, ch)}
+                              className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[120px] overflow-auto whitespace-pre-wrap break-all"
+                              style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                              disabled={post.status === "publishing"}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <textarea
+                        value={post.copy}
+                        onChange={(e) => updateCopy(post.id, e.target.value)}
+                        className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[200px] overflow-auto whitespace-pre-wrap break-all"
+                        style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                        disabled={post.status === "publishing"}
+                      />
+                    )}
 
                     {/* Action bar */}
                     <div className="flex items-center gap-2 flex-wrap">
@@ -445,7 +464,7 @@ export function PublishClient() {
                           className="text-xs h-8 px-5 bg-blue-600 hover:bg-blue-500 border-0 whitespace-nowrap"
                         >
                           <Send size={13} />
-                          Publicar no {channel.toUpperCase()}
+                          {post.targetChannels.length > 1 ? "Disparo Simultâneo" : `Publicar no ${post.targetChannels[0].toUpperCase()}`}
                         </Button>
                       )}
 

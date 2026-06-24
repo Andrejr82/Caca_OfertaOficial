@@ -14,23 +14,24 @@ interface CommentData {
   timestamp: string;
 }
 
-/**
- * Busca o Instagram Business Account ID via Facebook Page
- */
-async function getIgBusinessId(token: string): Promise<string | null> {
-  // Usar cache da env se disponível
-  if (process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID) {
-    return process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID;
-  }
-
+async function getIgBusinessIdAndPageToken(token: string): Promise<{ igBusinessId: string, pageToken: string } | null> {
   const res = await fetch(`${BASE_URL}/me/accounts?access_token=${token}`);
   const data = await res.json();
   const page = data.data?.[0];
   if (!page) return null;
 
+  const pageToken = page.access_token;
+
+  if (process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID) {
+    return { igBusinessId: process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID, pageToken };
+  }
+
   const igRes = await fetch(`${BASE_URL}/${page.id}?fields=instagram_business_account&access_token=${token}`);
   const igData = await igRes.json();
-  return igData.instagram_business_account?.id || null;
+  const igBusinessId = igData.instagram_business_account?.id || null;
+  
+  if (!igBusinessId) return null;
+  return { igBusinessId, pageToken };
 }
 
 /**
@@ -52,14 +53,14 @@ async function fetchComments(mediaId: string, token: string): Promise<CommentDat
 /**
  * Envia Private Reply via Instagram Messaging API
  */
-async function sendPrivateReply(igBusinessId: string, commentId: string, message: string, token: string): Promise<boolean> {
+async function sendPrivateReply(igBusinessId: string, commentId: string, message: string, pageToken: string): Promise<boolean> {
   const url = `${BASE_URL}/${igBusinessId}/messages`;
 
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${token}`
+      "Authorization": `Bearer ${pageToken}`
     },
     body: JSON.stringify({
       recipient: { comment_id: commentId },
@@ -94,12 +95,13 @@ export async function pollAndReplyComments(): Promise<{ processed: number; error
 
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-  // 1. Buscar IG Business Account ID
-  const igBusinessId = await getIgBusinessId(token);
-  if (!igBusinessId) {
-    console.log("[Polling] Não foi possível descobrir IG Business Account.");
+  // 1. Buscar IG Business Account ID e Page Token
+  const credentials = await getIgBusinessIdAndPageToken(token);
+  if (!credentials) {
+    console.log("[Polling] Não foi possível descobrir IG Business Account ou Page Token.");
     return { processed: 0, errors: 0, skipped: 0 };
   }
+  const { igBusinessId, pageToken } = credentials;
 
   // 2. Buscar posts publicados com external_id (apenas os últimos 50 para evitar Vercel Timeout)
   const { data: posts } = await supabase
@@ -180,7 +182,7 @@ export async function pollAndReplyComments(): Promise<{ processed: number; error
       const trackingUrl = createTrackedUrl(linkRecord.original_url, linkRecord.sub_id);
       const messageText = `Olá! 👋 Aqui está o link da oferta que você pediu no nosso post:\n\n👉 ${trackingUrl}\n\nAproveite antes que acabe!`;
 
-      const success = await sendPrivateReply(igBusinessId, comment.id, messageText, token);
+      const success = await sendPrivateReply(igBusinessId, comment.id, messageText, pageToken);
 
       // 7. Registrar no integration_logs (sucesso ou falha)
       const userId = post.user_id;
