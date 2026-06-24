@@ -1,0 +1,72 @@
+name: Publish Instagram Reel
+
+on:
+  workflow_dispatch:
+    inputs:
+      postId:
+        description: 'Post ID (UUID)'
+        required: true
+        type: string
+      offerId:
+        description: 'Offer ID (UUID)'
+        required: true
+        type: string
+      productName:
+        description: 'Nome do Produto'
+        required: true
+        type: string
+      originalPrice:
+        description: 'Preço Antigo (Opcional)'
+        required: false
+        type: string
+      currentPrice:
+        description: 'Preço Atual'
+        required: true
+        type: string
+      imageUrl:
+        description: 'Link da Imagem'
+        required: true
+        type: string
+      caption:
+        description: 'Legenda do Post'
+        required: true
+        type: string
+
+jobs:
+  render-and-publish:
+    name: Render Reel and Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      # O Remotion exige dependências do Chrome no Ubuntu para o Puppeteer
+      - name: Install Chrome Dependencies
+        run: sudo apt-get install -y libx11-xcb1 libxcomposite1 libxdamage1 libxrandr2 libxss1 libasound2 libatk1.0-0 libgtk-3-0
+
+      - name: Run Publish Script
+        env:
+          # Secrets do Banco e Instagram
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          INSTAGRAM_ACCESS_TOKEN: ${{ secrets.INSTAGRAM_ACCESS_TOKEN }}
+          
+          # Inputs da Vercel
+          INPUT_POST_ID: ${{ github.event.inputs.postId }}
+          INPUT_OFFER_ID: ${{ github.event.inputs.offerId }}
+          INPUT_PRODUCT_NAME: ${{ github.event.inputs.productName }}
+          INPUT_ORIGINAL_PRICE: ${{ github.event.inputs.originalPrice }}
+          INPUT_CURRENT_PRICE: ${{ github.event.inputs.currentPrice }}
+          INPUT_IMAGE_URL: ${{ github.event.inputs.imageUrl }}
+          INPUT_CAPTION: ${{ github.event.inputs.caption }}
+        run: npx tsx scripts/github-publish.ts

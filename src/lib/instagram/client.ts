@@ -260,6 +260,15 @@ export async function publishVideoToInstagram(videoUrl: string, caption: string)
     throw new Error(`Não foi possível descobrir sua conta do Instagram Business: ${msg}`);
   }
 
+  // Pré-aquece o Cloudinary fazendo um fetch na URL para forçar a renderização do MP4
+  // antes que o Instagram tente acessar e dê timeout.
+  try {
+    console.log(`[Instagram] Pré-aquecendo vídeo no Cloudinary: ${videoUrl}`);
+    await fetch(videoUrl, { method: "HEAD" });
+  } catch (e) {
+    console.log("[Instagram] Aviso: falha no pré-aquecimento do vídeo, prosseguindo mesmo assim.");
+  }
+
   console.log("[Instagram] Etapa 1: Criando container de vídeo (Reels)...");
   console.log("[Instagram] Video URL:", videoUrl);
 

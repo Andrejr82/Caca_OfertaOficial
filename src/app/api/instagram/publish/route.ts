@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { publishToInstagram } from "@/lib/instagram/client";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -41,7 +40,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
     }
 
-    // A API do Instagram exige uma URL de imagem pública
     const imageUrl = offer.image_url;
     if (!imageUrl) {
       return NextResponse.json({ 
@@ -53,7 +51,6 @@ export async function POST(request: Request) {
     // O usuário pode ter editado o texto na tela antes de aprovar
     const finalContent = content || post.content;
 
-    // Se o conteúdo foi alterado, atualiza primeiro no banco de dados
     if (content && content !== post.content) {
       await supabase
         .from("posts")
@@ -61,41 +58,76 @@ export async function POST(request: Request) {
         .eq("id", post.id);
     }
 
-    // 2. Executa a publicação real via Instagram Graph API
-    // Para simplificar a publicação no feed do Instagram, usaremos a legenda limpa do feed
-    // Vamos extrair a legenda do feed caso existam as divisões dos rascunhos de stories/carousel
     let publishCaption = finalContent;
     if (finalContent.includes("=== STORIES SUGERIDOS ===")) {
       publishCaption = finalContent.split("=== STORIES SUGERIDOS ===")[0].trim();
     }
 
-    const externalId = await publishToInstagram(imageUrl, publishCaption);
+    // 2. Dispara o GitHub Actions para Renderizar e Postar o Vídeo
+    console.log("[Instagram API] Disparando GitHub Actions para geração do vídeo...");
+    
+    const githubToken = process.env.GITHUB_TOKEN;
+    if (!githubToken) {
+      return NextResponse.json({ 
+        ok: false, 
+        message: "Variável de ambiente GITHUB_TOKEN não configurada na Vercel." 
+      }, { status: 500 });
+    }
 
-    // 3. Atualiza o status do post para published
-    const now = new Date().toISOString();
-    const { error: postUpdateError } = await supabase
+    // O format do original price e current price precisa vir da oferta.
+    // offer.price é o preco atual e offer.regular_price (ou algo do tipo) é o antigo.
+    const currentPrice = offer.price ? offer.price.toFixed(2).replace('.', ',') : "0,00";
+    const originalPrice = offer.original_price ? offer.original_price.toFixed(2).replace('.', ',') : "";
+
+    const repoOwner = "Andrejr82"; // Substitua pelo usuário correto se necessário, mas em repositórios pessoais é o owner do repo
+    const repoName = "Caca_OfertaOficial";
+    
+    // O GitHub aceita workflow dispatches através dessa API REST
+    const githubUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/publish-reel.yml/dispatches`;
+
+    const githubRes = await fetch(githubUrl, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${githubToken}`,
+        "Accept": "application/vnd.github.v3+json",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        ref: "main", // ou "master" dependendo do repositório
+        inputs: {
+          postId: post.id,
+          offerId: offer.id,
+          productName: offer.product_name || "Oferta Especial",
+          originalPrice: originalPrice,
+          currentPrice: currentPrice,
+          imageUrl: imageUrl,
+          caption: publishCaption
+        }
+      })
+    });
+
+    if (!githubRes.ok) {
+      const gitError = await githubRes.text();
+      console.error("[GitHub Actions Error]:", gitError);
+      return NextResponse.json({ 
+        ok: false, 
+        message: `Falha ao acionar o GitHub Actions: ${githubRes.statusText}. Verifique o GITHUB_TOKEN.` 
+      }, { status: 500 });
+    }
+
+    // 3. Atualiza o status do post para processing (já que o github assumiu)
+    await supabase
       .from("posts")
       .update({
-        status: "published",
-        external_id: externalId,
-        posted_at: now
+        status: "processing"
       })
       .eq("id", post.id);
 
-    if (postUpdateError) {
-      return NextResponse.json({ ok: false, message: "Erro ao atualizar status do post." }, { status: 500 });
-    }
+    return NextResponse.json({ 
+      ok: true, 
+      message: "Renderização do Vídeo iniciada no servidor! A publicação ocorrerá em até 2 minutos." 
+    });
 
-    // 4. Atualiza o status da oferta para posted
-    await supabase
-      .from("offers")
-      .update({
-        status: "posted",
-        updated_at: now
-      })
-      .eq("id", offer.id);
-
-    return NextResponse.json({ ok: true, externalId });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Falha na publicação no Instagram.";
     console.error("Erro ao publicar no Instagram:", error);
