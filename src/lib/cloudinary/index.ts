@@ -27,8 +27,9 @@ export async function uploadImageAndGenerateVideo(
         { 
           format: 'mp4',
           transformation: [
-            { width: 720, height: 1280, crop: 'fill', gravity: 'center' }, // 1º Corta a imagem para formato HD Vertical (Reels)
-            { duration: 5 } // 2º Cria um vídeo perfeito de 5 segundos a partir da imagem para garantir a postagem no Instagram
+            { width: 1080, height: 1920, crop: 'pad', background: 'blurred:400' }, // 1º Encaixa a imagem inteira com fundo desfocado no formato HD Vertical (Reels)
+            { effect: 'zoompan' }, // 2º Aplica animação Ken Burns para criar um vídeo real (Instagram pode rejeitar se for 100% estático)
+            { duration: 5 } // 3º Limita o vídeo a exatos 5 segundos
           ]
         }
       ],
@@ -38,7 +39,7 @@ export async function uploadImageAndGenerateVideo(
     // 2. Extrai a URL do vídeo que foi gerado na fila de eager
     const videoUrl = uploadResult.eager && uploadResult.eager.length > 0 
       ? uploadResult.eager[0].secure_url 
-      : cloudinary.url(uploadResult.public_id, { resource_type: 'image', format: 'mp4', transformation: [{ width: 720, height: 1280, crop: 'fill', gravity: 'center' }, { duration: 5 }] });
+      : cloudinary.url(uploadResult.public_id, { resource_type: 'image', format: 'mp4', transformation: [{ width: 1080, height: 1920, crop: 'pad', background: 'blurred:400' }, { effect: 'zoompan' }, { duration: 5 }] });
 
     return {
       success: true,

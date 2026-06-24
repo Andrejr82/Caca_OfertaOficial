@@ -38,7 +38,7 @@ export class PostBuilder {
 
 ${priceBlock}
 ${couponBlock}
-👉 O link de afiliado rastreado desta oferta está nos nossos STORIES e no LINK DA BIO! 🔗
+👉 O link rastreado desta oferta está nos nossos STORIES e no LINK DA BIO! 🔗
 
 ${hashtagsStr}`;
   }
