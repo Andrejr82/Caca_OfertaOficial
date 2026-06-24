@@ -316,10 +316,11 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     if (imageUrl.startsWith("//")) {
       imageUrl = "https:" + imageUrl;
     }
-    // Forçar imagens do ML a serem JPEG (necessário para Instagram) e em alta resolução
+    // O Cloudinary agora lida perfeitamente com imagens WebP, então não precisamos
+    // mais forçar a conversão de URL para .jpg (o que estava quebrando alguns links do ML).
     if (imageUrl.includes("mlstatic.com")) {
-      imageUrl = imageUrl.replace(/\.webp($|\?)/i, ".jpg$1");
-      imageUrl = imageUrl.replace(/-[a-zA-Z]\.jpg($|\?)/i, "-O.jpg$1");
+      // imageUrl = imageUrl.replace(/\.webp($|\?)/i, ".jpg$1");
+      // imageUrl = imageUrl.replace(/-[a-zA-Z]\.jpg($|\?)/i, "-O.jpg$1");
     }
   }
 
