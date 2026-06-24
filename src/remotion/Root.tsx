@@ -1,6 +1,7 @@
 import React from 'react';
 import { Composition } from 'remotion';
 import { ReelTemplate, ReelTemplateProps } from './ReelTemplate';
+import { PromoTemplate } from './PromoTemplate';
 
 export const RemotionRoot: React.FC = () => {
   return (
@@ -19,6 +20,16 @@ export const RemotionRoot: React.FC = () => {
           imageUrl: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?q=80&w=800&auto=format&fit=crop',
         } as ReelTemplateProps}
       />
+      <Composition
+        id="PromoReel"
+        component={PromoTemplate}
+        durationInFrames={210} // 7 segundos a 30fps
+        fps={30}
+        width={1080}
+        height={1920}
+        defaultProps={{}}
+      />
     </>
   );
 };
+

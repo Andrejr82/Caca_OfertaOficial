@@ -22,7 +22,7 @@ function slugToHashtags(name: string): string {
     .slice(0, 5)
     .map((w) => `#${w.replace(/[^a-z0-9]/g, "")}`);
 
-  const base = ["#ofertadodia", "#promocao", "#desconto", "#oferta"];
+  const base = ["#ofertadodia", "#promoção", "#cupom", "#achadinho", "#desconto", "#promocao", "#oferta"];
   return [...base, ...words].join(" ");
 }
 
@@ -44,7 +44,7 @@ export function generateTelegramMessage(offer: Offer, link: Pick<AffiliateLink, 
     offer.coupon ? `🎟️ Use o cupom: ${offer.coupon}\n` : null,
     `✨ link: ${link.tracked_url}`,
     "",
-    `#anuncio`,
+    `#ofertadodia #promoção #cupom #achadinho #desconto`,
     "",
     `Siga nossas Redes Sociais 👇`,
     `📸 Instagram: https://www.instagram.com/${officialBrand.instagram}`,
@@ -128,7 +128,7 @@ export function generateWhatsAppMessage(offer: Offer, link: Pick<AffiliateLink, 
     offer.coupon ? `🎟️ Use o cupom: ${offer.coupon}\n` : null,
     `✨ link: ${link.tracked_url}`,
     "",
-    `#anuncio`,
+    `#ofertadodia #promoção #cupom #achadinho #desconto`,
     "",
     `Siga nossas Redes Sociais 👇`,
     `📸 Instagram: https://www.instagram.com/${officialBrand.instagram}`,
