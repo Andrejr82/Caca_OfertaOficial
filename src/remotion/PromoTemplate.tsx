@@ -8,6 +8,39 @@ import {
   Sequence,
 } from 'remotion';
 
+// Ícones SVG oficiais das redes sociais
+const InstagramIcon: React.FC<{ size?: number }> = ({ size = 45 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <defs>
+      <linearGradient id="ig" x1="0" y1="24" x2="24" y2="0">
+        <stop offset="0%" stopColor="#feda75" />
+        <stop offset="20%" stopColor="#fa7e1e" />
+        <stop offset="40%" stopColor="#d62976" />
+        <stop offset="60%" stopColor="#962fbf" />
+        <stop offset="80%" stopColor="#4f5bd5" />
+      </linearGradient>
+    </defs>
+    <rect width="24" height="24" rx="6" fill="url(#ig)" />
+    <rect x="3" y="3" width="18" height="18" rx="4" stroke="white" strokeWidth="1.5" fill="none" />
+    <circle cx="12" cy="12" r="4.5" stroke="white" strokeWidth="1.5" fill="none" />
+    <circle cx="17.5" cy="6.5" r="1.2" fill="white" />
+  </svg>
+);
+
+const TelegramIcon: React.FC<{ size?: number }> = ({ size = 45 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="12" fill="#26A5E4" />
+    <path d="M5.5 11.5l11.2-4.3c.5-.2 1 .1.8.7l-1.9 9c-.1.5-.5.6-.9.4l-2.8-2.1-1.3 1.3c-.2.2-.3.2-.4 0l-.2-2.1L16 9.6c.2-.1 0-.3-.2-.2L8.3 13.7l-2.7-.8c-.6-.2-.6-.6.0-.8z" fill="white" />
+  </svg>
+);
+
+const WhatsAppIcon: React.FC<{ size?: number }> = ({ size = 45 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24">
+    <circle cx="12" cy="12" r="12" fill="#25D366" />
+    <path d="M17.5 14.4c-.3-.1-1.6-.8-1.8-.9-.3-.1-.5-.1-.7.2-.2.2-.7.9-.9 1.1-.2.2-.3.2-.6.1-.3-.2-1.3-.5-2.4-1.5-.9-.8-1.5-1.8-1.7-2.1-.2-.3 0-.4.1-.6.1-.1.3-.3.4-.5.1-.2.2-.3.2-.5.1-.2 0-.4 0-.5-.1-.2-.7-1.6-.9-2.2-.3-.6-.5-.5-.7-.5h-.6c-.2 0-.5.1-.8.4-.3.3-1 1-1 2.4s1 2.8 1.2 3c.1.2 2 3.1 4.9 4.3.7.3 1.2.5 1.6.6.7.2 1.3.2 1.8.1.6-.1 1.6-.7 1.8-1.3.2-.6.2-1.2.2-1.3-.1-.1-.3-.2-.6-.3z" fill="white" />
+  </svg>
+);
+
 export const PromoTemplate: React.FC = () => {
   const frame = useCurrentFrame();
   const { fps, durationInFrames } = useVideoConfig();
@@ -34,9 +67,9 @@ export const PromoTemplate: React.FC = () => {
   ];
 
   const socials = [
-    { emoji: '📸', text: '@caca.ofertaoficial', delay: 100 },
-    { emoji: '✈️', text: 'Telegram', delay: 107 },
-    { emoji: '💬', text: 'Canal WhatsApp', delay: 114 },
+    { icon: <InstagramIcon size={50} />, text: '@caca.ofertaoficial', delay: 100 },
+    { icon: <TelegramIcon size={50} />, text: 'Telegram', delay: 107 },
+    { icon: <WhatsAppIcon size={50} />, text: 'Canal WhatsApp', delay: 114 },
   ];
 
   return (
@@ -146,7 +179,7 @@ export const PromoTemplate: React.FC = () => {
               transform: `scale(${slideItems(s.delay)})`,
               display: 'flex', alignItems: 'center', gap: 20, marginBottom: 22
             }}>
-              <span style={{ fontSize: 45 }}>{s.emoji}</span>
+              {s.icon}
               <span style={{ color: '#FFFFFF', fontSize: 42, fontWeight: '600' }}>{s.text}</span>
             </div>
           ))}
