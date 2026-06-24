@@ -120,9 +120,6 @@ export const ReelTemplate: React.FC<ReelTemplateProps> = ({
             <div style={{ color: '#FFD700', fontSize: 90, fontWeight: '900', marginTop: 10, textShadow: '0 5px 20px rgba(255,215,0,0.3)' }}>
               POR: R$ {currentPrice}
             </div>
-            <div style={{ color: '#FFFFFF', fontSize: 35, marginTop: 10 }}>
-              à vista ou 3x s/ juros
-            </div>
           </div>
 
           {/* Tag de Escassez (Amarela) */}
