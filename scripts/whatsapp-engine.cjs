@@ -132,10 +132,31 @@ app.post('/send', async (req, res) => {
 
     try {
         let result;
-        if (imageUrl) {
+        let finalImageUrl = imageUrl;
+        
+        // Se a oferta não tiver imagem (ex: Cupons), criamos um banner dinâmico com a cor e nome da loja!
+        if (!finalImageUrl) {
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('mercado livre') || lowerText.includes('mercadolivre')) {
+                finalImageUrl = 'https://placehold.co/1200x630/FFE600/2D3277/png?text=OFERTA+MERCADO+LIVRE&font=Montserrat';
+            } else if (lowerText.includes('amazon')) {
+                finalImageUrl = 'https://placehold.co/1200x630/232F3E/FF9900/png?text=OFERTA+AMAZON&font=Montserrat';
+            } else if (lowerText.includes('shopee')) {
+                finalImageUrl = 'https://placehold.co/1200x630/EE4D2D/FFFFFF/png?text=OFERTA+SHOPEE&font=Montserrat';
+            } else if (lowerText.includes('magalu') || lowerText.includes('magazine luiza')) {
+                finalImageUrl = 'https://placehold.co/1200x630/0086FF/FFFFFF/png?text=OFERTA+MAGALU&font=Montserrat';
+            } else if (lowerText.includes('netshoes')) {
+                finalImageUrl = 'https://placehold.co/1200x630/5A2D82/FFFFFF/png?text=OFERTA+NETSHOES&font=Montserrat';
+            } else {
+                finalImageUrl = 'https://placehold.co/1200x630/E50914/FFFFFF/png?text=ALERTA+DE+CUPOM&font=Montserrat';
+            }
+            console.log(`  → Imagem não fornecida. Usando banner dinâmico: ${finalImageUrl}`);
+        }
+
+        if (finalImageUrl) {
             console.log('  → Baixando imagem...');
             try {
-                const imgRes = await fetch(imageUrl, {
+                const imgRes = await fetch(finalImageUrl, {
                     headers: {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
                         "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
