@@ -24,3 +24,5 @@ tsconfig.tsbuildinfo
 .vercel
 cloudflared.exe
 
+
+ssh-key-*.key
