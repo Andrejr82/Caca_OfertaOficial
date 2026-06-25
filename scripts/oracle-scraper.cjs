@@ -388,7 +388,7 @@ async function runScrapingCycle() {
   const startTime = Date.now();
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER V2 — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
-  const stores = ['Mercado Livre', 'Shopee', 'Amazon', 'Shein', 'Magalu', 'Netshoes'];
+  const stores = ['Mercado Livre', 'Amazon', 'Magalu', 'Netshoes'];
   let allCandidates = [];
 
   for (const store of stores) {
