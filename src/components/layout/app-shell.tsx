@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
   Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
-  PanelLeftOpen, LogOut, Sparkles, Zap, Menu, Activity
+  PanelLeftOpen, LogOut, Sparkles, Zap, Menu, Activity, TerminalSquare
 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { officialBrand } from "@/lib/env";
@@ -40,6 +40,7 @@ const navSections = [
   {
     title: "Sistema",
     items: [
+      { href: "/history", label: "Histórico do Robô", icon: TerminalSquare },
       { href: "/messages", label: "Mensagens", icon: MessageSquareText },
       { href: "/settings", label: "Configurações", icon: Settings }
     ]
