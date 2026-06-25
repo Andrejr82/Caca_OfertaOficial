@@ -13,7 +13,6 @@
 global.WebSocket = require('ws');
 
 const cron         = require('node-cron');
-const googleTrends = require('google-trends-api');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
 require('dotenv').config({ path: '.env.local' });
@@ -70,14 +69,19 @@ function getNextQuery(store) {
 
 async function fetchDailyTrendsAndGenerateQueries(stores) {
   try {
-    console.log(`\n🔍 Buscando tendências do Google Trends (BR)...`);
-    const results = await googleTrends.dailyTrends({ geo: 'BR' });
-    const parsed = JSON.parse(results);
-    const trendingDays = parsed.default.trendingSearchesDays;
+    console.log(`\n🔍 Buscando tendências do Google Trends (BR) via RSS Oficial...`);
+    const res = await fetch('https://trends.google.com/trending/rss?geo=BR');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const xml = await res.text();
     
-    let trendingTopics = [];
-    if (trendingDays && trendingDays.length > 0) {
-      trendingDays[0].trendingSearches.slice(0, 10).forEach(t => trendingTopics.push(t.title.query));
+    // Extrai os títulos das tendências usando Regex simples
+    let trendingTopics = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g)]
+                         .map(m => m[1]).slice(1, 11);
+                         
+    if (trendingTopics.length === 0) {
+       // Fallback se não tiver CDATA
+       trendingTopics = [...xml.matchAll(/<title>(.*?)<\/title>/g)]
+                         .map(m => m[1]).slice(1, 11);
     }
     
     console.log(`📈 Top Trends atuais: ${trendingTopics.join(', ')}`);
