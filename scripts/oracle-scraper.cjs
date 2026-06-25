@@ -31,11 +31,11 @@ const supabase = createClient(
 const FIRECRAWL_KEY   = process.env.FIRECRAWL_API_KEY;
 const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
-const OFFERS_PER_STORE = 8;
+const OFFERS_PER_STORE = 15;
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
-const VIP_SLOTS        = 3; // Limite rigoroso de chamadas à API da IA por ciclo (Proteção Free Tier)
-const APPROVAL_SCORE   = 7.3; // Nota mínima para ser considerado "Top Offer"
+const VIP_SLOTS        = 20; // Quantidade de posts que a IA vai gerar por ciclo
+const APPROVAL_SCORE   = 6.0; // Nota mínima para ser considerado "Top Offer"
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
