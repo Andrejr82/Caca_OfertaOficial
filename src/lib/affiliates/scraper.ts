@@ -1801,14 +1801,14 @@ export async function discoverAndIngestTrendingOffers(
     // Fallback para Admin Client se não houver contexto de request (Inngest Cron / Testes CLI)
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
     supabase = createSupabaseAdminClient();
-    userId = "98906817-5ff5-4956-a35b-88737339def5"; // UUID real do Admin
+    userId = "7a9ca7b7-f464-46e0-a9de-9b322c73628a"; // UUID real do Admin (André)
   }
 
   if (!supabase) {
     throw new Error("Supabase não configurado.");
   }
   if (!userId) {
-     userId = "98906817-5ff5-4956-a35b-88737339def5"; // Fallback de segurança para persistência
+     userId = "7a9ca7b7-f464-46e0-a9de-9b322c73628a"; // Fallback de segurança para persistência (André)
   }
 
   // Lista VIP do Modelo Pechinchou (Alta Conversão por Impulso)

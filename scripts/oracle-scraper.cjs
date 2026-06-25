@@ -33,7 +33,7 @@ const supabase = createClient(
 
 // ─── Configurações ────────────────────────────────────────────
 const FIRECRAWL_KEY   = process.env.FIRECRAWL_API_KEY;
-const ADMIN_USER_ID   = '98906817-5ff5-4956-a35b-88737339def5'; // Admin ID do sistema
+const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André (para aparecer no dashboard)
 const OFFERS_PER_STORE = 8;   // Produtos buscados por loja por ciclo
 const CLEANUP_DAYS     = 7;   // Apagar drafts mais velhos que X dias
 const CRON_SCHEDULE    = '0 */4 * * *'; // A cada 4 horas
