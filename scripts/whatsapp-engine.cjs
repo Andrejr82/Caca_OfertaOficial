@@ -147,18 +147,32 @@ app.post('/send', async (req, res) => {
                 
                 console.log('  → Convertendo imagem para thumbnail de Link Preview (Alta Resolução - 1200x630)...');
                 const sharp = require('sharp');
-                // Vamos comprimir levemente a imagem para envio nativo
+                // Compressão AGRESSIVA para garantir que o thumbnail fique abaixo de 64KB (limite do WhatsApp para cards grandes)
                 const imageBuffer = await sharp(buffer)
-                    .resize({ width: 1080, withoutEnlargement: true }) // WhatsApp prefere 1080p
-                    .jpeg({ quality: 85, force: true })
+                    .resize({ width: 700, height: 400, fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
+                    .jpeg({ quality: 50, force: true })
                     .toBuffer();
 
-                console.log('  → Enviando Imagem Nativa com Legenda...');
+                console.log(`  → Tamanho do Thumbnail: ${Math.round(imageBuffer.length / 1024)} KB`);
+                console.log('  → Enviando texto com Link Preview Forçado (Card Grande)...');
                 
+                // Extrai o primeiro link do texto
+                const urlMatch = text.match(/https?:\/\/[^\s]+/g);
+                const firstUrl = urlMatch && urlMatch.length > 0 ? urlMatch[urlMatch.length - 1] : 'https://caca-oferta-oficial.vercel.app';
+                
+                let extractedTitle = text.split('\n')[0].replace(/[\*🚨_~]/g, '').trim();
+                if (extractedTitle.length > 60) extractedTitle = extractedTitle.substring(0, 57) + '...';
+
                 result = await sock.sendMessage(jid, {
-                    image: imageBuffer,
-                    caption: text,
-                    mimetype: 'image/jpeg'
+                    text: text,
+                    linkPreview: {
+                        'canonical-url': firstUrl,
+                        'matched-text': firstUrl,
+                        title: extractedTitle,
+                        description: 'Acesse a oferta completa!',
+                        jpegThumbnail: imageBuffer,
+                        previewType: 'PHOTO' // Requer thumbnail < 64KB para funcionar
+                    }
                 });
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
