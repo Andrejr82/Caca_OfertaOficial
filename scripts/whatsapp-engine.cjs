@@ -157,7 +157,8 @@ app.post('/send', async (req, res) => {
                 
                 result = await sock.sendMessage(jid, {
                     image: imageBuffer,
-                    caption: text
+                    caption: text,
+                    mimetype: 'image/jpeg'
                 });
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
