@@ -180,6 +180,21 @@ async function firecrawlExtract(url, limit, storeName, attempt = 1) {
 }
 
 // ─── Normalização e Links ─────────────────────────────────────
+function cleanProductUrl(url) {
+  if (!url) return null;
+  try {
+    const obj = new URL(url);
+    // Remove query string e hash completamente para garantir que o link seja o mais puro possível
+    // Exceções: mantemos 'tag' ou similares se já existirem, mas como a limpeza ocorre ANTES da injeção de afiliado, 
+    // podemos limpar tudo com segurança para deduplicação.
+    obj.search = ''; 
+    obj.hash = '';
+    return obj.toString();
+  } catch(e) {
+    return url;
+  }
+}
+
 function normalizeImageUrl(url) {
   if (!url) return null;
   let u = url;
@@ -430,7 +445,8 @@ async function scrapeStore(store) {
   let storeCandidates = [];
 
   for (const p of rawProducts) {
-    const affiliateUrl = buildAffiliateUrl(p.url?.startsWith('http') ? p.url : urls[store], store);
+    const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
+    const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
     const prodData = {
       product_name: p.title, image_url: normalizeImageUrl(p.image || null),
       current_price: p.price, old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
