@@ -28,12 +28,12 @@ export default async function OffersPage() {
       <OfferForm />
 
       {/* Offers List */}
-      <section className="glass-card p-5">
-        <div className="border-b border-white/[0.04] pb-3 mb-4">
+      <section className="glass-card p-5 w-full overflow-hidden flex flex-col">
+        <div className="border-b border-white/[0.04] pb-3 mb-4 flex-shrink-0">
           <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">Últimas Ofertas</h2>
         </div>
-        <div className="overflow-x-auto pb-4">
-          <div className="space-y-2 min-w-[700px]">
+        <div className="overflow-x-auto pb-4 w-full">
+          <div className="space-y-2 min-w-[750px]">
             {offers.length ? offers.map((offer, index) => (
               <div
                 key={offer.id}
