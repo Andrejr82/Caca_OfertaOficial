@@ -1,18 +1,15 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  ORACLE-SCRAPER.CJS — Robô Caçador de Ofertas (Oracle Cloud)
+ *  ORACLE-SCRAPER.CJS — Robô Caçador de Ofertas V2 (Oracle Cloud)
  * ═══════════════════════════════════════════════════════════════
  * 
  * Processo permanente gerenciado pelo PM2.
- * Roda a cada 4 horas: raspa as 6 maiores lojas e salva no Supabase.
- * Zero dependência do Next.js, zero timeout da Vercel.
- * 
- * Lojas: Mercado Livre, Shopee, Amazon, Shein, Magalu, Netshoes
+ * Roda a cada 4 horas: raspa as lojas, filtra matematicamente,
+ * envia as 3 melhores para a Groq (Llama-3), gera links e posta rascunhos.
  */
 
 'use strict';
 
-// ⚠️ CRÍTICO: Deve ser definido ANTES de qualquer require do Supabase
 global.WebSocket = require('ws');
 
 const cron    = require('node-cron');
@@ -21,7 +18,6 @@ const ws      = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
 // ─── Supabase Admin Client ────────────────────────────────────
-// Node.js < 22 exige passagem explícita do ws como transport
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
@@ -33,19 +29,21 @@ const supabase = createClient(
 
 // ─── Configurações ────────────────────────────────────────────
 const FIRECRAWL_KEY   = process.env.FIRECRAWL_API_KEY;
-const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André (para aparecer no dashboard)
-const OFFERS_PER_STORE = 8;   // Produtos buscados por loja por ciclo
-const CLEANUP_DAYS     = 7;   // Apagar drafts mais velhos que X dias
-const CRON_SCHEDULE    = '0 */4 * * *'; // A cada 4 horas
+const GROQ_API_KEY    = process.env.GROQ_API_KEY;
+const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
+const OFFERS_PER_STORE = 8;
+const CLEANUP_DAYS     = 7;
+const CRON_SCHEDULE    = '0 */4 * * *';
+const VIP_SLOTS        = 3; // Limite rigoroso de chamadas à API da IA por ciclo (Proteção Free Tier)
+const APPROVAL_SCORE   = 7.3; // Nota mínima para ser considerado "Top Offer"
 
-// ─── Fontes de afiliados ──────────────────────────────────────
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
 const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
-// ─── Listas de palavras-chave virais por loja ─────────────────
+// ─── Listas Virais ────────────────────────────────────────────
 const VIRAL_QUERIES = {
   'Mercado Livre': ['airfryer oferta', 'celular oferta', 'fone bluetooth', 'aspirador robô', 'monitor gamer'],
   'Shopee':        ['kit cozinha', 'suporte celular', 'relógio smartwatch', 'luminária led', 'bolsa feminina'],
@@ -55,9 +53,8 @@ const VIRAL_QUERIES = {
   'Netshoes':      ['tênis corrida', 'chuteira', 'bola futebol', 'suplemento proteína', 'camiseta esporte'],
 };
 
-// ─── Contador de rotação de queries ──────────────────────────
 const queryIndex = {};
-Object.keys(VIRAL_QUERIES).forEach(store => { queryIndex[store] = 0; });
+Object.keys(VIRAL_QUERIES).forEach(s => { queryIndex[s] = 0; });
 
 function getNextQuery(store) {
   const queries = VIRAL_QUERIES[store];
@@ -66,35 +63,21 @@ function getNextQuery(store) {
   return q;
 }
 
-// ─── Utilitário: Chamar a Firecrawl API (com retry) ─────────
+// ─── Extração via Firecrawl ───────────────────────────────────
 async function firecrawlExtract(url, limit, storeName, attempt = 1) {
-  if (!FIRECRAWL_KEY) {
-    console.error('[SCRAPER] FIRECRAWL_API_KEY não configurada!');
-    return [];
-  }
-
+  if (!FIRECRAWL_KEY) return [];
   const MAX_RETRIES = 2;
   const prompt = `Você é um robô caçador de achadinhos. Extraia TODOS os produtos da página que sejam CLARAMENTE uma promoção. ` +
-    `Inclua: 1) preço antigo riscado; 2) selos de desconto (ex: -30% OFF); 3) tags de oferta relâmpago, oferta do dia, venda flash. ` +
-    `Ignore produtos sem desconto visível. Mire em ${limit * 3} itens. ` +
-    `Retorne: title, url (completa com https://), image, price (número), old_price (número ou null), discount_badge (texto ou null), rating (número ou null), category.`;
+    `Inclua: 1) preço antigo riscado; 2) selos de desconto; 3) tags de oferta. ` +
+    `Retorne: title, url (completa com https://), image, price (número), old_price (número/null), discount_badge, rating, category.`;
 
   try {
     console.log(`  [Firecrawl] ${storeName} — tentativa ${attempt}/${MAX_RETRIES}...`);
     const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${FIRECRAWL_KEY}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { 'Authorization': `Bearer ${FIRECRAWL_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        url,
-        formats: ['extract'],
-        waitFor: 8000,
-        timeout: 60000,
-        mobile: true,
-        proxy: 'stealth',
-        blockAds: true,
+        url, formats: ['extract'], waitFor: 8000, timeout: 60000, mobile: true, proxy: 'stealth', blockAds: true,
         extract: {
           prompt,
           schema: {
@@ -105,14 +88,10 @@ async function firecrawlExtract(url, limit, storeName, attempt = 1) {
                 items: {
                   type: 'object',
                   properties: {
-                    title:          { type: 'string' },
-                    url:            { type: 'string' },
-                    image:          { type: 'string' },
-                    price:          { type: 'number' },
-                    old_price:      { type: 'number', nullable: true },
-                    discount_badge: { type: 'string', nullable: true },
-                    rating:         { type: 'number', nullable: true },
-                    category:       { type: 'string' },
+                    title: { type: 'string' }, url: { type: 'string' }, image: { type: 'string' },
+                    price: { type: 'number' }, old_price: { type: 'number', nullable: true },
+                    discount_badge: { type: 'string', nullable: true }, rating: { type: 'number', nullable: true },
+                    category: { type: 'string' },
                   },
                   required: ['title', 'url', 'price'],
                 },
@@ -124,41 +103,25 @@ async function firecrawlExtract(url, limit, storeName, attempt = 1) {
       }),
     });
 
-    // Retry em caso de 408 (timeout) ou 429 (rate limit)
     if (res.status === 408 || res.status === 429) {
       if (attempt < MAX_RETRIES) {
-        const delay = attempt * 15000; // 15s, 30s...
-        console.warn(`  [Firecrawl] ${storeName} HTTP ${res.status} — aguardando ${delay/1000}s e tentando novamente...`);
-        await new Promise(r => setTimeout(r, delay));
+        await new Promise(r => setTimeout(r, attempt * 15000));
         return firecrawlExtract(url, limit, storeName, attempt + 1);
       }
-      console.warn(`  [Firecrawl] ${storeName} — máximo de tentativas atingido (${res.status}).`);
       return [];
     }
-
-    if (!res.ok) {
-      console.warn(`  [Firecrawl] ${storeName} HTTP ${res.status}`);
-      return [];
-    }
+    if (!res.ok) return [];
 
     const data = await res.json();
     const products = data?.data?.extract?.products || [];
-
-    // Filtra apenas produtos com desconto real
-    return products
-      .filter(p => p.title && p.price > 0 && (
-        (p.old_price && p.old_price > p.price) ||
-        (p.discount_badge && p.discount_badge.trim().length > 0)
-      ))
-      .slice(0, limit);
-
+    return products.filter(p => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0))).slice(0, limit);
   } catch (err) {
-    console.error(`  [Firecrawl] ${storeName} Erro: ${err.message}`);
+    console.error(`  [Firecrawl] Erro: ${err.message}`);
     return [];
   }
 }
 
-// ─── Normalização de URL de imagem ───────────────────────────
+// ─── Normalização e Links ─────────────────────────────────────
 function normalizeImageUrl(url) {
   if (!url) return null;
   let u = url;
@@ -167,37 +130,34 @@ function normalizeImageUrl(url) {
   return u;
 }
 
-// ─── Gera URL de afiliado por loja ───────────────────────────
 function buildAffiliateUrl(originalUrl, store) {
   try {
     const obj = new URL(originalUrl);
-    if (store === 'Mercado Livre' && ML_AFFILIATE_ID) {
-      obj.searchParams.set('dealerRef', ML_AFFILIATE_ID);
-      return obj.toString();
-    }
-    if (store === 'Amazon' && AMAZON_TAG) {
-      obj.searchParams.set('tag', AMAZON_TAG);
-      return obj.toString();
-    }
-    if (store === 'Magalu' && MAGALU_PARTNER_ID) {
-      obj.hostname = 'www.magazinevoce.com.br';
-      obj.pathname = `/${MAGALU_PARTNER_ID}${obj.pathname}`;
-      return obj.toString();
-    }
-    if (store === 'Netshoes' && RAKUTEN_AFFILIATE_ID) {
-      return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_AFFILIATE_ID}&mid=${RAKUTEN_NETSHOES_MID}&murl=${encodeURIComponent(originalUrl)}`;
-    }
+    if (store === 'Mercado Livre' && ML_AFFILIATE_ID) { obj.searchParams.set('dealerRef', ML_AFFILIATE_ID); return obj.toString(); }
+    if (store === 'Amazon' && AMAZON_TAG) { obj.searchParams.set('tag', AMAZON_TAG); return obj.toString(); }
+    if (store === 'Magalu' && MAGALU_PARTNER_ID) { obj.hostname = 'www.magazinevoce.com.br'; obj.pathname = `/${MAGALU_PARTNER_ID}${obj.pathname}`; return obj.toString(); }
+    if (store === 'Netshoes' && RAKUTEN_AFFILIATE_ID) return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_AFFILIATE_ID}&mid=${RAKUTEN_NETSHOES_MID}&murl=${encodeURIComponent(originalUrl)}`;
   } catch (_) {}
   return originalUrl;
 }
 
-// ─── Score simplificado para a Oracle (sem Next.js) ──────────
-function calculateScore(product) {
-  const price     = product.current_price || 0;
-  const oldPrice  = product.old_price || 0;
-  const rating    = product.rating || 0;
+// ─── Sub-ID e Tracked URL ─────────────────────────────────────
+function createSubId(channel, offerId) {
+  const shortId = offerId.replace(/-/g, "").slice(0, 8);
+  const prefixes = { telegram: "tg", instagram: "ig", whatsapp: "wp" };
+  return `${prefixes[channel] || "x"}_${shortId}`;
+}
 
-  // Score de desconto (peso 40%)
+function createTrackedUrl(subId) {
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://cacaoferta.com.br";
+  return `${baseUrl}/go/${subId}`;
+}
+
+// ─── Score Matemático Frio ────────────────────────────────────
+function calculateScore(product) {
+  const price = product.current_price || 0;
+  const oldPrice = product.old_price || 0;
+  
   let discountScore = 0;
   if (oldPrice > price) {
     const pct = (oldPrice - price) / oldPrice;
@@ -205,232 +165,259 @@ function calculateScore(product) {
     else if (pct > 0.80) discountScore = 2;
   }
 
-  // Score de preço (peso 25%)
-  let priceScore = 0;
-  if (price > 0 && price <= 100)       priceScore = 10;
-  else if (price <= 300)               priceScore = 8;
-  else if (price <= 700)               priceScore = 5;
-  else                                 priceScore = 2;
+  let priceScore = price <= 100 ? 10 : (price <= 300 ? 8 : (price <= 700 ? 5 : 2));
+  let impulseScore = price <= 80 ? 10 : (price <= 150 ? 8 : (price <= 300 ? 5 : 2));
+  let ratingScore = product.rating ? (product.rating / 5) * 10 : 5;
 
-  // Score de impulso (peso 20%)
-  let impulseScore = 0;
-  if (price <= 80)       impulseScore = 10;
-  else if (price <= 150) impulseScore = 8;
-  else if (price <= 300) impulseScore = 5;
-  else                   impulseScore = 2;
-
-  // Score de rating (peso 15%)
-  const ratingScore = rating > 0 ? (rating / 5) * 10 : 5;
-
-  const finalScore = Number(
-    ((discountScore * 0.40) + (priceScore * 0.25) + (impulseScore * 0.20) + (ratingScore * 0.15))
-    .toFixed(2)
-  );
-
-  return Math.max(0, Math.min(10, finalScore));
+  // Formula: Desconto(40%) + Preço(25%) + Impulso(20%) + Rating(15%)
+  return Number(((discountScore * 0.40) + (priceScore * 0.25) + (impulseScore * 0.20) + (ratingScore * 0.15)).toFixed(2));
 }
 
-// ─── Salva/atualiza oferta no Supabase ───────────────────────
+// ─── Lógica IA: Llama-3 via Groq ──────────────────────────────
+function cleanJsonString(str) {
+  return str.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+}
+
+async function generateOfferAnalysis(product, store) {
+  if (!GROQ_API_KEY) return generateFallback(product);
+
+  const baseSystemPrompt = `Você é um Copywriter de ELITE especializado em marketing de afiliados de alta conversão. Respond in JSON.
+Sua persona: Administrador eufórico de grupos de ofertas. Foco em escassez extrema e descontos.
+Regras:
+1. Ignore criação de links, injetaremos depois.
+2. Coloque hashtags no array 'hashtags'.
+3. Ignore preços monetários, injetaremos depois.
+Formato: JSON com strategies[{headline, hook, body, cta, score}], hashtags[].`;
+
+  const userPrompt = `Gerar copy para:
+Nome: ${product.product_name}
+Loja: ${store}
+
+RETORNE EXATAMENTE NESTE FORMATO JSON:
+{
+  "strategies": [
+    { "headline": "...", "hook": "...", "body": "...", "cta": "...", "score": 9.5 }
+  ],
+  "hashtags": ["#oferta"]
+}`;
+
+  let retries = 3;
+  while (retries > 0) {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [{ role: "system", content: baseSystemPrompt }, { role: "user", content: userPrompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.7, max_tokens: 1000
+        }),
+      });
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          await new Promise(r => setTimeout(r, 10000));
+          retries--; continue;
+        }
+        throw new Error(`Groq HTTP ${response.status}`);
+      }
+
+      const data = await response.json();
+      const raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
+      const strategy = (raw.strategies && raw.strategies[0]) ? raw.strategies[0] : null;
+      if (!strategy) throw new Error("JSON malformado");
+
+      const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
+
+      return {
+        score: strategy.score || 8.0,
+        telegram: `*${strategy.headline}*\n\n${strategy.hook}\n${strategy.body}\n\n👉 ${strategy.cta}\n🔗 {LINK}\n\n${hashtags}`,
+        instagram: `*${strategy.headline}*\n\n${strategy.hook}\n${strategy.body}\n\n👉 ${strategy.cta}\n🔗 Link na Bio: {LINK}\n\n${hashtags}`,
+        whatsapp: `*${strategy.headline}*\n\n${strategy.hook}\n${strategy.body}\n\n👉 ${strategy.cta}\n🔗 {LINK}`
+      };
+    } catch (err) {
+      await new Promise(r => setTimeout(r, 5000));
+      retries--;
+    }
+  }
+  return generateFallback(product);
+}
+
+function generateFallback(product) {
+  return {
+    score: 5.0,
+    telegram: `*Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n🔗 {LINK}\n\n#oferta`,
+    instagram: `*Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n🔗 Link na Bio: {LINK}\n\n#oferta`,
+    whatsapp: `*Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n🔗 {LINK}`
+  };
+}
+
+// ─── Salva Oferta Básica (Rascunho) ───────────────────────────
 async function upsertOffer(product, store, affiliateUrl) {
   const score = calculateScore(product);
 
-  // Checa duplicata pela URL
-  const { data: existing } = await supabase
-    .from('offers')
-    .select('id, current_price, score')
-    .eq('original_url', affiliateUrl)
-    .eq('user_id', ADMIN_USER_ID)
-    .maybeSingle();
+  const { data: existing } = await supabase.from('offers').select('id, current_price').eq('original_url', affiliateUrl).eq('user_id', ADMIN_USER_ID).maybeSingle();
 
   if (existing) {
-    const priceChanged = Number(existing.current_price) !== product.current_price;
-    if (priceChanged) {
-      await supabase.from('offers').update({
-        current_price: product.current_price,
-        old_price:     product.old_price,
-        image_url:     product.image_url,
-        score,
-        status:        'draft',
-        updated_at:    new Date().toISOString(),
-        notes:         `[Oracle] Preço atualizado: R$ ${existing.current_price} → R$ ${product.current_price}`,
-      }).eq('id', existing.id);
-      console.log(`  ↻ Atualizado: ${product.product_name.substring(0, 50)} (R$ ${product.current_price})`);
+    if (Number(existing.current_price) !== product.current_price) {
+      await supabase.from('offers').update({ current_price: product.current_price, old_price: product.old_price, image_url: product.image_url, score, updated_at: new Date().toISOString() }).eq('id', existing.id);
     } else {
-      // Só atualiza o timestamp para a faxina não apagar
       await supabase.from('offers').update({ updated_at: new Date().toISOString() }).eq('id', existing.id);
     }
-    return;
+    return { id: existing.id, isNew: false, score };
   }
 
-  // Inserção nova
-  const { error } = await supabase.from('offers').insert({
-    user_id:      ADMIN_USER_ID,
-    platform:     store,
-    product_name: product.product_name,
-    original_url: affiliateUrl,
-    image_url:    product.image_url,
-    current_price: product.current_price,
-    old_price:    product.old_price,
-    rating:       product.rating,
-    category:     product.category || 'Geral',
-    score,
-    status:       'draft',
-    notes:        `[Oracle-Scraper] Importado de ${store} às ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`,
-  });
+  const { data, error } = await supabase.from('offers').insert({
+    user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
+    image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
+    rating: product.rating, category: product.category || 'Geral', score, status: 'draft',
+    notes: `[Oracle] Importado às ${new Date().toLocaleString('pt-BR')}`,
+  }).select('id').single();
 
   if (error) {
-    console.error(`  ✗ Erro ao salvar: ${error.message}`);
-  } else {
-    console.log(`  ✓ Novo: ${product.product_name.substring(0, 50)} — R$ ${product.current_price} (score: ${score})`);
+    console.error(`  ✗ Erro insert: ${error.message}`);
+    return null;
   }
+  return { id: data.id, isNew: true, score };
 }
 
-// ─── Faxina automática: apaga drafts velhos ──────────────────
+// ─── Processamento Vip (IA, Links e Posts) ────────────────────
+async function processTopOffers(candidates) {
+  // Ordena por maior nota matemática
+  candidates.sort((a, b) => b.score - a.score);
+  const vipOffers = candidates.filter(c => c.score >= APPROVAL_SCORE).slice(0, VIP_SLOTS);
+
+  if (vipOffers.length === 0) {
+    console.log(`\n🤖 Nenhuma oferta atingiu o score mínimo (${APPROVAL_SCORE}) para IA nesta rodada.`);
+    return 0;
+  }
+
+  console.log(`\n🤖 Iniciando processamento IA para as ${vipOffers.length} melhores ofertas...`);
+  let processed = 0;
+
+  for (const item of vipOffers) {
+    console.log(`  [IA] Gerando copy para: ${item.product.product_name.substring(0, 40)}...`);
+    const analysis = await generateOfferAnalysis(item.product, item.store);
+    
+    const finalScore = Number(((item.score * 0.7) + (analysis.score * 0.3)).toFixed(2));
+    
+    // Deleta posts de rascunhos velhos para esta oferta
+    await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
+
+    const channels = ['telegram', 'instagram', 'whatsapp'];
+    const linksMap = {};
+
+    for (const channel of channels) {
+      const subId = createSubId(channel, item.id);
+      const trackedUrl = createTrackedUrl(subId);
+      
+      const { data: linkData } = await supabase.from('affiliate_links').upsert({
+        user_id: ADMIN_USER_ID, offer_id: item.id, channel, original_url: item.affiliateUrl, tracked_url: trackedUrl, sub_id: subId
+      }, { onConflict: 'offer_id,channel' }).select('id').single();
+
+      linksMap[channel] = { id: linkData.id, url: trackedUrl };
+    }
+
+    const postsToInsert = [
+      { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.telegram.id, channel: 'telegram', content: analysis.telegram.replace('{LINK}', linksMap.telegram.url), status: 'draft' },
+      { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.instagram.id, channel: 'instagram', content: analysis.instagram.replace('{LINK}', linksMap.instagram.url), status: 'draft' },
+      { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.whatsapp.id, channel: 'whatsapp', content: analysis.whatsapp.replace('{LINK}', linksMap.whatsapp.url), status: 'draft' }
+    ];
+
+    await supabase.from('posts').insert(postsToInsert);
+    await supabase.from('offers').update({ status: 'approved', score: finalScore }).eq('id', item.id);
+
+    processed++;
+    await new Promise(r => setTimeout(r, 5000)); // Respiro API Groq
+  }
+  return processed;
+}
+
+// ─── Faxina ───────────────────────────────────────────────────
 async function cleanupOldDrafts() {
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - CLEANUP_DAYS);
-
-  const { data: deleted, error } = await supabase
-    .from('offers')
-    .delete()
-    .eq('status', 'draft')
-    .lt('updated_at', cutoff.toISOString())
-    .select('id');
-
-  if (error) {
-    console.error('[FAXINA] Erro na limpeza:', error.message);
-  } else {
-    console.log(`[FAXINA] ${deleted?.length || 0} drafts antigos removidos (>= ${CLEANUP_DAYS} dias).`);
-  }
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - CLEANUP_DAYS);
+  const { data } = await supabase.from('offers').delete().eq('status', 'draft').lt('updated_at', cutoff.toISOString()).select('id');
+  console.log(`[FAXINA] ${data?.length || 0} drafts antigos removidos.`);
 }
 
-// ─── Raspa uma loja específica ────────────────────────────────
+// ─── Raspa Loja ───────────────────────────────────────────────
 async function scrapeStore(store) {
   const query = getNextQuery(store);
   console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
+  
+  const urls = {
+    'Mercado Livre': `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`,
+    'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
+    'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
+    'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
+    'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
+    'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
+  };
 
-  let targetUrl = '';
-  switch (store) {
-    case 'Mercado Livre': targetUrl = `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`; break;
-    case 'Shopee':        targetUrl = `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`; break;
-    case 'Amazon':        targetUrl = `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`; break;
-    case 'Shein':         targetUrl = `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`; break;
-    case 'Magalu':        targetUrl = `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`; break;
-    case 'Netshoes':      targetUrl = `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`; break;
-    default: return;
-  }
+  const rawProducts = await firecrawlExtract(urls[store], OFFERS_PER_STORE, store);
+  let storeCandidates = [];
 
-  const rawProducts = await firecrawlExtract(targetUrl, OFFERS_PER_STORE, store);
-  console.log(`  → ${rawProducts.length} produtos encontrados.`);
-
-  let saved = 0;
   for (const p of rawProducts) {
-    const imageUrl    = normalizeImageUrl(p.image || null);
-    const originalUrl = p.url?.startsWith('http') ? p.url : targetUrl;
-    const affiliateUrl = buildAffiliateUrl(originalUrl, store);
+    const affiliateUrl = buildAffiliateUrl(p.url?.startsWith('http') ? p.url : urls[store], store);
+    const prodData = {
+      product_name: p.title, image_url: normalizeImageUrl(p.image || null),
+      current_price: p.price, old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+      rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral'
+    };
 
-    await upsertOffer({
-      product_name:  p.title,
-      image_url:     imageUrl,
-      current_price: p.price,
-      old_price:     p.old_price && p.old_price > p.price ? p.old_price : null,
-      rating:        p.rating ? parseFloat(String(p.rating)) : null,
-      category:      p.category || 'Geral',
-    }, store, affiliateUrl);
-    saved++;
+    const res = await upsertOffer(prodData, store, affiliateUrl);
+    if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
   }
-  console.log(`  ✅ [${store}] ${saved} ofertas processadas.`);
-  return saved;
+  console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas novas coletadas.`);
+  return storeCandidates;
 }
 
-// ─── Ciclo principal de scraping ─────────────────────────────
+// ─── Ciclo Principal ──────────────────────────────────────────
 async function runScrapingCycle() {
   const startTime = Date.now();
-  const ts = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-  console.log(`\n${'═'.repeat(60)}`);
-  console.log(`🚀 ORACLE-SCRAPER — Ciclo iniciado em ${ts}`);
-  console.log(`${'═'.repeat(60)}`);
+  console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER V2 — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
   const stores = ['Mercado Livre', 'Shopee', 'Amazon', 'Shein', 'Magalu', 'Netshoes'];
-  let totalSaved = 0;
+  let allCandidates = [];
 
   for (const store of stores) {
     try {
-      const count = await scrapeStore(store);
-      totalSaved += (count || 0);
-      // Pausa entre lojas para não sobrecarregar a Firecrawl
+      const candidates = await scrapeStore(store);
+      allCandidates = allCandidates.concat(candidates);
       await new Promise(r => setTimeout(r, 5000));
-    } catch (err) {
-      console.error(`[SCRAPER][${store}] Erro inesperado: ${err.message}`);
-    }
+    } catch (err) { console.error(`[SCRAPER][${store}] Erro: ${err.message}`); }
   }
 
-  // Faxina automática
-  console.log('\n🧹 Executando faxina de ofertas antigas...');
+  // Passa os top candidatos do ciclo inteiro para a IA
+  const aiProcessed = await processTopOffers(allCandidates);
+
   await cleanupOldDrafts();
 
-  // Registra log no Supabase para monitoramento
   const duration = Math.round((Date.now() - startTime) / 1000);
   try {
     await supabase.from('integration_logs').insert({
-      user_id:     ADMIN_USER_ID,
-      integration: 'Oracle-Scraper',
-      action:      'Ciclo Completo',
-      status:      'success',
-      message:     `${totalSaved} ofertas processadas em ${duration}s. Lojas: ${stores.join(', ')}`,
-      metadata:    { total_saved: totalSaved, duration_seconds: duration, stores },
+      user_id: ADMIN_USER_ID, integration: 'Oracle-Scraper', action: 'Ciclo V2 Completo', status: 'success',
+      message: `${allCandidates.length} raspes, ${aiProcessed} via IA em ${duration}s.`,
+      metadata: { total_scraped: allCandidates.length, ai_processed: aiProcessed, duration_seconds: duration }
     });
-  } catch (e) {
-    console.error('[LOG] Falha ao registrar log:', e.message);
-  }
+  } catch(e){}
 
-
-  console.log(`\n🏁 Ciclo concluído! ${totalSaved} ofertas em ${duration}s.`);
-  console.log(`⏰ Próximo ciclo em 4 horas.\n`);
+  console.log(`\n🏁 Ciclo concluído! IA gerou ${aiProcessed} posts. Próximo ciclo em 4h.\n`);
 }
 
 // ─── Inicialização ────────────────────────────────────────────
-console.log('');
-console.log('╔══════════════════════════════════════════╗');
-console.log('║   ORACLE-SCRAPER — Caça Oferta Oficial  ║');
-console.log('║   Robô: 6 Lojas | Ciclo: 4 Horas        ║');
-console.log('╚══════════════════════════════════════════╝');
-console.log('');
+console.log('\n╔══════════════════════════════════════════╗');
+console.log('║   ORACLE-SCRAPER V2 (Com Cérebro IA)     ║');
+console.log('╚══════════════════════════════════════════╝\n');
 
-// Verifica configuração crítica
-if (!FIRECRAWL_KEY) {
-  console.error('❌ FIRECRAWL_API_KEY não encontrada no .env.local!');
-  console.error('   O scraper não consegue buscar produtos sem ela.');
-  process.exit(1);
-}
-if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.error('❌ SUPABASE_SERVICE_ROLE_KEY não encontrada no .env.local!');
+if (!FIRECRAWL_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log("Missing API keys");
   process.exit(1);
 }
 
-console.log(`✅ Firecrawl: OK`);
-console.log(`✅ Supabase Admin: OK`);
-console.log(`✅ Lojas configuradas: Mercado Livre, Shopee, Amazon, Shein, Magalu, Netshoes`);
-console.log(`✅ Frequência: a cada 4 horas (${CRON_SCHEDULE})`);
-console.log(`✅ Faxina automática: drafts com mais de ${CLEANUP_DAYS} dias`);
-console.log('');
+runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
-// Executa imediatamente ao iniciar (não espera a primeira hora cheia)
-console.log('▶ Executando ciclo inicial...');
-runScrapingCycle().catch(err => {
-  console.error('❌ Erro no ciclo inicial:', err.message);
+cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
+  name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
 });
-
-// Agenda o cron recorrente
-cron.schedule(CRON_SCHEDULE, () => {
-  runScrapingCycle().catch(err => {
-    console.error('❌ Erro no ciclo do cron:', err.message);
-  });
-}, {
-  name:      'oracle-scraper-main',
-  timezone:  'America/Sao_Paulo',
-  noOverlap: true, // Evita execuções paralelas se uma rodada demorar muito
-});
-
-console.log(`✅ Cron agendado! Próximas execuções: a cada 4 horas (horário de Brasília).`);
-console.log('');
