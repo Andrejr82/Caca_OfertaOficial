@@ -12,9 +12,10 @@
 
 global.WebSocket = require('ws');
 
-const cron    = require('node-cron');
+const cron         = require('node-cron');
+const googleTrends = require('google-trends-api');
 const { createClient } = require('@supabase/supabase-js');
-const ws      = require('ws');
+const ws           = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
 // ─── Supabase Admin Client ────────────────────────────────────
@@ -43,25 +44,71 @@ const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
-// ─── Listas Virais ────────────────────────────────────────────
-const VIRAL_QUERIES = {
-  'Mercado Livre': ['airfryer oferta', 'celular oferta', 'fone bluetooth', 'aspirador robô', 'monitor gamer'],
-  'Shopee':        ['kit cozinha', 'suporte celular', 'relógio smartwatch', 'luminária led', 'bolsa feminina'],
-  'Amazon':        ['kindle oferta', 'echo dot', 'impressora', 'headphone', 'câmera de segurança'],
-  'Shein':         ['vestido promoção', 'conjunto feminino', 'bolsa tendência', 'calçado feminino', 'acessórios moda'],
-  'Magalu':        ['tv oferta', 'geladeira promoção', 'micro-ondas', 'máquina de lavar', 'notebook'],
-  'Netshoes':      ['tênis corrida', 'chuteira', 'bola futebol', 'suplemento proteína', 'camiseta esporte'],
+// ─── Listas Virais Dinâmicas (Google Trends + IA) ─────────────
+let DYNAMIC_QUERIES = {};
+const DEFAULT_QUERIES = {
+  'Mercado Livre': ['airfryer oferta', 'celular promoção'],
+  'Amazon':        ['kindle', 'echo dot'],
+  'Magalu':        ['tv smart', 'geladeira'],
+  'Netshoes':      ['tênis corrida', 'chuteira'],
 };
 
 const queryIndex = {};
-Object.keys(VIRAL_QUERIES).forEach(s => { queryIndex[s] = 0; });
+Object.keys(DEFAULT_QUERIES).forEach(s => { queryIndex[s] = 0; });
 
 function getNextQuery(store) {
-  const queries = VIRAL_QUERIES[store];
-  const q = queries[queryIndex[store] % queries.length];
-  queryIndex[store]++;
+  const queries = DYNAMIC_QUERIES[store] && DYNAMIC_QUERIES[store].length > 0 
+    ? DYNAMIC_QUERIES[store] 
+    : DEFAULT_QUERIES[store] || ['oferta'];
+    
+  if (queryIndex[store] === undefined) queryIndex[store] = 0;
+  
+  const q = queries[queryIndex[store]];
+  queryIndex[store] = (queryIndex[store] + 1) % queries.length;
   return q;
 }
+
+async function fetchDailyTrendsAndGenerateQueries(stores) {
+  try {
+    console.log(`\n🔍 Buscando tendências do Google Trends (BR)...`);
+    const results = await googleTrends.dailyTrends({ geo: 'BR' });
+    const parsed = JSON.parse(results);
+    const trendingDays = parsed.default.trendingSearchesDays;
+    
+    let trendingTopics = [];
+    if (trendingDays && trendingDays.length > 0) {
+      trendingDays[0].trendingSearches.slice(0, 10).forEach(t => trendingTopics.push(t.title.query));
+    }
+    
+    console.log(`📈 Top Trends atuais: ${trendingTopics.join(', ')}`);
+    console.log(`🧠 Acionando Groq IA para traduzir tendências em buscas de e-commerce...`);
+
+    const prompt = `Você é um estrategista de e-commerce. As notícias e buscas em alta no Brasil hoje são: ${trendingTopics.join(', ')}.
+Baseado nisso, quais categorias de produtos de varejo as pessoas mais procurariam comprar?
+Mapeie exatas 5 buscas curtas e genéricas de produtos (ex: "aquecedor eletrico", "camisa time", "guarda chuva") para cada loja: ${stores.join(', ')}.
+Retorne APENAS um JSON válido no formato: { "Mercado Livre": ["busca1", "busca2", ...], "Amazon": [...] }`;
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.7, max_tokens: 800
+      })
+    });
+
+    const data = await response.json();
+    const raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
+    DYNAMIC_QUERIES = raw;
+    console.log(`✅ Consultas dinâmicas geradas com sucesso!`);
+  } catch (err) {
+    console.error(`⚠️ Erro ao buscar Google Trends. Usando buscas padrão. Detalhe:`, err.message);
+    DYNAMIC_QUERIES = DEFAULT_QUERIES;
+  }
+}
+
 
 // ─── Extração via Firecrawl ───────────────────────────────────
 async function firecrawlExtract(url, limit, storeName, attempt = 1) {
@@ -389,6 +436,9 @@ async function runScrapingCycle() {
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER V2 — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
   const stores = ['Mercado Livre', 'Amazon', 'Magalu', 'Netshoes'];
+  
+  await fetchDailyTrendsAndGenerateQueries(stores);
+  
   let allCandidates = [];
 
   for (const store of stores) {
