@@ -177,10 +177,8 @@ function calculateScore(product) {
 function cleanJsonString(str) {
   return str.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
 }
-
 async function generateOfferAnalysis(product, store) {
-  if (!GROQ_API_KEY) return generateFallback(product);
-
+  if (!GROQ_API_KEY) return generateFallback(product, store);
   const baseSystemPrompt = `Você é um Copywriter de ELITE especializado em marketing de afiliados de alta conversão. Respond in JSON.
 Sua persona: Administrador eufórico de grupos de ofertas. Foco em escassez extrema e descontos.
 Regras:
@@ -230,26 +228,38 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
 
       const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
 
+      const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+      const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+      
+      const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
+      const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
+
       return {
         score: strategy.score || 8.0,
-        telegram: `*${strategy.headline}*\n\n${strategy.hook}\n${strategy.body}\n\n👉 ${strategy.cta}\n🔗 {LINK}\n\n${hashtags}`,
-        instagram: `*${strategy.headline}*\n\n${strategy.hook}\n${strategy.body}\n\n👉 ${strategy.cta}\n🔗 Link na Bio: {LINK}\n\n${hashtags}`,
-        whatsapp: `*${strategy.headline}*\n\n${strategy.hook}\n${strategy.body}\n\n👉 ${strategy.cta}\n🔗 {LINK}`
+        telegram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}\n\n${hashtags}`,
+        instagram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}\n\n${hashtags}`,
+        whatsapp: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}`
       };
     } catch (err) {
       await new Promise(r => setTimeout(r, 5000));
       retries--;
     }
   }
-  return generateFallback(product);
+  return generateFallback(product, store);
 }
 
-function generateFallback(product) {
+function generateFallback(product, store) {
+  const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+  const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+  
+  const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
+  const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store || 'Especial'} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
+
   return {
     score: 5.0,
-    telegram: `*Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n🔗 {LINK}\n\n#oferta`,
-    instagram: `*Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n🔗 Link na Bio: {LINK}\n\n#oferta`,
-    whatsapp: `*Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n🔗 {LINK}`
+    telegram: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}\n\n#oferta`,
+    instagram: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}\n\n#oferta`,
+    whatsapp: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}`
   };
 }
 
