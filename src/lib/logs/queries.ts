@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase/server";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type IntegrationLog = {
   id: string;
@@ -12,7 +12,7 @@ export type IntegrationLog = {
 };
 
 export async function getIntegrationLogs(limit = 50): Promise<IntegrationLog[]> {
-  const supabase = createServerClient();
+  const supabase = await createServerSupabaseClient();
 
   const { data, error } = await supabase
     .from("integration_logs")
