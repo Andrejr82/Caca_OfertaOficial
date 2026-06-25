@@ -165,7 +165,14 @@ async function firecrawlExtract(url, limit, storeName, attempt = 1) {
 
     const data = await res.json();
     const products = data?.data?.extract?.products || [];
-    return products.filter(p => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0))).slice(0, limit);
+    return products.filter(p => 
+      p.title && p.price > 0 && 
+      (
+        (p.old_price && p.old_price > p.price) || 
+        (p.discount_badge && p.discount_badge.trim().length > 0) ||
+        (storeName === 'Magalu') // A Magalu costuma ocultar o old_price no grid, mas o prompt já filtra promoções
+      )
+    ).slice(0, limit);
   } catch (err) {
     console.error(`  [Firecrawl] Erro: ${err.message}`);
     return [];
