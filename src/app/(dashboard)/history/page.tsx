@@ -4,10 +4,13 @@ import { Activity, CheckCircle2, Clock, TerminalSquare, AlertCircle } from "luci
 export default async function HistoryPage() {
   const logs = await getIntegrationLogs(100);
 
-  // Calcular KPIs (exemplo: últimos 7 dias ou ciclo atual)
-  const today = new Date().toISOString().split("T")[0];
+  // Data de hoje em Brasília (formato YYYY-MM-DD)
+  const todayDateStr = new Intl.DateTimeFormat('fr-CA', {timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date());
   
-  const todayLogs = logs.filter(log => log.created_at.startsWith(today));
+  const todayLogs = logs.filter(log => {
+    const logBrDateStr = new Intl.DateTimeFormat('fr-CA', {timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date(log.created_at));
+    return logBrDateStr === todayDateStr;
+  });
   
   let totalScrapedToday = 0;
   let totalAiProcessedToday = 0;
@@ -86,8 +89,8 @@ export default async function HistoryPage() {
                       <td className="px-4 py-3 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <Clock size={14} className="text-white/30" />
-                          <span>{dateObj.toLocaleDateString("pt-BR")}</span>
-                          <span className="text-white/40">{dateObj.toLocaleTimeString("pt-BR", { hour: '2-digit', minute: '2-digit' })}</span>
+                          <span>{dateObj.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}</span>
+                          <span className="text-white/40">{dateObj.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 font-medium text-white/90">
