@@ -43,75 +43,38 @@ const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
-// ─── Listas Virais Dinâmicas (Google Trends + IA) ─────────────
-let DYNAMIC_QUERIES = {};
-const DEFAULT_QUERIES = {
-  'Mercado Livre': ['airfryer oferta', 'celular promoção'],
-  'Amazon':        ['kindle', 'echo dot'],
-  'Magalu':        ['tv smart', 'geladeira'],
-  'Netshoes':      ['tênis corrida', 'chuteira'],
+// ─── Listas Virais Dinâmicas (Golden Keywords) ─────────────
+const GOLDEN_QUERIES = {
+  'Mercado Livre': [
+    'Fralda Pampers', 'Sabão em pó Omo', 'Amaciante Downy', 'Papel Higiênico Neve',
+    'Cápsulas de Café', 'Leite Ninho', 'Cerveja Heineken', 'Kit Skincare',
+    'Protetor Solar', 'Kit Shampoo', 'Kit Roupa Infantil', 'Kit Cuecas',
+    'Jogo de Panelas', 'Furadeira', 'Jogo de Ferramentas'
+  ],
+  'Amazon': [
+    'iPhone', 'Notebook', 'Fone de Ouvido Bluetooth', 'SSD', 'Monitor',
+    'Kindle', 'Alexa Echo Dot', 'Perfume Importado', 'Wella Profissional',
+    'Cerave', 'Whey Protein', 'Creatina', 'Fraldas', 'Livros'
+  ],
+  'Netshoes': [
+    'Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira',
+    'Legging Academia', 'Top Fitness', 'Moletom', 'Jaqueta Corta Vento',
+    'Camisa de Time', 'Bermuda Tactel', 'Whey Protein', 'Pré-treino'
+  ],
+  'Magalu': [
+    'Air Fryer', 'Robô Aspirador', 'Cafeteira', 'Micro-ondas',
+    'Geladeira', 'Máquina de Lavar', 'Ventilador', 'Smart TV',
+    'Guarda-Roupa', 'Pneu', 'Cadeira Gamer', 'Secador de Cabelo', 'Fraldas'
+  ]
 };
 
-const queryIndex = {};
-Object.keys(DEFAULT_QUERIES).forEach(s => { queryIndex[s] = 0; });
-
-function getNextQuery(store) {
-  const queries = DYNAMIC_QUERIES[store] && DYNAMIC_QUERIES[store].length > 0 
-    ? DYNAMIC_QUERIES[store] 
-    : DEFAULT_QUERIES[store] || ['oferta'];
-    
-  if (queryIndex[store] === undefined) queryIndex[store] = 0;
-  
-  const q = queries[queryIndex[store]];
-  queryIndex[store] = (queryIndex[store] + 1) % queries.length;
-  return q;
+function getRandomQueries(store, count = 2) {
+  const list = GOLDEN_QUERIES[store] || ['oferta'];
+  const shuffled = [...list].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, count);
 }
 
-async function fetchDailyTrendsAndGenerateQueries(stores) {
-  try {
-    console.log(`\n🔍 Buscando tendências do Google Trends (BR) via RSS Oficial...`);
-    const res = await fetch('https://trends.google.com/trending/rss?geo=BR');
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const xml = await res.text();
-    
-    // Extrai os títulos das tendências usando Regex simples
-    let trendingTopics = [...xml.matchAll(/<title><!\[CDATA\[(.*?)\]\]><\/title>/g)]
-                         .map(m => m[1]).slice(1, 11);
-                         
-    if (trendingTopics.length === 0) {
-       // Fallback se não tiver CDATA
-       trendingTopics = [...xml.matchAll(/<title>(.*?)<\/title>/g)]
-                         .map(m => m[1]).slice(1, 11);
-    }
-    
-    console.log(`📈 Top Trends atuais: ${trendingTopics.join(', ')}`);
-    console.log(`🧠 Acionando Groq IA para traduzir tendências em buscas de e-commerce...`);
-
-    const prompt = `Você é um estrategista de e-commerce. As notícias e buscas em alta no Brasil hoje são: ${trendingTopics.join(', ')}.
-Baseado nisso, quais categorias de produtos de varejo as pessoas mais procurariam comprar?
-Mapeie exatas 5 buscas curtas e genéricas de produtos (ex: "aquecedor eletrico", "camisa time", "guarda chuva") para cada loja: ${stores.join(', ')}.
-Retorne APENAS um JSON válido no formato: { "Mercado Livre": ["busca1", "busca2", ...], "Amazon": [...] }`;
-
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: "llama-3.1-8b-instant",
-        messages: [{ role: "user", content: prompt }],
-        response_format: { type: "json_object" },
-        temperature: 0.7, max_tokens: 800
-      })
-    });
-
-    const data = await response.json();
-    const raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
-    DYNAMIC_QUERIES = raw;
-    console.log(`✅ Consultas dinâmicas geradas com sucesso!`);
-  } catch (err) {
-    console.error(`⚠️ Erro ao buscar Google Trends. Usando buscas padrão. Detalhe:`, err.message);
-    DYNAMIC_QUERIES = DEFAULT_QUERIES;
-  }
-}
+// Google Trends removido - utilizando o motor de Golden Keywords
 
 
 // ─── Extração via Firecrawl ───────────────────────────────────
@@ -429,34 +392,38 @@ async function cleanupOldDrafts() {
 
 // ─── Raspa Loja ───────────────────────────────────────────────
 async function scrapeStore(store) {
-  const query = getNextQuery(store);
-  console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
-  
-  const urls = {
-    'Mercado Livre': `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`,
-    'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
-    'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
-    'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
-    'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
-    'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
-  };
-
-  const rawProducts = await firecrawlExtract(urls[store], OFFERS_PER_STORE, store);
+  const queries = getRandomQueries(store, 2); // Sorteia 2 palavras-chave diferentes por loja
   let storeCandidates = [];
 
-  for (const p of rawProducts) {
-    const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
-    const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
-    const prodData = {
-      product_name: p.title, image_url: normalizeImageUrl(p.image || null),
-      current_price: p.price, old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-      rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral'
+  for (const query of queries) {
+    console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
+    
+    const urls = {
+      'Mercado Livre': `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`,
+      'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
+      'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
+      'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
+      'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
+      'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
     };
 
-    const res = await upsertOffer(prodData, store, affiliateUrl);
-    if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
+    const rawProducts = await firecrawlExtract(urls[store], OFFERS_PER_STORE, store);
+
+    for (const p of rawProducts) {
+      const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
+      const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
+      const prodData = {
+        product_name: p.title, image_url: normalizeImageUrl(p.image || null),
+        current_price: p.price, old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+        rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral'
+      };
+
+      const res = await upsertOffer(prodData, store, affiliateUrl);
+      if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
+    }
   }
-  console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas novas coletadas.`);
+  
+  console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas novas coletadas nas categorias sorteadas.`);
   return storeCandidates;
 }
 
@@ -466,8 +433,6 @@ async function runScrapingCycle() {
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER V2 — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
   const stores = ['Mercado Livre', 'Amazon', 'Magalu', 'Netshoes'];
-  
-  await fetchDailyTrendsAndGenerateQueries(stores);
   
   let allCandidates = [];
 
