@@ -5,6 +5,7 @@ import { generateMLAffiliateLink } from "@/lib/platforms/mercadolivre";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
 import { normalizeCategory, MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
 import { getNextViralTarget } from "@/lib/offers/discovery-config";
+import { callLLM } from "@/lib/ai/groq";
 
 const USER_AGENT = "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)";
 
@@ -74,60 +75,59 @@ function enhanceImageUrl(url: string | null): string | null {
 }
 
 export async function fetchShopeeTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca de tendências da Shopee via Firecrawl...");
+  console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca de tendências da Shopee via Oracle API...");
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      throw new Error("FIRECRAWL_API_KEY não configurada.");
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) {
+      throw new Error("ORACLE_API_KEY não configurada.");
     }
 
     const fetchLimit = limit * 4;
     const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category + " oferta relâmpago")}` : "https://shopee.com.br/m/ofertas-do-dia";
     const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: targetUrl, 
-        formats: ["extract"],
-        extract: {
-          prompt: promptText,
-          schema: {
-            type: "object",
-            properties: {
-              products: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    url: { type: "string" },
-                    image: { type: "string" },
-                    price: { type: "number" },
-                    old_price: { type: "number", nullable: true },
-                    discount_badge: { type: "string", nullable: true },
-                    rating: { type: "number", nullable: true },
-                    category: { type: "string" }
-                  },
-                  required: ["title", "url", "price"]
-                }
-              }
-            },
-            required: ["products"]
-          }
-        }
-      })
+    const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl, token: oracleKey }),
     });
 
-    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Shopee Trends: ${fcResponse.status}`);
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shopee");
+    if (!oracleRes.ok) throw new Error(`Falha na Oracle API Shopee Trends: ${oracleRes.status}`);
+    const oracleData = await oracleRes.json();
+    if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) throw new Error("Sem texto extraído da Shopee pela Oracle API");
 
-    const validProducts = fcData.data.extract.products
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+
+    const schemaObj = {
+      type: "object",
+      properties: {
+        products: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              image: { type: "string" },
+              price: { type: "number" },
+              old_price: { type: "number", nullable: true },
+              discount_badge: { type: "string", nullable: true },
+              rating: { type: "number", nullable: true },
+              category: { type: "string" }
+            },
+            required: ["title", "url", "price"]
+          }
+        }
+      },
+      required: ["products"]
+    };
+
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const fcData = JSON.parse(rawResult);
+
+    if (!fcData.products) throw new Error("Sem produtos extraídos da Shopee pela IA");
+
+    const validProducts = fcData.products
       .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
 
     const products = validProducts.slice(0, limit).map((p: any) => {
@@ -155,11 +155,11 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
 }
 
 export async function fetchSheinTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  console.log("[SCRAPER][SHEIN][TRENDS] Iniciando busca de tendências da Shein via Firecrawl...");
+  console.log("[SCRAPER][SHEIN][TRENDS] Iniciando busca de tendências da Shein via Oracle API...");
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      throw new Error("FIRECRAWL_API_KEY não configurada.");
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) {
+      throw new Error("ORACLE_API_KEY não configurada.");
     }
 
     const fetchLimit = limit * 4;
@@ -168,49 +168,48 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/promotion/flash-sale";
     const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: targetUrl, 
-        formats: ["extract"],
-        extract: {
-          prompt: promptText,
-          schema: {
-            type: "object",
-            properties: {
-              products: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    url: { type: "string" },
-                    image: { type: "string" },
-                    price: { type: "number" },
-                    old_price: { type: "number", nullable: true },
-                    discount_badge: { type: "string", nullable: true },
-                    rating: { type: "number", nullable: true },
-                    category: { type: "string" }
-                  },
-                  required: ["title", "url", "price"]
-                }
-              }
-            },
-            required: ["products"]
-          }
-        }
-      })
+    const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl, token: oracleKey }),
     });
 
-    if (!fcResponse.ok) throw new Error(`Falha no Firecrawl Shein Trends: ${fcResponse.status}`);
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data?.extract?.products) throw new Error("Sem produtos extraídos da Shein");
+    if (!oracleRes.ok) throw new Error(`Falha na Oracle API Shein Trends: ${oracleRes.status}`);
+    const oracleData = await oracleRes.json();
+    if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) throw new Error("Sem texto extraído da Shein pela Oracle API");
 
-    const validProducts = fcData.data.extract.products
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+
+    const schemaObj = {
+      type: "object",
+      properties: {
+        products: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              url: { type: "string" },
+              image: { type: "string" },
+              price: { type: "number" },
+              old_price: { type: "number", nullable: true },
+              discount_badge: { type: "string", nullable: true },
+              rating: { type: "number", nullable: true },
+              category: { type: "string" }
+            },
+            required: ["title", "url", "price"]
+          }
+        }
+      },
+      required: ["products"]
+    };
+
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const fcData = JSON.parse(rawResult);
+
+    if (!fcData.products) throw new Error("Sem produtos extraídos da Shein pela IA");
+
+    const validProducts = fcData.products
       .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
 
     const products = validProducts.slice(0, limit).map((p: any) => {
@@ -238,11 +237,11 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
 }
 
 export async function fetchMagaluTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  console.log("[SCRAPER][MAGALU][TRENDS] Iniciando busca de tendências do Magalu via Firecrawl...");
+  console.log("[SCRAPER][MAGALU][TRENDS] Iniciando busca de tendências do Magalu via Oracle API...");
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      throw new Error("FIRECRAWL_API_KEY não configurada.");
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) {
+      throw new Error("ORACLE_API_KEY não configurada.");
     }
 
     const fetchLimit = limit * 4;
@@ -257,59 +256,60 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
     for (const url of urls) {
       try {
         console.log(`[SCRAPER][MAGALU][TRENDS] Tentando URL: ${url}`);
-        const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${firecrawlKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            url,
-            formats: ["extract"],
-            waitFor: 5000,
-            extract: {
-              prompt: promptText,
-              schema: {
-                type: "object",
-                properties: {
-                  products: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        title: { type: "string" },
-                        url: { type: "string" },
-                        image: { type: "string" },
-                        price: { type: "number" },
-                        old_price: { type: "number", nullable: true },
-                        discount_badge: { type: "string", nullable: true },
-                        rating: { type: "number", nullable: true },
-                        category: { type: "string" }
-                      },
-                      required: ["title", "url", "price"]
-                    }
-                  }
-                },
-                required: ["products"]
-              }
-            }
-          })
+        
+        const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, token: oracleKey }),
         });
 
-        if (!fcResponse.ok) {
-          console.warn(`[SCRAPER][MAGALU][TRENDS] Firecrawl retornou status ${fcResponse.status} para ${url}`);
+        if (!oracleRes.ok) {
+          console.warn(`[SCRAPER][MAGALU][TRENDS] Oracle API retornou status ${oracleRes.status} para ${url}`);
           continue;
         }
 
-        const fcData = await fcResponse.json();
-        console.log(`[SCRAPER][MAGALU][TRENDS] Firecrawl success=${fcData.success}, products=${fcData.data?.extract?.products?.length ?? 0}`);
-
-        if (!fcData.success || !fcData.data?.extract?.products?.length) {
-          console.warn(`[SCRAPER][MAGALU][TRENDS] Sem produtos extraídos de ${url}. Tentando próxima URL...`);
+        const oracleData = await oracleRes.json();
+        
+        if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+          console.warn(`[SCRAPER][MAGALU][TRENDS] Sem texto extraído de ${url}. Tentando próxima URL...`);
           continue;
         }
 
-        const validProducts = fcData.data.extract.products
+        const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+
+        const schemaObj = {
+          type: "object",
+          properties: {
+            products: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  url: { type: "string" },
+                  image: { type: "string" },
+                  price: { type: "number" },
+                  old_price: { type: "number", nullable: true },
+                  discount_badge: { type: "string", nullable: true },
+                  rating: { type: "number", nullable: true },
+                  category: { type: "string" }
+                },
+                required: ["title", "url", "price"]
+              }
+            }
+          },
+          required: ["products"]
+        };
+
+        const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+        const fcData = JSON.parse(rawResult);
+
+        if (!fcData.products || !fcData.products.length) {
+          console.warn(`[SCRAPER][MAGALU][TRENDS] IA não encontrou produtos para ${url}. Tentando próxima URL...`);
+          continue;
+        }
+
+        const validProducts = fcData.products
           .filter((p: any) => p.title && p.price > 0 && !(p.title || "").toLowerCase().includes("protected by") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
 
         const products = validProducts.slice(0, limit)
@@ -355,88 +355,83 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
  */
 export async function fetchTrendingProductsFromLanding(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Iniciando busca de tendências do Mercado Livre...");
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  const oracleKey = process.env.ORACLE_API_KEY;
 
-  // === ESTRATÉGIA 1: Firecrawl Extract (IA) — mais resiliente ===
-  if (firecrawlKey) {
+  // === ESTRATÉGIA 1: Oracle API + IA Local (mais resiliente) ===
+  if (oracleKey) {
     try {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Firecrawl Extract (IA)...");
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Oracle API + IA...");
       const fetchLimit = limit * 4;
       const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : "https://www.mercadolivre.com.br/ofertas";
       const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
-      const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${firecrawlKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          url: targetUrl,
-          formats: ["extract"],
-          waitFor: 1000,
-          mobile: true,
-          proxy: "stealth",
-          blockAds: true,
-          extract: {
-            prompt: promptText,
-            schema: {
-              type: "object",
-              properties: {
-                products: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      title: { type: "string" },
-                      url: { type: "string" },
-                      image: { type: "string" },
-                      price: { type: "number" },
-                      old_price: { type: "number", nullable: true },
-                      discount_badge: { type: "string", nullable: true },
-                      rating: { type: "number", nullable: true },
-                      category: { type: "string" }
-                    },
-                    required: ["title", "url", "price"]
-                  }
-                }
-              },
-              required: ["products"]
-            }
-          }
-        })
+      const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl, token: oracleKey }),
       });
 
-      if (fcResponse.ok) {
-        const fcData = await fcResponse.json();
-        if (fcData.success && fcData.data?.extract?.products?.length > 0) {
-          const validProducts = fcData.data.extract.products
-            .filter((p: any) => p.title && p.price > 0 && !p.image?.includes("unsplash.com") && !p.image?.includes("example.com") && !p.image?.includes("mock") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+      if (oracleRes.ok) {
+        const oracleData = await oracleRes.json();
+        if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
+          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
 
-          const products = validProducts.slice(0, limit)
-            .map((p: any) => {
-              const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
-              return {
-                product_name: p.title,
-                original_url: p.url?.startsWith("http") ? p.url : `https://www.mercadolivre.com.br${p.url || ""}`,
-                image_url: enhanceImageUrl(p.image || null),
-                current_price: p.price,
-                old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-                discount_badge: p.discount_badge || null,
-                rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
-                category: cat,
-                subcategory: sub
-              };
-            });
+          const schemaObj = {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" },
+                    old_price: { type: "number", nullable: true },
+                    discount_badge: { type: "string", nullable: true },
+                    rating: { type: "number", nullable: true },
+                    category: { type: "string" }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          };
 
-          if (products.length > 0) {
-            console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 (Extract) OK: ${products.length} produtos.`);
-            return products;
+          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+          const fcData = JSON.parse(rawResult);
+
+          if (fcData.products && fcData.products.length > 0) {
+            const validProducts = fcData.products
+              .filter((p: any) => p.title && p.price > 0 && !p.image?.includes("unsplash.com") && !p.image?.includes("example.com") && !p.image?.includes("mock") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+
+            const products = validProducts.slice(0, limit)
+              .map((p: any) => {
+                const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
+                return {
+                  product_name: p.title,
+                  original_url: p.url?.startsWith("http") ? p.url : `https://www.mercadolivre.com.br${p.url || ""}`,
+                  image_url: enhanceImageUrl(p.image || null),
+                  current_price: p.price,
+                  old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
+                  discount_badge: p.discount_badge || null,
+                  rating: p.rating ? parseFloat(String(p.rating)) : null,
+                  category: cat,
+                  subcategory: sub
+                };
+              });
+
+            if (products.length > 0) {
+              console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 (IA) OK: ${products.length} produtos.`);
+              return products;
+            }
           }
         }
         console.warn("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 retornou 0 produtos. Tentando fallback HTML...");
       } else {
-        console.warn(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 falhou com status ${fcResponse.status}. Tentando fallback HTML...`);
+        console.warn(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 falhou com status ${oracleRes.status}. Tentando fallback HTML...`);
       }
     } catch (extractError) {
       const msg = extractError instanceof Error ? extractError.message : String(extractError);
@@ -444,31 +439,28 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
     }
   }
 
-  // === ESTRATÉGIA 2: Firecrawl HTML + Regex Parsing (fallback) ===
+  // === ESTRATÉGIA 2: Oracle API HTML + Regex Parsing (fallback) ===
   try {
     const url = "https://www.mercadolivre.com.br/mais-vendidos";
     let html = "";
 
-    if (firecrawlKey) {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Firecrawl HTML + Regex...");
-      const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    if (oracleKey) {
+      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Oracle API HTML + Regex...");
+      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${firecrawlKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ url, formats: ["html"], waitFor: 5000, mobile: true, proxy: "stealth", blockAds: true })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, token: oracleKey })
       });
 
-      if (!fcResponse.ok) {
-        throw new Error(`Falha no Firecrawl HTML. Status: ${fcResponse.status}`);
+      if (!oracleRes.ok) {
+        throw new Error(`Falha na Oracle API HTML. Status: ${oracleRes.status}`);
       }
 
-      const fcData = await fcResponse.json();
-      if (!fcData.success || !fcData.data?.html) {
-        throw new Error("Firecrawl não retornou HTML válido.");
+      const oracleData = await oracleRes.json();
+      if (!oracleData.success || !oracleData.data?.html) {
+        throw new Error("Oracle API não retornou HTML válido.");
       }
-      html = fcData.data.html;
+      html = oracleData.data.html;
       console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] HTML recebido: ${html.length} bytes.`);
     } else {
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Fetch direto (sujeito a bloqueio)...");
@@ -567,28 +559,25 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
   console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
   try {
     let html = "";
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+    const oracleKey = process.env.ORACLE_API_KEY;
 
-    if (firecrawlKey) {
-      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando Firecrawl para produto ML: ${productUrl}`);
-      const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    if (oracleKey) {
+      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando Oracle API para produto ML: ${productUrl}`);
+      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${firecrawlKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ url: productUrl, formats: ["html"], waitFor: 3000, mobile: true, proxy: "stealth", blockAds: true })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: productUrl, token: oracleKey })
       });
 
-      if (!fcResponse.ok) {
-        throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+      if (!oracleRes.ok) {
+        throw new Error(`Falha na Oracle API. Status: ${oracleRes.status}`);
       }
 
-      const fcData = await fcResponse.json();
-      if (!fcData.success || !fcData.data || !fcData.data.html) {
-        throw new Error("Firecrawl não retornou HTML válido.");
+      const oracleData = await oracleRes.json();
+      if (!oracleData.success || !oracleData.data || !oracleData.data.html) {
+        throw new Error("Oracle API não retornou HTML válido.");
       }
-      html = fcData.data.html;
+      html = oracleData.data.html;
     } else {
       console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando fetch direto para produto ML: ${productUrl}`);
       const response = await fetch(productUrl, {
@@ -692,43 +681,35 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
     const isSuspectedCaptcha = html.length < 10000 || html.includes("captcha") || html.includes("robot") || html.includes("tráfego suspeito");
     if (isSuspectedCaptcha) {
       updateMetrics("Mercado Livre", "captchas", 1);
-      console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Captcha ou bloqueio detectado no HTML. Iniciando retry com Firecrawl Extract...`);
+      console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Captcha ou bloqueio detectado no HTML. Iniciando retry com Oracle API + IA...`);
       
-      if (firecrawlKey) {
+      const oracleKey = process.env.ORACLE_API_KEY;
+      if (oracleKey) {
         try {
-          const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
             method: "POST",
-            headers: {
-              "Authorization": `Bearer ${firecrawlKey}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ 
-              url: productUrl, 
-              formats: ["extract"],
-              waitFor: 4000,
-              mobile: true,
-              proxy: "stealth",
-              blockAds: true,
-              extract: {
-                prompt: "Extraia o nome do produto, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.",
-                schema: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    image: { type: "string" },
-                    current_price: { type: "number" },
-                    old_price: { type: "number", nullable: true }
-                  },
-                  required: ["title", "current_price"]
-                }
-              }
-            })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: productUrl, token: oracleKey })
           });
 
-          if (fcResponse.ok) {
-            const fcData: any = await fcResponse.json();
-            if (fcData.success && fcData.data?.extract) {
-              const ext = fcData.data.extract;
+          if (oracleRes.ok) {
+            const oracleData = await oracleRes.json();
+            if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
+              const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+              const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.";
+              const schemaObj = {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  image: { type: "string" },
+                  current_price: { type: "number" },
+                  old_price: { type: "number", nullable: true }
+                },
+                required: ["title", "current_price"]
+              };
+              const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+              const ext = JSON.parse(rawResult);
+
               if (ext.current_price > 0 && ext.title) {
                 const scraped = {
                   product_name: ext.title.trim(),
@@ -738,14 +719,14 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
                   old_price: ext.old_price && ext.old_price > ext.current_price ? ext.old_price : null,
                   rating: 4.8
                 };
-                console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso via Firecrawl Extract Retry: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+                console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso via Oracle API Retry: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
                 updateMetrics("Mercado Livre", "found", 1);
                 return scraped;
               }
             }
           }
         } catch (retryError) {
-          console.error("[SCRAPER][MERCADO LIVRE][PRODUCT] Erro no retry do Firecrawl Extract:", retryError);
+          console.error("[SCRAPER][MERCADO LIVRE][PRODUCT] Erro no retry do Oracle API:", retryError);
         }
       }
     }
@@ -783,67 +764,52 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
       }
     }
 
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.error("[SCRAPER][MAGALU][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) {
+      console.error("[SCRAPER][MAGALU][PRODUCT] ORACLE_API_KEY não configurada. Impossível raspar.");
       updateMetrics("Magalu", "failures", 1);
       return null;
     }
 
-    console.log(`[SCRAPER][MAGALU][PRODUCT] Usando Firecrawl Extract para Magalu: ${productUrl}`);
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    console.log(`[SCRAPER][MAGALU][PRODUCT] Usando Oracle API para Magalu: ${productUrl}`);
+    const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: finalProductUrl, 
-        formats: ["extract"],
-        extract: {
-          prompt: "Extraia o nome do produto, a URL principal da imagem do produto, o preço atual promocional (como número) e o preço original/antigo cortado (como número). Retorne null para o preço antigo se não houver.",
-          schema: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              image: { type: "string" },
-              current_price: { type: "number" },
-              old_price: { type: "number", nullable: true }
-            },
-            required: ["title", "current_price"]
-          }
-        }
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: finalProductUrl, token: oracleKey })
     });
 
-    if (!fcResponse.ok) {
-      throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+    if (!oracleRes.ok) {
+      throw new Error(`Falha na Oracle API. Status: ${oracleRes.status}`);
     }
 
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data || !fcData.data.extract) {
-      throw new Error("Firecrawl não retornou dados de extração válidos.");
+    const oracleData = await oracleRes.json();
+    if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+      throw new Error("Oracle API não retornou texto ou HTML válidos.");
     }
 
-    const extract = fcData.data.extract;
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+    const promptText = "Extraia o nome do produto, a URL principal da imagem do produto, o preço atual promocional (como número) e o preço original/antigo cortado (como número). Retorne null para o preço antigo se não houver.";
+    const schemaObj = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        image: { type: "string" },
+        current_price: { type: "number" },
+        old_price: { type: "number", nullable: true }
+      },
+      required: ["title", "current_price"]
+    };
+
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const extract = JSON.parse(rawResult);
+
     const isAkamaiBlock = extract && (extract.title || "").toLowerCase().includes("protected by");
 
     // Fallback se a extração estruturada falhou (título vazio ou preço zerado ou bloqueio Akamai)
     if (!extract || !extract.title || extract.current_price === 0 || isAkamaiBlock) {
       console.log("[SCRAPER][MAGALU][PRODUCT] Extração estruturada falhou ou foi bloqueada. Tentando fallbacks via HTML...");
-      const fcHtmlResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${firecrawlKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ url: finalProductUrl, formats: ["html"] })
-      });
-
-      if (fcHtmlResponse.ok) {
-        const fcHtmlData: any = await fcHtmlResponse.json();
-        if (fcHtmlData.success && fcHtmlData.data?.html) {
-          const html = fcHtmlData.data.html;
+      const html = oracleData.data?.html || "";
+      if (html) {
 
           // 1. Título via og:title ou <title>
           const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i) || 
@@ -917,10 +883,9 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
             return scraped;
           }
         }
-      }
 
-      // Último recurso: Fetch simples direto (caso o Firecrawl HTML dê timeout ou falhe)
-      console.log("[SCRAPER][MAGALU][PRODUCT] Firecrawl HTML falhou ou deu timeout. Tentando fetch direto simples...");
+      // Último recurso: Fetch simples direto (caso o Oracle API HTML dê timeout ou falhe)
+      console.log("[SCRAPER][MAGALU][PRODUCT] Oracle API HTML falhou ou deu timeout. Tentando fetch direto simples...");
       try {
         const directRes = await fetch(finalProductUrl, {
           headers: {
@@ -1028,55 +993,30 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
       }
     }
 
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.error("[SCRAPER][SHOPEE][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
-      updateMetrics("Shopee", "failures", 1);
-      return null;
-    }
+
 
     let retries = 3;
     let delay = 1000;
-    let fcResponse = null;
+    let oracleData = null;
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} de raspagem Shopee...`);
-        fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        console.log(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} de raspagem Shopee via Oracle API...`);
+        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
           method: "POST",
-          headers: {
-            "Authorization": `Bearer ${firecrawlKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            url: finalProductUrl, 
-            formats: ["extract"],
-            extract: {
-              prompt: "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.",
-              schema: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  image: { type: "string" },
-                  current_price: { type: "number" },
-                  old_price: { type: "number", nullable: true }
-                },
-                required: ["title", "current_price"]
-              }
-            }
-          }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: finalProductUrl, token: oracleKey }),
           signal: AbortSignal.timeout(20000)
         });
 
-        if (fcResponse.status === 429) {
-          throw new Error("HTTP 429 Too Many Requests");
+        if (!oracleRes.ok) {
+          throw new Error(`HTTP Status ${oracleRes.status}`);
         }
         
-        if (fcResponse.ok) {
-          break; // Sucesso
-        }
-        
-        throw new Error(`HTTP Status ${fcResponse.status}`);
+        oracleData = await oracleRes.json();
+        break; // Sucesso
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} falhou: ${msg}`);
@@ -1088,16 +1028,25 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
       }
     }
 
-    if (!fcResponse || !fcResponse.ok) {
-      throw new Error("Falha ao obter resposta do Firecrawl após retries");
+    if (!oracleData || !oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+      throw new Error("Oracle API não retornou dados válidos para Shopee.");
     }
 
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data || !fcData.data.extract) {
-      throw new Error("Firecrawl não retornou dados de extração válidos para Shopee.");
-    }
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+    const promptText = "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.";
+    const schemaObj = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        image: { type: "string" },
+        current_price: { type: "number" },
+        old_price: { type: "number", nullable: true }
+      },
+      required: ["title", "current_price"]
+    };
 
-    const extract = fcData.data.extract;
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const extract = JSON.parse(rawResult);
     const scraped = {
       product_name: extract.title.trim(),
       original_url: finalProductUrl,
@@ -1120,78 +1069,61 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
 }
 
 async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
-  console.log(`[SCRAPER][SHEIN][PRODUCT] Iniciando raspagem de produto com Firecrawl: ${productUrl}`);
+  console.log(`[SCRAPER][SHEIN][PRODUCT] Iniciando raspagem de produto com Oracle API: ${productUrl}`);
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.error("[SCRAPER][SHEIN][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
-      updateMetrics("Shein", "failures", 1);
-      return null;
-    }
-
     let retries = 3;
     let delay = 1000;
-    let fcResponse = null;
+    let oracleData = null;
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
 
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
-        console.log(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} de raspagem Shein...`);
-        fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        console.log(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} de raspagem Shein via Oracle API...`);
+        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
           method: "POST",
-          headers: {
-            "Authorization": `Bearer ${firecrawlKey}`,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({ 
-            url: productUrl, 
-            formats: ["extract"],
-            extract: {
-              prompt: "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também.",
-              schema: {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  image: { type: "string" },
-                  current_price: { type: "number" },
-                  old_price: { type: "number", nullable: true }
-                },
-                required: ["title", "current_price"]
-              }
-            }
-          })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: productUrl, token: oracleKey }),
+          signal: AbortSignal.timeout(20000)
         });
 
-        if (fcResponse.status === 429) {
-          throw new Error("HTTP 429 Too Many Requests");
+        if (!oracleRes.ok) {
+          throw new Error(`HTTP Status ${oracleRes.status}`);
         }
         
-        if (fcResponse.ok) {
-          break; // Sucesso
-        }
-        
-        throw new Error(`HTTP Status ${fcResponse.status}`);
+        oracleData = await oracleRes.json();
+        break; // Sucesso
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} falhou: ${msg}`);
         if (attempt === retries) {
           throw error;
         }
-        // Backoff exponencial
         await new Promise(resolve => setTimeout(resolve, delay));
         delay *= 2;
       }
     }
 
-    if (!fcResponse || !fcResponse.ok) {
-      throw new Error("Falha ao obter resposta do Firecrawl após retries");
+    if (!oracleData || !oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+      throw new Error("Oracle API não retornou dados válidos para Shein.");
     }
 
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data || !fcData.data.extract) {
-      throw new Error("Firecrawl não retornou dados de extração válidos.");
-    }
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+    const promptText = "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também.";
+    const schemaObj = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        image: { type: "string" },
+        current_price: { type: "number" },
+        old_price: { type: "number", nullable: true }
+      },
+      required: ["title", "current_price"]
+    };
 
-    const extract = fcData.data.extract;
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const extract = JSON.parse(rawResult);
+
     const scraped = {
       product_name: extract.title.trim(),
       original_url: productUrl,
@@ -1229,48 +1161,43 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
       }
     }
 
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.error("[SCRAPER][AMAZON][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) {
+      console.error("[SCRAPER][AMAZON][PRODUCT] ORACLE_API_KEY não configurada. Impossível raspar.");
       return null;
     }
 
-    console.log(`[SCRAPER][AMAZON][PRODUCT] Usando Firecrawl Extract para Amazon: ${productUrl}`);
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    console.log(`[SCRAPER][AMAZON][PRODUCT] Usando Oracle API para Amazon: ${productUrl}`);
+    const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: finalProductUrl, 
-        formats: ["extract"],
-        extract: {
-          prompt: "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null.",
-          schema: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              image: { type: "string" },
-              current_price: { type: "number" },
-              old_price: { type: "number", nullable: true }
-            },
-            required: ["title", "current_price"]
-          }
-        }
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: finalProductUrl, token: oracleKey })
     });
 
-    if (!fcResponse.ok) {
-      throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+    if (!oracleRes.ok) {
+      throw new Error(`Falha na Oracle API. Status: ${oracleRes.status}`);
     }
 
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data || !fcData.data.extract) {
-      throw new Error("Firecrawl não retornou dados de extração válidos.");
+    const oracleData = await oracleRes.json();
+    if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+      throw new Error("Oracle API não retornou texto ou HTML válidos para Amazon.");
     }
 
-    const extract = fcData.data.extract;
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+    const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null.";
+    const schemaObj = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        image: { type: "string" },
+        current_price: { type: "number" },
+        old_price: { type: "number", nullable: true }
+      },
+      required: ["title", "current_price"]
+    };
+
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const extract = JSON.parse(rawResult);
     const titleLower = (extract.title || "").toLowerCase();
     
     // Proteção contra erro 404 / Cachorros da Amazon / Indisponível
@@ -1307,48 +1234,43 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
 async function scrapeNetshoesProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
   console.log(`[SCRAPER][NETSHOES][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.error("[SCRAPER][NETSHOES][PRODUCT] FIRECRAWL_API_KEY não configurada. Impossível raspar.");
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) {
+      console.error("[SCRAPER][NETSHOES][PRODUCT] ORACLE_API_KEY não configurada. Impossível raspar.");
       return null;
     }
 
-    const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+    const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
       method: "POST",
-      headers: {
-        "Authorization": `Bearer ${firecrawlKey}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ 
-        url: productUrl, 
-        formats: ["extract"],
-        extract: {
-          prompt: "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site.",
-          schema: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              image: { type: "string" },
-              current_price: { type: "string" },
-              old_price: { type: "string", nullable: true },
-              discount_badge: { type: "string", nullable: true }
-            },
-            required: ["title", "current_price"]
-          }
-        }
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: productUrl, token: oracleKey })
     });
 
-    if (!fcResponse.ok) {
-      throw new Error(`Falha no Firecrawl. Status: ${fcResponse.status}`);
+    if (!oracleRes.ok) {
+      throw new Error(`Falha na Oracle API. Status: ${oracleRes.status}`);
     }
 
-    const fcData = await fcResponse.json();
-    if (!fcData.success || !fcData.data || !fcData.data.extract) {
-      throw new Error("Firecrawl não retornou dados de extração válidos para Netshoes.");
+    const oracleData = await oracleRes.json();
+    if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+      throw new Error("Oracle API não retornou texto ou HTML válidos para Netshoes.");
     }
 
-    const extract = fcData.data.extract;
+    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+    const promptText = "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site.";
+    const schemaObj = {
+      type: "object",
+      properties: {
+        title: { type: "string" },
+        image: { type: "string" },
+        current_price: { type: "string" },
+        old_price: { type: "string", nullable: true },
+        discount_badge: { type: "string", nullable: true }
+      },
+      required: ["title", "current_price"]
+    };
+
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+    const extract = JSON.parse(rawResult);
 
     // Converte os valores extraídos de string para número
     const parsePrice = (priceStr: string | number | null | undefined): number | null => {
@@ -1409,11 +1331,7 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
 export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon...");
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.warn("[SCRAPER][AMAZON][TRENDS] FIRECRAWL_API_KEY não configurada.");
-      return [];
-    }
+
 
     const fetchLimit = limit * 4;
     // URLs de descoberta Amazon: Deals (principal) + Movers & Shakers + Best Sellers
@@ -1442,56 +1360,58 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL (Tentativa ${attempt}): ${url}`);
-          const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          const oracleKey = process.env.ORACLE_API_KEY;
+          if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
+
+          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
             method: "POST",
-            headers: {
-              "Authorization": `Bearer ${firecrawlKey}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ 
-              url,
-              formats: ["extract"],
-              waitFor: 1000,
-              timeout: 60000,
-              extract: {
-                prompt: promptText,
-                schema: {
-                  type: "object",
-                  properties: {
-                    products: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          title: { type: "string" },
-                          url: { type: "string" },
-                          image: { type: "string" },
-                          price: { type: "number" },
-                          old_price: { type: "number", nullable: true },
-                          discount_badge: { type: "string", nullable: true },
-                          category: { type: "string" }
-                        },
-                        required: ["title", "url", "price"]
-                      }
-                    }
-                  },
-                  required: ["products"]
-                }
-              }
-            }),
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, token: oracleKey }),
             signal: AbortSignal.timeout(65000)
           });
         
-          if (!fcResponse.ok) {
-            console.warn(`[SCRAPER][AMAZON][TRENDS] Firecrawl retornou status ${fcResponse.status} para ${url}`);
-            if (fcResponse.status === 408 || fcResponse.status === 401 || fcResponse.status === 403 || fcResponse.status === 500 || fcResponse.status === 429) {
-              throw new Error(`HTTP Status ${fcResponse.status}`);
+          if (!oracleRes.ok) {
+            console.warn(`[SCRAPER][AMAZON][TRENDS] Oracle API retornou status ${oracleRes.status} para ${url}`);
+            if (oracleRes.status === 408 || oracleRes.status === 401 || oracleRes.status === 403 || oracleRes.status === 500 || oracleRes.status === 429) {
+              throw new Error(`HTTP Status ${oracleRes.status}`);
             }
             break; // Se não for um erro de antibot/timeout/limite, interrompe os retries para esta URL
           }
 
-          fcData = await fcResponse.json();
-          console.log(`[SCRAPER][AMAZON][TRENDS] Firecrawl success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
+          const oracleData = await oracleRes.json();
+          if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+             throw new Error("Sem texto extraído da Amazon");
+          }
+
+          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+
+          const schemaObj = {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" },
+                    old_price: { type: "number", nullable: true },
+                    discount_badge: { type: "string", nullable: true },
+                    category: { type: "string" }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          };
+
+          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+          fcData = { success: true, data: { extract: JSON.parse(rawResult) } };
+          
+          console.log(`[SCRAPER][AMAZON][TRENDS] Oracle API + IA success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
           break;
         } catch (error) {
           const msg = error instanceof Error ? error.message : String(error);
@@ -1551,11 +1471,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
 export async function fetchNetshoesTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][NETSHOES][TRENDS] Iniciando busca de tendências da Netshoes...");
   try {
-    const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-    if (!firecrawlKey) {
-      console.warn("[SCRAPER][NETSHOES][TRENDS] FIRECRAWL_API_KEY não configurada.");
-      return [];
-    }
+
 
     const fetchLimit = limit * 4;
     const urls = category
@@ -1578,52 +1494,55 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
           console.log(`[SCRAPER][NETSHOES][TRENDS] Tentando URL (Tentativa ${attempt}): ${url}`);
-          const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
+          const oracleKey = process.env.ORACLE_API_KEY;
+          if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
+
+          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
             method: "POST",
-            headers: {
-              "Authorization": `Bearer ${firecrawlKey}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ 
-              url,
-              formats: ["extract"],
-              timeout: 60000,
-              extract: {
-                prompt: promptText,
-                schema: {
-                  type: "object",
-                  properties: {
-                    products: {
-                      type: "array",
-                      items: {
-                        type: "object",
-                        properties: {
-                          title: { type: "string" },
-                          url: { type: "string" },
-                          image: { type: "string" },
-                          price: { type: "number" },
-                          old_price: { type: "number", nullable: true },
-                          discount_badge: { type: "string", nullable: true },
-                          rating: { type: "number", nullable: true },
-                          category: { type: "string" }
-                        },
-                        required: ["title", "url", "price"]
-                      }
-                    }
-                  },
-                  required: ["products"]
-                }
-              }
-            }),
-            signal: AbortSignal.timeout(65000)
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, token: oracleKey }),
+            signal: AbortSignal.timeout(60000)
           });
-        
-          if (!fcResponse.ok) {
-            if (fcResponse.status === 408 || fcResponse.status >= 500) throw new Error(`HTTP Status ${fcResponse.status}`);
+
+          if (!oracleRes.ok) {
+            if (oracleRes.status === 408 || oracleRes.status >= 500 || oracleRes.status === 429 || oracleRes.status === 403) throw new Error(`HTTP Status ${oracleRes.status}`);
             break;
           }
 
-          fcData = await fcResponse.json();
+          const oracleData = await oracleRes.json();
+          if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
+             throw new Error("Sem texto extraído da Netshoes");
+          }
+
+          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+
+          const schemaObj = {
+            type: "object",
+            properties: {
+              products: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    title: { type: "string" },
+                    url: { type: "string" },
+                    image: { type: "string" },
+                    price: { type: "number" },
+                    old_price: { type: "number", nullable: true },
+                    discount_badge: { type: "string", nullable: true },
+                    category: { type: "string" }
+                  },
+                  required: ["title", "url", "price"]
+                }
+              }
+            },
+            required: ["products"]
+          };
+
+          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
+          fcData = { success: true, data: { extract: JSON.parse(rawResult) } };
+
+          console.log(`[SCRAPER][NETSHOES][TRENDS] Oracle API + IA success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
           break;
         } catch (error) {
           if (attempt === retries) break;

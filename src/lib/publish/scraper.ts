@@ -44,7 +44,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   let price = 0;
   let html = "";
   let imageSource = "none";
-  let firecrawlMetadata: any = null;
+  let apiMetadata: any = null;
 
   logger.info("Iniciando extração de metadados", { url });
 
@@ -70,7 +70,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
         logger.info("Extração via Mercado Livre API realizada com sucesso", { finalUrl });
         return mlMetadata;
       }
-      logger.warn("Falha ao extrair dados via API do Mercado Livre, caindo de volta para Firecrawl/Scraper.");
+      logger.warn("Falha ao extrair dados via API do Mercado Livre, caindo de volta para Oracle API/Scraper genérico.");
     } catch (err) {
       logger.error("Erro ao chamar API do Mercado Livre no fetchLinkMetadata:", err);
     }
@@ -89,12 +89,12 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
           imageUrl: nsMetadata.image_url || undefined,
           price: nsMetadata.current_price,
           finalUrl: finalUrl,
-          imageSource: "firecrawl_custom",
+          imageSource: "oracle_custom",
           confidenceScore: 95,
           extractionDate: new Date().toISOString()
         };
       }
-      logger.warn("Falha ao extrair dados via Scraper da Netshoes, caindo de volta para Firecrawl/Scraper genérico.");
+      logger.warn("Falha ao extrair dados via Scraper da Netshoes, caindo de volta para Oracle API/Scraper genérico.");
     } catch (err) {
       logger.error("Erro ao chamar Scraper Dedicado da Netshoes:", err);
     }
@@ -109,7 +109,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
       
-      const oracleRes = await fetch('http://193.122.242.178:3001/api/scrape', {
+      const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -135,7 +135,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
            }
 
            if (oracleData.data.metadata) {
-             firecrawlMetadata = oracleData.data.metadata;
+             apiMetadata = oracleData.data.metadata;
              if (!title || title === "Oferta Especial") title = oracleData.data.metadata.title;
              if (!imageUrl && oracleData.data.metadata.ogImage) {
                imageUrl = oracleData.data.metadata.ogImage;
@@ -152,7 +152,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     }
   }
 
-  // 4. Fallback: Fetch HTTP simples se Firecrawl falhou em trazer o HTML
+  // 4. Fallback: Fetch HTTP simples se Oracle API falhou em trazer o HTML
   if (!html) {
     logger.info("Usando fetch simples como fallback", { finalUrl });
     const controller = new AbortController();
@@ -179,7 +179,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     }
   }
 
-  // 5. Parse de HTML (Se Firecrawl não extraiu os dados ou não usamos FC)
+  // 5. Parse de HTML (Se a Oracle API não extraiu os dados)
   if (html) {
     // 5.1 Extract Title
     if (title === "Oferta Especial") {
@@ -321,7 +321,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   if (imageUrl) {
     score += 20; // Imagem presente
     // Bônus se imagem vem de fontes estruturadas fortes
-    if (imageSource === "firecrawl_extract" || imageSource === "json-ld") {
+    if (imageSource === "oracle_extract" || imageSource === "json-ld") {
       score += 10;
     }
   }

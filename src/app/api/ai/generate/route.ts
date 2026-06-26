@@ -93,7 +93,7 @@ export async function POST(request: Request) {
         user_id: user.id,
         winner_strategy: analysis.winner_strategy_type,
         score: analysis.score,
-        model: process.env.GROQ_MODEL || "llama-3.1-8b-instant"
+        model: process.env.GROQ_MODEL || "llama3-8b-8192"
       }).then(({ error }) => {
         if (error) {
           console.warn("[Observabilidade] Falha ao gravar ai_copy_log (Tabela pode não existir ainda):", error.message);

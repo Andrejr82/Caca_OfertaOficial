@@ -60,7 +60,7 @@ function cleanJsonString(str: string): string {
 /**
  * Interface unificada para invocar a Groq com Structured Outputs (E Motor Duplo Integrado)
  */
-async function callLLM(
+export async function callLLM(
   systemPrompt: string,
   userPrompt: string,
   jsonSchemaObj: any,
@@ -73,7 +73,7 @@ async function callLLM(
     throw new Error("Nenhuma API Key configurada no ambiente.");
   }
 
-  let groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  let groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   console.log(`[AI Service] ⚡ Direcionando para Groq (Motor Principal) com modelo: ${groqModel}`);
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -135,7 +135,7 @@ export async function generateOfferAnalysis(
   }
 
   const apiKey = process.env.GROQ_API_KEY;
-  const model = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  const model = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
 
   if (!apiKey) {
     console.warn("GROQ_API_KEY não configurada. Utilizando fallback estático.");
