@@ -100,75 +100,55 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     }
   }
 
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
+  const oracleKey = process.env.ORACLE_API_KEY;
 
-  // 3. Extração via Firecrawl
-  if (firecrawlKey) {
+  // 3. Extração via Micro-API Oracle In-House
+  if (oracleKey) {
     try {
-      logger.info("Tentando extração via Firecrawl", { finalUrl });
+      logger.info("Tentando extração via Oracle API In-House", { finalUrl });
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
       
-      const fcRes = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      const oracleRes = await fetch('http://193.122.242.178:3001/api/scrape', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${firecrawlKey}`
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ url: finalUrl, formats: ["html", "extract"], extract: {
-            schema: {
-                type: "object",
-                properties: {
-                    price: { type: "number" },
-                    title: { type: "string" },
-                    image: { type: "string" }
-                }
-            }
-        } }),
+        body: JSON.stringify({ url: finalUrl, token: oracleKey }),
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
 
-      if (fcRes.ok) {
-        const fcData = await fcRes.json();
-        if (fcData.success && fcData.data) {
-          const fcStatusCode = fcData.data.metadata?.statusCode || 200;
-          const fcTitle = fcData.data.metadata?.title || "";
-          
-          if (fcStatusCode === 403 || fcStatusCode === 401 || fcStatusCode === 503 || fcTitle.includes("Não é possível acessar a página")) {
-             logger.warn("Firecrawl foi bloqueado pelo anti-bot do site", { statusCode: fcStatusCode, title: fcTitle });
-             html = ""; // Força o fallback
-          } else {
-            html = fcData.data.html || "";
-            
-            // Fallback extraction block from LLM extract
-            if (fcData.data.extract) {
-                if (fcData.data.extract.title) title = fcData.data.extract.title;
-                if (fcData.data.extract.price) price = fcData.data.extract.price;
-                if (fcData.data.extract.image) {
-                    imageUrl = fcData.data.extract.image;
-                    imageSource = "firecrawl_extract";
-                }
-            }
+      if (oracleRes.ok) {
+        const oracleData = await oracleRes.json();
+        if (oracleData.success && oracleData.data) {
+           html = oracleData.data.html || "";
+           
+           if (oracleData.data.extract) {
+               if (oracleData.data.extract.title) title = oracleData.data.extract.title;
+               if (oracleData.data.extract.price) price = oracleData.data.extract.price;
+               if (oracleData.data.extract.image) {
+                   imageUrl = oracleData.data.extract.image;
+                   imageSource = "oracle_extract";
+               }
+           }
 
-            // Meta tag extraction directly from FC
-            if (fcData.data.metadata) {
-              firecrawlMetadata = fcData.data.metadata;
-              if (!title || title === "Oferta Especial") title = fcData.data.metadata.title;
-              if (!imageUrl && fcData.data.metadata.ogImage) {
-                imageUrl = fcData.data.metadata.ogImage;
-                imageSource = "firecrawl_og";
-              }
-            }
-            logger.info("Firecrawl sucesso", { finalUrl, hasHtml: !!html });
-          }
+           if (oracleData.data.metadata) {
+             firecrawlMetadata = oracleData.data.metadata;
+             if (!title || title === "Oferta Especial") title = oracleData.data.metadata.title;
+             if (!imageUrl && oracleData.data.metadata.ogImage) {
+               imageUrl = oracleData.data.metadata.ogImage;
+               imageSource = "oracle_og";
+             }
+           }
+           logger.info("Oracle API sucesso", { finalUrl, hasHtml: !!html });
         }
       } else {
-        logger.warn("Firecrawl retornou erro", { status: fcRes.status });
+        logger.warn("Oracle API retornou erro", { status: oracleRes.status });
       }
     } catch (err) {
-      logger.error("Falha ao comunicar com Firecrawl", err);
+      logger.error("Falha ao comunicar com Oracle API", err);
     }
   }
 
