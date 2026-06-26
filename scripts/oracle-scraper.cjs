@@ -152,7 +152,7 @@ async function crawleeExtract(url, limit, storeName) {
           const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
           if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
         }
-        return unique.slice(0, 40).join('\n');
+        return unique.slice(0, 20).join('\n');
       });
     }
   });
@@ -193,9 +193,10 @@ Schema JSON Obrigatório:
       response_format: { type: "json_object" },
       messages: [
         { role: 'system', content: prompt },
-        { role: 'user', content: rawExtractedData.substring(0, 15000) }
+        { role: 'user', content: rawExtractedData.substring(0, 6000) }
       ],
-      temperature: 0.1
+      temperature: 0.1,
+      max_tokens: 2000
     }, {
       headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
     });
