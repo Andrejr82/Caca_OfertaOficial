@@ -97,7 +97,9 @@ async function crawleeExtract(url, limit, storeName) {
     requestHandlerTimeoutSecs: 30,
     navigationTimeoutSecs: 25,
     autoscaledPoolOptions: {
-      isSystemIdleFunction: () => true
+      systemStatusOptions: {
+        maxMemoryMbytes: 4096
+      }
     },
     browserPoolOptions: {
       useFingerprints: true,
