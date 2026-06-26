@@ -118,21 +118,6 @@ async function crawleeExtract(url, limit, storeName) {
       launcher: chromium,
       launchOptions: {
         headless: true,
-      }
-    },
-    browserPoolOptions: {
-      useFingerprints: true,
-      fingerprintOptions: {
-        fingerprintGeneratorOptions: {
-          browsers: [{ name: 'edge', minVersion: 96 }, { name: 'chrome', minVersion: 100 }],
-          devices: ['desktop'],
-          operatingSystems: ['windows'],
-        }
-      }
-    },
-    launchContext: {
-      launchOptions: {
-        headless: true,
         args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
       }
     },

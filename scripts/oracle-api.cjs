@@ -82,21 +82,6 @@ app.post('/api/scrape', async (req, res) => {
         launcher: chromium,
         launchOptions: {
           headless: true,
-        }
-      },
-      browserPoolOptions: {
-        useFingerprints: true,
-        fingerprintOptions: {
-          fingerprintGeneratorOptions: {
-            browsers: [{ name: BrowserName.edge, minVersion: 96 }, { name: BrowserName.chrome, minVersion: 100 }],
-            devices: [DeviceCategory.desktop],
-            operatingSystems: [OperatingSystemsName.windows],
-          }
-        }
-      },
-      launchContext: {
-        launchOptions: {
-          headless: true,
           args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
         }
       },
