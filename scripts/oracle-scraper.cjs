@@ -12,6 +12,10 @@
 
 global.WebSocket = require('ws');
 
+const os = require('os');
+os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
+os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
+const fs           = require('fs');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
@@ -97,8 +101,16 @@ async function crawleeExtract(url, limit, storeName) {
 
   const crawler = new PlaywrightCrawler({
     maxConcurrency: 1,
-    requestHandlerTimeoutSecs: 30,
-    navigationTimeoutSecs: 25,
+    requestHandlerTimeoutSecs: 60,
+    navigationTimeoutSecs: 45,
+    autoscaledPoolOptions: {
+      systemStatusOptions: {
+        maxMemoryOverloadedRatio: 999,
+        maxEventLoopOverloadedRatio: 999,
+        maxCpuOverloadedRatio: 999,
+        maxClientOverloadedRatio: 999
+      }
+    },
     browserPoolOptions: {
       useFingerprints: true,
       fingerprintOptions: {

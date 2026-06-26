@@ -1,9 +1,9 @@
+const os = require('os');
+os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
+os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const express = require('express');
 const { PlaywrightCrawler, BrowserName, DeviceCategory, OperatingSystemsName } = require('crawlee');
 const axios = require('axios');
-
-process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
-process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 require('dotenv').config({ path: '.env.local' });
 
 const app = express();
@@ -67,6 +67,14 @@ app.post('/api/scrape', async (req, res) => {
       maxConcurrency: 1,
       requestHandlerTimeoutSecs: 30,
       navigationTimeoutSecs: 25,
+      autoscaledPoolOptions: {
+        systemStatusOptions: {
+          maxMemoryOverloadedRatio: 999,
+          maxEventLoopOverloadedRatio: 999,
+          maxCpuOverloadedRatio: 999,
+          maxClientOverloadedRatio: 999
+        }
+      },
       browserPoolOptions: {
         useFingerprints: true,
         fingerprintOptions: {
