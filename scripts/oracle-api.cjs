@@ -2,7 +2,10 @@ const os = require('os');
 os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const express = require('express');
-const { PlaywrightCrawler, BrowserName, DeviceCategory, OperatingSystemsName } = require('crawlee');
+const { PlaywrightCrawler } = require('crawlee');
+const { chromium } = require('playwright-extra');
+const stealthPlugin = require('puppeteer-extra-plugin-stealth');
+chromium.use(stealthPlugin());
 const axios = require('axios');
 require('dotenv').config({ path: '.env.local' });
 
@@ -73,6 +76,12 @@ app.post('/api/scrape', async (req, res) => {
           maxEventLoopOverloadedRatio: 999,
           maxCpuOverloadedRatio: 999,
           maxClientOverloadedRatio: 999
+        }
+      },
+      launchContext: {
+        launcher: chromium,
+        launchOptions: {
+          headless: true,
         }
       },
       browserPoolOptions: {

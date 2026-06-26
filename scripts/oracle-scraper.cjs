@@ -20,6 +20,9 @@ const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
 const { PlaywrightCrawler, Dataset } = require('crawlee');
+const { chromium } = require('playwright-extra');
+const stealthPlugin = require('puppeteer-extra-plugin-stealth');
+chromium.use(stealthPlugin());
 
 process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
 process.env.CRAWLEE_MEMORY_MBYTES = '4096';
@@ -109,6 +112,12 @@ async function crawleeExtract(url, limit, storeName) {
         maxEventLoopOverloadedRatio: 999,
         maxCpuOverloadedRatio: 999,
         maxClientOverloadedRatio: 999
+      }
+    },
+    launchContext: {
+      launcher: chromium,
+      launchOptions: {
+        headless: true,
       }
     },
     browserPoolOptions: {
