@@ -556,187 +556,42 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
  * Nota: Pode sofrer redirecionamento para tela de tráfego suspeito dependendo do IP/Rate Limit.
  */
 async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
-  console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Iniciando raspagem de produto: ${productUrl}`);
+  console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Iniciando raspagem via API oficial: ${productUrl}`);
   try {
-    let html = "";
-    const oracleKey = process.env.ORACLE_API_KEY;
-
-    if (oracleKey) {
-      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando Oracle API para produto ML: ${productUrl}`);
-      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: productUrl, token: oracleKey })
-      });
-
-      if (!oracleRes.ok) {
-        throw new Error(`Falha na Oracle API. Status: ${oracleRes.status}`);
-      }
-
-      const oracleData = await oracleRes.json();
-      if (!oracleData.success || !oracleData.data || !oracleData.data.html) {
-        throw new Error("Oracle API não retornou HTML válido.");
-      }
-      html = oracleData.data.html;
-    } else {
-      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Usando fetch direto para produto ML: ${productUrl}`);
-      const response = await fetch(productUrl, {
-        headers: {
-          "User-Agent": USER_AGENT,
-          "Accept-Language": "pt-BR,pt;q=0.9",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Falha ao obter o produto. Status: ${response.status}`);
-      }
-      html = await response.text();
+    const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
+    
+    // fetchMLProductDetails já lida com o token e fallback para App Token
+    const metadata = await fetchMLProductDetails(productUrl);
+    
+    if (!metadata) {
+      console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao extrair dados via API oficial: ${productUrl}`);
+      updateMetrics("Mercado Livre", "failures", 1);
+      return null;
     }
 
-    // 1. Extração do título (OpenGraph)
-    const titleMatch = html.match(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i);
-    let title = titleMatch ? titleMatch[1] : "";
-    if (!title) {
-      const tagTitleMatch = html.match(/<title>([^<]+)<\/title>/i);
-      title = tagTitleMatch ? tagTitleMatch[1].replace("- Mercado Livre", "").trim() : "Produto sem nome";
-    }
+    const scraped = {
+      product_name: metadata.title || "Produto sem nome",
+      original_url: metadata.finalUrl || productUrl,
+      image_url: enhanceImageUrl(metadata.imageUrl || null),
+      current_price: metadata.price || 0,
+      old_price: null,
+      discount_badge: null,
+      rating: null,
+      category: null,
+      subcategory: null
+    };
 
-    // 2. Extração da Imagem (OpenGraph)
-    const imageMatch = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-    const image = imageMatch ? imageMatch[1] : null;
-
-    // Valores padrão
-    let currentPrice = 0;
-    let oldPrice: number | null = null;
-    let rating: number | null = null;
-
-    // 3. Extração via JSON-LD
-    const ldJsonMatches = html.match(/<script\s+type=["']application\/ld\+json["']>([\s\S]*?)<\/script>/gi);
-    if (ldJsonMatches) {
-      for (const scriptTag of ldJsonMatches) {
-        try {
-          const jsonContent = scriptTag.replace(/<script\s+type=["']application\/ld\+json["']>/i, "").replace(/<\/script>/i, "").trim();
-          const parsed = JSON.parse(jsonContent);
-          
-          if (parsed["@type"] === "Product" || parsed["@context"]?.includes("schema.org")) {
-            if (parsed.name && !title) title = parsed.name;
-            if (parsed.offers) {
-              const offer = Array.isArray(parsed.offers) ? parsed.offers[0] : parsed.offers;
-              if (offer.price) {
-                currentPrice = parseFloat(offer.price);
-              } else if (offer.lowPrice) {
-                currentPrice = parseFloat(offer.lowPrice);
-              }
-            }
-            if (parsed.aggregateRating && parsed.aggregateRating.ratingValue) {
-              rating = parseFloat(parsed.aggregateRating.ratingValue);
-            }
-            break;
-          }
-        } catch {
-          // Ignora JSONs malformados
-        }
-      }
-    }
-
-    // 4. Fallback de preço
-    if (currentPrice === 0) {
-      const metaPriceMatch = html.match(/<meta\s+property=["']product:preconfigured_price:amount["']\s+content=["']([^"']+)["']/i) ||
-                         html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
-      if (metaPriceMatch) {
-        currentPrice = parseFloat(metaPriceMatch[1]);
-      } else {
-        const priceRegex = /"price":\s*(\d+(?:\.\d+)?)/i;
-        const priceMatch = html.match(priceRegex);
-        if (priceMatch) {
-          currentPrice = parseFloat(priceMatch[1]);
-        }
-      }
-    }
-
-    // 5. Extração de Preço Antigo
-    const oldPriceMatch = html.match(/<span\s+class=["']ui-pdp-price__original-value["'][\s\S]*?<span\s+class=["']andes-money-amount__fraction["']>([^<]+)<\/span>/i) ||
-                        html.match(/<del[^>]*>[\s\S]*?<span\s+class=["']andes-money-amount__fraction["']>([^<]+)<\/span>/i);
-    if (oldPriceMatch) {
-      const valStr = oldPriceMatch[1].replace(/\./g, "").replace(",", ".");
-      oldPrice = parseFloat(valStr);
-    }
-
-    if (currentPrice > 0) {
-      const scraped = {
-        product_name: title.trim(),
-        original_url: productUrl,
-        image_url: enhanceImageUrl(image),
-        current_price: currentPrice,
-        old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
-        rating: rating
-      };
+    if (scraped.product_name && scraped.image_url) {
       console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso ao raspar produto: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
       updateMetrics("Mercado Livre", "found", 1);
       return scraped;
     }
 
-    // Se falhou ao extrair o preço (pode ser captcha do ML)
-    const isSuspectedCaptcha = html.length < 10000 || html.includes("captcha") || html.includes("robot") || html.includes("tráfego suspeito");
-    if (isSuspectedCaptcha) {
-      updateMetrics("Mercado Livre", "captchas", 1);
-      console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Captcha ou bloqueio detectado no HTML. Iniciando retry com Oracle API + IA...`);
-      
-      const oracleKey = process.env.ORACLE_API_KEY;
-      if (oracleKey) {
-        try {
-          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
-            method: "POST",
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url: productUrl, token: oracleKey })
-          });
-
-          if (oracleRes.ok) {
-            const oracleData = await oracleRes.json();
-            if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
-              const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-              const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.";
-              const schemaObj = {
-                type: "object",
-                properties: {
-                  title: { type: "string" },
-                  image: { type: "string" },
-                  current_price: { type: "number" },
-                  old_price: { type: "number", nullable: true }
-                },
-                required: ["title", "current_price"]
-              };
-              const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 15000), schemaObj, 0.2, 4000);
-              const ext = JSON.parse(rawResult);
-
-              if (ext.current_price > 0 && ext.title) {
-                const scraped = {
-                  product_name: ext.title.trim(),
-                  original_url: productUrl,
-                  image_url: enhanceImageUrl(ext.image || null),
-                  current_price: ext.current_price,
-                  old_price: ext.old_price && ext.old_price > ext.current_price ? ext.old_price : null,
-                  rating: 4.8
-                };
-                console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso via Oracle API Retry: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
-                updateMetrics("Mercado Livre", "found", 1);
-                return scraped;
-              }
-            }
-          }
-        } catch (retryError) {
-          console.error("[SCRAPER][MERCADO LIVRE][PRODUCT] Erro no retry do Oracle API:", retryError);
-        }
-      }
-    }
-
-    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao extrair preço do produto: ${productUrl}`);
+    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao extrair produto: ${productUrl} (Faltando nome ou imagem)`);
     updateMetrics("Mercado Livre", "failures", 1);
     return null;
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao raspar produto ${productUrl}: ${errorMsg}`);
+    console.error(`[SCRAPER][MERCADO LIVRE][PRODUCT] Erro:`, error);
     updateMetrics("Mercado Livre", "failures", 1);
     return null;
   }
@@ -788,7 +643,7 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    const promptText = "Extraia o nome do produto, a URL principal da imagem do produto, o preço atual promocional (como número) e o preço original/antigo cortado (como número). Retorne null para o preço antigo se não houver.";
+    const promptText = "Extraia o nome do produto, a URL principal da imagem do produto, o preço atual promocional (como número) e o preço original/antigo cortado (como número). Retorne null para o preço antigo se não houver. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
       properties: {
@@ -1033,7 +888,7 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    const promptText = "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null.";
+    const promptText = "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
       properties: {
@@ -1109,7 +964,7 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    const promptText = "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também.";
+    const promptText = "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
       properties: {
@@ -1184,7 +1039,7 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null.";
+    const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
       properties: {
@@ -1256,7 +1111,7 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    const promptText = "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site.";
+    const promptText = "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
       properties: {

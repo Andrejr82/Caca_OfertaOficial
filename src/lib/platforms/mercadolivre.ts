@@ -85,6 +85,45 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
   }
 }
 
+let cachedAppToken: string | null = null;
+let appTokenExpiresAt: number = 0;
+
+export async function getAppMLAccessToken(): Promise<string | null> {
+  if (cachedAppToken && Date.now() < appTokenExpiresAt) {
+    return cachedAppToken;
+  }
+  
+  const appId = process.env.MERCADO_LIVRE_APP_ID || process.env.MERCADO_LIVRE_CLIENT_ID;
+  const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET;
+
+  if (!appId || !clientSecret) return null;
+
+  try {
+    const response = await fetch("https://api.mercadolibre.com/oauth/token", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded"
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: appId,
+        client_secret: clientSecret
+      }).toString()
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      cachedAppToken = data.access_token;
+      appTokenExpiresAt = Date.now() + (data.expires_in * 1000) - (5 * 60 * 1000); // 5 min safety margin
+      return cachedAppToken;
+    }
+  } catch (err) {
+    console.error("[ML API] Erro ao obter token App Client Credentials:", err);
+  }
+  return null;
+}
+
 /**
  * Obtém um token de acesso do Mercado Livre válido para o usuário (renovando se necessário)
  */
@@ -183,6 +222,12 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
     accessToken = await getValidMLAccessToken(userId);
   }
 
+  // Fallback para token genérico da aplicação se o usuário não tiver token vinculado
+  if (!accessToken) {
+    console.log(`[ML API] Usuário sem token OAuth. Utilizando fallback App Token (Client Credentials).`);
+    accessToken = await getAppMLAccessToken();
+  }
+
   const headers: HeadersInit = {
     "Accept": "application/json"
   };
@@ -239,6 +284,28 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
         price = data.price;
       }
 
+      // Fallback para quando o produto de catálogo não retorna o preço na API
+      if (price === 0) {
+        console.log(`[ML API] Preço não encontrado no produto de catálogo ${mlIdInfo.id}. Tentando fallback de HTML...`);
+        try {
+          const htmlRes = await fetch(url, {
+             headers: {
+               "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+               "Accept-Language": "pt-BR,pt;q=0.9"
+             }
+          });
+          const html = await htmlRes.text();
+          const metaPriceMatch = html.match(/<meta\s+property=["']product:preconfigured_price:amount["']\s+content=["']([^"']+)["']/i) ||
+                             html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+          if (metaPriceMatch) {
+            price = parseFloat(metaPriceMatch[1]);
+            console.log(`[ML API] Preço resgatado via fallback HTML: R$ ${price}`);
+          }
+        } catch (htmlErr) {
+          console.error("[ML API] Falha no fallback HTML:", htmlErr);
+        }
+      }
+
       if (data.pictures && data.pictures.length > 0) {
         imageUrl = data.pictures[0].secure_url || data.pictures[0].url;
       } else if (data.thumbnail) {
@@ -246,10 +313,10 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       }
     }
 
-    // Melhora a imagem substituindo o thumbnail padrão por alta resolução (-O) se possível
+    // A substituição por -O.jpg foi removida porque a CDN do ML retorna 404
+    // se a imagem em alta resolução (-O) não existir de fato.
     if (imageUrl && imageUrl.includes("mlstatic.com")) {
       imageUrl = imageUrl.replace(/\.webp$/i, ".jpg");
-      imageUrl = imageUrl.replace(/-[a-zA-Z]\.jpg$/i, "-O.jpg");
     }
 
     if (imageUrl && imageUrl.startsWith("//")) {
