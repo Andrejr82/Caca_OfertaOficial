@@ -1,7 +1,7 @@
 const express = require('express');
-const { PlaywrightCrawler } = require('crawlee');
+const { PlaywrightCrawler, BrowserName, DeviceCategory, OperatingSystemsName } = require('crawlee');
 const axios = require('axios');
-require('dotenv').config();
+require('dotenv').config({ path: '.env.local' });
 
 const app = express();
 app.use(express.json());
@@ -19,19 +19,20 @@ async function extractWithGroq(text) {
 3. image: A URL da imagem principal do produto (se encontrar)
 
 Retorne APENAS um JSON válido, sem markdown. Se não encontrar o preço, mande null.
-{"title": "Nome", "price": 10.00, "image": "http..."}
+Exemplo de Saída: {"title": "Nome", "price": 10.00, "image": "http..."}
 
 Texto extraído do site:
 ${text.slice(0, 8000)}`;
 
   try {
     const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-      model: 'llama3-8b-8192',
+      model: 'llama-3.1-8b-instant', // Usando um modelo mais novo e rápido
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       response_format: { type: 'json_object' }
     }, {
-      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` }
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
+      timeout: 10000 // Timeout pro groq não travar a req
     });
 
     const content = response.data.choices[0].message.content;
@@ -62,32 +63,52 @@ app.post('/api/scrape', async (req, res) => {
     const crawler = new PlaywrightCrawler({
       maxConcurrency: 1,
       requestHandlerTimeoutSecs: 30,
+      navigationTimeoutSecs: 25,
+      browserPoolOptions: {
+        useFingerprints: true,
+        fingerprintOptions: {
+          fingerprintGeneratorOptions: {
+            browsers: [{ name: BrowserName.edge, minVersion: 96 }, { name: BrowserName.chrome, minVersion: 100 }],
+            devices: [DeviceCategory.desktop],
+            operatingSystems: [OperatingSystemsName.windows],
+          }
+        }
+      },
       launchContext: {
         launchOptions: {
           headless: true,
-          args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process']
+          args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
         }
       },
       async requestHandler({ page }) {
-        await page.waitForTimeout(3000);
-        htmlResult = await page.evaluate(() => document.documentElement.outerHTML);
-        textResult = await page.evaluate(() => document.body.innerText);
         try {
-          metaResult.title = await page.title();
-          metaResult.ogImage = await page.evaluate(() => document.querySelector('meta[property="og:image"]')?.content);
-        } catch(e) {}
+          // Engana proteções bot comuns injetando webdriver false
+          await page.addInitScript(() => {
+            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+          });
+          
+          await page.waitForTimeout(4000); // Aguarda o render inicial
+          htmlResult = await page.evaluate(() => document.documentElement.outerHTML);
+          textResult = await page.evaluate(() => document.body.innerText);
+          
+          try {
+            metaResult.title = await page.title();
+            metaResult.ogImage = await page.evaluate(() => document.querySelector('meta[property="og:image"]')?.content);
+          } catch(e) {}
+        } catch(e) {
+          console.error("Erro interno no requestHandler:", e);
+        }
       }
     });
 
     await crawler.run([url]);
 
     if (!htmlResult) {
-      throw new Error("Falha ao raspar a página.");
+      throw new Error("Falha ao raspar a página. Bloqueio ou Timeout.");
     }
+    
     console.log(`[API] Raspagem concluída. Acionando a IA para extratação...`);
-
     const extracted = await extractWithGroq(textResult) || {};
-
     console.log(`[API] Extraído com sucesso. Preço: ${extracted.price}`);
 
     return res.json({

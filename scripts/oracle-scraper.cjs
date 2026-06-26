@@ -94,14 +94,32 @@ async function crawleeExtract(url, limit, storeName) {
 
   const crawler = new PlaywrightCrawler({
     maxConcurrency: 1,
+    requestHandlerTimeoutSecs: 30,
+    navigationTimeoutSecs: 25,
+    browserPoolOptions: {
+      useFingerprints: true,
+      fingerprintOptions: {
+        fingerprintGeneratorOptions: {
+          browsers: [{ name: 'edge', minVersion: 96 }, { name: 'chrome', minVersion: 100 }],
+          devices: ['desktop'],
+          operatingSystems: ['windows'],
+        }
+      }
+    },
     launchContext: {
       launchOptions: {
         headless: true,
-        args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process']
+        args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
       }
     },
     async requestHandler({ request, page, log }) {
       log.info(`[Crawlee] Raspando: ${request.url}`);
+      
+      // Engana proteções bot comuns injetando webdriver false
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
+
       await page.waitForTimeout(6000); 
 
       rawExtractedData = await page.evaluate(() => {
