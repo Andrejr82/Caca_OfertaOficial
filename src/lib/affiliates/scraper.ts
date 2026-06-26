@@ -86,15 +86,10 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
     const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category + " oferta relâmpago")}` : "https://shopee.com.br/m/ofertas-do-dia";
     const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
-    const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: targetUrl, token: oracleKey, formats: ["html"] }),
+    const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl, token: oracleKey }),
     });
 
     if (!oracleRes.ok) throw new Error(`Falha na Oracle API Shopee Trends: ${oracleRes.status}`);
@@ -173,15 +168,10 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/promotion/flash-sale";
     const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
-    const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: targetUrl, token: oracleKey, formats: ["html"] }),
+    const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl, token: oracleKey }),
     });
 
     if (!oracleRes.ok) throw new Error(`Falha na Oracle API Shein Trends: ${oracleRes.status}`);
@@ -267,15 +257,10 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
       try {
         console.log(`[SCRAPER][MAGALU][TRENDS] Tentando URL: ${url}`);
         
-        const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url, token: oracleKey, formats: ["html"] }),
+        const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, token: oracleKey }),
         });
 
         if (!oracleRes.ok) {
@@ -380,15 +365,10 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
       const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : "https://www.mercadolivre.com.br/ofertas";
       const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional) e categoria.`;
 
-      const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: targetUrl, token: oracleKey, formats: ["html"] }),
+      const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl, token: oracleKey }),
       });
 
       if (oracleRes.ok) {
@@ -466,15 +446,10 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
 
     if (oracleKey) {
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Oracle API HTML + Regex...");
-      const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
+      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url, token: oracleKey, formats: ["html"] })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, token: oracleKey })
       });
 
       if (!oracleRes.ok) {
@@ -652,15 +627,10 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     console.log(`[SCRAPER][MAGALU][PRODUCT] Usando Oracle API para Magalu: ${productUrl}`);
-    const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: finalProductUrl, token: oracleKey, formats: ["html"] })
+    const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: finalProductUrl, token: oracleKey })
     });
 
     if (!oracleRes.ok) {
@@ -889,15 +859,10 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} de raspagem Shopee via Oracle API...`);
-        const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: finalProductUrl, token: oracleKey, formats: ["html"] }),
+        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: finalProductUrl, token: oracleKey }),
           signal: AbortSignal.timeout(20000)
         });
 
@@ -970,15 +935,10 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
     for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         console.log(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} de raspagem Shein via Oracle API...`);
-        const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: productUrl, token: oracleKey, formats: ["html"] }),
+        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: productUrl, token: oracleKey }),
           signal: AbortSignal.timeout(20000)
         });
 
@@ -1063,15 +1023,10 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     console.log(`[SCRAPER][AMAZON][PRODUCT] Usando Oracle API para Amazon: ${productUrl}`);
-    const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: finalProductUrl, token: oracleKey, formats: ["html"] })
+    const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: finalProductUrl, token: oracleKey })
     });
 
     if (!oracleRes.ok) {
@@ -1140,15 +1095,10 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
       return null;
     }
 
-    const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url: productUrl, token: oracleKey, formats: ["html"] })
+    const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+      method: "POST",
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: productUrl, token: oracleKey })
     });
 
     if (!oracleRes.ok) {
@@ -1268,15 +1218,10 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
           const oracleKey = process.env.ORACLE_API_KEY;
           if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
 
-          const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url, token: oracleKey, formats: ["html"] }),
+          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, token: oracleKey }),
             signal: AbortSignal.timeout(65000)
           });
         
@@ -1407,15 +1352,10 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
           const oracleKey = process.env.ORACLE_API_KEY;
           if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
 
-          const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
-        },
-        body: JSON.stringify({ url, token: oracleKey, formats: ["html"] }),
+          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+            method: "POST",
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url, token: oracleKey }),
             signal: AbortSignal.timeout(60000)
           });
 

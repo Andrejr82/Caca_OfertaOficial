@@ -109,15 +109,12 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
       
-      const useFirecrawl = !!process.env.FIRECRAWL_API_KEY;
-      const endpoint = useFirecrawl ? "https://api.firecrawl.dev/v1/scrape" : "http://193.122.242.178:3002/api/scrape";
-      const oracleRes = await fetch(endpoint, {
-        method: "POST",
+      const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
-          ...(useFirecrawl ? { "Authorization": `Bearer ${process.env.FIRECRAWL_API_KEY}` } : {})
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ url: finalUrl, token: oracleKey, formats: ["html"] }),
+        body: JSON.stringify({ url: finalUrl, token: oracleKey }),
         signal: controller.signal
       });
       
