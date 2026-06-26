@@ -64,6 +64,9 @@ app.post('/api/scrape', async (req, res) => {
       maxConcurrency: 1,
       requestHandlerTimeoutSecs: 30,
       navigationTimeoutSecs: 25,
+      autoscaledPoolOptions: {
+        isSystemIdleFunction: () => true
+      },
       browserPoolOptions: {
         useFingerprints: true,
         fingerprintOptions: {
