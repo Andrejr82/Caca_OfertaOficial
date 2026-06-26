@@ -1,6 +1,9 @@
 const express = require('express');
 const { PlaywrightCrawler, BrowserName, DeviceCategory, OperatingSystemsName } = require('crawlee');
 const axios = require('axios');
+
+process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
+process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 require('dotenv').config({ path: '.env.local' });
 
 const app = express();

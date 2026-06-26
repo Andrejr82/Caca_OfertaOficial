@@ -863,7 +863,7 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: finalProductUrl, token: oracleKey }),
-          signal: AbortSignal.timeout(20000)
+          signal: AbortSignal.timeout(60000)
         });
 
         if (!oracleRes.ok) {
@@ -939,7 +939,7 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: productUrl, token: oracleKey }),
-          signal: AbortSignal.timeout(20000)
+          signal: AbortSignal.timeout(60000)
         });
 
         if (!oracleRes.ok) {

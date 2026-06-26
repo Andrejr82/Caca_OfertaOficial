@@ -15,7 +15,10 @@ global.WebSocket = require('ws');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
-const { PlaywrightCrawler } = require('crawlee');
+const { PlaywrightCrawler, Dataset } = require('crawlee');
+
+process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
+process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 const axios        = require('axios');
 require('dotenv').config({ path: '.env.local' });
 
