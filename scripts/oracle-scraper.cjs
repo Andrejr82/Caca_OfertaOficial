@@ -1,11 +1,11 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  ORACLE-SCRAPER.CJS — Robô Caçador de Ofertas V2 (Oracle Cloud)
+ *  ORACLE-SCRAPER.CJS — Robô Caçador de Ofertas V2 (In-House)
  * ═══════════════════════════════════════════════════════════════
  * 
  * Processo permanente gerenciado pelo PM2.
- * Roda a cada 4 horas: raspa as lojas, filtra matematicamente,
- * envia as 3 melhores para a Groq (Llama-3), gera links e posta rascunhos.
+ * Roda a cada 4 horas: raspa as lojas (Crawlee), formata (Groq),
+ * gera links de afiliado e posta rascunhos.
  */
 
 'use strict';
@@ -15,6 +15,8 @@ global.WebSocket = require('ws');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
+const { PlaywrightCrawler } = require('crawlee');
+const axios        = require('axios');
 require('dotenv').config({ path: '.env.local' });
 
 // ─── Supabase Admin Client ────────────────────────────────────
@@ -28,14 +30,14 @@ const supabase = createClient(
 );
 
 // ─── Configurações ────────────────────────────────────────────
-const FIRECRAWL_KEY   = process.env.FIRECRAWL_API_KEY;
+process.env.CRAWLEE_MEMORY_MBYTES = '400';
 const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
-const OFFERS_PER_STORE = 15;
+const OFFERS_PER_STORE = 20;
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
-const VIP_SLOTS        = 20; // Quantidade de posts que a IA vai gerar por ciclo
-const APPROVAL_SCORE   = 6.0; // Nota mínima para ser considerado "Top Offer"
+const VIP_SLOTS        = 20; 
+const APPROVAL_SCORE   = 6.0; 
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
@@ -43,113 +45,147 @@ const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
-// ─── Listas Virais Dinâmicas (Golden Keywords) ─────────────
+// ─── Sistema de Baldinhos (Golden Queries) ────────────────────
 const GOLDEN_QUERIES = {
-  'Mercado Livre': [
-    'Fralda Pampers', 'Sabão em pó Omo', 'Amaciante Downy', 'Papel Higiênico Neve',
-    'Cápsulas de Café', 'Leite Ninho', 'Cerveja Heineken', 'Kit Skincare',
-    'Protetor Solar', 'Kit Shampoo', 'Kit Roupa Infantil', 'Kit Cuecas',
-    'Jogo de Panelas', 'Furadeira', 'Jogo de Ferramentas'
-  ],
-  'Amazon': [
-    'iPhone', 'Notebook', 'Fone de Ouvido Bluetooth', 'SSD', 'Monitor',
-    'Kindle', 'Alexa Echo Dot', 'Perfume Importado', 'Wella Profissional',
-    'Cerave', 'Whey Protein', 'Creatina', 'Fraldas', 'Livros'
-  ],
-  'Netshoes': [
-    'Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira',
-    'Legging Academia', 'Top Fitness', 'Moletom', 'Jaqueta Corta Vento',
-    'Camisa de Time', 'Bermuda Tactel', 'Whey Protein', 'Pré-treino'
-  ],
-  'Magalu': [
-    'Air Fryer', 'Robô Aspirador', 'Cafeteira', 'Micro-ondas',
-    'Geladeira', 'Máquina de Lavar', 'Ventilador', 'Smart TV',
-    'Guarda-Roupa', 'Pneu', 'Cadeira Gamer', 'Secador de Cabelo', 'Fraldas'
-  ]
+  'Mercado Livre': {
+    'Supermercado': ['Sabão em pó Omo', 'Amaciante Downy', 'Papel Higiênico Neve', 'Leite Ninho', 'Cápsulas de Café', 'Cerveja Heineken', 'Azeite Gallo', 'Café Pilão', 'Leite Condensado Moça', 'Desodorante Rexona', 'Pasta de Amendoim'],
+    'Bebês': ['Fralda Pampers', 'Lenço Umedecido', 'Pomada Assadura', 'Fralda Huggies', 'Mamadeira Avent', 'Leite Aptamil', 'Cadeira para Auto'],
+    'Beleza': ['Kit Skincare', 'Protetor Solar', 'Kit Shampoo', 'Perfume Importado', 'Creme Cerave', 'Sérum Principia', 'Máscara de Cílios', 'Óleo Braé'],
+    'Ferramentas': ['Furadeira', 'Jogo de Ferramentas', 'Kit Chaves', 'Parafusadeira Bosch', 'Serra Tico-Tico', 'Caixa de Ferramentas'],
+    'Casa': ['Jogo de Panelas', 'Mop Giratório', 'Fritadeira Air Fryer', 'Ventilador Arno', 'Travesseiro Emma', 'Kit Toalhas Banhão']
+  },
+  'Amazon': {
+    'Tecnologia': ['iPhone', 'Notebook', 'Fone de Ouvido Bluetooth', 'SSD', 'Monitor', 'Kindle', 'Alexa Echo Dot', 'Teclado Mecânico', 'Mouse Logitech', 'iPad', 'Apple Watch'],
+    'Beleza': ['Perfume Importado', 'Wella Profissional', 'Cerave', 'La Roche-Posay', 'Loreal Elseve', 'Protetor Solar Vichy', 'Secador Taiff'],
+    'Suplementos': ['Whey Protein', 'Creatina', 'Pré-Treino', 'Barra de Proteína', 'Ômega 3', 'Colágeno', 'Multivitamínico'],
+    'Bebês': ['Fraldas', 'Cadeirinha para Auto', 'Carrinho de Bebê', 'Babá Eletrônica', 'Copo de Transição Munchkin'],
+    'Casa': ['Cafeteira Nespresso', 'Aspirador de Pó Vertical', 'Robô Aspirador', 'Pipoqueira Elétrica', 'Filtro de Água Consul'],
+    'Livros': ['Livro Hábitos Atômicos', 'Livro É Assim Que Acaba', 'Livro Psicologia Financeira', 'Box Harry Potter']
+  },
+  'Netshoes': {
+    'Calçados': ['Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira', 'Tênis Asics', 'Tênis Puma', 'Tênis Vans', 'Bota Oakley'],
+    'Roupas': ['Legging Academia', 'Top Fitness', 'Moletom', 'Jaqueta Corta Vento', 'Camisa de Time', 'Bermuda Tactel', 'Calça Jogger', 'Meia Nike'],
+    'Suplementos': ['Whey Protein', 'Pré-treino', 'Creatina Max Titanium', 'BCAA', 'Hipercalórico'],
+    'Acessórios': ['Mochila Nike', 'Bolsa Academia', 'Squeeze Térmico', 'Bola de Futebol', 'Caneleira']
+  },
+  'Magalu': {
+    'Eletrodomésticos': ['Air Fryer', 'Robô Aspirador', 'Cafeteira', 'Micro-ondas', 'Geladeira', 'Máquina de Lavar', 'Fogão 4 Bocas', 'Purificador de Água'],
+    'Móveis': ['Guarda-Roupa', 'Cadeira Gamer', 'Sofá', 'Cama Box Casal', 'Painel para TV', 'Mesa de Jantar'],
+    'Auto': ['Pneu', 'Som Automotivo', 'Central Multimídia', 'Bateria Moura'],
+    'Celulares': ['Samsung Galaxy', 'iPhone', 'Motorola Edge', 'Xiaomi Redmi'],
+    'TV e Vídeo': ['Smart TV 50', 'Smart TV LG', 'Soundbar JBL', 'TV Samsung']
+  }
 };
 
-function getRandomQueries(store, count = 2) {
-  const list = GOLDEN_QUERIES[store] || ['oferta'];
-  const shuffled = [...list].sort(() => 0.5 - Math.random());
-  return shuffled.slice(0, count);
+function getRandomQueries(store) {
+  const categories = GOLDEN_QUERIES[store] || {};
+  const selected = [];
+  for (const cat in categories) {
+    const list = categories[cat];
+    const shuffled = [...list].sort(() => 0.5 - Math.random());
+    selected.push(...shuffled.slice(0, 2)); // Pega 2 de cada categoria
+  }
+  return selected;
 }
 
-// Google Trends removido - utilizando o motor de Golden Keywords
+// ─── Extração via Crawlee + Groq ──────────────────────────────
+async function crawleeExtract(url, limit, storeName) {
+  let rawExtractedData = '';
 
+  const crawler = new PlaywrightCrawler({
+    maxConcurrency: 1,
+    launchContext: {
+      launchOptions: {
+        headless: true,
+        args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process']
+      }
+    },
+    async requestHandler({ request, page, log }) {
+      log.info(`[Crawlee] Raspando: ${request.url}`);
+      await page.waitForTimeout(6000); 
 
-// ─── Extração via Firecrawl ───────────────────────────────────
-async function firecrawlExtract(url, limit, storeName, attempt = 1) {
-  if (!FIRECRAWL_KEY) return [];
-  const MAX_RETRIES = 2;
-  const prompt = `Você é um robô caçador de achadinhos. Extraia TODOS os produtos da página que sejam CLARAMENTE uma promoção. ` +
-    `Inclua: 1) preço antigo riscado; 2) selos de desconto; 3) tags de oferta. ` +
-    `Retorne: title, url (completa com https://), image, price (número), old_price (número/null), discount_badge, rating, category.`;
+      rawExtractedData = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('a, div.ui-search-result, div[data-component-type="s-search-result"]'));
+        let results = [];
+        for (let el of items) {
+          const text = el.innerText || '';
+          if (text.includes('R$')) {
+            const linkTag = el.tagName === 'A' ? el : el.querySelector('a');
+            const imgTag = el.querySelector('img');
+            const url = linkTag ? linkTag.href : '';
+            const img = imgTag ? imgTag.src : '';
+            if (url) {
+              results.push(`[TEXTO]: ${text.replace(/\n/g, ' ')} | [LINK]: ${url} | [IMG]: ${img}`);
+            }
+          }
+        }
+        const unique = [];
+        const seen = new Set();
+        for(let r of results) {
+          const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
+          if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
+        }
+        return unique.slice(0, 40).join('\n');
+      });
+    }
+  });
 
   try {
-    console.log(`  [Firecrawl] ${storeName} — tentativa ${attempt}/${MAX_RETRIES}...`);
-    const res = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${FIRECRAWL_KEY}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        url, formats: ['extract'], waitFor: 8000, timeout: 60000, mobile: true, proxy: 'stealth', blockAds: true,
-        extract: {
-          prompt,
-          schema: {
-            type: 'object',
-            properties: {
-              products: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    title: { type: 'string' }, url: { type: 'string' }, image: { type: 'string' },
-                    price: { type: 'number' }, old_price: { type: 'number', nullable: true },
-                    discount_badge: { type: 'string', nullable: true }, rating: { type: 'number', nullable: true },
-                    category: { type: 'string' },
-                  },
-                  required: ['title', 'url', 'price'],
-                },
-              },
-            },
-            required: ['products'],
-          },
-        },
-      }),
+    await crawler.run([url]);
+  } catch (err) {
+    console.error(`  [Crawlee] Erro ao raspar ${storeName}: ${err.message}`);
+    return [];
+  }
+
+  if (!rawExtractedData) return [];
+
+  // Chama a Groq para formatar os dados
+  console.log(`  [Groq] Analisando dados brutos da ${storeName}...`);
+  const prompt = `Você é um extrator de dados. Analise esta lista de produtos encontrados na loja ${storeName}.
+Identifique as melhores ofertas e monte um JSON APENAS com os produtos válidos (que tenham nome e preço).
+Se houver preço cortado (ex: de R$ 100 por R$ 50), coloque 100 em old_price e 50 em price.
+
+Schema JSON Obrigatório:
+{
+  "products": [
+    {
+      "title": "Nome limpo do produto",
+      "url": "O link absoluto exato da extração",
+      "image": "O link da imagem se houver, ou null",
+      "price": 199.90,
+      "old_price": 299.90,
+      "category": "${storeName}",
+      "rating": 4.5
+    }
+  ]
+}`;
+
+  try {
+    const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+      model: 'llama-3.1-8b-instant',
+      response_format: { type: "json_object" },
+      messages: [
+        { role: 'system', content: prompt },
+        { role: 'user', content: rawExtractedData.substring(0, 15000) }
+      ],
+      temperature: 0.1
+    }, {
+      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
     });
 
-    if (res.status === 408 || res.status === 429) {
-      if (attempt < MAX_RETRIES) {
-        await new Promise(r => setTimeout(r, attempt * 15000));
-        return firecrawlExtract(url, limit, storeName, attempt + 1);
-      }
-      return [];
-    }
-    if (!res.ok) return [];
-
-    const data = await res.json();
-    const products = data?.data?.extract?.products || [];
-    return products.filter(p => 
-      p.title && p.price > 0 && 
-      (
-        (p.old_price && p.old_price > p.price) || 
-        (p.discount_badge && p.discount_badge.trim().length > 0) ||
-        (storeName === 'Magalu') // A Magalu costuma ocultar o old_price no grid, mas o prompt já filtra promoções
-      )
-    ).slice(0, limit);
+    const data = JSON.parse(res.data.choices[0].message.content);
+    return (data.products || []).slice(0, limit);
   } catch (err) {
-    console.error(`  [Firecrawl] Erro: ${err.message}`);
+    console.error(`  [Groq] Falha na formatação: ${err.message}`);
     return [];
   }
 }
 
-// ─── Normalização e Links ─────────────────────────────────────
+// ─── Normalização e Links de Afiliado ─────────────────────────
 function cleanProductUrl(url) {
   if (!url) return null;
   try {
     const obj = new URL(url);
-    // Remove query string e hash completamente para garantir que o link seja o mais puro possível
-    // Exceções: mantemos 'tag' ou similares se já existirem, mas como a limpeza ocorre ANTES da injeção de afiliado, 
-    // podemos limpar tudo com segurança para deduplicação.
     obj.search = ''; 
     obj.hash = '';
     return obj.toString();
@@ -159,7 +195,7 @@ function cleanProductUrl(url) {
 }
 
 function normalizeImageUrl(url) {
-  if (!url) return null;
+  if (!url || url === 'null') return null;
   let u = url;
   if (u.startsWith('//')) u = 'https:' + u;
   if (u.includes('mlcdn.com.br')) u = u.replace(/\/\d+x\d+\//, '/orig/');
@@ -205,11 +241,10 @@ function calculateScore(product) {
   let impulseScore = price <= 80 ? 10 : (price <= 150 ? 8 : (price <= 300 ? 5 : 2));
   let ratingScore = product.rating ? (product.rating / 5) * 10 : 5;
 
-  // Formula: Desconto(40%) + Preço(25%) + Impulso(20%) + Rating(15%)
   return Number(((discountScore * 0.40) + (priceScore * 0.25) + (impulseScore * 0.20) + (ratingScore * 0.15)).toFixed(2));
 }
 
-// ─── Lógica IA: Llama-3 via Groq ──────────────────────────────
+// ─── Lógica IA: Copywriting via Groq ──────────────────────────
 function cleanJsonString(str) {
   return str.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
 }
@@ -269,7 +304,6 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
       
       const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
       const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
-      
       const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
 
       return {
@@ -321,7 +355,7 @@ async function upsertOffer(product, store, affiliateUrl) {
     user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
     image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
     rating: product.rating, category: product.category || 'Geral', score, status: 'draft',
-    notes: `[Oracle] Importado às ${new Date().toLocaleString('pt-BR')}`,
+    notes: `[Oracle In-House] Importado às ${new Date().toLocaleString('pt-BR')}`,
   }).select('id').single();
 
   if (error) {
@@ -333,9 +367,30 @@ async function upsertOffer(product, store, affiliateUrl) {
 
 // ─── Processamento Vip (IA, Links e Posts) ────────────────────
 async function processTopOffers(candidates) {
-  // Ordena por maior nota matemática
   candidates.sort((a, b) => b.score - a.score);
-  const vipOffers = candidates.filter(c => c.score >= APPROVAL_SCORE).slice(0, VIP_SLOTS);
+  
+  const uniqueStores = [...new Set(candidates.map(c => c.store))];
+  const maxPerStore = uniqueStores.length > 0 ? Math.ceil(VIP_SLOTS / uniqueStores.length) : VIP_SLOTS;
+  
+  const storeCounts = {};
+  let vipOffers = [];
+  const leftovers = [];
+  
+  for (const c of candidates) {
+    if (c.score < APPROVAL_SCORE) continue;
+    
+    storeCounts[c.store] = (storeCounts[c.store] || 0) + 1;
+    if (storeCounts[c.store] <= maxPerStore) {
+      vipOffers.push(c);
+    } else {
+      leftovers.push(c);
+    }
+  }
+  
+  while (vipOffers.length < VIP_SLOTS && leftovers.length > 0) {
+    vipOffers.push(leftovers.shift());
+  }
+  vipOffers = vipOffers.slice(0, VIP_SLOTS);
 
   if (vipOffers.length === 0) {
     console.log(`\n🤖 Nenhuma oferta atingiu o score mínimo (${APPROVAL_SCORE}) para IA nesta rodada.`);
@@ -350,8 +405,6 @@ async function processTopOffers(candidates) {
     const analysis = await generateOfferAnalysis(item.product, item.store);
     
     const finalScore = Number(((item.score * 0.7) + (analysis.score * 0.3)).toFixed(2));
-    
-    // Deleta posts de rascunhos velhos para esta oferta
     await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
 
     const channels = ['telegram', 'instagram', 'whatsapp'];
@@ -378,7 +431,7 @@ async function processTopOffers(candidates) {
     await supabase.from('offers').update({ status: 'approved', score: finalScore }).eq('id', item.id);
 
     processed++;
-    await new Promise(r => setTimeout(r, 5000)); // Respiro API Groq
+    await new Promise(r => setTimeout(r, 6000)); 
   }
   return processed;
 }
@@ -392,7 +445,7 @@ async function cleanupOldDrafts() {
 
 // ─── Raspa Loja ───────────────────────────────────────────────
 async function scrapeStore(store) {
-  const queries = getRandomQueries(store, 2); // Sorteia 2 palavras-chave diferentes por loja
+  const queries = getRandomQueries(store); // Pega 1 keyword de CADA categoria da loja
   let storeCandidates = [];
 
   for (const query of queries) {
@@ -407,11 +460,14 @@ async function scrapeStore(store) {
       'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
     };
 
-    const rawProducts = await firecrawlExtract(urls[store], OFFERS_PER_STORE, store);
+    const rawProducts = await crawleeExtract(urls[store], OFFERS_PER_STORE, store);
 
     for (const p of rawProducts) {
+      if (!p.title || !p.price) continue;
+      
       const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
       const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
+      
       const prodData = {
         product_name: p.title, image_url: normalizeImageUrl(p.image || null),
         current_price: p.price, old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
@@ -421,38 +477,38 @@ async function scrapeStore(store) {
       const res = await upsertOffer(prodData, store, affiliateUrl);
       if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
     }
+    
+    // Pausa anti-rate limit da Groq entre cada keyword
+    console.log(`  [Rate Limit] Pausa de 20s para resfriar a Groq API...`);
+    await new Promise(r => setTimeout(r, 20000));
   }
   
-  console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas novas coletadas nas categorias sorteadas.`);
+  console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas coletadas das diversas categorias.`);
   return storeCandidates;
 }
 
 // ─── Ciclo Principal ──────────────────────────────────────────
 async function runScrapingCycle() {
   const startTime = Date.now();
-  console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER V2 — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
+  console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER IN-HOUSE — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
   const stores = ['Mercado Livre', 'Amazon', 'Magalu', 'Netshoes'];
-  
   let allCandidates = [];
 
   for (const store of stores) {
     try {
       const candidates = await scrapeStore(store);
       allCandidates = allCandidates.concat(candidates);
-      await new Promise(r => setTimeout(r, 5000));
     } catch (err) { console.error(`[SCRAPER][${store}] Erro: ${err.message}`); }
   }
 
-  // Passa os top candidatos do ciclo inteiro para a IA
   const aiProcessed = await processTopOffers(allCandidates);
-
   await cleanupOldDrafts();
 
   const duration = Math.round((Date.now() - startTime) / 1000);
   try {
     await supabase.from('integration_logs').insert({
-      user_id: ADMIN_USER_ID, integration: 'Oracle-Scraper', action: 'Ciclo V2 Completo', status: 'success',
+      user_id: ADMIN_USER_ID, integration: 'Oracle-Scraper', action: 'Ciclo In-House Completo', status: 'success',
       message: `${allCandidates.length} raspes, ${aiProcessed} via IA em ${duration}s.`,
       metadata: { total_scraped: allCandidates.length, ai_processed: aiProcessed, duration_seconds: duration }
     });
@@ -463,11 +519,11 @@ async function runScrapingCycle() {
 
 // ─── Inicialização ────────────────────────────────────────────
 console.log('\n╔══════════════════════════════════════════╗');
-console.log('║   ORACLE-SCRAPER V2 (Com Cérebro IA)     ║');
+console.log('║   ORACLE-SCRAPER IN-HOUSE (Crawlee)      ║');
 console.log('╚══════════════════════════════════════════╝\n');
 
-if (!FIRECRAWL_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.log("Missing API keys");
+if (!GROQ_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log("Missing API keys (Groq ou Supabase)");
   process.exit(1);
 }
 
