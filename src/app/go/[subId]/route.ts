@@ -41,7 +41,25 @@ export async function GET(request: Request, { params }: { params: Promise<{ subI
 
   if (error || !link) {
     console.error("Link não encontrado para o subId:", subId, error);
-    return NextResponse.json({ error: "Link não encontrado ou bloqueado por RLS", subId, supabaseError: error }, { status: 404 });
+    const html = `
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oferta Não Encontrada</title>
+</head>
+<body style="display:flex; justify-content:center; align-items:center; height:100vh; font-family:sans-serif; text-align:center; padding:20px; background:#f9fafb; margin:0;">
+    <div>
+        <h2 style="color:#ef4444; margin-bottom:10px;">⚠️ Oferta Indisponível</h2>
+        <p style="color:#4b5563; font-size:16px;">Infelizmente este link expirou ou a oferta foi encerrada.</p>
+    </div>
+</body>
+</html>`;
+    return new NextResponse(html, {
+      status: 404,
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    });
   }
 
   // Extrair metadados para analytics (anonimizados)
