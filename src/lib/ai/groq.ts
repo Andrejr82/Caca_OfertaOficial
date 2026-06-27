@@ -221,7 +221,7 @@ Foque exclusivamente no texto persuasivo: Headline, Gancho, Corpo e CTA curto.
 ## REGRAS INQUEBRÁVEIS (CRÍTICAS)
 1. Escreva os textos ignorando a criação de URLs ou links, pois o sistema injetará automaticamente o link de afiliado rastreado no final.
 2. Coloque as hashtags exclusivamentes no array designado para elas. Mantenha o texto principal limpo de hashtags.
-3. Escreva os textos ignorando preços monetários numéricos, pois o sistema injetará automaticamente os valores dinâmicos reais posteriormente.
+3. Não inclua nenhuma menção a valores monetários (R$) no texto, nem crie placeholders de preço (como [PREÇO] ou [VALOR]). O sistema já anexará um bloco com os preços reais no final da mensagem. Foque no benefício e no desconto percentual.
 4. Assegure que as chamadas para ação (CTA) sejam focadas em urgência extrema (Ex: "🏃‍♂️ COMPRE ANTES QUE ACABE", "🚨 CLIQUE PARA GARANTIR").
 5. Output the structured data in JSON format and make sure to escape any special characters to output clean, valid JSON.
 

@@ -202,13 +202,17 @@ async function crawleeExtract(url, limit, storeName) {
 Identifique as melhores ofertas e monte um JSON APENAS com os produtos válidos (que tenham nome e preço).
 Se houver preço cortado (ex: de R$ 100 por R$ 50), coloque 100 em old_price e 50 em price.
 
+MUITO IMPORTANTE:
+- Extraia os Nomes REAIS dos produtos do texto bruto. NÃO USE placeholders como "Nome limpo do produto" ou "Produto 1".
+- Extraia a Imagem REAL e a URL REAL dos campos fornecidos.
+
 Schema JSON Obrigatório:
 {
   "products": [
     {
-      "title": "Nome limpo do produto",
-      "url": "O link absoluto exato da extração",
-      "image": "O link da imagem se houver, ou null",
+      "title": "<Extraia o nome real do texto>",
+      "url": "<Link absoluto exato extraído>",
+      "image": "<Link da imagem extraída ou null>",
       "price": 199.90,
       "old_price": 299.90,
       "category": "${storeName}",
