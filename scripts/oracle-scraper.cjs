@@ -162,7 +162,7 @@ async function crawleeExtract(url, limit, storeName) {
       await page.waitForTimeout(2000);
 
       rawExtractedData = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('a, div.ui-search-result, div[data-component-type="s-search-result"]'));
+        const items = Array.from(document.querySelectorAll('a, div.ui-search-result, div[data-component-type="s-search-result"], div.poly-card, div.andes-card'));
         let results = [];
         for (let el of items) {
           const text = el.innerText || '';
@@ -254,7 +254,7 @@ Schema JSON Obrigatório:
         delay *= 2;
         retries--;
       } else {
-        console.error(`  [Groq] Falha na formatação: ${err.message}`);
+        console.error(`  [Groq] Falha na formatação: ${err.message} ${err.response ? JSON.stringify(err.response.data) : ""}`);
         return [];
       }
     }
