@@ -13,7 +13,6 @@
     "verify": "npm run lint && npm run typecheck && npm run test && npm run build && npm run security:check"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@remotion/bundler": "^4.0.482",
     "@remotion/cli": "^4.0.482",
     "@supabase/ssr": "^0.7.0",

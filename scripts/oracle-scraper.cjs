@@ -40,7 +40,7 @@ const supabase = createClient(
 );
 
 // ─── Configurações ────────────────────────────────────────────
-process.env.CRAWLEE_MEMORY_MBYTES = '8192';
+process.env.CRAWLEE_MEMORY_MBYTES = '3072';
 const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
 const OFFERS_PER_STORE = 20;
@@ -161,7 +161,10 @@ async function crawleeExtract(url, limit, storeName) {
             const linkTag = el.tagName === 'A' ? el : el.querySelector('a');
             const imgTag = el.querySelector('img');
             const url = linkTag ? linkTag.href : '';
-            const img = imgTag ? imgTag.src : '';
+            let img = '';
+            if (imgTag) {
+              img = imgTag.getAttribute('data-src') || imgTag.getAttribute('src') || imgTag.src || '';
+            }
             if (url) {
               results.push(`[TEXTO]: ${text.replace(/\n/g, ' ')} | [LINK]: ${url} | [IMG]: ${img}`);
             }
@@ -208,26 +211,45 @@ Schema JSON Obrigatório:
   ]
 }`;
 
-  try {
-    const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-      model: 'llama-3.1-8b-instant',
-      response_format: { type: "json_object" },
-      messages: [
-        { role: 'system', content: prompt },
-        { role: 'user', content: rawExtractedData.substring(0, 6000) }
-      ],
-      temperature: 0.1,
-      max_tokens: 2000
-    }, {
-      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
-    });
+  let retries = 3;
+  let delay = 2000;
+  while (retries > 0) {
+    try {
+      const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model: 'llama-3.1-8b-instant',
+        response_format: { type: "json_object" },
+        messages: [
+          { role: 'system', content: prompt },
+          { role: 'user', content: rawExtractedData.substring(0, 6000) }
+        ],
+        temperature: 0.1,
+        max_tokens: 2000
+      }, {
+        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
+      });
 
-    const data = JSON.parse(res.data.choices[0].message.content);
-    return (data.products || []).slice(0, limit);
-  } catch (err) {
-    console.error(`  [Groq] Falha na formatação: ${err.message}`);
-    return [];
+      const content = res.data.choices[0].message.content;
+      try {
+        const cleanContent = content.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+        const data = JSON.parse(cleanContent);
+        return (data.products || []).slice(0, limit);
+      } catch (parseErr) {
+        console.error(`  [Groq] Erro de parse JSON no scraper: ${parseErr.message}`);
+        return [];
+      }
+    } catch (err) {
+      if (err.response && err.response.status === 429) {
+        console.log(`  [Groq Rate Limit] Aguardando ${delay}ms...`);
+        await new Promise(r => setTimeout(r, delay));
+        delay *= 2;
+        retries--;
+      } else {
+        console.error(`  [Groq] Falha na formatação: ${err.message}`);
+        return [];
+      }
+    }
   }
+  return [];
 }
 
 // ─── Normalização e Links de Afiliado ─────────────────────────
@@ -320,6 +342,7 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
 }`;
 
   let retries = 3;
+  let delay = 2000;
   while (retries > 0) {
     try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -335,16 +358,24 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
 
       if (!response.ok) {
         if (response.status === 429) {
-          await new Promise(r => setTimeout(r, 10000));
+          console.log(`  [Groq Rate Limit - Copy] Aguardando ${delay}ms...`);
+          await new Promise(r => setTimeout(r, delay));
+          delay *= 2;
           retries--; continue;
         }
         throw new Error(`Groq HTTP ${response.status}`);
       }
 
       const data = await response.json();
-      const raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
+      let raw;
+      try {
+        raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
+      } catch (parseErr) {
+        console.log(`  [Groq] JSON malformado. Retentando...`);
+        throw new Error("JSON malformado");
+      }
       const strategy = (raw.strategies && raw.strategies[0]) ? raw.strategies[0] : null;
-      if (!strategy) throw new Error("JSON malformado");
+      if (!strategy) throw new Error("Sem estrategia valida");
 
       const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
 
@@ -362,7 +393,12 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
         whatsapp: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}`
       };
     } catch (err) {
-      await new Promise(r => setTimeout(r, 5000));
+      if (err.message && (err.message.includes("JSON malformado") || err.message.includes("Sem estrategia valida"))) {
+         retries--;
+         continue;
+      }
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
       retries--;
     }
   }
@@ -527,9 +563,8 @@ async function scrapeStore(store) {
       if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
     }
     
-    // Pausa anti-rate limit da Groq entre cada keyword
-    console.log(`  [Rate Limit] Pausa de 20s para resfriar a Groq API...`);
-    await new Promise(r => setTimeout(r, 20000));
+    // O exponential backoff cuida do rate limit agora
+    await new Promise(r => setTimeout(r, 1000));
   }
   
   console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas coletadas das diversas categorias.`);

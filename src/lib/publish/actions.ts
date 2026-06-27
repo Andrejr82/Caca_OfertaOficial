@@ -138,7 +138,7 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     whatsapp: channel === "whatsapp" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("whatsapp", newOffer.product_name, newOffer.id), "whatsapp", utmMedium, utmCampaign),
   };
 
-  // 4. Invocar a IA (Groq / Gemini via fallback ou integração)
+  // 4. Invocar a IA (Groq Exclusivo)
   const aiResult = await generateOfferAnalysis(newOffer, aiLinks);
 
   // 5. Retornar os dados prontos
