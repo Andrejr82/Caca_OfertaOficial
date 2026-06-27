@@ -125,7 +125,7 @@ export async function callLLM(
     throw new Error(`Resposta vazia ou corrompida da Groq: ${JSON.stringify(data)}`);
   }
 
-  return data.choices[0].message.content.trim();
+  return cleanJsonString(data.choices[0].message.content);
 }
 
 /**

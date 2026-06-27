@@ -362,7 +362,15 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
     try {
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Oracle API + IA...");
       const fetchLimit = limit * 4;
-      const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : "https://www.mercadolivre.com.br/ofertas";
+      const defaultUrls = [
+        "https://www.mercadolivre.com.br/ofertas",
+        "https://www.mercadolivre.com.br/mais-vendidos",
+        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-CELLPHONES",
+        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-TELEVISIONS",
+        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-COMPUTERS"
+      ];
+      const randomUrl = defaultUrls[Math.floor(Math.random() * defaultUrls.length)];
+      const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : randomUrl;
       const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
 
       const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
