@@ -66,51 +66,38 @@ app.post('/api/scrape', async (req, res) => {
   let metaResult = {};
 
   try {
-    const { Configuration } = require('crawlee');
-    Configuration.getGlobalConfig().set('persistStorage', false);
-    Configuration.getGlobalConfig().set('purgeOnStart', true);
-
-    const crawler = new PlaywrightCrawler({
-      maxConcurrency: 1,
-      requestHandlerTimeoutSecs: 30,
-      navigationTimeoutSecs: 25,
-      autoscaledPoolOptions: {
-        systemStatusOptions: {
-          maxMemoryOverloadedRatio: 999,
-          maxEventLoopOverloadedRatio: 999,
-          maxCpuOverloadedRatio: 999,
-          maxClientOverloadedRatio: 999
-        }
-      },
-      launchContext: {
-        launcher: chromium,
-        launchOptions: {
-          headless: true,
-          args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
-        }
-      },
-      async requestHandler({ page }) {
-        try {
-          // Engana proteções bot comuns injetando webdriver false
-          await page.addInitScript(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-          });
-          
-          await page.waitForTimeout(4000); // Aguarda o render inicial
-          htmlResult = await page.evaluate(() => document.documentElement.outerHTML);
-          textResult = await page.evaluate(() => document.body.innerText);
-          
-          try {
-            metaResult.title = await page.title();
-            metaResult.ogImage = await page.evaluate(() => document.querySelector('meta[property="og:image"]')?.content);
-          } catch(e) {}
-        } catch(e) {
-          console.error("Erro interno no requestHandler:", e);
-        }
-      }
+    const browser = await chromium.launch({
+      headless: true,
+      args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
     });
+    
+    const context = await browser.newContext();
+    const page = await context.newPage();
+    
+    try {
+      // Engana proteções bot comuns injetando webdriver false
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      });
 
-    await crawler.run([{ url, uniqueKey: Date.now().toString() + Math.random().toString() }]);
+      // Timeout total de 45 segundos para a navegação, apenas aguardando domcontentloaded para driblar lentidão
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      
+      await page.waitForTimeout(4000); // Aguarda o render inicial (SPA e JS)
+
+      htmlResult = await page.evaluate(() => document.documentElement.outerHTML);
+      textResult = await page.evaluate(() => document.body.innerText);
+
+      try {
+        metaResult.title = await page.title();
+        metaResult.ogImage = await page.evaluate(() => document.querySelector('meta[property="og:image"]')?.content);
+      } catch(e) {}
+      
+    } catch(e) {
+      console.error("Erro interno ao navegar:", e);
+    } finally {
+      await browser.close();
+    }
 
     if (!htmlResult) {
       throw new Error("Falha ao raspar a página. Bloqueio ou Timeout.");
