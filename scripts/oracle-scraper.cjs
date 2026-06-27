@@ -43,7 +43,7 @@ const supabase = createClient(
 process.env.CRAWLEE_MEMORY_MBYTES = '3072';
 const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
-const OFFERS_PER_STORE = 15; // Reduzido para evitar erro 413 no Groq
+const OFFERS_PER_STORE = 5; // Reduzido para caber no limite de tokens do JSON
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
@@ -229,7 +229,7 @@ Schema JSON Obrigatório:
           { role: 'user', content: rawExtractedData.substring(0, 4000) }
         ],
         temperature: 0.1,
-        max_tokens: 1000
+        max_tokens: 1500
       }, {
         headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
       });
