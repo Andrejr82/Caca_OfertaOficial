@@ -122,7 +122,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
       required: ["products"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const fcData = JSON.parse(rawResult);
 
     if (!fcData.products) throw new Error("Sem produtos extraídos da Shopee pela IA");
@@ -204,7 +204,7 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
       required: ["products"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const fcData = JSON.parse(rawResult);
 
     if (!fcData.products) throw new Error("Sem produtos extraídos da Shein pela IA");
@@ -301,7 +301,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
           required: ["products"]
         };
 
-        const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+        const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
         const fcData = JSON.parse(rawResult);
 
         if (!fcData.products || !fcData.products.length) {
@@ -400,7 +400,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
             required: ["products"]
           };
 
-          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
           const fcData = JSON.parse(rawResult);
 
           if (fcData.products && fcData.products.length > 0) {
@@ -655,7 +655,7 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
 
     const isAkamaiBlock = extract && (extract.title || "").toLowerCase().includes("protected by");
@@ -900,7 +900,7 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
     const scraped = {
       product_name: extract.title.trim(),
@@ -976,7 +976,7 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
 
     const scraped = {
@@ -1051,7 +1051,7 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
     const titleLower = (extract.title || "").toLowerCase();
     
@@ -1124,7 +1124,7 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
 
     // Converte os valores extraídos de string para número
@@ -1202,13 +1202,16 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
     const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. 
 Critérios rígidos:
 1. O produto DEVE ter um preço antigo riscado ou um selo percentual de desconto.
-2. Para a IMAGEM (image), extraia a URL de alta resolução (frequentemente no atributo data-src, src ou srcset). NUNCA extraia placeholders.
+2. Para a IMAGEM (image), extraia a URL de alta resolução. Na Amazon, a imagem real frequentemente está no atributo 'data-a-dynamic-image', 'data-src' ou 'srcset'. NUNCA extraia placeholders como imagens de 1px ou cinzas.
 3. Para o SELO (discount_badge), extraia EXATAMENTE o que está escrito no site (ex: '30% OFF'). NUNCA invente.
 4. Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal.
 Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge, rating (se houver) e category.`;
 
-    for (const url of urls) {
-      let retries = 3;
+    // Limitar a apenas 1 URL para evitar 504 Timeout na Vercel (se não achar na primeira, paciência)
+    const urlsToTry = urls.slice(0, 1);
+
+    for (const url of urlsToTry) {
+      let retries = 1; // Sem retries longos para não dar 504
       let delay = 1500;
       let fcData = null;
 
@@ -1263,7 +1266,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
             required: ["products"]
           };
 
-          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
           fcData = { success: true, data: { extract: JSON.parse(rawResult) } };
           
           console.log(`[SCRAPER][AMAZON][TRENDS] Oracle API + IA success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
@@ -1394,7 +1397,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
             required: ["products"]
           };
 
-          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 10000), schemaObj, 0.2, 4000);
+          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
           fcData = { success: true, data: { extract: JSON.parse(rawResult) } };
 
           console.log(`[SCRAPER][NETSHOES][TRENDS] Oracle API + IA success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
