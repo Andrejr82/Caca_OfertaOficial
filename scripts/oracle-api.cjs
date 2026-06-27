@@ -66,6 +66,10 @@ app.post('/api/scrape', async (req, res) => {
   let metaResult = {};
 
   try {
+    const { Configuration } = require('crawlee');
+    Configuration.getGlobalConfig().set('persistStorage', false);
+    Configuration.getGlobalConfig().set('purgeOnStart', true);
+
     const crawler = new PlaywrightCrawler({
       maxConcurrency: 1,
       requestHandlerTimeoutSecs: 30,
@@ -106,7 +110,7 @@ app.post('/api/scrape', async (req, res) => {
       }
     });
 
-    await crawler.run([url]);
+    await crawler.run([{ url, uniqueKey: Date.now().toString() + Math.random().toString() }]);
 
     if (!htmlResult) {
       throw new Error("Falha ao raspar a página. Bloqueio ou Timeout.");
