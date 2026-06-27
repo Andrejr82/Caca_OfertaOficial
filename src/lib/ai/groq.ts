@@ -73,8 +73,14 @@ export async function callLLM(
     throw new Error("Nenhuma API Key configurada no ambiente.");
   }
 
-  let groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
+  let groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
   console.log(`[AI Service] ⚡ Direcionando para Groq (Motor Principal) com modelo: ${groqModel}`);
+
+  // Forçar a palavra JSON no prompt e injetar o schema para garantir a estrutura correta (ex: { "products": [...] })
+  const schemaStr = jsonSchemaObj ? JSON.stringify(jsonSchemaObj) : "";
+  const safeSystemPrompt = systemPrompt.toLowerCase().includes("json") 
+    ? systemPrompt + (schemaStr ? `\n\nRespeite estritamente este formato JSON: ${schemaStr}` : "")
+    : systemPrompt + `\n\nResponda OBRIGATORIAMENTE em formato JSON com a estrutura exata solicitada: ${schemaStr}`;
 
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -85,12 +91,12 @@ export async function callLLM(
     body: JSON.stringify({
       model: groqModel,
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: "system", content: safeSystemPrompt },
         { role: "user", content: userPrompt }
       ],
       response_format: { type: "json_object" },
       temperature: temperature,
-      max_tokens: maxTokens
+      max_tokens: Math.min(maxTokens, 1500) // Limita a 1500 tokens para caber no limite TPM (6000) do Free Tier
     }),
     signal: AbortSignal.timeout(30000)
   });
