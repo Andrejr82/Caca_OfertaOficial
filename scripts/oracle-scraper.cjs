@@ -47,7 +47,7 @@ const OFFERS_PER_STORE = 15; // Reduzido para evitar erro 413 no Groq
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
-const APPROVAL_SCORE   = 5.5; 
+const APPROVAL_SCORE   = 5.0; 
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
