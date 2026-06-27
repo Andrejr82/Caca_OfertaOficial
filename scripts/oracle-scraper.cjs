@@ -173,6 +173,7 @@ async function crawleeExtract(url, limit, storeName) {
             let img = '';
             if (imgTag) {
               img = imgTag.getAttribute('data-src') || imgTag.getAttribute('src') || imgTag.src || '';
+              if (img.startsWith('data:image')) img = 'base64_hidden';
             }
             if (url) {
               results.push(`[TEXTO]: ${text.replace(/\n/g, ' ')} | [LINK]: ${url} | [IMG]: ${img}`);
