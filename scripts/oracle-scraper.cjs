@@ -40,7 +40,7 @@ const supabase = createClient(
 );
 
 // ─── Configurações ────────────────────────────────────────────
-process.env.CRAWLEE_MEMORY_MBYTES = '400';
+process.env.CRAWLEE_MEMORY_MBYTES = '8192';
 const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
 const OFFERS_PER_STORE = 20;
@@ -118,12 +118,33 @@ async function crawleeExtract(url, limit, storeName) {
       launcher: chromium,
       launchOptions: {
         headless: true,
-        args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
+        args: [
+          '--disable-dev-shm-usage',
+          '--no-sandbox',
+          '--disable-gpu',
+          '--single-process',
+          '--disable-blink-features=AutomationControlled',
+          '--js-flags="--max-old-space-size=128"',
+          '--disable-extensions',
+          '--disable-default-apps',
+          '--no-first-run',
+          '--mute-audio'
+        ]
       }
     },
     async requestHandler({ request, page, log }) {
       log.info(`[Crawlee] Raspando: ${request.url}`);
       
+      // Bloqueia imagens, fontes e mídia para economizar RAM/CPU na VPS
+      await page.route('**/*', (route) => {
+        const type = route.request().resourceType();
+        if (['image', 'font', 'media'].includes(type)) {
+          route.abort();
+        } else {
+          route.continue();
+        }
+      });
+
       // Engana proteções bot comuns injetando webdriver false
       await page.addInitScript(() => {
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
