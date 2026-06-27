@@ -63,8 +63,8 @@ export async function POST(request: Request) {
             },
             body: JSON.stringify({ offerId: offer.id })
           });
-          // Delay maior de 10s entre requisições para mitigar proativamente o Rate Limit 429 da Groq
-          await new Promise(resolve => setTimeout(resolve, 10000));
+          // Delay de 2s (30 RPM na Groq) é suficiente e evita que a requisição do usuário expire no Vercel
+          await new Promise(resolve => setTimeout(resolve, 2000));
         } catch (generateError) {
           console.error(`Falha ao gerar criativos por IA para oferta ${offer.id}:`, generateError);
         }

@@ -164,7 +164,7 @@ async function crawleeExtract(url, limit, storeName) {
           const text = el.innerText || '';
           if (text.includes('R$')) {
             const linkTag = el.tagName === 'A' ? el : el.querySelector('a');
-            const imgTag = el.querySelector('img');
+            const imgTag = el.querySelector('img.s-image') || el.querySelector('img.ui-search-result-image__element') || el.querySelector('img.poly-component__picture') || el.querySelector('img');
             const url = linkTag ? linkTag.href : '';
             let img = '';
             if (imgTag) {
