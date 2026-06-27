@@ -2,10 +2,6 @@ const os = require('os');
 os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const express = require('express');
-const { PlaywrightCrawler } = require('crawlee');
-const { chromium } = require('playwright-extra');
-const stealthPlugin = require('puppeteer-extra-plugin-stealth');
-chromium.use(stealthPlugin());
 const axios = require('axios');
 require('dotenv').config({ path: '.env.local' });
 
@@ -65,43 +61,31 @@ app.post('/api/scrape', async (req, res) => {
   let textResult = '';
   let metaResult = {};
 
+  const SCRAPFLY_API_KEY = process.env.SCRAPFLY_API_KEY;
+  if (!SCRAPFLY_API_KEY) {
+    return res.status(500).json({ error: 'SCRAPFLY_API_KEY não configurada na VPS.' });
+  }
+
   try {
-    const browser = await chromium.launch({
-      headless: true,
-      args: ['--disable-dev-shm-usage', '--no-sandbox', '--disable-gpu', '--single-process', '--disable-blink-features=AutomationControlled']
-    });
+    console.log(`[API] Solicitando HTML ao Scrapfly...`);
+    const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_API_KEY}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
+    const response = await axios.get(scrapflyUrl, { timeout: 60000 });
     
-    const context = await browser.newContext();
-    const page = await context.newPage();
-    
-    try {
-      // Engana proteções bot comuns injetando webdriver false
-      await page.addInitScript(() => {
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-      });
-
-      // Timeout total de 45 segundos para a navegação, apenas aguardando domcontentloaded para driblar lentidão
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      
-      await page.waitForTimeout(4000); // Aguarda o render inicial (SPA e JS)
-
-      htmlResult = await page.evaluate(() => document.documentElement.outerHTML);
-      textResult = await page.evaluate(() => document.body.innerText);
-
-      try {
-        metaResult.title = await page.title();
-        metaResult.ogImage = await page.evaluate(() => document.querySelector('meta[property="og:image"]')?.content);
-      } catch(e) {}
-      
-    } catch(e) {
-      console.error("Erro interno ao navegar:", e);
-    } finally {
-      await browser.close();
-    }
-
+    htmlResult = response.data.result.content;
     if (!htmlResult) {
-      throw new Error("Falha ao raspar a página. Bloqueio ou Timeout.");
+      throw new Error("Falha ao raspar a página. Retorno vazio do Scrapfly.");
     }
+
+    // Parsing do HTML para texto limpo usando Regex se Cheerio falhar, mas vamos tentar Cheerio primeiro se disponível, ou regex.
+    // Usando cheerio para limpeza segura do texto
+    const cheerio = require('cheerio');
+    const $ = cheerio.load(htmlResult);
+    $('script, style, noscript, svg, img').remove();
+    textResult = $('body').text().replace(/\s+/g, ' ').trim();
+
+    metaResult.title = $('title').text() || '';
+    metaResult.ogImage = $('meta[property="og:image"]').attr('content') || '';
+
     
     console.log(`[API] Raspagem concluída. Acionando a IA para extratação...`);
     const extracted = await extractWithGroq(textResult) || {};
