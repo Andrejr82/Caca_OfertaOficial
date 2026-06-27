@@ -1,4 +1,6 @@
-const { chromium } = require('playwright');
+const { chromium } = require('playwright-extra');
+const stealthPlugin = require('puppeteer-extra-plugin-stealth');
+chromium.use(stealthPlugin());
 require('dotenv').config({ path: '.env.local' });
 
 (async () => {
@@ -29,7 +31,7 @@ require('dotenv').config({ path: '.env.local' });
     }
   });
 
-  console.log('Navigating to Mercado Livre...');
+  console.log('Navigating to Mercado Livre with Stealth...');
   const response = await page.goto('https://www.mercadolivre.com.br/ofertas?q=Azeite%20Gallo');
   console.log('Response Status:', response ? response.status() : 'No response');
   
@@ -40,11 +42,21 @@ require('dotenv').config({ path: '.env.local' });
     const bodyTextLength = document.body ? document.body.innerText.length : 0;
     const linksCount = document.querySelectorAll('a').length;
     const divsCount = document.querySelectorAll('div').length;
-    
-    // Check if the word "R$" is present anywhere on the page
     const hasRs = document.body ? document.body.innerText.includes('R$') : false;
     
-    return { title, bodyTextLength, linksCount, divsCount, hasRs };
+    // Test the selector from crawleeExtract
+    const items = Array.from(document.querySelectorAll('a, div.ui-search-result, div[data-component-type="s-search-result"]'));
+    let resultsCount = 0;
+    let matchingTexts = [];
+    for (let el of items) {
+      const text = el.innerText || '';
+      if (text.includes('R$')) {
+        resultsCount++;
+        if (matchingTexts.length < 5) matchingTexts.push(text.substring(0, 100));
+      }
+    }
+
+    return { title, bodyTextLength, linksCount, divsCount, hasRs, resultsCount, matchingTexts };
   });
 
   console.log('Page Details:', pageDetails);
