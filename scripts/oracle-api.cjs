@@ -12,38 +12,6 @@ const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
-// Função para chamar o Groq Llama-3 e extrair os dados
-async function extractWithGroq(text) {
-  if (!GROQ_API_KEY) return null;
-  const prompt = `Você é um extrator JSON. Leia o texto abaixo (extraído de um site de e-commerce) e extraia:
-1. title: O nome do produto
-2. price: O preço atual (apenas o número, ex: 159.90, sem R$)
-3. image: A URL da imagem principal do produto (se encontrar)
-
-Retorne APENAS um JSON válido, sem markdown. Se não encontrar o preço, mande null.
-Exemplo de Saída: {"title": "Nome", "price": 10.00, "image": "http..."}
-
-Texto extraído do site:
-${text.slice(0, 8000)}`;
-
-  try {
-    const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-      model: 'llama-3.1-8b-instant', // Usando um modelo mais novo e rápido
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      response_format: { type: 'json_object' }
-    }, {
-      headers: { 'Authorization': `Bearer ${GROQ_API_KEY}` },
-      timeout: 10000 // Timeout pro groq não travar a req
-    });
-
-    const content = response.data.choices[0].message.content;
-    return JSON.parse(content);
-  } catch (err) {
-    console.error("Erro no Groq:", err.message);
-    return null;
-  }
-}
 
 app.post('/api/scrape', async (req, res) => {
   const { url, token } = req.body;
@@ -68,7 +36,6 @@ app.post('/api/scrape', async (req, res) => {
     return res.status(500).json({ error: 'Nenhuma SCRAPFLY_API_KEY configurada na VPS.' });
   }
 
-  // Seleciona uma chave aleatória da lista (Roleta de Chaves)
   const SCRAPFLY_API_KEY = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
 
   try {
@@ -82,8 +49,6 @@ app.post('/api/scrape', async (req, res) => {
       throw new Error("Falha ao raspar a página. Retorno vazio do Scrapfly.");
     }
 
-    // Parsing do HTML para texto limpo usando Regex se Cheerio falhar, mas vamos tentar Cheerio primeiro se disponível, ou regex.
-    // Usando cheerio para limpeza segura do texto
     const cheerio = require('cheerio');
     const $ = cheerio.load(htmlResult);
     $('script, style, noscript, svg, img').remove();
@@ -92,10 +57,7 @@ app.post('/api/scrape', async (req, res) => {
     metaResult.title = $('title').text() || '';
     metaResult.ogImage = $('meta[property="og:image"]').attr('content') || '';
 
-    
-    console.log(`[API] Raspagem concluída. Acionando a IA para extratação...`);
-    const extracted = await extractWithGroq(textResult) || {};
-    console.log(`[API] Extraído com sucesso. Preço: ${extracted.price}`);
+    console.log(`[API] Raspagem concluída. Retornando HTML para extração no Vercel...`);
 
     return res.json({
       success: true,
@@ -103,9 +65,9 @@ app.post('/api/scrape', async (req, res) => {
         html: htmlResult,
         text: textResult,
         extract: {
-          title: extracted.title || null,
-          price: extracted.price || null,
-          image: extracted.image || null
+          title: null,
+          price: null,
+          image: null
         },
         metadata: metaResult
       }
