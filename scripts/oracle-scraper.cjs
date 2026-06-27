@@ -47,7 +47,7 @@ const OFFERS_PER_STORE = 15; // Reduzido para evitar erro 413 no Groq
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
-const APPROVAL_SCORE   = 6.0; 
+const APPROVAL_SCORE   = 5.5; 
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
@@ -313,15 +313,24 @@ function calculateScore(product) {
   let discountScore = 0;
   if (oldPrice > price) {
     const pct = (oldPrice - price) / oldPrice;
-    if (pct >= 0.05 && pct <= 0.80) discountScore = Math.min((pct / 0.5) * 10, 10);
-    else if (pct > 0.80) discountScore = 2;
+    
+    // Bônus High-Ticket: Descontos em produtos caros valem MUITO mais
+    if (price >= 1500 && pct >= 0.10) {
+      discountScore = 10; // iPhone com 10% off é nota 10 em desconto
+    } else if (pct >= 0.05 && pct <= 0.80) {
+      discountScore = Math.min((pct / 0.5) * 10, 10);
+    } else if (pct > 0.80) {
+      discountScore = 2; // Penalidade de falso desconto (Black Fraude)
+    }
   }
 
-  let priceScore = price <= 100 ? 10 : (price <= 300 ? 8 : (price <= 700 ? 5 : 2));
-  let impulseScore = price <= 80 ? 10 : (price <= 150 ? 8 : (price <= 300 ? 5 : 2));
+  // Preço Absoluto: Produtos abaixo de R$ 90 ganham nota máxima, independentemente de desconto
+  let priceScore = price <= 90 ? 10 : (price <= 300 ? 8 : (price <= 700 ? 5 : 2));
+  let impulseScore = price <= 90 ? 10 : (price <= 150 ? 8 : (price <= 300 ? 5 : 2));
+  
   let ratingScore = product.rating ? (product.rating / 5) * 10 : 5;
 
-  return Number(((discountScore * 0.40) + (priceScore * 0.25) + (impulseScore * 0.20) + (ratingScore * 0.15)).toFixed(2));
+  return Number(((discountScore * 0.35) + (priceScore * 0.30) + (impulseScore * 0.20) + (ratingScore * 0.15)).toFixed(2));
 }
 
 // ─── Lógica IA: Copywriting via Groq ──────────────────────────
