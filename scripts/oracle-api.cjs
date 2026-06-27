@@ -61,14 +61,20 @@ app.post('/api/scrape', async (req, res) => {
   let textResult = '';
   let metaResult = {};
 
-  const SCRAPFLY_API_KEY = process.env.SCRAPFLY_API_KEY;
-  if (!SCRAPFLY_API_KEY) {
-    return res.status(500).json({ error: 'SCRAPFLY_API_KEY não configurada na VPS.' });
+  const envKeys = process.env.SCRAPFLY_API_KEYS || process.env.SCRAPFLY_API_KEY || '';
+  const SCRAPFLY_KEYS = envKeys.split(',').map(k => k.trim()).filter(Boolean);
+
+  if (SCRAPFLY_KEYS.length === 0) {
+    return res.status(500).json({ error: 'Nenhuma SCRAPFLY_API_KEY configurada na VPS.' });
   }
 
+  // Seleciona uma chave aleatória da lista (Roleta de Chaves)
+  const SCRAPFLY_API_KEY = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
+
   try {
-    console.log(`[API] Solicitando HTML ao Scrapfly...`);
+    console.log(`[API] Solicitando HTML ao Scrapfly usando chave terminada em ...${SCRAPFLY_API_KEY.slice(-4)}`);
     const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_API_KEY}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
+
     const response = await axios.get(scrapflyUrl, { timeout: 60000 });
     
     htmlResult = response.data.result.content;
