@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { getPostHistory } from "@/lib/offers/queries";
+import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
 import { Instagram } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -63,19 +64,7 @@ export default async function InstagramDashboardPage() {
             {draftPosts.length}
           </span>
         </div>
-        {draftPosts.length > 0 ? (
-          <div className="grid gap-4">
-            {draftPosts.map((post) => (
-              <InstagramPostApprovalCard key={post.id} post={post} />
-            ))}
-          </div>
-        ) : (
-          <div className="glass-card p-6 text-center">
-            <p className="text-sm text-white/30">
-              Nenhum post no Instagram aguardando aprovação. Use o Robô de Tendências no Dashboard ou cadastre uma nova oferta.
-            </p>
-          </div>
-        )}
+        <BatchApprovalList posts={draftPosts as any} channel="instagram" />
       </section>
 
       {/* Post History */}

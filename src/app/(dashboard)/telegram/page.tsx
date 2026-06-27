@@ -3,6 +3,7 @@ import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions
 import { officialBrand, hasTelegramEnv } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
+import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
 import { Bot, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -74,19 +75,7 @@ export default async function TelegramDashboardPage() {
           </span>
         </div>
         
-        {draftPosts.length > 0 ? (
-          <div className="grid gap-4">
-            {draftPosts.map((post) => (
-              <TelegramPostApprovalCard key={post.id} post={post} />
-            ))}
-          </div>
-        ) : (
-          <div className="glass-card p-6 text-center">
-            <p className="text-sm text-white/30">
-              Nenhuma mensagem no Telegram aguardando aprovação. Use o Robô de Tendências no Dashboard.
-            </p>
-          </div>
-        )}
+        <BatchApprovalList posts={draftPosts as any} channel="telegram" />
       </section>
 
       {/* Post History */}

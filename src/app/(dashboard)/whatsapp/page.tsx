@@ -3,6 +3,7 @@ import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions
 import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
+import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
 import { MessageCircle, AlertTriangle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -66,19 +67,7 @@ export default async function WhatsappDashboardPage() {
           </span>
         </div>
         
-        {draftPosts.length > 0 ? (
-          <div className="grid gap-4">
-            {draftPosts.map((post) => (
-              <WhatsappPostApprovalCard key={post.id} post={post} />
-            ))}
-          </div>
-        ) : (
-          <div className="glass-card p-6 text-center">
-            <p className="text-sm text-white/30">
-              Nenhuma mensagem de WhatsApp aguardando aprovação. Use o Robô de Tendências no Dashboard.
-            </p>
-          </div>
-        )}
+        <BatchApprovalList posts={draftPosts as any} channel="whatsapp" />
       </section>
 
       {/* Post History */}
