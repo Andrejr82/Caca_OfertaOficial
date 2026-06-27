@@ -43,7 +43,7 @@ const supabase = createClient(
 process.env.CRAWLEE_MEMORY_MBYTES = '3072';
 const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
-const OFFERS_PER_STORE = 20;
+const OFFERS_PER_STORE = 15; // Reduzido para evitar erro 413 no Groq
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
@@ -114,6 +114,9 @@ async function crawleeExtract(url, limit, storeName) {
         maxClientOverloadedRatio: 999
       }
     },
+    browserPoolOptions: {
+      useFingerprints: true, // Camuflagem de SO e Navegador dinâmico
+    },
     launchContext: {
       launcher: chromium,
       launchOptions: {
@@ -150,7 +153,13 @@ async function crawleeExtract(url, limit, storeName) {
         Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
       });
 
-      await page.waitForTimeout(6000); 
+      // Simulação de Comportamento Humano (Scroll e pausas randômicas)
+      const scrollSteps = Math.floor(Math.random() * 5) + 3; // 3 a 7 scrolls
+      for (let i = 0; i < scrollSteps; i++) {
+        await page.mouse.wheel(0, Math.floor(Math.random() * 600) + 200);
+        await page.waitForTimeout(Math.floor(Math.random() * 800) + 500);
+      }
+      await page.waitForTimeout(2000);
 
       rawExtractedData = await page.evaluate(() => {
         const items = Array.from(document.querySelectorAll('a, div.ui-search-result, div[data-component-type="s-search-result"]'));
@@ -176,7 +185,7 @@ async function crawleeExtract(url, limit, storeName) {
           const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
           if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
         }
-        return unique.slice(0, 20).join('\n');
+        return unique.slice(0, 15).join('\n'); // Reduzido de 20 para 15 para não estourar o Groq 413
       });
     }
   });
