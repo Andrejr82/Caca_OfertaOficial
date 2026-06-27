@@ -617,7 +617,7 @@ async function runScrapingCycle() {
     });
   } catch(e){}
 
-  console.log(`\n🏁 Ciclo concluído! IA gerou ${aiProcessed} posts. Próximo ciclo em 4h.\n`);
+  console.log(`\n🏁 Ciclo concluído em ${duration}s! IA gerou ${aiProcessed} posts. Próximo ciclo em 4h.\n`);
 }
 
 // ─── Inicialização ────────────────────────────────────────────
