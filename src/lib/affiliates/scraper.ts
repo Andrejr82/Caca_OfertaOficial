@@ -1191,145 +1191,114 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
   return scrapeMercadoLivreProductDetails(productUrl);
 }
 
+import * as cheerio from 'cheerio';
+
 export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon...");
+  console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon (Modo Cheerio Parser)...");
   try {
-
-
-    const fetchLimit = limit * 4;
-    // URLs de descoberta Amazon: Deals (principal) + Movers & Shakers + Best Sellers
-    // NOTA: Amazon tem anti-bot agressivo. Falhas são esperadas; o sistema tem fallback interno.
     const urls = category
       ? [`https://www.amazon.com.br/s?k=${encodeURIComponent(category + " oferta")}`]
       : [
           "https://www.amazon.com.br/deals",
-          "https://www.amazon.com.br/gp/movers-and-shakers/electronics", // Trending: crescimento rápido
-          "https://www.amazon.com.br/gp/bestsellers/electronics"          // Best Sellers Eletrônicos
+          "https://www.amazon.com.br/gp/movers-and-shakers/electronics",
+          "https://www.amazon.com.br/gp/bestsellers/electronics"
         ];
 
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. 
-Critérios rígidos:
-1. O produto DEVE ter um preço antigo riscado ou um selo percentual de desconto.
-2. Para a IMAGEM (image), extraia a URL de alta resolução. Na Amazon, a imagem real frequentemente está no atributo 'data-a-dynamic-image', 'data-src' ou 'srcset'. NUNCA extraia placeholders como imagens de 1px ou cinzas.
-3. Para o SELO (discount_badge), extraia EXATAMENTE o que está escrito no site (ex: '30% OFF'). NUNCA invente.
-4. Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal.
-Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge, rating (se houver) e category.`;
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
 
-    // Limitar a apenas 1 URL para evitar 504 Timeout na Vercel (se não achar na primeira, paciência)
-    const urlsToTry = urls.slice(0, 1);
+    for (const url of urls) {
+      console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL: ${url}`);
+      try {
+        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+          method: "POST",
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, token: oracleKey }),
+          signal: AbortSignal.timeout(65000)
+        });
 
-    for (const url of urlsToTry) {
-      let retries = 1; // Sem retries longos para não dar 504
-      let delay = 1500;
-      let fcData = null;
+        if (!oracleRes.ok) {
+          console.warn(`[SCRAPER][AMAZON][TRENDS] Oracle API retornou status ${oracleRes.status} para ${url}`);
+          continue;
+        }
 
-      for (let attempt = 1; attempt <= retries; attempt++) {
-        try {
-          console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL (Tentativa ${attempt}): ${url}`);
-          const oracleKey = process.env.ORACLE_API_KEY;
-          if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
+        const oracleData = await oracleRes.json();
+        if (!oracleData.success || (!oracleData.data?.html)) {
+          console.warn(`[SCRAPER][AMAZON][TRENDS] Sem HTML extraído de ${url}.`);
+          continue;
+        }
 
-          const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
-            method: "POST",
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ url, token: oracleKey }),
-            signal: AbortSignal.timeout(65000)
-          });
+        const html = oracleData.data.html;
+        const results: ScrapedProduct[] = [];
         
-          if (!oracleRes.ok) {
-            console.warn(`[SCRAPER][AMAZON][TRENDS] Oracle API retornou status ${oracleRes.status} para ${url}`);
-            if (oracleRes.status === 408 || oracleRes.status === 401 || oracleRes.status === 403 || oracleRes.status === 500 || oracleRes.status === 429) {
-              throw new Error(`HTTP Status ${oracleRes.status}`);
-            }
-            break; // Se não for um erro de antibot/timeout/limite, interrompe os retries para esta URL
-          }
+        // Parse HTML com Cheerio
+        const $ = cheerio.load(html);
+        const items = $('div[data-asin]');
 
-          const oracleData = await oracleRes.json();
-          if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
-             throw new Error("Sem texto extraído da Amazon");
-          }
-
-          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-
-          const schemaObj = {
-            type: "object",
-            properties: {
-              products: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    url: { type: "string" },
-                    image: { type: "string" },
-                    price: { type: "number" },
-                    old_price: { type: "number", nullable: true },
-                    discount_badge: { type: "string", nullable: true },
-                    category: { type: "string" }
-                  },
-                  required: ["title", "url", "price"]
-                }
-              }
-            },
-            required: ["products"]
-          };
-
-          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
-          fcData = { success: true, data: { extract: JSON.parse(rawResult) } };
+        items.each((i, el) => {
+          if (results.length >= limit) return false; // Break loop
           
-          console.log(`[SCRAPER][AMAZON][TRENDS] Oracle API + IA success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);
-          break;
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : String(error);
-          console.warn(`[SCRAPER][AMAZON][TRENDS] Tentativa ${attempt} falhou: ${msg}`);
-          if (attempt === retries) break;
-          await new Promise(resolve => setTimeout(resolve, delay));
-          delay *= 2;
+          const asin = $(el).attr('data-asin');
+          if (!asin || asin.trim() === '') return;
+          
+          // Title
+          let title = $(el).find('h2 span').text().trim() || 
+                      $(el).find('.a-size-base-plus').text().trim() ||
+                      $(el).find('.a-size-medium').text().trim() ||
+                      $(el).find('.p13n-sc-truncate').text().trim() ||
+                      $(el).find('img').attr('alt');
+                      
+          // Prices
+          const priceText = $(el).find('.a-price .a-offscreen').first().text();
+          let currentPrice = 0;
+          if (priceText && priceText.includes('R$')) {
+              currentPrice = parseFloat(priceText.replace('R$', '').replace(/\\./g, '').replace(',', '.').trim());
+          }
+
+          const oldPriceText = $(el).find('.a-price.a-text-price .a-offscreen').text() || $(el).find('.a-text-strike').text();
+          let oldPrice: number | null = null;
+          if (oldPriceText && oldPriceText.includes('R$')) {
+              oldPrice = parseFloat(oldPriceText.replace('R$', '').replace(/\\./g, '').replace(',', '.').trim());
+          }
+          
+          // Image
+          let image = $(el).find('img.s-image').attr('src') || $(el).find('img.a-dynamic-image').attr('src') || $(el).find('img').attr('src');
+          
+          // Link
+          let link = $(el).find('h2 a').attr('href') || $(el).find('a.a-link-normal').attr('href');
+          if (link && !link.startsWith('http')) link = 'https://www.amazon.com.br' + link;
+
+          if (title && link && currentPrice > 0 && oldPrice && oldPrice > currentPrice) {
+             const { category: cat, subcategory: sub } = normalizeCategory(category || title);
+             results.push({
+               product_name: title,
+               original_url: link,
+               image_url: enhanceImageUrl(image || null),
+               current_price: currentPrice,
+               old_price: oldPrice,
+               discount_badge: null,
+               rating: null,
+               category: cat,
+               subcategory: sub
+             });
+          }
+        });
+
+        if (results.length > 0) {
+          console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso (Cheerio Mode): ${results.length} tendências encontradas via ${url}.`);
+          return results;
         }
+
+      } catch (e) {
+        console.warn(`[SCRAPER][AMAZON][TRENDS] Falha na url ${url}: ${e}`);
       }
-
-      if (!fcData || !fcData.success || !fcData.data?.extract?.products?.length) {
-        console.warn(`[SCRAPER][AMAZON][TRENDS] Sem produtos extraídos de ${url}. Tentando próxima URL...`);
-        continue;
-      }
-
-        const validProducts = fcData.data.extract.products
-          .filter((p: any) => {
-            const titleLower = (p.title || "").toLowerCase();
-            return p.title && p.price > 0 &&
-              !titleLower.includes("cachorros da amazon") &&
-              !titleLower.includes("página não encontrada") &&
-              !titleLower.includes("sorry") &&
-              ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0));
-          });
-
-        const products = validProducts.slice(0, limit)
-          .map((p: any) => {
-            const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
-            return {
-              product_name: p.title,
-              original_url: p.url?.startsWith("http") ? p.url : `https://www.amazon.com.br${p.url || ""}`,
-              image_url: enhanceImageUrl(p.image || null),
-              current_price: p.price,
-              old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-              discount_badge: p.discount_badge || null,
-              rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
-              category: cat,
-              subcategory: sub
-            };
-          });
-
-        if (products.length > 0) {
-          console.log(`[SCRAPER][AMAZON][TRENDS] Sucesso: ${products.length} tendências encontradas via ${url}.`);
-          return products;
-        }
     }
 
-    console.warn("[SCRAPER][AMAZON][TRENDS] Nenhuma URL retornou produtos.");
+    console.warn("[SCRAPER][AMAZON][TRENDS] Nenhuma URL retornou produtos via Cheerio.");
     return [];
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[SCRAPER][AMAZON][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    console.error(`[SCRAPER][AMAZON][TRENDS] Falha global no extrator Amazon: ${errorMsg}`);
     return [];
   }
 }
