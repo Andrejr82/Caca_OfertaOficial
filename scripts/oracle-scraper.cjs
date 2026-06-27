@@ -62,21 +62,17 @@ const GOLDEN_QUERIES = {
     'Bebês': ['Fralda Pampers', 'Lenço Umedecido', 'Pomada Assadura', 'Fralda Huggies', 'Mamadeira Avent', 'Leite Aptamil', 'Cadeira para Auto'],
     'Beleza': ['Kit Skincare', 'Protetor Solar', 'Kit Shampoo', 'Perfume Importado', 'Creme Cerave', 'Sérum Principia', 'Máscara de Cílios', 'Óleo Braé'],
     'Ferramentas': ['Furadeira', 'Jogo de Ferramentas', 'Kit Chaves', 'Parafusadeira Bosch', 'Serra Tico-Tico', 'Caixa de Ferramentas'],
-    'Casa': ['Jogo de Panelas', 'Mop Giratório', 'Fritadeira Air Fryer', 'Ventilador Arno', 'Travesseiro Emma', 'Kit Toalhas Banhão']
+    'Casa': ['Jogo de Panelas', 'Mop Giratório', 'Fritadeira Air Fryer', 'Ventilador Arno', 'Travesseiro Emma', 'Kit Toalhas Banhão'],
+    'Esportes': ['Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira', 'Tênis Puma', 'Camisa de Time', 'Bola de Futebol', 'Bolsa Academia', 'Calça Jogger']
   },
   'Amazon': {
     'Tecnologia': ['iPhone', 'Notebook', 'Fone de Ouvido Bluetooth', 'SSD', 'Monitor', 'Kindle', 'Alexa Echo Dot', 'Teclado Mecânico', 'Mouse Logitech', 'iPad', 'Apple Watch'],
     'Beleza': ['Perfume Importado', 'Wella Profissional', 'Cerave', 'La Roche-Posay', 'Loreal Elseve', 'Protetor Solar Vichy', 'Secador Taiff'],
-    'Suplementos': ['Whey Protein', 'Creatina', 'Pré-Treino', 'Barra de Proteína', 'Ômega 3', 'Colágeno', 'Multivitamínico'],
+    'Suplementos': ['Whey Protein', 'Creatina Max Titanium', 'Pré-Treino', 'Barra de Proteína', 'Ômega 3', 'Colágeno', 'BCAA', 'Hipercalórico'],
     'Bebês': ['Fraldas', 'Cadeirinha para Auto', 'Carrinho de Bebê', 'Babá Eletrônica', 'Copo de Transição Munchkin'],
     'Casa': ['Cafeteira Nespresso', 'Aspirador de Pó Vertical', 'Robô Aspirador', 'Pipoqueira Elétrica', 'Filtro de Água Consul'],
-    'Livros': ['Livro Hábitos Atômicos', 'Livro É Assim Que Acaba', 'Livro Psicologia Financeira', 'Box Harry Potter']
-  },
-  'Netshoes': {
-    'Calçados': ['Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira', 'Tênis Asics', 'Tênis Puma', 'Tênis Vans', 'Bota Oakley'],
-    'Roupas': ['Legging Academia', 'Top Fitness', 'Moletom', 'Jaqueta Corta Vento', 'Camisa de Time', 'Bermuda Tactel', 'Calça Jogger', 'Meia Nike'],
-    'Suplementos': ['Whey Protein', 'Pré-treino', 'Creatina Max Titanium', 'BCAA', 'Hipercalórico'],
-    'Acessórios': ['Mochila Nike', 'Bolsa Academia', 'Squeeze Térmico', 'Bola de Futebol', 'Caneleira']
+    'Livros': ['Livro Hábitos Atômicos', 'Livro É Assim Que Acaba', 'Livro Psicologia Financeira', 'Box Harry Potter'],
+    'Moda': ['Mochila Nike', 'Tênis Asics', 'Tênis Vans', 'Jaqueta Corta Vento', 'Squeeze Térmico']
   },
   'Magalu': {
     'Eletrodomésticos': ['Air Fryer', 'Robô Aspirador', 'Cafeteira', 'Micro-ondas', 'Geladeira', 'Máquina de Lavar', 'Fogão 4 Bocas', 'Purificador de Água'],
@@ -595,7 +591,7 @@ async function runScrapingCycle() {
   const startTime = Date.now();
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER IN-HOUSE — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
-  const stores = ['Mercado Livre', 'Amazon', 'Magalu', 'Netshoes'];
+  const stores = ['Mercado Livre', 'Amazon', 'Magalu'];
   let allCandidates = [];
 
   for (const store of stores) {
