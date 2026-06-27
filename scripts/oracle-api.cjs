@@ -40,7 +40,7 @@ app.post('/api/scrape', async (req, res) => {
 
   try {
     console.log(`[API] Solicitando HTML ao Scrapfly usando chave terminada em ...${SCRAPFLY_API_KEY.slice(-4)}`);
-    const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_API_KEY}&url=${encodeURIComponent(url)}&asp=true&render_js=true&proxy_pool=public_residential_pool&country=br`;
+    const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_API_KEY}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
 
     const response = await axios.get(scrapflyUrl, { timeout: 60000 });
     
