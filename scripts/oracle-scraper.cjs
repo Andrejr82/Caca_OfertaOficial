@@ -230,10 +230,10 @@ Schema JSON Obrigatório:
         response_format: { type: "json_object" },
         messages: [
           { role: 'system', content: prompt },
-          { role: 'user', content: rawExtractedData.substring(0, 6000) }
+          { role: 'user', content: rawExtractedData.substring(0, 4000) }
         ],
         temperature: 0.1,
-        max_tokens: 2000
+        max_tokens: 1000
       }, {
         headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
       });
