@@ -74,7 +74,16 @@ export async function callLLM(
   }
 
   let groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
-  console.log(`[AI Service] ⚡ Direcionando para Groq (Motor Principal) com modelo: ${groqModel}`);
+  
+  // Proteção contra Rate Limit / 413 Payload Too Large
+  // O Llama 3.3 70b tem limite de TPM baixo no tier gratuito da Groq (12k). 
+  // Para HTMLs gigantes do scraper, usamos o 3.1 8B que tem contexto de 128k e maior limite.
+  if (userPrompt.length > 15000) {
+    groqModel = "llama-3.1-8b-instant";
+    console.log(`[AI Service] ⚠️ Prompt gigante detectado (${userPrompt.length} chars). Forçando modelo ${groqModel} para evitar Rate Limit e suportar o payload.`);
+  } else {
+    console.log(`[AI Service] ⚡ Direcionando para Groq (Motor Principal) com modelo: ${groqModel}`);
+  }
 
   // Forçar a palavra JSON no prompt e injetar o schema para garantir a estrutura correta (ex: { "products": [...] })
   const schemaStr = jsonSchemaObj ? JSON.stringify(jsonSchemaObj) : "";
