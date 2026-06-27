@@ -165,36 +165,41 @@ app.post('/send', async (req, res) => {
                 if (!imgRes.ok) throw new Error(`Falha ao baixar imagem: ${imgRes.statusText}`);
                 const arrayBuffer = await imgRes.arrayBuffer();
                 const buffer = Buffer.from(arrayBuffer);
-                
-                console.log('  → Convertendo imagem para thumbnail de Link Preview (Alta Resolução - 1200x630)...');
+                console.log('  → Convertendo imagem para thumbnail em alta resolução...');
                 const sharp = require('sharp');
-                // Compressão AGRESSIVA para garantir que o thumbnail fique abaixo de 64KB (limite do WhatsApp para cards grandes)
+                // Mantém alta qualidade mas dentro do limite de thumbnail
                 const imageBuffer = await sharp(buffer)
-                    .resize({ width: 700, height: 400, fit: 'contain', background: { r: 255, g: 255, b: 255, alpha: 1 } })
-                    .jpeg({ quality: 50, force: true })
+                    .resize({ width: 800, withoutEnlargement: true })
+                    .jpeg({ quality: 75, force: true })
                     .toBuffer();
 
                 console.log(`  → Tamanho do Thumbnail: ${Math.round(imageBuffer.length / 1024)} KB`);
-                console.log('  → Enviando texto com Link Preview Forçado (Card Grande)...');
+                console.log('  → Enviando com renderLargerThumbnail (Plano B)...');
                 
-                // Extrai o primeiro link do texto
-                const urlMatch = text.match(/https?:\/\/[^\s]+/g);
-                const firstUrl = urlMatch && urlMatch.length > 0 ? urlMatch[urlMatch.length - 1] : 'https://caca-oferta-oficial.vercel.app';
+                // Extrai o primeiro link do texto para colocar no banner clicável
+                const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
+                const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
                 
-                let extractedTitle = text.split('\n')[0].replace(/[\*🚨_~]/g, '').trim();
-                if (extractedTitle.length > 60) extractedTitle = extractedTitle.substring(0, 57) + '...';
-
                 result = await sock.sendMessage(jid, {
                     text: text,
-                    linkPreview: {
-                        'canonical-url': firstUrl,
-                        'matched-text': firstUrl,
-                        title: extractedTitle,
-                        description: 'Acesse a oferta completa!',
-                        jpegThumbnail: imageBuffer,
-                        previewType: 'PHOTO' // Requer thumbnail < 64KB para funcionar
+                    contextInfo: {
+                        externalAdReply: {
+                            title: "Caça Ofertas",
+                            body: "Ver oferta completa na loja",
+                            mediaType: 1, // 1 for image
+                            thumbnail: imageBuffer,
+                            sourceUrl: clickUrl,
+                            renderLargerThumbnail: true
+                        }
                     }
                 });
+                
+                // --- TESTE DE PERMISSÃO (MENSAGEM DE TEXTO SIMPLES) ---
+                console.log('  → Enviando também um texto simples para garantir entrega...');
+                await sock.sendMessage(jid, {
+                    text: "🔔 [Mensagem do Sistema] O robô tem permissão para postar neste canal! (Ignorar)"
+                });
+                
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
                 throw err;
