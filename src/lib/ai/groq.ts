@@ -73,7 +73,7 @@ export async function callLLM(
     throw new Error("Nenhuma API Key configurada no ambiente.");
   }
 
-  let groqModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+  let groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   console.log(`[AI Service] ⚡ Direcionando para Groq (Motor Principal) com modelo: ${groqModel}`);
 
   // Forçar a palavra JSON no prompt e injetar o schema para garantir a estrutura correta (ex: { "products": [...] })
