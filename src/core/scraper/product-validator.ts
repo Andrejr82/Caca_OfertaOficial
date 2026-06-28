@@ -49,6 +49,10 @@ export function validateProduct(product: any, source: string): ValidationResult 
   }
 
   // 3. Validação de Imagem
+  if (!image || image === "null" || image.length < 5) {
+    return { valid: false, confidence: 0, rejectReason: "SEM_IMAGEM" };
+  }
+  
   if (isBlacklistedImage(image)) {
     return { valid: false, confidence: 10, rejectReason: "BLACKLIST_IMAGE" };
   }
