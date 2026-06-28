@@ -59,14 +59,14 @@ const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
 // ─── Sistema de Baldinhos (Golden Queries) ────────────────────
 const GOLDEN_QUERIES = {
-  'Mercado Livre': {
-    'Supermercado': ['Sabão em pó Omo', 'Amaciante Downy', 'Papel Higiênico Neve', 'Leite Ninho', 'Cápsulas de Café', 'Cerveja Heineken', 'Azeite Gallo', 'Café Pilão', 'Leite Condensado Moça', 'Desodorante Rexona', 'Pasta de Amendoim'],
-    'Bebês': ['Fralda Pampers', 'Lenço Umedecido', 'Pomada Assadura', 'Fralda Huggies', 'Mamadeira Avent', 'Leite Aptamil', 'Cadeira para Auto'],
-    'Beleza': ['Kit Skincare', 'Protetor Solar', 'Kit Shampoo', 'Perfume Importado', 'Creme Cerave', 'Sérum Principia', 'Máscara de Cílios', 'Óleo Braé'],
-    'Ferramentas': ['Furadeira', 'Jogo de Ferramentas', 'Kit Chaves', 'Parafusadeira Bosch', 'Serra Tico-Tico', 'Caixa de Ferramentas'],
-    'Casa': ['Jogo de Panelas', 'Mop Giratório', 'Fritadeira Air Fryer', 'Ventilador Arno', 'Travesseiro Emma', 'Kit Toalhas Banhão'],
-    'Esportes': ['Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira', 'Tênis Puma', 'Camisa de Time', 'Bola de Futebol', 'Bolsa Academia', 'Calça Jogger']
-  },
+  // 'Mercado Livre': {
+  //   'Supermercado': ['Sabão em pó Omo', 'Amaciante Downy', 'Papel Higiênico Neve', 'Leite Ninho', 'Cápsulas de Café', 'Cerveja Heineken', 'Azeite Gallo', 'Café Pilão', 'Leite Condensado Moça', 'Desodorante Rexona', 'Pasta de Amendoim'],
+  //   'Bebês': ['Fralda Pampers', 'Lenço Umedecido', 'Pomada Assadura', 'Fralda Huggies', 'Mamadeira Avent', 'Leite Aptamil', 'Cadeira para Auto'],
+  //   'Beleza': ['Kit Skincare', 'Protetor Solar', 'Kit Shampoo', 'Perfume Importado', 'Creme Cerave', 'Sérum Principia', 'Máscara de Cílios', 'Óleo Braé'],
+  //   'Ferramentas': ['Furadeira', 'Jogo de Ferramentas', 'Kit Chaves', 'Parafusadeira Bosch', 'Serra Tico-Tico', 'Caixa de Ferramentas'],
+  //   'Casa': ['Jogo de Panelas', 'Mop Giratório', 'Fritadeira Air Fryer', 'Ventilador Arno', 'Travesseiro Emma', 'Kit Toalhas Banhão'],
+  //   'Esportes': ['Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira', 'Tênis Puma', 'Camisa de Time', 'Bola de Futebol', 'Bolsa Academia', 'Calça Jogger']
+  // },
   'Amazon': {
     'Tecnologia': ['iPhone', 'Notebook', 'Fone de Ouvido Bluetooth', 'SSD', 'Monitor', 'Kindle', 'Alexa Echo Dot', 'Teclado Mecânico', 'Mouse Logitech', 'iPad', 'Apple Watch'],
     'Beleza': ['Perfume Importado', 'Wella Profissional', 'Cerave', 'La Roche-Posay', 'Loreal Elseve', 'Protetor Solar Vichy', 'Secador Taiff'],
