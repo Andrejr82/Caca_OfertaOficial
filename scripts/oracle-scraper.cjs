@@ -113,7 +113,17 @@ async function crawleeExtract(url, limit, storeName) {
   let rawExtractedData = '';
   let evalResult = { text: '', found: 0, sent: 0 };
 
-  const proxyConfiguration = undefined;
+  const SCRAPFLY_KEYS = (process.env.SCRAPFLY_API_KEYS || "").split(",").map(k => k.trim()).filter(k => k);
+  let proxyConfiguration = undefined;
+
+  if (storeName === 'Mercado Livre' && SCRAPFLY_KEYS.length > 0) {
+    const key = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
+    // Proxy Scrapfly: username = API_KEY, password = asp=true&country=br
+    proxyConfiguration = new ProxyConfiguration({
+      proxyUrls: [`http://${key}:asp=true&country=br@proxy.scrapfly.io:8080`]
+    });
+    console.log(`  [Scrapfly] Utilizando proxy na loja Mercado Livre`);
+  }
 
   const crawler = new PlaywrightCrawler({
     proxyConfiguration,
