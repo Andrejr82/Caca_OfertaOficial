@@ -126,9 +126,10 @@ async function crawleeExtract(url, limit, storeName) {
       }
     },
     browserPoolOptions: {
-      useFingerprints: true, // Camuflagem de SO e Navegador dinâmico
+      useFingerprints: false, // DESATIVADO para não conflitar com o stealthPlugin
     },
     launchContext: {
+      useIncognitoPages: false, // Necessário para o stealthPlugin aplicar no contexto global
       launcher: chromium,
       launchOptions: {
         headless: true,
@@ -136,7 +137,6 @@ async function crawleeExtract(url, limit, storeName) {
           '--disable-dev-shm-usage',
           '--no-sandbox',
           '--disable-gpu',
-          '--single-process',
           '--disable-blink-features=AutomationControlled',
           '--js-flags="--max-old-space-size=128"',
           '--disable-extensions',
