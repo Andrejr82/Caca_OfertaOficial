@@ -710,24 +710,116 @@ async function scrapeStore(store) {
   return storeCandidates;
 }
 
+// ─── Heartbeat System ─────────────────────────────────────────
+async function updateHeartbeat() {
+  try {
+    await supabase.from('integration_logs').insert({
+      user_id: ADMIN_USER_ID, integration: 'Notebook-Heartbeat', action: 'Heartbeat Ping', status: 'success',
+      message: `Notebook is alive at ${new Date().toISOString()}`,
+      metadata: { last_seen: new Date().toISOString() }
+    });
+  } catch (e) {}
+}
+
+async function checkHeartbeat() {
+  try {
+    const { data } = await supabase.from('integration_logs')
+      .select('created_at')
+      .eq('integration', 'Notebook-Heartbeat')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (data && data.created_at) {
+      const lastSeen = new Date(data.created_at);
+      const diffMins = (Date.now() - lastSeen.getTime()) / 1000 / 60;
+      if (diffMins < 60) return true; // Online se visto na última 1 hora
+    }
+  } catch (e) {}
+  return false;
+}
+
 // ─── Ciclo Principal ──────────────────────────────────────────
 async function runScrapingCycle() {
   const startTime = Date.now();
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER IN-HOUSE — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
-  const isLocal = process.platform === 'win32';
-  const stores = isLocal ? ['Mercado Livre', 'Amazon', 'Magalu'] : ['Amazon', 'Magalu'];
+  const isWindows = process.platform === 'win32';
+  const mode = process.env.SCRAPER_MODE || 'LOCAL';
   let allCandidates = [];
+  let aiProcessed = 0;
 
-  for (const store of stores) {
-    try {
-      const candidates = await scrapeStore(store);
-      allCandidates = allCandidates.concat(candidates);
-    } catch (err) { console.error(`[SCRAPER][${store}] Erro: ${err.message}`); }
+  if (mode === 'LOCAL') {
+    if (isWindows) {
+      console.log(`\n[MODE: LOCAL] 💻 NOTEBOOK WINDOWS DETECTADO. Iniciando Scraping Local...`);
+      await updateHeartbeat();
+      const stores = ['Mercado Livre', 'Amazon', 'Magalu'];
+      
+      for (const store of stores) {
+        try {
+          const candidates = await scrapeStore(store);
+          allCandidates = allCandidates.concat(candidates);
+        } catch (err) { console.error(`[SCRAPER][${store}] Erro: ${err.message}`); }
+      }
+      
+      console.log(`\n✅ Scraping local concluído. ${allCandidates.length} ofertas inseridas como DRAFT no Supabase.`);
+      console.log(`⏳ Aguardando a Oracle capturar os drafts no próximo ciclo dela.`);
+      
+    } else {
+      console.log(`\n[MODE: LOCAL] ☁️ ORACLE VPS DETECTADA. Atuando como Orquestrador / Leitor.`);
+      const isOnline = await checkHeartbeat();
+      if (!isOnline) {
+         console.log(`\n⚠️ Scraping indisponível. Notebook offline há mais de 60 mins. Aguardando próximo ciclo.`);
+         return; 
+      }
+      
+      console.log(`\n📡 Notebook está online. Buscando novos DRAFTs no Supabase...`);
+      const { data: drafts, error } = await supabase.from('offers')
+        .select('*')
+        .eq('status', 'draft')
+        .eq('user_id', ADMIN_USER_ID);
+        
+      if (error) {
+        console.error("Erro ao buscar drafts:", error.message);
+      } else if (drafts && drafts.length > 0) {
+         console.log(`\n📦 Encontrados ${drafts.length} drafts! Iniciando IA, Score Comercial e Publicação...`);
+         
+         // Remapeia para o formato que processTopOffers espera
+         allCandidates = drafts.map(d => ({
+           id: d.id,
+           product: {
+             product_name: d.product_name,
+             current_price: d.current_price,
+             old_price: d.old_price,
+             image_url: d.image_url,
+             category: d.category || 'Geral',
+             rating: d.rating
+           },
+           store: d.platform,
+           affiliateUrl: d.original_url,
+           score: d.score || 0
+         }));
+         
+         aiProcessed = await processTopOffers(allCandidates);
+      } else {
+         console.log(`\n📭 Nenhum draft novo no Supabase. Aguardando o Notebook enviar mais.`);
+      }
+      await cleanupOldDrafts();
+    }
+  } else if (mode === 'ORACLE' || mode === 'AUTO') {
+    console.log(`\n[MODE: ${mode}] ⚠️ AVISO: Executando Scraping e Orquestração na mesma máquina (Uso para testes).`);
+    const stores = isWindows ? ['Mercado Livre', 'Amazon', 'Magalu'] : ['Amazon', 'Magalu'];
+    
+    for (const store of stores) {
+      try {
+        const candidates = await scrapeStore(store);
+        allCandidates = allCandidates.concat(candidates);
+      } catch (err) { console.error(`[SCRAPER][${store}] Erro: ${err.message}`); }
+    }
+
+    aiProcessed = await processTopOffers(allCandidates);
+    await cleanupOldDrafts();
   }
-
-  const aiProcessed = await processTopOffers(allCandidates);
-  await cleanupOldDrafts();
 
   const duration = Math.round((Date.now() - startTime) / 1000);
   

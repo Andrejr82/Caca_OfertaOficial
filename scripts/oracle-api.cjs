@@ -20,6 +20,12 @@ app.post('/api/scrape', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
 
+  const mode = process.env.SCRAPER_MODE || 'LOCAL';
+  if (mode === 'LOCAL' && process.platform !== 'win32') {
+    console.log(`[API] Bloqueado: Tentativa de scraping na Oracle enquanto SCRAPER_MODE=LOCAL`);
+    return res.status(403).json({ error: 'Scraping on Oracle is disabled in LOCAL mode. The Notebook is responsible for scraping.' });
+  }
+
   if (!url) {
     return res.status(400).json({ error: 'Missing url param' });
   }

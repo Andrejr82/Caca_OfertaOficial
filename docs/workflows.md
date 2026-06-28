@@ -2,11 +2,16 @@
 
 Esta documentação descreve as trilhas do sistema do ponto de vista sistêmico e do usuário.
 
-## Workflow 1: Entrada e Avaliação Comercial (Scraping)
+## Workflow 1: Entrada e Extração (Notebook Windows)
 
-1. **Trigger Manual ou Cron:** O usuário cola a URL da Amazon no dashboard OU o Inngest engatilha `runUserScrapingBackground` e roda a API `/api/scraper/trends`.
-2. **Coleta de Metadados:** O sistema desce no HTML e extrai `<meta tags>`, preços antigos, preços novos e título.
-3. **Cálculo de Score V2:** A função `calculateFinalRankScore` é ativada. Com base na discrepância de preço (desconto) e sazonalidade, a oferta recebe uma nota comercial de 0 a 10. Se a nota final for baixa, ela é marcada como rejeitada pelo filtro anti-lixo. Se for alta, é qualificada.
+1. **Scraping Direto (Playwright/Scrapfly):** O Notebook Windows roda o `oracle-scraper.cjs` no modo `LOCAL`, navegando na Amazon/Shopee/Magalu/etc.
+2. **Validação HTML e Produto:** Os dados extraídos do HTML passam pelo `HTML Validator` e pelo extrator JSON. O `Product Validator` verifica se é uma oferta válida (possui preço, nome e imagem).
+3. **Persistência Inicial (Supabase):** O Notebook grava os produtos diretamente no Supabase na tabela `offers` com status `draft`. A partir daqui, ele encerra seu ciclo e atualiza seu *heartbeat*.
+
+## Workflow 1.5: Orquestração e Avaliação Comercial (Oracle VPS)
+
+1. **Consumo de Fila:** A Oracle VPS (via PM2 `oracle-orchestrator`), detecta que o Notebook enviou novos drafts.
+2. **Cálculo de Score V2:** A função `calculateFinalRankScore` (ou a lógica similar na Oracle) é ativada. Com base na discrepância de preço (desconto) e sazonalidade, a oferta recebe uma nota comercial. Se a nota final for baixa, ela é marcada como rejeitada pelo filtro anti-lixo. Se for alta, é qualificada.
 
 ## Workflow 2: Geração Assíncrona e Rastreamento
 

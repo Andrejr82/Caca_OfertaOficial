@@ -23,24 +23,36 @@ O fluxo do sistema opera da seguinte forma:
 4. O módulo de Tracking atrela o ID da oferta a `SubIDs` específicos para gerar URLs rastreáveis únicas por rede.
 5. O operador aprova a postagem no Dashboard, e o Inngest ou a API despacha a mensagem imediatamente via Webhooks ou instâncias conectadas.
 
-## Arquitetura
+## Arquitetura (Migração Local -> Oracle)
 
 O projeto adota uma arquitetura Serverless baseada em **Next.js 16 (App Router)** com backend orientado a Serverless Functions, persistência e autenticação via **Supabase**, e mensageria distribuída com **Inngest**.
 
+**Nova Arquitetura de 3 Pilares Independentes:**
+A arquitetura atual foi rigorosamente dividida em três frentes que operam de forma 100% isolada, comunicando-se apenas via banco de dados (Supabase):
+
+1. **Notebook Windows (Scraping):** O único responsável por Playwright, Scrapfly, extração e validação do HTML e do Produto. Ele grava as ofertas diretamente no Supabase como *drafts*.
+2. **Oracle VPS (Orquestração e Processamento):** Atua passivamente lendo o Supabase. Executa os workers PM2, gera a cópia via IA (Groq/Gemini), calcula score/ranking e publica.
+3. **Ngrok:** Responsabilidade única de servir como Webhook público do WhatsApp. Não participa do scraping.
+
 ```mermaid
-graph TD;
-  User[Operador] -->|Painel Web| NextJS[Next.js App Router];
-  NextJS -->|Server Actions| API[API Routes];
-  API -->|Autenticação & RLS| Supabase[(Supabase DB & Storage)];
-  API -->|Prompts| LLM[Groq / Gemini AI];
-  API -->|Enqueue| Inngest[Inngest Background Jobs];
-  
-  Inngest -.->|Trigger| TelegramAPI[Telegram Bot API];
-  Inngest -.->|Trigger| InstaAPI[Instagram Graph API];
-  Inngest -.->|Fila Local| BaileysDB[(Fila DB Whatsapp)];
-  
-  Baileys[Motor WhatsApp Node.js] -->|Polls| BaileysDB;
-  Baileys -->|Envia Mensagens| WhatsApp[WhatsApp Web];
+graph TD
+    subgraph Notebook Windows
+        Playwright --> Scrapfly
+        Scrapfly --> HTMLValidator[HTML Validator]
+        HTMLValidator --> ProductValidator[Product Validator]
+        ProductValidator --> Supabase[(Supabase)]
+    end
+
+    subgraph Oracle VPS
+        Supabase --> IA[IA / Groq / Gemini]
+        IA --> Ranking
+        Ranking --> Telegram
+        Ranking --> Instagram
+    end
+
+    subgraph Ngrok 
+        Webhook[Webhook WhatsApp\n(Apenas)]
+    end
 ```
 
 ## Tecnologias Utilizadas

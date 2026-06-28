@@ -55,7 +55,13 @@ graph TD;
     Baileys -->|Websockets| WhatsApp
 ```
 
-## Separação de Componentes
+## Separação de Componentes (Nova Arquitetura de 3 Pilares)
+
+Recentemente, a arquitetura de scraping foi severamente desacoplada para isolar 3 responsabilidades que não se comunicam via HTTP diretamente:
+
+1. **Notebook Windows (Scraping):** O único motor que abre instâncias do Playwright, aciona o Scrapfly, coleta o HTML, valida a estrutura (HTML/Product Validator) e **grava diretamente no Supabase**.
+2. **Oracle VPS (Processamento e IA):** O Worker da Oracle **não executa scraping**. Ele fica num loop contínuo lendo o Supabase em busca de novas ofertas, calcula o Score Comercial, injeta a copy gerada por IA (Groq/Gemini) e comanda as publicações de redes sociais.
+3. **Ngrok (Webhook):** Mantém exclusivamente o webhook ativo para recebimento de mensagens do WhatsApp e **não participa** da cadeia de scraping ou IA.
 
 ### 1. Camada de Apresentação (Frontend)
 Construído sobre o App Router do Next.js 16 (`/src/app/(dashboard)`).

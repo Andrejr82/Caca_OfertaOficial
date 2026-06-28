@@ -358,7 +358,8 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
  */
 export async function fetchTrendingProductsFromLanding(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Iniciando busca de tendências do Mercado Livre...");
-  const oracleKey = process.env.ORACLE_API_KEY;
+  // Se rodando local (development), ignora a chave da Oracle para forçar o fetch direto com seu IP Residencial
+  const oracleKey = process.env.NODE_ENV !== 'production' ? null : process.env.ORACLE_API_KEY;
 
   // === ESTRATÉGIA 1: Oracle API + IA Local (mais resiliente) ===
   if (oracleKey) {
