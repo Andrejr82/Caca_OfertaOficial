@@ -19,7 +19,7 @@ const fs           = require('fs');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
-const { PlaywrightCrawler, Dataset } = require('crawlee');
+const { PlaywrightCrawler, Dataset, ProxyConfiguration } = require('crawlee');
 const { chromium } = require('playwright-extra');
 const stealthPlugin = require('puppeteer-extra-plugin-stealth');
 chromium.use(stealthPlugin());
@@ -113,7 +113,13 @@ async function crawleeExtract(url, limit, storeName) {
   let rawExtractedData = '';
   let evalResult = { text: '', found: 0, sent: 0 };
 
+  const scrapflyKeys = process.env.SCRAPFLY_API_KEYS ? process.env.SCRAPFLY_API_KEYS.split(',') : [];
+  const proxyConfiguration = scrapflyKeys.length > 0 
+    ? new ProxyConfiguration({ proxyUrls: scrapflyKeys.map(key => `http://scrape:${key}@proxy.scrapfly.io:8080`) })
+    : undefined;
+
   const crawler = new PlaywrightCrawler({
+    proxyConfiguration,
     maxConcurrency: 1,
     requestHandlerTimeoutSecs: 60,
     navigationTimeoutSecs: 45,
