@@ -67,11 +67,17 @@ export async function callLLM(
   temperature: number,
   maxTokens: number
 ): Promise<string> {
-  const groqKey = process.env.GROQ_API_KEY;
+  const groqKey1 = process.env.GROQ_API_KEY;
+  const groqKey2 = process.env.GROQ_API_KEY_2;
+  const keys = [groqKey1, groqKey2].filter(Boolean);
 
-  if (!groqKey) {
+  if (keys.length === 0) {
     throw new Error("Nenhuma API Key configurada no ambiente.");
   }
+  
+  // Se falhar na primeria com 429, o retry vai ser manual.
+  // Vamos usar apenas a primeira por default aqui pois a rotação complexa foi implementada nos callers (oracle-scraper)
+  const groqKey = keys[0];
 
   let groqModel = process.env.GROQ_MODEL || "llama-3.3-70b-versatile";
   

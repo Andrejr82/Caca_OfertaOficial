@@ -20,9 +20,7 @@ const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
 const { PlaywrightCrawler, Dataset, ProxyConfiguration } = require('crawlee');
-const { chromium } = require('playwright-extra');
-const stealthPlugin = require('puppeteer-extra-plugin-stealth');
-chromium.use(stealthPlugin());
+// Removidos os plugins extras que estavam conflitando com a evasão nativa do Crawlee
 
 process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
 process.env.CRAWLEE_MEMORY_MBYTES = '4096';
@@ -143,21 +141,16 @@ async function crawleeExtract(url, limit, storeName) {
       }
     },
     browserPoolOptions: {
-      useFingerprints: false, // DESATIVADO para não conflitar com o stealthPlugin
+      useFingerprints: true, // <-- ATIVADO: É isso que burla o bloqueio do Mercado Livre de forma perfeita.
     },
     launchContext: {
-      useIncognitoPages: false, // Necessário para o stealthPlugin aplicar no contexto global
-      launcher: chromium,
       launchOptions: {
-        headless: true,
+        headless: true, // Voltamos para modo oculto (fantasma) para não atrapalhar seu uso do Windows
         args: [
           '--disable-dev-shm-usage',
           '--no-sandbox',
           '--disable-gpu',
           '--disable-blink-features=AutomationControlled',
-          '--js-flags="--max-old-space-size=128"',
-          '--disable-extensions',
-          '--disable-default-apps',
           '--no-first-run',
           '--mute-audio'
         ]
@@ -172,15 +165,8 @@ async function crawleeExtract(url, limit, storeName) {
     async requestHandler({ request, page, log }) {
       log.info(`[Crawlee] Raspando: ${request.url}`);
       
-      // Bloqueia imagens, fontes e mídia para economizar RAM/CPU na VPS
-      await page.route('**/*', (route) => {
-        const type = route.request().resourceType();
-        if (['image', 'font', 'media'].includes(type)) {
-          route.abort();
-        } else {
-          route.continue();
-        }
-      });
+      // Removido: O bloqueio agressivo de imagens/fontes estava disparando o alerta de Bot das lojas.
+      // Como agora estamos no Windows (com RAM/CPU sobrando), deixamos carregar normalmente para máxima semelhança humana.
 
       // Engana proteções bot comuns injetando webdriver false
       await page.addInitScript(() => {
@@ -196,7 +182,8 @@ async function crawleeExtract(url, limit, storeName) {
       await page.waitForTimeout(2000);
 
       evalResult = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item'));
+        // Seletores atualizados (inclui o novo .poly-card do ML e grid da Amazon)
+        const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item, .poly-card, .promotion-item, .a-carousel-card, [data-csa-c-type="item"], .DealGridItem-module__dealItemContent_1vFdd'));
         let results = [];
         for (let el of items) {
           const text = el.innerText || '';
@@ -261,8 +248,14 @@ async function crawleeExtract(url, limit, storeName) {
 
   let retries = 3;
   let delay = 20000; // Aumentado para 20s para resetar Token Per Minute Limit (TPM)
+  
+  // Rotação de chaves
+  const keys = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(Boolean);
+  let currentKeyIndex = 0;
+
   while (retries > 0) {
     try {
+      const currentKey = keys[currentKeyIndex % keys.length];
       const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
         model: 'mixtral-8x7b-32768',
         response_format: { type: "json_object" },
@@ -273,7 +266,7 @@ async function crawleeExtract(url, limit, storeName) {
         temperature: 0.1,
         max_tokens: 1500
       }, {
-        headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
+        headers: { 'Authorization': `Bearer ${currentKey}`, 'Content-Type': 'application/json' }
       });
 
       if (res.data.usage) {
@@ -302,10 +295,16 @@ async function crawleeExtract(url, limit, storeName) {
       }
     } catch (err) {
       if (err.response && err.response.status === 429) {
-        console.log(`  [Groq Rate Limit] Aguardando ${delay}ms... Detalhe:`, err.response.data);
-        await new Promise(r => setTimeout(r, delay));
-        delay *= 2;
-        retries--;
+        console.log(`  [Groq Rate Limit] Limite atingido na chave ${currentKeyIndex + 1}. Trocando de chave ou aguardando ${delay}ms... Detalhe:`, err.response.data);
+        if (keys.length > 1) {
+          currentKeyIndex++; // Rotaciona a chave imediatamente
+          retries--; // Gasta um retry, mas sem delay longo
+          await new Promise(r => setTimeout(r, 2000));
+        } else {
+          await new Promise(r => setTimeout(r, delay));
+          delay *= 2;
+          retries--;
+        }
       } else {
         console.error(`  [Groq] Falha na formatação: ${err.message} ${err.response ? JSON.stringify(err.response.data) : ""}`);
         return [];
@@ -450,13 +449,17 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
   "hashtags": ["#oferta"]
 }`;
 
+  const keys = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(Boolean);
+  let currentKeyIndex = 0;
+
   let retries = 3;
   let delay = 20000; // Aumentado para 20s
   while (retries > 0) {
     try {
+      const currentKey = keys[currentKeyIndex % keys.length];
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${GROQ_API_KEY}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${currentKey}` },
         body: JSON.stringify({
           model: "mixtral-8x7b-32768",
           messages: [{ role: "system", content: baseSystemPrompt }, { role: "user", content: userPrompt }],
@@ -467,10 +470,17 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
 
       if (!response.ok) {
         if (response.status === 429) {
-          console.log(`  [Groq Rate Limit - Copy] Aguardando ${delay}ms...`);
-          await new Promise(r => setTimeout(r, delay));
-          delay *= 2;
-          retries--; continue;
+          console.log(`  [Groq Rate Limit - Copy] Limite atingido. Rotacionando chave...`);
+          if (keys.length > 1) {
+            currentKeyIndex++;
+            retries--;
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          } else {
+            await new Promise(r => setTimeout(r, delay));
+            delay *= 2;
+            retries--; continue;
+          }
         }
         throw new Error(`Groq HTTP ${response.status}`);
       }
