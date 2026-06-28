@@ -128,8 +128,8 @@ async function crawleeExtract(url, limit, storeName) {
   const crawler = new PlaywrightCrawler({
     proxyConfiguration,
     maxConcurrency: 1,
-    requestHandlerTimeoutSecs: 60,
-    navigationTimeoutSecs: 45,
+    requestHandlerTimeoutSecs: 150,
+    navigationTimeoutSecs: 120,
     autoscaledPoolOptions: {
       systemStatusOptions: {
         maxMemoryOverloadedRatio: 999,
