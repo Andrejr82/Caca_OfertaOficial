@@ -119,8 +119,8 @@ async function crawleeExtract(url, limit, storeName) {
 
   if (storeName === 'Mercado Livre' && SCRAPFLY_KEYS.length > 0) {
     const key = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
-    // Utilizando API Direta do Scrapfly retornando o HTML cru (format=raw)
-    targetUrl = `https://api.scrapfly.io/scrape?key=${key}&url=${encodeURIComponent(url)}&asp=true&country=br&format=raw`;
+    // Utilizando API Direta do Scrapfly retornando o HTML cru (format=raw) com renderização de JS
+    targetUrl = `https://api.scrapfly.io/scrape?key=${key}&url=${encodeURIComponent(url)}&asp=true&country=br&render_js=true&format=raw`;
     console.log(`  [Scrapfly] Utilizando API Direta na loja Mercado Livre`);
   }
 
