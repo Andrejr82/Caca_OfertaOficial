@@ -266,6 +266,10 @@ async function crawleeExtract(url, limit, storeName) {
         const returnedProducts = data.products || [];
         cycleMetrics.produtos_retornados += returnedProducts.length;
         
+        if (storeName === "Amazon") {
+          console.log(`[Amazon] Groq Output:`, JSON.stringify(returnedProducts, null, 2));
+        }
+        
         const approvedProducts = sanitizeScrapedData(returnedProducts, storeName).slice(0, limit);
         cycleMetrics.produtos_aprovados += approvedProducts.length;
         cycleMetrics.produtos_rejeitados += (returnedProducts.length - approvedProducts.length);

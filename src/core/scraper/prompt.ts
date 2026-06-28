@@ -11,5 +11,10 @@ REGRAS DE INTEGRIDADE OBRIGATÓRIAS (CRÍTICAS):
 5. Extraia tudo o que puder do produto. Se não souber um campo, não o inclua, mas não deixe de extrair o produto por causa disso.
 6. Não liste produtos genéricos. Se não houver clareza de que é um produto à venda, ignore-o.
 
-Retorne OBRIGATORIAMENTE um JSON válido seguindo a estrutura de array "products". Se a página não tiver nenhum produto, retorne { "products": [] }.`;
+7. O campo "product_name" (ou "title") é OBRIGATÓRIO. Extraia o nome real do produto do texto, mesmo que haja mistura de patrocínios (ex: "Patrocinado Notebook Acer...").
+8. O campo "price" (ou "preco") é OBRIGATÓRIO.
+9. Os campos "url" (ou "link") e "image_url" (ou "img") também devem ser preenchidos se disponíveis.
+10. Se a string contiver vários produtos misturados em um banner patrocinado, tente isolar o nome do produto principal.
+
+Retorne OBRIGATORIAMENTE um JSON válido seguindo a estrutura de array "products". Se a página não tiver nenhum produto, retorne { "products": [] }. Cada produto deve ter "product_name", "price", "url" e "image_url".`;
 }
