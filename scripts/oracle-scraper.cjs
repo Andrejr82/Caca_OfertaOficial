@@ -212,6 +212,7 @@ async function crawleeExtract(url, limit, storeName) {
         }
         return { text: unique.slice(0, 15).join('\n'), found: unique.length, sent: Math.min(unique.length, 15) };
       });
+      console.log(`[${storeName}] Itens raspados (únicos): ${evalResult.found} | RAW size: ${evalResult.text.length}`);
     }
   });
 
