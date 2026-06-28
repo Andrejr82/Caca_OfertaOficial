@@ -647,7 +647,7 @@ async function scrapeStore(store) {
     console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
     
     const urls = {
-      'Mercado Livre': `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(query)}`,
+      'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
       'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
       'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
       'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
