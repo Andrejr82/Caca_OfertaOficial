@@ -113,10 +113,7 @@ async function crawleeExtract(url, limit, storeName) {
   let rawExtractedData = '';
   let evalResult = { text: '', found: 0, sent: 0 };
 
-  const scrapflyKeys = process.env.SCRAPFLY_API_KEYS ? process.env.SCRAPFLY_API_KEYS.split(',') : [];
-  const proxyConfiguration = scrapflyKeys.length > 0 
-    ? new ProxyConfiguration({ proxyUrls: scrapflyKeys.map(key => `http://scrape:${key}@proxy.scrapfly.io:8080`) })
-    : undefined;
+  const proxyConfiguration = undefined;
 
   const crawler = new PlaywrightCrawler({
     proxyConfiguration,
