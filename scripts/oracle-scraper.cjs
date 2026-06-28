@@ -240,7 +240,7 @@ async function crawleeExtract(url, limit, storeName) {
   const prompt = getScrapingPrompt(storeName);
 
   let retries = 3;
-  let delay = 2000;
+  let delay = 20000; // Aumentado para 20s para resetar Token Per Minute Limit (TPM)
   while (retries > 0) {
     try {
       const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
@@ -431,7 +431,7 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
 }`;
 
   let retries = 3;
-  let delay = 2000;
+  let delay = 20000; // Aumentado para 20s
   while (retries > 0) {
     try {
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -682,8 +682,8 @@ async function scrapeStore(store) {
       if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
     }
     
-    // O exponential backoff cuida do rate limit agora
-    await new Promise(r => setTimeout(r, 1000));
+    // Espera 5 segundos entre as buscas de categorias para aliviar o Groq TPM
+    await new Promise(r => setTimeout(r, 5000));
   }
   
   console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas coletadas das diversas categorias.`);
