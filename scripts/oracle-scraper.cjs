@@ -282,7 +282,7 @@ async function crawleeExtract(url, limit, storeName) {
       }
     } catch (err) {
       if (err.response && err.response.status === 429) {
-        console.log(`  [Groq Rate Limit] Aguardando ${delay}ms...`);
+        console.log(`  [Groq Rate Limit] Aguardando ${delay}ms... Detalhe:`, err.response.data);
         await new Promise(r => setTimeout(r, delay));
         delay *= 2;
         retries--;
