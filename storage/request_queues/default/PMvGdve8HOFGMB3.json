@@ -1,9 +1,0 @@
-{
-	"id": "PMvGdve8HOFGMB3",
-	"json": "{\"id\":\"PMvGdve8HOFGMB3\",\"url\":\"https://www.amazon.com.br/s?k=Fralda\",\"loadedUrl\":\"https://www.amazon.com.br/s?k=Fralda\",\"uniqueKey\":\"https://www.amazon.com.br/s?k=Fralda\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2026-06-27T00:48:40.161Z\"}",
-	"method": "GET",
-	"orderNo": null,
-	"retryCount": 0,
-	"uniqueKey": "https://www.amazon.com.br/s?k=Fralda",
-	"url": "https://www.amazon.com.br/s?k=Fralda"
-}

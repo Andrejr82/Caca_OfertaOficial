@@ -233,6 +233,7 @@ async function crawleeExtract(url, limit, storeName) {
 
   // Chama a Groq para formatar os dados
   console.log(`  [Groq] Analisando dados brutos da ${storeName}...`);
+  if (storeName === "Amazon") console.log("RAW AMZ:", rawExtractedData.substring(0, 1000));
   const prompt = getScrapingPrompt(storeName);
 
   let retries = 3;

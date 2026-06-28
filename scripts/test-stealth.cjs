@@ -31,6 +31,8 @@ async function runTest() {
             log.info('Extraindo elementos da tela...');
             
             const isML = request.url.includes('mercadolivre.com.br');
+            const html = await page.content();
+            require('fs').writeFileSync('ml-error.html', html);
             
             const evalResult = await page.evaluate(() => {
                 const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item'));

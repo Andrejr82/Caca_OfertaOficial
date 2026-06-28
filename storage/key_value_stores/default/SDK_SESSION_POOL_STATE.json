@@ -3,7 +3,7 @@
   "retiredSessionsCount": 0,
   "sessions": [
     {
-      "id": "session_s1mYLOv7Dq",
+      "id": "session_vpjwiUvlXd",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -16,14 +16,14 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-27T01:38:32.576Z",
-      "createdAt": "2026-06-27T00:48:32.576Z",
+      "expiresAt": "2026-06-28T16:20:55.812Z",
+      "createdAt": "2026-06-28T15:30:55.812Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_tYWqDqSvM1",
+      "id": "session_hWZV3om5fR",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -31,13 +31,68 @@
         "enableLooseMode": false,
         "allowSpecialUseDomain": true,
         "prefixSecurity": "silent",
-        "cookies": []
+        "cookies": [
+          {
+            "key": "_d2id",
+            "value": "22e28663-4e30-4dcf-bc78-3690a207855b-n",
+            "expires": "2027-06-28T15:30:56.778Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-28T15:30:56.887Z",
+            "lastAccessed": "2026-06-28T15:30:56.887Z"
+          },
+          {
+            "key": "_csrf",
+            "value": "hYgEdjJiUbiqwyQGsKquqiFS",
+            "expires": "2026-06-28T16:20:56.885Z",
+            "domain": "lista.mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": true,
+            "creation": "2026-06-28T15:30:56.893Z",
+            "lastAccessed": "2026-06-28T15:30:56.893Z"
+          },
+          {
+            "key": "_mldataSessionId",
+            "value": "a04c897d-221e-452d-92b6-1bf060f03686",
+            "expires": "2026-06-28T16:00:56.779Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-28T15:30:56.893Z",
+            "lastAccessed": "2026-06-28T15:30:56.893Z"
+          },
+          {
+            "key": "_bmstate",
+            "value": "4e2b3f3493bed012b47bf086608119e1535079cbfdd7584402acefa61af15770%3B2%3Bab241d48258085d9ae6f70c2fa5d02f66c6fee1eb14650da1a867956dc26c5cf%3B1782664255%3B3a9f2%3B02d34f1e160e0a1f099dc096becf574fa96cdb2813f6c5195d48b9d80849900c",
+            "expires": "2026-06-29T15:24:16.779Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-28T15:30:56.895Z",
+            "lastAccessed": "2026-06-28T15:30:56.895Z"
+          },
+          {
+            "key": "_bmc",
+            "value": "4e2b3f3493bed012b47bf086608119e1535079cbfdd7584402acefa61af15770%3B321",
+            "expires": "2026-06-29T15:24:16.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-28T15:30:56.895Z",
+            "lastAccessed": "2026-06-28T15:30:56.895Z"
+          }
+        ]
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-27T01:38:32.584Z",
-      "createdAt": "2026-06-27T00:48:32.584Z",
+      "expiresAt": "2026-06-28T16:20:55.817Z",
+      "createdAt": "2026-06-28T15:30:55.817Z",
       "usageCount": 1,
       "maxUsageCount": 50,
       "errorScore": 0
