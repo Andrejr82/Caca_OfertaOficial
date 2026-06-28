@@ -26,6 +26,18 @@ export async function getOffer(id: string) {
   return data as Offer | null;
 }
 
+export async function getOfferPosts(offerId: string) {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [];
+
+  const { data } = await supabase
+    .from("posts")
+    .select("*")
+    .eq("offer_id", offerId)
+    .neq("status", "deleted");
+  return data || [];
+}
+
 export async function listAffiliateLinks() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as AffiliateLink[];
@@ -110,6 +122,8 @@ export async function getPostHistory(channel?: string) {
   if (channel) {
     query = query.eq("channel", channel);
   }
+
+  query = query.neq("status", "deleted");
 
   const { data: postsData } = await query.order("created_at", { ascending: false });
   if (!postsData) return [];

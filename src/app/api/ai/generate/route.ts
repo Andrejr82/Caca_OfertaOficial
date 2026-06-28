@@ -132,7 +132,7 @@ export async function POST(request: Request) {
     }
 
     // 5. Deleta rascunhos antigos de posts desta oferta para evitar duplicações
-    await supabase.from("posts").delete().eq("offer_id", offer.id).eq("status", "draft");
+    await supabase.from("posts").update({ status: "deleted", deleted_at: new Date().toISOString() }).eq("offer_id", offer.id).eq("status", "draft");
 
     // 6. Insere os novos rascunhos na tabela de posts
     // Para Instagram, formatamos as sugestões de Stories, Reels e Carrossel no conteúdo de forma amigável

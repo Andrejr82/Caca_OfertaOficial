@@ -25,8 +25,9 @@ export async function POST(request: Request) {
     // 1. Obter o post
     const { data: post, error: postError } = await supabase
       .from("posts")
-      .select("*, offers(image_url)")
+      .select("*, offers(*)")
       .eq("id", postId)
+      .neq("status", "deleted")
       .eq("user_id", user.id)
       .single();
 

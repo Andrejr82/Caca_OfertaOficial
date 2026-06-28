@@ -1,0 +1,411 @@
+{
+  "total_ofertas_processadas": 47,
+  "premium_promovidos": 0,
+  "premium_rebaixados": 0,
+  "baratos_promovidos": 5,
+  "baratos_rebaixados": 38,
+  "top20_v1": [
+    {
+      "id": "e3918c56-b38c-4f86-8d8d-97e516d24320",
+      "name": "Bandeira Do Brasil Para Capô De Carro Co",
+      "price": 29.09,
+      "oldPrice": 59.99,
+      "v1_score": 9.91,
+      "v2_score": 9.91,
+      "diff": "0.00",
+      "isPremium": false
+    },
+    {
+      "id": "831be263-33aa-42d9-98de-161f32f4ac8b",
+      "name": "Calça Jogger Tactel Soltinha Slim Academ",
+      "price": 39.8,
+      "oldPrice": 88.9,
+      "v1_score": 9.88,
+      "v2_score": 9.88,
+      "diff": "0.00",
+      "isPremium": false
+    },
+    {
+      "id": "f7ed8f1b-69c3-40de-9b03-df82c008df21",
+      "name": "Corta Vento Masculino Jaqueta Esportiva ",
+      "price": 84.97,
+      "oldPrice": 149.85,
+      "v1_score": 9.35,
+      "v2_score": 9.28,
+      "diff": "-0.07",
+      "isPremium": false
+    },
+    {
+      "id": "09bcc2ac-dfaf-4d1d-a193-8783cec19db5",
+      "name": "Calça Cargo Feminina Wide Leg Cintura Al",
+      "price": 69.9,
+      "oldPrice": 110.9,
+      "v1_score": 9.03,
+      "v2_score": 8.9,
+      "diff": "-0.13",
+      "isPremium": false
+    },
+    {
+      "id": "e3adaf2b-fe51-45bb-be6e-88272e3b9867",
+      "name": "Papel Higiênico Neve Supreme Folha Tripl",
+      "price": 63.06,
+      "oldPrice": 92.3,
+      "v1_score": 8.69,
+      "v2_score": 8.5,
+      "diff": "-0.19",
+      "isPremium": false
+    },
+    {
+      "id": "9fb6e75a-ab0c-412a-9d0a-fb41525bf95c",
+      "name": "Tapete Higiênico 50 Unidades (60x55) Des",
+      "price": 48,
+      "oldPrice": 69.9,
+      "v1_score": 8.51,
+      "v2_score": 8.33,
+      "diff": "-0.18",
+      "isPremium": false
+    },
+    {
+      "id": "bd129a6a-105e-4f0e-aa0b-65c29ee073ca",
+      "name": "Liquidificador Easy Power Mondial 550W -",
+      "price": 80.93,
+      "oldPrice": 132,
+      "v1_score": 8.46,
+      "v2_score": 8.35,
+      "diff": "-0.11",
+      "isPremium": false
+    },
+    {
+      "id": "04a7d6dc-95ff-4d2f-b02a-c58eee2aee47",
+      "name": "Jaqueta Corta Vento Fila Core Run Mascul",
+      "price": 170.99,
+      "oldPrice": 349.99,
+      "v1_score": 8.34,
+      "v2_score": 7.69,
+      "diff": "-0.65",
+      "isPremium": false
+    },
+    {
+      "id": "64811cd9-a8ad-4d91-ba5e-3920abed844a",
+      "name": "Camisa Botafogo II 25/26 s/n Goleiro Ree",
+      "price": 94.99,
+      "oldPrice": 399.99,
+      "v1_score": 8.25,
+      "v2_score": 8.35,
+      "diff": "0.10",
+      "isPremium": false
+    },
+    {
+      "id": "723b95bf-49de-42aa-94a7-ce7e0e00220c",
+      "name": "Camisa Botafogo I 25/26 s/n Torcedor Ree",
+      "price": 94.99,
+      "oldPrice": 399.99,
+      "v1_score": 8.25,
+      "v2_score": 8.35,
+      "diff": "0.10",
+      "isPremium": false
+    },
+    {
+      "id": "91184e01-b72c-4dd2-9fe3-6d86537cec88",
+      "name": "Jaqueta Puffer Bobojaco Masculina Casaco",
+      "price": 113.05,
+      "oldPrice": 189.99,
+      "v1_score": 8.21,
+      "v2_score": 8.22,
+      "diff": "0.01",
+      "isPremium": false
+    },
+    {
+      "id": "42d58a89-4e56-45de-be4f-12fb98dae829",
+      "name": "Camisa França Eurodry Marinho Original R",
+      "price": 119.9,
+      "oldPrice": 229.9,
+      "v1_score": 8.1,
+      "v2_score": 8.18,
+      "diff": "0.08",
+      "isPremium": false
+    },
+    {
+      "id": "bf7610dc-0ea1-4d85-b13f-7e3625f695e8",
+      "name": "Camisa Barcelona Nike II 2025/26 Torcedo",
+      "price": 179.99,
+      "oldPrice": 399.99,
+      "v1_score": 7.65,
+      "v2_score": 7,
+      "diff": "-0.65",
+      "isPremium": false
+    },
+    {
+      "id": "e9d765b8-e377-4779-b6ec-c21e90e722b6",
+      "name": "Kit 2 Controle Sem Fio Redfin Para Ps4 P",
+      "price": 99.9,
+      "oldPrice": 170,
+      "v1_score": 7.64,
+      "v2_score": 7.65,
+      "diff": "0.01",
+      "isPremium": false
+    },
+    {
+      "id": "f1ba019e-f2d2-4019-b4e6-bc679a69c49a",
+      "name": "Camisa Manchester City Home 24/25 s/nº T",
+      "price": 225.16,
+      "oldPrice": 444.9,
+      "v1_score": 7.61,
+      "v2_score": 6.95,
+      "diff": "-0.66",
+      "isPremium": false
+    },
+    {
+      "id": "dc61ac54-780e-4be7-88c1-4c6d53b89dd8",
+      "name": "Aquecedor Ab1100n 1500w Branco Britânia ",
+      "price": 136.9,
+      "oldPrice": 228,
+      "v1_score": 7.55,
+      "v2_score": 7.55,
+      "diff": "0.00",
+      "isPremium": false
+    },
+    {
+      "id": "1fb667ea-26c6-4c63-a41c-2215c7f56649",
+      "name": "Strawberry Pre-Workout 3VS Nutrition Est",
+      "price": 69.9,
+      "oldPrice": 78.33,
+      "v1_score": 7.1,
+      "v2_score": 6.71,
+      "diff": "-0.39",
+      "isPremium": false
+    },
+    {
+      "id": "1be8f7dc-3c31-486a-aaf4-29cfd45d52aa",
+      "name": "Kit de limpeza de superfícies           ",
+      "price": 120.59,
+      "oldPrice": 160.79,
+      "v1_score": 7.1,
+      "v2_score": 6.95,
+      "diff": "-0.15",
+      "isPremium": false
+    },
+    {
+      "id": "d0f97b11-a027-4cbe-a813-48d2efc39912",
+      "name": "Bold Barra de Proteína Caixa Mista (12 U",
+      "price": 109,
+      "oldPrice": 139,
+      "v1_score": 6.86,
+      "v2_score": 6.68,
+      "diff": "-0.18",
+      "isPremium": false
+    },
+    {
+      "id": "3c145e76-3f0e-4254-a88c-74638ea9b30b",
+      "name": "Jaqueta Corta-Vento Olympikus Essential ",
+      "price": 142.49,
+      "oldPrice": 179.99,
+      "v1_score": 6.81,
+      "v2_score": 6.62,
+      "diff": "-0.19",
+      "isPremium": false
+    }
+  ],
+  "top20_v2": [
+    {
+      "id": "e3918c56-b38c-4f86-8d8d-97e516d24320",
+      "name": "Bandeira Do Brasil Para Capô De Carro Co",
+      "price": 29.09,
+      "oldPrice": 59.99,
+      "v1_score": 9.91,
+      "v2_score": 9.91,
+      "diff": "0.00",
+      "isPremium": false
+    },
+    {
+      "id": "831be263-33aa-42d9-98de-161f32f4ac8b",
+      "name": "Calça Jogger Tactel Soltinha Slim Academ",
+      "price": 39.8,
+      "oldPrice": 88.9,
+      "v1_score": 9.88,
+      "v2_score": 9.88,
+      "diff": "0.00",
+      "isPremium": false
+    },
+    {
+      "id": "914daa43-1f03-4301-bcbf-8b7dee97abb1",
+      "name": "Jaqueta Corta Vento Fila Block Colors Fe",
+      "price": 522.4,
+      "oldPrice": 1849.7,
+      "v1_score": 6.75,
+      "v2_score": 9.85,
+      "diff": "3.10",
+      "isPremium": false
+    },
+    {
+      "id": "f7ed8f1b-69c3-40de-9b03-df82c008df21",
+      "name": "Corta Vento Masculino Jaqueta Esportiva ",
+      "price": 84.97,
+      "oldPrice": 149.85,
+      "v1_score": 9.35,
+      "v2_score": 9.28,
+      "diff": "-0.07",
+      "isPremium": false
+    },
+    {
+      "id": "09bcc2ac-dfaf-4d1d-a193-8783cec19db5",
+      "name": "Calça Cargo Feminina Wide Leg Cintura Al",
+      "price": 69.9,
+      "oldPrice": 110.9,
+      "v1_score": 9.03,
+      "v2_score": 8.9,
+      "diff": "-0.13",
+      "isPremium": false
+    },
+    {
+      "id": "e3adaf2b-fe51-45bb-be6e-88272e3b9867",
+      "name": "Papel Higiênico Neve Supreme Folha Tripl",
+      "price": 63.06,
+      "oldPrice": 92.3,
+      "v1_score": 8.69,
+      "v2_score": 8.5,
+      "diff": "-0.19",
+      "isPremium": false
+    },
+    {
+      "id": "bd129a6a-105e-4f0e-aa0b-65c29ee073ca",
+      "name": "Liquidificador Easy Power Mondial 550W -",
+      "price": 80.93,
+      "oldPrice": 132,
+      "v1_score": 8.46,
+      "v2_score": 8.35,
+      "diff": "-0.11",
+      "isPremium": false
+    },
+    {
+      "id": "64811cd9-a8ad-4d91-ba5e-3920abed844a",
+      "name": "Camisa Botafogo II 25/26 s/n Goleiro Ree",
+      "price": 94.99,
+      "oldPrice": 399.99,
+      "v1_score": 8.25,
+      "v2_score": 8.35,
+      "diff": "0.10",
+      "isPremium": false
+    },
+    {
+      "id": "723b95bf-49de-42aa-94a7-ce7e0e00220c",
+      "name": "Camisa Botafogo I 25/26 s/n Torcedor Ree",
+      "price": 94.99,
+      "oldPrice": 399.99,
+      "v1_score": 8.25,
+      "v2_score": 8.35,
+      "diff": "0.10",
+      "isPremium": false
+    },
+    {
+      "id": "9fb6e75a-ab0c-412a-9d0a-fb41525bf95c",
+      "name": "Tapete Higiênico 50 Unidades (60x55) Des",
+      "price": 48,
+      "oldPrice": 69.9,
+      "v1_score": 8.51,
+      "v2_score": 8.33,
+      "diff": "-0.18",
+      "isPremium": false
+    },
+    {
+      "id": "91184e01-b72c-4dd2-9fe3-6d86537cec88",
+      "name": "Jaqueta Puffer Bobojaco Masculina Casaco",
+      "price": 113.05,
+      "oldPrice": 189.99,
+      "v1_score": 8.21,
+      "v2_score": 8.22,
+      "diff": "0.01",
+      "isPremium": false
+    },
+    {
+      "id": "42d58a89-4e56-45de-be4f-12fb98dae829",
+      "name": "Camisa França Eurodry Marinho Original R",
+      "price": 119.9,
+      "oldPrice": 229.9,
+      "v1_score": 8.1,
+      "v2_score": 8.18,
+      "diff": "0.08",
+      "isPremium": false
+    },
+    {
+      "id": "04a7d6dc-95ff-4d2f-b02a-c58eee2aee47",
+      "name": "Jaqueta Corta Vento Fila Core Run Mascul",
+      "price": 170.99,
+      "oldPrice": 349.99,
+      "v1_score": 8.34,
+      "v2_score": 7.69,
+      "diff": "-0.65",
+      "isPremium": false
+    },
+    {
+      "id": "e9d765b8-e377-4779-b6ec-c21e90e722b6",
+      "name": "Kit 2 Controle Sem Fio Redfin Para Ps4 P",
+      "price": 99.9,
+      "oldPrice": 170,
+      "v1_score": 7.64,
+      "v2_score": 7.65,
+      "diff": "0.01",
+      "isPremium": false
+    },
+    {
+      "id": "dc61ac54-780e-4be7-88c1-4c6d53b89dd8",
+      "name": "Aquecedor Ab1100n 1500w Branco Britânia ",
+      "price": 136.9,
+      "oldPrice": 228,
+      "v1_score": 7.55,
+      "v2_score": 7.55,
+      "diff": "0.00",
+      "isPremium": false
+    },
+    {
+      "id": "bf7610dc-0ea1-4d85-b13f-7e3625f695e8",
+      "name": "Camisa Barcelona Nike II 2025/26 Torcedo",
+      "price": 179.99,
+      "oldPrice": 399.99,
+      "v1_score": 7.65,
+      "v2_score": 7,
+      "diff": "-0.65",
+      "isPremium": false
+    },
+    {
+      "id": "1be8f7dc-3c31-486a-aaf4-29cfd45d52aa",
+      "name": "Kit de limpeza de superfícies           ",
+      "price": 120.59,
+      "oldPrice": 160.79,
+      "v1_score": 7.1,
+      "v2_score": 6.95,
+      "diff": "-0.15",
+      "isPremium": false
+    },
+    {
+      "id": "f1ba019e-f2d2-4019-b4e6-bc679a69c49a",
+      "name": "Camisa Manchester City Home 24/25 s/nº T",
+      "price": 225.16,
+      "oldPrice": 444.9,
+      "v1_score": 7.61,
+      "v2_score": 6.95,
+      "diff": "-0.66",
+      "isPremium": false
+    },
+    {
+      "id": "1fb667ea-26c6-4c63-a41c-2215c7f56649",
+      "name": "Strawberry Pre-Workout 3VS Nutrition Est",
+      "price": 69.9,
+      "oldPrice": 78.33,
+      "v1_score": 7.1,
+      "v2_score": 6.71,
+      "diff": "-0.39",
+      "isPremium": false
+    },
+    {
+      "id": "d0f97b11-a027-4cbe-a813-48d2efc39912",
+      "name": "Bold Barra de Proteína Caixa Mista (12 U",
+      "price": 109,
+      "oldPrice": 139,
+      "v1_score": 6.86,
+      "v2_score": 6.68,
+      "diff": "-0.18",
+      "isPremium": false
+    }
+  ]
+}

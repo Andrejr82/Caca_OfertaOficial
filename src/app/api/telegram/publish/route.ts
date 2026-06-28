@@ -26,6 +26,7 @@ export async function POST(request: Request) {
       .from("posts")
       .select("*, offers(*)")
       .eq("id", postId)
+      .neq("status", "deleted")
       .single();
 
     if (postError || !post) {

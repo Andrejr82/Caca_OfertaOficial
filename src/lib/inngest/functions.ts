@@ -194,7 +194,7 @@ export const runUserScrapingBackground = inngest.createFunction(
             .eq("id", offer.id);
 
           // 3.4. Deletar rascunhos de posts antigos para evitar duplicações
-          await supabase.from("posts").delete().eq("offer_id", offer.id).eq("status", "draft");
+          await supabase.from("posts").update({ status: "deleted", deleted_at: new Date().toISOString() }).eq("offer_id", offer.id).eq("status", "draft");
 
           // 3.5. Salvar novos posts
           const instagramContent = [

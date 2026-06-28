@@ -51,7 +51,26 @@ app.post('/api/scrape', async (req, res) => {
 
     const cheerio = require('cheerio');
     const $ = cheerio.load(htmlResult);
-    $('script, style, noscript, svg, img').remove();
+    $('script, style, noscript, svg').remove();
+    $('img').each((i, el) => {
+      let src = '';
+      const dyn = $(el).attr('data-a-dynamic-image');
+      if (dyn) {
+        try { src = Object.keys(JSON.parse(dyn))[0]; } catch(e){}
+      }
+      if (!src) src = $(el).attr('data-src');
+      if (!src) {
+        const srcset = $(el).attr('srcset');
+        if (srcset) src = srcset.split(' ')[0];
+      }
+      if (!src) src = $(el).attr('src');
+      
+      if (src && !src.startsWith('data:image') && !src.includes('base64') && !src.includes('svg') && !src.includes('placeholder')) {
+        $(el).replaceWith(` [IMG:${src}] `);
+      } else {
+        $(el).remove();
+      }
+    });
     textResult = $('body').text().replace(/\s+/g, ' ').trim();
 
     metaResult.title = $('title').text() || '';

@@ -53,8 +53,10 @@ create table if not exists public.posts (
   channel text not null check (channel in ('telegram', 'instagram', 'whatsapp')),
   content text not null,
   external_id text,
-  status text not null default 'draft' check (status in ('draft', 'published', 'failed')),
+  status text not null default 'draft' check (status in ('draft', 'published', 'failed', 'deleted')),
   posted_at timestamptz,
+  deleted_at timestamptz,
+  deleted_by uuid references auth.users(id),
   created_at timestamptz not null default now()
 );
 
@@ -98,6 +100,7 @@ create index if not exists offers_user_score_idx on public.offers(user_id, score
 create index if not exists offers_new_score_idx on public.offers(new_score desc);
 create index if not exists affiliate_links_user_offer_idx on public.affiliate_links(user_id, offer_id);
 create index if not exists posts_user_channel_idx on public.posts(user_id, channel);
+create index if not exists posts_status_idx on public.posts(status);
 create index if not exists sales_user_sold_at_idx on public.sales(user_id, sold_at desc);
 create index if not exists integration_logs_user_created_idx on public.integration_logs(user_id, created_at desc);
 

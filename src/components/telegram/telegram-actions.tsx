@@ -86,16 +86,16 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
   }
 
   async function handleReject() {
-    if (!confirm("Tem certeza que deseja excluir esta sugestão? Ela será removida de todas as redes sociais.")) return;
+    if (!confirm("Tem certeza que deseja excluir esta publicação do Telegram? A oferta original será mantida.")) return;
     
     setLoading(true);
     setStatus(null);
 
     try {
-      const response = await fetch("/api/offers/reject", {
+      const response = await fetch("/api/posts/reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId: post.offers.id })
+        body: JSON.stringify({ postId: post.id })
       });
       const data = await response.json();
 

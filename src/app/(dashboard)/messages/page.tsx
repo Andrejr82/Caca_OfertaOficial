@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { generateAllMessages } from "@/lib/messages/generate";
-import { listAffiliateLinks, listOffers } from "@/lib/offers/queries";
+import { getOfferPosts, listAffiliateLinks, listOffers } from "@/lib/offers/queries";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { GenerateAIMessagesButton, CopyToClipboardButton } from "@/components/messages/message-actions";
@@ -36,10 +36,7 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
 
   const supabase = await createServerSupabaseClient();
   if (supabase && offer) {
-    const { data: dbPosts } = await supabase
-      .from("posts")
-      .select("*")
-      .eq("offer_id", offer.id);
+    const dbPosts = await getOfferPosts(offer.id);
 
     if (dbPosts && dbPosts.length > 0) {
       const tel = dbPosts.find((p) => p.channel === "telegram");

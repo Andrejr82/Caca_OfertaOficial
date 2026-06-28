@@ -1,0 +1,8 @@
+export const SCRAPER_STRICT_MODE = true;
+
+export const SCRAPER_LIMITS = {
+  MIN_TITLE_LENGTH: 5,
+  MAX_TITLE_LENGTH: 250,
+  MIN_PRICE: 0.1,
+  MAX_PRICE: 50000
+};

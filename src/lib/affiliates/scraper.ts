@@ -84,7 +84,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
 
     const fetchLimit = limit * 4;
     const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category + " oferta relâmpago")}` : "https://shopee.com.br/m/ofertas-do-dia";
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
+    const promptText = getScrapingPrompt();
 
     const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
       method: 'POST',
@@ -97,6 +97,8 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
     if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) throw new Error("Sem texto extraído da Shopee pela Oracle API");
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
     const schemaObj = {
       type: "object",
@@ -127,8 +129,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
 
     if (!fcData.products) throw new Error("Sem produtos extraídos da Shopee pela IA");
 
-    const validProducts = fcData.products
-      .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+    const validProducts = sanitizeScrapedData(fcData.products, "Trends_API");
 
     const products = validProducts.slice(0, limit).map((p: any) => {
       const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
@@ -166,7 +167,7 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     // Corrigido: era /campaigns/best_sellers (best sellers ≠ promoções).
     // Agora usa /promotion/flash-sale: página de vendas relâmpago com preço antigo riscado real.
     const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/promotion/flash-sale";
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url, image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
+    const promptText = getScrapingPrompt();
 
     const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
       method: 'POST',
@@ -179,6 +180,8 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) throw new Error("Sem texto extraído da Shein pela Oracle API");
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
     const schemaObj = {
       type: "object",
@@ -209,8 +212,7 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
 
     if (!fcData.products) throw new Error("Sem produtos extraídos da Shein pela IA");
 
-    const validProducts = fcData.products
-      .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+    const validProducts = sanitizeScrapedData(fcData.products, "Trends_API");
 
     const products = validProducts.slice(0, limit).map((p: any) => {
       const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
@@ -251,7 +253,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
           "https://www.magazineluiza.com.br/selecao/ofertasdodia/"
         ];
 
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
+    const promptText = getScrapingPrompt();
 
     for (const url of urls) {
       try {
@@ -276,6 +278,8 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
         }
 
         const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
         const schemaObj = {
           type: "object",
@@ -309,8 +313,7 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
           continue;
         }
 
-        const validProducts = fcData.products
-          .filter((p: any) => p.title && p.price > 0 && !(p.title || "").toLowerCase().includes("protected by") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+        const validProducts = sanitizeScrapedData(fcData.products, "Trends_API");
 
         const products = validProducts.slice(0, limit)
           .map((p: any) => {
@@ -371,7 +374,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
       ];
       const randomUrl = defaultUrls[Math.floor(Math.random() * defaultUrls.length)];
       const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : randomUrl;
-      const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. Isso inclui obrigatoriamente uma destas opções: 1) Produtos com preço antigo riscado; 2) Produtos com selos percentuais explícitos (ex: '-20% OFF'); 3) Produtos com tags oficiais de loja como 'Oferta do Dia', 'Oferta Relâmpago', 'Oferta em Destaque', 'Venda Flash' ou 'Super Oferta'. Ignore produtos com preço cheio ou sem indicativo claro de promoção. Não pule nenhum produto que atenda aos critérios! Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal. Para cada produto retorne o titulo, url (começando com https://), image, price, old_price (se houver), discount_badge (se houver selo ou texto promocional), rating (se houver) e categoria.`;
+      const promptText = getScrapingPrompt();
 
       const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
         method: 'POST',
@@ -383,6 +386,8 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
         const oracleData = await oracleRes.json();
         if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
           const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
           const schemaObj = {
             type: "object",
@@ -412,8 +417,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
           const fcData = JSON.parse(rawResult);
 
           if (fcData.products && fcData.products.length > 0) {
-            const validProducts = fcData.products
-              .filter((p: any) => p.title && p.price > 0 && !p.image?.includes("unsplash.com") && !p.image?.includes("example.com") && !p.image?.includes("mock") && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+            const validProducts = sanitizeScrapedData(fcData.products, "Trends_API");
 
             const products = validProducts.slice(0, limit)
               .map((p: any) => {
@@ -651,6 +655,8 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
     const promptText = "Extraia o nome do produto, a URL principal da imagem do produto, o preço atual promocional (como número) e o preço original/antigo cortado (como número). Retorne null para o preço antigo se não houver. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -896,6 +902,8 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
     const promptText = "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -972,6 +980,8 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
     const promptText = "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1047,6 +1057,8 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
     const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1119,6 +1131,8 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
     const promptText = "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1313,13 +1327,7 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
       ? [`https://www.netshoes.com.br/busca?q=${encodeURIComponent(category + " oferta")}`]
       : ["https://www.netshoes.com.br/busca?q=oferta", "https://www.netshoes.com.br/lst/promocoes", "https://www.netshoes.com.br/especial/outlet"];
 
-    const promptText = `Você é um assistente caçador de Achadinhos. Extraia TODOS os produtos da página (mire em extrair uns ${fetchLimit} itens) que sejam CLARAMENTE uma promoção. 
-Critérios rígidos:
-1. O produto DEVE ter um preço antigo riscado ou um selo percentual de desconto.
-2. Para a IMAGEM (image), extraia a URL de alta resolução (frequentemente no atributo data-src, src ou srcset). NUNCA extraia placeholders (imagens vazias, base64 ou de carregamento).
-3. Para o SELO (discount_badge), extraia EXATAMENTE o que está escrito no site (ex: '30% OFF'). NUNCA invente palavras ou traduções.
-4. Se houver avaliação/nota do produto (ex: 4.5 estrelas), inclua no campo rating como número decimal.
-Retorne para cada produto: title, url, image, price (número), old_price (número, se houver), discount_badge, rating (se houver) e category.`;
+    const promptText = getScrapingPrompt();
 
     for (const url of urls) {
       let retries = 3;
@@ -1350,6 +1358,8 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
           }
 
           const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
           const schemaObj = {
             type: "object",
@@ -1388,8 +1398,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
 
       if (!fcData || !fcData.success || !fcData.data?.extract?.products?.length) continue;
 
-      const validProducts = fcData.data.extract.products
-        .filter((p: any) => p.title && p.price > 0 && ((p.old_price && p.old_price > p.price) || (p.discount_badge && p.discount_badge.trim().length > 0)));
+      const validProducts = sanitizeScrapedData(fcData.data?.extract?.products || [], "Trends_API");
 
       const products = validProducts.slice(0, limit).map((p: any) => {
         const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
@@ -1417,6 +1426,7 @@ Retorne para cada produto: title, url, image, price (número), old_price (númer
 }
 
 import { fetchMarketplaceCoupons, ScrapedCoupon } from "./coupon-scraper";
+import { validateHtml, getScrapingPrompt, sanitizeScrapedData } from "@/core/scraper/validator";
 
 /**
  * Roda o fluxo completo de descoberta de Cupons para as fontes selecionadas

@@ -35,12 +35,12 @@ export function BatchApprovalList({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
-  function toggleSelection(offerId: string) {
+  function toggleSelection(postId: string) {
     const newSet = new Set(selectedIds);
-    if (newSet.has(offerId)) {
-      newSet.delete(offerId);
+    if (newSet.has(postId)) {
+      newSet.delete(postId);
     } else {
-      newSet.add(offerId);
+      newSet.add(postId);
     }
     setSelectedIds(newSet);
   }
@@ -49,21 +49,21 @@ export function BatchApprovalList({
     if (selectedIds.size === posts.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(posts.map(p => p.offers.id)));
+      setSelectedIds(new Set(posts.map(p => p.id)));
     }
   }
 
   async function handleBulkDelete() {
     if (selectedIds.size === 0) return;
-    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.size} sugestões de uma vez? Elas serão removidas de todas as redes.`)) return;
+    if (!confirm(`Tem certeza que deseja excluir ${selectedIds.size} publicações de uma vez? Apenas as publicações destes canais serão removidas.`)) return;
 
     setLoading(true);
 
     try {
-      const response = await fetch("/api/offers/bulk-reject", {
+      const response = await fetch("/api/posts/bulk-reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerIds: Array.from(selectedIds) })
+        body: JSON.stringify({ postIds: Array.from(selectedIds) })
       });
       const data = await response.json();
 
@@ -125,7 +125,7 @@ export function BatchApprovalList({
       {/* Lista de Posts */}
       <div className="grid gap-4">
         {posts.map((post) => {
-          const isSelected = selectedIds.has(post.offers.id);
+          const isSelected = selectedIds.has(post.id);
           
           return (
             <div key={post.id} className="relative group">
@@ -134,7 +134,7 @@ export function BatchApprovalList({
                 <input 
                   type="checkbox"
                   checked={isSelected}
-                  onChange={() => toggleSelection(post.offers.id)}
+                  onChange={() => toggleSelection(post.id)}
                   className="w-6 h-6 rounded border-2 border-white/40 bg-black/40 text-red-500 cursor-pointer accent-red-500 shadow-md backdrop-blur-sm transition-all hover:scale-110"
                 />
               </div>
