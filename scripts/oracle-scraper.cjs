@@ -115,14 +115,13 @@ async function crawleeExtract(url, limit, storeName) {
 
   const SCRAPFLY_KEYS = (process.env.SCRAPFLY_API_KEYS || "").split(",").map(k => k.trim()).filter(k => k);
   let proxyConfiguration = undefined;
+  let targetUrl = url;
 
   if (storeName === 'Mercado Livre' && SCRAPFLY_KEYS.length > 0) {
     const key = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
-    // Proxy Scrapfly: username = API_KEY, password = asp=true&country=br
-    proxyConfiguration = new ProxyConfiguration({
-      proxyUrls: [`http://${key}:asp=true&country=br@proxy.scrapfly.io:8080`]
-    });
-    console.log(`  [Scrapfly] Utilizando proxy na loja Mercado Livre`);
+    // Utilizando API Direta do Scrapfly retornando o HTML cru (format=raw)
+    targetUrl = `https://api.scrapfly.io/scrape?key=${key}&url=${encodeURIComponent(url)}&asp=true&country=br&format=raw`;
+    console.log(`  [Scrapfly] Utilizando API Direta na loja Mercado Livre`);
   }
 
   const crawler = new PlaywrightCrawler({
@@ -236,7 +235,7 @@ async function crawleeExtract(url, limit, storeName) {
   });
 
   try {
-    await crawler.run([url]);
+    await crawler.run([targetUrl]);
   } catch (err) {
     console.error(`  [Crawlee] Erro ao raspar ${storeName}: ${err.message}`);
     return [];
