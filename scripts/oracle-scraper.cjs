@@ -114,10 +114,13 @@ async function crawleeExtract(url, limit, storeName) {
   let evalResult = { text: '', found: 0, sent: 0 };
 
   const SCRAPFLY_KEYS = (process.env.SCRAPFLY_API_KEYS || "").split(",").map(k => k.trim()).filter(k => k);
-  let proxyConfiguration = undefined;
+  let proxyConfiguration;
   let targetUrl = url;
+  
+  const isLocal = process.platform === 'win32';
 
-  if (storeName === 'Mercado Livre' && SCRAPFLY_KEYS.length > 0) {
+  // Usamos Scrapfly apenas se não for execução local (para evitar proxy de datacenter no IP residencial)
+  if (!isLocal && storeName === 'Mercado Livre' && SCRAPFLY_KEYS.length > 0) {
     const key = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
     // Proxy Scrapfly: username = API_KEY, password = asp=true&country=br
     proxyConfiguration = new ProxyConfiguration({
@@ -712,7 +715,8 @@ async function runScrapingCycle() {
   const startTime = Date.now();
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER IN-HOUSE — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
-  const stores = ['Mercado Livre', 'Amazon', 'Magalu'];
+  const isLocal = process.platform === 'win32';
+  const stores = isLocal ? ['Mercado Livre', 'Amazon', 'Magalu'] : ['Amazon', 'Magalu'];
   let allCandidates = [];
 
   for (const store of stores) {
