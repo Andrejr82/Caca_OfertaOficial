@@ -159,6 +159,12 @@ async function crawleeExtract(url, limit, storeName) {
         ]
       }
     },
+    preNavigationHooks: [
+      async ({ page }) => {
+        page.setDefaultNavigationTimeout(150000);
+        page.setDefaultTimeout(150000);
+      }
+    ],
     async requestHandler({ request, page, log }) {
       log.info(`[Crawlee] Raspando: ${request.url}`);
       
