@@ -28,6 +28,8 @@ process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
 process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 const axios        = require('axios');
 require('dotenv').config({ path: '.env.local' });
+const { validateHtml, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
+
 
 // ─── Supabase Admin Client ────────────────────────────────────
 const supabase = createClient(
@@ -94,9 +96,22 @@ function getRandomQueries(store) {
   return selected;
 }
 
+// ─── Telemetria Global do Ciclo ─────────────────────────────────
+const cycleMetrics = {
+  produtos_encontrados: 0,
+  produtos_enviados_llm: 0,
+  produtos_retornados: 0,
+  produtos_aprovados: 0,
+  produtos_rejeitados: 0,
+  total_tokens: 0,
+  reject_reasons: {},
+  por_marketplace: {}
+};
+
 // ─── Extração via Crawlee + Groq ──────────────────────────────
 async function crawleeExtract(url, limit, storeName) {
   let rawExtractedData = '';
+  let evalResult = { text: '', found: 0, sent: 0 };
 
   const crawler = new PlaywrightCrawler({
     maxConcurrency: 1,
@@ -157,19 +172,32 @@ async function crawleeExtract(url, limit, storeName) {
       }
       await page.waitForTimeout(2000);
 
-      rawExtractedData = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('a, div.ui-search-result, div[data-component-type="s-search-result"], div.poly-card, div.andes-card'));
+      evalResult = await page.evaluate(() => {
+        const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item'));
         let results = [];
         for (let el of items) {
           const text = el.innerText || '';
           if (text.includes('R$')) {
             const linkTag = el.tagName === 'A' ? el : el.querySelector('a');
-            const imgTag = el.querySelector('img.s-image') || el.querySelector('img.ui-search-result-image__element') || el.querySelector('img.poly-component__picture') || el.querySelector('img');
+            const imgTag = el.querySelector('img.s-image') || el.querySelector('img.ui-search-result-image__element') || el.querySelector('img[data-testid="image"]') || el.querySelector('img');
             const url = linkTag ? linkTag.href : '';
             let img = '';
             if (imgTag) {
-              img = imgTag.getAttribute('data-src') || imgTag.getAttribute('src') || imgTag.src || '';
-              if (img.startsWith('data:image')) img = 'base64_hidden';
+              const dyn = imgTag.getAttribute('data-a-dynamic-image');
+              if (dyn) {
+                try { img = Object.keys(JSON.parse(dyn))[0]; } catch(e){}
+              }
+              if (!img) img = imgTag.getAttribute('data-src');
+              if (!img) {
+                const srcset = imgTag.getAttribute('srcset');
+                if (srcset) img = srcset.split(' ')[0];
+              }
+              if (!img) img = imgTag.getAttribute('src');
+              if (!img) img = imgTag.src || '';
+              
+              if (img.startsWith('data:image') || img.includes('base64') || img.includes('svg') || img.includes('placeholder')) {
+                img = '';
+              }
             }
             if (url) {
               results.push(`[TEXTO]: ${text.replace(/\n/g, ' ')} | [LINK]: ${url} | [IMG]: ${img}`);
@@ -182,7 +210,7 @@ async function crawleeExtract(url, limit, storeName) {
           const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
           if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
         }
-        return unique.slice(0, 15).join('\n'); // Reduzido de 20 para 15 para não estourar o Groq 413
+        return { text: unique.slice(0, 15).join('\n'), found: unique.length, sent: Math.min(unique.length, 15) };
       });
     }
   });
@@ -194,32 +222,17 @@ async function crawleeExtract(url, limit, storeName) {
     return [];
   }
 
+  rawExtractedData = evalResult.text;
+  cycleMetrics.produtos_encontrados += evalResult.found;
+  cycleMetrics.produtos_enviados_llm += evalResult.sent;
+  if (!cycleMetrics.por_marketplace[storeName]) cycleMetrics.por_marketplace[storeName] = 0;
+
   if (!rawExtractedData) return [];
+  if (!validateHtml(rawExtractedData, storeName)) return [];
 
   // Chama a Groq para formatar os dados
   console.log(`  [Groq] Analisando dados brutos da ${storeName}...`);
-  const prompt = `Você é um extrator de dados. Analise esta lista de produtos encontrados na loja ${storeName}.
-Identifique as melhores ofertas e monte um JSON APENAS com os produtos válidos (que tenham nome e preço).
-Se houver preço cortado (ex: de R$ 100 por R$ 50), coloque 100 em old_price e 50 em price.
-
-MUITO IMPORTANTE:
-- Extraia os Nomes REAIS dos produtos do texto bruto. NÃO USE placeholders como "Nome limpo do produto" ou "Produto 1".
-- Extraia a Imagem REAL e a URL REAL dos campos fornecidos.
-
-Schema JSON Obrigatório:
-{
-  "products": [
-    {
-      "title": "<Extraia o nome real do texto>",
-      "url": "<Link absoluto exato extraído>",
-      "image": "<Link da imagem extraída ou null>",
-      "price": 199.90,
-      "old_price": 299.90,
-      "category": "${storeName}",
-      "rating": 4.5
-    }
-  ]
-}`;
+  const prompt = getScrapingPrompt(storeName);
 
   let retries = 3;
   let delay = 2000;
@@ -238,11 +251,22 @@ Schema JSON Obrigatório:
         headers: { 'Authorization': `Bearer ${GROQ_API_KEY}`, 'Content-Type': 'application/json' }
       });
 
+      if (res.data.usage) {
+        cycleMetrics.total_tokens += res.data.usage.total_tokens;
+      }
       const content = res.data.choices[0].message.content;
       try {
         const cleanContent = content.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
         const data = JSON.parse(cleanContent);
-        return (data.products || []).slice(0, limit);
+        const returnedProducts = data.products || [];
+        cycleMetrics.produtos_retornados += returnedProducts.length;
+        
+        const approvedProducts = sanitizeScrapedData(returnedProducts, storeName).slice(0, limit);
+        cycleMetrics.produtos_aprovados += approvedProducts.length;
+        cycleMetrics.produtos_rejeitados += (returnedProducts.length - approvedProducts.length);
+        cycleMetrics.por_marketplace[storeName] += approvedProducts.length;
+        
+        return approvedProducts;
       } catch (parseErr) {
         console.error(`  [Groq] Erro de parse JSON no scraper: ${parseErr.message}`);
         return [];
@@ -307,7 +331,7 @@ function createTrackedUrl(subId) {
 }
 
 // ─── Score Matemático Frio ────────────────────────────────────
-function calculateScore(product) {
+function calculateScoreV1(product) {
   const price = product.current_price || 0;
   const oldPrice = product.old_price || 0;
   
@@ -333,6 +357,43 @@ function calculateScore(product) {
 
   return Number(((discountScore * 0.35) + (priceScore * 0.30) + (impulseScore * 0.20) + (ratingScore * 0.15)).toFixed(2));
 }
+
+function calculateScoreV2(product) {
+  const price = product.current_price || 0;
+  const oldPrice = product.old_price || 0;
+  
+  let discountPct = 0;
+  let absoluteSavings = 0;
+
+  if (oldPrice > price) {
+    discountPct = (oldPrice - price) / oldPrice;
+    absoluteSavings = oldPrice - price;
+  }
+  
+  let discountScore = 0;
+  if (discountPct > 0) {
+    if (discountPct > 0.8) discountScore = 2; // Black Fraude
+    else discountScore = Math.min((discountPct / 0.5) * 10, 10);
+  }
+  
+  // Economia Absoluta
+  let savingsScore = absoluteSavings >= 1000 ? 10 : (absoluteSavings >= 500 ? 8 : (absoluteSavings >= 100 ? 5 : 0));
+  
+  // Compra por Impulso
+  let impulseScore = price <= 90 ? 10 : (price <= 150 ? 8 : (price <= 300 ? 5 : 0));
+  
+  // Premium Score (compensa a falta de impulseScore para produtos caros)
+  let premiumScore = price >= 1500 ? 8 : (price >= 700 ? 5 : 0);
+  
+  let ratingScore = product.rating ? (product.rating / 5) * 10 : 5;
+  
+  // A V2 pega o maior multiplicador comercial secundário
+  const bestCommercialScore = Math.max(savingsScore, impulseScore, premiumScore);
+
+  return Number(((discountScore * 0.40) + (bestCommercialScore * 0.45) + (ratingScore * 0.15)).toFixed(2));
+}
+
+
 
 // ─── Lógica IA: Copywriting via Groq ──────────────────────────
 function cleanJsonString(str) {
@@ -442,23 +503,53 @@ function generateFallback(product, store) {
 
 // ─── Salva Oferta Básica (Rascunho) ───────────────────────────
 async function upsertOffer(product, store, affiliateUrl) {
-  const score = calculateScore(product);
+  const scoreV1 = calculateScoreV1(product);
+  const scoreV2 = calculateScoreV2(product);
+  
+  // A V1 continua mandando no sistema principal
+  const score = scoreV1;
 
-  const { data: existing } = await supabase.from('offers').select('id, current_price').eq('original_url', affiliateUrl).eq('user_id', ADMIN_USER_ID).maybeSingle();
+  // A/B Test Telemetry
+  if (process.env.SCORING_V2_ENABLED === 'true') {
+    if (!cycleMetrics.ab_test_offers) cycleMetrics.ab_test_offers = [];
+    cycleMetrics.ab_test_offers.push({
+      product_name: product.product_name,
+      store: store,
+      score_v1: scoreV1,
+      score_v2: scoreV2,
+      diff: Number((scoreV2 - scoreV1).toFixed(2)),
+      timestamp: new Date().toISOString()
+    });
+  }
+
+  const { data: existing } = await supabase.from('offers').select('id, current_price, metadata').eq('original_url', affiliateUrl).eq('user_id', ADMIN_USER_ID).maybeSingle();
 
   if (existing) {
+    let newMetadata = existing.metadata || {};
+    if (process.env.SCORING_V2_ENABLED === 'true') {
+      newMetadata.score_v2 = scoreV2;
+      newMetadata.score_v1 = scoreV1;
+    }
+
     if (Number(existing.current_price) !== product.current_price) {
-      await supabase.from('offers').update({ current_price: product.current_price, old_price: product.old_price, image_url: product.image_url, score, updated_at: new Date().toISOString() }).eq('id', existing.id);
+      await supabase.from('offers').update({ current_price: product.current_price, old_price: product.old_price, image_url: product.image_url, score, metadata: newMetadata, updated_at: new Date().toISOString() }).eq('id', existing.id);
     } else {
-      await supabase.from('offers').update({ updated_at: new Date().toISOString() }).eq('id', existing.id);
+      await supabase.from('offers').update({ score, metadata: newMetadata, updated_at: new Date().toISOString() }).eq('id', existing.id);
     }
     return { id: existing.id, isNew: false, score };
+  }
+
+  let metadata = {};
+  if (process.env.SCORING_V2_ENABLED === 'true') {
+    metadata.score_v2 = scoreV2;
+    metadata.score_v1 = scoreV1;
   }
 
   const { data, error } = await supabase.from('offers').insert({
     user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
     image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
     rating: product.rating, category: product.category || 'Geral', score, status: 'draft',
+    metadata,
     notes: `[Oracle In-House] Importado às ${new Date().toLocaleString('pt-BR')}`,
   }).select('id').single();
 
@@ -609,13 +700,57 @@ async function runScrapingCycle() {
   await cleanupOldDrafts();
 
   const duration = Math.round((Date.now() - startTime) / 1000);
+  
+  const recoveryRate = cycleMetrics.produtos_encontrados > 0 ? (cycleMetrics.produtos_aprovados / cycleMetrics.produtos_encontrados).toFixed(2) : 0;
+  const approvalRate = cycleMetrics.produtos_retornados > 0 ? (cycleMetrics.produtos_aprovados / cycleMetrics.produtos_retornados).toFixed(2) : 0;
+
+  let abTestReport = null;
+  if (process.env.SCORING_V2_ENABLED === 'true' && cycleMetrics.ab_test_offers) {
+    const sortedByV1 = [...cycleMetrics.ab_test_offers].sort((a, b) => b.score_v1 - a.score_v1);
+    const sortedByV2 = [...cycleMetrics.ab_test_offers].sort((a, b) => b.score_v2 - a.score_v2);
+    
+    // Calcula rank
+    sortedByV1.forEach((o, i) => o.ranking_v1 = i + 1);
+    const v2RankMap = new Map();
+    sortedByV2.forEach((o, i) => v2RankMap.set(o.product_name, i + 1));
+    
+    abTestReport = sortedByV1.map(o => ({
+      ...o,
+      ranking_v2: v2RankMap.get(o.product_name)
+    }));
+  }
+
   try {
     await supabase.from('integration_logs').insert({
       user_id: ADMIN_USER_ID, integration: 'Oracle-Scraper', action: 'Ciclo In-House Completo', status: 'success',
       message: `${allCandidates.length} raspes, ${aiProcessed} via IA em ${duration}s.`,
-      metadata: { total_scraped: allCandidates.length, ai_processed: aiProcessed, duration_seconds: duration }
+      metadata: { 
+        total_scraped: allCandidates.length, 
+        ai_processed: aiProcessed, 
+        duration_seconds: duration,
+        produtos_encontrados: cycleMetrics.produtos_encontrados,
+        produtos_enviados_llm: cycleMetrics.produtos_enviados_llm,
+        produtos_retornados: cycleMetrics.produtos_retornados,
+        produtos_aprovados: cycleMetrics.produtos_aprovados,
+        produtos_rejeitados: cycleMetrics.produtos_rejeitados,
+        recovery_rate: recoveryRate,
+        approval_rate: approvalRate,
+        consumo_tokens: cycleMetrics.total_tokens,
+        por_marketplace: cycleMetrics.por_marketplace,
+        ab_test_report: abTestReport
+      }
     });
   } catch(e){}
+
+  // Reset metrics for next cycle
+  cycleMetrics.produtos_encontrados = 0;
+  cycleMetrics.produtos_enviados_llm = 0;
+  cycleMetrics.produtos_retornados = 0;
+  cycleMetrics.produtos_aprovados = 0;
+  cycleMetrics.produtos_rejeitados = 0;
+  cycleMetrics.total_tokens = 0;
+  cycleMetrics.por_marketplace = {};
+  cycleMetrics.ab_test_offers = [];
 
   console.log(`\n🏁 Ciclo concluído em ${duration}s! IA gerou ${aiProcessed} posts. Próximo ciclo em 4h.\n`);
 }
