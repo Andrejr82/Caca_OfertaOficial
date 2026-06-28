@@ -12,7 +12,7 @@ REGRAS DE INTEGRIDADE OBRIGATÓRIAS (CRÍTICAS):
 6. Não liste produtos genéricos. Se não houver clareza de que é um produto à venda, ignore-o.
 
 7. O campo "product_name" (ou "title") é OBRIGATÓRIO. Extraia o nome real do produto do texto, mesmo que haja mistura de patrocínios (ex: "Patrocinado Notebook Acer...").
-8. O campo "price" (ou "preco") é OBRIGATÓRIO.
+8. O campo "price" (ou "preco") é OBRIGATÓRIO e DEVE SER UM NÚMERO (float). Converta textos como "R$ 1.299,99" para 1299.99. Nunca retorne strings no campo price.
 9. Os campos "url" (ou "link") e "image_url" (ou "img") também devem ser preenchidos se disponíveis.
 10. Se a string contiver vários produtos misturados em um banner patrocinado, tente isolar o nome do produto principal.
 

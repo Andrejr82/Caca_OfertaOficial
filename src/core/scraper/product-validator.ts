@@ -19,7 +19,19 @@ export function validateProduct(product: any, source: string): ValidationResult 
   }
 
   const title = (product.title || product.product_name || "").trim();
-  const price = typeof product.price === 'number' ? product.price : (product.current_price || 0);
+  
+  let price = 0;
+  if (typeof product.price === 'number') {
+    price = product.price;
+  } else if (typeof product.current_price === 'number') {
+    price = product.current_price;
+  } else {
+    // Tenta fazer o parse de string, caso o LLM retorne "R$ 1.299,99"
+    const rawPrice = product.price || product.current_price || "0";
+    const cleaned = String(rawPrice).replace(/[R$\s.]/g, '').replace(',', '.');
+    price = parseFloat(cleaned) || 0;
+  }
+  
   const image = (product.image || product.image_url || "").trim();
   const url = (product.url || product.original_url || "").trim();
 
