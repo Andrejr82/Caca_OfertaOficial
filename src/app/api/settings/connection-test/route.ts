@@ -14,7 +14,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Não autorizado." }, { status: 401 });
     }
 
-    const { platform } = await request.json();
+    const body = await request.json();
+    const { platform, sendTest } = body as { platform?: string; sendTest?: boolean };
     const now = new Date().toLocaleString("pt-BR");
 
     if (platform === "Instagram") {
@@ -71,6 +72,34 @@ export async function POST(request: Request) {
       const status = await whatsappService.getChannelStatus();
       if (status?.connected) {
         const sender = status?.sender?.id ? ` Motor conectado como ${status.sender.id}.` : "";
+        if (sendTest) {
+          const testText = `🧪 Teste Vercel → Motor Oracle (${new Date().toLocaleString("pt-BR")})`;
+          const result = await whatsappService.sendChannelMessage(channelId, testText);
+          try {
+            await supabase.from("integration_logs").insert({
+              user_id: user.id,
+              integration: "WhatsApp",
+              action: "Connection Test (Send)",
+              status: "success",
+              message: `Teste de envio disparado para o canal ${channelId}`,
+              metadata: {
+                engineUrl,
+                requestId: result?.requestId || null,
+                messageId: result?.messageId || null
+              }
+            });
+          } catch {}
+          return NextResponse.json(
+            {
+              ok: true,
+              message: `Conectado.${sender} Teste enviado.`,
+              lastCheck: now,
+              details: status,
+              test: { requestId: result?.requestId || null, messageId: result?.messageId || null }
+            }
+          );
+        }
+
         return NextResponse.json({ ok: true, message: `Conectado.${sender}`, lastCheck: now, details: status });
       }
 

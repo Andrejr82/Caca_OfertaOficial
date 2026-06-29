@@ -282,7 +282,10 @@ app.get('/test-send', async (req, res) => {
     if (!isConnected || !sock) {
         return res.status(503).json({ ok: false, message: 'Motor desconectado' });
     }
-    const jid = '120363426476830692@newsletter';
+    const jid = (process.env.WHATSAPP_CHANNEL_ID || '120363426476830692@newsletter')
+        .replace(/['"]/g, '')
+        .replace(/\s+/g, '')
+        .trim();
     try {
         const result = await sock.sendMessage(jid, { text: '🧪 Teste automático do motor — ' + new Date().toLocaleTimeString('pt-BR') });
         console.log(`\n🧪 TESTE: Enviado! ID: ${result?.key?.id}`);
