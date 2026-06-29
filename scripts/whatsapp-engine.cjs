@@ -210,15 +210,22 @@ app.post('/send', async (req, res) => {
                 const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
                 const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
 
-                // Gera URL ÚNICA com timestamp, random e hash para garantir que o WhatsApp não cacheie
-                const randomStr = Math.random().toString(36).substring(2, 10);
-                const uniqueSourceUrl = clickUrl.includes('?') 
-                    ? `${clickUrl}&_t=${Date.now()}&_r=${randomStr}` 
-                    : `${clickUrl}?_t=${Date.now()}&_r=${randomStr}`;
-                
+                const isNewsletter = jid.endsWith('@newsletter');
+
+                let uniqueSourceUrl = clickUrl;
                 let finalMessageText = text;
-                if (urlMatch) {
-                    finalMessageText = text.split(clickUrl).join(uniqueSourceUrl);
+
+                if (!isNewsletter) {
+                    const randomStr = Math.random().toString(36).substring(2, 10);
+                    uniqueSourceUrl = clickUrl.includes('?')
+                        ? `${clickUrl}&_t=${Date.now()}&_r=${randomStr}`
+                        : `${clickUrl}?_t=${Date.now()}&_r=${randomStr}`;
+
+                    if (urlMatch) {
+                        finalMessageText = text.split(clickUrl).join(uniqueSourceUrl);
+                    }
+                } else {
+                    console.log(`- Newsletter detectada: desativando cache-buster de URL`);
                 }
 
                 console.log(`- Texto pós-modificação (hash): ${hashStr(finalMessageText)}`);
