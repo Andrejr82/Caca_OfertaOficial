@@ -247,6 +247,10 @@ async function crawleeExtract(url, limit, storeName) {
   let rawExtractedData = '';
   let evalResult = { text: '', found: 0, sent: 0 };
 
+  // Calcula maxProducts aqui (fora do page.evaluate, pois lá não tem acesso às variáveis Node.js)
+  const providerConfig = PROVIDER_CONFIG[LLM_PROVIDER];
+  const maxProducts = providerConfig?.productsToProcess || 15;
+  
   const SCRAPFLY_KEYS = (process.env.SCRAPFLY_API_KEYS || "").split(",").map(k => k.trim()).filter(k => k);
   let proxyConfiguration;
   let targetUrl = url;
@@ -327,7 +331,7 @@ async function crawleeExtract(url, limit, storeName) {
       }
       await page.waitForTimeout(2000);
 
-      evalResult = await page.evaluate(() => {
+      evalResult = await page.evaluate((maxProd) => {
         const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item, .poly-card'));
         let results = [];
         for (let el of items) {
@@ -365,18 +369,15 @@ async function crawleeExtract(url, limit, storeName) {
           const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
           if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
         }
-        // Usa número de produtos baseado no provedor LLM principal
-        const providerConfig = PROVIDER_CONFIG[LLM_PROVIDER];
-        const maxProducts = providerConfig?.productsToProcess || 15;
         return { 
-          text: unique.slice(0, maxProducts).join('\n'), 
+          text: unique.slice(0, maxProd).join('\n'), 
           found: items.length,
           valid: results.length,
-          sent: Math.min(unique.length, maxProducts),
+          sent: Math.min(unique.length, maxProd),
           longestText: results.reduce((max, r) => Math.max(max, r.length), 0),
           avgText: results.length ? results.reduce((sum, r) => sum + r.length, 0) / results.length : 0
         };
-      });
+      }, maxProducts);
       console.log(`\n  [DIAGNÓSTICO ${storeName}] Seletores encontrados: ${evalResult.found} | Cards com preço: ${evalResult.valid} | Enviados: ${evalResult.sent} | Textos: (Max: ${evalResult.longestText}, Média: ${evalResult.avgText.toFixed(0)})`);
       console.log(`[${storeName}] Itens raspados (únicos): ${evalResult.sent} | RAW size: ${evalResult.text.length}`);
     }
