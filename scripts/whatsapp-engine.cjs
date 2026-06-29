@@ -42,7 +42,7 @@ async function connectToWhatsApp() {
         auth: state,
         printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        generateHighQualityLinkPreview: true,
+        generateHighQualityLinkPreview: false, // Desligado para evitar cache de preview
     });
 
     // Create a promise that resolves when connection is open
@@ -185,9 +185,11 @@ app.post('/send', async (req, res) => {
                 const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
                 const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
 
+                // Gera URL ÚNICA com timestamp, random e hash para garantir que o WhatsApp não cacheie
+                const randomStr = Math.random().toString(36).substring(2, 10);
                 const uniqueSourceUrl = clickUrl.includes('?') 
-                    ? clickUrl.replace('?', `/${Date.now()}?`) 
-                    : `${clickUrl}/${Date.now()}`;
+                    ? `${clickUrl}&_t=${Date.now()}&_r=${randomStr}` 
+                    : `${clickUrl}?_t=${Date.now()}&_r=${randomStr}`;
                 
                 let finalMessageText = text;
                 if (urlMatch) {
@@ -210,18 +212,26 @@ app.post('/send', async (req, res) => {
                 const extAdReplyHashObj = { ...externalAdReplyObj, thumbnail: hashBuf(imageBuffer) };
                 console.log(`- externalAdReply hash (sem o buffer real): ${hashStr(JSON.stringify(extAdReplyHashObj))}`);
 
-                result = await sock.sendMessage(jid, {
-                    text: finalMessageText,
-                    linkPreview: {
-                        'matched-text': uniqueSourceUrl,
-                        title: externalAdReplyObj.title,
-                        description: externalAdReplyObj.body,
-                        jpegThumbnail: imageBuffer
-                    },
-                    contextInfo: {
-                        externalAdReply: externalAdReplyObj
-                    }
-                });
+                if (req.body.nativeMedia) {
+                    console.log('  → Enviando como Mídia Nativa (Image Message)');
+                    result = await sock.sendMessage(jid, {
+                        image: imageBuffer,
+                        caption: finalMessageText
+                    });
+                } else {
+                    result = await sock.sendMessage(jid, {
+                        text: finalMessageText,
+                        linkPreview: {
+                            'matched-text': uniqueSourceUrl,
+                            title: externalAdReplyObj.title,
+                            description: externalAdReplyObj.body,
+                            jpegThumbnail: imageBuffer
+                        },
+                        contextInfo: {
+                            externalAdReply: externalAdReplyObj
+                        }
+                    });
+                }
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
                 throw err;

@@ -1,9 +1,9 @@
 {
-  "usableSessionsCount": 36,
+  "usableSessionsCount": 12,
   "retiredSessionsCount": 0,
   "sessions": [
     {
-      "id": "session_JRS6deQQIU",
+      "id": "session_mS3VxidFTe",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -16,14 +16,14 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:01.119Z",
-      "createdAt": "2026-06-29T03:00:01.119Z",
+      "expiresAt": "2026-06-29T21:04:48.950Z",
+      "createdAt": "2026-06-29T20:14:48.950Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_4xsZuJ7cCP",
+      "id": "session_2Hqwhd2lL1",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -34,51 +34,71 @@
         "cookies": [
           {
             "key": "_d2id",
-            "value": "887429bd-5759-411a-9f72-10f1656fc597-n",
-            "expires": "2027-06-29T03:00:03.117Z",
+            "value": "ca0779da-9981-44de-9f2b-5bfc5b341c1b-n",
+            "expires": "2027-06-29T20:14:53.823Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:00:03.836Z",
-            "lastAccessed": "2026-06-29T03:00:03.836Z"
-          },
-          {
-            "key": "_mldataSessionId",
-            "value": "c01ad831-34e0-4310-a4f3-bdf1ccc411ad",
-            "expires": "2026-06-29T03:30:03.000Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:00:03.837Z",
-            "lastAccessed": "2026-06-29T03:00:03.837Z"
+            "creation": "2026-06-29T20:14:53.961Z",
+            "lastAccessed": "2026-06-29T20:14:53.961Z"
           },
           {
             "key": "_csrf",
-            "value": "Y02Q0_CFmhmoDgkoL4Paria3",
-            "expires": "2026-06-29T03:50:03.836Z",
-            "domain": "www.mercadolivre.com.br",
+            "value": "VaZ_qbJl7bxczQYQyA2Vd08q",
+            "expires": "2026-06-29T21:04:53.960Z",
+            "domain": "lista.mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
             "hostOnly": true,
-            "creation": "2026-06-29T03:00:03.837Z",
-            "lastAccessed": "2026-06-29T03:00:03.837Z"
+            "creation": "2026-06-29T20:14:53.965Z",
+            "lastAccessed": "2026-06-29T20:14:53.965Z"
+          },
+          {
+            "key": "_mldataSessionId",
+            "value": "212dfc04-28b4-4bcc-a96d-70f4eb53f491",
+            "expires": "2026-06-29T20:44:53.823Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:14:53.965Z",
+            "lastAccessed": "2026-06-29T20:14:53.965Z"
+          },
+          {
+            "key": "_bmstate",
+            "value": "0c77d4a1522518e7fbd435b538c43d1042105bda161b3ba10a8b947f789e5073%3B2%3B17667910870f3c27f5b10d2be5dc72594e85505445605fec976441301df7a246%3B1782767693%3B3a9f2%3Bf13753390f0f0ae9fedba47c2f6b8364b1219cb01ad33f0f65ee85c419b46616",
+            "expires": "2026-06-30T20:08:13.823Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:14:53.966Z",
+            "lastAccessed": "2026-06-29T20:14:53.966Z"
+          },
+          {
+            "key": "_bmc",
+            "value": "0c77d4a1522518e7fbd435b538c43d1042105bda161b3ba10a8b947f789e5073%3B218",
+            "expires": "2026-06-30T20:08:13.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:14:53.966Z",
+            "lastAccessed": "2026-06-29T20:14:53.966Z"
           }
         ]
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:01.155Z",
-      "createdAt": "2026-06-29T03:00:01.155Z",
+      "expiresAt": "2026-06-29T21:04:48.954Z",
+      "createdAt": "2026-06-29T20:14:48.954Z",
       "usageCount": 1,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_DIxx2kPMag",
+      "id": "session_IW0mQEL2YW",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -91,14 +111,14 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:14.271Z",
-      "createdAt": "2026-06-29T03:00:14.271Z",
+      "expiresAt": "2026-06-29T21:05:09.438Z",
+      "createdAt": "2026-06-29T20:15:09.438Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_6reSMaFdTS",
+      "id": "session_8ErUtQ9dGU",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -109,51 +129,71 @@
         "cookies": [
           {
             "key": "_d2id",
-            "value": "7a094064-6dd9-4c63-8f3d-5e9e9b4915b3-n",
-            "expires": "2027-06-29T03:00:15.014Z",
+            "value": "6971d46f-a062-481b-85f7-20515746d6b7-n",
+            "expires": "2027-06-29T20:15:13.297Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:00:15.729Z",
-            "lastAccessed": "2026-06-29T03:00:15.729Z"
-          },
-          {
-            "key": "_mldataSessionId",
-            "value": "1e873238-1816-41b4-a636-777c31348dc7",
-            "expires": "2026-06-29T03:30:15.000Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:00:15.729Z",
-            "lastAccessed": "2026-06-29T03:00:15.729Z"
+            "creation": "2026-06-29T20:15:13.409Z",
+            "lastAccessed": "2026-06-29T20:15:13.409Z"
           },
           {
             "key": "_csrf",
-            "value": "YSybl_iW8DliKIIc7KoXZesK",
-            "expires": "2026-06-29T03:50:15.729Z",
-            "domain": "www.mercadolivre.com.br",
+            "value": "0ZPshjdNTJHleicfajq3Gn7z",
+            "expires": "2026-06-29T21:05:13.408Z",
+            "domain": "lista.mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
             "hostOnly": true,
-            "creation": "2026-06-29T03:00:15.729Z",
-            "lastAccessed": "2026-06-29T03:00:15.729Z"
+            "creation": "2026-06-29T20:15:13.409Z",
+            "lastAccessed": "2026-06-29T20:15:13.409Z"
+          },
+          {
+            "key": "_mldataSessionId",
+            "value": "276b94db-95cd-423b-82fb-27ab35fbe0d3",
+            "expires": "2026-06-29T20:45:13.298Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:13.409Z",
+            "lastAccessed": "2026-06-29T20:15:13.409Z"
+          },
+          {
+            "key": "_bmstate",
+            "value": "d5cf339304e1b9057e631a13ec379567235f0af4381cbf6ff7fb1c9d47ac42da%3B2%3B58d5f7eb9a622373db20fd3d5ffcf3327f6887428646bcbc2377ff1be35fc071%3B1782767712%3B3a9f2%3B89855a4bea77660245fc05578564ac6c2e7f5014ae531727a2076b8a365bb3ae",
+            "expires": "2026-06-30T20:08:33.298Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:13.409Z",
+            "lastAccessed": "2026-06-29T20:15:13.409Z"
+          },
+          {
+            "key": "_bmc",
+            "value": "d5cf339304e1b9057e631a13ec379567235f0af4381cbf6ff7fb1c9d47ac42da%3B86",
+            "expires": "2026-06-30T20:08:33.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:13.409Z",
+            "lastAccessed": "2026-06-29T20:15:13.409Z"
           }
         ]
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:14.273Z",
-      "createdAt": "2026-06-29T03:00:14.273Z",
+      "expiresAt": "2026-06-29T21:05:09.439Z",
+      "createdAt": "2026-06-29T20:15:09.439Z",
       "usageCount": 1,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_4jdixD6s1Q",
+      "id": "session_yJ4siYsfSs",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -166,14 +206,14 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:41.106Z",
-      "createdAt": "2026-06-29T03:00:41.106Z",
+      "expiresAt": "2026-06-29T21:05:29.902Z",
+      "createdAt": "2026-06-29T20:15:29.902Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_wCRNoS5zPE",
+      "id": "session_ivZYhuMdAn",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -184,1598 +224,211 @@
         "cookies": [
           {
             "key": "_d2id",
-            "value": "82987337-a0fc-4e5e-abe2-38f38dadd697-n",
-            "expires": "2027-06-29T03:00:42.233Z",
+            "value": "87a01322-4269-40df-984b-fc7bc1cccfb3-n",
+            "expires": "2027-06-29T20:15:34.272Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:00:43.046Z",
-            "lastAccessed": "2026-06-29T03:00:43.046Z"
-          },
-          {
-            "key": "_mldataSessionId",
-            "value": "83bf0e85-cf98-44d5-adac-8df07847be28",
-            "expires": "2026-06-29T03:30:42.000Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:00:43.046Z",
-            "lastAccessed": "2026-06-29T03:00:43.046Z"
+            "creation": "2026-06-29T20:15:34.363Z",
+            "lastAccessed": "2026-06-29T20:15:45.268Z"
           },
           {
             "key": "_csrf",
-            "value": "xwNtnYIIV8WGC-oiDMT2DgqB",
-            "expires": "2026-06-29T03:50:43.046Z",
-            "domain": "www.mercadolivre.com.br",
+            "value": "Owt3_Q-a-2jxjmIrHfQNp5PF",
+            "expires": "2026-06-29T21:05:34.363Z",
+            "domain": "lista.mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
             "hostOnly": true,
-            "creation": "2026-06-29T03:00:43.046Z",
-            "lastAccessed": "2026-06-29T03:00:43.046Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:41.108Z",
-      "createdAt": "2026-06-29T03:00:41.108Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_eZyTeMkCrc",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:53.399Z",
-      "createdAt": "2026-06-29T03:00:53.399Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_BA1e1fnKMv",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "_d2id",
-            "value": "48a3a6c8-36a0-4218-9dad-cb71568301fd-n",
-            "expires": "2027-06-29T03:00:54.133Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:00:54.828Z",
-            "lastAccessed": "2026-06-29T03:00:54.828Z"
+            "creation": "2026-06-29T20:15:34.363Z",
+            "lastAccessed": "2026-06-29T20:15:45.268Z"
           },
           {
             "key": "_mldataSessionId",
-            "value": "f2f5c75f-e410-4e63-a768-79e9f011f385",
-            "expires": "2026-06-29T03:30:54.000Z",
+            "value": "df6450c5-6458-4746-9c5c-d1bfbce733cf",
+            "expires": "2026-06-29T20:45:42.000Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:00:54.828Z",
-            "lastAccessed": "2026-06-29T03:00:54.828Z"
+            "creation": "2026-06-29T20:15:34.363Z",
+            "lastAccessed": "2026-06-29T20:15:45.268Z"
           },
           {
-            "key": "_csrf",
-            "value": "RPLH8tIiLjzYXpDy4CefJw1W",
-            "expires": "2026-06-29T03:50:54.828Z",
-            "domain": "www.mercadolivre.com.br",
+            "key": "_bmstate",
+            "value": "222a67a2c4ff7c9715e706b7849a9a395ba0ded6f6783cbc6b45c39ea8acad4c%3B2%3B6148817a5369e4627fe3a1c6b2c63e515fd00cffeae9433cbd32995d2be77911%3B1782767733%3B3a9f2%3Bff9f1bbf50294ca15a007b1f71d722934b2006ad383e8ff1d1112691bfc75119",
+            "expires": "2026-06-30T20:08:54.273Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": true,
-            "creation": "2026-06-29T03:00:54.828Z",
-            "lastAccessed": "2026-06-29T03:00:54.828Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:50:53.400Z",
-      "createdAt": "2026-06-29T03:00:53.400Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_FMcjbB2xZb",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:07.823Z",
-      "createdAt": "2026-06-29T03:01:07.823Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_24aXbieoFe",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:34.363Z",
+            "lastAccessed": "2026-06-29T20:15:45.268Z"
+          },
           {
-            "key": "_d2id",
-            "value": "a2fdfde9-3fb8-4655-a659-6c506bbd7aed-n",
-            "expires": "2027-06-29T03:01:08.823Z",
+            "key": "_bmc",
+            "value": "222a67a2c4ff7c9715e706b7849a9a395ba0ded6f6783cbc6b45c39ea8acad4c%3B983",
+            "expires": "2026-06-30T20:08:54.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:34.363Z",
+            "lastAccessed": "2026-06-29T20:15:45.269Z"
+          },
+          {
+            "key": "_bm_skipml",
+            "value": "true",
+            "expires": "2026-06-29T20:20:35.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:45.269Z",
+            "lastAccessed": "2026-06-29T20:15:45.269Z"
+          },
+          {
+            "key": "_bm_timing",
+            "value": "1782764134347%3B1782764135565%3B1218%3Bh5pcte5o",
+            "expires": "2026-06-29T20:17:35.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
+          },
+          {
+            "key": "main_domain",
+            "expires": "2026-06-29T21:05:45.268Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:01:09.596Z",
-            "lastAccessed": "2026-06-29T03:01:09.596Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "_mldataSessionId",
-            "value": "9b0e4b45-5235-4d7f-b56f-2627a2775568",
-            "expires": "2026-06-29T03:31:09.000Z",
+            "key": "main_attributes",
+            "expires": "2026-06-29T21:05:45.268Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:01:09.597Z",
-            "lastAccessed": "2026-06-29T03:01:09.597Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "_csrf",
-            "value": "rxj8eWqHXjk1zZkdNcqGhYC5",
-            "expires": "2026-06-29T03:51:09.596Z",
-            "domain": "www.mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": true,
-            "creation": "2026-06-29T03:01:09.597Z",
-            "lastAccessed": "2026-06-29T03:01:09.597Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:07.824Z",
-      "createdAt": "2026-06-29T03:01:07.824Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_uKeg8xdfsN",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:19.899Z",
-      "createdAt": "2026-06-29T03:01:19.899Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_dLOcAzbwy9",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "_d2id",
-            "value": "3f614f20-53b4-4c9c-8784-cd8e9be97309-n",
-            "expires": "2027-06-29T03:01:20.072Z",
+            "key": "categories",
+            "expires": "2026-06-29T21:05:45.268Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:01:21.687Z",
-            "lastAccessed": "2026-06-29T03:01:21.687Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "_mldataSessionId",
-            "value": "1a9d8ae0-17e3-49e7-90cc-91ba9fdf7245",
-            "expires": "2026-06-29T03:31:21.000Z",
+            "key": "last_query",
+            "value": "fralda%20pampers",
+            "expires": "2026-06-29T21:05:45.268Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:01:21.687Z",
-            "lastAccessed": "2026-06-29T03:01:21.687Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "_csrf",
-            "value": "5-94c3UrGUH1olyU7ulIEgaw",
-            "expires": "2026-06-29T03:51:21.687Z",
-            "domain": "www.mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": true,
-            "creation": "2026-06-29T03:01:21.687Z",
-            "lastAccessed": "2026-06-29T03:01:21.687Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:19.903Z",
-      "createdAt": "2026-06-29T03:01:19.903Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_bXWHyK6pIB",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:34.527Z",
-      "createdAt": "2026-06-29T03:01:34.527Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_60PPWW0gzt",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "_d2id",
-            "value": "8fec885d-e0c8-44a2-9792-1a73aeb89a07-n",
-            "expires": "2027-06-29T03:01:35.342Z",
+            "key": "category",
+            "value": "MLB40629",
+            "expires": "2026-06-29T21:05:45.268Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:01:36.263Z",
-            "lastAccessed": "2026-06-29T03:01:36.263Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "_mldataSessionId",
-            "value": "ce0a97ef-2ec4-45e8-b96d-3d3d288b6d46",
-            "expires": "2026-06-29T03:31:36.000Z",
+            "key": "backend_dejavu_info",
+            "value": "j%3A%7B%7D",
+            "expires": "2026-06-29T21:05:45.268Z",
             "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:01:36.263Z",
-            "lastAccessed": "2026-06-29T03:01:36.263Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "_csrf",
-            "value": "E5NqCAXliT9DrexUei8sBmqo",
-            "expires": "2026-06-29T03:51:36.263Z",
-            "domain": "www.mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": true,
-            "creation": "2026-06-29T03:01:36.263Z",
-            "lastAccessed": "2026-06-29T03:01:36.263Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:34.528Z",
-      "createdAt": "2026-06-29T03:01:34.528Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_OtsG0q0TDV",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:48.446Z",
-      "createdAt": "2026-06-29T03:01:48.446Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_FugbpCEKkt",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "_d2id",
-            "value": "d260021f-c041-48f3-9acc-372cf85fc00d-n",
-            "expires": "2027-06-29T03:01:49.510Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:01:50.181Z",
-            "lastAccessed": "2026-06-29T03:01:50.181Z"
-          },
-          {
-            "key": "_mldataSessionId",
-            "value": "9360b37f-9a57-455d-8d26-6ac1b6e7c65e",
-            "expires": "2026-06-29T03:31:50.000Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:01:50.182Z",
-            "lastAccessed": "2026-06-29T03:01:50.182Z"
-          },
-          {
-            "key": "_csrf",
-            "value": "YEVWIyeMCph-d9jwQ_rZe90a",
-            "expires": "2026-06-29T03:51:50.181Z",
-            "domain": "www.mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": true,
-            "creation": "2026-06-29T03:01:50.182Z",
-            "lastAccessed": "2026-06-29T03:01:50.182Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:51:48.448Z",
-      "createdAt": "2026-06-29T03:01:48.448Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_IyXiE2rwHd",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:00.022Z",
-      "createdAt": "2026-06-29T03:02:00.022Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_wBRxVD2X17",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "_d2id",
-            "value": "26ba65ab-1bdc-4ab9-a4bf-4683087242b8-n",
-            "expires": "2027-06-29T03:02:00.868Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:01.523Z",
-            "lastAccessed": "2026-06-29T03:02:01.523Z"
-          },
-          {
-            "key": "_mldataSessionId",
-            "value": "0fa30b0b-758d-4443-83c5-dd7c3c68f1e9",
-            "expires": "2026-06-29T03:32:01.000Z",
-            "domain": "mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:01.523Z",
-            "lastAccessed": "2026-06-29T03:02:01.523Z"
-          },
-          {
-            "key": "_csrf",
-            "value": "EE6u2urywIDhb5X_f2yqApwP",
-            "expires": "2026-06-29T03:52:01.523Z",
-            "domain": "www.mercadolivre.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": true,
-            "creation": "2026-06-29T03:02:01.523Z",
-            "lastAccessed": "2026-06-29T03:02:01.523Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:00.026Z",
-      "createdAt": "2026-06-29T03:02:00.026Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_enxo7qu6FL",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:13.855Z",
-      "createdAt": "2026-06-29T03:02:13.855Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_kIvgWOguX5",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "135-6781184-7999957",
-            "expires": "2027-06-29T03:02:14.656Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:16.401Z",
-            "lastAccessed": "2026-06-29T03:02:16.401Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:02:14.657Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:16.401Z",
-            "lastAccessed": "2026-06-29T03:02:16.401Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:02:14.657Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:16.401Z",
-            "lastAccessed": "2026-06-29T03:02:16.401Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:02:14.657Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:16.401Z",
-            "lastAccessed": "2026-06-29T03:02:16.401Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-6SKR2E5FDKDBB36WJQ6M|1782702134948&t:1782702135353&adb:adblk_no",
-            "expires": "2027-06-14T03:02:15.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:02:16.401Z",
-            "lastAccessed": "2026-06-29T03:02:16.401Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:13.856Z",
-      "createdAt": "2026-06-29T03:02:13.856Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_RKCfk4JrO3",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:34.866Z",
-      "createdAt": "2026-06-29T03:02:34.866Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_ArHNSSv7nO",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "131-9893727-0866764",
-            "expires": "2027-06-29T03:02:35.937Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:37.724Z",
-            "lastAccessed": "2026-06-29T03:02:37.724Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:02:35.939Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:37.724Z",
-            "lastAccessed": "2026-06-29T03:02:37.724Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:02:35.939Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:37.724Z",
-            "lastAccessed": "2026-06-29T03:02:37.724Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:02:35.939Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:37.724Z",
-            "lastAccessed": "2026-06-29T03:02:37.724Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-8G3BFPHXAXDPK8G3B53K|1782702156213&t:1782702156703&adb:adblk_no",
-            "expires": "2027-06-14T03:02:36.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:02:37.724Z",
-            "lastAccessed": "2026-06-29T03:02:37.724Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:34.867Z",
-      "createdAt": "2026-06-29T03:02:34.867Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_zXMVRqv7hH",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:54.959Z",
-      "createdAt": "2026-06-29T03:02:54.959Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_tpJ8siqeJv",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "133-4941403-5762124",
-            "expires": "2027-06-29T03:02:55.763Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:57.635Z",
-            "lastAccessed": "2026-06-29T03:02:57.635Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:02:55.764Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:57.635Z",
-            "lastAccessed": "2026-06-29T03:02:57.635Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:02:55.764Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:57.635Z",
-            "lastAccessed": "2026-06-29T03:02:57.635Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:02:55.764Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:02:57.635Z",
-            "lastAccessed": "2026-06-29T03:02:57.635Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-SHHDDW8RPAXK92H299ST|1782702176094&t:1782702176611&adb:adblk_no",
-            "expires": "2027-06-14T03:02:56.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:02:57.635Z",
-            "lastAccessed": "2026-06-29T03:02:57.635Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:52:54.960Z",
-      "createdAt": "2026-06-29T03:02:54.960Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_m5xdMN6dkA",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:53:15.528Z",
-      "createdAt": "2026-06-29T03:03:15.528Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_vmHfTMw9Vf",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "133-4983566-2011714",
-            "expires": "2027-06-29T03:03:16.414Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:18.876Z",
-            "lastAccessed": "2026-06-29T03:03:18.876Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:03:16.415Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:18.876Z",
-            "lastAccessed": "2026-06-29T03:03:18.876Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:03:16.415Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:18.876Z",
-            "lastAccessed": "2026-06-29T03:03:18.876Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:03:16.415Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:18.876Z",
-            "lastAccessed": "2026-06-29T03:03:18.876Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-55X9XP6MFB1K53683XH2|1782702196681&t:1782702197413&adb:adblk_no",
-            "expires": "2027-06-14T03:03:17.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:03:18.876Z",
-            "lastAccessed": "2026-06-29T03:03:18.876Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:53:15.531Z",
-      "createdAt": "2026-06-29T03:03:15.531Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_1G3Yp2v4Ns",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:53:33.345Z",
-      "createdAt": "2026-06-29T03:03:33.345Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_fAmAwvwAmh",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "144-9595528-6578131",
-            "expires": "2027-06-29T03:03:34.163Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:36.693Z",
-            "lastAccessed": "2026-06-29T03:03:36.693Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:03:34.164Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:36.693Z",
-            "lastAccessed": "2026-06-29T03:03:36.693Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:03:34.164Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:36.693Z",
-            "lastAccessed": "2026-06-29T03:03:36.693Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:03:34.164Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:36.694Z",
-            "lastAccessed": "2026-06-29T03:03:36.694Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-5EBC9MP06RKHN2N6PKVF|1782702214372&t:1782702215109&adb:adblk_no",
-            "expires": "2027-06-14T03:03:35.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:03:36.694Z",
-            "lastAccessed": "2026-06-29T03:03:36.694Z"
-          },
-          {
-            "key": "ubid-acbbr",
-            "value": "130-2439804-2160069",
-            "expires": "2027-06-29T03:03:36.597Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:03:36.694Z",
-            "lastAccessed": "2026-06-29T03:03:36.694Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:53:33.347Z",
-      "createdAt": "2026-06-29T03:03:33.347Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_rKTMPHABI4",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:54:05.146Z",
-      "createdAt": "2026-06-29T03:04:05.146Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_OgkdOgHIqJ",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "139-3255163-0154765",
-            "expires": "2027-06-29T03:04:06.111Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:04:06.112Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:04:06.112Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:04:06.112Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-REGNBGAPV6B16HVCRWDH|1782702246271&t:1782702246813&adb:adblk_no",
-            "expires": "2027-06-14T03:04:06.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          },
-          {
-            "key": "ubid-acbbr",
-            "value": "134-5667338-0174053",
-            "expires": "2027-06-29T03:04:08.254Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          },
-          {
-            "key": "session-token",
-            "value": "\"hgsKqHmJBSxA2XYb596bxIz2kvIVR3LiRH10BWDxX2sIxmRmM9qMwRpol3ws1PozXpSqFW9lxkG0w97S7ZzSm6x+OU/D+nuXPcDk+iHmTolFt3vzwndVR+8NxIr2OkGtalFFVYTKKoHu0Bf3BKBajALForbOeLXou5meZ685USv32Cof4MaGHvKkNr8r5B1QT4wGYb9y+KNeSWRie4ls8NivhS3isdogqU3gJxjEnLE=\"",
-            "expires": "2027-06-29T03:04:08.451Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:08.460Z",
-            "lastAccessed": "2026-06-29T03:04:08.460Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:54:05.147Z",
-      "createdAt": "2026-06-29T03:04:05.147Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_jWaoUVEstk",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:54:22.913Z",
-      "createdAt": "2026-06-29T03:04:22.913Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_b1JPtUYfVI",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "session-id",
-            "value": "136-7918630-7203220",
-            "expires": "2027-06-29T03:04:25.299Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:29.424Z",
-            "lastAccessed": "2026-06-29T03:04:29.424Z"
-          },
-          {
-            "key": "session-id-time",
-            "value": "2082787201l",
-            "expires": "2027-06-29T03:04:25.300Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:29.425Z",
-            "lastAccessed": "2026-06-29T03:04:29.425Z"
-          },
-          {
-            "key": "i18n-prefs",
-            "value": "BRL",
-            "expires": "2027-06-29T03:04:25.300Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:29.425Z",
-            "lastAccessed": "2026-06-29T03:04:29.425Z"
-          },
-          {
-            "key": "lc-acbbr",
-            "value": "pt_BR",
-            "expires": "2027-06-29T03:04:25.300Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:29.425Z",
-            "lastAccessed": "2026-06-29T03:04:29.425Z"
-          },
-          {
-            "key": "csm-hit",
-            "value": "tb:s-6KPC9N4YSKGH57B6QYF5|1782702265641&t:1782702266351&adb:adblk_no",
-            "expires": "2027-06-14T03:04:26.000Z",
-            "domain": "www.amazon.com.br",
-            "path": "/",
-            "hostOnly": true,
-            "creation": "2026-06-29T03:04:29.425Z",
-            "lastAccessed": "2026-06-29T03:04:29.425Z"
-          },
-          {
-            "key": "ubid-acbbr",
-            "value": "130-0869436-3176715",
-            "expires": "2027-06-29T03:04:29.084Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:29.425Z",
-            "lastAccessed": "2026-06-29T03:04:29.425Z"
-          },
-          {
-            "key": "session-token",
-            "value": "\"YobspPFzMfvUZV1jyhG0mtZdtAnC45ehFKb1w56uo7zwev/dBmQ3cnDyB2DLk1q7w63KriS1NBp9V7Ie0oqSQrs2DWeP3+rwYg2snIheeBZ2MI/MvVSNaRKuN2Vc+I0iU0s6pp1ID9lHPhWDQHGSXTKlxLEceIIWZ542f31/mMt9OEC1SIRPNRw/X4xgmeP2qlhGvISrg/6RHsZGVVdg5SgCji10G16fb26gG2GEBaI=\"",
-            "expires": "2027-06-29T03:04:29.331Z",
-            "domain": "amazon.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:04:29.425Z",
-            "lastAccessed": "2026-06-29T03:04:29.425Z"
-          }
-        ]
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:54:22.915Z",
-      "createdAt": "2026-06-29T03:04:22.915Z",
-      "usageCount": 1,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_BckPFs3LK0",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": []
-      },
-      "userData": {},
-      "maxErrorScore": 3,
-      "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:55:12.253Z",
-      "createdAt": "2026-06-29T03:05:12.253Z",
-      "usageCount": 0,
-      "maxUsageCount": 50,
-      "errorScore": 0
-    },
-    {
-      "id": "session_OhDTlmpmCA",
-      "cookieJar": {
-        "version": "tough-cookie@6.0.1",
-        "storeType": "MemoryCookieStore",
-        "rejectPublicSuffixes": true,
-        "enableLooseMode": false,
-        "allowSpecialUseDomain": true,
-        "prefixSecurity": "silent",
-        "cookies": [
-          {
-            "key": "mlparceiro",
-            "value": "3653",
-            "expires": "2026-07-29T03:05:13.191Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "basket_abtest",
-            "value": "B",
-            "expires": "2026-06-29T05:05:13.192Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "abtest_prebasket",
-            "value": "A",
-            "expires": "2026-06-30T03:05:13.192Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_modal_added_to_bag",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "filter_categories_modal_added_to_bag",
-            "value": "%5B%22ME%22%5D",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_add_basket_success_drawer_showcase",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_header_trends",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_trending_showcase",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_header_basket_counter",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "mixer_shipping",
-            "value": "AUTO",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "mixer_hub_shipping",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_wishlist",
-            "value": "false",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.646Z",
-            "lastAccessed": "2026-06-29T03:05:13.646Z"
-          },
-          {
-            "key": "toggle_pdp_seller_score",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_vwo",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_agatha",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_ads",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_new_service_page",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_quick_click",
-            "value": "false",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "enable_fallback_banner",
-            "value": "0",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_show_luiza_installment_plan",
-            "value": "true",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "FCCDCF",
+            "key": "c_s7dla",
             "value": "1",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "ml2_redirect_8020",
-            "value": "0",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "FCNEC",
-            "value": "1",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "theme",
-            "value": "theme-default",
-            "expires": "2026-06-29T03:35:13.297Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "show_seller_score_above",
-            "value": "5",
-            "expires": "2026-06-29T03:55:13.646Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "toggle_new_service_page_spa",
-            "value": "false",
-            "expires": "2026-06-29T04:05:13.298Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "AKA_A2",
-            "value": "A",
-            "expires": "2026-06-29T04:05:13.193Z",
-            "domain": "magazineluiza.com.br",
+            "expires": "2026-07-29T20:15:37.546Z",
+            "domain": "lista.mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "bm_ss",
-            "value": "ab8e18ef4e",
-            "expires": "2026-06-29T04:05:13.193Z",
-            "domain": "magazineluiza.com.br",
+            "key": "cp",
+            "value": "20211360",
+            "expires": "2026-07-29T20:15:38.546Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "bm_s",
-            "value": "YAAQBMkQAk2LbAufAQAANY9WEQXvV5uFRBVAZOg5KyHgS0L9LfsvIVlhKmrUrjYr5GIfIXNz7R0IF52xBQAPpzPWf/666k3BKfOAmShMrgcxsRcTutsPeIZbielxbBr9QSF5UvNXU7ezvI9GZ1kMbx8Da4pPBbq+lWOOJ5C0Cy8pXV+rM2bqYzKT8l8egyTf/8V+cTH7jINIrwudzUAZbjLImvkzz4c3by+Y23jGQG9H8cSuOVeIqOggX6Mnm1Dy/1TeYVarlcsWQXligjSbwiPOBaSFWhwhgERZPnEjaWFAuasWMoungfnQmUwhCFBhxkEbd0tH8OMjP2AAmGA8za3Ak1JsbJ9y8WGXM4n6nFS/Z5bVLiVxCIXPSK/Dpbid2HHfJPT2mZ8yvPClTmCZWuZYlfI1SWOXbf7N2Dbu0n4LxovQFjnU5WgOyb5hTaT5K35zkpKhdONQP5GTcS2srb9lxq4LqIaMuXSrs4hSNRzK9tVnvgJCMhkmIhxM/N4UiZK0DEHVWmDulGLoeNny6kAdOiVgqoGyrNe9nutikBvUM1AdUJL1IGbkluBkbK8gsJ3Bz6p5WP7Xg4UnDQb5y+0qeq1eDOCMVpvGGVmzAlxVq/wbA9ciztIAGZsjLklddC6V1y7150Tc087Xmhn5mn696NjNRXf5+Bd9jUbKmchKXhz6Q7dooqbnPipW3fIJbqgS5X1pe12kf9c3wChAOhwIV4FBSm3zTWPrricprkkGs95U1SiQmBZhKNo9YGcT15oDB0L0hXTmJXuH5IgqFXuOmgqllZleoHWgXn7NxMaPgfrWOU+jFQAptyHwPgQkPsEDBmc3HYMnmxReImp2G3MHaYyCi/RqafoVyw==",
-            "expires": "2026-07-30T03:05:13.193Z",
-            "domain": "magazineluiza.com.br",
+            "key": "inferredZipcode",
+            "value": "true",
+            "expires": "2026-07-29T20:15:38.546Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "bm_sc",
-            "value": "1~1~761804352~YAAQBMkQAk6LbAufAQAANY9WEQjkqErkykvnXk/B3wD0Ec8AEHXpGJNtpdh8ZJhKpw+hIHmdgfsDeMsM28NBzfCDAWsvlJ/cv7grKUC9aUKhfD7v5F0XbOs3p9hKs9FIbaDpE4+wB/QI9baXrY7r2CyAq6rNT43m8/ZJB9w7ZGu6pjDc5l4JCfKbR0Msfbw/HI/KLV2qe2HuYmSweHtgUevRJCX71rrcyWRsDmf+OPx1sW0hgtnD4gZH8//eQ+fH8V0iji+ZBW2gUA39VJckA9wF/3VgZ1ZJtfI4uY202l0e4x0cO67A6qPLCVI2X/pHLplZssWcnF4H50vQQMunWo7lIVqZbRWPXFOcm57HMKmRAhs0PeggZ3Tg6TfXEbOhts/JMpMaUMru36Qfbbx8rDdDtTxpPxI+m6SlQJcFuXnDI25KMWp+gilX23cjxSuXYdhwS4negZKqZWVXAqw4abziBYjWU8dDx2p440VSEw2Ii6bcd57f6M4DSVnkrE0cFlGZlm6Hq+GvqTydJI2lhJ04ZRtxBHCKhtIdBMrQ83a6uJQxgviBTwV4V/3ZBYW/S5Mk0jHVuvnyJQxVww==~0~0~0",
-            "expires": "2026-06-29T03:16:13.193Z",
-            "domain": "magazineluiza.com.br",
+            "key": "_snoopy",
+            "value": "eyJmaW5nZXJwcmludCI6ImFTaTE0eGpiSDVweHlGaWhtZXVDekk3cnNDajV0b3UwZkFUZjZHUjFZWGwvSmxudEhQSEwxKzVrcnlQcHJvL1pDNTY0Y21ZVU5IbERpQXhMQ2dRaFFOemNuS1hUeXdCa3BRNmpWd0ljeTBMekZXMitqNzM1ekRUaThuaXliRWI1cTJ4NU5XNm5wcitnRWx1SUhsLy92clVYUW1YMVJMSmxvWFYvd0ROMG9kWUh1SC9PS0pFPSIsImtleSI6Ik5QRmk3aGhVY0F3M2ZTK1NnbGlqdk9RTnNOUC81ai9oQmRuWE1wc2EwOCs0YjlHWkpEa3JJNm4rRVJUZnNJcXgzSXpLR1dpY3NHMGppSFhFMTVnRlRUbXM3MVhzeEZhWCJ9",
+            "expires": "2026-06-29T21:15:44.017Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           },
           {
-            "key": "bm_so",
-            "value": "05FCCE754514AE47D200D69FFF148F08F38F031D327370B1EF37BA8E043287A4~YAAQBMkQAk+LbAufAQAANY9WEQiASqyO813q1/y+x34z6gydVKXy+VP3OHfpZri968htmPUrKvPsJYNGL3a3YNt2DW8Lx0NFBhrT+QIo78BFrVZNZC9qBAxi0S/lOeCLSIHQd9rKm0fB+sVk1lxms0X2JVszGjRrU97xx5OjBI2Ld8PM6S9LPLTMVrSXdfGXVXQ5yQO0KkxCg0RrOp69/wUZBtL8L6BOszZpu/zC0jyFTFVGFASDKmXaFE5Vrbsoxcwwp/KOo0gZaJZVllFE4GeQXshtGplSUnUpksdgsD8maeE07939dd5lC7Zj8SKmzKMEEAca/Hn5dn7GAh5bmAVpsHmuIqjLVZvJ9wzUvexCRqb4R8YnZ3fky2H3gLMIOS7hOH9R5U67KR0gZPvltrrkz+l9QOZXffX0Xq/baQz7XSAttHih9Hlzd+YGAUBiUQUJ2u5vSqMgwsN3cj1utyVtG8yRZjB1XmggExU=",
-            "expires": "2026-06-30T03:05:13.193Z",
-            "domain": "magazineluiza.com.br",
+            "key": "g_state",
+            "value": "{\"i_l\":0,\"i_ll\":1782764145045,\"i_b\":\"gKSn4/oWh10XGZHhcMmX1CozI7IMcBsjWPddZQKyC4c\",\"i_e\":{\"enable_itp_optimization\":24},\"i_et\":1782764145045}",
+            "expires": "2026-12-26T20:15:45.000Z",
+            "domain": "lista.mercadolivre.com.br",
             "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "bm_sz",
-            "value": "D7D52A84C01194ABE152D0E8B38C4C23~YAAQBMkQAlCLbAufAQAANY9WEQBmmgkMyOyDulxjQ5q8ZpLBm1QcMRRpTvzLGNa4UDQ77riczJEZoL/DJRjE+BrrS8ze5d++s5rPWtr+9i1cBMeWW+2Nu/NmInE4ST4kms4K8s7RZ7l2Mzy75VLz6dCmFV4TiDrdVW6nSmLOgoOnCQOPVltbilyF+q1cgdk8Ef0mJde+CX4IKBryuv8Yg/OWrwZ+RRTYBmscu+6uimYZloQO/zBxSNpkALHpDU04s8g36oeiRJkvfhPHKcuInFsaaNFEleGCJnTSKgVv5AN3JBswWoc8qK9VbTMYovFa3l3eXEfpxI28G6P7B3ssScxsL3IgmoiKuauBj6KoDhtcYyD7hpI0DLmznjZMp29qi5sg~3225657~3684417",
-            "expires": "2026-06-29T07:05:13.193Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "_abck",
-            "value": "1445A7E9D7AD45EFB8696822257C56D4~-1~YAAQBMkQAmiLbAufAQAAj49WERAWK2CRxjJa1YjNI0UwvBqPQhGV0LuvAqrRAw2o6PVmy1w/OtR1sRfvydL7+YMLoVGNlDUyoTrzniiSDor5/iOCGAq4wXzA8uGU4GSyr0zmrL+BbXetWsncN8fgs2lu9AEdBOCkKwaRHB+y9fWn7aXP+VyYXdsTeCMlAC2/8oFjrkZOL0+3XCsAjaF70wMk3EqS0l1Ex/QMmap1wyPHYWAfUeenKFfFeBdu24f8SdmLZakpA4nShwGPr7CJ5WmByPf40dmCye8Gj6iCTePexWajbk4VVAHaLwHHGa47c2eMihYWLzsOrLYtsVUeTqVv34kgcEjG/tU5XoLOEyE5smXIdJrS4t2o4QKuhzbZU6QAse2RtK1kPcZQ/PkES45SIV+2rfeWdDU5zy+OX9NJvakrMZ1+k1Bqu0WXB05JtDwY3RSk27Wul/L61RR0KRUyQmWxXX+0Lot2PBNZ3Yi+0OGKbLuFrgnYL3kxudy8Ihbj0lUIdUNhvnlm8nEINbjP74WWXnTdtedWKmITcirMK0eDPSljVQILtQ==~-1~-1~-1~AAQAAAAF%2f%2f%2f%2f%2f+2CCrmt1xCHEYuQMs1ulXcCNFACgHig6ap4NQJ%2fy3BinpseWoKmLLbhG3Ie5ysa6o%2fHvj4Z%2frQW0XwsdIrXk7fH%2fX4+vZ42B+4n~-1",
-            "expires": "2027-06-29T03:05:13.282Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
-          },
-          {
-            "key": "bm_lso",
-            "value": "05FCCE754514AE47D200D69FFF148F08F38F031D327370B1EF37BA8E043287A4~YAAQBMkQAk+LbAufAQAANY9WEQiASqyO813q1/y+x34z6gydVKXy+VP3OHfpZri968htmPUrKvPsJYNGL3a3YNt2DW8Lx0NFBhrT+QIo78BFrVZNZC9qBAxi0S/lOeCLSIHQd9rKm0fB+sVk1lxms0X2JVszGjRrU97xx5OjBI2Ld8PM6S9LPLTMVrSXdfGXVXQ5yQO0KkxCg0RrOp69/wUZBtL8L6BOszZpu/zC0jyFTFVGFASDKmXaFE5Vrbsoxcwwp/KOo0gZaJZVllFE4GeQXshtGplSUnUpksdgsD8maeE07939dd5lC7Zj8SKmzKMEEAca/Hn5dn7GAh5bmAVpsHmuIqjLVZvJ9wzUvexCRqb4R8YnZ3fky2H3gLMIOS7hOH9R5U67KR0gZPvltrrkz+l9QOZXffX0Xq/baQz7XSAttHih9Hlzd+YGAUBiUQUJ2u5vSqMgwsN3cj1utyVtG8yRZjB1XmggExU=~1782702313488",
-            "expires": "2026-07-29T03:05:13.000Z",
-            "domain": "www.magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:13.647Z",
-            "lastAccessed": "2026-06-29T03:05:13.647Z"
+            "hostOnly": true,
+            "creation": "2026-06-29T20:15:45.270Z",
+            "lastAccessed": "2026-06-29T20:15:45.270Z"
           }
         ]
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:55:12.255Z",
-      "createdAt": "2026-06-29T03:05:12.255Z",
-      "usageCount": 1,
+      "expiresAt": "2026-06-29T21:05:29.903Z",
+      "createdAt": "2026-06-29T20:15:29.903Z",
+      "usageCount": 2,
       "maxUsageCount": 50,
-      "errorScore": 0
+      "errorScore": 0.5
     },
     {
-      "id": "session_cF5YAbplNk",
+      "id": "session_ujfqP4oaPZ",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -1788,14 +441,34 @@
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:55:47.498Z",
-      "createdAt": "2026-06-29T03:05:47.498Z",
+      "expiresAt": "2026-06-29T21:05:39.068Z",
+      "createdAt": "2026-06-29T20:15:39.068Z",
       "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     },
     {
-      "id": "session_9dYuOQ2nsg",
+      "id": "session_nzON077lhF",
+      "cookieJar": {
+        "version": "tough-cookie@6.0.1",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": []
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2026-06-29T21:06:02.075Z",
+      "createdAt": "2026-06-29T20:16:02.075Z",
+      "usageCount": 0,
+      "maxUsageCount": 50,
+      "errorScore": 0
+    },
+    {
+      "id": "session_BAAUfXq7h8",
       "cookieJar": {
         "version": "tough-cookie@6.0.1",
         "storeType": "MemoryCookieStore",
@@ -1805,363 +478,322 @@
         "prefixSecurity": "silent",
         "cookies": [
           {
-            "key": "mlparceiro",
-            "value": "3653",
-            "expires": "2026-07-29T03:05:48.309Z",
-            "domain": "magazineluiza.com.br",
+            "key": "_d2id",
+            "value": "5143648f-0e0e-4ae1-b554-53027e276e74-n",
+            "expires": "2027-06-29T20:16:07.206Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
+            "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.711Z",
-            "lastAccessed": "2026-06-29T03:05:48.711Z"
+            "creation": "2026-06-29T20:16:07.397Z",
+            "lastAccessed": "2026-06-29T20:16:07.397Z"
           },
           {
-            "key": "basket_abtest",
-            "value": "B",
-            "expires": "2026-06-29T05:05:48.311Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "abtest_prebasket",
-            "value": "A",
-            "expires": "2026-06-30T03:05:48.311Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_modal_added_to_bag",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "filter_categories_modal_added_to_bag",
-            "value": "%5B%22ME%22%5D",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_add_basket_success_drawer_showcase",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_header_trends",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_trending_showcase",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_header_basket_counter",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "mixer_shipping",
-            "value": "AUTO",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "mixer_hub_shipping",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_wishlist",
-            "value": "false",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_pdp_seller_score",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_vwo",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_agatha",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_ads",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_new_service_page",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_quick_click",
-            "value": "false",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "enable_fallback_banner",
-            "value": "0",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_show_luiza_installment_plan",
-            "value": "true",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "FCCDCF",
-            "value": "1",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "ml2_redirect_8020",
-            "value": "0",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "FCNEC",
-            "value": "1",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "theme",
-            "value": "theme-default",
-            "expires": "2026-06-29T03:35:48.367Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "show_seller_score_above",
-            "value": "5",
-            "expires": "2026-06-29T03:55:48.711Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "toggle_new_service_page_spa",
-            "value": "false",
-            "expires": "2026-06-29T04:05:48.367Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "AKA_A2",
-            "value": "A",
-            "expires": "2026-06-29T04:05:48.312Z",
-            "domain": "magazineluiza.com.br",
+            "key": "_csrf",
+            "value": "IZxgs-5_JnCpgqK_kAHFNK3L",
+            "expires": "2026-06-29T21:06:07.397Z",
+            "domain": "lista.mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
+            "hostOnly": true,
+            "creation": "2026-06-29T20:16:07.397Z",
+            "lastAccessed": "2026-06-29T20:16:07.397Z"
           },
           {
-            "key": "bm_ss",
-            "value": "ab8e18ef4e",
-            "expires": "2026-06-29T04:05:48.312Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "bm_s",
-            "value": "YAAQBMkQAjOrbAufAQAAZhhXEQVY9qOw65DOdfvw9afKDF73KM98ohlqaSvSwfvrkHxIBkk/vnCawohrcL4X8cafB39uvvlrnlicMLorwt0l3kT5yiaPDNlxPhuNozLj/XN2fk+cjjSJsWT6jtEnQZXdA+cQqWalMe3tvteOYBskfUVG+Tu5DFSF+jx3w1pUbVjhAtCz8h146pc8ahcO4NEH9dZ9oUSMPeYk/A4DULvAAzWPshj1rc/uOtly77EpnkPMQkZK1MNHk6+JCtvxZhZEOiTLm8pG++dlMxjjVh5bCLlS4zQS74ODOfz4nz/f1mDNA1CJLviGzuhhVG66jWuTf0jZ5LlBCXypYF68T8MEQExFwjOHXpVF0VnJu8TnvlPkFde7pW5ZIBIggKkqdZDUUpsNXwbZifE5zLty0i9Kz/qYbr5NVsD053ZySAuPJRkQ8fo7AApVJimnSRSJRXyFVxycjIWMPMarGIJGXFczS+Gj9VutZxoMr/sZX6bSfvM/ZSRoNS8liXirErf8PQkXuF5ytbUHsdLsLids52I4CIO9IPS8XHddoKWsuukkhfkzGOhWo/PDOVXlegLW/SvRBGp0UNG8f74ubss6lcMnajqT3+o/vGri1Mh8unby73yNVYKRXVqsJcVWquKLK3oVkJ6rkHC3NGQ3vWp65JQLg4eQWA1oqFjNdYBX+fxSm1E44QV98gg5USh3ZqjLG0qpgZl92qHuUhNrX/Wx7DK0AewfhTqazZLP8AFXfb4rnFRR4azzPP6Ka1ONafaorhY4dh3OVZYIYKZgIGiHyBtubMXnU2wc3PXRxO6+eTOIAZbCGXQvtTA2pboBsSnmnHZvpgx3g74ELzH8Ag==",
-            "expires": "2026-07-30T03:05:48.312Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "secure": true,
-            "httpOnly": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.712Z",
-            "lastAccessed": "2026-06-29T03:05:48.712Z"
-          },
-          {
-            "key": "bm_sc",
-            "value": "1~1~767663727~YAAQBMkQAjSrbAufAQAAZhhXEQgP3Qi43bGQD/78dI+ge6ucjT41fFQJO3NPhigp9uD8t5Rss+f1FybMss9oQM3afryf2miveO7nOqSZs7nfhi6F8EC/kA5rNROmHrSi5mT5IzYp8Nlcu7oAg+9XPyeeFFhblqXYYORBMERY/vv/Q3N2ecL6qABuGj+RmT0BhK/0OJy7OpBXQx9yUO792q+JSV/sCMzzOBzx1k06JefOAAXzXAmqtlhjBRr/xa888sygf3WNXVI2PYdPt282l8Z4H1wPCanVcYRGJ9J4oVoqqX/aj0uMcn+2AOSfYiSr/m7qbXL4TvSt0tFoODEkvrqkx9MJF7cXZlgK6xiPick9qkMEx6weArf3reEzi8BZY6NGPo9Z3GhID06kpxDbA5Tf1f0typ2W/AUv3u9mzuFBWELrkL6Hzak0DSPNlmUnmVYnczWreYeSIrkVj+rr4/EM+SrSGFlSgwpgK7wKEUUkuWjLAzITVWwNR8V6lPIWJ4SluQyL/MZQoX2zgIxLxwDXa1iEJDbS+Cwf9dQWVP2Q7P2gTg==~0~0~0",
-            "expires": "2026-06-29T03:16:48.313Z",
-            "domain": "magazineluiza.com.br",
+            "key": "_mldataSessionId",
+            "value": "ebdc203c-6bd0-45eb-9013-ac4fc6e4d17b",
+            "expires": "2026-06-29T20:46:07.207Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
             "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.713Z",
-            "lastAccessed": "2026-06-29T03:05:48.713Z"
+            "creation": "2026-06-29T20:16:07.397Z",
+            "lastAccessed": "2026-06-29T20:16:07.397Z"
           },
           {
-            "key": "bm_so",
-            "value": "640B95BD4D91DBC8CC1D140FD361BBD7F46512E829777A558CC24751775EBB32~YAAQBMkQAjWrbAufAQAAZhhXEQgcTKnbF1YLirML6LsPc66LWNeTL/m3Eh91nLf+CCy7DlLj85wW2rrhbimAdmAup4WvYr/aqdWbQDuEaEpX3R1Q3b4OsKeDAdo3UPZLHoH7CBZkR7S/vXMHbMaJn1ilOpFE+vO6QaYRWJ7sihxxNBFPncNzBURU4809sHlzzJdDGLn6M5UBoL6pdRt9TXuvQKFKkWD29FcFmdiYaXQP9dGDC04RmSJL9y2Kc1/3MIhtLvCLPONuAUDaABwh2VdiDebXntALi/u+UUU+tpFeOzoXsAxjX9YK7q4Uzxh1DV7WNrkZF0XZUJdhPzK52XjE7/c7yw3Ye9MGvLosjUUXQpqH3628ZwRrTKByiYZ1K9MsCTdvupgRiIwka2xVPlaPRbjd5sGzpyqZTPqRdqcDo8JSlq5c6o4s9ct2YSzr2Wea7Yn4orW95h47flbP5VPZwHe4tWTockhlC3c=",
-            "expires": "2026-06-30T03:05:48.313Z",
-            "domain": "magazineluiza.com.br",
+            "key": "_bmstate",
+            "value": "a5f6361a827a73834fc80309da1b91cd7b46093ef3ca090d20a549d03d438d93%3B2%3B711a309b9b1858264492b57bd2c93ba0bf5ddf41a3db362a47142865f5e64e1c%3B1782767766%3B3a9f2%3Bb6977b7070657c57be4b11831e08bdba43db8233cc86d68f77e7273c06f28986",
+            "expires": "2026-06-30T20:09:27.207Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
-            "secure": true,
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.713Z",
-            "lastAccessed": "2026-06-29T03:05:48.713Z"
+            "creation": "2026-06-29T20:16:07.397Z",
+            "lastAccessed": "2026-06-29T20:16:07.397Z"
           },
           {
-            "key": "bm_sz",
-            "value": "AE724A90D56179D638DDE636C270F855~YAAQBMkQAjarbAufAQAAZhhXEQBDwCOZousz8nfVzP49R5lzfkUNLHWdhZME0xW+emalQs09/q5pDC5ONk29d5A40nI6v+AH/38U9yIVebvJeOMgEsaG6ozS5DOPlc4FxYWzbCIIwHX/EEVH+nrIyigI0DXVGRhsm5GIidqNDYsMZkzsTLU96+qwb05B5wCAyZj+yR3zHrbvRVuc/DUl8R4IQmoKE9uX76dWbjigaeyB6Db0ZLbU/Ut4LY2hzdJ0D/7tsE2PZbyTDpJXmHOIZI1qsM6fpDWgM5eMz87WfpRfNtxw//R2cHakVZCbnFVhXFfPpn+0GDvVMvdvDmFkVdhzqmnjkzRX4g3IvpZLwlJb4w3TFoENQECX8T89+5Cyy1vK~3356739~3486785",
-            "expires": "2026-06-29T07:05:48.313Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.713Z",
-            "lastAccessed": "2026-06-29T03:05:48.713Z"
-          },
-          {
-            "key": "_abck",
-            "value": "77A10FA35B609545FDF357FFC4C4FFDC~-1~YAAQBMkQAkSrbAufAQAAkxhXERCE71E03U7QOYTaMP/86XeBDz80MJn/zWXCah6qSH+kbAKWX7snrQiapefS92Rj8AAaJULEE2mYXh7a9xUCWm0ERPoYjVGetER14fZphJaI6wtonFLxq5ACOn2/dDIGErODav6bnNRwa37XuoxyAvVKiqWgK7A40D5WQfZOUu+WbxA0UzYEDUFWxNMluLg/JTVo7nVsj1IRMIskNSKGwvlwmZQBUjNl0RHxugzcWeValSJN0ww/p6+3Ptz8ho5TM8+mKhlMA5qeehU0SwTHla+5WQ6FxcgzpYrhr6QqFZ8V4Z1sfhe+Rr+LwuFe4mU8S7eP0PrLiA670d+wpAnNCbUaqE18EsfjzKEF3H+sNUB+rRdD3eXQOoktZV/qaQi+8aGZGehG6p50POtwLnm342HkbPDVDcAADqcJ+AFKeMjheTZ62WSnbYHtJrH/IreO8NMINjW6YG7ZJL3yMhLgRYjm2fZJAM2Qe7WWU4XoxMoR/oHzFEZYtc7MrXmiWENLrkzzunQcH0AgMbLu4S87q0SyiPXA/zdjXQ==~-1~-1~-1~AAQAAAAF%2f%2f%2f%2f%2f5Ln7z2BTf+fVsgOOHE3%2fmUjepN780mScPD0FnZI1E2cNN7uNmrZIo46kidU1MbUzWG8gmU%2ftfJ7AEiOglQKTUhVR6Kk8AxBR5kf~-1",
-            "expires": "2027-06-29T03:05:48.368Z",
-            "domain": "magazineluiza.com.br",
-            "path": "/",
-            "secure": true,
-            "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.713Z",
-            "lastAccessed": "2026-06-29T03:05:48.713Z"
-          },
-          {
-            "key": "bm_lso",
-            "value": "640B95BD4D91DBC8CC1D140FD361BBD7F46512E829777A558CC24751775EBB32~YAAQBMkQAjWrbAufAQAAZhhXEQgcTKnbF1YLirML6LsPc66LWNeTL/m3Eh91nLf+CCy7DlLj85wW2rrhbimAdmAup4WvYr/aqdWbQDuEaEpX3R1Q3b4OsKeDAdo3UPZLHoH7CBZkR7S/vXMHbMaJn1ilOpFE+vO6QaYRWJ7sihxxNBFPncNzBURU4809sHlzzJdDGLn6M5UBoL6pdRt9TXuvQKFKkWD29FcFmdiYaXQP9dGDC04RmSJL9y2Kc1/3MIhtLvCLPONuAUDaABwh2VdiDebXntALi/u+UUU+tpFeOzoXsAxjX9YK7q4Uzxh1DV7WNrkZF0XZUJdhPzK52XjE7/c7yw3Ye9MGvLosjUUXQpqH3628ZwRrTKByiYZ1K9MsCTdvupgRiIwka2xVPlaPRbjd5sGzpyqZTPqRdqcDo8JSlq5c6o4s9ct2YSzr2Wea7Yn4orW95h47flbP5VPZwHe4tWTockhlC3c=~1782702348545",
-            "expires": "2026-07-29T03:05:48.000Z",
-            "domain": "www.magazineluiza.com.br",
+            "key": "_bmc",
+            "value": "a5f6361a827a73834fc80309da1b91cd7b46093ef3ca090d20a549d03d438d93%3B30",
+            "expires": "2026-06-30T20:09:27.000Z",
+            "domain": "mercadolivre.com.br",
             "path": "/",
             "hostOnly": false,
-            "creation": "2026-06-29T03:05:48.713Z",
-            "lastAccessed": "2026-06-29T03:05:48.713Z"
+            "creation": "2026-06-29T20:16:07.397Z",
+            "lastAccessed": "2026-06-29T20:16:07.397Z"
           }
         ]
       },
       "userData": {},
       "maxErrorScore": 3,
       "errorScoreDecrement": 0.5,
-      "expiresAt": "2026-06-29T03:55:47.500Z",
-      "createdAt": "2026-06-29T03:05:47.500Z",
+      "expiresAt": "2026-06-29T21:06:02.077Z",
+      "createdAt": "2026-06-29T20:16:02.077Z",
       "usageCount": 1,
+      "maxUsageCount": 50,
+      "errorScore": 0
+    },
+    {
+      "id": "session_7Ni0CyMefF",
+      "cookieJar": {
+        "version": "tough-cookie@6.0.1",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": []
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2026-06-29T21:06:24.973Z",
+      "createdAt": "2026-06-29T20:16:24.973Z",
+      "usageCount": 0,
+      "maxUsageCount": 50,
+      "errorScore": 0
+    },
+    {
+      "id": "session_YAIGZdxFT7",
+      "cookieJar": {
+        "version": "tough-cookie@6.0.1",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": [
+          {
+            "key": "_d2id",
+            "value": "26616647-696c-423d-aa28-5f27a5ccb41b-n",
+            "expires": "2027-06-29T20:16:28.466Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:28.613Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_csrf",
+            "value": "vkY0S-UqeyaDcG2MuOlDU3Ht",
+            "expires": "2026-06-29T21:06:28.612Z",
+            "domain": "lista.mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": true,
+            "creation": "2026-06-29T20:16:28.613Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_mldataSessionId",
+            "value": "9e7c1a35-8450-4d86-bc02-532b9d4c2092",
+            "expires": "2026-06-29T20:46:41.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:28.613Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_bmstate",
+            "value": "1808dc3987327a83a2f0c146f2aca2031d7fc4edc8d90b5a4e49fa7ffb9720a3%3B2%3B5c0e350da313ddb24f0f1eba660e174b28094bbf09b197216d251c73b5859ceb%3B1782767787%3B3a9f2%3B9910251798e708033501ab686e5921bbe4e967b7ef14581ff726705cd487240f",
+            "expires": "2026-06-30T20:09:48.467Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:28.613Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_bmc",
+            "value": "1808dc3987327a83a2f0c146f2aca2031d7fc4edc8d90b5a4e49fa7ffb9720a3%3B72",
+            "expires": "2026-06-30T20:09:48.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:28.613Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_snoopy",
+            "value": "eyJmaW5nZXJwcmludCI6IkNiYlVOVDZJekRGMUpzMXlSck1hS0swMmRPQW0xQVNLcmFJVS9zVCtOZjRObldzZDU3SnA1RDZnTktONmljZVFpSC9hNk5uZW1Dd20wVXBtVUZ5Z0FmNDZDbzlRQXdXV1F6NGdEYVBTWTVJL3NudWh6amNnbEtHUklVd2J6MjlTdStVUGJzcFZnbnBiMFNCbTYxS0FxblMxbDhMZ09WVkpadWs1TUw0c3NvWHlOUHAzTlZvPSIsImtleSI6Ik5yakI5anBkcllhY20vd3dNS2NiVHp4TG8yWGc0T0h5Y2RMeDFiMThUWkU4Q3M2ekhyRDB2c1AzWU9NY25sbUd5QUgyS1NseGthRENQbkRTWkIrVktKV1JPeDQ2UEUrNiJ9",
+            "expires": "2026-06-29T21:16:29.484Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_bm_skipml",
+            "value": "true",
+            "expires": "2026-06-29T20:21:29.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "_bm_timing",
+            "value": "1782764188604%3B1782764189618%3B1014%3B7rohy68p",
+            "expires": "2026-06-29T20:18:29.000Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "main_domain",
+            "expires": "2026-06-29T21:06:41.822Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "main_attributes",
+            "expires": "2026-06-29T21:06:41.822Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "categories",
+            "expires": "2026-06-29T21:06:41.822Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "last_query",
+            "value": "protetor%20solar",
+            "expires": "2026-06-29T21:06:41.822Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "category",
+            "value": "MLB199648",
+            "expires": "2026-06-29T21:06:41.822Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "backend_dejavu_info",
+            "value": "j%3A%7B%7D",
+            "expires": "2026-06-29T21:06:41.822Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "c_s7dla",
+            "value": "1",
+            "expires": "2026-07-29T20:16:33.047Z",
+            "domain": "lista.mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "cp",
+            "value": "20211360",
+            "expires": "2026-07-29T20:16:36.047Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "inferredZipcode",
+            "value": "true",
+            "expires": "2026-07-29T20:16:36.047Z",
+            "domain": "mercadolivre.com.br",
+            "path": "/",
+            "secure": true,
+            "httpOnly": true,
+            "hostOnly": false,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          },
+          {
+            "key": "g_state",
+            "value": "{\"i_l\":0,\"i_ll\":1782764201728,\"i_b\":\"UxuDZDlgukjPRMqllmt1XX47QzjmP9QIGHXzSF8+FFs\",\"i_e\":{\"enable_itp_optimization\":24},\"i_et\":1782764201728}",
+            "expires": "2026-12-26T20:16:41.000Z",
+            "domain": "lista.mercadolivre.com.br",
+            "path": "/",
+            "hostOnly": true,
+            "creation": "2026-06-29T20:16:41.822Z",
+            "lastAccessed": "2026-06-29T20:16:41.822Z"
+          }
+        ]
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2026-06-29T21:06:24.979Z",
+      "createdAt": "2026-06-29T20:16:24.979Z",
+      "usageCount": 2,
+      "maxUsageCount": 50,
+      "errorScore": 0.5
+    },
+    {
+      "id": "session_dtlMNHPf0I",
+      "cookieJar": {
+        "version": "tough-cookie@6.0.1",
+        "storeType": "MemoryCookieStore",
+        "rejectPublicSuffixes": true,
+        "enableLooseMode": false,
+        "allowSpecialUseDomain": true,
+        "prefixSecurity": "silent",
+        "cookies": []
+      },
+      "userData": {},
+      "maxErrorScore": 3,
+      "errorScoreDecrement": 0.5,
+      "expiresAt": "2026-06-29T21:06:36.444Z",
+      "createdAt": "2026-06-29T20:16:36.444Z",
+      "usageCount": 0,
       "maxUsageCount": 50,
       "errorScore": 0
     }
