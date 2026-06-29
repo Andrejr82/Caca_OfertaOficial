@@ -142,6 +142,7 @@ app.post('/send', async (req, res) => {
         ? configuredChannelId
         : requestedJid;
     const requestId = req.headers['x-request-id'] || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+    const isNewsletter = jid.endsWith('@newsletter');
 
     console.log('\n======================================================');
     console.log(`🔎 [AUDITORIA ENGINE] INÍCIO DO DISPARO`);
@@ -160,6 +161,28 @@ app.post('/send', async (req, res) => {
     }
 
     try {
+        if (isNewsletter) {
+            console.log('  → Newsletter detectada: enviando como TEXTO (sem upload de imagem)');
+            const result = await sock.sendMessage(jid, { text: text });
+
+            console.log(`- Message ID retornado: ${result?.key?.id || 'N/A'}`);
+            console.log(`- Timestamp do envio: ${Date.now()}`);
+            console.log('======================================================\n');
+            console.log(`  ✅ ENVIADO! Message ID: ${result?.key?.id || 'N/A'}`);
+            console.log(`  ✅ Status: ${result?.status || 'N/A'}`);
+            return res.json({
+                ok: true,
+                message: 'Enviado via Baileys Local! (newsletter-text)',
+                requestId,
+                requestedJid,
+                jid,
+                messageId: result?.key?.id,
+                status: result?.status || null,
+                sender: sock?.user ? { id: sock.user.id, name: sock.user.name } : null,
+                serverTime: new Date().toISOString()
+            });
+        }
+
         let finalImageUrl = imageUrl;
         if (!finalImageUrl) {
             const lowerText = text.toLowerCase();
@@ -209,8 +232,6 @@ app.post('/send', async (req, res) => {
 
                 const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
                 const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
-
-                const isNewsletter = jid.endsWith('@newsletter');
 
                 let uniqueSourceUrl = clickUrl;
                 let finalMessageText = text;
