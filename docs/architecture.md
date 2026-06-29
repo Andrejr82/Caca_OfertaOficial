@@ -55,13 +55,14 @@ graph TD;
     Baileys -->|Websockets| WhatsApp
 ```
 
-## Separação de Componentes (Nova Arquitetura de 3 Pilares)
+## Separação de Componentes (Nova Arquitetura Desacoplada)
 
-Recentemente, a arquitetura de scraping foi severamente desacoplada para isolar 3 responsabilidades que não se comunicam via HTTP diretamente:
+A arquitetura monolítica antiga (`oracle-scraper.cjs`) foi severamente desacoplada para isolar responsabilidades e blindar o sistema contra bloqueios de segurança (WAF):
 
-1. **Notebook Windows (Scraping):** O único motor que abre instâncias do Playwright, aciona o Scrapfly, coleta o HTML, valida a estrutura (HTML/Product Validator) e **grava diretamente no Supabase**.
-2. **Oracle VPS (Processamento e IA):** O Worker da Oracle **não executa scraping**. Ele fica num loop contínuo lendo o Supabase em busca de novas ofertas, calcula o Score Comercial, injeta a copy gerada por IA (Groq/Gemini) e comanda as publicações de redes sociais.
-3. **Ngrok (Webhook):** Mantém exclusivamente o webhook ativo para recebimento de mensagens do WhatsApp e **não participa** da cadeia de scraping ou IA.
+1. **Minerador de Dados (`scripts/local-scraper.cjs`):** Roda localmente, delegando o by-pass do Mercado Livre para a API do Scrape.do (Proxy Residencial Premium sem renderização de tela). Salva tudo no Supabase como `draft`.
+2. **Cérebro de Marketing (`scripts/ai-processor.cjs`):** Um script isolado que varre as ofertas `draft`, calcula scores, e envia para a **Camada LLM Abstrata (Factory)**. Ele formata os posts de redes sociais (Copy) e salva no banco pronto para publicação (`approved`).
+3. **Camada LLM Abstrata (`src/core/llm/`):** Todos os scripts chamam Inteligência Artificial exclusivamente via `LLMFactory`. Ela é configurada no `.env` para usar o **Cerebras** primariamente, com fallback automático para **Groq**. Nenhum modelo fica hardcoded.
+4. **Publicação (Dashboard Web):** As publicações finais ocorrem de maneira semiautomática ou manual pelo painel da Vercel.
 
 ### 1. Camada de Apresentação (Frontend)
 Construído sobre o App Router do Next.js 16 (`/src/app/(dashboard)`).

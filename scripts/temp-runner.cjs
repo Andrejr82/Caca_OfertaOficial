@@ -193,7 +193,7 @@ async function crawleeExtract(url, limit, storeName) {
       await page.waitForTimeout(2000);
 
       evalResult = await page.evaluate(() => {
-        const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item, .poly-card'));
+        const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item'));
         let results = [];
         for (let el of items) {
           const text = el.innerText || '';
@@ -921,6 +921,13 @@ if (!GROQ_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
 // runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
 // cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
-//   name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
-// });
-module.exports = { crawleeExtract };
+  name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
+});
+
+(async () => { 
+  console.log('=== TESTANDO AMAZON ===');
+  console.log(await crawleeExtract('https://www.amazon.com.br/s?k=Sab%C3%A3o+em+p%C3%B3+Omo', 5, 'Amazon')); 
+  console.log('=== TESTANDO MAGALU ===');
+  console.log(await crawleeExtract('https://www.magazineluiza.com.br/busca/Sab%C3%A3o+em+p%C3%B3+Omo/', 5, 'Magalu')); 
+  process.exit(0); 
+})();
