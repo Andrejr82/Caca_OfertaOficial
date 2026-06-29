@@ -43,17 +43,151 @@ const supabase = createClient(
 
 // ─── Configurações ────────────────────────────────────────────
 process.env.CRAWLEE_MEMORY_MBYTES = '3072';
-const GROQ_API_KEY    = process.env.GROQ_API_KEY;
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
 const OFFERS_PER_STORE = 5; // Reduzido para caber no limite de tokens do JSON
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
-const APPROVAL_SCORE   = 5.0; 
+const APPROVAL_SCORE   = 5.0;
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
 const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
+
+// ─── LLM Provider Setup ────────────────────────────────────────
+const LLM_PROVIDER = process.env.LLM_PROVIDER || 'cerebras';
+const LLM_FALLBACK = process.env.LLM_FALLBACK || 'groq';
+
+// Configurações dos providers
+const PROVIDER_CONFIG = {
+  cerebras: {
+    apiKey: process.env.CEREBRAS_API_KEY,
+    baseURL: process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1',
+    model: process.env.CEREBRAS_MODEL || 'gpt-oss-120b',
+    maxTokens: 8000, // Maior limite para Cerebras
+    productsToProcess: 10 // Menos produtos para não cortar a resposta
+  },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: 'https://api.groq.com/openai/v1',
+    model: process.env.GROQ_MODEL || 'llama-3.1-8b-instant',
+    apiKey2: process.env.GROQ_API_KEY_2,
+    maxTokens: 4000,
+    productsToProcess: 15
+  }
+};
+
+/**
+ * Função genérica para chamar LLM em formato OpenAI-compatible
+ */
+async function callLLM(messages, providerType = LLM_PROVIDER, config = {}) {
+  const providerConfig = PROVIDER_CONFIG[providerType];
+  
+  if (!providerConfig || !providerConfig.apiKey) {
+    throw new Error(`Provider ${providerType} não configurado corretamente`);
+  }
+  
+  const url = (providerConfig.baseURL).replace(/\/$/, '') + '/chat/completions';
+  
+  const body = {
+    model: providerConfig.model,
+    messages: messages,
+    temperature: config.temperature ?? 0.1,
+    max_tokens: config.maxTokens ?? providerConfig.maxTokens ?? 4000,
+    response_format: config.responseFormat
+  };
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${providerConfig.apiKey}`
+  };
+  
+  const response = await axios.post(url, body, { headers });
+  
+  // Cerebras puts content in message.reasoning, others in message.content
+  if (response.data.choices && response.data.choices[0]) {
+    const msg = response.data.choices[0].message;
+    if (msg.reasoning && !msg.content) {
+      response.data.choices[0].message.content = msg.reasoning;
+    }
+  }
+  
+  if (response.data.usage) {
+    cycleMetrics.totalTokens += response.data.usage.total_tokens;
+  }
+  
+  return response.data;
+}
+
+/**
+ * Tenta o provider principal, se falhar tenta o fallback
+ */
+async function callLLMWithFallback(messages, config = {}) {
+  let lastError = null;
+  
+  // Tenta o provider principal
+  try {
+    console.log(`  [LLM] Usando provider principal: ${LLM_PROVIDER}`);
+    const result = await callLLM(messages, LLM_PROVIDER, config);
+    
+    // Check if response was cut off
+    const finishReason = result.choices?.[0]?.finish_reason;
+    if (finishReason === 'length') {
+      console.warn(`  [LLM] Provider ${LLM_PROVIDER} response cut off (finish_reason: length), using fallback`);
+      lastError = new Error('Response cut off');
+    } else {
+      return result;
+    }
+  } catch (error) {
+    console.warn(`  [LLM] Provider ${LLM_PROVIDER} falhou: ${error.message}`);
+    lastError = error;
+  }
+  
+  // Tenta o fallback
+  try {
+    console.log(`  [LLM] Usando fallback: ${LLM_FALLBACK}`);
+    
+    if (LLM_FALLBACK === 'groq' && PROVIDER_CONFIG.groq.apiKey2) {
+      // Para Groq, tenta rotacionar chaves
+      let groqError = null;
+      const keys = [PROVIDER_CONFIG.groq.apiKey, PROVIDER_CONFIG.groq.apiKey2].filter(Boolean);
+      
+      for (let i = 0; i < keys.length; i++) {
+        try {
+          console.log(`  [Groq] Tentando chave ${i + 1}...`);
+          const url = (PROVIDER_CONFIG.groq.baseURL).replace(/\/$/, '') + '/chat/completions';
+          const body = {
+            model: PROVIDER_CONFIG.groq.model,
+            messages: messages,
+            temperature: config.temperature ?? 0.1,
+            max_tokens: config.maxTokens ?? PROVIDER_CONFIG.groq.maxTokens,
+            response_format: config.responseFormat
+          };
+          const headers = {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${keys[i]}`
+          };
+          const response = await axios.post(url, body, { headers });
+          
+          if (response.data.usage) {
+            cycleMetrics.totalTokens += response.data.usage.total_tokens;
+          }
+          
+          return response.data;
+        } catch (err) {
+          groqError = err;
+        }
+      }
+      
+      throw groqError;
+    }
+    
+    return await callLLM(messages, LLM_FALLBACK, config);
+  } catch (fallbackError) {
+    console.error(`  [LLM] Fallback ${LLM_FALLBACK} também falhou: ${fallbackError.message}`);
+    throw lastError || fallbackError;
+  }
+}
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
@@ -103,7 +237,7 @@ const cycleMetrics = {
   produtos_retornados: 0,
   produtos_aprovados: 0,
   produtos_rejeitados: 0,
-  total_tokens: 0,
+  totalTokens: 0, // Nome consistente com o resto do código
   reject_reasons: {},
   por_marketplace: {}
 };
@@ -134,6 +268,7 @@ async function crawleeExtract(url, limit, storeName) {
     maxConcurrency: 1,
     requestHandlerTimeoutSecs: 150,
     navigationTimeoutSecs: 120,
+    maxRequestRetries: 3, // Retry failed requests up to 3 times
     autoscaledPoolOptions: {
       systemStatusOptions: {
         maxMemoryOverloadedRatio: 999,
@@ -230,11 +365,14 @@ async function crawleeExtract(url, limit, storeName) {
           const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
           if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
         }
+        // Usa número de produtos baseado no provedor LLM principal
+        const providerConfig = PROVIDER_CONFIG[LLM_PROVIDER];
+        const maxProducts = providerConfig?.productsToProcess || 15;
         return { 
-          text: unique.slice(0, 15).join('\n'), 
+          text: unique.slice(0, maxProducts).join('\n'), 
           found: items.length,
           valid: results.length,
-          sent: Math.min(unique.length, 15),
+          sent: Math.min(unique.length, maxProducts),
           longestText: results.reduce((max, r) => Math.max(max, r.length), 0),
           avgText: results.length ? results.reduce((sum, r) => sum + r.length, 0) / results.length : 0
         };
@@ -248,6 +386,7 @@ async function crawleeExtract(url, limit, storeName) {
     await crawler.run([targetUrl]);
   } catch (err) {
     console.error(`  [Crawlee] Erro ao raspar ${storeName}: ${err.message}`);
+    await logErrorToSupabase('Oracle-Scraper', 'Crawlee Extract', err, { storeName, url: targetUrl });
     return [];
   }
 
@@ -259,80 +398,50 @@ async function crawleeExtract(url, limit, storeName) {
   if (!rawExtractedData) return [];
   if (!validateHtml(rawExtractedData, storeName)) return [];
 
-  // Chama a Groq para formatar os dados
-  console.log(`  [Groq] Analisando dados brutos da ${storeName}...`);
+  // Chama o LLM para formatar os dados
+  console.log(`  [LLM] Analisando dados brutos da ${storeName}...`);
   if (storeName === "Amazon") console.log("RAW AMZ:", rawExtractedData.substring(0, 1000));
   const prompt = getScrapingPrompt(storeName);
 
-  let retries = 3;
-  let delay = 20000; // Aumentado para 20s para resetar Token Per Minute Limit (TPM)
-  
-  // Rotação de chaves
-  const keys = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(Boolean);
-  let currentKeyIndex = 0;
+  const messages = [
+    { role: 'system', content: prompt },
+    { role: 'user', content: rawExtractedData.substring(0, 4000) }
+  ];
 
-  while (retries > 0) {
+  try {
+    const res = await callLLMWithFallback(messages, {
+      temperature: 0.1,
+      responseFormat: { type: "json_object" }
+    });
+
+    const content = res.choices[0].message.content;
     try {
-      const currentKey = keys[currentKeyIndex % keys.length];
-      const res = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-        model: 'llama-3.1-8b-instant',
-        response_format: { type: "json_object" },
-        messages: [
-          { role: 'system', content: prompt },
-          { role: 'user', content: rawExtractedData.substring(0, 4000) }
-        ],
-        temperature: 0.1,
-        max_tokens: 1500
-      }, {
-        headers: { 'Authorization': `Bearer ${currentKey}`, 'Content-Type': 'application/json' }
-      });
-
-      if (res.data.usage) {
-        cycleMetrics.total_tokens += res.data.usage.total_tokens;
+      const cleanContent = content.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
+      const data = JSON.parse(cleanContent);
+      const returnedProducts = data.products || [];
+      cycleMetrics.produtos_retornados += returnedProducts.length;
+      
+      if (storeName === "Amazon") {
+        console.log(`[Amazon] Output:`, JSON.stringify(returnedProducts, null, 2));
       }
-      const content = res.data.choices[0].message.content;
-      try {
-        const cleanContent = content.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
-        const data = JSON.parse(cleanContent);
-        const returnedProducts = data.products || [];
-        cycleMetrics.produtos_retornados += returnedProducts.length;
-        
-        if (storeName === "Amazon") {
-          console.log(`[Amazon] Groq Output:`, JSON.stringify(returnedProducts, null, 2));
-        }
-        
-        const approvedProducts = sanitizeScrapedData(returnedProducts, storeName).slice(0, limit);
-        
-        console.log(`\n  [DIAGNÓSTICO GROQ ${storeName}] Retornados: ${returnedProducts.length} | Aprovados: ${approvedProducts.length} | Rejeitados: ${returnedProducts.length - approvedProducts.length}`);
-        
-        cycleMetrics.produtos_aprovados += approvedProducts.length;
-        cycleMetrics.produtos_rejeitados += (returnedProducts.length - approvedProducts.length);
-        cycleMetrics.por_marketplace[storeName] += approvedProducts.length;
-        
-        return approvedProducts;
-      } catch (parseErr) {
-        console.error(`  [Groq] Erro de parse JSON no scraper: ${parseErr.message}`);
-        return [];
-      }
-    } catch (err) {
-      if (err.response && err.response.status === 429) {
-        console.log(`  [Groq Rate Limit] Limite atingido na chave ${currentKeyIndex + 1}. Trocando de chave ou aguardando ${delay}ms... Detalhe:`, err.response.data);
-        if (keys.length > 1) {
-          currentKeyIndex++; // Rotaciona a chave imediatamente
-          retries--; // Gasta um retry, mas sem delay longo
-          await new Promise(r => setTimeout(r, 2000));
-        } else {
-          await new Promise(r => setTimeout(r, delay));
-          delay *= 2;
-          retries--;
-        }
-      } else {
-        console.error(`  [Groq] Falha na formatação: ${err.message} ${err.response ? JSON.stringify(err.response.data) : ""}`);
-        return [];
-      }
+      
+      const approvedProducts = sanitizeScrapedData(returnedProducts, storeName).slice(0, limit);
+      
+      console.log(`\n  [DIAGNÓSTICO ${storeName}] Retornados: ${returnedProducts.length} | Aprovados: ${approvedProducts.length} | Rejeitados: ${returnedProducts.length - approvedProducts.length}`);
+      
+      cycleMetrics.produtos_aprovados += approvedProducts.length;
+      cycleMetrics.produtos_rejeitados += (returnedProducts.length - approvedProducts.length);
+      cycleMetrics.por_marketplace[storeName] += approvedProducts.length;
+      
+      return approvedProducts;
+    } catch (parseErr) {
+      console.error(`  [LLM] Erro de parse JSON no scraper: ${parseErr.message}`);
+      return [];
     }
+  } catch (err) {
+    console.error(`  [LLM] Falha na formatação: ${err.message}`);
+    return [];
   }
-  return [];
 }
 
 // ─── Normalização e Links de Afiliado ─────────────────────────
@@ -449,7 +558,15 @@ function cleanJsonString(str) {
   return str.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
 }
 async function generateOfferAnalysis(product, store) {
-  if (!GROQ_API_KEY) return generateFallback(product, store);
+  // Verifica se temos pelo menos um provider configurado
+  const hasCerebras = !!PROVIDER_CONFIG.cerebras.apiKey;
+  const hasGroq = !!PROVIDER_CONFIG.groq.apiKey;
+  
+  if (!hasCerebras && !hasGroq) {
+    console.warn(`  [LLM] Nenhum provider configurado. Usando fallback.`);
+    return generateFallback(product, store);
+  }
+  
   const baseSystemPrompt = `Você é um Copywriter de ELITE especializado em marketing de afiliados de alta conversão. Respond in JSON.
 Sua persona: Administrador eufórico de grupos de ofertas. Foco em escassez extrema e descontos.
 Regras:
@@ -470,79 +587,50 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
   "hashtags": ["#oferta"]
 }`;
 
-  const keys = [process.env.GROQ_API_KEY, process.env.GROQ_API_KEY_2].filter(Boolean);
-  let currentKeyIndex = 0;
+  const messages = [
+    { role: "system", content: baseSystemPrompt },
+    { role: "user", content: userPrompt }
+  ];
 
-  let retries = 3;
-  let delay = 20000; // Aumentado para 20s
-  while (retries > 0) {
+  try {
+    const data = await callLLMWithFallback(messages, {
+      temperature: 0.7,
+      maxTokens: 1000,
+      responseFormat: { type: "json_object" }
+    });
+
+    let raw;
     try {
-      const currentKey = keys[currentKeyIndex % keys.length];
-      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${currentKey}` },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [{ role: "system", content: baseSystemPrompt }, { role: "user", content: userPrompt }],
-          response_format: { type: "json_object" },
-          temperature: 0.7, max_tokens: 1000
-        }),
-      });
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          console.log(`  [Groq Rate Limit - Copy] Limite atingido. Rotacionando chave...`);
-          if (keys.length > 1) {
-            currentKeyIndex++;
-            retries--;
-            await new Promise(r => setTimeout(r, 2000));
-            continue;
-          } else {
-            await new Promise(r => setTimeout(r, delay));
-            delay *= 2;
-            retries--; continue;
-          }
-        }
-        throw new Error(`Groq HTTP ${response.status}`);
-      }
-
-      const data = await response.json();
-      let raw;
-      try {
-        raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
-      } catch (parseErr) {
-        console.log(`  [Groq] JSON malformado. Retentando...`);
-        throw new Error("JSON malformado");
-      }
-      const strategy = (raw.strategies && raw.strategies[0]) ? raw.strategies[0] : null;
-      if (!strategy) throw new Error("Sem estrategia valida");
-
-      const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
-
-      const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-      const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-      
-      const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
-      const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
-      const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
-
-      return {
-        score: strategy.score || 8.0,
-        telegram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}\n\n${hashtags}`,
-        instagram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${instagramBottomBlock}\n\n${hashtags}`,
-        whatsapp: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}`
-      };
-    } catch (err) {
-      if (err.message && (err.message.includes("JSON malformado") || err.message.includes("Sem estrategia valida"))) {
-         retries--;
-         continue;
-      }
-      await new Promise(r => setTimeout(r, delay));
-      delay *= 2;
-      retries--;
+      raw = JSON.parse(cleanJsonString(data.choices[0].message.content));
+    } catch (parseErr) {
+      console.log(`  [LLM] JSON malformado. Usando fallback.`);
+      return generateFallback(product, store);
     }
+    const strategy = (raw.strategies && raw.strategies[0]) ? raw.strategies[0] : null;
+    if (!strategy) {
+      console.log(`  [LLM] Sem estratégia válida. Usando fallback.`);
+      return generateFallback(product, store);
+    }
+
+    const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
+
+    const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+    const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+    
+    const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
+    const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
+    const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
+
+    return {
+      score: strategy.score || 8.0,
+      telegram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}\n\n${hashtags}`,
+      instagram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${instagramBottomBlock}\n\n${hashtags}`,
+      whatsapp: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}`
+    };
+  } catch (err) {
+    console.error(`  [LLM] Falha na geração de copy: ${err.message}. Usando fallback.`);
+    return generateFallback(product, store);
   }
-  return generateFallback(product, store);
 }
 
 function generateFallback(product, store) {
@@ -568,6 +656,14 @@ async function upsertOffer(product, store, affiliateUrl) {
   
   // A V1 continua mandando no sistema principal
   const score = scoreV1;
+  
+  // Prepara explainability com os scores para armazenar
+  const explainability = {
+    score_v1: scoreV1,
+    score_v2: scoreV2,
+    timestamp: new Date().toISOString(),
+    oracle_version: "2.0",
+  };
 
   // A/B Test Telemetry
   if (process.env.SCORING_V2_ENABLED === 'true') {
@@ -582,39 +678,42 @@ async function upsertOffer(product, store, affiliateUrl) {
     });
   }
 
-  const { data: existing } = await supabase.from('offers').select('id, current_price, metadata').eq('original_url', affiliateUrl).eq('user_id', ADMIN_USER_ID).maybeSingle();
+  const { data: existing } = await supabase.from('offers').select('id, current_price, explainability').eq('original_url', affiliateUrl).eq('user_id', ADMIN_USER_ID).maybeSingle();
 
   if (existing) {
-    let newMetadata = existing.metadata || {};
-    if (process.env.SCORING_V2_ENABLED === 'true') {
-      newMetadata.score_v2 = scoreV2;
-      newMetadata.score_v1 = scoreV1;
-    }
+    // Merge explainability existente com os novos scores
+    const newExplainability = { ...(existing.explainability || {}), ...explainability };
 
     if (Number(existing.current_price) !== product.current_price) {
-      await supabase.from('offers').update({ current_price: product.current_price, old_price: product.old_price, image_url: product.image_url, score, metadata: newMetadata, updated_at: new Date().toISOString() }).eq('id', existing.id);
+      await supabase.from('offers').update({ 
+        current_price: product.current_price, 
+        old_price: product.old_price, 
+        image_url: product.image_url, 
+        score, 
+        explainability: newExplainability,
+        updated_at: new Date().toISOString() 
+      }).eq('id', existing.id);
     } else {
-      await supabase.from('offers').update({ score, metadata: newMetadata, updated_at: new Date().toISOString() }).eq('id', existing.id);
+      await supabase.from('offers').update({ 
+        score, 
+        explainability: newExplainability,
+        updated_at: new Date().toISOString() 
+      }).eq('id', existing.id);
     }
     return { id: existing.id, isNew: false, score };
-  }
-
-  let metadata = {};
-  if (process.env.SCORING_V2_ENABLED === 'true') {
-    metadata.score_v2 = scoreV2;
-    metadata.score_v1 = scoreV1;
   }
 
   const { data, error } = await supabase.from('offers').insert({
     user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
     image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
     rating: product.rating, category: product.category || 'Geral', score, status: 'draft',
-    metadata,
+    explainability: explainability,
     notes: `[Oracle In-House] Importado às ${new Date().toLocaleString('pt-BR')}`,
   }).select('id').single();
 
   if (error) {
     console.error(`  ✗ Erro insert: ${error.message}`);
+    await logErrorToSupabase('Oracle-Scraper', 'Upsert Offer', error, { product, store, affiliateUrl });
     return null;
   }
   return { id: data.id, isNew: true, score };
@@ -704,41 +803,72 @@ async function scrapeStore(store) {
   let storeCandidates = [];
 
   for (const query of queries) {
-    console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
-    
-    const urls = {
-      'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
-      'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
-      'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
-      'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
-      'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
-      'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
-    };
-
-    const rawProducts = await crawleeExtract(urls[store], OFFERS_PER_STORE, store);
-
-    for (const p of rawProducts) {
-      if (!p.title || !p.price) continue;
+    try {
+      console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
       
-      const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
-      const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
-      
-      const prodData = {
-        product_name: p.title, image_url: normalizeImageUrl(p.image || null),
-        current_price: p.price, old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-        rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral'
+      const urls = {
+        'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
+        'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
+        'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
+        'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
+        'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
+        'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
       };
 
-      const res = await upsertOffer(prodData, store, affiliateUrl);
-      if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
+      const rawProducts = await crawleeExtract(urls[store], OFFERS_PER_STORE, store);
+
+      for (const p of rawProducts) {
+        // A Groq retorna product_name e image_url, mas também suporta title/image para compatibilidade
+        const productName = p.product_name || p.title;
+        const productImage = p.image_url || p.image;
+        const productPrice = p.current_price || p.price;
+        const productOldPrice = p.old_price;
+        
+        if (!productName || !productPrice) continue;
+        
+        const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
+        const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
+        
+        const prodData = {
+          product_name: productName, image_url: normalizeImageUrl(productImage || null),
+          current_price: productPrice, old_price: productOldPrice && productOldPrice > productPrice ? productOldPrice : null,
+          rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral'
+        };
+
+        const res = await upsertOffer(prodData, store, affiliateUrl);
+        if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
+      }
+      
+      // Espera 5 segundos entre as buscas de categorias para aliviar o Groq TPM
+      await new Promise(r => setTimeout(r, 5000));
+    } catch (err) {
+      console.error(`  [${store}] Erro na query "${query}": ${err.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Scrape Query', err, { store, query });
     }
-    
-    // Espera 5 segundos entre as buscas de categorias para aliviar o Groq TPM
-    await new Promise(r => setTimeout(r, 5000));
   }
   
   console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas coletadas das diversas categorias.`);
   return storeCandidates;
+}
+
+// ─── Error Logging Helper ─────────────────────────────────────
+async function logErrorToSupabase(integration, action, error, metadata = {}) {
+  try {
+    await supabase.from('integration_logs').insert({
+      user_id: ADMIN_USER_ID,
+      integration,
+      action,
+      status: 'error',
+      message: error.message || String(error),
+      metadata: {
+        ...metadata,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (logErr) {
+    console.error('Failed to log error to Supabase:', logErr.message);
+  }
 }
 
 // ─── Heartbeat System ─────────────────────────────────────────
@@ -888,7 +1018,7 @@ async function runScrapingCycle() {
         produtos_rejeitados: cycleMetrics.produtos_rejeitados,
         recovery_rate: recoveryRate,
         approval_rate: approvalRate,
-        consumo_tokens: cycleMetrics.total_tokens,
+        consumo_tokens: cycleMetrics.totalTokens, // Corrigido
         por_marketplace: cycleMetrics.por_marketplace,
         ab_test_report: abTestReport
       }
@@ -901,7 +1031,7 @@ async function runScrapingCycle() {
   cycleMetrics.produtos_retornados = 0;
   cycleMetrics.produtos_aprovados = 0;
   cycleMetrics.produtos_rejeitados = 0;
-  cycleMetrics.total_tokens = 0;
+  cycleMetrics.totalTokens = 0; // Corrigido
   cycleMetrics.por_marketplace = {};
   cycleMetrics.ab_test_offers = [];
 
@@ -913,14 +1043,32 @@ console.log('\n╔════════════════════�
 console.log('║   ORACLE-SCRAPER IN-HOUSE (Crawlee)      ║');
 console.log('╚══════════════════════════════════════════╝\n');
 
-if (!GROQ_API_KEY || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  console.log("Missing API keys (Groq ou Supabase)");
+// Verifica se temos pelo menos um LLM provider configurado
+const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
+
+if (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
 
-// runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
+runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
 // cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
 //   name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
 // });
-module.exports = { crawleeExtract };
+module.exports = { 
+  crawleeExtract,
+  cleanProductUrl,
+  normalizeImageUrl,
+  buildAffiliateUrl,
+  calculateScoreV1,
+  calculateScoreV2,
+  generateFallback,
+  getRandomQueries,
+  scrapeStore,
+  upsertOffer,
+  processTopOffers,
+  runScrapingCycle,
+  logErrorToSupabase,
+  GOLDEN_QUERIES
+};
