@@ -1,13 +1,17 @@
-import { NextResponse } from "next/server";
+import { NextResponse, NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { inngest } from "@/lib/inngest/client";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export async function GET(request: Request, { params }: { params: Promise<{ subId: string }> | { subId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ subId: string[] }> | { subId: string[] } }) {
   // Await params to avoid the Next.js 15+ synchronous dynamic API warning
-  const { subId } = await params;
+  const resolvedParams = await params;
+  
+  // Extrai o primeiro elemento do array de parâmetros da rota catch-all
+  const subIdString = Array.isArray(resolvedParams.subId) ? resolvedParams.subId[0] : resolvedParams.subId;
+  const subId = decodeURIComponent(subIdString);
 
   if (!subId) {
     return NextResponse.redirect(new URL("/", request.url));
@@ -114,14 +118,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ subI
     <meta property="og:image:width" content="1200">
     <meta property="og:image:height" content="630">
     
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="🔥 ${title}">
-    <meta name="twitter:description" content="Aproveite esta oferta imperdível!">
-    <meta name="twitter:image" content="${image}">
-
     <!-- Redirecionamentos Automáticos -->
-    <meta http-equiv="refresh" content="0; url=${originalUrl}">
+    ${userAgent.includes('WhatsApp') || userAgent.includes('facebookexternalhit') 
+      ? '<!-- Crawler detectado: Meta refresh bloqueado para evitar agrupamento de cache no destino -->' 
+      : '<meta http-equiv="refresh" content="0; url=' + originalUrl + '">'}
+    
     <script>
         window.location.href = "${originalUrl}";
     </script>

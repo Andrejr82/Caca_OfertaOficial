@@ -167,39 +167,42 @@ app.post('/send', async (req, res) => {
                 const buffer = Buffer.from(arrayBuffer);
                 console.log('  → Convertendo imagem para thumbnail em alta resolução...');
                 const sharp = require('sharp');
-                // Mantém alta qualidade mas dentro do limite de thumbnail
+                // Mantém alta qualidade mas converte para JPEG garantido para o WhatsApp
                 const imageBuffer = await sharp(buffer)
                     .resize({ width: 800, withoutEnlargement: true })
-                    .jpeg({ quality: 75, force: true })
+                    .jpeg({ quality: 80, force: true })
                     .toBuffer();
 
                 console.log(`  → Tamanho do Thumbnail: ${Math.round(imageBuffer.length / 1024)} KB`);
-                console.log('  → Enviando com renderLargerThumbnail (Plano B)...');
                 
                 // Extrai o primeiro link do texto para colocar no banner clicável
                 const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
                 const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
+
+                // Cache buster: WhatsApp ignora buffers novos se a URL base for idêntica.
+                // O ?v= é ignorado no Vercel (que carrega o destino correto) mas o Crawler vê como URL diferente.
+                // Como query parameters às vezes são ignorados, adicionamos no formato de path graças a nova rota catch-all!
+                // O link base é ex: https://dominio.com/go/wp_1234
+                // Vamos converter para: https://dominio.com/go/wp_1234/1719284918239
+                const uniqueSourceUrl = clickUrl.includes('?') 
+                    ? clickUrl.replace('?', `/${Date.now()}?`) 
+                    : `${clickUrl}/${Date.now()}`;
                 
                 result = await sock.sendMessage(jid, {
                     text: text,
                     contextInfo: {
                         externalAdReply: {
-                            title: "Caça Ofertas",
-                            body: "Ver oferta completa na loja",
+                            title: text.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9 ]/g, '') || "Oferta Especial",
+                            body: "Clique no link acima para comprar 👆",
                             mediaType: 1, // 1 for image
                             thumbnail: imageBuffer,
-                            sourceUrl: clickUrl,
+                            sourceUrl: uniqueSourceUrl,
                             renderLargerThumbnail: true
                         }
                     }
                 });
                 
-                // --- TESTE DE PERMISSÃO (MENSAGEM DE TEXTO SIMPLES) ---
-                console.log('  → Enviando também um texto simples para garantir entrega...');
-                await sock.sendMessage(jid, {
-                    text: "🔔 [Mensagem do Sistema] O robô tem permissão para postar neste canal! (Ignorar)"
-                });
-                
+
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
                 throw err;
