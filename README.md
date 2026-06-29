@@ -201,3 +201,8 @@ Para contribuir:
 ## Licen√ßa
 
 MIT License.
+
+ # #   S o l u Á „ o   d e   A n t i - C a c h e   ( W h a t s A p p   L i n k   P r e v i e w ) 
+ A   p l a t a f o r m a   r e s o l v e   p r o b l e m a s   e s t r u t u r a i s   d o   c a c h e   e s t · t i c o   d o   \ B a i l e y s \   m a n i p u l a n d o   e m   t e m p o   r e a l   a   U R L   e n v i a d a   n o   c o r p o   d a s   m e n s a g e n s   ( a p l i c a n d o   u m   \ D a t e . n o w ( ) \   d i n ‚ m i c o   n a   p o n t a ) .   S a i b a   m a i s   e m   [ d o c s / a r c h i t e c t u r e . m d ] ( d o c s / a r c h i t e c t u r e . m d ) . 
+  
+ 

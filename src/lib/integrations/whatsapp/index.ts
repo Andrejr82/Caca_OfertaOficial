@@ -48,6 +48,12 @@ export class WhatsAppService {
         imageUrl,
       };
 
+      const crypto = require('crypto');
+      const hash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex').substring(0, 10);
+      console.log(`🔎 [AUDITORIA SERVICE] Preparando envio para Engine Local...`);
+      console.log(`- WhatsApp payload hash: ${hash}`);
+      console.log(`- imageUrl no payload: ${payload.imageUrl}`);
+
       // 2. Disparar contra o engine local (com retry)
       const response = await fetch(`${this.engineUrl}/send`, {
         method: "POST",

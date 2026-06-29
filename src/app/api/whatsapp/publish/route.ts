@@ -44,6 +44,18 @@ export async function POST(request: Request) {
     // O usuário pode ter editado o texto na tela antes de aprovar
     const finalContent = content || post.content;
 
+    const crypto = require('crypto');
+    const hash = (data: any) => crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex').substring(0, 10);
+    
+    console.log('\n======================================================');
+    console.log(`🔎 [AUDITORIA NEXT.JS] INÍCIO DO FLUXO`);
+    console.log(`- Offer ID: ${offer.id}`);
+    console.log(`- Product ID: ${offer.product_id || 'N/A'}`);
+    console.log(`- Título: ${offer.title}`);
+    console.log(`- image_url recebida do banco: ${offer.image_url}`);
+    console.log(`- Offer object hash: ${hash(offer)}`);
+    console.log(`- Post object hash: ${hash(post)}`);
+
     // Se o conteúdo foi alterado, atualiza primeiro no banco de dados
     if (content && content !== post.content) {
       await supabase
@@ -61,6 +73,9 @@ export async function POST(request: Request) {
     const { whatsappService } = await import("@/lib/integrations/whatsapp");
     let whatsappResult;
     try {
+      console.log(`- Publisher payload info: channelId=${channelId}, image_url=${offer.image_url}`);
+      console.log('======================================================\n');
+      
       // A imagem será puxada automaticamente pelo Baileys lendo as tags OG do nosso link /go/
       whatsappResult = await whatsappService.sendChannelMedia(channelId, finalContent, offer.image_url);
     } catch (error: any) {

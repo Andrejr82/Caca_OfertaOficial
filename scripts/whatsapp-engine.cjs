@@ -119,27 +119,26 @@ app.post('/send', async (req, res) => {
     // Sanitize number (strip quotes, spaces)
     const jid = number.replace(/['"]/g, '').trim();
 
-    console.log(`\n📤 ── NOVA REQUISIÇÃO /send ──`);
-    console.log(`  JID: ${jid}`);
-    console.log(`  Texto: ${text.substring(0, 80)}...`);
-    console.log(`  Imagem: ${imageUrl ? 'Sim' : 'Não'}`);
-    console.log(`  Conectado: ${isConnected}`);
+    console.log('\n======================================================');
+    console.log(`🔎 [AUDITORIA ENGINE] INÍCIO DO DISPARO`);
+    console.log(`- JID: ${jid}`);
+    console.log(`- Texto recebido (${text.length} chars)`);
+    console.log(`- image_url recebida: ${imageUrl}`);
+    
+    // Log the exact full payload
+    const fs = require('fs');
+    fs.appendFileSync('last_request.log', JSON.stringify(req.body, null, 2) + '\n\n');
 
     if (!isConnected || !sock) {
         console.log('  ❌ Motor não está conectado ao WhatsApp!');
-        return res.status(503).json({ ok: false, message: 'O WhatsApp não está conectado. Verifique o terminal.' });
+        return res.status(503).json({ ok: false, message: 'Motor não conectado' });
     }
 
     try {
-        let result;
         let finalImageUrl = imageUrl;
-        
-        // Se a oferta não tiver imagem (ex: Cupons), criamos um banner dinâmico com a cor e nome da loja!
         if (!finalImageUrl) {
             const lowerText = text.toLowerCase();
-            if (lowerText.includes('mercado livre') || lowerText.includes('mercadolivre')) {
-                finalImageUrl = 'https://placehold.co/1200x630/FFE600/2D3277/png?text=OFERTA+MERCADO+LIVRE&font=Montserrat';
-            } else if (lowerText.includes('amazon')) {
+            if (lowerText.includes('amazon')) {
                 finalImageUrl = 'https://placehold.co/1200x630/232F3E/FF9900/png?text=OFERTA+AMAZON&font=Montserrat';
             } else if (lowerText.includes('shopee')) {
                 finalImageUrl = 'https://placehold.co/1200x630/EE4D2D/FFFFFF/png?text=OFERTA+SHOPEE&font=Montserrat';
@@ -150,12 +149,17 @@ app.post('/send', async (req, res) => {
             } else {
                 finalImageUrl = 'https://placehold.co/1200x630/E50914/FFFFFF/png?text=ALERTA+DE+CUPOM&font=Montserrat';
             }
-            console.log(`  → Imagem não fornecida. Usando banner dinâmico: ${finalImageUrl}`);
+            console.log(`  → Imagem genérica definida: ${finalImageUrl}`);
         }
 
+        let result;
         if (finalImageUrl) {
-            console.log('  → Baixando imagem...');
+            console.log(`- finalImageUrl para fetch: ${finalImageUrl}`);
             try {
+                const crypto = require('crypto');
+                const hashStr = (str) => crypto.createHash('sha256').update(str).digest('hex').substring(0, 10);
+                const hashBuf = (buf) => crypto.createHash('sha256').update(buf).digest('hex').substring(0, 10);
+
                 const imgRes = await fetch(finalImageUrl, {
                     headers: {
                         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -165,44 +169,59 @@ app.post('/send', async (req, res) => {
                 if (!imgRes.ok) throw new Error(`Falha ao baixar imagem: ${imgRes.statusText}`);
                 const arrayBuffer = await imgRes.arrayBuffer();
                 const buffer = Buffer.from(arrayBuffer);
-                console.log('  → Convertendo imagem para thumbnail em alta resolução...');
+                
+                console.log(`- imageBuffer original size: ${buffer.length} bytes`);
+                console.log(`- imageBuffer original hash: ${hashBuf(buffer)}`);
+                
                 const sharp = require('sharp');
-                // Mantém alta qualidade mas converte para JPEG garantido para o WhatsApp
                 const imageBuffer = await sharp(buffer)
                     .resize({ width: 800, withoutEnlargement: true })
                     .jpeg({ quality: 80, force: true })
                     .toBuffer();
 
-                console.log(`  → Tamanho do Thumbnail: ${Math.round(imageBuffer.length / 1024)} KB`);
-                
-                // Extrai o primeiro link do texto para colocar no banner clicável
+                console.log(`- imageBuffer processado (Sharp) size: ${imageBuffer.length} bytes`);
+                console.log(`- imageBuffer processado (Sharp) hash: ${hashBuf(imageBuffer)}`);
+
                 const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
                 const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
 
-                // Cache buster: WhatsApp ignora buffers novos se a URL base for idêntica.
-                // O ?v= é ignorado no Vercel (que carrega o destino correto) mas o Crawler vê como URL diferente.
-                // Como query parameters às vezes são ignorados, adicionamos no formato de path graças a nova rota catch-all!
-                // O link base é ex: https://dominio.com/go/wp_1234
-                // Vamos converter para: https://dominio.com/go/wp_1234/1719284918239
                 const uniqueSourceUrl = clickUrl.includes('?') 
                     ? clickUrl.replace('?', `/${Date.now()}?`) 
                     : `${clickUrl}/${Date.now()}`;
                 
+                let finalMessageText = text;
+                if (urlMatch) {
+                    finalMessageText = text.split(clickUrl).join(uniqueSourceUrl);
+                }
+
+                console.log(`- Texto pós-modificação (hash): ${hashStr(finalMessageText)}`);
+                console.log(`- clickUrl encontrada: ${clickUrl}`);
+                console.log(`- uniqueSourceUrl final: ${uniqueSourceUrl}`);
+
+                const externalAdReplyObj = {
+                    title: text.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9 ]/g, '') || "Oferta Especial",
+                    body: "Clique no link acima para comprar 👆",
+                    mediaType: 1,
+                    thumbnail: imageBuffer,
+                    sourceUrl: uniqueSourceUrl,
+                    renderLargerThumbnail: true
+                };
+
+                const extAdReplyHashObj = { ...externalAdReplyObj, thumbnail: hashBuf(imageBuffer) };
+                console.log(`- externalAdReply hash (sem o buffer real): ${hashStr(JSON.stringify(extAdReplyHashObj))}`);
+
                 result = await sock.sendMessage(jid, {
-                    text: text,
+                    text: finalMessageText,
+                    linkPreview: {
+                        'matched-text': uniqueSourceUrl,
+                        title: externalAdReplyObj.title,
+                        description: externalAdReplyObj.body,
+                        jpegThumbnail: imageBuffer
+                    },
                     contextInfo: {
-                        externalAdReply: {
-                            title: text.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9 ]/g, '') || "Oferta Especial",
-                            body: "Clique no link acima para comprar 👆",
-                            mediaType: 1, // 1 for image
-                            thumbnail: imageBuffer,
-                            sourceUrl: uniqueSourceUrl,
-                            renderLargerThumbnail: true
-                        }
+                        externalAdReply: externalAdReplyObj
                     }
                 });
-                
-
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
                 throw err;
@@ -214,6 +233,9 @@ app.post('/send', async (req, res) => {
             });
         }
 
+        console.log(`- Message ID retornado: ${result?.key?.id || 'N/A'}`);
+        console.log(`- Timestamp do envio: ${Date.now()}`);
+        console.log('======================================================\n');
         console.log(`  ✅ ENVIADO! Message ID: ${result?.key?.id || 'N/A'}`);
         console.log(`  ✅ Status: ${result?.status || 'N/A'}`);
         res.json({ ok: true, message: 'Enviado via Baileys Local!', messageId: result?.key?.id });
