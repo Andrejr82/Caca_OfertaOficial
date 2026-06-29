@@ -268,12 +268,12 @@ export async function publishToWhatsAppAction(text: string, imageUrl?: string) {
     const { whatsappService } = await import("@/lib/integrations/whatsapp");
     const result = await whatsappService.sendChannelMedia(channelId, text, imageUrl);
 
-    return { ok: true, message: "Publicado com sucesso no WhatsApp via Baileys Local!" };
+    return { ok: true, message: "Publicado com sucesso no WhatsApp via Motor (Oracle)!" };
   } catch (error: unknown) {
-    console.error("[PublishAction] Erro ao conectar com o Motor WhatsApp Local:", error);
+    console.error("[PublishAction] Erro ao conectar com o Motor WhatsApp (Oracle):", error);
     return { 
       ok: false, 
-      message: "Erro ao comunicar com o motor local. Verifique se você rodou 'npm run whatsapp' em outro terminal." 
+      message: "Erro ao comunicar com o motor WhatsApp. Verifique se o motor está rodando e conectado na Oracle (Settings → Connection Tests → WhatsApp)." 
     };
   }
 }

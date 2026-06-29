@@ -21,8 +21,9 @@ export class WhatsAppService {
       const response = await fetch(`${this.engineUrl}/status`, {
         headers: { "x-api-key": API_KEY }
       });
-      if (!response.ok) throw new Error("Engine retornou status de erro");
-      return await response.json();
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(`Engine retornou status de erro HTTP ${response.status}`);
+      return data || { connected: false };
     } catch (error: any) {
       logger.error("Falha ao checar status do WhatsApp Engine", { error: error.message });
       return { connected: false };
@@ -50,8 +51,10 @@ export class WhatsAppService {
 
       const crypto = require('crypto');
       const hash = crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex').substring(0, 10);
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${hash}`;
       console.log(`🔎 [AUDITORIA SERVICE] Preparando envio para Engine Local...`);
       console.log(`- WhatsApp payload hash: ${hash}`);
+      console.log(`- requestId: ${requestId}`);
       console.log(`- imageUrl no payload: ${payload.imageUrl}`);
 
       // 2. Disparar contra o engine local (com retry)
@@ -60,6 +63,7 @@ export class WhatsAppService {
         headers: {
           "Content-Type": "application/json",
           "x-api-key": API_KEY,
+          "x-request-id": requestId,
           "Bypass-Tunnel-Reminder": "true"
         },
         body: JSON.stringify(payload)
@@ -77,8 +81,21 @@ export class WhatsAppService {
       const data = await response.json();
       if (!data.ok) throw new Error(data.message || "Erro interno do engine");
 
-      logger.info(`✅ Publicado no WhatsApp Canal ${channelId}`, { messageId: data.messageId });
-      return { success: true, messageId: data.messageId, provider: "whatsapp" };
+      logger.info(`✅ Publicado no WhatsApp Canal ${channelId}`, {
+        requestId: data.requestId || requestId,
+        messageId: data.messageId,
+        jid: data.jid,
+        sender: data.sender,
+        status: data.status,
+        engineUrl: this.engineUrl
+      });
+      return {
+        success: true,
+        messageId: data.messageId,
+        provider: "whatsapp",
+        requestId: data.requestId || requestId,
+        engine: data
+      };
       
     } catch (error: any) {
       logger.error(`❌ Erro ao publicar no WhatsApp Canal ${channelId}`, { error: error.message });

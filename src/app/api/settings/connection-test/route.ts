@@ -53,11 +53,29 @@ export async function POST(request: Request) {
     }
 
     if (platform === "WhatsApp") {
-      const token = process.env.WHATSAPP_CLOUD_API_TOKEN;
-      if (!token) {
-        return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_CLOUD_API_TOKEN não configurado no .env.local.", lastCheck: now });
+      const engineUrl = process.env.WHATSAPP_ENGINE_URL;
+      const engineKey = process.env.WHATSAPP_ENGINE_API_KEY;
+      const channelId = process.env.WHATSAPP_CHANNEL_ID;
+
+      if (!engineUrl) {
+        return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_ENGINE_URL não configurado (Vercel deve apontar para o motor rodando na Oracle).", lastCheck: now });
       }
-      return NextResponse.json({ ok: true, message: "Conectado. API Cloud do WhatsApp ativa e pronta para envio.", lastCheck: now });
+      if (!engineKey) {
+        return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_ENGINE_API_KEY não configurado (precisa bater com o motor da Oracle).", lastCheck: now });
+      }
+      if (!channelId) {
+        return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_CHANNEL_ID não configurado (ex: 120363...@newsletter).", lastCheck: now });
+      }
+
+      const { whatsappService } = await import("@/lib/integrations/whatsapp");
+      const status = await whatsappService.getChannelStatus();
+      if (status?.connected) {
+        const sender = status?.sender?.id ? ` Motor conectado como ${status.sender.id}.` : "";
+        return NextResponse.json({ ok: true, message: `Conectado.${sender}`, lastCheck: now, details: status });
+      }
+
+      const disconnect = status?.lastDisconnect?.message ? ` Último erro: ${status.lastDisconnect.message}` : "";
+      return NextResponse.json({ ok: false, message: `Motor WhatsApp desconectado ou inacessível.${disconnect}`, lastCheck: now, details: status });
     }
 
     if (platform === "Mercado Livre") {

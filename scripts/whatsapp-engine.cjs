@@ -5,7 +5,11 @@ const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const { useSupabaseAuthState } = require('./supabase-auth-state.cjs');
 const { createClient } = require('@supabase/supabase-js');
-require('dotenv').config({ path: '.env.local' });
+const fs = require('fs');
+
+const envPath = fs.existsSync('.env.local.remote') ? '.env.local.remote' : '.env.local';
+require('dotenv').config({ path: envPath });
+console.log(`[WHATSAPP-ENGINE] ENV carregado: ${envPath}`);
 
 // Supabase no Node.js 20 exige 'ws' nativamente para conexões Realtime
 global.WebSocket = require('ws');
@@ -34,6 +38,7 @@ app.use((req, res, next) => {
 let sock = null;
 let isConnected = false;
 let connectionPromise = null;
+let lastDisconnectInfo = null;
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
@@ -65,6 +70,11 @@ async function connectToWhatsApp() {
 
                 console.log(`⚠️ Conexão fechada. Código: ${statusCode}, Motivo: ${error?.message}`);
                 isConnected = false;
+                lastDisconnectInfo = {
+                    statusCode,
+                    message: error?.message,
+                    at: new Date().toISOString()
+                };
 
                 if (shouldReconnect) {
                     console.log('🔄 Reconectando em 3 segundos...');
@@ -80,6 +90,9 @@ async function connectToWhatsApp() {
                 console.log('\n✅ CONECTADO AO WHATSAPP COM SUCESSO!');
                 console.log('O motor está pronto para receber disparos do Caça Ofertas.');
                 isConnected = true;
+                try {
+                    console.log(`[WHATSAPP-ENGINE] Conectado como: ${sock?.user?.id || 'N/A'} (${sock?.user?.name || 'sem nome'})`);
+                } catch {}
                 resolve();
             }
         });
@@ -92,7 +105,11 @@ connectToWhatsApp();
 
 // ─── Status Endpoint ───
 app.get('/status', (req, res) => {
-    res.json({ connected: isConnected });
+    res.json({
+        connected: isConnected,
+        sender: sock?.user ? { id: sock.user.id, name: sock.user.name } : null,
+        lastDisconnect: lastDisconnectInfo
+    });
 });
 
 // ─── Resolve Channel ID ───
@@ -117,16 +134,24 @@ app.post('/send', async (req, res) => {
     }
 
     // Sanitize number (strip quotes, spaces)
-    const jid = number.replace(/['"]/g, '').trim();
+    const requestedJid = String(number).replace(/['"]/g, '').replace(/\s+/g, '').trim();
+    const configuredChannelId = process.env.WHATSAPP_CHANNEL_ID
+        ? String(process.env.WHATSAPP_CHANNEL_ID).replace(/['"]/g, '').replace(/\s+/g, '').trim()
+        : null;
+    const jid = configuredChannelId && configuredChannelId.endsWith('@newsletter') && requestedJid.endsWith('@newsletter') && configuredChannelId !== requestedJid
+        ? configuredChannelId
+        : requestedJid;
+    const requestId = req.headers['x-request-id'] || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
     console.log('\n======================================================');
     console.log(`🔎 [AUDITORIA ENGINE] INÍCIO DO DISPARO`);
-    console.log(`- JID: ${jid}`);
+    console.log(`- Request ID: ${requestId}`);
+    console.log(`- JID solicitado: ${requestedJid}`);
+    if (jid !== requestedJid) console.log(`- JID efetivo (do ENV do motor): ${jid}`);
     console.log(`- Texto recebido (${text.length} chars)`);
     console.log(`- image_url recebida: ${imageUrl}`);
     
     // Log the exact full payload
-    const fs = require('fs');
     fs.appendFileSync('last_request.log', JSON.stringify(req.body, null, 2) + '\n\n');
 
     if (!isConnected || !sock) {
@@ -234,7 +259,17 @@ app.post('/send', async (req, res) => {
         console.log('======================================================\n');
         console.log(`  ✅ ENVIADO! Message ID: ${result?.key?.id || 'N/A'}`);
         console.log(`  ✅ Status: ${result?.status || 'N/A'}`);
-        res.json({ ok: true, message: 'Enviado via Baileys Local!', messageId: result?.key?.id });
+        res.json({
+            ok: true,
+            message: 'Enviado via Baileys Local!',
+            requestId,
+            requestedJid,
+            jid,
+            messageId: result?.key?.id,
+            status: result?.status || null,
+            sender: sock?.user ? { id: sock.user.id, name: sock.user.name } : null,
+            serverTime: new Date().toISOString()
+        });
     } catch (sendError) {
         console.error(`  ❌ ERRO AO ENVIAR:`, sendError.message);
         console.error(`  ❌ Stack:`, sendError.stack?.split('\n').slice(0, 3).join('\n'));

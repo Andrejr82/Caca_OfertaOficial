@@ -80,10 +80,41 @@ export async function POST(request: Request) {
       whatsappResult = await whatsappService.sendChannelMedia(channelId, finalContent, offer.image_url);
     } catch (error: any) {
       console.error("Erro na integração WhatsApp:", error);
+      try {
+        await supabase.from("integration_logs").insert({
+          user_id: user.id,
+          integration: "WhatsApp",
+          action: "Publicar",
+          status: "error",
+          message: `Falha ao enviar para o canal ${channelId}`,
+          metadata: {
+            postId,
+            offerId: offer.id,
+            engineUrl: process.env.WHATSAPP_ENGINE_URL || null,
+            error: error.message
+          }
+        });
+      } catch {}
       return NextResponse.json({ ok: false, message: `Erro ao enviar via WhatsApp: ${error.message}` }, { status: 502 });
     }
 
     const externalId = whatsappResult.messageId || `wa-${Date.now()}`;
+    try {
+      await supabase.from("integration_logs").insert({
+        user_id: user.id,
+        integration: "WhatsApp",
+        action: "Publicar",
+        status: "success",
+        message: `Disparo aceito pelo motor WhatsApp para o canal ${channelId}`,
+        metadata: {
+          postId,
+          offerId: offer.id,
+          externalId,
+          engineUrl: process.env.WHATSAPP_ENGINE_URL || null,
+          engine: whatsappResult.engine || null
+        }
+      });
+    } catch {}
 
     // 3. Atualiza o status do post para published
     const now = new Date().toISOString();
