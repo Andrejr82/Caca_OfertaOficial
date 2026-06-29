@@ -212,26 +212,12 @@ app.post('/send', async (req, res) => {
                 const extAdReplyHashObj = { ...externalAdReplyObj, thumbnail: hashBuf(imageBuffer) };
                 console.log(`- externalAdReply hash (sem o buffer real): ${hashStr(JSON.stringify(extAdReplyHashObj))}`);
 
-                if (req.body.nativeMedia) {
-                    console.log('  → Enviando como Mídia Nativa (Image Message)');
-                    result = await sock.sendMessage(jid, {
-                        image: imageBuffer,
-                        caption: finalMessageText
-                    });
-                } else {
-                    result = await sock.sendMessage(jid, {
-                        text: finalMessageText,
-                        linkPreview: {
-                            'matched-text': uniqueSourceUrl,
-                            title: externalAdReplyObj.title,
-                            description: externalAdReplyObj.body,
-                            jpegThumbnail: imageBuffer
-                        },
-                        contextInfo: {
-                            externalAdReply: externalAdReplyObj
-                        }
-                    });
-                }
+                // SEMPRE enviamos como Mídia Nativa para evitar cache de link preview!
+                console.log('  → Enviando como Mídia Nativa (Image Message)');
+                result = await sock.sendMessage(jid, {
+                    image: imageBuffer,
+                    caption: finalMessageText
+                });
             } catch (err) {
                 console.error('  ❌ Erro ao processar imagem:', err.message);
                 throw err;
