@@ -28,7 +28,7 @@ process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
 process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 const axios        = require('axios');
 require('dotenv').config({ path: '.env.local' });
-const { validateHtml, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
+const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
 
 
 // ─── Supabase Admin Client ────────────────────────────────────
@@ -44,7 +44,7 @@ const supabase = createClient(
 // ─── Configurações ────────────────────────────────────────────
 process.env.CRAWLEE_MEMORY_MBYTES = '3072';
 const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
-const OFFERS_PER_STORE = 5; // Reduzido para caber no limite de tokens do JSON
+const OFFERS_PER_STORE = 6; // Teto por query aumentado para ampliar a descoberta
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
@@ -191,42 +191,924 @@ async function callLLMWithFallback(messages, config = {}) {
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 
-// ─── Sistema de Baldinhos (Golden Queries) ────────────────────
-const GOLDEN_QUERIES = {
-  'Mercado Livre': {
-    'Supermercado': ['Sabão em pó Omo', 'Amaciante Downy', 'Papel Higiênico Neve', 'Leite Ninho', 'Cápsulas de Café', 'Cerveja Heineken', 'Azeite Gallo', 'Café Pilão', 'Leite Condensado Moça', 'Desodorante Rexona', 'Pasta de Amendoim'],
-    'Bebês': ['Fralda Pampers', 'Lenço Umedecido', 'Pomada Assadura', 'Fralda Huggies', 'Mamadeira Avent', 'Leite Aptamil', 'Cadeira para Auto'],
-    'Beleza': ['Kit Skincare', 'Protetor Solar', 'Kit Shampoo', 'Perfume Importado', 'Creme Cerave', 'Sérum Principia', 'Máscara de Cílios', 'Óleo Braé'],
-    'Ferramentas': ['Furadeira', 'Jogo de Ferramentas', 'Kit Chaves', 'Parafusadeira Bosch', 'Serra Tico-Tico', 'Caixa de Ferramentas'],
-    'Casa': ['Jogo de Panelas', 'Mop Giratório', 'Fritadeira Air Fryer', 'Ventilador Arno', 'Travesseiro Emma', 'Kit Toalhas Banhão'],
-    'Esportes': ['Tênis Nike', 'Tênis Adidas', 'Tênis Mizuno', 'Chuteira', 'Tênis Puma', 'Camisa de Time', 'Bola de Futebol', 'Bolsa Academia', 'Calça Jogger']
-  },
-  'Amazon': {
-    'Tecnologia': ['iPhone', 'Notebook', 'Fone de Ouvido Bluetooth', 'SSD', 'Monitor', 'Kindle', 'Alexa Echo Dot', 'Teclado Mecânico', 'Mouse Logitech', 'iPad', 'Apple Watch'],
-    'Beleza': ['Perfume Importado', 'Wella Profissional', 'Cerave', 'La Roche-Posay', 'Loreal Elseve', 'Protetor Solar Vichy', 'Secador Taiff'],
-    'Suplementos': ['Whey Protein', 'Creatina Max Titanium', 'Pré-Treino', 'Barra de Proteína', 'Ômega 3', 'Colágeno', 'BCAA', 'Hipercalórico'],
-    'Bebês': ['Fraldas', 'Cadeirinha para Auto', 'Carrinho de Bebê', 'Babá Eletrônica', 'Copo de Transição Munchkin'],
-    'Casa': ['Cafeteira Nespresso', 'Aspirador de Pó Vertical', 'Robô Aspirador', 'Pipoqueira Elétrica', 'Filtro de Água Consul'],
-    'Livros': ['Livro Hábitos Atômicos', 'Livro É Assim Que Acaba', 'Livro Psicologia Financeira', 'Box Harry Potter'],
-    'Moda': ['Mochila Nike', 'Tênis Asics', 'Tênis Vans', 'Jaqueta Corta Vento', 'Squeeze Térmico']
-  },
-  'Magalu': {
-    'Eletrodomésticos': ['Air Fryer', 'Robô Aspirador', 'Cafeteira', 'Micro-ondas', 'Geladeira', 'Máquina de Lavar', 'Fogão 4 Bocas', 'Purificador de Água'],
-    'Móveis': ['Guarda-Roupa', 'Cadeira Gamer', 'Sofá', 'Cama Box Casal', 'Painel para TV', 'Mesa de Jantar'],
-    'Auto': ['Pneu', 'Som Automotivo', 'Central Multimídia', 'Bateria Moura'],
-    'Celulares': ['Samsung Galaxy', 'iPhone', 'Motorola Edge', 'Xiaomi Redmi'],
-    'TV e Vídeo': ['Smart TV 50', 'Smart TV LG', 'Soundbar JBL', 'TV Samsung']
-  }
+// #region debug-point A:golden-queries-audit-bootstrap
+const SCRAPER_AUDIT_ENV_FILE = '.dbg/golden-queries-audit.env';
+const SCRAPER_AUDIT_LOG_FILE = '.dbg/trae-debug-log-golden-queries-audit.ndjson';
+const SCRAPER_AUDIT_RUN_ID = process.env.SCRAPER_AUDIT_RUN_ID || 'pre-fix';
+const SCRAPER_AUDIT_STATE = {
+  currentStore: null,
+  currentQuery: null,
+  currentCategory: null,
+  currentVariant: null,
+  queryStartedAt: 0,
+  cycleStartedAt: 0
 };
 
-function getRandomQueries(store) {
-  const categories = GOLDEN_QUERIES[store] || {};
-  const selected = [];
-  for (const cat in categories) {
-    const list = categories[cat];
-    const shuffled = [...list].sort(() => 0.5 - Math.random());
-    selected.push(...shuffled.slice(0, 2)); // Pega 2 de cada categoria
+function emitAuditEvent(hypothesisId, location, msg, data = {}) {
+  const payload = {
+    sessionId: 'golden-queries-audit',
+    runId: SCRAPER_AUDIT_RUN_ID,
+    hypothesisId,
+    location,
+    msg: `[DEBUG] ${msg}`,
+    data,
+    ts: Date.now()
+  };
+
+  try {
+    fs.appendFileSync(SCRAPER_AUDIT_LOG_FILE, `${JSON.stringify(payload)}\n`);
+  } catch (_) {}
+
+  if (typeof fetch !== 'function') return;
+  let serverUrl = 'http://127.0.0.1:7777/event';
+  let sessionId = 'golden-queries-audit';
+  try {
+    const envRaw = fs.readFileSync(SCRAPER_AUDIT_ENV_FILE, 'utf8');
+    serverUrl = envRaw.match(/DEBUG_SERVER_URL=(.+)/)?.[1]?.trim() || serverUrl;
+    sessionId = envRaw.match(/DEBUG_SESSION_ID=(.+)/)?.[1]?.trim() || sessionId;
+  } catch (_) {}
+
+  payload.sessionId = sessionId;
+
+  fetch(serverUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  }).catch(() => {});
+}
+
+function averageNumbers(values = []) {
+  if (!values.length) return 0;
+  return Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2));
+}
+
+function incrementCounter(target, key) {
+  target[key] = (target[key] || 0) + 1;
+}
+
+function bucketConfidence(confidence) {
+  if (confidence < 40) return '0-39';
+  if (confidence < 60) return '40-59';
+  if (confidence < 80) return '60-79';
+  return '80-100';
+}
+
+function buildValidationPreview(products, storeName) {
+  const preview = {
+    found: products.length,
+    approved: 0,
+    rejected: 0,
+    avgConfidence: 0,
+    rejectStats: {},
+    confidenceBuckets: {},
+    missingStats: {
+      title: 0,
+      price: 0,
+      image: 0,
+      url: 0,
+      category: 0,
+      marketplace: storeName ? 0 : products.length
+    }
+  };
+  const confidences = [];
+
+  products.forEach((product) => {
+    const title = String(product?.title || product?.product_name || '').trim();
+    const image = String(product?.image || product?.image_url || '').trim();
+    const url = String(product?.url || product?.original_url || '').trim();
+    const rawPrice = product?.price ?? product?.current_price ?? 0;
+    const price = typeof rawPrice === 'number'
+      ? rawPrice
+      : parseFloat(String(rawPrice).replace(/[R$\s.]/g, '').replace(',', '.')) || 0;
+
+    if (!title) preview.missingStats.title += 1;
+    if (!price) preview.missingStats.price += 1;
+    if (!image || image === 'null') preview.missingStats.image += 1;
+    if (!url) preview.missingStats.url += 1;
+    if (!product?.category) preview.missingStats.category += 1;
+
+    const validation = validateProduct(product, storeName);
+    confidences.push(validation.confidence);
+    incrementCounter(preview.confidenceBuckets, bucketConfidence(validation.confidence));
+
+    if (validation.valid) {
+      preview.approved += 1;
+    } else {
+      preview.rejected += 1;
+      incrementCounter(preview.rejectStats, validation.rejectReason || 'UNKNOWN');
+    }
+  });
+
+  preview.avgConfidence = averageNumbers(confidences);
+  return preview;
+}
+// #endregion
+
+// ─── Sistema de Descoberta (Golden Queries) ───────────────────
+const QUERY_VARIANT_ORDER = ['popular', 'volume', 'brand', 'generic', 'promo'];
+const STORE_QUERY_SETTINGS = {
+  'Mercado Livre': { categoriesPerRun: 12, queriesPerCategory: 2 },
+  'Amazon': { categoriesPerRun: 12, queriesPerCategory: 2 },
+  'Magalu': { categoriesPerRun: 12, queriesPerCategory: 2 },
+  'Shopee': { categoriesPerRun: 12, queriesPerCategory: 2 },
+  'Shein': { categoriesPerRun: 12, queriesPerCategory: 2 },
+  'Netshoes': { categoriesPerRun: 12, queriesPerCategory: 2 }
+};
+
+const MARKETPLACE_ORDER = ['Mercado Livre', 'Amazon', 'Magalu', 'Netshoes', 'Shopee', 'Shein'];
+
+const ELETRONICOS = [
+  'Echo Pop',
+  'Echo Show 8',
+  'Kindle Paperwhite 16GB',
+  'Fire TV Stick 4K Max',
+  'Galaxy SmartTag2',
+  'Instax Mini 12',
+  'Carregador GaN Baseus 65W',
+  'Power bank I2GO 20000mAh',
+  'Mini projetor HY320',
+  'Dock station USB-C Ugreen'
+];
+
+const GAMES = [
+  'PlayStation 5 Slim',
+  'PlayStation 5 Digital',
+  'Nintendo Switch OLED',
+  'Xbox Series S Carbon Black',
+  'Controle DualSense Midnight Black',
+  'Controle Xbox Robot White',
+  'Mario Kart 8 Deluxe',
+  'Zelda Tears of the Kingdom',
+  'EA Sports FC 26',
+  'Gift card PlayStation Store'
+];
+
+const HARDWARE = [
+  'RTX 4060 8GB',
+  'RTX 4070 Super',
+  'Radeon RX 7800 XT',
+  'Ryzen 7 8700G',
+  'Ryzen 5 5600',
+  'Intel Core i7 14700K',
+  'SSD Kingston NV3 1TB',
+  'SSD WD Black SN770 1TB',
+  'Memoria DDR5 Kingston Fury 32GB',
+  'Fonte Corsair RM750e'
+];
+
+const INFORMATICA = [
+  'Notebook Lenovo LOQ',
+  'Notebook ASUS Vivobook 15',
+  'Notebook Dell Inspiron 15',
+  'Notebook Samsung Galaxy Book4',
+  'Monitor LG Ultrawide 29',
+  'Mouse Logitech G502 Hero',
+  'Teclado mecanico Redragon Kumara',
+  'Webcam Logitech C920s',
+  'Cadeira gamer ThunderX3 TGC12',
+  'Impressora Epson EcoTank L3250'
+];
+
+const CASA_INTELIGENTE = [
+  'Lampada smart Positivo Casa Inteligente',
+  'Smart plug Intelbras EWS 301',
+  'Fechadura digital Intelbras FR 101',
+  'Camera TP-Link Tapo C200',
+  'Robo aspirador Xiaomi S10',
+  'Sensor de presenca smart Zemismart',
+  'Interruptor smart NovaDigital Wi-Fi',
+  'Video porteiro Intelbras Allo W3',
+  'Controle universal smart Positivo',
+  'Fita LED smart RGBIC Tuya'
+];
+
+const COZINHA = [
+  'Air fryer Philips Walita 6.2L',
+  'Air fryer oven Mondial 12L',
+  'Cafeteira Nespresso Essenza Mini',
+  'Cafeteira Tres Coracoes Lov',
+  'Panela de pressao eletrica Electrolux PCC20',
+  'Kit churrasco Tramontina 15 pecas',
+  'Jogo de facas Tramontina Plenus',
+  'Processador Oster 3 em 1',
+  'Mixer Philips Walita Daily',
+  'Conjunto de panelas Tramontina Solar'
+];
+
+const ELETRODOMESTICOS = [
+  'Geladeira Brastemp Inverse 447L',
+  'Lava e seca Samsung 11kg',
+  'Maquina de lavar Electrolux 12kg',
+  'Lava-loucas Brastemp 14 servicos',
+  'Cooktop Electrolux 5 bocas',
+  'Forno eletrico Fischer Fit Line',
+  'Micro-ondas LG 30L NeoChef',
+  'Freezer vertical Consul 231L',
+  'Ar-condicionado LG Dual Inverter 12000',
+  'Cervejeira Midea Flex 96L'
+];
+
+const ELETROPORTATEIS = [
+  'Aspirador vertical WAP Power Speed',
+  'Escova secadora Mondial Golden Rose',
+  'Secador Taiff Style 2000W',
+  'Vaporizador portatil Black+Decker',
+  'Sanduicheira Cadence Click',
+  'Grill George Foreman Family',
+  'Chaleira eletrica Electrolux EEK10',
+  'Liquidificador Oster 1400 Full',
+  'Multiprocessador Philco PMP1600',
+  'Passadeira a vapor Arno Steam Power'
+];
+
+const FERRAMENTAS = [
+  'Furadeira Bosch GSB 13 RE',
+  'Parafusadeira Makita DF333D',
+  'Kit ferramentas Bosch 103 pecas',
+  'Lavadora WAP Ousada Plus 2200',
+  'Serra marmore Makita 4100NH3Z',
+  'Jogo de chaves Gedore Red',
+  'Trena laser Bosch GLM 40',
+  'Soprador termico Vonder STV 1500',
+  'Martelete DeWalt D25133K',
+  'Serra tico-tico Bosch GST 700'
+];
+
+const AUTOMOTIVO = [
+  'Central multimidia Pioneer DMH-A5450BT',
+  'Aspirador automotivo Black+Decker ADV1200',
+  'Carregador veicular Baseus SuperCharge',
+  'Camera veicular 70mai Dash Cam A500S',
+  'Calibrador portatil Xiaomi 2',
+  'Lampada Philips CrystalVision H4',
+  'Suporte celular veicular I2GO MagSafe',
+  'Bateria Moura 60Ah',
+  'Compressor de ar portatil Multilaser',
+  'Sensor de estacionamento Tech One'
+];
+
+const PET = [
+  'Fonte para gato Catit Flower',
+  'Caixa de areia fechada Furacao Pet',
+  'Racao Premier Formula Caes Adultos',
+  'Racao Royal Canin Mini Indoor',
+  'Caminha pet impermeavel Baw Waw',
+  'Arranhador gato 3 andares',
+  'Bebedouro automatico pet 2 litros',
+  'Tapete higienico SuperSecao 30 unidades',
+  'Brinquedo Kong Classic medio',
+  'Escova removedora de pelos pet'
+];
+
+const SAUDE = [
+  'Aparelho de pressao Omron HEM-7122',
+  'Massageador pistola Relaxmedic',
+  'Oximetro G-Tech OLED',
+  'Inalador nebulizador Omron NE-C803',
+  'Balanca bioimpedancia Xiaomi Mi Body',
+  'Escova eletrica Oral-B Vitality',
+  'Irrigador oral Waterpik Cordless',
+  'Travesseiro ortopedico Nasa',
+  'Monitor de glicemia Accu-Chek Guide',
+  'Termometro infravermelho G-Tech'
+];
+
+const FITNESS = [
+  'Bicicleta ergometrica Dream MAX V',
+  'Esteira eletrica Polimet EP-1600',
+  'Halteres ajustaveis 20kg',
+  'Corda speed rope de cross training',
+  'Caneleira 5kg par',
+  'Kettlebell 12kg emborrachado',
+  'Bike spinning Gallant Elite',
+  'Banco de supino dobravel',
+  'Kit mini bands tecido',
+  'Roda abdominal com apoio'
+];
+
+const SUPLEMENTOS = [
+  'Creatina Max Titanium 300g',
+  'Creatina Soldiers Nutrition 500g',
+  'Whey Growth concentrado 1kg',
+  'Whey Max Titanium 100% whey',
+  'Pre-treino Horus 300g',
+  'Albumina Naturovos 500g',
+  'Multivitaminico Growth',
+  'Omega 3 Growth',
+  'Colageno hidrolisado Sanavita',
+  'Barra de proteina Bold'
+];
+
+const MODA_MASCULINA = [
+  'Camiseta Insider Tech T-Shirt',
+  'Jaqueta corta vento Nike Club',
+  'Kit cueca Lupo boxer',
+  'Camisa polo Reserva piquet',
+  'Bermuda Nike Dri-FIT Challenger',
+  'Moletom Adidas Essentials',
+  'Camisa social slim masculina',
+  'Carteira couro masculina Fasolo',
+  'Jaqueta puffer masculina',
+  'Kit camisetas basicas Hering'
+];
+
+const MODA_FEMININA = [
+  'Vestido midi canelado',
+  'Conjunto academia feminino seamless',
+  'Pijama americano feminino',
+  'Bolsa tote feminina estruturada',
+  'Jaqueta puffer feminina',
+  'Calca wide leg jeans feminina',
+  'Modelador cintura alta feminino',
+  'Kit lingerie microfibra',
+  'Camisa oversized feminina',
+  'Vestido festa midi acetinado'
+];
+
+const TENIS = [
+  'Nike Air Max Excee',
+  'Nike Revolution 7',
+  'Adidas Ultraboost Light',
+  'Olympikus Corre 3',
+  'Olympikus Corre Max',
+  'Mizuno Wave Creation 26',
+  'Puma Carina BDP',
+  'Under Armour Charged Slight 3',
+  'New Balance 530',
+  'Vans Old Skool preto'
+];
+
+const RELOGIOS = [
+  'Apple Watch SE GPS',
+  'Galaxy Watch7 BT',
+  'Huawei Watch GT 5',
+  'Redmi Watch 5 Lite',
+  'Casio G-Shock GA-2100',
+  'Amazfit Balance',
+  'Smartwatch QCY Watch GS',
+  'Garmin Forerunner 55',
+  'Relogio Technos Racer',
+  'Relogio Orient automatico masculino'
+];
+
+const PERFUMES = [
+  'La Vie Est Belle Lancome',
+  '212 VIP Black Carolina Herrera',
+  'Dior Sauvage Eau de Toilette',
+  'Invictus Paco Rabanne',
+  'Good Girl Carolina Herrera',
+  'Yara Lattafa',
+  'Club de Nuit Intense Man',
+  'Egeo Bomb Black',
+  'Libre Yves Saint Laurent',
+  'My Way Giorgio Armani'
+];
+
+const BELEZA = [
+  'Kit skincare Cerave hidratacao',
+  'Protetor solar ISDIN Fusion Water',
+  'Serum Principia niacinamida',
+  'Serum Creamy retinol',
+  'Chapinha Taiff Style',
+  'Maquina de cortar Philips Multigroom',
+  'Escova secadora Philco Soft Brush',
+  'Base Maybelline Super Stay',
+  'Secador Dyson Supersonic',
+  'Mascara Elseve Glycolic Gloss'
+];
+
+const INFANTIL = [
+  'Patinete infantil 3 rodas',
+  'Bicicleta infantil aro 16',
+  'Mochila escolar infantil rodinhas',
+  'Lancheira termica infantil',
+  'LEGO Classic caixa criativa',
+  'Piscina inflavel Mor 1000 litros',
+  'Fantasia infantil Stitch',
+  'Mesa didatica infantil',
+  'Cama montessoriana infantil',
+  'Boneca Barbie Dreamtopia'
+];
+
+const BEBE = [
+  'Fralda Pampers Premium Care',
+  'Fralda Huggies Supreme Care',
+  'Lenco umedecido Pampers 576 unidades',
+  'Carrinho de bebe travel system',
+  'Cadeirinha carro 0 a 36kg',
+  'Baba eletronica com camera',
+  'Bomba tira leite eletrica',
+  'Esterilizador de mamadeiras a vapor',
+  'Tapete de atividades bebe',
+  'Cadeira de alimentacao bebe'
+];
+
+const PAPELARIA = [
+  'Caneta Stabilo Boss kit pastel',
+  'Marca texto CIS Lumini',
+  'Lapis Faber-Castell 72 cores',
+  'Caderno Tilibra espiral 10 materias',
+  'Caneta gel Pentel EnerGel',
+  'Planner permanente sem data',
+  'Apontador eletrico com deposito',
+  'Estojo escolar grande 100 pens',
+  'Kit brush pen tons pastel',
+  'Bloco adesivo Post-it gigante'
+];
+
+const ESCRITORIO = [
+  'Cadeira escritorio ergonomica mesh',
+  'Monitor portatil Arzopa 15.6',
+  'Suporte notebook aluminio regulavel',
+  'Mesa digitalizadora Wacom One',
+  'Hub USB-C 8 em 1 Ugreen',
+  'Impressora Brother laser HL-L2360DW',
+  'Roteador mesh TP-Link Deco M4',
+  'Nobreak SMS 1200VA',
+  'Mesa regulavel de altura',
+  'Teclado Logitech K380'
+];
+
+const DECORACAO = [
+  'Lustre pendente moderno',
+  'Fita LED RGBIC Govee',
+  'Espelho decorativo redondo 80cm',
+  'Painel ripado decorativo',
+  'Luminaria de mesa LED',
+  'Quadro decorativo minimalista',
+  'Tapete sala felpudo 2x3',
+  'Cortina blackout 2 folhas',
+  'Puff bau decorativo',
+  'Difusor de aromas ultrassonico'
+];
+
+const MOVEIS = [
+  'Sofa retratil 4 lugares',
+  'Guarda-roupa casal 6 portas',
+  'Painel para TV ate 65',
+  'Mesa de jantar 6 cadeiras',
+  'Escrivaninha industrial 120cm',
+  'Rack com painel suspenso',
+  'Cama box bau casal',
+  'Poltrona decorativa linho',
+  'Sapateira banco estofada',
+  'Closet modulado aberto'
+];
+
+const UTILIDADES = [
+  'Copo termico Stanley Quencher',
+  'Garrafa termica Zojirushi 1L',
+  'Organizador multiuso transparente',
+  'Escorredor de louca inox',
+  'Mop spray FlashLimp',
+  'Varal de chao dobravel',
+  'Caixa organizadora com tampa',
+  'Kit potes hermeticos 12 pecas',
+  'Balanca de cozinha digital',
+  'Porta temperos giratorio 16 potes'
+];
+
+const CELULARES = [
+  'Moto G54 5G',
+  'Moto G34 5G',
+  'Galaxy A55 5G',
+  'Galaxy M55 5G',
+  'Redmi Note 13 5G',
+  'POCO C75',
+  'Realme 12x 5G',
+  'Infinix Hot 40i',
+  'iPhone 15 128GB',
+  'POCO X6 Pro'
+];
+
+const TABLETS = [
+  'iPad 10 geracao Wi-Fi',
+  'iPad Air M2 11',
+  'Galaxy Tab S9 FE',
+  'Galaxy Tab A9+',
+  'Redmi Pad SE 11',
+  'Lenovo Tab P12',
+  'Vaio TL10 tablet',
+  'Galaxy Tab S6 Lite',
+  'Xiaomi Pad 6',
+  'Tablet Positivo Vision Tab 10'
+];
+
+const SMARTPHONES_PREMIUM = [
+  'iPhone 16 128GB',
+  'iPhone 16 Pro 256GB',
+  'iPhone 16 Pro Max 256GB',
+  'Galaxy S25 256GB',
+  'Galaxy S25 Ultra 512GB',
+  'Galaxy Z Flip6 256GB',
+  'Galaxy Z Fold6 512GB',
+  'Xiaomi 15 Ultra',
+  'Motorola Razr 50 Ultra',
+  'Asus ROG Phone 9'
+];
+
+const SMARTPHONES_INTERMEDIARIOS = [
+  'Galaxy A36 5G',
+  'Galaxy A56 5G',
+  'Redmi Note 14 Pro 5G',
+  'Redmi Note 14 Pro Plus',
+  'POCO X7 Pro',
+  'Moto Edge 50 Neo',
+  'Moto Edge 50 Fusion',
+  'Realme 12 Pro Plus',
+  'Infinix Note 40 5G',
+  'Nothing Phone 2a'
+];
+
+const AUDIO = [
+  'JBL Go 4',
+  'JBL PartyBox 110',
+  'JBL Flip 6',
+  'QCY HT07 ArcBuds',
+  'Anker Soundcore Q30',
+  'Edifier W820NB Plus',
+  'Soundbar Samsung HW-B550',
+  'Microfone Fifine A6V',
+  'Sony WH-1000XM5',
+  'AirPods 4'
+];
+
+const VIDEO = [
+  'TV Samsung Crystal 50 4K',
+  'TV LG OLED C4 55',
+  'TV TCL 55 C655',
+  'Smart monitor Samsung M8',
+  'Projetor Wanbo Mozart 1',
+  'Webcam Logitech Brio 4K',
+  'Camera GoPro HERO13 Black',
+  'TV Philips Ambilight 55',
+  'Mini projetor HY300 Pro',
+  'Camera de seguranca Imou Cruiser'
+];
+
+const STREAMING = [
+  'Fire TV Cube',
+  'Google TV Streamer 4K',
+  'Roku Express 4K',
+  'Xiaomi TV Box S 2nd Gen',
+  'Elgato HD60 X',
+  'Stream Deck Neo',
+  'Cam Link 4K Elgato',
+  'Ring light 18 polegadas',
+  'Microfone Fifine K658',
+  'Controle remoto air mouse'
+];
+
+const LIVROS = [
+  'Habitos Atomicos',
+  'A Psicologia Financeira',
+  'Box Harry Potter',
+  'Box ACOTAR',
+  'Cafe com Deus Pai 2026',
+  'O Homem Mais Rico da Babilonia',
+  'A Sutil Arte de Ligar o Foda-se',
+  'As Armas da Persuasao',
+  'Box Percy Jackson',
+  'Livro de colorir Bobbie Goods'
+];
+
+const BRINQUEDOS = [
+  'LEGO Technic McLaren',
+  'Hot Wheels ataque da cobra',
+  'Boneca Barbie DreamHouse Adventures',
+  'Nerf Elite 2.0 Commander',
+  'Carrinho controle remoto 4x4',
+  'Pista Hot Wheels City',
+  'Jogo Uno minimalista',
+  'Play-Doh sorveteria',
+  'Fisher-Price Cachorrinho Aprender',
+  'Quebra-cabeca 1000 pecas'
+];
+
+const CAMPING = [
+  'Barraca Azteq Minipack',
+  'Colchao inflavel casal Intex',
+  'Lanterna tatica recarregavel',
+  'Cadeira camping dobravel',
+  'Caixa termica Coleman 28QT',
+  'Fogareiro Nautika Frontier',
+  'Mochila cargueira 50L',
+  'Canivete Victorinox Huntsman',
+  'Saco de dormir Coleman',
+  'Garrafa Stanley Adventure 1.5L'
+];
+
+const PESCA = [
+  'Carretilha Marine Sports Brisa',
+  'Molinete Shimano Sienna 2500',
+  'Vara de pesca carbono 1.80',
+  'Linha multifilamento 8X 300m',
+  'Caixa de pesca organizadora',
+  'Kit iscas artificiais tucuna',
+  'Alicate de pesca boga grip',
+  'Sonar portatil Fish Finder',
+  'Cadeira de pesca dobravel',
+  'Viveiro para pesca esportiva'
+];
+
+const ESPORTE = [
+  'Bola futsal Penalty Max 1000',
+  'Camisa oficial Adidas futebol',
+  'Chuteira Nike Phantom GX',
+  'Bicicleta aro 29 Caloi Explorer',
+  'Patins inline Oxer',
+  'Raquete beach tennis Shark',
+  'Prancha stand up inflavel',
+  'Kimono jiu-jitsu trancado',
+  'Luva boxe Everlast Pro Style',
+  'Kit beach tennis carbono'
+];
+
+const JARDINAGEM = [
+  'Aparador de grama Tramontina AP1500T',
+  'Mangueira flex para jardim 30m',
+  'Tesoura de poda Tramontina profissional',
+  'Soprador de folhas a bateria',
+  'Cortador de grama eletrico 1300W',
+  'Vaso autoirrigavel grande',
+  'Kit ferramentas jardinagem 3 pecas',
+  'Mangueira expansivel 15m',
+  'Serra de poda eletrica',
+  'Pulverizador manual 5L'
+];
+
+const CATEGORY_QUERY_BLOCKS = {
+  'Eletrônicos': ELETRONICOS,
+  'Games': GAMES,
+  'Hardware': HARDWARE,
+  'Informática': INFORMATICA,
+  'Casa Inteligente': CASA_INTELIGENTE,
+  'Cozinha': COZINHA,
+  'Eletrodomésticos': ELETRODOMESTICOS,
+  'Eletroportáteis': ELETROPORTATEIS,
+  'Ferramentas': FERRAMENTAS,
+  'Automotivo': AUTOMOTIVO,
+  'Pet': PET,
+  'Saúde': SAUDE,
+  'Fitness': FITNESS,
+  'Suplementos': SUPLEMENTOS,
+  'Moda Masculina': MODA_MASCULINA,
+  'Moda Feminina': MODA_FEMININA,
+  'Tênis': TENIS,
+  'Relógios': RELOGIOS,
+  'Perfumes': PERFUMES,
+  'Beleza': BELEZA,
+  'Infantil': INFANTIL,
+  'Bebê': BEBE,
+  'Papelaria': PAPELARIA,
+  'Escritório': ESCRITORIO,
+  'Decoração': DECORACAO,
+  'Móveis': MOVEIS,
+  'Utilidades': UTILIDADES,
+  'Celulares': CELULARES,
+  'Tablets': TABLETS,
+  'Smartphones Premium': SMARTPHONES_PREMIUM,
+  'Smartphones Intermediários': SMARTPHONES_INTERMEDIARIOS,
+  'Áudio': AUDIO,
+  'Vídeo': VIDEO,
+  'Streaming': STREAMING,
+  'Livros': LIVROS,
+  'Brinquedos': BRINQUEDOS,
+  'Camping': CAMPING,
+  'Pesca': PESCA,
+  'Esporte': ESPORTE,
+  'Jardinagem': JARDINAGEM
+};
+
+const CATEGORY_MARKETPLACE_TARGETS = {
+  'Eletrônicos': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Games': ['Amazon', 'Mercado Livre', 'Magalu'],
+  'Hardware': ['Mercado Livre', 'Amazon', 'Magalu'],
+  'Informática': ['Mercado Livre', 'Amazon', 'Magalu'],
+  'Casa Inteligente': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Cozinha': ['Amazon', 'Magalu', 'Mercado Livre'],
+  'Eletrodomésticos': ['Magalu', 'Mercado Livre', 'Amazon'],
+  'Eletroportáteis': ['Amazon', 'Magalu', 'Mercado Livre'],
+  'Ferramentas': ['Mercado Livre', 'Amazon', 'Shopee'],
+  'Automotivo': ['Mercado Livre', 'Amazon', 'Shopee'],
+  'Pet': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Saúde': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Fitness': ['Netshoes', 'Amazon', 'Mercado Livre'],
+  'Suplementos': ['Netshoes', 'Amazon', 'Mercado Livre'],
+  'Moda Masculina': ['Netshoes', 'Shopee', 'Shein'],
+  'Moda Feminina': ['Shopee', 'Shein', 'Netshoes'],
+  'Tênis': ['Netshoes', 'Mercado Livre', 'Amazon'],
+  'Relógios': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Perfumes': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Beleza': ['Amazon', 'Shopee', 'Shein'],
+  'Infantil': ['Shopee', 'Amazon', 'Mercado Livre'],
+  'Bebê': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Papelaria': ['Amazon', 'Shopee', 'Mercado Livre'],
+  'Escritório': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Decoração': ['Amazon', 'Shopee', 'Magalu'],
+  'Móveis': ['Magalu', 'Mercado Livre', 'Amazon'],
+  'Utilidades': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Celulares': ['Mercado Livre', 'Amazon', 'Magalu'],
+  'Tablets': ['Amazon', 'Mercado Livre', 'Magalu'],
+  'Smartphones Premium': ['Mercado Livre', 'Amazon', 'Magalu'],
+  'Smartphones Intermediários': ['Mercado Livre', 'Amazon', 'Magalu'],
+  'Áudio': ['Amazon', 'Mercado Livre', 'Magalu'],
+  'Vídeo': ['Amazon', 'Mercado Livre', 'Magalu'],
+  'Streaming': ['Amazon', 'Mercado Livre', 'Magalu'],
+  'Livros': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Brinquedos': ['Amazon', 'Shopee', 'Mercado Livre'],
+  'Camping': ['Amazon', 'Mercado Livre', 'Shopee'],
+  'Pesca': ['Mercado Livre', 'Amazon', 'Shopee'],
+  'Esporte': ['Netshoes', 'Amazon', 'Mercado Livre'],
+  'Jardinagem': ['Mercado Livre', 'Amazon', 'Shopee']
+};
+
+function normalizeGoldenQuery(query) {
+  return String(query || '').trim().replace(/\s+/g, ' ');
+}
+
+function dedupeQueryList(queries) {
+  const seen = new Set();
+  return queries.reduce((acc, rawQuery) => {
+    const query = normalizeGoldenQuery(rawQuery);
+    const key = query.toLowerCase();
+    if (!query || seen.has(key)) return acc;
+    seen.add(key);
+    acc.push(query);
+    return acc;
+  }, []);
+}
+
+function buildCategoryQueryBank(queries) {
+  const buckets = {
+    popular: [],
+    volume: [],
+    brand: [],
+    generic: [],
+    promo: []
+  };
+  const bucketNames = Object.keys(buckets);
+  dedupeQueryList(queries).forEach((query, index) => {
+    buckets[bucketNames[index % bucketNames.length]].push(query);
+  });
+  return buckets;
+}
+
+function createEmptyGoldenQueries() {
+  return MARKETPLACE_ORDER.reduce((acc, store) => {
+    acc[store] = {};
+    return acc;
+  }, {});
+}
+
+function buildMarketplaceGoldenQueries() {
+  const banks = createEmptyGoldenQueries();
+  const marketplaceLoad = MARKETPLACE_ORDER.reduce((acc, store) => {
+    acc[store] = 0;
+    return acc;
+  }, {});
+
+  Object.entries(CATEGORY_QUERY_BLOCKS).forEach(([categoryName, rawQueries]) => {
+    const targets = CATEGORY_MARKETPLACE_TARGETS[categoryName] || MARKETPLACE_ORDER;
+    const queries = dedupeQueryList(rawQueries);
+    const assignments = targets.reduce((acc, store) => {
+      acc[store] = [];
+      return acc;
+    }, {});
+
+    const seededTargets = [...targets]
+      .sort((a, b) => marketplaceLoad[a] - marketplaceLoad[b])
+      .slice(0, Math.min(targets.length, queries.length));
+
+    queries.forEach((query, index) => {
+      if (index < seededTargets.length) {
+        const seededStore = seededTargets[index];
+        assignments[seededStore].push(query);
+        marketplaceLoad[seededStore] += 1;
+        return;
+      }
+
+      const selectedStore = targets.reduce((bestStore, currentStore) => {
+        if (!bestStore) return currentStore;
+
+        const bestLoad = marketplaceLoad[bestStore];
+        const currentLoad = marketplaceLoad[currentStore];
+        if (currentLoad !== bestLoad) {
+          return currentLoad < bestLoad ? currentStore : bestStore;
+        }
+
+        return assignments[currentStore].length < assignments[bestStore].length ? currentStore : bestStore;
+      }, null);
+
+      assignments[selectedStore].push(query);
+      marketplaceLoad[selectedStore] += 1;
+    });
+
+    targets.forEach((store) => {
+      if (assignments[store].length > 0) {
+        banks[store][categoryName] = buildCategoryQueryBank(assignments[store]);
+      }
+    });
+  });
+
+  return banks;
+}
+
+const GOLDEN_QUERIES = buildMarketplaceGoldenQueries();
+
+const QUERY_ROTATION_STATE = {};
+
+function rotateList(items, offset = 0) {
+  if (!items.length) return [];
+  const shift = Math.abs(offset) % items.length;
+  return items.slice(shift).concat(items.slice(0, shift));
+}
+
+// #region debug-point A:query-meta
+function resolveQueryAuditMeta(store, query) {
+  const normalizedQuery = normalizeGoldenQuery(query);
+  const storeBank = GOLDEN_QUERIES[store] || {};
+
+  for (const [categoryName, variants] of Object.entries(storeBank)) {
+    for (const [variantName, queries] of Object.entries(variants)) {
+      if ((queries || []).some((candidate) => normalizeGoldenQuery(candidate) === normalizedQuery)) {
+        return { category: categoryName, variant: variantName };
+      }
+    }
   }
+
+  return { category: 'Desconhecida', variant: 'unknown' };
+}
+// #endregion
+
+function pickQueryFromCategory(categoryBank, variantOrder, usedQueries) {
+  if (!categoryBank) return null;
+
+  for (const variant of variantOrder) {
+    const pool = categoryBank[variant] || [];
+    for (const rawQuery of pool) {
+      const query = normalizeGoldenQuery(rawQuery);
+      if (query && !usedQueries.has(query)) {
+        return query;
+      }
+    }
+  }
+
+  return null;
+}
+
+function getRandomQueries(store) {
+  const categories = Object.keys(GOLDEN_QUERIES[store] || {});
+  const settings = STORE_QUERY_SETTINGS[store] || { categoriesPerRun: 12, queriesPerCategory: 2 };
+  const state = QUERY_ROTATION_STATE[store] || { categoryCursor: 0, variantCursor: 0 };
+  QUERY_ROTATION_STATE[store] = state;
+
+  if (categories.length === 0) {
+    return ['oferta'];
+  }
+
+  const orderedCategories = rotateList(categories, state.categoryCursor);
+  const selectedCategories = orderedCategories.slice(0, Math.min(settings.categoriesPerRun, categories.length));
+  const usedQueries = new Set();
+  const selected = [];
+
+  selectedCategories.forEach((categoryName, index) => {
+    const categoryBank = GOLDEN_QUERIES[store][categoryName];
+    const primaryOrder = rotateList(QUERY_VARIANT_ORDER, state.variantCursor + index);
+    const secondaryOrder = rotateList(QUERY_VARIANT_ORDER, state.variantCursor + index + 2);
+
+    const firstQuery = pickQueryFromCategory(categoryBank, primaryOrder, usedQueries);
+    if (firstQuery) {
+      usedQueries.add(firstQuery);
+      selected.push(firstQuery);
+    }
+
+    if ((settings.queriesPerCategory || 1) > 1) {
+      const secondQuery = pickQueryFromCategory(categoryBank, secondaryOrder, usedQueries);
+      if (secondQuery) {
+        usedQueries.add(secondQuery);
+        selected.push(secondQuery);
+      }
+    }
+  });
+
+  state.categoryCursor = (state.categoryCursor + selectedCategories.length) % categories.length;
+  state.variantCursor = (state.variantCursor + 1) % QUERY_VARIANT_ORDER.length;
+
+  // #region debug-point A:selected-queries
+  const selectedCategorySet = new Set(selectedCategories);
+  const dormantCategories = categories.filter((categoryName) => !selectedCategorySet.has(categoryName));
+  emitAuditEvent('A', 'oracle-scraper.cjs:getRandomQueries', 'query-batch-selected', {
+    store,
+    totalCategoriesAvailable: categories.length,
+    selectedCategories,
+    dormantCategories,
+    queriesSelected: selected.map((query) => ({ query, ...resolveQueryAuditMeta(store, query) })),
+    settings,
+    rotationState: { categoryCursor: state.categoryCursor, variantCursor: state.variantCursor }
+  });
+  // #endregion
+
   return selected;
 }
 
@@ -246,6 +1128,13 @@ const cycleMetrics = {
 async function crawleeExtract(url, limit, storeName) {
   let rawExtractedData = '';
   let evalResult = { text: '', found: 0, sent: 0 };
+  const extractStartedAt = Date.now();
+  const queryContext = {
+    store: SCRAPER_AUDIT_STATE.currentStore || storeName,
+    query: SCRAPER_AUDIT_STATE.currentQuery,
+    category: SCRAPER_AUDIT_STATE.currentCategory,
+    variant: SCRAPER_AUDIT_STATE.currentVariant
+  };
 
   // Calcula maxProducts aqui (fora do page.evaluate, pois lá não tem acesso às variáveis Node.js)
   const providerConfig = PROVIDER_CONFIG[LLM_PROVIDER];
@@ -386,6 +1275,14 @@ async function crawleeExtract(url, limit, storeName) {
   try {
     await crawler.run([targetUrl]);
   } catch (err) {
+    // #region debug-point B:crawlee-error
+    emitAuditEvent('B', 'oracle-scraper.cjs:crawleeExtract', 'crawler-error', {
+      ...queryContext,
+      url: targetUrl,
+      error: err.message,
+      durationMs: Date.now() - extractStartedAt
+    });
+    // #endregion
     console.error(`  [Crawlee] Erro ao raspar ${storeName}: ${err.message}`);
     await logErrorToSupabase('Oracle-Scraper', 'Crawlee Extract', err, { storeName, url: targetUrl });
     return [];
@@ -396,8 +1293,37 @@ async function crawleeExtract(url, limit, storeName) {
   cycleMetrics.produtos_enviados_llm += evalResult.sent;
   if (!cycleMetrics.por_marketplace[storeName]) cycleMetrics.por_marketplace[storeName] = 0;
 
-  if (!rawExtractedData) return [];
-  if (!validateHtml(rawExtractedData, storeName)) return [];
+  // #region debug-point B:extract-summary
+  emitAuditEvent('B', 'oracle-scraper.cjs:crawleeExtract', 'extract-summary', {
+    ...queryContext,
+    url: targetUrl,
+    selectorsFound: evalResult.found,
+    cardsWithPrice: evalResult.valid,
+    productsSentToLlm: evalResult.sent,
+    rawPayloadLength: rawExtractedData.length,
+    durationMs: Date.now() - extractStartedAt
+  });
+  // #endregion
+
+  if (!rawExtractedData) {
+    // #region debug-point B:empty-extract
+    emitAuditEvent('B', 'oracle-scraper.cjs:crawleeExtract', 'extract-empty', {
+      ...queryContext,
+      url: targetUrl
+    });
+    // #endregion
+    return [];
+  }
+  if (!validateHtml(rawExtractedData, storeName)) {
+    // #region debug-point B:html-rejected
+    emitAuditEvent('B', 'oracle-scraper.cjs:crawleeExtract', 'html-validator-rejected', {
+      ...queryContext,
+      url: targetUrl,
+      rawPayloadLength: rawExtractedData.length
+    });
+    // #endregion
+    return [];
+  }
 
   // Chama o LLM para formatar os dados
   console.log(`  [LLM] Analisando dados brutos da ${storeName}...`);
@@ -421,14 +1347,38 @@ async function crawleeExtract(url, limit, storeName) {
       const data = JSON.parse(cleanContent);
       const returnedProducts = data.products || [];
       cycleMetrics.produtos_retornados += returnedProducts.length;
+      const validationPreview = buildValidationPreview(returnedProducts, storeName);
       
       if (storeName === "Amazon") {
         console.log(`[Amazon] Output:`, JSON.stringify(returnedProducts, null, 2));
       }
+
+      // #region debug-point C:validator-preview
+      emitAuditEvent('C', 'oracle-scraper.cjs:crawleeExtract', 'validator-preview', {
+        ...queryContext,
+        returnedProducts: returnedProducts.length,
+        previewApproved: validationPreview.approved,
+        previewRejected: validationPreview.rejected,
+        avgConfidence: validationPreview.avgConfidence,
+        rejectStats: validationPreview.rejectStats,
+        confidenceBuckets: validationPreview.confidenceBuckets,
+        missingStats: validationPreview.missingStats
+      });
+      // #endregion
       
       const approvedProducts = sanitizeScrapedData(returnedProducts, storeName).slice(0, limit);
       
       console.log(`\n  [DIAGNÓSTICO ${storeName}] Retornados: ${returnedProducts.length} | Aprovados: ${approvedProducts.length} | Rejeitados: ${returnedProducts.length - approvedProducts.length}`);
+
+      // #region debug-point C:validator-result
+      emitAuditEvent('C', 'oracle-scraper.cjs:crawleeExtract', 'validator-result', {
+        ...queryContext,
+        returnedProducts: returnedProducts.length,
+        approvedProducts: approvedProducts.length,
+        rejectedProducts: returnedProducts.length - approvedProducts.length,
+        limitApplied: limit
+      });
+      // #endregion
       
       cycleMetrics.produtos_aprovados += approvedProducts.length;
       cycleMetrics.produtos_rejeitados += (returnedProducts.length - approvedProducts.length);
@@ -436,10 +1386,22 @@ async function crawleeExtract(url, limit, storeName) {
       
       return approvedProducts;
     } catch (parseErr) {
+      // #region debug-point C:parse-error
+      emitAuditEvent('C', 'oracle-scraper.cjs:crawleeExtract', 'llm-parse-error', {
+        ...queryContext,
+        error: parseErr.message
+      });
+      // #endregion
       console.error(`  [LLM] Erro de parse JSON no scraper: ${parseErr.message}`);
       return [];
     }
   } catch (err) {
+    // #region debug-point C:llm-error
+    emitAuditEvent('C', 'oracle-scraper.cjs:crawleeExtract', 'llm-formatting-error', {
+      ...queryContext,
+      error: err.message
+    });
+    // #endregion
     console.error(`  [LLM] Falha na formatação: ${err.message}`);
     return [];
   }
@@ -679,6 +1641,24 @@ async function upsertOffer(product, store, affiliateUrl) {
     });
   }
 
+  // #region debug-point D:score-calculated
+  emitAuditEvent('D', 'oracle-scraper.cjs:upsertOffer', 'offer-scored', {
+    store,
+    query: SCRAPER_AUDIT_STATE.currentQuery,
+    queryCategory: SCRAPER_AUDIT_STATE.currentCategory,
+    queryVariant: SCRAPER_AUDIT_STATE.currentVariant,
+    productName: product.product_name,
+    productCategory: product.category || 'Geral',
+    currentPrice: product.current_price,
+    oldPrice: product.old_price,
+    rating: product.rating,
+    hasImage: !!product.image_url,
+    scoreV1,
+    scoreV2,
+    scoreChosen: score
+  });
+  // #endregion
+
   const { data: existing } = await supabase.from('offers').select('id, current_price, explainability').eq('original_url', affiliateUrl).eq('user_id', ADMIN_USER_ID).maybeSingle();
 
   if (existing) {
@@ -701,6 +1681,17 @@ async function upsertOffer(product, store, affiliateUrl) {
         updated_at: new Date().toISOString() 
       }).eq('id', existing.id);
     }
+
+    // #region debug-point D:db-update
+    emitAuditEvent('D', 'oracle-scraper.cjs:upsertOffer', 'offer-upserted-existing', {
+      store,
+      query: SCRAPER_AUDIT_STATE.currentQuery,
+      queryCategory: SCRAPER_AUDIT_STATE.currentCategory,
+      productName: product.product_name,
+      offerId: existing.id,
+      score
+    });
+    // #endregion
     return { id: existing.id, isNew: false, score };
   }
 
@@ -713,10 +1704,30 @@ async function upsertOffer(product, store, affiliateUrl) {
   }).select('id').single();
 
   if (error) {
+    // #region debug-point D:db-error
+    emitAuditEvent('D', 'oracle-scraper.cjs:upsertOffer', 'offer-insert-error', {
+      store,
+      query: SCRAPER_AUDIT_STATE.currentQuery,
+      queryCategory: SCRAPER_AUDIT_STATE.currentCategory,
+      productName: product.product_name,
+      error: error.message
+    });
+    // #endregion
     console.error(`  ✗ Erro insert: ${error.message}`);
     await logErrorToSupabase('Oracle-Scraper', 'Upsert Offer', error, { product, store, affiliateUrl });
     return null;
   }
+
+  // #region debug-point D:db-insert
+  emitAuditEvent('D', 'oracle-scraper.cjs:upsertOffer', 'offer-inserted-new', {
+    store,
+    query: SCRAPER_AUDIT_STATE.currentQuery,
+    queryCategory: SCRAPER_AUDIT_STATE.currentCategory,
+    productName: product.product_name,
+    offerId: data.id,
+    score
+  });
+  // #endregion
   return { id: data.id, isNew: true, score };
 }
 
@@ -730,9 +1741,13 @@ async function processTopOffers(candidates) {
   const storeCounts = {};
   let vipOffers = [];
   const leftovers = [];
+  let belowThresholdCount = 0;
   
   for (const c of candidates) {
-    if (c.score < APPROVAL_SCORE) continue;
+    if (c.score < APPROVAL_SCORE) {
+      belowThresholdCount++;
+      continue;
+    }
     
     storeCounts[c.store] = (storeCounts[c.store] || 0) + 1;
     if (storeCounts[c.store] <= maxPerStore) {
@@ -746,6 +1761,17 @@ async function processTopOffers(candidates) {
     vipOffers.push(leftovers.shift());
   }
   vipOffers = vipOffers.slice(0, VIP_SLOTS);
+
+  // #region debug-point E:approval-pipeline
+  emitAuditEvent('E', 'oracle-scraper.cjs:processTopOffers', 'approval-pipeline-summary', {
+    totalCandidates: candidates.length,
+    belowThresholdCount,
+    selectedForAi: vipOffers.length,
+    leftoverCount: leftovers.length,
+    maxPerStore,
+    uniqueStores
+  });
+  // #endregion
 
   if (vipOffers.length === 0) {
     console.log(`\n🤖 Nenhuma oferta atingiu o score mínimo (${APPROVAL_SCORE}) para IA nesta rodada.`);
@@ -785,6 +1811,19 @@ async function processTopOffers(candidates) {
     await supabase.from('posts').insert(postsToInsert);
     await supabase.from('offers').update({ status: 'approved', score: finalScore }).eq('id', item.id);
 
+    // #region debug-point E:approved-offer
+    emitAuditEvent('E', 'oracle-scraper.cjs:processTopOffers', 'offer-approved', {
+      offerId: item.id,
+      store: item.store,
+      query: item.audit?.query || null,
+      queryCategory: item.audit?.queryCategory || null,
+      productName: item.product.product_name,
+      originalScore: item.score,
+      aiScore: analysis.score,
+      finalScore
+    });
+    // #endregion
+
     processed++;
     await new Promise(r => setTimeout(r, 6000)); 
   }
@@ -802,9 +1841,31 @@ async function cleanupOldDrafts() {
 async function scrapeStore(store) {
   const queries = getRandomQueries(store); // Pega 1 keyword de CADA categoria da loja
   let storeCandidates = [];
+  const storeStartedAt = Date.now();
 
   for (const query of queries) {
     try {
+      const queryMeta = resolveQueryAuditMeta(store, query);
+      SCRAPER_AUDIT_STATE.currentStore = store;
+      SCRAPER_AUDIT_STATE.currentQuery = query;
+      SCRAPER_AUDIT_STATE.currentCategory = queryMeta.category;
+      SCRAPER_AUDIT_STATE.currentVariant = queryMeta.variant;
+      SCRAPER_AUDIT_STATE.queryStartedAt = Date.now();
+      let scoredProducts = 0;
+      let newOffers = 0;
+      let existingOffers = 0;
+      let skippedMissingCore = 0;
+      const queryScores = [];
+
+      // #region debug-point B:query-start
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'query-start', {
+        store,
+        query,
+        queryCategory: queryMeta.category,
+        queryVariant: queryMeta.variant
+      });
+      // #endregion
+
       console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
       
       const urls = {
@@ -825,7 +1886,10 @@ async function scrapeStore(store) {
         const productPrice = p.current_price || p.price;
         const productOldPrice = p.old_price;
         
-        if (!productName || !productPrice) continue;
+        if (!productName || !productPrice) {
+          skippedMissingCore++;
+          continue;
+        }
         
         const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
         const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
@@ -837,17 +1901,72 @@ async function scrapeStore(store) {
         };
 
         const res = await upsertOffer(prodData, store, affiliateUrl);
-        if (res && res.isNew) storeCandidates.push({ id: res.id, product: prodData, store, affiliateUrl, score: res.score });
+        if (res) {
+          scoredProducts++;
+          queryScores.push(res.score);
+          if (res.isNew) {
+            newOffers++;
+            storeCandidates.push({
+              id: res.id,
+              product: prodData,
+              store,
+              affiliateUrl,
+              score: res.score,
+              audit: {
+                query,
+                queryCategory: queryMeta.category,
+                queryVariant: queryMeta.variant
+              }
+            });
+          } else {
+            existingOffers++;
+          }
+        }
       }
+
+      // #region debug-point B:query-end
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'query-end', {
+        store,
+        query,
+        queryCategory: queryMeta.category,
+        queryVariant: queryMeta.variant,
+        approvedProductsFromValidator: rawProducts.length,
+        scoredProducts,
+        newOffers,
+        existingOffers,
+        skippedMissingCore,
+        avgScore: averageNumbers(queryScores),
+        durationMs: Date.now() - SCRAPER_AUDIT_STATE.queryStartedAt
+      });
+      // #endregion
       
       // Espera 5 segundos entre as buscas de categorias para aliviar o Groq TPM
       await new Promise(r => setTimeout(r, 5000));
     } catch (err) {
+      // #region debug-point B:query-error
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'query-error', {
+        store,
+        query,
+        queryCategory: SCRAPER_AUDIT_STATE.currentCategory,
+        queryVariant: SCRAPER_AUDIT_STATE.currentVariant,
+        error: err.message,
+        durationMs: SCRAPER_AUDIT_STATE.queryStartedAt ? Date.now() - SCRAPER_AUDIT_STATE.queryStartedAt : 0
+      });
+      // #endregion
       console.error(`  [${store}] Erro na query "${query}": ${err.message}`);
       await logErrorToSupabase('Oracle-Scraper', 'Scrape Query', err, { store, query });
     }
   }
   
+  // #region debug-point B:store-summary
+  emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
+    store,
+    queriesExecuted: queries.length,
+    candidatesCollected: storeCandidates.length,
+    durationMs: Date.now() - storeStartedAt
+  });
+  // #endregion
+
   console.log(`  ✅ [${store}] ${storeCandidates.length} ofertas coletadas das diversas categorias.`);
   return storeCandidates;
 }
@@ -904,6 +2023,7 @@ async function checkHeartbeat() {
 // ─── Ciclo Principal ──────────────────────────────────────────
 async function runScrapingCycle() {
   const startTime = Date.now();
+  SCRAPER_AUDIT_STATE.cycleStartedAt = startTime;
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER IN-HOUSE — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
 
   const isWindows = process.platform === 'win32';
@@ -1025,6 +2145,22 @@ async function runScrapingCycle() {
       }
     });
   } catch(e){}
+
+  // #region debug-point E:cycle-summary
+  emitAuditEvent('E', 'oracle-scraper.cjs:runScrapingCycle', 'cycle-summary', {
+    mode,
+    totalScrapedCandidates: allCandidates.length,
+    aiProcessed,
+    durationSeconds: duration,
+    produtosEncontrados: cycleMetrics.produtos_encontrados,
+    produtosEnviadosLlm: cycleMetrics.produtos_enviados_llm,
+    produtosRetornados: cycleMetrics.produtos_retornados,
+    produtosAprovados: cycleMetrics.produtos_aprovados,
+    produtosRejeitados: cycleMetrics.produtos_rejeitados,
+    totalTokens: cycleMetrics.totalTokens,
+    porMarketplace: cycleMetrics.por_marketplace
+  });
+  // #endregion
 
   // Reset metrics for next cycle
   cycleMetrics.produtos_encontrados = 0;
