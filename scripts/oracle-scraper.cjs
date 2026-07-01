@@ -53,6 +53,7 @@ const APPROVAL_SCORE   = 3.5;
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
 const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
+const SHOPEE_ADMITAD_ID    = process.env.SHOPEE_ADMITAD_CAMPAIGN_ID || ''; // Preencher no .env.local
 
 // ─── LLM Provider Setup ────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'cerebras';
@@ -1538,6 +1539,7 @@ function buildAffiliateUrl(originalUrl, store) {
     if (store === 'Amazon' && AMAZON_TAG) { obj.searchParams.set('tag', AMAZON_TAG); return obj.toString(); }
     if (store === 'Magalu' && MAGALU_PARTNER_ID) { obj.hostname = 'www.magazinevoce.com.br'; obj.pathname = `/${MAGALU_PARTNER_ID}${obj.pathname}`; return obj.toString(); }
     if (store === 'Netshoes' && RAKUTEN_AFFILIATE_ID) return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_AFFILIATE_ID}&mid=${RAKUTEN_NETSHOES_MID}&murl=${encodeURIComponent(originalUrl)}`;
+    if (store === 'Shopee' && SHOPEE_ADMITAD_ID) return `https://ad.admitad.com/g/${SHOPEE_ADMITAD_ID}/?ulp=${encodeURIComponent(originalUrl)}`;
   } catch (_) {}
   return originalUrl;
 }
@@ -2138,7 +2140,7 @@ async function runScrapingCycle() {
     if (isWindows) {
       console.log(`\n[MODE: LOCAL] 💻 NOTEBOOK WINDOWS DETECTADO. Iniciando Scraping Local...`);
       await updateHeartbeat();
-      const stores = ['Mercado Livre', 'Amazon', 'Magalu'];
+      const stores = ['Mercado Livre', 'Amazon', 'Shopee']; // Magalu desativada: bloqueio 403 consistente. Shopee ativa quando SHOPEE_ADMITAD_CAMPAIGN_ID preenchido
       
       for (const store of stores) {
         try {
@@ -2223,7 +2225,7 @@ async function runScrapingCycle() {
     }
   } else if (mode === 'ORACLE' || mode === 'AUTO') {
     console.log(`\n[MODE: ${mode}] ⚠️ AVISO: Executando Scraping e Orquestração na mesma máquina (Uso para testes).`);
-    const stores = isWindows ? ['Mercado Livre', 'Amazon', 'Magalu'] : ['Amazon', 'Magalu'];
+    const stores = isWindows ? ['Mercado Livre', 'Amazon', 'Shopee'] : ['Mercado Livre', 'Amazon', 'Shopee']; // Magalu desativada: bloqueio 403 consistente
     
     for (const store of stores) {
       try {
