@@ -48,7 +48,7 @@ const OFFERS_PER_STORE = 6; // Teto por query aumentado para ampliar a descobert
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
 const VIP_SLOTS        = 20; 
-const APPROVAL_SCORE   = 5.0;
+const APPROVAL_SCORE   = 3.5;
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
@@ -1523,6 +1523,8 @@ function cleanProductUrl(url) {
 
 function normalizeImageUrl(url) {
   if (!url || url === 'null') return null;
+  // Rejeita imagens de anúncios patrocinados da Amazon (logo de marca, não produto)
+  if (url.includes('/S/al-na') || url.includes('sponsored-ads.amazon') || url.includes('aax-us-east-retail')) return null;
   let u = url;
   if (u.startsWith('//')) u = 'https:' + u;
   if (u.includes('mlcdn.com.br')) u = u.replace(/\/\d+x\d+\//, '/orig/');
@@ -2145,8 +2147,38 @@ async function runScrapingCycle() {
         } catch (err) { console.error(`[SCRAPER][${store}] Erro: ${err.message}`); }
       }
       
-      console.log(`\n✅ Scraping local concluído. ${allCandidates.length} ofertas inseridas como DRAFT no Supabase.`);
-      console.log(`⏳ Aguardando a Oracle capturar os drafts no próximo ciclo dela.`);
+      console.log(`\n✅ Scraping local concluído. ${allCandidates.length} ofertas raspadas neste ciclo.`);
+      console.log(`\n📦 Buscando TODOS os drafts pendentes no Supabase para processar com IA...`);
+
+      const { data: pendingDrafts, error: draftsError } = await supabase
+        .from('offers')
+        .select('*')
+        .eq('status', 'draft')
+        .eq('user_id', ADMIN_USER_ID);
+
+      if (draftsError) {
+        console.error(`[DRAFTS] Erro ao buscar drafts: ${draftsError.message}`);
+      } else if (pendingDrafts && pendingDrafts.length > 0) {
+        console.log(`\n🚀 ${pendingDrafts.length} drafts encontrados. Iniciando IA...`);
+        const draftCandidates = pendingDrafts.map(d => ({
+          id: d.id,
+          product: {
+            product_name: d.product_name,
+            current_price: d.current_price,
+            old_price: d.old_price,
+            image_url: d.image_url,
+            category: d.category || 'Geral',
+            rating: d.rating
+          },
+          store: d.platform,
+          affiliateUrl: d.original_url,
+          score: d.score || 0
+        }));
+        aiProcessed = await processTopOffers(draftCandidates);
+      } else {
+        console.log(`\n📭 Nenhum draft pendente no Supabase.`);
+      }
+      await cleanupOldDrafts();
       
     } else {
       console.log(`\n[MODE: LOCAL] ☁️ ORACLE VPS DETECTADA. Atuando como Orquestrador / Leitor.`);
@@ -2291,9 +2323,9 @@ if (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
 
 runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
-// cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
-//   name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
-// });
+cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
+  name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
+});
 module.exports = { 
   crawleeExtract,
   cleanProductUrl,
