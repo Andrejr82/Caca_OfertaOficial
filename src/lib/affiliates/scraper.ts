@@ -656,8 +656,7 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
     const promptText = "Extraia o nome do produto, a URL principal da imagem do produto, o preço atual promocional (como número) e o preço original/antigo cortado (como número). Retorne null para o preço antigo se não houver. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -903,8 +902,7 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
     const promptText = "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -981,8 +979,7 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
     const promptText = "Extraia o nome do produto, a URL da imagem principal do produto e o preço promocional atual do produto (como número). Se houver preço antigo cortado, traga também. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1058,8 +1055,7 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
     const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1132,8 +1128,7 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
     }
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
     const promptText = "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1211,6 +1206,159 @@ import * as cheerio from 'cheerio';
 export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon (Modo Cheerio Parser)...");
   try {
+    const parsePriceValue = (raw: string | null | undefined): number | null => {
+      if (!raw) return null;
+      const numeric = raw.replace(/\u00A0/g, " ").replace(/[^\d.,]/g, "").trim();
+      if (!numeric) return null;
+      if (numeric.includes(",")) {
+        const [intPartRaw, decPartRaw] = numeric.split(",");
+        const intPart = (intPartRaw || "").replace(/\./g, "").replace(/[^\d]/g, "");
+        const decPart = (decPartRaw || "").replace(/[^\d]/g, "").slice(0, 2);
+        const n = Number.parseFloat(`${intPart}.${decPart || "00"}`);
+        return Number.isFinite(n) ? n : null;
+      }
+      const dotParts = numeric.split(".");
+      if (dotParts.length === 1) {
+        const n = Number.parseFloat(dotParts[0]);
+        return Number.isFinite(n) ? n : null;
+      }
+      const dec = dotParts.pop() || "00";
+      const int = dotParts.join("").replace(/[^\d]/g, "");
+      const n = Number.parseFloat(`${int}.${dec.replace(/[^\d]/g, "").slice(0, 2) || "00"}`);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    const extractCurrentPrice = ($: cheerio.CheerioAPI, el: any): number => {
+      const offscreenCurrent =
+        $(el).find(".a-price:not(.a-text-price) .a-offscreen").first().text().trim() ||
+        $(el).find(".a-price .a-offscreen").first().text().trim();
+      const parsedOffscreen = parsePriceValue(offscreenCurrent);
+      if (parsedOffscreen && parsedOffscreen > 0) return parsedOffscreen;
+
+      const wholeText =
+        $(el).find(".a-price:not(.a-text-price) .a-price-whole").first().text().trim() ||
+        $(el).find(".a-price-whole").first().text().trim();
+      const fractionText =
+        $(el).find(".a-price:not(.a-text-price) .a-price-fraction").first().text().trim() ||
+        $(el).find(".a-price-fraction").first().text().trim();
+
+      const whole = (wholeText || "").replace(/[^\d]/g, "");
+      const fraction = (fractionText || "").replace(/[^\d]/g, "").slice(0, 2);
+      if (whole) {
+        const n = Number.parseFloat(`${whole}.${fraction || "00"}`);
+        if (Number.isFinite(n) && n > 0) return n;
+      }
+
+      const fallbackText = $(el).find('[data-a-color="price"]').first().text().trim() || $(el).text();
+      const parsedFallback = parsePriceValue(fallbackText);
+      if (parsedFallback && parsedFallback > 0) return parsedFallback;
+
+      return 0;
+    };
+
+    const extractOldPrice = ($: cheerio.CheerioAPI, el: any, currentPrice: number): number | null => {
+      const oldPriceText =
+        $(el).find(".a-price.a-text-price .a-offscreen").first().text().trim() ||
+        $(el).find(".a-text-price .a-offscreen").first().text().trim() ||
+        $(el).find(".a-text-strike").first().text().trim();
+      const parsed = parsePriceValue(oldPriceText);
+      if (!parsed || parsed <= 0) return null;
+      if (currentPrice > 0 && parsed <= currentPrice) return null;
+      return parsed;
+    };
+
+    const isPlaceholderImage = (url: string): boolean => {
+      const u = url.toLowerCase().trim();
+      if (!u) return true;
+      if (u.startsWith("data:")) return true;
+      if (u.includes("sprite") || u.includes("nav-sprite")) return true;
+      if (u.includes("transparent") || u.includes("blank") || u.includes("placeholder") || u.includes("pixel")) return true;
+      if (u.endsWith(".gif")) return true;
+      return false;
+    };
+
+    const pickFromDynamicImage = (raw: string | null | undefined): string | null => {
+      if (!raw) return null;
+      const normalized = raw.replace(/&quot;/g, '"').replace(/&#34;/g, '"').trim();
+      try {
+        const parsed = JSON.parse(normalized) as Record<string, [number, number] | number[]>;
+        let bestUrl: string | null = null;
+        let bestArea = -1;
+        for (const [url, dims] of Object.entries(parsed || {})) {
+          if (!url || isPlaceholderImage(url)) continue;
+          const width = Array.isArray(dims) ? Number(dims[0]) : 0;
+          const height = Array.isArray(dims) ? Number(dims[1]) : 0;
+          const area = (Number.isFinite(width) ? width : 0) * (Number.isFinite(height) ? height : 0);
+          if (area > bestArea) {
+            bestArea = area;
+            bestUrl = url;
+          }
+        }
+        return bestUrl;
+      } catch {
+        return null;
+      }
+    };
+
+    const pickFromSrcset = (raw: string | null | undefined): string | null => {
+      if (!raw) return null;
+      const parts = raw
+        .split(",")
+        .map(p => p.trim())
+        .filter(Boolean);
+      let bestUrl: string | null = null;
+      let bestScore = -1;
+      for (const part of parts) {
+        const [url, descriptor] = part.split(/\s+/);
+        if (!url || isPlaceholderImage(url)) continue;
+        let score = 0;
+        if (descriptor) {
+          const m = descriptor.match(/^(\d+(?:\.\d+)?)(w|x)$/i);
+          if (m) {
+            const value = Number.parseFloat(m[1]);
+            score = Number.isFinite(value) ? value : 0;
+            if (m[2].toLowerCase() === "x") score *= 1000;
+          }
+        }
+        if (score > bestScore) {
+          bestScore = score;
+          bestUrl = url;
+        }
+      }
+      return bestUrl;
+    };
+
+    const extractImage = ($: cheerio.CheerioAPI, el: any): string | null => {
+      const imgEl = $(el).find("img").first();
+      const dynamicRaw = imgEl.attr("data-a-dynamic-image") || $(el).find("img").attr("data-a-dynamic-image");
+      const dynamicPicked = pickFromDynamicImage(dynamicRaw);
+      if (dynamicPicked) return dynamicPicked;
+
+      const srcsetRaw =
+        imgEl.attr("srcset") ||
+        imgEl.attr("data-srcset") ||
+        $(el).find("img.s-image").attr("srcset") ||
+        $(el).find("img.a-dynamic-image").attr("srcset");
+      const srcsetPicked = pickFromSrcset(srcsetRaw);
+      if (srcsetPicked) return srcsetPicked;
+
+      const dataSrc =
+        imgEl.attr("data-src") ||
+        imgEl.attr("data-lazy-src") ||
+        $(el).find("img.s-image").attr("data-src") ||
+        $(el).find("img.a-dynamic-image").attr("data-src");
+      if (dataSrc && !isPlaceholderImage(dataSrc)) return dataSrc;
+
+      const src =
+        imgEl.attr("src") ||
+        $(el).find("img.s-image").attr("src") ||
+        $(el).find("img.a-dynamic-image").attr("src") ||
+        $(el).find("img").attr("src");
+      if (src && !isPlaceholderImage(src)) return src;
+
+      return null;
+    };
+
     const urls = category
       ? [`https://www.amazon.com.br/s?k=${encodeURIComponent(category + " oferta")}`]
       : [
@@ -1263,27 +1411,16 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
                       $(el).find('.p13n-sc-truncate').text().trim() ||
                       $(el).find('img').attr('alt');
                       
-          // Prices
-          const priceText = $(el).find('.a-price .a-offscreen').first().text();
-          let currentPrice = 0;
-          if (priceText && priceText.includes('R$')) {
-              currentPrice = parseFloat(priceText.replace('R$', '').replace(/\\./g, '').replace(',', '.').trim());
-          }
-
-          const oldPriceText = $(el).find('.a-price.a-text-price .a-offscreen').text() || $(el).find('.a-text-strike').text();
-          let oldPrice: number | null = null;
-          if (oldPriceText && oldPriceText.includes('R$')) {
-              oldPrice = parseFloat(oldPriceText.replace('R$', '').replace(/\\./g, '').replace(',', '.').trim());
-          }
+          const currentPrice = extractCurrentPrice($, el);
+          const oldPrice = extractOldPrice($, el, currentPrice);
           
-          // Image
-          let image = $(el).find('img.s-image').attr('src') || $(el).find('img.a-dynamic-image').attr('src') || $(el).find('img').attr('src');
+          const image = extractImage($, el);
           
           // Link
           let link = $(el).find('h2 a').attr('href') || $(el).find('a.a-link-normal').attr('href');
           if (link && !link.startsWith('http')) link = 'https://www.amazon.com.br' + link;
 
-          if (title && link && currentPrice > 0 && oldPrice && oldPrice > currentPrice) {
+          if (title && link && currentPrice > 0) {
              const { category: cat, subcategory: sub } = normalizeCategory(category || title);
              results.push({
                product_name: title,

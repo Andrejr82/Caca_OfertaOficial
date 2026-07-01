@@ -1220,9 +1220,97 @@ async function crawleeExtract(url, limit, storeName) {
       }
       await page.waitForTimeout(2000);
 
-      evalResult = await page.evaluate((maxProd) => {
+      if (!crawler.__imageDebugListenerAttached) {
+        page.on('console', (msg) => {
+          try {
+            const text = msg.text();
+            if (typeof text === 'string' && text.startsWith('IMAGE_DEBUG')) {
+              console.log(text);
+            }
+          } catch {}
+        });
+        crawler.__imageDebugListenerAttached = true;
+      }
+
+      evalResult = await page.evaluate(({ maxProd, imageDebugCtx }) => {
         const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item, .poly-card'));
         let results = [];
+        const IMAGE_DEBUG_LIMIT = 5;
+        let imageDebugLogged = 0;
+
+        const parseSrcsetUrls = (srcsetValue) => {
+          if (!srcsetValue || typeof srcsetValue !== 'string') return [];
+          return srcsetValue
+            .split(',')
+            .map((part) => part.trim())
+            .filter(Boolean)
+            .map((part) => part.split(/\s+/)[0])
+            .filter(Boolean);
+        };
+
+        const collectCardImages = (cardEl) => {
+          const imgs = Array.from(cardEl.querySelectorAll('img'));
+          const out = [];
+          const seen = new Set();
+
+          const pushUrl = (url, origin, attrName) => {
+            if (!url || typeof url !== 'string') return;
+            const normalized = url.trim();
+            if (!normalized) return;
+            const key = `${origin}::${normalized}`;
+            if (seen.has(key)) return;
+            seen.add(key);
+            if (origin === 'outro' && attrName) {
+              out.push({ url: normalized, origin, attr: attrName });
+            } else {
+              out.push({ url: normalized, origin });
+            }
+          };
+
+          for (const imgEl of imgs) {
+            const src = imgEl.getAttribute('src');
+            if (src) pushUrl(src, 'src');
+
+            const srcset = imgEl.getAttribute('srcset');
+            if (srcset) {
+              for (const u of parseSrcsetUrls(srcset)) pushUrl(u, 'srcset');
+            }
+
+            const dataSrc = imgEl.getAttribute('data-src');
+            if (dataSrc) pushUrl(dataSrc, 'data-src');
+
+            const dataOriginal = imgEl.getAttribute('data-original');
+            if (dataOriginal) pushUrl(dataOriginal, 'data-original');
+
+            const dataLazy = imgEl.getAttribute('data-lazy') || imgEl.getAttribute('data-lazy-src');
+            if (dataLazy) pushUrl(dataLazy, 'data-lazy');
+
+            const dyn = imgEl.getAttribute('data-a-dynamic-image');
+            if (dyn) {
+              try {
+                const parsed = JSON.parse(dyn);
+                for (const k of Object.keys(parsed || {})) {
+                  pushUrl(k, 'outro', 'data-a-dynamic-image');
+                }
+              } catch {}
+            }
+          }
+
+          return out;
+        };
+
+        const extractCardTitle = (cardEl) => {
+          const t =
+            (cardEl.querySelector('h2 span') && cardEl.querySelector('h2 span').textContent) ||
+            (cardEl.querySelector('.a-size-base-plus') && cardEl.querySelector('.a-size-base-plus').textContent) ||
+            (cardEl.querySelector('.a-size-medium') && cardEl.querySelector('.a-size-medium').textContent) ||
+            '';
+          const cleaned = (t || '').trim();
+          if (cleaned) return cleaned;
+          const imgAlt = cardEl.querySelector('img') ? cardEl.querySelector('img').getAttribute('alt') : '';
+          return (imgAlt || '').trim();
+        };
+
         for (let el of items) {
           const text = el.innerText || '';
           if (text.includes('R$')) {
@@ -1248,6 +1336,19 @@ async function crawleeExtract(url, limit, storeName) {
               }
             }
             if (url) {
+              if (imageDebugLogged < IMAGE_DEBUG_LIMIT) {
+                const title = extractCardTitle(el);
+                const imagesInCard = collectCardImages(el);
+                console.log('IMAGE_DEBUG ' + JSON.stringify({
+                  Marketplace: (imageDebugCtx && imageDebugCtx.marketplace) || '',
+                  "Golden Query": (imageDebugCtx && imageDebugCtx.goldenQuery) || '',
+                  "Título": title,
+                  "Quantidade de imagens encontradas dentro do card": imagesInCard.length,
+                  "Imagem atualmente escolhida pelo scraper": img || '',
+                  "Lista completa das URLs de imagens encontradas no card": imagesInCard
+                }));
+                imageDebugLogged++;
+              }
               results.push(`[TEXTO]: ${text.replace(/\n/g, ' ')} | [LINK]: ${url} | [IMG]: ${img}`);
             }
           }
@@ -1266,7 +1367,7 @@ async function crawleeExtract(url, limit, storeName) {
           longestText: results.reduce((max, r) => Math.max(max, r.length), 0),
           avgText: results.length ? results.reduce((sum, r) => sum + r.length, 0) / results.length : 0
         };
-      }, maxProducts);
+      }, { maxProd: maxProducts, imageDebugCtx: { marketplace: storeName, goldenQuery: queryContext.query || '' } });
       console.log(`\n  [DIAGNÓSTICO ${storeName}] Seletores encontrados: ${evalResult.found} | Cards com preço: ${evalResult.valid} | Enviados: ${evalResult.sent} | Textos: (Max: ${evalResult.longestText}, Média: ${evalResult.avgText.toFixed(0)})`);
       console.log(`[${storeName}] Itens raspados (únicos): ${evalResult.sent} | RAW size: ${evalResult.text.length}`);
     }

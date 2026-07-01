@@ -27,3 +27,12 @@ cloudflared.exe
 
 ssh-key-*.key
 storage/
+.cursor/
+.dbg/
+storage_audit_amz_mag/
+storage_audit_full_run/
+debug-golden-queries-audit.md
+scripts/test-ml.cjs
+scripts/test-oracle-controlled.cjs
+scripts/test-scrapedo.cjs
+scripts/test-scrapfly-api.cjs
