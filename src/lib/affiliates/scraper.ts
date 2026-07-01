@@ -1578,6 +1578,15 @@ export async function discoverAndIngestCoupons(
   console.log(`[SCRAPER][COUPONS] Iniciando descobrimento e ingestão para fontes: ${sources.join(", ")}`);
   let supabase;
   let userId = targetUserId || null;
+  const getDefaultCouponImageUrl = (sourceName: string): string | null => {
+    const normalized = sourceName.toLowerCase().trim();
+    if (normalized === "mercado livre") return "https://www.mercadolivre.com.br/favicon.ico";
+    if (normalized === "magalu") return "https://www.magazineluiza.com.br/favicon.ico";
+    if (normalized === "shopee") return "https://shopee.com.br/favicon.ico";
+    if (normalized === "shein") return "https://br.shein.com/favicon.ico";
+    if (normalized === "amazon") return "https://www.amazon.com.br/favicon.ico";
+    return null;
+  };
 
   if (targetUserId) {
     const { createSupabaseAdminClient } = await import("@/lib/supabase/admin");
@@ -1623,6 +1632,11 @@ export async function discoverAndIngestCoupons(
         }
       }
 
+      const imageUrl =
+        coupon.image_url && coupon.image_url.startsWith("http")
+          ? coupon.image_url
+          : getDefaultCouponImageUrl(source);
+
       const { data: existingOffer } = await supabase
         .from("offers")
         .select("id")
@@ -1645,7 +1659,7 @@ export async function discoverAndIngestCoupons(
           platform: platformValue === "Shein" ? "Outro" : platformValue,
           product_name: `[CUPOM] ${coupon.discount}`,
           original_url: finalUrl,
-          image_url: null,
+          image_url: imageUrl,
           current_price: 0,
           old_price: null,
           rating: null,

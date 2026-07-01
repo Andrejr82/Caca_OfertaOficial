@@ -4,6 +4,7 @@ export interface ScrapedCoupon {
   rules: string;
   link: string;
   marketplace: string;
+  image_url?: string | null;
 }
 
 const MARKETPLACE_COUPON_URLS: Record<string, string> = {
@@ -31,7 +32,7 @@ export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): P
     return [];
   }
 
-  const promptText = `Você é um assistente caçador de Cupons. Extraia os ${limit} melhores e maiores cupons de desconto ativos nesta página da ${marketplace}. Para cada cupom, identifique o código promocional em si (code) (ex: SHP20, GANHE10, FRETEGRATIS. Se não houver texto explícito de código mas for um botão de resgate automático, deixe o code como 'RESGATE DIRETO'), o valor do desconto (discount) (ex: R$20 OFF, 15% OFF), a regra principal de uso (rules) (ex: Para compras acima de R$100, ou Válido na primeira compra), e o link direto para a página de resgate ou para a loja (link). Ignore cupons expirados se houver indicativo.`;
+  const promptText = `Você é um assistente caçador de Cupons. Extraia os ${limit} melhores e maiores cupons de desconto ativos nesta página da ${marketplace}. Para cada cupom, identifique o código promocional em si (code) (ex: SHP20, GANHE10, FRETEGRATIS. Se não houver texto explícito de código mas for um botão de resgate automático, deixe o code como 'RESGATE DIRETO'), o valor do desconto (discount) (ex: R$20 OFF, 15% OFF), a regra principal de uso (rules) (ex: Para compras acima de R$100, ou Válido na primeira compra), a imagem do cupom (image_url) se existir, e o link direto para a página de resgate ou para a loja (link). Ignore cupons expirados se houver indicativo.`;
 
   let retries = 3;
   let delay = 1500;
@@ -48,10 +49,10 @@ export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): P
         },
         body: JSON.stringify({ 
           url: targetUrl,
-          formats: ["extract"],
+          formats: ["json"],
           waitFor: 3000, // Waits a bit for dynamic coupon rendering
           timeout: 60000,
-          extract: {
+          jsonOptions: {
             prompt: promptText,
             schema: {
               type: "object",
@@ -64,7 +65,8 @@ export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): P
                       code: { type: "string" },
                       discount: { type: "string" },
                       rules: { type: "string" },
-                      link: { type: "string" }
+                      link: { type: "string" },
+                      image_url: { type: "string" }
                     },
                     required: ["code", "discount"]
                   }
@@ -96,18 +98,29 @@ export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): P
     }
   }
 
-  if (!fcData || !fcData.success || !fcData.data?.extract?.coupons?.length) {
+  const extractedCoupons =
+    fcData?.data?.extract?.coupons ||
+    fcData?.data?.llm_extraction?.coupons ||
+    fcData?.data?.json?.coupons;
+
+  if (!fcData || !fcData.success || !Array.isArray(extractedCoupons) || extractedCoupons.length === 0) {
     console.warn(`[COUPON-SCRAPER] Nenhum cupom extraído para ${marketplace}.`);
     return [];
   }
 
-  const rawCoupons = fcData.data.extract.coupons;
+  const rawCoupons = extractedCoupons;
   
   return rawCoupons.slice(0, limit).map((c: any) => ({
     code: c.code || "RESGATE DIRETO",
     discount: c.discount || "Desconto Especial",
     rules: c.rules || "Verifique no site",
     link: c.link && c.link.startsWith("http") ? c.link : targetUrl,
-    marketplace: marketplace
+    marketplace: marketplace,
+    image_url:
+      typeof c.image_url === "string" && c.image_url.startsWith("http")
+        ? c.image_url
+        : typeof c.image === "string" && c.image.startsWith("http")
+          ? c.image
+          : null
   }));
 }
