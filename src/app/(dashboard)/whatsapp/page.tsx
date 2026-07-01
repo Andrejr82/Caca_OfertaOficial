@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions";
 import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
@@ -9,7 +10,7 @@ import { MessageCircle, AlertTriangle } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function WhatsappDashboardPage() {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   
   interface PostWithOffer {
     id: string;

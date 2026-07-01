@@ -47,7 +47,7 @@ const ADMIN_USER_ID   = '7a9ca7b7-f464-46e0-a9de-9b322c73628a'; // ID do André
 const OFFERS_PER_STORE = 6; // Teto por query aumentado para ampliar a descoberta
 const CLEANUP_DAYS     = 7;
 const CRON_SCHEDULE    = '0 */4 * * *';
-const VIP_SLOTS        = 20; 
+const VIP_SLOTS        = Number.MAX_SAFE_INTEGER; 
 const APPROVAL_SCORE   = 3.5;
 
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';

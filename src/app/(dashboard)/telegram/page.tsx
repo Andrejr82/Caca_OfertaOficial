@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
 import { officialBrand, hasTelegramEnv } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
@@ -9,7 +10,7 @@ import { Bot, AlertTriangle } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function TelegramDashboardPage() {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   const configured = hasTelegramEnv();
   
   interface PostWithOffer {

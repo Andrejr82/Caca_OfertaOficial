@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { getPostHistory } from "@/lib/offers/queries";
@@ -8,7 +9,7 @@ import { Instagram } from "lucide-react";
 export const dynamic = "force-dynamic";
 
 export default async function InstagramDashboardPage() {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   interface PostWithOffer {
     id: string;
     content: string;

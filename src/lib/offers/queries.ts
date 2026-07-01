@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AffiliateLink, Offer, Sale } from "@/types/domain";
 
 export async function getCurrentUserId() {
@@ -27,7 +28,7 @@ export async function getOffer(id: string) {
 }
 
 export async function getOfferPosts(offerId: string) {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   if (!supabase) return [];
 
   const { data } = await supabase
@@ -95,7 +96,7 @@ export async function getDashboardData() {
 }
 
 export async function getPostHistory(channel?: string) {
-  const supabase = await createServerSupabaseClient();
+  const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   if (!supabase) return [];
 
   // Busca os posts
