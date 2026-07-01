@@ -53,7 +53,8 @@ const APPROVAL_SCORE   = 3.5;
 const ML_AFFILIATE_ID      = process.env.MERCADO_LIVRE_AFFILIATE_ID || '';
 const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
 const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
-const SHOPEE_ADMITAD_ID    = process.env.SHOPEE_ADMITAD_CAMPAIGN_ID || ''; // Preencher no .env.local
+const SHOPEE_APP_ID        = process.env.SHOPEE_APP_ID || '';
+const SHOPEE_APP_SECRET    = process.env.SHOPEE_APP_SECRET || '';
 
 // ─── LLM Provider Setup ────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'cerebras';
@@ -1539,9 +1540,34 @@ function buildAffiliateUrl(originalUrl, store) {
     if (store === 'Amazon' && AMAZON_TAG) { obj.searchParams.set('tag', AMAZON_TAG); return obj.toString(); }
     if (store === 'Magalu' && MAGALU_PARTNER_ID) { obj.hostname = 'www.magazinevoce.com.br'; obj.pathname = `/${MAGALU_PARTNER_ID}${obj.pathname}`; return obj.toString(); }
     if (store === 'Netshoes' && RAKUTEN_AFFILIATE_ID) return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_AFFILIATE_ID}&mid=${RAKUTEN_NETSHOES_MID}&murl=${encodeURIComponent(originalUrl)}`;
-    if (store === 'Shopee' && SHOPEE_ADMITAD_ID) return `https://ad.admitad.com/g/${SHOPEE_ADMITAD_ID}/?ulp=${encodeURIComponent(originalUrl)}`;
   } catch (_) {}
   return originalUrl;
+}
+
+// ─── Shopee Affiliate Link (API Oficial) ─────────────────────
+const crypto = require('crypto');
+async function generateShopeeAffiliateUrl(originalUrl) {
+  if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) return originalUrl;
+  try {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const path = '/api/v2/affiliate/links/generate';
+    const baseString = `${SHOPEE_APP_ID}${timestamp}${path}`;
+    const sign = crypto.createHmac('sha256', SHOPEE_APP_SECRET).update(baseString).digest('hex');
+
+    const resp = await axios.post(
+      `https://open-api.affiliate.shopee.com.br${path}`,
+      { origin_url: originalUrl },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        params: { app_id: SHOPEE_APP_ID, timestamp, sign }
+      }
+    );
+    const link = resp.data?.data?.affiliate_link;
+    return link || originalUrl;
+  } catch (err) {
+    console.warn(`  [Shopee] Falha ao gerar link afiliado: ${err.message}. Usando URL original.`);
+    return originalUrl;
+  }
 }
 
 // ─── Sub-ID e Tracked URL ─────────────────────────────────────
@@ -1997,7 +2023,10 @@ async function scrapeStore(store) {
         }
         
         const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
-        const affiliateUrl = buildAffiliateUrl(cleanProductUrl(rawUrl), store);
+        const cleanUrl = cleanProductUrl(rawUrl);
+        const affiliateUrl = store === 'Shopee'
+          ? await generateShopeeAffiliateUrl(cleanUrl)
+          : buildAffiliateUrl(cleanUrl, store);
         
         const prodData = {
           product_name: productName, image_url: normalizeImageUrl(productImage || null),
