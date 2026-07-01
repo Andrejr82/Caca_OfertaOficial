@@ -1,208 +1,113 @@
-# Caça Oferta Oficial
+# Caça Oferta Oficial — Baseline (estado atual)
 
-Plataforma unificada para automação, curadoria e publicação em massa de ofertas de afiliados, focada na alta conversão através de canais sociais e aplicativos de mensageria.
+## Objetivo do projeto
 
-## Visão Geral
+Centralizar a curadoria, geração de criativos (IA), rastreamento (SubID) e publicação de ofertas em múltiplos canais (Telegram, WhatsApp, Instagram e Facebook) usando um painel web (Next.js) e um conjunto de scripts/serviços auxiliares (Oracle).
 
-O **Caça Oferta Oficial** é um sistema completo projetado para gerenciar o ciclo de vida de ofertas de afiliados. O objetivo é eliminar o esforço manual de coleta de links, tratamento de imagens, rastreamento (SubIDs) e criação de copywriting, consolidando tudo em uma interface centralizada baseada em IA.
+## Arquitetura atual
 
-**Problema que resolve:** A fragmentação e a ineficiência no processo de marketing de afiliados manual.
-**Principais funcionalidades implementadas:**
-- **Scraping e Curadoria:** Importação de ofertas de marketplaces (Mercado Livre, Shopee, Amazon, Shein, Magalu) com cálculo de rankeamento e score.
-- **Rastreamento Automático:** Geração de links de afiliado encurtados com rastreio de SubID específicos para Telegram, WhatsApp e Instagram.
-- **Copywriting por Inteligência Artificial:** Geração de textos focados em gatilhos mentais e conversão utilizando a API do Groq (Llama-3) ou Google Gemini.
-- **Disparo Multi-canal:** Publicação automatizada para WhatsApp, Telegram e Instagram (Feed/Stories).
-- **Background Jobs:** Processamento assíncrono e orquestração de webhooks usando Inngest.
+- **Vercel**: hospeda o app Next.js (UI + rotas `/api/*`) e executa cron via `vercel.json`.
+- **Supabase**: PostgreSQL + Auth + Storage; é o repositório central de estado (ofertas, posts, links, logs).
+- **Oracle (VPS)**:
+  - **WhatsApp Engine** (Express + Baileys) em `:3001` para envio a canal Newsletter.
+  - **Oracle API** (Express) em `:3002` para raspagem via Scrapfly e retorno de HTML/texto.
+  - **Oracle Scraper** (Crawlee + Playwright) como processo longo que grava/atualiza dados no Supabase.
+- **Windows (desenvolvimento/execução local)**: roda o Next.js localmente e scripts auxiliares quando necessário.
 
-## Demonstração
+## Tecnologias utilizadas
 
-O fluxo do sistema opera da seguinte forma:
-1. O operador (ou bot via Inngest) coleta a URL/ID de um produto em um marketplace.
-2. O scraper extrai os metadados (título, preço original, preço com desconto, imagem, URL original).
-3. O motor de Inteligência Artificial gera textos otimizados (hook, body, CTA) customizados para cada rede (WhatsApp, Telegram, Instagram).
-4. O módulo de Tracking atrela o ID da oferta a `SubIDs` específicos para gerar URLs rastreáveis únicas por rede.
-5. O operador aprova a postagem no Dashboard, e o Inngest ou a API despacha a mensagem imediatamente via Webhooks ou instâncias conectadas.
+- **Web**: Next.js `^16.2.2`, React `^19.2.0`, TailwindCSS.
+- **Banco**: Supabase (`@supabase/supabase-js`, `@supabase/ssr`).
+- **IA**:
+  - **Groq** (API OpenAI-compatible via `fetch`/`axios`) no app e em scripts.
+  - **Cerebras** (API OpenAI-compatible via `axios`) no `oracle-scraper.cjs` e na camada `src/core/llm/*`.
+- **Scraping**: Crawlee + Playwright (+ stealth plugin), Scrapfly (HTTP API), Firecrawl (HTTP API para extração de cupons).
+- **Mensageria/Publicação**: Telegram Bot API, Meta Graph API (Instagram/Facebook), Baileys (WhatsApp Web).
+- **Mídia**: Sharp (proxy/normalização de imagem), Cloudinary (geração de vídeo a partir de imagem), Remotion (render em GitHub Actions).
+- **Outros**: Express, Zod, Vitest.
 
-## Arquitetura (Migração Local -> Oracle)
+## Estrutura de pastas
 
-O projeto adota uma arquitetura Serverless baseada em **Next.js 16 (App Router)** com backend orientado a Serverless Functions, persistência e autenticação via **Supabase**, e mensageria distribuída com **Inngest**.
+- `src/app/`: UI (App Router) e rotas de API (`/api/*`).
+- `src/lib/`: integrações (WhatsApp/Instagram/Telegram/Cloudinary), regras de domínio (offers/publish/tracking), Supabase clients.
+- `src/core/`: camada LLM abstrata (providers e factory) usada por scripts.
+- `scripts/`: processos e utilitários (Oracle Scraper, WhatsApp Engine, Oracle API, testes).
+- `supabase/`: `schema.sql` e migrações SQL.
+- `.github/workflows/`: automação de publish de Reels via GitHub Actions.
+- `apps/chrome-extension/`: extensão do Chrome (arquivos do MVP).
 
-**Nova Arquitetura de 3 Pilares Independentes:**
-A arquitetura atual foi rigorosamente dividida em três frentes que operam de forma 100% isolada, comunicando-se apenas via banco de dados (Supabase):
+## Requisitos
 
-1. **Notebook Windows (Scraping):** O único responsável por Playwright, Scrapfly, extração e validação do HTML e do Produto. Ele grava as ofertas diretamente no Supabase como *drafts*.
-2. **Oracle VPS (Orquestração e Processamento):** Atua passivamente lendo o Supabase. Executa os workers PM2, gera a cópia via IA (Groq/Gemini), calcula score/ranking e publica.
-3. **Ngrok:** Responsabilidade única de servir como Webhook público do WhatsApp. Não participa do scraping.
-
-```mermaid
-graph TD
-    subgraph Notebook Windows
-        Playwright --> Scrapfly
-        Scrapfly --> HTMLValidator[HTML Validator]
-        HTMLValidator --> ProductValidator[Product Validator]
-        ProductValidator --> Supabase[(Supabase)]
-    end
-
-    subgraph Oracle VPS
-        Supabase --> IA[IA / Groq / Gemini]
-        IA --> Ranking
-        Ranking --> Telegram
-        Ranking --> Instagram
-    end
-
-    subgraph Ngrok 
-        Webhook[Webhook WhatsApp\n(Apenas)]
-    end
-```
-
-## Tecnologias Utilizadas
-
-- **Frontend:** React 19, Next.js 16 (App Router), Tailwind CSS, Lucide React, Shadcn/UI (UI Components).
-- **Backend:** Next.js API Routes, Node.js (`scripts/`), Inngest para orquestração de tarefas assíncronas.
-- **Banco de Dados:** Supabase (PostgreSQL), Supabase Auth, Storage (Imagens de Ofertas).
-- **Inteligência Artificial:** Groq (`@groq/sdk`), Google Gemini (`@google/generative-ai`).
-- **Infraestrutura:** Vercel (Hospedagem Web), Node.js (WhatsApp Worker).
-- **APIs:** Telegram Bot API, Instagram Graph API, Scrapers (Marketplaces).
-- **Bibliotecas Principais:** `@whiskeysockets/baileys` (WhatsApp), `zod` (Validação de schemas), `pino` (Logging), `sharp` (Imagens).
-
-## Estrutura do Projeto
-
-- `/src/app`: Frontend (Páginas do Dashboard, Autenticação) e Backend (Rotas `/api/` divididas em `ai`, `auth`, `inngest`, `instagram`, `offers`, `publish`, `scraper`, `settings`, `telegram`, `webhooks`, `whatsapp`).
-- `/src/components`: Componentes visuais reusáveis organizados por contexto de domínio.
-- `/src/lib`: Core da aplicação contendo regras de negócio separadas em módulos (`affiliates`, `ai`, `analytics`, `inngest`, `tracking`, etc.).
-- `/supabase`: Configurações de esquema SQL, políticas de RLS e migrações do banco de dados.
-- `/scripts`: Ferramentas auxiliares Node.js (ex: Engine de WhatsApp, crons manuais, testes de segurança).
-- `/docs`: Documentação técnica focada na manutenibilidade e arquitetura.
-- `/apps/chrome-extension`: Ferramenta auxiliar (MVP) para raspagem rápida de dados no navegador.
+- Node.js 20+
+- Conta/projeto Supabase (URL + keys)
+- Para publicar:
+  - Telegram: Bot Token + Channel ID
+  - WhatsApp: WhatsApp Engine ativo (Oracle) + API Key + Channel ID
+  - Instagram/Facebook: token Meta Graph API (e, opcionalmente, Cloudinary/GitHub Actions conforme o fluxo)
+- Para scraping:
+  - Oracle API: Scrapfly API Key(s)
+  - Coupon Scraper: Firecrawl API Key
 
 ## Instalação
 
-**Pré-requisitos:**
-- Node.js versão 20 ou superior.
-- Projeto criado e configurado no Supabase.
-- Contas ativas na Inngest, Groq/Gemini, Telegram BotFather e Facebook/Instagram Developer.
-
-**Passo a passo:**
 ```bash
-# Clone o repositório
-git clone https://github.com/Andrejr82/Caca_OfertaOficial.git
-cd Caca_OfertaOficial
-
-# Instale as dependências
 npm install
-
-# Configure as variáveis de ambiente
-cp .env.example .env.local
 ```
 
 ## Configuração
 
-O arquivo `.env.local` é o centro de controle. Variáveis obrigatórias incluem:
-- **Supabase**: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`.
-- **IA**: `GROQ_API_KEY` ou `GEMINI_API_KEY`.
-- **Inngest**: `INNGEST_EVENT_KEY`, `INNGEST_SIGNING_KEY`.
-- **Integrações de Rede**: Chaves de API do Telegram, tokens do Instagram.
+- Variáveis de ambiente ficam em `.env.local` (local) e, no Oracle, o motor do WhatsApp aceita `.env.local.remote` ou `.env.local` (prioriza `.env.local.remote`).
+- Lista completa e finalidade: `docs/ambiente.md`.
 
-*Observação:* Veja `docs/configuration.md` para a lista exaustiva e detalhes de como obter cada chave.
+## Execução local
 
-## Execução
-
-### Ambiente de Desenvolvimento
-1. Inicie o servidor Web Next.js:
 ```bash
 npm run dev
 ```
-2. O painel estará disponível em `http://localhost:3000`.
 
-### Servidor de WhatsApp (Background)
-A conexão com o WhatsApp exige um Worker contínuo. Abra outro terminal e execute:
+- App: `http://localhost:3000`
+- Para rodar o motor do WhatsApp localmente:
+
 ```bash
 npm run whatsapp
 ```
-*Isso gerará um QR Code no terminal. Escaneie-o com seu aplicativo WhatsApp.*
 
-## Funcionalidades
+Este comando executa em paralelo:
+- `node scripts/whatsapp-engine.cjs` (porta `3001`)
+- `ngrok http --domain=reasonably-droughtier-kyla.ngrok-free.dev 3001` (conforme `package.json`)
 
-### 🚀 Implementadas (Em Produção)
-- Cadastro, leitura e exclusão de ofertas no banco de dados.
-- API nativa para importação via extensores (Scraper API em `src/app/api/scraper`).
-- Geração de copywriting persuasivo com IA integrado (Groq/Gemini).
-- Módulo `lib/tracking` que cria SubIDs exclusivos para Telegram, WhatsApp e Instagram.
-- Integração de mensageria assíncrona usando **Inngest** (`publishPostBackground`, `runUserScrapingBackground`).
-- Disparo de ofertas para Telegram, Instagram (Feed/Stories) e WhatsApp (`baileys`).
-- Dashboard administrativo com componentes unificados (`src/app/(dashboard)`).
-- Segurança ativa em nível de banco via **Supabase RLS**.
+## Execução Oracle
 
-### 🚧 Em Desenvolvimento / Planejadas
-- **Monitoramento de ROI e UTMs:** Aprofundamento do uso da tabela `sales` lendo relatórios automáticos.
-- **Chrome Extension Scraper:** Integração avançada via `publish/extension` para publicação direta do navegador.
-- **Geração de Imagens para Stories:** Implementação contínua do uso de bibliotecas gráficas e IA.
+Componentes que rodam na VPS Oracle:
 
-## Fluxos do Sistema
+- **WhatsApp Engine**: `node scripts/whatsapp-engine.cjs` (porta `3001`)
+- **Oracle API**: `node scripts/oracle-api.cjs` (porta `3002`, rota `POST /api/scrape`)
+- **Oracle Scraper**: `node scripts/oracle-scraper.cjs` (cron interno por `node-cron`)
 
-### Fluxo Operacional de Curadoria
-1. Ofertas quentes são inseridas via API de Trends (`/api/scraper/trends`) ou via entrada manual no painel.
-2. O job `runUserScrapingBackground` do Inngest processa os links assincronamente.
-3. Múltiplas copys (Rascunhos na tabela `posts`) são gravadas após passar pela Engine de AI.
-4. O operador revisa no Painel (UI) e autoriza a postagem.
+## Execução Vercel
 
-### Fluxo Técnico de Envio
-- Ao clicar em "Publicar", o frontend aciona `/api/publish/[canal]`.
-- A API cria um evento no **Inngest** (ex: `post/publish`).
-- Se canal = `telegram` ou `instagram`, o Inngest dispara a API REST nativa.
-- Se canal = `whatsapp`, o status muda e o `whatsapp-engine.cjs` pega o registro da fila interna no PostgreSQL para disparar.
+- Build/Deploy: `next build` (conforme `vercel.json`)
+- Cron configurado no projeto:
+  - `GET /api/instagram/poll-comments` com schedule `0 0 * * *` (conforme `vercel.json`)
 
-## APIs
+## Integração Supabase
 
-A aplicação expõe suas APIs REST na pasta `src/app/api`. As principais são:
-- `POST /api/ai/generate`: Envia metadados para IA, gera `affiliate_links` e salva `posts`.
-- `POST /api/publish/[canal]`: Publica ou agenda uma oferta em um canal.
-- `POST /api/scraper/import`: Ponto de entrada via extensão ou webhooks.
-- `GET/POST /api/inngest`: Endpoint para o orquestrador do Inngest rodar funções serverless em background.
-*(Consulte `docs/api.md` para a lista completa).*
+- Schema base: `supabase/schema.sql`
+- Migrações adicionais: `supabase/migrations_*.sql`
+- Tabelas efetivamente usadas pelo código incluem: `offers`, `affiliate_links`, `posts`, `sales`, `integration_logs`, `ai_copy_logs`, `app_settings`, `profiles`, `audit_logs`, `click_events`, `baileys_sessions`.
 
-## Banco de Dados
+## Scripts principais
 
-Modelagem hospedada no **Supabase** (`supabase/schema.sql`):
-- `profiles`: Extensão da tabela `auth.users`.
-- `offers`: Central de informações e pontuações do produto raw.
-- `affiliate_links`: Links rastreáveis (1 `offer` -> N `affiliate_links` separados por canal).
-- `posts`: Rascunhos de publicações e histórico das redes.
-- `sales`: Conversões e monitoramento de ROI bruto.
-- `integration_logs` e `ai_copy_logs`: Tabelas vitais para observabilidade (Auditoria e Testes de Prompts).
-- `app_settings`: Armazenamento em formato JSONB das configurações sensíveis dos operadores.
+- `scripts/oracle-scraper.cjs`: robô de descoberta/processamento (Crawlee + LLM + gravação no Supabase).
+- `scripts/whatsapp-engine.cjs`: motor de envio WhatsApp (Express + Baileys) com endpoints `/status`, `/send`, `/resolve-channel/:code`.
+- `scripts/oracle-api.cjs`: micro-API de scraping (Express) consumida pelo app via Oracle.
+- `scripts/ai-processor.cjs`: processador de ofertas draft → posts/links (LLM Factory).
+- `.github/workflows/publish-reel.yml` + `scripts/github-publish.ts`: renderiza vídeo (Remotion), faz upload no Supabase Storage e publica no Instagram.
 
-## Deploy
+## Fluxo geral
 
-1. **Frontend e API**: Deploy recomendado na Vercel conectado à branch `main` e apontado para as variáveis de ambiente corretas.
-2. **Workers (Inngest)**: A Vercel atua como executora Serverless do Inngest, gerida via painel cloud da Inngest.
-3. **WhatsApp Engine**: Deve rodar num serviço de contêiner persistente (Railway, Render, VPS) usando `npm run whatsapp`, visto que o WhatsApp Web exige manter os websockets abertos.
-
-## Monitoramento
-
-- **Log Server**: As integrações com APIs salvam sucessos/erros na tabela `integration_logs`.
-- **Logs Locais**: A biblioteca `pino` padroniza saídas no terminal.
-- O motor da IA armazena estatísticas das escolhas do modelo em `ai_copy_logs` para melhorias de Prompt.
-
-## Segurança
-
-O Caça Oferta Oficial é *Security-first*:
-- **RLS (Row Level Security)** em todas as tabelas (o usuário final via token JWT não acessa dados alheios).
-- Proteção total de rotas (`src/app/api`) onde o `supabase.auth.getUser()` define as regras.
-- Chaves sensíveis (ex: Meta, Groq) nunca vazam para o bundle do Next.js Client.
-
-## Contribuição
-
-Para contribuir:
-1. Clone o projeto e crie uma *branch* baseada na issue sendo trabalhada.
-2. Certifique-se de validar seus tipos (`npm run typecheck`) e padrões (`npm run lint`).
-3. Crie um Pull Request com descrições detalhadas da alteração arquitetural.
-
-## Licença
-
-MIT License.
-
- # #   S o l u � � o   d e   A n t i - C a c h e   ( W h a t s A p p   L i n k   P r e v i e w ) 
- A   p l a t a f o r m a   r e s o l v e   p r o b l e m a s   e s t r u t u r a i s   d o   c a c h e   e s t � t i c o   d o   \ B a i l e y s \   m a n i p u l a n d o   e m   t e m p o   r e a l   a   U R L   e n v i a d a   n o   c o r p o   d a s   m e n s a g e n s   ( a p l i c a n d o   u m   \ D a t e . n o w ( ) \   d i n � m i c o   n a   p o n t a ) .   S a i b a   m a i s   e m   [ d o c s / a r c h i t e c t u r e . m d ] ( d o c s / a r c h i t e c t u r e . m d ) . 
-  
- 
+1. Entrada de oferta (scraping de tendências, scraping em Oracle, ou inserção via UI/API).
+2. Persistência no Supabase (`offers`).
+3. Geração de links rastreáveis (`affiliate_links`) e criação de rascunhos (`posts`) via IA.
+4. Publicação por canal via rotas `/api/*` (Telegram/WhatsApp/Instagram/Facebook) e atualização de status no banco.
+5. Tracking de cliques via `/go/:subId` + eventos (Inngest) gravando em `click_events` e agregando em `affiliate_links`.
