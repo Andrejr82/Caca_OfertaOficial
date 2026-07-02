@@ -9,7 +9,6 @@ type TelegramPublishResult = {
 };
 
 const TELEGRAM_CAPTION_LIMIT = 1024;
-const TELEGRAM_MESSAGE_LIMIT = 4096;
 const URL_PATTERN = /https?:\/\/\S+/i;
 
 function truncateText(text: string, limit: number) {
@@ -21,33 +20,6 @@ function truncateText(text: string, limit: number) {
 
 function normalizeTelegramText(text: string) {
   return text.replace(/\r\n/g, "\n").trim();
-}
-
-function splitLongText(text: string, limit: number) {
-  const chunks: string[] = [];
-  let remaining = text.trim();
-
-  while (remaining.length > limit) {
-    let splitAt = remaining.lastIndexOf("\n\n", limit);
-    if (splitAt < Math.floor(limit * 0.5)) {
-      splitAt = remaining.lastIndexOf("\n", limit);
-    }
-    if (splitAt < Math.floor(limit * 0.5)) {
-      splitAt = remaining.lastIndexOf(" ", limit);
-    }
-    if (splitAt <= 0) {
-      splitAt = limit;
-    }
-
-    chunks.push(remaining.slice(0, splitAt).trim());
-    remaining = remaining.slice(splitAt).trim();
-  }
-
-  if (remaining.length > 0) {
-    chunks.push(remaining);
-  }
-
-  return chunks.filter(Boolean);
 }
 
 function extractTelegramTail(text: string) {
@@ -69,47 +41,50 @@ export function sanitizeTelegramCaption(caption: string) {
     return normalized;
   }
 
-  const { body } = extractTelegramTail(normalized);
-  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
-  const headline = lines[0] || "Confira os detalhes completos na mensagem abaixo.";
-  const secondary = lines[1] || "Detalhes completos logo abaixo.";
-  const captionText = [headline, secondary].filter(Boolean).join("\n\n");
-  return truncateText(captionText, TELEGRAM_CAPTION_LIMIT);
-}
-
-export function splitTelegramText(fullText: string) {
-  const normalized = normalizeTelegramText(fullText);
-  if (normalized.length <= TELEGRAM_MESSAGE_LIMIT) {
-    return [normalized];
-  }
-
   const { body, tail } = extractTelegramTail(normalized);
+  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
+  const headline = lines[0] || "Confira a oferta";
+  const bodyText = lines.slice(1).join(" ").replace(/\s+/g, " ").trim();
+
   if (!tail) {
-    return splitLongText(normalized, TELEGRAM_MESSAGE_LIMIT);
+    const plainCaption = [headline, truncateText(bodyText, TELEGRAM_CAPTION_LIMIT - headline.length - 2)]
+      .filter(Boolean)
+      .join("\n\n");
+    return truncateText(plainCaption, TELEGRAM_CAPTION_LIMIT);
   }
 
-  const bodyChunks = splitLongText(body, TELEGRAM_MESSAGE_LIMIT);
-  const parts = bodyChunks.slice(0, -1);
-  const lastBodyChunk = bodyChunks.at(-1) || "";
-  const combinedLastPart = [lastBodyChunk, tail].filter(Boolean).join("\n\n").trim();
+  const tailLines = tail.split("\n").map((line) => line.trim()).filter(Boolean);
+  const linkLine = tailLines.find((line) => URL_PATTERN.test(line)) || "";
+  const ctaLines = tailLines.filter((line) => line !== linkLine);
 
-  if (combinedLastPart.length <= TELEGRAM_MESSAGE_LIMIT) {
-    parts.push(combinedLastPart);
-    return parts.filter(Boolean);
+  const buildCaption = (description: string, cta: string[]) =>
+    [headline, description, linkLine, ...cta].filter(Boolean).join("\n\n");
+
+  let captionText = buildCaption(bodyText, ctaLines);
+  if (captionText.length <= TELEGRAM_CAPTION_LIMIT) {
+    return captionText;
   }
 
-  if (lastBodyChunk) {
-    parts.push(lastBodyChunk);
+  const minCaption = buildCaption("", ctaLines);
+  const descriptionBudget = TELEGRAM_CAPTION_LIMIT - minCaption.length - (bodyText ? 2 : 0);
+  if (descriptionBudget > 0) {
+    captionText = buildCaption(truncateText(bodyText, descriptionBudget), ctaLines);
+    if (captionText.length <= TELEGRAM_CAPTION_LIMIT) {
+      return captionText;
+    }
   }
 
-  const tailChunks = splitLongText(tail, TELEGRAM_MESSAGE_LIMIT);
-  if (tailChunks.length > 1) {
-    const tailWithoutLast = tailChunks.slice(0, -1);
-    const lastTailChunk = tailChunks.at(-1) || "";
-    return [...parts, ...tailWithoutLast, lastTailChunk].filter(Boolean);
+  const compactCta = ctaLines.length > 0 ? [ctaLines[0], ...ctaLines.slice(1)] : [];
+  const compactMinCaption = buildCaption("", compactCta);
+  const compactBudget = TELEGRAM_CAPTION_LIMIT - compactMinCaption.length - (bodyText ? 2 : 0);
+  if (compactBudget > 0) {
+    captionText = buildCaption(truncateText(bodyText, compactBudget), compactCta);
+    if (captionText.length <= TELEGRAM_CAPTION_LIMIT) {
+      return captionText;
+    }
   }
 
-  return [...parts, ...tailChunks].filter(Boolean);
+  return truncateText(buildCaption("", compactCta), TELEGRAM_CAPTION_LIMIT);
 }
 
 export async function POST(request: Request) {
@@ -164,7 +139,6 @@ export async function POST(request: Request) {
     }
 
     const imageUrl = isCouponOffer(offer) ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
-    const fullTextParts = splitTelegramText(finalContent);
 
     // 2. Executa a publicação real via Telegram API
     let telegramPost: TelegramPublishResult;
@@ -172,14 +146,8 @@ export async function POST(request: Request) {
       if (imageUrl) {
         const { sendTelegramPhoto } = await import("@/lib/telegram/client");
         telegramPost = await sendTelegramPhoto(sanitizeTelegramCaption(finalContent), imageUrl) as TelegramPublishResult;
-        for (const part of fullTextParts) {
-          await sendTelegramMessage(part);
-        }
       } else {
-        telegramPost = await sendTelegramMessage(fullTextParts[0]) as TelegramPublishResult;
-        for (const part of fullTextParts.slice(1)) {
-          await sendTelegramMessage(part);
-        }
+        telegramPost = await sendTelegramMessage(finalContent) as TelegramPublishResult;
       }
     } catch (error: any) {
       console.error("Telegram API Error:", error);
