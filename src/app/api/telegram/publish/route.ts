@@ -8,6 +8,77 @@ type TelegramPublishResult = {
   date: number;
 };
 
+const TELEGRAM_CAPTION_LIMIT = 1024;
+const URL_PATTERN = /https?:\/\/\S+/i;
+
+function truncateText(text: string, limit: number) {
+  if (limit <= 0) return "";
+  if (text.length <= limit) return text;
+  if (limit <= 3) return text.slice(0, limit);
+  return `${text.slice(0, limit - 3).trimEnd()}...`;
+}
+
+export function sanitizeTelegramCaption(caption: string) {
+  const normalized = caption.replace(/\r\n/g, "\n").trim();
+  if (normalized.length <= TELEGRAM_CAPTION_LIMIT) {
+    return normalized;
+  }
+
+  const lines = normalized.split("\n").map((line) => line.trimEnd());
+  const linkIndex = lines.findIndex((line) => URL_PATTERN.test(line));
+
+  if (linkIndex === -1) {
+    return truncateText(normalized, TELEGRAM_CAPTION_LIMIT);
+  }
+
+  const beforeLink = lines.slice(0, linkIndex).filter((line) => line.trim().length > 0);
+  const afterLink = lines.slice(linkIndex).filter((line) => line.trim().length > 0);
+
+  const headline = beforeLink[0] || "";
+  const supportLines = beforeLink.slice(1, 3);
+  const bodyLines = beforeLink.slice(3);
+  const descriptiveText = [...supportLines, ...bodyLines].join(" ");
+  const fullSuffix = afterLink.join("\n");
+  const linkLine = afterLink.find((line) => URL_PATTERN.test(line)) || "";
+  const compactSuffix = afterLink
+    .filter((line, index) => index === 0 || URL_PATTERN.test(line))
+    .join("\n");
+
+  const buildCaption = (
+    body: string,
+    suffix: string,
+    extraSupport: string[] = supportLines,
+    customHeadline: string = headline
+  ) => [customHeadline, extraSupport.join("\n"), body, suffix]
+    .filter((section) => section && section.trim().length > 0)
+    .join("\n\n");
+
+  let candidate = buildCaption(bodyLines.join(" "));
+  if (candidate.length <= TELEGRAM_CAPTION_LIMIT) {
+    return candidate;
+  }
+
+  const suffix = fullSuffix.length <= TELEGRAM_CAPTION_LIMIT ? fullSuffix : compactSuffix || linkLine;
+  const baseWithoutBody = buildCaption("", suffix, []);
+  const remainingForBody = TELEGRAM_CAPTION_LIMIT - baseWithoutBody.length - 2;
+  if (remainingForBody > 0) {
+    let truncatedBody = truncateText(descriptiveText, remainingForBody);
+    candidate = buildCaption(truncatedBody, suffix, []);
+    while (candidate.length > TELEGRAM_CAPTION_LIMIT && truncatedBody.length > 0) {
+      const overflow = candidate.length - TELEGRAM_CAPTION_LIMIT;
+      truncatedBody = truncateText(truncatedBody, Math.max(truncatedBody.length - overflow - 3, 0));
+      candidate = buildCaption(truncatedBody, suffix, []);
+    }
+    if (candidate.length <= TELEGRAM_CAPTION_LIMIT) {
+      return candidate;
+    }
+  }
+
+  const minimalBase = buildCaption("", linkLine, []);
+  const remainingForHeadline = TELEGRAM_CAPTION_LIMIT - minimalBase.length - 2;
+  return buildCaption("", linkLine, [], truncateText(headline, Math.max(remainingForHeadline, 0)));
+}
+
 export async function POST(request: Request) {
   try {
     const { postId, content } = (await request.json()) as { postId?: string; content?: string };
@@ -67,7 +138,7 @@ export async function POST(request: Request) {
       if (imageUrl) {
         // Envia foto com a legenda
         const { sendTelegramPhoto } = await import("@/lib/telegram/client");
-        telegramPost = await sendTelegramPhoto(finalContent, imageUrl) as TelegramPublishResult;
+        telegramPost = await sendTelegramPhoto(sanitizeTelegramCaption(finalContent), imageUrl) as TelegramPublishResult;
       } else {
         // Fallback: só texto
         telegramPost = await sendTelegramMessage(finalContent) as TelegramPublishResult;
