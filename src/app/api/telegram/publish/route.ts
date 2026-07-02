@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { sendTelegramMessage } from "@/lib/telegram/client";
+import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+
+type TelegramPublishResult = {
+  message_id: number;
+  date: number;
+};
 
 export async function POST(request: Request) {
   try {
@@ -37,7 +43,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Este post não é do canal Telegram." }, { status: 400 });
     }
 
-    const offer = post.offers;
+    const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
     if (!offer) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
     }
@@ -53,16 +59,18 @@ export async function POST(request: Request) {
         .eq("id", post.id);
     }
 
+    const imageUrl = isCouponOffer(offer) ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
+
     // 2. Executa a publicação real via Telegram API
-    let telegramPost;
+    let telegramPost: TelegramPublishResult;
     try {
-      if (offer.image_url) {
+      if (imageUrl) {
         // Envia foto com a legenda
         const { sendTelegramPhoto } = await import("@/lib/telegram/client");
-        telegramPost = await sendTelegramPhoto(finalContent, offer.image_url);
+        telegramPost = await sendTelegramPhoto(finalContent, imageUrl) as TelegramPublishResult;
       } else {
         // Fallback: só texto
-        telegramPost = await sendTelegramMessage(finalContent);
+        telegramPost = await sendTelegramMessage(finalContent) as TelegramPublishResult;
       }
     } catch (error: any) {
       console.error("Telegram API Error:", error);

@@ -1,6 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { getPostHistory } from "@/lib/offers/queries";
 import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
@@ -10,29 +9,35 @@ export const dynamic = "force-dynamic";
 
 export default async function InstagramDashboardPage() {
   const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
-  interface PostWithOffer {
+interface PostWithOffer {
+  id: string;
+  content: string;
+  status: string;
+  external_id: string | null;
+  posted_at: string | null;
+  created_at: string;
+  affiliate_links?: {
+    tracked_url: string;
+  } | null;
+  offers: {
     id: string;
-    content: string;
-    status: string;
-    external_id: string | null;
-    posted_at: string | null;
-    created_at: string;
-    offers: {
-      id: string;
-      product_name: string;
-      platform: string;
-      current_price: number;
-      old_price: number | null;
-      image_url: string | null;
-    };
-  }
+    product_name: string;
+    platform: string;
+    current_price: number;
+    old_price: number | null;
+    image_url: string | null;
+    original_url: string;
+    coupon: string | null;
+    notes: string | null;
+  };
+}
 
   let draftPosts: PostWithOffer[] = [];
 
   if (supabase) {
     const { data: drafts } = await supabase
       .from("posts")
-      .select("*, offers(*)")
+      .select("*, offers(*), affiliate_links(tracked_url)")
       .eq("channel", "instagram")
       .eq("status", "draft")
       .order("created_at", { ascending: false });

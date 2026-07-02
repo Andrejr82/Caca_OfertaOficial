@@ -1,11 +1,10 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions";
 import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
-import { MessageCircle, AlertTriangle } from "lucide-react";
+import { MessageCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -19,6 +18,9 @@ export default async function WhatsappDashboardPage() {
     external_id: string | null;
     posted_at: string | null;
     created_at: string;
+    affiliate_links?: {
+      tracked_url: string;
+    } | null;
     offers: {
       id: string;
       product_name: string;
@@ -26,6 +28,9 @@ export default async function WhatsappDashboardPage() {
       current_price: number;
       old_price: number | null;
       image_url: string | null;
+      original_url: string;
+      coupon: string | null;
+      notes: string | null;
     };
   }
 
@@ -34,7 +39,7 @@ export default async function WhatsappDashboardPage() {
   if (supabase) {
     const { data: drafts } = await supabase
       .from("posts")
-      .select("*, offers(*)")
+      .select("*, offers(*), affiliate_links(tracked_url)")
       .eq("channel", "whatsapp")
       .eq("status", "draft")
       .order("created_at", { ascending: false });

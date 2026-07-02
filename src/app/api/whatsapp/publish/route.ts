@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 
 export async function POST(request: Request) {
   try {
@@ -36,10 +37,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Este post não é do canal WhatsApp." }, { status: 400 });
     }
 
-    const offer = post.offers;
+    const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
     if (!offer) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
     }
+
+    const imageUrl = isCouponOffer(offer) ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
 
     // O usuário pode ter editado o texto na tela antes de aprovar
     const finalContent = content || post.content;
@@ -53,6 +56,7 @@ export async function POST(request: Request) {
     console.log(`- Product ID: ${offer.product_id || 'N/A'}`);
     console.log(`- Título: ${offer.title}`);
     console.log(`- image_url recebida do banco: ${offer.image_url}`);
+    console.log(`- image_url final para envio: ${imageUrl}`);
     console.log(`- Offer object hash: ${hash(offer)}`);
     console.log(`- Post object hash: ${hash(post)}`);
 
@@ -73,11 +77,11 @@ export async function POST(request: Request) {
     const { whatsappService } = await import("@/lib/integrations/whatsapp");
     let whatsappResult;
     try {
-      console.log(`- Publisher payload info: channelId=${channelId}, image_url=${offer.image_url}`);
+      console.log(`- Publisher payload info: channelId=${channelId}, image_url=${imageUrl}`);
       console.log('======================================================\n');
       
       // A imagem será puxada automaticamente pelo Baileys lendo as tags OG do nosso link /go/
-      whatsappResult = await whatsappService.sendChannelMedia(channelId, finalContent, offer.image_url);
+      whatsappResult = await whatsappService.sendChannelMedia(channelId, finalContent, imageUrl);
     } catch (error: any) {
       console.error("Erro na integração WhatsApp:", error);
       try {

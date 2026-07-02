@@ -15,6 +15,9 @@ interface PostWithOffer {
   external_id: string | null;
   posted_at: string | null;
   created_at: string;
+  affiliate_links?: {
+    tracked_url: string;
+  } | null;
   offers: {
     id: string;
     product_name: string;
@@ -22,6 +25,9 @@ interface PostWithOffer {
     current_price: number;
     old_price: number | null;
     image_url: string | null;
+    original_url: string;
+    coupon: string | null;
+    notes: string | null;
   };
 }
 

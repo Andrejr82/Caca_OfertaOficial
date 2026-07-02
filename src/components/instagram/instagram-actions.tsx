@@ -1,9 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { Bot, Send, CheckCircle2, AlertTriangle, Image as ImageIcon, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bot, Send, CheckCircle2, AlertTriangle, Image as ImageIcon, Trash2, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import Image from "next/image";
+import {
+  cleanCouponTitle,
+  getCouponCardImageSources,
+  isCouponOffer,
+  parseCouponDetails
+} from "@/lib/coupons/presentation";
 
 export function InstagramTestButton({ hasToken }: { hasToken: boolean }) {
   const [loading, setLoading] = useState(false);
@@ -30,9 +35,9 @@ export function InstagramTestButton({ hasToken }: { hasToken: boolean }) {
 
   return (
     <div className="grid gap-2">
-      <Button 
-        disabled={loading || !hasToken} 
-        onClick={testConnection} 
+      <Button
+        disabled={loading || !hasToken}
+        onClick={testConnection}
         type="button"
         variant="secondary"
         className="w-fit"
@@ -55,6 +60,9 @@ interface PostWithOffer {
   content: string;
   status: string;
   created_at: string;
+  affiliate_links?: {
+    tracked_url: string;
+  } | null;
   offers: {
     id: string;
     product_name: string;
@@ -62,6 +70,9 @@ interface PostWithOffer {
     current_price: number;
     old_price: number | null;
     image_url: string | null;
+    original_url: string;
+    coupon: string | null;
+    notes: string | null;
   };
 }
 
@@ -69,6 +80,16 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
   const [caption, setCaption] = useState(post.content);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null);
+
+  const couponOffer = isCouponOffer(post.offers);
+  const couponDetails = couponOffer ? parseCouponDetails(post.offers.notes) : null;
+  const couponImage = couponOffer ? getCouponCardImageSources(post.offers) : null;
+  const [couponImageSrc, setCouponImageSrc] = useState(couponImage?.initialSrc || "");
+  const couponLink = post.affiliate_links?.tracked_url || post.offers.original_url;
+
+  useEffect(() => {
+    setCouponImageSrc(couponImage?.initialSrc || "");
+  }, [couponImage?.initialSrc]);
 
   async function handleApproveAndPublish() {
     setLoading(true);
@@ -90,7 +111,6 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
           success: true,
           message: "Post publicado com sucesso no Instagram!"
         });
-        // Recarrega a página para atualizar o status do post após 1.5s
         setTimeout(() => {
           window.location.reload();
         }, 1500);
@@ -112,7 +132,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
 
   async function handleReject() {
     if (!confirm("Tem certeza que deseja excluir esta publicação do Instagram? A oferta original será mantida.")) return;
-    
+
     setLoading(true);
     setStatus(null);
 
@@ -148,21 +168,26 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
     }
   }
 
-  // Preços formatados
   const formattedPrice = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(post.offers.current_price);
-  const formattedOldPrice = post.offers.old_price 
-    ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(post.offers.old_price) 
+  const formattedOldPrice = post.offers.old_price
+    ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(post.offers.old_price)
     : null;
 
   return (
     <article className="rounded-lg border border-moss/10 bg-white p-5 shadow-panel grid gap-4 lg:grid-cols-[200px_1fr] items-start">
-      {/* Coluna da Imagem */}
       <div className="relative aspect-square w-full rounded-md border border-moss/10 bg-paper overflow-hidden flex items-center justify-center">
-        {post.offers.image_url ? (
-          <img 
-            src={`/api/images/proxy?url=${encodeURIComponent(post.offers.image_url)}`} 
+        {couponOffer ? (
+          <img
+            src={couponImageSrc}
+            alt={cleanCouponTitle(post.offers.product_name)}
+            className="object-cover w-full h-full"
+            onError={() => setCouponImageSrc(couponImage?.fallbackSrc || "/coupon-assets/default-coupon.png")}
+          />
+        ) : post.offers.image_url ? (
+          <img
+            src={`/api/images/proxy?url=${encodeURIComponent(post.offers.image_url)}`}
             referrerPolicy="no-referrer"
-            alt={post.offers.product_name} 
+            alt={post.offers.product_name}
             className="object-contain w-full h-full p-2"
           />
         ) : (
@@ -173,15 +198,40 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
         )}
       </div>
 
-      {/* Coluna do Conteúdo / Legenda */}
       <div className="grid gap-3">
         <header className="flex flex-wrap justify-between items-start gap-2 border-b border-moss/10 pb-2">
           <div>
-            <h3 className="font-bold text-lg text-ink">{post.offers.product_name}</h3>
-            <p className="text-xs text-ink/60">
-              Plataforma: <span className="font-semibold">{post.offers.platform}</span> | Preço: <span className="font-semibold text-moss">{formattedPrice}</span>
-              {formattedOldPrice && ` (Anterior: ${formattedOldPrice})`}
-            </p>
+            {couponOffer ? (
+              <>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs rounded-full bg-pink-100 text-pink-800 px-2.5 py-0.5 font-semibold uppercase inline-flex items-center gap-1">
+                    <Ticket size={12} />
+                    Cupom
+                  </span>
+                  <span className="text-xs text-ink/60">
+                    Marketplace: <span className="font-semibold">{post.offers.platform}</span>
+                  </span>
+                </div>
+                <h3 className="font-bold text-lg text-ink mt-2">{cleanCouponTitle(post.offers.product_name)}</h3>
+                {post.offers.coupon ? <p className="text-sm font-semibold text-pink-700">Código: {post.offers.coupon}</p> : null}
+                <p className="text-xs text-ink/70 mt-2">{couponDetails?.description}</p>
+                {couponDetails?.validity ? <p className="text-xs text-ink/55 mt-1">Validade: {couponDetails.validity}</p> : null}
+                <p className="text-xs text-ink/55 mt-1 break-all">
+                  Link afiliado:{" "}
+                  <a href={couponLink} target="_blank" rel="noreferrer" className="font-semibold text-moss underline underline-offset-2">
+                    {couponLink}
+                  </a>
+                </p>
+              </>
+            ) : (
+              <>
+                <h3 className="font-bold text-lg text-ink">{post.offers.product_name}</h3>
+                <p className="text-xs text-ink/60">
+                  Plataforma: <span className="font-semibold">{post.offers.platform}</span> | Preço: <span className="font-semibold text-moss">{formattedPrice}</span>
+                  {formattedOldPrice && ` (Anterior: ${formattedOldPrice})`}
+                </p>
+              </>
+            )}
           </div>
           <span className="text-xs rounded-full bg-yellow-100 text-yellow-800 px-2.5 py-0.5 font-semibold uppercase">
             Aguardando Aprovação
@@ -202,7 +252,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button
-              disabled={loading || !post.offers.image_url}
+              disabled={loading || (!couponOffer && !post.offers.image_url)}
               onClick={handleApproveAndPublish}
               type="button"
               className="bg-moss hover:bg-ink text-white"
@@ -210,7 +260,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
               {loading ? "Processando..." : "Aprovar e Publicar no Instagram"}
               <Send size={14} />
             </Button>
-            
+
             <Button
               disabled={loading}
               onClick={handleReject}
@@ -223,7 +273,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
             </Button>
           </div>
 
-          {!post.offers.image_url && (
+          {!couponOffer && !post.offers.image_url && (
             <p className="text-xs text-red-500 font-semibold flex items-center gap-1">
               <AlertTriangle size={14} />
               Requer imagem cadastrada no produto para poder postar.

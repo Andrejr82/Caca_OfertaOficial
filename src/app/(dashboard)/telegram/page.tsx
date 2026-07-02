@@ -1,6 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
 import { officialBrand, hasTelegramEnv } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
@@ -20,6 +19,9 @@ export default async function TelegramDashboardPage() {
     external_id: string | null;
     posted_at: string | null;
     created_at: string;
+    affiliate_links?: {
+      tracked_url: string;
+    } | null;
     offers: {
       id: string;
       product_name: string;
@@ -27,6 +29,9 @@ export default async function TelegramDashboardPage() {
       current_price: number;
       old_price: number | null;
       image_url: string | null;
+      original_url: string;
+      coupon: string | null;
+      notes: string | null;
     };
   }
 
@@ -35,7 +40,7 @@ export default async function TelegramDashboardPage() {
   if (supabase) {
     const { data: drafts } = await supabase
       .from("posts")
-      .select("*, offers(*)")
+      .select("*, offers(*), affiliate_links(tracked_url)")
       .eq("channel", "telegram")
       .eq("status", "draft")
       .order("created_at", { ascending: false });

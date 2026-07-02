@@ -5,6 +5,8 @@ import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import type { AffiliateLink, Offer } from "@/types/domain";
 import { calculateFinalRankScore } from "@/lib/offers/score-v2";
 import { validateOfferForPersistence } from "@/core/scraper/product-validator";
+import { isCouponOffer } from "@/lib/coupons/presentation";
+import { generateInstagramMessage, generateTelegramMessage, generateWhatsAppMessage } from "@/lib/messages/generate";
 
 export async function POST(request: Request) {
   try {
@@ -37,16 +39,19 @@ export async function POST(request: Request) {
     }
 
     const offer = offerData as Offer;
-    const offerValidation = validateOfferForPersistence({
-      product_name: offer.product_name,
-      platform: offer.platform,
-      original_url: offer.original_url,
-      image_url: offer.image_url,
-      current_price: offer.current_price,
-    });
+    const couponOffer = isCouponOffer(offer);
+    if (!couponOffer) {
+      const offerValidation = validateOfferForPersistence({
+        product_name: offer.product_name,
+        platform: offer.platform,
+        original_url: offer.original_url,
+        image_url: offer.image_url,
+        current_price: offer.current_price,
+      });
 
-    if (!offerValidation.valid) {
-      return NextResponse.json({ ok: false, message: `Oferta rejeitada: ${offerValidation.rejectReason}` }, { status: 400 });
+      if (!offerValidation.valid) {
+        return NextResponse.json({ ok: false, message: `Oferta rejeitada: ${offerValidation.rejectReason}` }, { status: 400 });
+      }
     }
 
     // 2. Cria ou recupera os links de afiliados para cada canal
@@ -80,67 +85,89 @@ export async function POST(request: Request) {
       links[channel] = linkData as AffiliateLink;
     }
 
-    // 3. Executa a análise via Groq AI
-    const analysis = await generateOfferAnalysis(offer, {
-      telegram: links.telegram.tracked_url,
-      instagram: links.instagram.tracked_url,
-      whatsapp: links.whatsapp.tracked_url
-    });
+    let telegramContent: string;
+    let instagramFeed: string;
+    let instagramStories: string[];
+    let instagramReels: string[];
+    let instagramCarousel: string[];
+    let whatsappContent: string;
+    let responseScore = Number(offer.score || 0);
+    let responseStatus = offer.status;
 
-    // 3.5 Atualiza o SubID com a estratégia vencedora para rastreamento (Opcional ML Prep)
-    if (analysis.winner_strategy_type) {
-      for (const channel of channels) {
-        const link = links[channel];
-        const newSubId = `${link.sub_id}-${analysis.winner_strategy_type}`;
-        
-        // Fire and forget update
-        supabase.from("affiliate_links").update({
-          sub_id: newSubId
-        }).eq("id", link.id).then();
+    if (couponOffer) {
+      const instagramCopy = generateInstagramMessage(offer, { tracked_url: links.instagram.tracked_url } as AffiliateLink);
+      telegramContent = generateTelegramMessage(offer, { tracked_url: links.telegram.tracked_url } as AffiliateLink);
+      instagramFeed = instagramCopy.feed;
+      instagramStories = instagramCopy.stories;
+      instagramReels = instagramCopy.reels;
+      instagramCarousel = instagramCopy.carousel;
+      whatsappContent = generateWhatsAppMessage(offer, { tracked_url: links.whatsapp.tracked_url } as AffiliateLink);
+    } else {
+      const analysis = await generateOfferAnalysis(offer, {
+        telegram: links.telegram.tracked_url,
+        instagram: links.instagram.tracked_url,
+        whatsapp: links.whatsapp.tracked_url
+      });
+
+      if (analysis.winner_strategy_type) {
+        for (const channel of channels) {
+          const link = links[channel];
+          const newSubId = `${link.sub_id}-${analysis.winner_strategy_type}`;
+
+          supabase.from("affiliate_links").update({
+            sub_id: newSubId
+          }).eq("id", link.id).then();
+        }
+
+        supabase.from("ai_copy_logs").insert({
+          offer_id: offer.id,
+          user_id: user.id,
+          winner_strategy: analysis.winner_strategy_type,
+          score: analysis.score,
+          model: process.env.GROQ_MODEL || "llama3-8b-8192"
+        }).then(({ error }) => {
+          if (error) {
+            console.warn("[Observabilidade] Falha ao gravar ai_copy_log (Tabela pode não existir ainda):", error.message);
+          }
+        });
       }
 
-      // 3.6 Log da geração de copy (Observabilidade)
-      supabase.from("ai_copy_logs").insert({
-        offer_id: offer.id,
-        user_id: user.id,
-        winner_strategy: analysis.winner_strategy_type,
-        score: analysis.score,
-        model: process.env.GROQ_MODEL || "llama3-8b-8192"
-      }).then(({ error }) => {
-        if (error) {
-          console.warn("[Observabilidade] Falha ao gravar ai_copy_log (Tabela pode não existir ainda):", error.message);
-        }
-      });
-    }
+      const commercialScore = Number(offer.new_score || offer.score || 0);
+      const conversionScore = Number(offer.explainability?.conversion_score || 5.0);
+      const aiCopyScore = Number(analysis.score || 0);
+      const finalRankScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
 
-    // 4. Atualiza o score e o status da oferta usando a função unificada
-    const commercialScore = Number(offer.new_score || offer.score || 0);
-    const conversionScore = Number(offer.explainability?.conversion_score || 5.0);
-    const aiCopyScore = Number(analysis.score || 0);
+      const updatedExplainability = {
+        ...(offer.explainability || {}),
+        ai_copy_score: aiCopyScore,
+        final_rank_score: finalRankScore,
+        commercial_score: commercialScore,
+        conversion_score: conversionScore
+      };
 
-    const finalRankScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
+      const newStatus = finalRankScore >= 7.0 ? "approved" : offer.status;
+      const { error: updateError } = await supabase
+        .from("offers")
+        .update({
+          score: finalRankScore,
+          explainability: updatedExplainability,
+          status: newStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", offer.id);
 
-    const updatedExplainability = {
-      ...(offer.explainability || {}),
-      ai_copy_score: aiCopyScore,
-      final_rank_score: finalRankScore,
-      commercial_score: commercialScore,
-      conversion_score: conversionScore
-    };
+      if (updateError) {
+        return NextResponse.json({ ok: false, message: "Erro ao atualizar score da oferta." }, { status: 500 });
+      }
 
-    const newStatus = finalRankScore >= 7.0 ? "approved" : offer.status;
-    const { error: updateError } = await supabase
-      .from("offers")
-      .update({
-        score: finalRankScore,
-        explainability: updatedExplainability,
-        status: newStatus,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", offer.id);
-
-    if (updateError) {
-      return NextResponse.json({ ok: false, message: "Erro ao atualizar score da oferta." }, { status: 500 });
+      telegramContent = analysis.telegram;
+      instagramFeed = analysis.instagram_feed;
+      instagramStories = analysis.instagram_stories;
+      instagramReels = analysis.instagram_reels;
+      instagramCarousel = analysis.instagram_carousel;
+      whatsappContent = analysis.whatsapp;
+      responseScore = analysis.score;
+      responseStatus = newStatus;
     }
 
     // 5. Deleta rascunhos antigos de posts desta oferta para evitar duplicações
@@ -149,16 +176,16 @@ export async function POST(request: Request) {
     // 6. Insere os novos rascunhos na tabela de posts
     // Para Instagram, formatamos as sugestões de Stories, Reels e Carrossel no conteúdo de forma amigável
     const instagramContent = [
-      analysis.instagram_feed,
+      instagramFeed,
       "",
       "=== STORIES SUGERIDOS ===",
-      ...analysis.instagram_stories.map((s) => `• ${s}`),
+      ...instagramStories.map((s) => `• ${s}`),
       "",
       "=== REELS SUGERIDO ===",
-      ...analysis.instagram_reels.map((r) => `- ${r}`),
+      ...instagramReels.map((r) => `- ${r}`),
       "",
       "=== CARROSSEL SUGERIDO ===",
-      ...analysis.instagram_carousel.map((c) => `- ${c}`)
+      ...instagramCarousel.map((c) => `- ${c}`)
     ].join("\n");
 
     const postsToInsert = [
@@ -167,7 +194,7 @@ export async function POST(request: Request) {
         offer_id: offer.id,
         affiliate_link_id: links.telegram.id,
         channel: "telegram",
-        content: analysis.telegram,
+        content: telegramContent,
         status: "draft"
       },
       {
@@ -183,7 +210,7 @@ export async function POST(request: Request) {
         offer_id: offer.id,
         affiliate_link_id: links.whatsapp.id,
         channel: "whatsapp",
-        content: analysis.whatsapp,
+        content: whatsappContent,
         status: "draft"
       }
     ];
@@ -205,8 +232,8 @@ export async function POST(request: Request) {
       return NextResponse.json({
         ok: true,
         message: "Nenhum rascunho novo criado: já existem posts ativos para todos os canais.",
-        score: analysis.score,
-        status: newStatus
+        score: responseScore,
+        status: responseStatus
       });
     }
 
@@ -218,8 +245,8 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       message: "Copys e rascunhos de posts gerados com sucesso!",
-      score: analysis.score,
-      status: newStatus
+      score: responseScore,
+      status: responseStatus
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Erro desconhecido";

@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { publishToInstagram } from "@/lib/instagram/client";
+import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 
 export async function POST(request: Request) {
   try {
@@ -44,7 +46,8 @@ export async function POST(request: Request) {
     // O Supabase pode retornar a relação como um array dependendo de como a foreign key foi resolvida.
     const offer = Array.isArray(offerData) ? offerData[0] : offerData;
 
-    const imageUrl = offer.image_url;
+    const couponOffer = isCouponOffer(offer);
+    const imageUrl = couponOffer ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
     if (!imageUrl) {
       return NextResponse.json({ 
         ok: false, 
@@ -65,6 +68,32 @@ export async function POST(request: Request) {
     let publishCaption = finalContent;
     if (finalContent.includes("=== STORIES SUGERIDOS ===")) {
       publishCaption = finalContent.split("=== STORIES SUGERIDOS ===")[0].trim();
+    }
+
+    if (couponOffer) {
+      const externalId = await publishToInstagram(imageUrl, publishCaption);
+
+      await supabase
+        .from("posts")
+        .update({
+          status: "published",
+          external_id: externalId,
+          posted_at: new Date().toISOString()
+        })
+        .eq("id", post.id);
+
+      await supabase
+        .from("offers")
+        .update({
+          status: "posted",
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", offer.id);
+
+      return NextResponse.json({
+        ok: true,
+        message: "Cupom publicado com sucesso no Instagram."
+      });
     }
 
     // 2. Dispara o GitHub Actions para Renderizar e Postar o Vídeo
