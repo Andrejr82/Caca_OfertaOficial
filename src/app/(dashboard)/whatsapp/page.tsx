@@ -2,8 +2,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
-import { PostHistoryTable } from "@/components/dashboard/post-history-table";
-import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
+import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -25,6 +24,8 @@ export default async function WhatsappDashboardPage() {
       id: string;
       product_name: string;
       platform: string;
+      marketplace?: string | null;
+      category?: string | null;
       current_price: number;
       old_price: number | null;
       image_url: string | null;
@@ -62,24 +63,12 @@ export default async function WhatsappDashboardPage() {
         </div>
       </header>
 
-      {/* Draft Posts */}
-      <section className="grid gap-4">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">
-            Aguardando Aprovação
-          </h2>
-          <span className="grid h-5 min-w-5 place-items-center rounded-md bg-emerald-500/15 px-1.5 text-[10px] font-extrabold text-emerald-400">
-            {draftPosts.length}
-          </span>
-        </div>
-        
-        <BatchApprovalList posts={draftPosts as any} channel="whatsapp" />
-      </section>
-
-      {/* Post History */}
-      <section className="grid gap-4">
-        <PostHistoryTable initialData={historyData} channelName="whatsapp" />
-      </section>
+      <SocialChannelPostsView
+        channel="whatsapp"
+        accentClassName="bg-emerald-500/15 text-emerald-300"
+        draftPosts={draftPosts}
+        historyData={historyData as any}
+      />
     </div>
   );
 }

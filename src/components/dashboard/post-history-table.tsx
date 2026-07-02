@@ -10,6 +10,8 @@ interface PostItem {
   time: string;
   product: string;
   platform: string;
+  marketplace?: string | null;
+  category?: string | null;
   link: string;
   channel: string;
   status: string;
@@ -21,9 +23,16 @@ interface PostItem {
 interface PostHistoryTableProps {
   initialData: PostItem[];
   channelName: string;
+  showPlatformFilter?: boolean;
+  emptyMessage?: string;
 }
 
-export function PostHistoryTable({ initialData, channelName }: PostHistoryTableProps) {
+export function PostHistoryTable({
+  initialData,
+  channelName,
+  showPlatformFilter = true,
+  emptyMessage = "Nenhuma postagem encontrada para os filtros aplicados.",
+}: PostHistoryTableProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [platformFilter, setPlatformFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -47,7 +56,9 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
         status: "published",
         clicks: 142,
         conversions: 8,
-        revenue: 239.20
+        revenue: 239.20,
+        marketplace: "Amazon",
+        category: null
       },
       {
         id: "mock-2",
@@ -60,7 +71,9 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
         status: "published",
         clicks: 98,
         conversions: 5,
-        revenue: 149.50
+        revenue: 149.50,
+        marketplace: "Shopee",
+        category: null
       },
       {
         id: "mock-3",
@@ -73,7 +86,9 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
         status: "draft",
         clicks: 0,
         conversions: 0,
-        revenue: 0.00
+        revenue: 0.00,
+        marketplace: "Mercado Livre",
+        category: null
       },
       {
         id: "mock-4",
@@ -86,7 +101,9 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
         status: "failed",
         clicks: 0,
         conversions: 0,
-        revenue: 0.00
+        revenue: 0.00,
+        marketplace: "Magalu",
+        category: null
       },
       {
         id: "mock-5",
@@ -99,7 +116,9 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
         status: "published",
         clicks: 220,
         conversions: 15,
-        revenue: 119.85
+        revenue: 119.85,
+        marketplace: "Shein",
+        category: null
       }
     ].filter(item => item.channel === channelName);
   }, [initialData, channelName]);
@@ -126,7 +145,7 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
       .filter(item => {
         const matchesSearch = item.product.toLowerCase().includes(searchTerm.toLowerCase()) ||
           item.platform.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesPlatform = platformFilter === "all" || item.platform === platformFilter;
+        const matchesPlatform = !showPlatformFilter || platformFilter === "all" || item.platform === platformFilter;
         const matchesStatus = statusFilter === "all" || item.status === statusFilter;
         return matchesSearch && matchesPlatform && matchesStatus;
       })
@@ -149,7 +168,7 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
         if (valA > valB) return sortAsc ? 1 : -1;
         return 0;
       });
-  }, [displayData, searchTerm, platformFilter, statusFilter, sortField, sortAsc]);
+  }, [displayData, searchTerm, platformFilter, showPlatformFilter, statusFilter, sortField, sortAsc]);
 
   return (
     <div className="glass-card p-5">
@@ -173,16 +192,18 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
           />
         </div>
         <div className="flex flex-wrap gap-2">
-          <select
-            value={platformFilter}
-            onChange={(e) => setPlatformFilter(e.target.value)}
-            className="focus-ring rounded-md border border-moss/10 bg-paper py-2 px-3 text-sm text-ink font-semibold focus:border-moss"
-          >
-            <option value="all">Todas as Plataformas</option>
-            {platforms.filter(p => p !== "all").map(p => (
-              <option key={p} value={p}>{p}</option>
-            ))}
-          </select>
+          {showPlatformFilter && (
+            <select
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              className="focus-ring rounded-md border border-moss/10 bg-paper py-2 px-3 text-sm text-ink font-semibold focus:border-moss"
+            >
+              <option value="all">Todas as Plataformas</option>
+              {platforms.filter(p => p !== "all").map(p => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+          )}
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
@@ -272,7 +293,7 @@ export function PostHistoryTable({ initialData, channelName }: PostHistoryTableP
             ) : (
               <tr>
                 <td colSpan={8} className="py-8 text-center text-ink/50 bg-paper/20">
-                  Nenhuma postagem encontrada para os filtros aplicados.
+                  {emptyMessage}
                 </td>
               </tr>
             )}

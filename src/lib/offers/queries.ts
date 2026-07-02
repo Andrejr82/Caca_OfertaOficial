@@ -111,7 +111,9 @@ export async function getPostHistory(channel?: string) {
     offers (
       id,
       product_name,
-      platform
+      platform,
+      marketplace,
+      category
     ),
     affiliate_links (
       id,
@@ -150,6 +152,8 @@ export async function getPostHistory(channel?: string) {
       time: dateObj.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
       product: post.offers?.product_name || "Produto Desconhecido",
       platform: post.offers?.platform || "Outro",
+      marketplace: post.offers?.marketplace || null,
+      category: post.offers?.category || null,
       link: link?.tracked_url || "#",
       channel: post.channel,
       status: post.status,
