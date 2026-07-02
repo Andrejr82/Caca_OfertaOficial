@@ -36,7 +36,7 @@ const defaultCouponSources = {
 const couponAvailability = {
   mercadolivre: "temporarily_unavailable",
   magalu: "supported",
-  shopee: "temporarily_unavailable",
+  shopee: "supported",
   shein: "supported",
   amazon: "supported",
   netshoes: "unsupported"
