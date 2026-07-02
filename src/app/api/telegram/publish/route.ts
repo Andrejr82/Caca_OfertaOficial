@@ -9,6 +9,7 @@ type TelegramPublishResult = {
 };
 
 const TELEGRAM_CAPTION_LIMIT = 1024;
+const TELEGRAM_MESSAGE_LIMIT = 4096;
 const URL_PATTERN = /https?:\/\/\S+/i;
 
 function truncateText(text: string, limit: number) {
@@ -18,65 +19,97 @@ function truncateText(text: string, limit: number) {
   return `${text.slice(0, limit - 3).trimEnd()}...`;
 }
 
+function normalizeTelegramText(text: string) {
+  return text.replace(/\r\n/g, "\n").trim();
+}
+
+function splitLongText(text: string, limit: number) {
+  const chunks: string[] = [];
+  let remaining = text.trim();
+
+  while (remaining.length > limit) {
+    let splitAt = remaining.lastIndexOf("\n\n", limit);
+    if (splitAt < Math.floor(limit * 0.5)) {
+      splitAt = remaining.lastIndexOf("\n", limit);
+    }
+    if (splitAt < Math.floor(limit * 0.5)) {
+      splitAt = remaining.lastIndexOf(" ", limit);
+    }
+    if (splitAt <= 0) {
+      splitAt = limit;
+    }
+
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+
+  if (remaining.length > 0) {
+    chunks.push(remaining);
+  }
+
+  return chunks.filter(Boolean);
+}
+
+function extractTelegramTail(text: string) {
+  const lines = text.split("\n").map((line) => line.trimEnd()).filter((line) => line.trim().length > 0);
+  const linkIndex = lines.findIndex((line) => URL_PATTERN.test(line));
+  if (linkIndex === -1) {
+    return { body: text, tail: "" };
+  }
+
+  return {
+    body: lines.slice(0, linkIndex).join("\n").trim(),
+    tail: lines.slice(linkIndex).join("\n").trim()
+  };
+}
+
 export function sanitizeTelegramCaption(caption: string) {
-  const normalized = caption.replace(/\r\n/g, "\n").trim();
+  const normalized = normalizeTelegramText(caption);
   if (normalized.length <= TELEGRAM_CAPTION_LIMIT) {
     return normalized;
   }
 
-  const lines = normalized.split("\n").map((line) => line.trimEnd());
-  const linkIndex = lines.findIndex((line) => URL_PATTERN.test(line));
+  const { body } = extractTelegramTail(normalized);
+  const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
+  const headline = lines[0] || "Confira os detalhes completos na mensagem abaixo.";
+  const secondary = lines[1] || "Detalhes completos logo abaixo.";
+  const captionText = [headline, secondary].filter(Boolean).join("\n\n");
+  return truncateText(captionText, TELEGRAM_CAPTION_LIMIT);
+}
 
-  if (linkIndex === -1) {
-    return truncateText(normalized, TELEGRAM_CAPTION_LIMIT);
+export function splitTelegramText(fullText: string) {
+  const normalized = normalizeTelegramText(fullText);
+  if (normalized.length <= TELEGRAM_MESSAGE_LIMIT) {
+    return [normalized];
   }
 
-  const beforeLink = lines.slice(0, linkIndex).filter((line) => line.trim().length > 0);
-  const afterLink = lines.slice(linkIndex).filter((line) => line.trim().length > 0);
-
-  const headline = beforeLink[0] || "";
-  const supportLines = beforeLink.slice(1, 3);
-  const bodyLines = beforeLink.slice(3);
-  const descriptiveText = [...supportLines, ...bodyLines].join(" ");
-  const fullSuffix = afterLink.join("\n");
-  const linkLine = afterLink.find((line) => URL_PATTERN.test(line)) || "";
-  const compactSuffix = afterLink
-    .filter((line, index) => index === 0 || URL_PATTERN.test(line))
-    .join("\n");
-
-  const buildCaption = (
-    body: string,
-    suffix: string,
-    extraSupport: string[] = supportLines,
-    customHeadline: string = headline
-  ) => [customHeadline, extraSupport.join("\n"), body, suffix]
-    .filter((section) => section && section.trim().length > 0)
-    .join("\n\n");
-
-  let candidate = buildCaption(bodyLines.join(" "));
-  if (candidate.length <= TELEGRAM_CAPTION_LIMIT) {
-    return candidate;
+  const { body, tail } = extractTelegramTail(normalized);
+  if (!tail) {
+    return splitLongText(normalized, TELEGRAM_MESSAGE_LIMIT);
   }
 
-  const suffix = fullSuffix.length <= TELEGRAM_CAPTION_LIMIT ? fullSuffix : compactSuffix || linkLine;
-  const baseWithoutBody = buildCaption("", suffix, []);
-  const remainingForBody = TELEGRAM_CAPTION_LIMIT - baseWithoutBody.length - 2;
-  if (remainingForBody > 0) {
-    let truncatedBody = truncateText(descriptiveText, remainingForBody);
-    candidate = buildCaption(truncatedBody, suffix, []);
-    while (candidate.length > TELEGRAM_CAPTION_LIMIT && truncatedBody.length > 0) {
-      const overflow = candidate.length - TELEGRAM_CAPTION_LIMIT;
-      truncatedBody = truncateText(truncatedBody, Math.max(truncatedBody.length - overflow - 3, 0));
-      candidate = buildCaption(truncatedBody, suffix, []);
-    }
-    if (candidate.length <= TELEGRAM_CAPTION_LIMIT) {
-      return candidate;
-    }
+  const bodyChunks = splitLongText(body, TELEGRAM_MESSAGE_LIMIT);
+  const parts = bodyChunks.slice(0, -1);
+  const lastBodyChunk = bodyChunks.at(-1) || "";
+  const combinedLastPart = [lastBodyChunk, tail].filter(Boolean).join("\n\n").trim();
+
+  if (combinedLastPart.length <= TELEGRAM_MESSAGE_LIMIT) {
+    parts.push(combinedLastPart);
+    return parts.filter(Boolean);
   }
 
-  const minimalBase = buildCaption("", linkLine, []);
-  const remainingForHeadline = TELEGRAM_CAPTION_LIMIT - minimalBase.length - 2;
-  return buildCaption("", linkLine, [], truncateText(headline, Math.max(remainingForHeadline, 0)));
+  if (lastBodyChunk) {
+    parts.push(lastBodyChunk);
+  }
+
+  const tailChunks = splitLongText(tail, TELEGRAM_MESSAGE_LIMIT);
+  if (tailChunks.length > 1) {
+    const tailWithoutLast = tailChunks.slice(0, -1);
+    const lastTailChunk = tailChunks.at(-1) || "";
+    return [...parts, ...tailWithoutLast, lastTailChunk].filter(Boolean);
+  }
+
+  return [...parts, ...tailChunks].filter(Boolean);
 }
 
 export async function POST(request: Request) {
@@ -131,17 +164,22 @@ export async function POST(request: Request) {
     }
 
     const imageUrl = isCouponOffer(offer) ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
+    const fullTextParts = splitTelegramText(finalContent);
 
     // 2. Executa a publicação real via Telegram API
     let telegramPost: TelegramPublishResult;
     try {
       if (imageUrl) {
-        // Envia foto com a legenda
         const { sendTelegramPhoto } = await import("@/lib/telegram/client");
         telegramPost = await sendTelegramPhoto(sanitizeTelegramCaption(finalContent), imageUrl) as TelegramPublishResult;
+        for (const part of fullTextParts) {
+          await sendTelegramMessage(part);
+        }
       } else {
-        // Fallback: só texto
-        telegramPost = await sendTelegramMessage(finalContent) as TelegramPublishResult;
+        telegramPost = await sendTelegramMessage(fullTextParts[0]) as TelegramPublishResult;
+        for (const part of fullTextParts.slice(1)) {
+          await sendTelegramMessage(part);
+        }
       }
     } catch (error: any) {
       console.error("Telegram API Error:", error);
