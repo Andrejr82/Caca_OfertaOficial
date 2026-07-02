@@ -55,6 +55,28 @@ const AMAZON_TAG           = process.env.AMAZON_PARTNER_TAG || '';
 const MAGALU_PARTNER_ID    = process.env.MAGALU_PARTNER_ID || '';
 const SHOPEE_APP_ID        = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET    = process.env.SHOPEE_APP_SECRET || '';
+const SKIP_STORES          = new Set((process.env.SKIP_STORES || '').split(',').map(s => s.trim()).filter(Boolean));
+
+const AMAZON_CONTEXT_OPTIONS = {
+  locale: 'pt-BR',
+  timezoneId: 'America/Sao_Paulo',
+  userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36',
+  viewport: { width: 1366, height: 900 },
+  extraHTTPHeaders: {
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'accept-language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'cache-control': 'no-cache',
+    'pragma': 'no-cache',
+    'sec-ch-ua': '"Chromium";v="138", "Not=A?Brand";v="24", "Google Chrome";v="138"',
+    'sec-ch-ua-mobile': '?0',
+    'sec-ch-ua-platform': '"Windows"',
+    'sec-fetch-dest': 'document',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-site': 'none',
+    'sec-fetch-user': '?1',
+    'upgrade-insecure-requests': '1'
+  }
+};
 
 // ─── LLM Provider Setup ────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'cerebras';
@@ -1303,6 +1325,7 @@ async function crawleeExtract(url, limit, storeName) {
     launchContext: {
       useIncognitoPages: false, // Necessário para o stealthPlugin aplicar no contexto global
       launcher: chromium,
+      contextOptions: storeName === 'Amazon' ? AMAZON_CONTEXT_OPTIONS : undefined,
       launchOptions: {
         headless: true,
         args: [
@@ -1438,12 +1461,29 @@ async function crawleeExtract(url, limit, storeName) {
           return (imgAlt || '').trim();
         };
 
+        const pickBestLink = (cardEl) => {
+          const anchors = Array.from(cardEl.querySelectorAll('a[href]'));
+          const hrefs = anchors
+            .map((a) => (a.href || '').trim())
+            .filter(Boolean);
+
+          const directAmazon = hrefs.find((href) => /amazon\.com\.br\/(?:dp|gp\/aw\/d|gp\/product)\//i.test(href));
+          if (directAmazon) return directAmazon;
+
+          const embeddedAmazon = hrefs.find((href) => href.includes('https://www.amazon.com.br/'));
+          if (embeddedAmazon) return embeddedAmazon;
+
+          const headingAnchor = cardEl.querySelector('h2 a[href]');
+          if (headingAnchor && headingAnchor.href) return headingAnchor.href;
+
+          return hrefs[0] || '';
+        };
+
         for (let el of items) {
           const text = el.innerText || '';
           if (text.includes('R$')) {
-            const linkTag = el.tagName === 'A' ? el : el.querySelector('a');
             const imgTag = el.querySelector('img.s-image') || el.querySelector('img.ui-search-result-image__element') || el.querySelector('img[data-testid="image"]') || el.querySelector('img');
-            const url = linkTag ? linkTag.href : '';
+            const url = pickBestLink(el);
             let img = '';
             if (imgTag) {
               const dyn = imgTag.getAttribute('data-a-dynamic-image');
@@ -1647,8 +1687,20 @@ async function crawleeExtract(url, limit, storeName) {
 function cleanProductUrl(url) {
   if (!url) return null;
   try {
-    const obj = new URL(url);
-    obj.search = ''; 
+    let candidate = url;
+
+    const embeddedAmazonMatch = candidate.match(/https:\/\/www\.amazon\.com\.br\/[^\s"'<>]+/gi);
+    if (embeddedAmazonMatch && embeddedAmazonMatch.length > 0) {
+      candidate = embeddedAmazonMatch[embeddedAmazonMatch.length - 1];
+    }
+
+    const asinMatch = candidate.match(/\/(?:dp|gp\/aw\/d|gp\/product)\/([A-Z0-9]{10})/i);
+    if (asinMatch) {
+      return `https://www.amazon.com.br/dp/${asinMatch[1].toUpperCase()}`;
+    }
+
+    const obj = new URL(candidate);
+    obj.search = '';
     obj.hash = '';
     return obj.toString();
   } catch(e) {
@@ -2335,7 +2387,7 @@ async function runScrapingCycle() {
     if (isWindows) {
       console.log(`\n[MODE: LOCAL] 💻 NOTEBOOK WINDOWS DETECTADO. Iniciando Scraping Local...`);
       await updateHeartbeat();
-      const stores = ['Mercado Livre', 'Amazon', 'Shopee']; // Magalu desativada: bloqueio 403 consistente. Shopee ativa quando SHOPEE_ADMITAD_CAMPAIGN_ID preenchido
+      const stores = getEnabledStores(['Mercado Livre', 'Amazon', 'Shopee']); // Magalu desativada: bloqueio 403 consistente. Shopee ativa quando SHOPEE_ADMITAD_CAMPAIGN_ID preenchido
       
       for (const store of stores) {
         try {
@@ -2420,7 +2472,7 @@ async function runScrapingCycle() {
     }
   } else if (mode === 'ORACLE' || mode === 'AUTO') {
     console.log(`\n[MODE: ${mode}] ⚠️ AVISO: Executando Scraping e Orquestração na mesma máquina (Uso para testes).`);
-    const stores = isWindows ? ['Mercado Livre', 'Amazon', 'Shopee'] : ['Mercado Livre', 'Amazon', 'Shopee']; // Magalu desativada: bloqueio 403 consistente
+    const stores = getEnabledStores(isWindows ? ['Mercado Livre', 'Amazon', 'Shopee'] : ['Mercado Livre', 'Amazon', 'Shopee']); // Magalu desativada: bloqueio 403 consistente
     
     for (const store of stores) {
       try {
@@ -2545,3 +2597,7 @@ module.exports = {
   GOLDEN_QUERIES,
   PROVIDER_CONFIG
 };
+
+function getEnabledStores(stores) {
+  return stores.filter(store => !SKIP_STORES.has(store));
+}
