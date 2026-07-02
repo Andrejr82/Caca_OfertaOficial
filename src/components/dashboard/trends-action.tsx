@@ -6,29 +6,72 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
 
+const sourceLabels = {
+  mercadolivre: "Mercado Livre",
+  magalu: "Magalu",
+  shopee: "Shopee",
+  shein: "Shein",
+  amazon: "Amazon",
+  netshoes: "Netshoes"
+} as const;
+
+const defaultProductSources = {
+  mercadolivre: true,
+  magalu: false,
+  shopee: false,
+  shein: false,
+  amazon: false,
+  netshoes: false
+};
+
+const defaultCouponSources = {
+  mercadolivre: false,
+  magalu: true,
+  shopee: false,
+  shein: true,
+  amazon: true,
+  netshoes: false
+};
+
+const couponAvailability = {
+  mercadolivre: "temporarily_unavailable",
+  magalu: "supported",
+  shopee: "temporarily_unavailable",
+  shein: "supported",
+  amazon: "supported",
+  netshoes: "unsupported"
+} as const;
+
 export function TrendsAction() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [sources, setSources] = useState({
-    mercadolivre: true,
-    magalu: false,
-    shopee: false,
-    shein: false,
-    amazon: false,
-    netshoes: false
-  });
+  const [productSources, setProductSources] = useState(defaultProductSources);
+  const [couponSources, setCouponSources] = useState(defaultCouponSources);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [mode, setMode] = useState<"products" | "coupons">("products");
 
-  // Carrega seleção do localStorage ao montar no cliente
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("caca_oferta_selected_sources");
-      if (saved) {
-        const parsed = JSON.parse(saved);
+      const savedProducts = localStorage.getItem("caca_oferta_selected_sources_products");
+      const savedCoupons = localStorage.getItem("caca_oferta_selected_sources_coupons");
+
+      if (savedProducts) {
+        const parsed = JSON.parse(savedProducts);
         if (parsed && typeof parsed === "object") {
-          setSources(prev => ({
+          setProductSources((prev) => ({
             ...prev,
             ...parsed
+          }));
+        }
+      }
+
+      if (savedCoupons) {
+        const parsed = JSON.parse(savedCoupons);
+        if (parsed && typeof parsed === "object") {
+          setCouponSources((prev) => ({
+            ...prev,
+            ...parsed,
+            netshoes: false
           }));
         }
       }
@@ -37,22 +80,30 @@ export function TrendsAction() {
     }
   }, []);
 
-  // Handler para persistir no localStorage
+  const sources = mode === "products" ? productSources : couponSources;
+  const setSources = mode === "products" ? setProductSources : setCouponSources;
+
   const handleSourceChange = (key: keyof typeof sources, checked: boolean) => {
     const updated = { ...sources, [key]: checked };
     setSources(updated);
     try {
-      localStorage.setItem("caca_oferta_selected_sources", JSON.stringify(updated));
+      localStorage.setItem(
+        mode === "products" ? "caca_oferta_selected_sources_products" : "caca_oferta_selected_sources_coupons",
+        JSON.stringify(updated)
+      );
     } catch (error) {
       console.error("[localStorage] Erro ao salvar fontes selecionadas:", error);
     }
   };
 
-  const activeSourcesCount = Object.values(sources).filter(Boolean).length;
+  const activeSourcesCount = Object.entries(sources).filter(([key, enabled]) => {
+    if (!enabled) return false;
+    if (mode === "products") return true;
+    return couponAvailability[key as keyof typeof couponAvailability] === "supported";
+  }).length;
 
   const [limit, setLimit] = useState<number>(20);
   const [category, setCategory] = useState<string>("Geral");
-  const [mode, setMode] = useState<"products" | "coupons">("products");
 
   async function handleFetchTrends() {
     if (activeSourcesCount === 0) {
@@ -67,13 +118,13 @@ export function TrendsAction() {
     setResult(null);
 
     // Mapeamento interno de nomes amigáveis para a API
-    const selectedSources = [];
-    if (sources.mercadolivre) selectedSources.push("Mercado Livre");
-    if (sources.magalu) selectedSources.push("Magalu");
-    if (sources.shopee) selectedSources.push("Shopee");
-    if (sources.shein) selectedSources.push("Shein");
-    if (sources.amazon) selectedSources.push("Amazon");
-    if (sources.netshoes) selectedSources.push("Netshoes");
+    const selectedSources = (Object.keys(sourceLabels) as Array<keyof typeof sourceLabels>)
+      .filter((key) => {
+        if (!sources[key]) return false;
+        if (mode === "products") return true;
+        return couponAvailability[key] === "supported";
+      })
+      .map((key) => sourceLabels[key]);
 
     try {
       const endpoint = mode === "products" ? "/api/scraper/trends" : "/api/scraper/coupons";
@@ -142,60 +193,34 @@ export function TrendsAction() {
               : "Varre as páginas oficiais de cupons das plataformas e extrai códigos de desconto disponíveis."}
           </p>
           <div className="mt-3 flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sources.mercadolivre}
-                onChange={(e) => handleSourceChange("mercadolivre", e.target.checked)}
-                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
-              />
-              Mercado Livre
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sources.magalu}
-                onChange={(e) => handleSourceChange("magalu", e.target.checked)}
-                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
-              />
-              Magalu
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sources.shopee}
-                onChange={(e) => handleSourceChange("shopee", e.target.checked)}
-                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
-              />
-              Shopee
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sources.shein}
-                onChange={(e) => handleSourceChange("shein", e.target.checked)}
-                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
-              />
-              Shein
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sources.amazon}
-                onChange={(e) => handleSourceChange("amazon", e.target.checked)}
-                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
-              />
-              Amazon
-            </label>
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sources.netshoes}
-                onChange={(e) => handleSourceChange("netshoes", e.target.checked)}
-                className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4"
-              />
-              Netshoes
-            </label>
+            {(Object.keys(sourceLabels) as Array<keyof typeof sourceLabels>).map((key) => {
+              const couponState = couponAvailability[key];
+              const isCouponSupported = couponState === "supported";
+              const disabledInCoupons = mode === "coupons" && !isCouponSupported;
+              const helperText =
+                mode === "coupons" && couponState === "unsupported"
+                  ? "Não suportado"
+                  : mode === "coupons" && couponState === "temporarily_unavailable"
+                    ? "Indisponível no momento"
+                    : null;
+
+              return (
+                <label
+                  key={key}
+                  className={`flex items-center gap-2 text-sm font-medium ${disabledInCoupons ? "cursor-not-allowed text-white/35" : "cursor-pointer"}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={sources[key]}
+                    disabled={disabledInCoupons}
+                    onChange={(e) => handleSourceChange(key, e.target.checked)}
+                    className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4 disabled:opacity-50"
+                  />
+                  <span>{sourceLabels[key]}</span>
+                  {helperText ? <span className="text-[11px] text-amber-400">{helperText}</span> : null}
+                </label>
+              );
+            })}
           </div>
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
             {mode === "products" && (
