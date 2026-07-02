@@ -108,9 +108,9 @@ export async function POST(request: Request) {
     }
 
     if (platform === "Mercado Livre") {
-      const clientId = process.env.MERCADO_LIVRE_CLIENT_ID;
+      const clientId = process.env.MERCADO_LIVRE_APP_ID || process.env.MERCADO_LIVRE_CLIENT_ID;
       if (!clientId) {
-        return NextResponse.json({ ok: false, message: "Erro: MERCADO_LIVRE_CLIENT_ID ausente no arquivo .env.local.", lastCheck: now });
+        return NextResponse.json({ ok: false, message: "Erro: MERCADO_LIVRE_APP_ID/MERCADO_LIVRE_CLIENT_ID ausente no arquivo .env.local.", lastCheck: now });
       }
       return NextResponse.json({ ok: true, message: "Conectado. Credenciais do Mercado Livre válidas. Scraper pronto.", lastCheck: now });
     }

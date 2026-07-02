@@ -161,7 +161,7 @@ async function countDraftPosts() {
 async function loadApprovedOffers() {
   const { data, error } = await supabase
     .from('offers')
-    .select('id,user_id,product_name,current_price,old_price,original_url,platform,rating,status')
+    .select('id,user_id,product_name,current_price,old_price,original_url,platform,rating,status,image_url,score')
     .eq('status', 'approved')
     .order('updated_at', { ascending: true });
 
@@ -258,26 +258,35 @@ function buildPlan(approvedOffers, activePosts) {
   }
 
   const offersToBackfill = [];
+  const incompleteApprovedOffers = [];
   for (const offer of approvedOffers) {
-    if (isInvalidAmazonOffer(offer)) continue;
-
     const remainingPosts = activeAfterPlanByOffer.get(offer.id) || [];
     const activeChannels = new Set(remainingPosts.map((post) => post.channel));
     const missingChannels = CHANNELS.filter((channel) => !activeChannels.has(channel));
 
     if (missingChannels.length > 0) {
-      offersToBackfill.push({
+      const incompleteEntry = {
         offer,
         missingChannels
-      });
+      };
+      incompleteApprovedOffers.push(incompleteEntry);
+      if (!isInvalidAmazonOffer(offer)) {
+        offersToBackfill.push(incompleteEntry);
+      }
     }
   }
+
+  const invalidIncompleteOffers = incompleteApprovedOffers.filter((entry) => isInvalidAmazonOffer(entry.offer));
+  const potentiallyValidIncompleteOffers = incompleteApprovedOffers.filter((entry) => !isInvalidAmazonOffer(entry.offer));
 
   return {
     invalidAmazonPosts,
     duplicateGroups,
     deleteIds: [...deleteIds],
-    offersToBackfill
+    offersToBackfill,
+    incompleteApprovedOffers,
+    invalidIncompleteOffers,
+    potentiallyValidIncompleteOffers
   };
 }
 
@@ -337,9 +346,23 @@ async function collectFinalValidation() {
     approvedOffers: approvedOffers.length,
     invalidAmazonActivePosts: plan.invalidAmazonPosts.length,
     duplicateActiveGroups: plan.duplicateGroups.length,
-    approvedOffersMissingChannels: plan.offersToBackfill.length,
+    approvedOffersMissingChannels: plan.incompleteApprovedOffers.length,
+    approvedOffersMissingChannelsExcludingPotentiallyValidPending: plan.invalidIncompleteOffers.length,
+    potentiallyValidPendingIds: plan.potentiallyValidIncompleteOffers.map((entry) => entry.offer.id),
     draftCounts
   };
+}
+
+async function rejectOffers(offerIds) {
+  if (offerIds.length === 0) return;
+  const { error } = await supabase
+    .from('offers')
+    .update({ status: 'rejected' })
+    .in('id', offerIds);
+
+  if (error) {
+    throw new Error(`Falha ao rejeitar offers: ${error.message}`);
+  }
 }
 
 function writeReport(report) {
@@ -369,10 +392,16 @@ async function run() {
       offerId: entry.offer.id,
       missingChannels: entry.missingChannels
     })),
+    incompleteApprovedOffers: plan.incompleteApprovedOffers.length,
+    invalidIncompleteOffers: plan.invalidIncompleteOffers.length,
+    invalidIncompleteOfferIds: plan.invalidIncompleteOffers.map((entry) => entry.offer.id),
+    potentiallyValidIncompleteOffers: plan.potentiallyValidIncompleteOffers.length,
+    potentiallyValidIncompleteOfferIds: plan.potentiallyValidIncompleteOffers.map((entry) => entry.offer.id),
     draftBefore,
     wouldCreateByChannel: { telegram: 0, instagram: 0, whatsapp: 0 },
     markedDeleted: 0,
     duplicatesCorrected: 0,
+    rejectedOffers: 0,
     offersCorrected: 0,
     createdByChannel: { telegram: 0, instagram: 0, whatsapp: 0 },
     failures: []
@@ -389,15 +418,19 @@ async function run() {
   console.log(`TOTAL_ACTIVE_POSTS\t${report.totalAnalyzed.activePosts}`);
   console.log(`INVALID_AMAZON_POSTS_TO_DELETE\t${report.invalidAmazonPostsToDelete}`);
   console.log(`DUPLICATE_GROUPS_TO_FIX\t${report.duplicateGroupsToFix}`);
-  console.log(`OFFERS_TO_CORRECT\t${report.offersToCorrect}`);
-  console.log(`WOULD_CREATE_BY_CHANNEL\t${JSON.stringify(report.wouldCreateByChannel)}`);
+  console.log(`INCOMPLETE_APPROVED_OFFERS\t${report.incompleteApprovedOffers}`);
+  console.log(`INVALID_INCOMPLETE_OFFERS\t${report.invalidIncompleteOffers}`);
+  console.log(`POTENTIALLY_VALID_INCOMPLETE_OFFERS\t${report.potentiallyValidIncompleteOffers}`);
+  console.log(`POTENTIALLY_VALID_IDS\t${report.potentiallyValidIncompleteOfferIds.join(',') || '(none)'}`);
   console.log(`DRAFT_BEFORE\t${JSON.stringify(report.draftBefore)}`);
 
   if (DRY_RUN) {
     report.finalValidation = {
       invalidAmazonActivePosts: report.invalidAmazonPostsToDelete,
       duplicateActiveGroups: report.duplicateGroupsToFix,
-      approvedOffersMissingChannels: report.offersToCorrect,
+      approvedOffersMissingChannels: report.incompleteApprovedOffers,
+      approvedOffersMissingChannelsExcludingPotentiallyValidPending: report.invalidIncompleteOffers,
+      potentiallyValidPendingIds: report.potentiallyValidIncompleteOfferIds,
       draftCounts: draftBefore
     };
     writeReport(report);
@@ -413,53 +446,19 @@ async function run() {
     throw error;
   }
 
-  for (const entry of plan.offersToBackfill) {
-    try {
-      const activeChannels = await getStillActiveChannels(entry.offer.id);
-      const missingChannels = CHANNELS.filter((channel) => !activeChannels.has(channel));
-      if (missingChannels.length === 0) {
-        continue;
-      }
-
-      const links = {};
-      for (const channel of missingChannels) {
-        links[channel] = await ensureLink(entry.offer, channel);
-      }
-
-      const analysis = await generateOfferAnalysis(entry.offer, entry.offer.platform);
-      const postsToInsert = missingChannels.map((channel) => ({
-        user_id: entry.offer.user_id,
-        offer_id: entry.offer.id,
-        affiliate_link_id: links[channel].id,
-        channel,
-        content: analysis[channel].replace('{LINK}', links[channel].tracked_url),
-        status: 'draft'
-      }));
-
-      if (postsToInsert.length === 0) {
-        continue;
-      }
-
-      const { error: insertError } = await supabase.from('posts').insert(postsToInsert);
-      if (insertError) {
-        throw new Error(`Falha ao inserir posts: ${insertError.message}`);
-      }
-
-      report.offersCorrected++;
-      for (const post of postsToInsert) {
-        report.createdByChannel[post.channel]++;
-      }
-    } catch (error) {
-      report.failures.push({ stage: 'backfill-posts', offerId: entry.offer.id, message: error.message });
-      console.error(`SANITIZE_FAIL\t${entry.offer.id}\t${error.message}`);
-    }
+  try {
+    await rejectOffers(report.invalidIncompleteOfferIds);
+    report.rejectedOffers = report.invalidIncompleteOfferIds.length;
+  } catch (error) {
+    report.failures.push({ stage: 'reject-offers', message: error.message });
+    throw error;
   }
 
   report.finalValidation = await collectFinalValidation();
   console.log(`MARKED_DELETED\t${report.markedDeleted}`);
   console.log(`DUPLICATES_CORRECTED\t${report.duplicatesCorrected}`);
-  console.log(`OFFERS_CORRECTED\t${report.offersCorrected}`);
-  console.log(`CREATED_BY_CHANNEL\t${JSON.stringify(report.createdByChannel)}`);
+  console.log(`REJECTED_OFFERS\t${report.rejectedOffers}`);
+  console.log(`POTENTIALLY_VALID_IDS\t${report.potentiallyValidIncompleteOfferIds.join(',') || '(none)'}`);
   console.log(`FINAL_VALIDATION\t${JSON.stringify(report.finalValidation)}`);
   writeReport(report);
   return report;

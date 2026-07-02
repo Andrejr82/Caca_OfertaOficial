@@ -90,6 +90,8 @@ async function callLLM(messages, providerType = LLM_PROVIDER, config = {}) {
   }
   
   const url = (providerConfig.baseURL).replace(/\/$/, '') + '/chat/completions';
+  const promptStats = getPromptStats(messages);
+  const diagnosticMeta = config.diagnostic || {};
   
   const body = {
     model: providerConfig.model,
@@ -103,8 +105,52 @@ async function callLLM(messages, providerType = LLM_PROVIDER, config = {}) {
     'Content-Type': 'application/json',
     'Authorization': `Bearer ${providerConfig.apiKey}`
   };
-  
-  const response = await axios.post(url, body, { headers });
+
+  logLLMDiagnostic('request', {
+    provider: providerType,
+    model: providerConfig.model,
+    url,
+    timeoutMs: config.timeoutMs ?? null,
+    maxTokens: body.max_tokens,
+    temperature: body.temperature,
+    responseFormat: body.response_format?.type || null,
+    productsInBatch: diagnosticMeta.productsInBatch ?? null,
+    pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+    phase: diagnosticMeta.phase || null,
+    store: diagnosticMeta.store || null,
+    query: diagnosticMeta.query || null,
+    offerId: diagnosticMeta.offerId || null,
+    promptType: diagnosticMeta.promptType || null,
+    rawLength: diagnosticMeta.rawLength ?? null,
+    ...promptStats
+  });
+
+  let response;
+  try {
+    response = await axios.post(url, body, { headers, timeout: config.timeoutMs ?? 0 });
+  } catch (error) {
+    logLLMDiagnostic('error', {
+      provider: providerType,
+      model: providerConfig.model,
+      timeoutMs: config.timeoutMs ?? null,
+      productsInBatch: diagnosticMeta.productsInBatch ?? null,
+      pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+      phase: diagnosticMeta.phase || null,
+      store: diagnosticMeta.store || null,
+      query: diagnosticMeta.query || null,
+      offerId: diagnosticMeta.offerId || null,
+      promptType: diagnosticMeta.promptType || null,
+      ...promptStats,
+      httpStatus: error?.response?.status ?? null,
+      errorMessage: error?.message || 'Unknown error',
+      responseSnippet: safeDiagnosticSnippet(error?.response?.data),
+      responseHeaders: {
+        retryAfter: error?.response?.headers?.['retry-after'] ?? null,
+        contentType: error?.response?.headers?.['content-type'] ?? null
+      }
+    });
+    throw error;
+  }
   
   // Cerebras puts content in message.reasoning, others in message.content
   if (response.data.choices && response.data.choices[0]) {
@@ -117,6 +163,23 @@ async function callLLM(messages, providerType = LLM_PROVIDER, config = {}) {
   if (response.data.usage) {
     cycleMetrics.totalTokens += response.data.usage.total_tokens;
   }
+
+  logLLMDiagnostic('success', {
+    provider: providerType,
+    model: providerConfig.model,
+    timeoutMs: config.timeoutMs ?? null,
+    productsInBatch: diagnosticMeta.productsInBatch ?? null,
+    pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+    phase: diagnosticMeta.phase || null,
+    store: diagnosticMeta.store || null,
+    query: diagnosticMeta.query || null,
+    offerId: diagnosticMeta.offerId || null,
+    promptType: diagnosticMeta.promptType || null,
+    ...promptStats,
+    finishReason: response.data.choices?.[0]?.finish_reason ?? null,
+    usage: response.data.usage || null,
+    responseSnippet: safeDiagnosticSnippet(response.data.choices?.[0]?.message?.content || response.data.choices?.[0]?.message?.reasoning)
+  });
   
   return response.data;
 }
@@ -126,6 +189,7 @@ async function callLLM(messages, providerType = LLM_PROVIDER, config = {}) {
  */
 async function callLLMWithFallback(messages, config = {}) {
   let lastError = null;
+  const diagnosticMeta = config.diagnostic || {};
   
   // Tenta o provider principal
   try {
@@ -137,12 +201,40 @@ async function callLLMWithFallback(messages, config = {}) {
     if (finishReason === 'length') {
       console.warn(`  [LLM] Provider ${LLM_PROVIDER} response cut off (finish_reason: length), using fallback`);
       lastError = new Error('Response cut off');
+      logLLMDiagnostic('fallback', {
+        provider: LLM_PROVIDER,
+        fallback: LLM_FALLBACK,
+        reason: 'finish_reason_length',
+        finishReason,
+        phase: diagnosticMeta.phase || null,
+        store: diagnosticMeta.store || null,
+        query: diagnosticMeta.query || null,
+        offerId: diagnosticMeta.offerId || null,
+        productsInBatch: diagnosticMeta.productsInBatch ?? null,
+        pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+        ...getPromptStats(messages)
+      });
     } else {
       return result;
     }
   } catch (error) {
     console.warn(`  [LLM] Provider ${LLM_PROVIDER} falhou: ${error.message}`);
     lastError = error;
+    logLLMDiagnostic('fallback', {
+      provider: LLM_PROVIDER,
+      fallback: LLM_FALLBACK,
+      reason: 'primary_error',
+      phase: diagnosticMeta.phase || null,
+      store: diagnosticMeta.store || null,
+      query: diagnosticMeta.query || null,
+      offerId: diagnosticMeta.offerId || null,
+      productsInBatch: diagnosticMeta.productsInBatch ?? null,
+      pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+      ...getPromptStats(messages),
+      httpStatus: error?.response?.status ?? null,
+      errorMessage: error?.message || 'Unknown error',
+      responseSnippet: safeDiagnosticSnippet(error?.response?.data)
+    });
   }
   
   // Tenta o fallback
@@ -197,6 +289,8 @@ const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 const SCRAPER_AUDIT_ENV_FILE = '.dbg/golden-queries-audit.env';
 const SCRAPER_AUDIT_LOG_FILE = '.dbg/trae-debug-log-golden-queries-audit.ndjson';
 const SCRAPER_AUDIT_RUN_ID = process.env.SCRAPER_AUDIT_RUN_ID || 'pre-fix';
+const LLM_DIAGNOSTIC_ENABLED = process.env.LLM_DIAGNOSTIC === '1';
+const LLM_DIAGNOSTIC_LOG_FILE = process.env.LLM_DIAGNOSTIC_LOG_FILE || '.dbg/cerebras-fallback-diagnostic.ndjson';
 const SCRAPER_AUDIT_STATE = {
   currentStore: null,
   currentQuery: null,
@@ -237,6 +331,37 @@ function emitAuditEvent(hypothesisId, location, msg, data = {}) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload)
   }).catch(() => {});
+}
+
+function safeDiagnosticSnippet(value, maxLen = 280) {
+  if (value === null || value === undefined) return null;
+  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  return text.replace(/\s+/g, ' ').trim().slice(0, maxLen);
+}
+
+function getPromptStats(messages = []) {
+  const normalized = Array.isArray(messages) ? messages : [];
+  const contentLengths = normalized.map((message) => String(message?.content || '').length);
+  return {
+    promptLength: contentLengths.reduce((sum, size) => sum + size, 0),
+    messageCount: normalized.length,
+    systemLength: contentLengths[0] || 0,
+    userLength: contentLengths[1] || 0
+  };
+}
+
+function logLLMDiagnostic(event, payload = {}) {
+  if (!LLM_DIAGNOSTIC_ENABLED) return;
+  const entry = {
+    ts: new Date().toISOString(),
+    runId: process.env.LLM_DIAGNOSTIC_RUN_ID || 'default',
+    event,
+    ...payload
+  };
+  console.log(`[LLM_DIAG] ${JSON.stringify(entry)}`);
+  try {
+    fs.appendFileSync(LLM_DIAGNOSTIC_LOG_FILE, `${JSON.stringify(entry)}\n`);
+  } catch (_) {}
 }
 
 function averageNumbers(values = []) {
@@ -1441,7 +1566,15 @@ async function crawleeExtract(url, limit, storeName) {
   try {
     const res = await callLLMWithFallback(messages, {
       temperature: 0.1,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      diagnostic: {
+        phase: 'extraction',
+        promptType: 'scraping',
+        store: storeName,
+        query: queryContext.query,
+        productsInBatch: maxProducts,
+        rawLength: rawExtractedData.length
+      }
     });
 
     const content = res.choices[0].message.content;
@@ -1651,7 +1784,7 @@ function calculateScoreV2(product) {
 function cleanJsonString(str) {
   return str.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
 }
-async function generateOfferAnalysis(product, store) {
+async function generateOfferAnalysis(product, store, diagnosticMeta = {}) {
   // Verifica se temos pelo menos um provider configurado
   const hasCerebras = !!PROVIDER_CONFIG.cerebras.apiKey;
   const hasGroq = !!PROVIDER_CONFIG.groq.apiKey;
@@ -1690,7 +1823,16 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
     const data = await callLLMWithFallback(messages, {
       temperature: 0.7,
       maxTokens: 1000,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      diagnostic: {
+        phase: 'copy',
+        promptType: 'offer_analysis',
+        store,
+        offerId: diagnosticMeta.offerId || product.id || null,
+        productsInBatch: 1,
+        pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+        query: diagnosticMeta.query || null
+      }
     });
 
     let raw;
@@ -1914,7 +2056,11 @@ async function processTopOffers(candidates) {
 
   for (const item of vipOffers) {
     console.log(`  [IA] Gerando copy para: ${item.product.product_name.substring(0, 40)}...`);
-    const analysis = await generateOfferAnalysis(item.product, item.store);
+    const analysis = await generateOfferAnalysis(item.product, item.store, {
+      offerId: item.id,
+      pipelineBatchSize: vipOffers.length,
+      query: item.audit?.query || null
+    });
     
     const finalScore = Number(((item.score * 0.7) + (analysis.score * 0.3)).toFixed(2));
     await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
@@ -2372,18 +2518,23 @@ if (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
+if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
+  runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
-cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
-  name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
-});
+  cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
+    name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
+  });
+}
 module.exports = { 
+  callLLM,
+  callLLMWithFallback,
   crawleeExtract,
   cleanProductUrl,
   normalizeImageUrl,
   buildAffiliateUrl,
   calculateScoreV1,
   calculateScoreV2,
+  generateOfferAnalysis,
   generateFallback,
   getRandomQueries,
   scrapeStore,
@@ -2391,5 +2542,6 @@ module.exports = {
   processTopOffers,
   runScrapingCycle,
   logErrorToSupabase,
-  GOLDEN_QUERIES
+  GOLDEN_QUERIES,
+  PROVIDER_CONFIG
 };
