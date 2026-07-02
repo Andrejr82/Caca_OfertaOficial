@@ -1565,6 +1565,46 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
 
 import { fetchMarketplaceCoupons, ScrapedCoupon } from "./coupon-scraper";
 import { validateHtml, getScrapingPrompt, sanitizeScrapedData } from "@/core/scraper/validator";
+import {
+  buildOfferContentHash,
+  canonicalizeOfferUrl,
+  normalizeProductTitle,
+  validateOfferForPersistence,
+  type StrongOfferValidationResult
+} from "@/core/scraper/product-validator";
+
+async function findDuplicateOffer(
+  supabase: any,
+  userId: string,
+  validation: StrongOfferValidationResult
+): Promise<any | null> {
+  const { data } = await supabase
+    .from("offers")
+    .select("id, current_price, old_price, score, status, platform, product_name, original_url")
+    .eq("user_id", userId)
+    .eq("platform", validation.platform)
+    .limit(1000);
+
+  return (data || []).find((offer: any) => {
+    const canonicalUrl = canonicalizeOfferUrl(offer.original_url);
+    const normalizedTitle = normalizeProductTitle(offer.product_name || "");
+    const price = Number(offer.current_price || 0);
+    const contentHash = canonicalUrl
+      ? buildOfferContentHash({
+          platform: offer.platform,
+          normalizedTitle,
+          price,
+          canonicalUrl
+        })
+      : null;
+
+    return (
+      canonicalUrl === validation.canonicalUrl ||
+      contentHash === validation.contentHash ||
+      (normalizedTitle === validation.normalizedTitle && price === Number(validation.price))
+    );
+  }) || null;
+}
 
 /**
  * Roda o fluxo completo de descoberta de Cupons para as fontes selecionadas
@@ -1812,16 +1852,27 @@ export async function discoverAndIngestTrendingOffers(
         }
       }
 
-      // Verificar se este produto já foi cadastrado antes (usando o finalUrl)
-      const { data: existingOffer } = await supabase
-        .from("offers")
-        .select("id, current_price, old_price, score, status")
-        .eq("original_url", finalUrl)
-        .eq("user_id", userId)
-        .maybeSingle();
-
       let platformValue = source;
       let notesValue = `Importado automaticamente via Robô de Tendências (${source}).`;
+
+      const offerValidation = validateOfferForPersistence({
+        product_name: product.product_name,
+        platform: platformValue,
+        original_url: finalUrl,
+        image_url: product.image_url,
+        current_price: product.current_price,
+      });
+
+      if (!offerValidation.valid) {
+        console.warn(`[SCRAPER][${source.toUpperCase()}][TRENDS] Oferta rejeitada antes da gravação: ${offerValidation.rejectReason}`);
+        updateMetrics(source, "discarded", 1);
+        continue;
+      }
+
+      const canonicalOriginalUrl = offerValidation.canonicalUrl as string;
+
+      // Verificar duplicidade por URL canônica, content_hash e título+marketplace+preço.
+      const existingOffer = await findDuplicateOffer(supabase, userId, offerValidation);
 
       // Aplica o Motor Frio para ter o Rating + Shadow Mode
       const curation = curateOfferScore({
@@ -1846,6 +1897,7 @@ export async function discoverAndIngestTrendingOffers(
             .from("offers")
             .update({
               product_name: product.product_name,
+              original_url: canonicalOriginalUrl,
               image_url: product.image_url,
               current_price: product.current_price,
               old_price: product.old_price,
@@ -1892,7 +1944,7 @@ export async function discoverAndIngestTrendingOffers(
             user_id: userId,
             platform: "Shein",
             product_name: product.product_name,
-            original_url: finalUrl,
+            original_url: canonicalOriginalUrl,
             image_url: product.image_url,
             current_price: product.current_price,
             old_price: product.old_price,
@@ -1914,8 +1966,9 @@ export async function discoverAndIngestTrendingOffers(
           updateMetrics(source, "found", 1);
           continue;
         } else {
-          platformValue = "Outro";
-          notesValue = `Plataforma original: Shein. ${notesValue}`;
+          console.error(`[SCRAPER][${source.toUpperCase()}][TRENDS] Erro ao salvar oferta Shein: ${insertError?.message || "retorno vazio"}`);
+          updateMetrics(source, "failures", 1);
+          continue;
         }
       }
 
@@ -1927,7 +1980,7 @@ export async function discoverAndIngestTrendingOffers(
           user_id: userId,
           platform: platformValue,
           product_name: product.product_name,
-          original_url: finalUrl,
+          original_url: canonicalOriginalUrl,
           image_url: product.image_url,
           current_price: product.current_price,
           old_price: product.old_price,

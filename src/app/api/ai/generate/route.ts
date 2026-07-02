@@ -4,6 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import type { AffiliateLink, Offer } from "@/types/domain";
 import { calculateFinalRankScore } from "@/lib/offers/score-v2";
+import { validateOfferForPersistence } from "@/core/scraper/product-validator";
 
 export async function POST(request: Request) {
   try {
@@ -36,6 +37,17 @@ export async function POST(request: Request) {
     }
 
     const offer = offerData as Offer;
+    const offerValidation = validateOfferForPersistence({
+      product_name: offer.product_name,
+      platform: offer.platform,
+      original_url: offer.original_url,
+      image_url: offer.image_url,
+      current_price: offer.current_price,
+    });
+
+    if (!offerValidation.valid) {
+      return NextResponse.json({ ok: false, message: `Oferta rejeitada: ${offerValidation.rejectReason}` }, { status: 400 });
+    }
 
     // 2. Cria ou recupera os links de afiliados para cada canal
     const channels = ["telegram", "instagram", "whatsapp"] as const;
@@ -176,7 +188,29 @@ export async function POST(request: Request) {
       }
     ];
 
-    const { error: postsError } = await supabase.from("posts").insert(postsToInsert);
+    const { data: activePosts, error: activePostsError } = await supabase
+      .from("posts")
+      .select("channel")
+      .eq("offer_id", offer.id)
+      .neq("status", "deleted");
+
+    if (activePostsError) {
+      return NextResponse.json({ ok: false, message: "Erro ao verificar posts ativos." }, { status: 500 });
+    }
+
+    const activeChannels = new Set((activePosts || []).map((post: any) => post.channel));
+    const missingPostsToInsert = postsToInsert.filter((post) => !activeChannels.has(post.channel));
+
+    if (missingPostsToInsert.length === 0) {
+      return NextResponse.json({
+        ok: true,
+        message: "Nenhum rascunho novo criado: já existem posts ativos para todos os canais.",
+        score: analysis.score,
+        status: newStatus
+      });
+    }
+
+    const { error: postsError } = await supabase.from("posts").insert(missingPostsToInsert);
     if (postsError) {
       return NextResponse.json({ ok: false, message: "Erro ao salvar rascunhos de posts." }, { status: 500 });
     }

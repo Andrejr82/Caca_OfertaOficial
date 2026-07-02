@@ -1,4 +1,5 @@
 import { LinkMetadata } from "./scraper";
+import { validateOfferForPersistence } from "@/core/scraper/product-validator";
 
 export type PageClassification =
   | "VALID_PRODUCT"
@@ -27,6 +28,21 @@ export function evaluateQualityGate(metadata: LinkMetadata): QualityGateResult {
   const hasPrice = metadata.price && metadata.price > 0;
   const hasImage = !!metadata.imageUrl;
   const isRandomSequence = /^[a-z0-9]{15,}$/i.test(metadata.title ? metadata.title.split(" | ")[0] : "");
+  const persistenceValidation = validateOfferForPersistence({
+    product_name: metadata.title,
+    platform: metadata.platform,
+    original_url: metadata.finalUrl,
+    image_url: metadata.imageUrl,
+    current_price: metadata.price,
+  });
+
+  if (!persistenceValidation.valid) {
+    return {
+      status: "REJECTED",
+      classification: "INVALID_PAGE",
+      reason: persistenceValidation.rejectReason || "Oferta inválida para persistência."
+    };
+  }
 
   if (isProfileUrl && !hasPrice && !hasImage) {
     return {

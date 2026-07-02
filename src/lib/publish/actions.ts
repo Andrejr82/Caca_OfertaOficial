@@ -9,6 +9,38 @@ import { logger } from "@/lib/utils/logger";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
 import type { Channel, Offer } from "@/types/domain";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
+import {
+  canonicalizeOfferUrl,
+  normalizeProductTitle,
+  validateOfferForPersistence,
+  type StrongOfferValidationResult
+} from "@/core/scraper/product-validator";
+
+async function findDuplicateOffer(
+  supabase: any,
+  userId: string,
+  validation: StrongOfferValidationResult
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("offers")
+    .select("id, platform, product_name, current_price, original_url")
+    .eq("user_id", userId)
+    .eq("platform", validation.platform)
+    .limit(1000);
+
+  const same = (data || []).find((offer: any) => {
+    const canonicalUrl = canonicalizeOfferUrl(offer.original_url);
+    const normalizedTitle = normalizeProductTitle(offer.product_name || "");
+    const samePrice = Number(offer.current_price) === Number(validation.price);
+
+    return (
+      canonicalUrl === validation.canonicalUrl ||
+      (normalizedTitle === validation.normalizedTitle && samePrice)
+    );
+  });
+
+  return same?.id || null;
+}
 
 export async function generateQuickPostAction(affiliateUrl: string, channel: Channel) {
   const supabase = await createServerSupabaseClient();
@@ -61,6 +93,31 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     metadata.platform = "Link Externo" as any;
   }
 
+  const offerValidation = validateOfferForPersistence({
+    product_name: metadata.title,
+    platform: metadata.platform,
+    original_url: metadata.finalUrl || affiliateUrl,
+    image_url: metadata.imageUrl,
+    current_price: metadata.price,
+  });
+
+  if (!offerValidation.valid) {
+    return {
+      ok: false,
+      status: "REJECTED",
+      message: `Oferta rejeitada: ${offerValidation.rejectReason}`
+    };
+  }
+
+  const duplicateOfferId = await findDuplicateOffer(supabase, userId, offerValidation);
+  if (duplicateOfferId) {
+    return {
+      ok: false,
+      status: "REJECTED",
+      message: `Oferta duplicada bloqueada antes da gravação: ${duplicateOfferId}`
+    };
+  }
+
   // Processamento do Score pelo Curation Engine
   const curation = curateOfferScore({
     current_price: metadata.price || 0,
@@ -72,11 +129,11 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     .from("offers")
     .insert({
       user_id: userId,
-      platform: metadata.platform,
+      platform: offerValidation.platform,
       product_name: metadata.title,
-      original_url: affiliateUrl,
-      image_url: metadata.imageUrl || null,
-      current_price: metadata.price || 0,
+      original_url: offerValidation.canonicalUrl,
+      image_url: metadata.imageUrl,
+      current_price: offerValidation.price,
       status: "approved",
       score: curation.score,
       legacy_score: curation.legacy_score,
