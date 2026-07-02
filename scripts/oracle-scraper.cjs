@@ -1921,16 +1921,27 @@ async function processTopOffers(candidates) {
 
     const channels = ['telegram', 'instagram', 'whatsapp'];
     const linksMap = {};
+    let linkErrorFound = false;
 
     for (const channel of channels) {
       const subId = createSubId(channel, item.id);
       const trackedUrl = createTrackedUrl(subId);
       
-      const { data: linkData } = await supabase.from('affiliate_links').upsert({
+      const { data: linkData, error: linkError } = await supabase.from('affiliate_links').upsert({
         user_id: ADMIN_USER_ID, offer_id: item.id, channel, original_url: item.affiliateUrl, tracked_url: trackedUrl, sub_id: subId
       }, { onConflict: 'offer_id,channel' }).select('id').single();
 
+      if (linkError || !linkData?.id) {
+        console.error(`  [Erro] Falha ao criar link ${channel}: ${linkError?.message || 'linkData ausente'}`);
+        linkErrorFound = true;
+        break;
+      }
+
       linksMap[channel] = { id: linkData.id, url: trackedUrl };
+    }
+
+    if (linkErrorFound) {
+      continue;
     }
 
     const postsToInsert = [
@@ -1939,8 +1950,17 @@ async function processTopOffers(candidates) {
       { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.whatsapp.id, channel: 'whatsapp', content: analysis.whatsapp.replace('{LINK}', linksMap.whatsapp.url), status: 'draft' }
     ];
 
-    await supabase.from('posts').insert(postsToInsert);
-    await supabase.from('offers').update({ status: 'approved', score: finalScore }).eq('id', item.id);
+    const { error: postsError } = await supabase.from('posts').insert(postsToInsert);
+    if (postsError) {
+      console.error(`  [Erro] Falha ao inserir posts: ${postsError.message}`);
+      continue;
+    }
+
+    const { error: offerUpdateError } = await supabase.from('offers').update({ status: 'approved', score: finalScore }).eq('id', item.id);
+    if (offerUpdateError) {
+      console.error(`  [Erro] Falha ao aprovar oferta: ${offerUpdateError.message}`);
+      continue;
+    }
 
     // #region debug-point E:approved-offer
     emitAuditEvent('E', 'oracle-scraper.cjs:processTopOffers', 'offer-approved', {
