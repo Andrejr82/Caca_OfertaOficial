@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sparkles, Loader2 } from "lucide-react";
+import { Sparkles, Loader2, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import { MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
@@ -42,6 +42,9 @@ const couponAvailability = {
   netshoes: "unsupported"
 } as const;
 
+const mercadolivreCouponTooltip =
+  "Os cupons públicos do Mercado Livre não possuem uma fonte oficial estável para este módulo.\n\nA busca de PRODUTOS continua funcionando normalmente.";
+
 export function TrendsAction() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -71,6 +74,7 @@ export function TrendsAction() {
           setCouponSources((prev) => ({
             ...prev,
             ...parsed,
+            mercadolivre: false,
             netshoes: false
           }));
         }
@@ -84,6 +88,10 @@ export function TrendsAction() {
   const setSources = mode === "products" ? setProductSources : setCouponSources;
 
   const handleSourceChange = (key: keyof typeof sources, checked: boolean) => {
+    if (mode === "coupons" && couponAvailability[key as keyof typeof couponAvailability] !== "supported") {
+      return;
+    }
+
     const updated = { ...sources, [key]: checked };
     setSources(updated);
     try {
@@ -190,38 +198,55 @@ export function TrendsAction() {
           <p className="text-xs text-white/35 mt-1">
             {mode === "products" 
               ? "Varre os itens mais vendidos das plataformas selecionadas, extrai dados de produtos e gera rascunhos com IA."
-              : "Varre as páginas oficiais de cupons das plataformas e extrai códigos de desconto disponíveis."}
+              : "Busca cupons públicos disponíveis através de fontes oficiais suportadas."}
           </p>
           <div className="mt-3 flex flex-wrap gap-4">
             {(Object.keys(sourceLabels) as Array<keyof typeof sourceLabels>).map((key) => {
               const couponState = couponAvailability[key];
               const isCouponSupported = couponState === "supported";
               const disabledInCoupons = mode === "coupons" && !isCouponSupported;
+              const showMercadoLivreTooltip = mode === "coupons" && key === "mercadolivre";
               const helperText =
                 mode === "coupons" && couponState === "unsupported"
                   ? "Não suportado"
                   : mode === "coupons" && couponState === "temporarily_unavailable"
-                    ? "Indisponível no momento"
+                    ? "Cupons oficiais indisponíveis"
                     : null;
 
               return (
                 <label
                   key={key}
+                  title={showMercadoLivreTooltip ? mercadolivreCouponTooltip : undefined}
+                  onClick={disabledInCoupons ? (e) => e.preventDefault() : undefined}
                   className={`flex items-center gap-2 text-sm font-medium ${disabledInCoupons ? "cursor-not-allowed text-white/35" : "cursor-pointer"}`}
                 >
                   <input
                     type="checkbox"
                     checked={sources[key]}
                     disabled={disabledInCoupons}
-                    onChange={(e) => handleSourceChange(key, e.target.checked)}
-                    className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4 disabled:opacity-50"
+                    onChange={disabledInCoupons ? undefined : (e) => handleSourceChange(key, e.target.checked)}
+                    className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <span>{sourceLabels[key]}</span>
-                  {helperText ? <span className="text-[11px] text-amber-400">{helperText}</span> : null}
+                  {showMercadoLivreTooltip ? (
+                    <span
+                      title={mercadolivreCouponTooltip}
+                      className="inline-flex text-white/45"
+                      aria-label="Informações sobre cupons do Mercado Livre"
+                    >
+                      <CircleAlert size={14} />
+                    </span>
+                  ) : null}
+                  {helperText ? <span className="text-[11px] text-white/45">{helperText}</span> : null}
                 </label>
               );
             })}
           </div>
+          {mode === "coupons" ? (
+            <p className="mt-2 text-[11px] text-white/45">
+              Alguns marketplaces podem não disponibilizar cupons públicos de forma oficial.
+            </p>
+          ) : null}
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
             {mode === "products" && (
               <div className="flex items-center gap-2">
