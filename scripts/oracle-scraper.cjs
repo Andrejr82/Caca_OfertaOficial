@@ -78,6 +78,8 @@ const AMAZON_CONTEXT_OPTIONS = {
   }
 };
 
+const SHOPEE_OFFICIAL_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
+
 // ─── LLM Provider Setup ────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'cerebras';
 const LLM_FALLBACK = process.env.LLM_FALLBACK || 'groq';
@@ -86,6 +88,7 @@ const LLM_FALLBACK = process.env.LLM_FALLBACK || 'groq';
 const PROVIDER_CONFIG = {
   cerebras: {
     apiKey: process.env.CEREBRAS_API_KEY,
+    apiKey2: process.env.CEREBRAS_API_KEY_2,
     baseURL: process.env.CEREBRAS_BASE_URL || 'https://api.cerebras.ai/v1',
     model: process.env.CEREBRAS_MODEL || 'gpt-oss-120b',
     maxTokens: 8000, // Maior limite para Cerebras
@@ -206,103 +209,163 @@ async function callLLM(messages, providerType = LLM_PROVIDER, config = {}) {
   return response.data;
 }
 
+async function callLLMWithKey(messages, providerType, apiKey, config = {}) {
+  const providerConfig = PROVIDER_CONFIG[providerType];
+  
+  if (!providerConfig || !apiKey) {
+    throw new Error(`Provider ${providerType} não configurado corretamente`);
+  }
+  
+  const url = (providerConfig.baseURL).replace(/\/$/, '') + '/chat/completions';
+  const promptStats = getPromptStats(messages);
+  const diagnosticMeta = config.diagnostic || {};
+  
+  const body = {
+    model: providerConfig.model,
+    messages: messages,
+    temperature: config.temperature ?? 0.1,
+    max_tokens: config.maxTokens ?? providerConfig.maxTokens ?? 4000,
+    response_format: config.responseFormat
+  };
+  
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`
+  };
+
+  logLLMDiagnostic('request', {
+    provider: providerType,
+    model: providerConfig.model,
+    url,
+    timeoutMs: config.timeoutMs ?? null,
+    maxTokens: body.max_tokens,
+    temperature: body.temperature,
+    responseFormat: body.response_format?.type || null,
+    phase: diagnosticMeta.phase || null,
+    store: diagnosticMeta.store || null,
+    query: diagnosticMeta.query || null,
+    offerId: diagnosticMeta.offerId || null,
+    productsInBatch: diagnosticMeta.productsInBatch ?? null,
+    pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+    promptType: diagnosticMeta.promptType || null,
+    ...promptStats
+  });
+  
+  const response = await axios.post(url, body, {
+    headers,
+    timeout: config.timeoutMs ?? 180000,
+    validateStatus: () => true
+  });
+  
+  if (response.status >= 400) {
+    const err = new Error(`Request failed with status code ${response.status}`);
+    err.response = response;
+    throw err;
+  }
+
+  if (response.data.choices && response.data.choices[0]) {
+    const msg = response.data.choices[0].message;
+    if (msg.reasoning && !msg.content) {
+      response.data.choices[0].message.content = msg.reasoning;
+    }
+  }
+  
+  if (response.data.usage) {
+    cycleMetrics.totalTokens += response.data.usage.total_tokens;
+  }
+
+  logLLMDiagnostic('success', {
+    provider: providerType,
+    model: providerConfig.model,
+    timeoutMs: config.timeoutMs ?? null,
+    productsInBatch: diagnosticMeta.productsInBatch ?? null,
+    pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+    phase: diagnosticMeta.phase || null,
+    store: diagnosticMeta.store || null,
+    query: diagnosticMeta.query || null,
+    offerId: diagnosticMeta.offerId || null,
+    promptType: diagnosticMeta.promptType || null,
+    ...promptStats,
+    finishReason: response.data.choices?.[0]?.finish_reason ?? null,
+    usage: response.data.usage || null,
+    responseSnippet: safeDiagnosticSnippet(response.data.choices?.[0]?.message?.content || response.data.choices?.[0]?.message?.reasoning)
+  });
+  
+  return response.data;
+}
+
 /**
  * Tenta o provider principal, se falhar tenta o fallback
  */
 async function callLLMWithFallback(messages, config = {}) {
   let lastError = null;
   const diagnosticMeta = config.diagnostic || {};
-  
-  // Tenta o provider principal
-  try {
-    console.log(`  [LLM] Usando provider principal: ${LLM_PROVIDER}`);
-    const result = await callLLM(messages, LLM_PROVIDER, config);
-    
-    // Check if response was cut off
-    const finishReason = result.choices?.[0]?.finish_reason;
-    if (finishReason === 'length') {
-      console.warn(`  [LLM] Provider ${LLM_PROVIDER} response cut off (finish_reason: length), using fallback`);
-      lastError = new Error('Response cut off');
+
+  const providerAttempts = [
+    { provider: 'cerebras', keyLabel: 'chave 1', key: PROVIDER_CONFIG.cerebras.apiKey },
+    { provider: 'cerebras', keyLabel: 'chave 2', key: PROVIDER_CONFIG.cerebras.apiKey2 },
+    { provider: 'groq', keyLabel: 'chave 1', key: PROVIDER_CONFIG.groq.apiKey },
+    { provider: 'groq', keyLabel: 'chave 2', key: PROVIDER_CONFIG.groq.apiKey2 },
+  ].filter(attempt => attempt.key);
+
+  if (providerAttempts.length === 0) {
+    throw new Error('Nenhuma chave de LLM configurada');
+  }
+
+  for (let i = 0; i < providerAttempts.length; i++) {
+    const attempt = providerAttempts[i];
+    const nextAttempt = providerAttempts[i + 1] || null;
+
+    try {
+      console.log(`  [${attempt.provider === 'cerebras' ? 'Cerebras' : 'Groq'}] Tentando ${attempt.keyLabel}...`);
+      const result = await callLLMWithKey(messages, attempt.provider, attempt.key, config);
+      const finishReason = result.choices?.[0]?.finish_reason;
+
+      if (finishReason === 'length') {
+        lastError = new Error('Response cut off');
+        console.warn(`  [LLM] ${attempt.provider} ${attempt.keyLabel} retornou finish_reason=length.`);
+        logLLMDiagnostic('fallback', {
+          provider: attempt.provider,
+          providerKeyLabel: attempt.keyLabel,
+          fallback: nextAttempt ? `${nextAttempt.provider}:${nextAttempt.keyLabel}` : null,
+          reason: 'finish_reason_length',
+          finishReason,
+          phase: diagnosticMeta.phase || null,
+          store: diagnosticMeta.store || null,
+          query: diagnosticMeta.query || null,
+          offerId: diagnosticMeta.offerId || null,
+          productsInBatch: diagnosticMeta.productsInBatch ?? null,
+          pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
+          ...getPromptStats(messages)
+        });
+        continue;
+      }
+
+      return result;
+    } catch (error) {
+      lastError = error;
+      console.warn(`  [LLM] ${attempt.provider} ${attempt.keyLabel} falhou: ${error.message}`);
       logLLMDiagnostic('fallback', {
-        provider: LLM_PROVIDER,
-        fallback: LLM_FALLBACK,
-        reason: 'finish_reason_length',
-        finishReason,
+        provider: attempt.provider,
+        providerKeyLabel: attempt.keyLabel,
+        fallback: nextAttempt ? `${nextAttempt.provider}:${nextAttempt.keyLabel}` : null,
+        reason: 'attempt_error',
         phase: diagnosticMeta.phase || null,
         store: diagnosticMeta.store || null,
         query: diagnosticMeta.query || null,
         offerId: diagnosticMeta.offerId || null,
         productsInBatch: diagnosticMeta.productsInBatch ?? null,
         pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
-        ...getPromptStats(messages)
+        ...getPromptStats(messages),
+        httpStatus: error?.response?.status ?? null,
+        errorMessage: error?.message || 'Unknown error',
+        responseSnippet: safeDiagnosticSnippet(error?.response?.data)
       });
-    } else {
-      return result;
     }
-  } catch (error) {
-    console.warn(`  [LLM] Provider ${LLM_PROVIDER} falhou: ${error.message}`);
-    lastError = error;
-    logLLMDiagnostic('fallback', {
-      provider: LLM_PROVIDER,
-      fallback: LLM_FALLBACK,
-      reason: 'primary_error',
-      phase: diagnosticMeta.phase || null,
-      store: diagnosticMeta.store || null,
-      query: diagnosticMeta.query || null,
-      offerId: diagnosticMeta.offerId || null,
-      productsInBatch: diagnosticMeta.productsInBatch ?? null,
-      pipelineBatchSize: diagnosticMeta.pipelineBatchSize ?? null,
-      ...getPromptStats(messages),
-      httpStatus: error?.response?.status ?? null,
-      errorMessage: error?.message || 'Unknown error',
-      responseSnippet: safeDiagnosticSnippet(error?.response?.data)
-    });
   }
-  
-  // Tenta o fallback
-  try {
-    console.log(`  [LLM] Usando fallback: ${LLM_FALLBACK}`);
-    
-    if (LLM_FALLBACK === 'groq' && PROVIDER_CONFIG.groq.apiKey2) {
-      // Para Groq, tenta rotacionar chaves
-      let groqError = null;
-      const keys = [PROVIDER_CONFIG.groq.apiKey, PROVIDER_CONFIG.groq.apiKey2].filter(Boolean);
-      
-      for (let i = 0; i < keys.length; i++) {
-        try {
-          console.log(`  [Groq] Tentando chave ${i + 1}...`);
-          const url = (PROVIDER_CONFIG.groq.baseURL).replace(/\/$/, '') + '/chat/completions';
-          const body = {
-            model: PROVIDER_CONFIG.groq.model,
-            messages: messages,
-            temperature: config.temperature ?? 0.1,
-            max_tokens: config.maxTokens ?? PROVIDER_CONFIG.groq.maxTokens,
-            response_format: config.responseFormat
-          };
-          const headers = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${keys[i]}`
-          };
-          const response = await axios.post(url, body, { headers });
-          
-          if (response.data.usage) {
-            cycleMetrics.totalTokens += response.data.usage.total_tokens;
-          }
-          
-          return response.data;
-        } catch (err) {
-          groqError = err;
-        }
-      }
-      
-      throw groqError;
-    }
-    
-    return await callLLM(messages, LLM_FALLBACK, config);
-  } catch (fallbackError) {
-    console.error(`  [LLM] Fallback ${LLM_FALLBACK} também falhou: ${fallbackError.message}`);
-    throw lastError || fallbackError;
-  }
+
+  console.error(`  [LLM] Todas as tentativas falharam.`);
+  throw lastError;
 }
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
@@ -1325,7 +1388,6 @@ async function crawleeExtract(url, limit, storeName) {
     launchContext: {
       useIncognitoPages: false, // Necessário para o stealthPlugin aplicar no contexto global
       launcher: chromium,
-      contextOptions: storeName === 'Amazon' ? AMAZON_CONTEXT_OPTIONS : undefined,
       launchOptions: {
         headless: true,
         args: [
@@ -1335,7 +1397,8 @@ async function crawleeExtract(url, limit, storeName) {
           '--disable-blink-features=AutomationControlled',
           '--no-first-run',
           '--mute-audio'
-        ]
+        ],
+        ...(storeName === 'Amazon' ? AMAZON_CONTEXT_OPTIONS : {})
       }
     },
     preNavigationHooks: [
@@ -1752,6 +1815,93 @@ async function generateShopeeAffiliateUrl(originalUrl) {
   } catch (err) {
     console.warn(`  [Shopee] Falha ao gerar link afiliado: ${err.message}. Usando URL original.`);
     return originalUrl;
+  }
+}
+
+function parseShopeeMoney(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const num = Number.parseFloat(String(value).replace(',', '.'));
+  return Number.isFinite(num) ? num : null;
+}
+
+function buildShopeeOfficialPayload(query, limit, page = 1) {
+  return JSON.stringify({
+    operationName: 'ShopeeProductOfferSearch',
+    query: 'query ShopeeProductOfferSearch($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName } pageInfo { page limit hasNextPage } } }',
+    variables: {
+      keyword: query,
+      page,
+      limit,
+      sortType: 2,
+      isAMSOffer: true,
+    },
+  });
+}
+
+async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STORE) {
+  if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) {
+    console.warn('  [Shopee API] Credenciais ausentes. Retornando 0 produtos.');
+    return [];
+  }
+
+  const payload = buildShopeeOfficialPayload(query, limit, 1);
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = crypto
+    .createHash('sha256')
+    .update(`${SHOPEE_APP_ID}${timestamp}${payload}${SHOPEE_APP_SECRET}`)
+    .digest('hex');
+
+  try {
+    const resp = await axios.post(SHOPEE_OFFICIAL_API_URL, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
+      },
+      timeout: 60000,
+      validateStatus: () => true,
+    });
+
+    const errors = Array.isArray(resp.data?.errors) ? resp.data.errors : [];
+    if (resp.status !== 200 || errors.length > 0) {
+      const errMsg = errors.map((e) => e?.message).filter(Boolean).join(' | ') || `HTTP ${resp.status}`;
+      console.warn(`  [Shopee API] Falha na busca oficial: ${errMsg}. Retornando 0 produtos.`);
+      return [];
+    }
+
+    const nodes = Array.isArray(resp.data?.data?.productOfferV2?.nodes)
+      ? resp.data.data.productOfferV2.nodes
+      : [];
+
+    const converted = nodes
+      .map((node) => {
+        const currentPrice = parseShopeeMoney(node?.priceMin) ?? parseShopeeMoney(node?.priceMax);
+        const oldPriceCandidate = parseShopeeMoney(node?.priceMax);
+        const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
+        if (!node?.productName || !currentPrice || !node?.productLink) return null;
+
+        return {
+          product_name: String(node.productName).trim(),
+          current_price: currentPrice,
+          old_price: oldPrice,
+          image_url: node.imageUrl || null,
+          original_url: node.productLink,
+          affiliate_url: node.offerLink || node.productLink,
+          rating: node.ratingStar ? parseFloat(String(node.ratingStar)) : null,
+          category: 'Geral',
+          platform: 'Shopee',
+          marketplace: 'Shopee',
+          sales: node.sales ?? null,
+          shopee_item_id: node.itemId ?? null,
+          shopee_shop_id: node.shopId ?? null,
+        };
+      })
+      .filter(Boolean);
+
+    console.log(`  [Shopee API] HTTP ${resp.status} | Retornados: ${nodes.length} | Convertidos: ${converted.length}`);
+    return converted;
+  } catch (err) {
+    console.warn(`  [Shopee API] Erro de requisição: ${err.message}. Retornando 0 produtos.`);
+    return [];
   }
 }
 
@@ -2226,7 +2376,9 @@ async function scrapeStore(store) {
         'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
       };
 
-      const rawProducts = await crawleeExtract(urls[store], OFFERS_PER_STORE, store);
+      const rawProducts = store === 'Shopee'
+        ? await fetchShopeeProductsFromOfficialApi(query, OFFERS_PER_STORE)
+        : await crawleeExtract(urls[store], OFFERS_PER_STORE, store);
 
       for (const p of rawProducts) {
         // A Groq retorna product_name e image_url, mas também suporta title/image para compatibilidade
@@ -2240,10 +2392,12 @@ async function scrapeStore(store) {
           continue;
         }
         
-        const rawUrl = p.url?.startsWith('http') ? p.url : urls[store];
+        const rawUrl = store === 'Shopee'
+          ? (p.original_url?.startsWith('http') ? p.original_url : (p.url?.startsWith('http') ? p.url : urls[store]))
+          : (p.url?.startsWith('http') ? p.url : urls[store]);
         const cleanUrl = cleanProductUrl(rawUrl);
         const affiliateUrl = store === 'Shopee'
-          ? await generateShopeeAffiliateUrl(cleanUrl)
+          ? (p.affiliate_url?.startsWith('http') ? p.affiliate_url : await generateShopeeAffiliateUrl(cleanUrl))
           : buildAffiliateUrl(cleanUrl, store);
         
         const prodData = {
@@ -2592,6 +2746,7 @@ module.exports = {
   scrapeStore,
   upsertOffer,
   processTopOffers,
+  fetchShopeeProductsFromOfficialApi,
   runScrapingCycle,
   logErrorToSupabase,
   GOLDEN_QUERIES,
