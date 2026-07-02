@@ -8,6 +8,45 @@ export interface ValidationResult {
   rejectReason: string | null;
 }
 
+function isAmazonSource(source: string): boolean {
+  return source.trim().toLowerCase().includes("amazon");
+}
+
+function isGenericAmazonTitle(title: string): boolean {
+  const normalized = title
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .replace(/^loja oficial\s+/i, "")
+    .replace(/[|:-]+$/g, "");
+
+  return [
+    "amazon",
+    "amazon.com.br",
+    "amazon brasil",
+    "amazon.com",
+  ].includes(normalized);
+}
+
+function isPromotionalAmazonImage(imageUrl: string): boolean {
+  const lower = imageUrl.trim().toLowerCase();
+  if (!lower) return true;
+
+  return (
+    lower.includes("/s/al-na") ||
+    lower.includes("sponsored-ads.amazon") ||
+    lower.includes("aax-us-east-retail") ||
+    lower.includes("nav-sprite") ||
+    lower.includes("sprite") ||
+    lower.includes("banner") ||
+    lower.includes("logo") ||
+    lower.includes("icon") ||
+    lower.includes("pixel") ||
+    lower.includes("placeholder") ||
+    lower.endsWith(".gif")
+  );
+}
+
 export function validateProduct(product: any, source: string): ValidationResult {
   if (!SCRAPER_STRICT_MODE) {
     return { valid: true, confidence: 100, rejectReason: null };
@@ -34,13 +73,18 @@ export function validateProduct(product: any, source: string): ValidationResult 
   
   const image = (product.image || product.image_url || "").trim();
   const url = (product.url || product.original_url || "").trim();
+  const amazonSource = isAmazonSource(source);
 
   if (!title) {
     return { valid: false, confidence: 5, rejectReason: "SEM_TITULO" };
   }
 
+  if (amazonSource && isGenericAmazonTitle(title)) {
+    return { valid: false, confidence: 0, rejectReason: "AMAZON_TITULO_GENERICO" };
+  }
+
   if (price < SCRAPER_LIMITS.MIN_PRICE || price > SCRAPER_LIMITS.MAX_PRICE) {
-    return { valid: false, confidence: 10, rejectReason: "PRECO_INVALIDO" };
+    return { valid: false, confidence: 10, rejectReason: amazonSource ? "AMAZON_PRECO_INVALIDO" : "PRECO_INVALIDO" };
   }
 
   // 2. Validação de Título (Blacklist e Tamanho)
@@ -64,6 +108,10 @@ export function validateProduct(product: any, source: string): ValidationResult 
   if (!image || image === "null" || image.length < 5) {
     return { valid: false, confidence: 0, rejectReason: "SEM_IMAGEM" };
   }
+
+  if (amazonSource && isPromotionalAmazonImage(image)) {
+    return { valid: false, confidence: 0, rejectReason: "AMAZON_IMAGEM_PROMOCIONAL" };
+  }
   
   if (isBlacklistedImage(image)) {
     return { valid: false, confidence: 10, rejectReason: "BLACKLIST_IMAGE" };
@@ -78,6 +126,14 @@ export function validateProduct(product: any, source: string): ValidationResult 
     const parsedUrl = new URL(url);
     if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
       return { valid: false, confidence: 0, rejectReason: "PROTOCOLO_URL_INVALIDO" };
+    }
+
+    if (amazonSource) {
+      const host = parsedUrl.hostname.toLowerCase();
+      const isAmazonHost = host === "www.amazon.com.br" || host === "amazon.com.br" || host === "amzn.to";
+      if (!isAmazonHost) {
+        return { valid: false, confidence: 0, rejectReason: "AMAZON_URL_INVALIDA" };
+      }
     }
   } catch (err) {
     return { valid: false, confidence: 0, rejectReason: "URL_MALFORMADA" };
