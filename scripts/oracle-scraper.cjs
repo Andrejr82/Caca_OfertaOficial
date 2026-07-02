@@ -27,6 +27,7 @@ chromium.use(stealthPlugin());
 process.env.CRAWLEE_AVAILABLE_MEMORY_RATIO = '10.0';
 process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 const axios        = require('axios');
+const cheerio      = require('cheerio');
 require('dotenv').config({ path: '.env.local' });
 const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
 
@@ -368,7 +369,12 @@ async function callLLMWithFallback(messages, config = {}) {
   throw lastError;
 }
 const RAKUTEN_AFFILIATE_ID = process.env.RAKUTEN_AFFILIATE_ID || '';
+const RAKUTEN_ACCESS_TOKEN = process.env.RAKUTEN_ACCESS_TOKEN || '';
+const RAKUTEN_CLIENT_ID = process.env.RAKUTEN_CLIENT_ID || '';
+const RAKUTEN_CLIENT_SECRET = process.env.RAKUTEN_CLIENT_SECRET || '';
+const RAKUTEN_SID = process.env.RAKUTEN_SID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
+const ENABLE_NETSHOES_RAKUTEN = process.env.ENABLE_NETSHOES_RAKUTEN === '1';
 
 // #region debug-point A:golden-queries-audit-bootstrap
 const SCRAPER_AUDIT_ENV_FILE = '.dbg/golden-queries-audit.env';
@@ -516,8 +522,8 @@ function buildValidationPreview(products, storeName) {
 }
 // #endregion
 
-// ─── Sistema de Descoberta (Golden Queries) ───────────────────
-const QUERY_VARIANT_ORDER = ['popular', 'volume', 'brand', 'generic', 'promo'];
+// ─── Sistema de Descoberta ─────────────────────────────────────
+const QUERY_VARIANT_ORDER = ['ofertas', 'mais_vendidos', 'tendencias', 'categoria', 'viral', 'lancamentos'];
 const STORE_QUERY_SETTINGS = {
   'Mercado Livre': { categoriesPerRun: 12, queriesPerCategory: 2 },
   'Amazon': { categoriesPerRun: 12, queriesPerCategory: 2 },
@@ -1049,94 +1055,147 @@ const JARDINAGEM = [
   'Pulverizador manual 5L'
 ];
 
-const CATEGORY_QUERY_BLOCKS = {
-  'Eletrônicos': ELETRONICOS,
-  'Games': GAMES,
-  'Hardware': HARDWARE,
-  'Informática': INFORMATICA,
-  'Casa Inteligente': CASA_INTELIGENTE,
-  'Cozinha': COZINHA,
-  'Eletrodomésticos': ELETRODOMESTICOS,
-  'Eletroportáteis': ELETROPORTATEIS,
-  'Ferramentas': FERRAMENTAS,
-  'Automotivo': AUTOMOTIVO,
-  'Pet': PET,
-  'Saúde': SAUDE,
-  'Fitness': FITNESS,
-  'Suplementos': SUPLEMENTOS,
-  'Moda Masculina': MODA_MASCULINA,
-  'Moda Feminina': MODA_FEMININA,
-  'Tênis': TENIS,
-  'Relógios': RELOGIOS,
-  'Perfumes': PERFUMES,
-  'Beleza': BELEZA,
-  'Infantil': INFANTIL,
-  'Bebê': BEBE,
-  'Papelaria': PAPELARIA,
-  'Escritório': ESCRITORIO,
-  'Decoração': DECORACAO,
-  'Móveis': MOVEIS,
-  'Utilidades': UTILIDADES,
-  'Celulares': CELULARES,
-  'Tablets': TABLETS,
-  'Smartphones Premium': SMARTPHONES_PREMIUM,
-  'Smartphones Intermediários': SMARTPHONES_INTERMEDIARIOS,
-  'Áudio': AUDIO,
-  'Vídeo': VIDEO,
-  'Streaming': STREAMING,
-  'Livros': LIVROS,
-  'Brinquedos': BRINQUEDOS,
-  'Camping': CAMPING,
-  'Pesca': PESCA,
-  'Esporte': ESPORTE,
-  'Jardinagem': JARDINAGEM
+const DISCOVERY_QUERY_BLOCKS = {
+  'Mercado Livre': [
+    'ofertas do dia',
+    'mais vendidos',
+    'tendências',
+    'eletrônicos em oferta',
+    'celulares promoção',
+    'casa móveis decoração',
+    'utilidades domésticas',
+    'cozinha promoção',
+    'beleza cuidado pessoal',
+    'bebê promoção',
+    'pet shop promoção',
+    'games promoção',
+    'ferramentas construção',
+    'esporte fitness',
+    'automotivo promoção',
+    'informática promoção',
+    'moda feminina promoção',
+    'moda masculina promoção',
+    'organização casa',
+    'produto viral'
+  ],
+  'Amazon': [
+    'mais vendidos',
+    'ofertas do dia',
+    'eletrônicos promoção',
+    'casa promoção',
+    'cozinha promoção',
+    'utilidades domésticas',
+    'beleza promoção',
+    'livros mais vendidos',
+    'kindle promoção',
+    'fire tv promoção',
+    'alexa promoção',
+    'brinquedos promoção',
+    'bebê promoção',
+    'pet promoção',
+    'games promoção',
+    'informática promoção',
+    'escritório promoção',
+    'produto viral',
+    'achadinhos amazon',
+    'lançamentos amazon'
+  ],
+  'Shopee': [
+    'ofertas oficiais',
+    'mais vendidos',
+    'achadinhos',
+    'moda promoção',
+    'beleza promoção',
+    'eletrônicos promoção',
+    'casa decoração',
+    'cama mesa banho',
+    'smartphones promoção',
+    'fritadeira elétrica',
+    'projetor promoção',
+    'saúde promoção',
+    'pet promoção',
+    'bebê promoção'
+  ]
 };
 
-const CATEGORY_MARKETPLACE_TARGETS = {
-  'Eletrônicos': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Games': ['Amazon', 'Mercado Livre', 'Magalu'],
-  'Hardware': ['Mercado Livre', 'Amazon', 'Magalu'],
-  'Informática': ['Mercado Livre', 'Amazon', 'Magalu'],
-  'Casa Inteligente': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Cozinha': ['Amazon', 'Magalu', 'Mercado Livre'],
-  'Eletrodomésticos': ['Magalu', 'Mercado Livre', 'Amazon'],
-  'Eletroportáteis': ['Amazon', 'Magalu', 'Mercado Livre'],
-  'Ferramentas': ['Mercado Livre', 'Amazon', 'Shopee'],
-  'Automotivo': ['Mercado Livre', 'Amazon', 'Shopee'],
-  'Pet': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Saúde': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Fitness': ['Netshoes', 'Amazon', 'Mercado Livre'],
-  'Suplementos': ['Netshoes', 'Amazon', 'Mercado Livre'],
-  'Moda Masculina': ['Netshoes', 'Shopee', 'Shein'],
-  'Moda Feminina': ['Shopee', 'Shein', 'Netshoes'],
-  'Tênis': ['Netshoes', 'Mercado Livre', 'Amazon'],
-  'Relógios': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Perfumes': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Beleza': ['Amazon', 'Shopee', 'Shein'],
-  'Infantil': ['Shopee', 'Amazon', 'Mercado Livre'],
-  'Bebê': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Papelaria': ['Amazon', 'Shopee', 'Mercado Livre'],
-  'Escritório': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Decoração': ['Amazon', 'Shopee', 'Magalu'],
-  'Móveis': ['Magalu', 'Mercado Livre', 'Amazon'],
-  'Utilidades': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Celulares': ['Mercado Livre', 'Amazon', 'Magalu'],
-  'Tablets': ['Amazon', 'Mercado Livre', 'Magalu'],
-  'Smartphones Premium': ['Mercado Livre', 'Amazon', 'Magalu'],
-  'Smartphones Intermediários': ['Mercado Livre', 'Amazon', 'Magalu'],
-  'Áudio': ['Amazon', 'Mercado Livre', 'Magalu'],
-  'Vídeo': ['Amazon', 'Mercado Livre', 'Magalu'],
-  'Streaming': ['Amazon', 'Mercado Livre', 'Magalu'],
-  'Livros': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Brinquedos': ['Amazon', 'Shopee', 'Mercado Livre'],
-  'Camping': ['Amazon', 'Mercado Livre', 'Shopee'],
-  'Pesca': ['Mercado Livre', 'Amazon', 'Shopee'],
-  'Esporte': ['Netshoes', 'Amazon', 'Mercado Livre'],
-  'Jardinagem': ['Mercado Livre', 'Amazon', 'Shopee']
+const MARKETPLACE_DISCOVERY_SOURCES = {
+  'Mercado Livre': [
+    { type: 'url', source: 'https://www.mercadolivre.com.br/mais-vendidos', fallbackKeyword: 'mais vendidos' },
+    { type: 'url', source: 'https://www.mercadolivre.com.br/l/promocoes', fallbackKeyword: 'ofertas do dia' },
+    { type: 'url', source: 'https://tendencias.mercadolivre.com.br/', fallbackKeyword: 'tendências' },
+    { type: 'url', source: 'https://www.mercadolivre.com.br/categorias', fallbackKeyword: 'eletrônicos em oferta' },
+    { type: 'url', source: 'https://www.mercadolivre.com.br/lojas-oficiais', fallbackKeyword: 'ofertas oficiais' }
+  ],
+  'Amazon': [
+    { type: 'url', source: 'https://www.amazon.com.br/gp/bestsellers', fallbackKeyword: 'mais vendidos' },
+    { type: 'url', source: 'https://www.amazon.com.br/deals', fallbackKeyword: 'ofertas do dia' },
+    { type: 'url', source: 'https://www.amazon.com.br/gp/new-releases', fallbackKeyword: 'lançamentos amazon' },
+    { type: 'url', source: 'https://www.amazon.com.br/gp/movers-and-shakers', fallbackKeyword: 'produto viral' }
+  ],
+  'Shopee': DISCOVERY_QUERY_BLOCKS.Shopee.map((source) => ({ type: 'keyword', source }))
+};
+
+const SPECIFIC_QUERY_FALLBACK_BLOCKS = {
+  'Mercado Livre': [
+    ...ELETRONICOS,
+    ...GAMES,
+    ...HARDWARE,
+    ...INFORMATICA,
+    ...CASA_INTELIGENTE,
+    ...COZINHA,
+    ...FERRAMENTAS,
+    ...AUTOMOTIVO,
+    ...CELULARES
+  ],
+  'Amazon': [
+    ...ELETRONICOS,
+    ...CASA_INTELIGENTE,
+    ...COZINHA,
+    ...LIVROS,
+    ...BRINQUEDOS,
+    ...BEBE,
+    ...PET,
+    ...ESCRITORIO
+  ],
+  'Shopee': [
+    ...MODA_FEMININA,
+    ...MODA_MASCULINA,
+    ...BELEZA,
+    ...UTILIDADES,
+    ...DECORACAO,
+    ...INFANTIL,
+    ...BEBE,
+    ...PET
+  ]
 };
 
 function normalizeGoldenQuery(query) {
   return String(query || '').trim().replace(/\s+/g, ' ');
+}
+
+function normalizeDiscoverySource(source) {
+  if (source && typeof source === 'object') {
+    const type = source.type === 'url' ? 'url' : 'keyword';
+    const value = normalizeGoldenQuery(source.source || source.query || source.url || source.value);
+    return {
+      type,
+      source: value,
+      query: value,
+      fallbackKeyword: normalizeGoldenQuery(source.fallbackKeyword || '')
+    };
+  }
+
+  const value = normalizeGoldenQuery(source);
+  return { type: 'keyword', source: value, query: value, fallbackKeyword: '' };
+}
+
+function getDiscoverySourceValue(source) {
+  return normalizeDiscoverySource(source).source;
+}
+
+function getDiscoverySourceKey(source) {
+  const normalized = normalizeDiscoverySource(source);
+  return `${normalized.type}:${normalized.source.toLowerCase()}`;
 }
 
 function dedupeQueryList(queries) {
@@ -1151,82 +1210,38 @@ function dedupeQueryList(queries) {
   }, []);
 }
 
-function buildCategoryQueryBank(queries) {
-  const buckets = {
-    popular: [],
-    volume: [],
-    brand: [],
-    generic: [],
-    promo: []
-  };
-  const bucketNames = Object.keys(buckets);
-  dedupeQueryList(queries).forEach((query, index) => {
-    buckets[bucketNames[index % bucketNames.length]].push(query);
+function classifyDiscoveryQuery(query) {
+  const normalized = normalizeGoldenQuery(query).toLowerCase();
+  if (/oferta|promo|achadinho/.test(normalized)) return 'ofertas';
+  if (/mais vendido/.test(normalized)) return 'mais_vendidos';
+  if (/tend[eê]ncia/.test(normalized)) return 'tendencias';
+  if (/viral/.test(normalized)) return 'viral';
+  if (/lan[cç]amento/.test(normalized)) return 'lancamentos';
+  return 'categoria';
+}
+
+function buildDiscoveryQueryBank(queries) {
+  const buckets = QUERY_VARIANT_ORDER.reduce((acc, variant) => {
+    acc[variant] = [];
+    return acc;
+  }, {});
+
+  dedupeQueryList(queries).forEach((query) => {
+    buckets[classifyDiscoveryQuery(query)].push(query);
   });
+
   return buckets;
 }
 
-function createEmptyGoldenQueries() {
-  return MARKETPLACE_ORDER.reduce((acc, store) => {
-    acc[store] = {};
+function buildDiscoveryQueries() {
+  return Object.entries(DISCOVERY_QUERY_BLOCKS).reduce((acc, [store, queries]) => {
+    acc[store] = { discovery: buildDiscoveryQueryBank(queries) };
     return acc;
   }, {});
 }
 
-function buildMarketplaceGoldenQueries() {
-  const banks = createEmptyGoldenQueries();
-  const marketplaceLoad = MARKETPLACE_ORDER.reduce((acc, store) => {
-    acc[store] = 0;
-    return acc;
-  }, {});
-
-  Object.entries(CATEGORY_QUERY_BLOCKS).forEach(([categoryName, rawQueries]) => {
-    const targets = CATEGORY_MARKETPLACE_TARGETS[categoryName] || MARKETPLACE_ORDER;
-    const queries = dedupeQueryList(rawQueries);
-    const assignments = targets.reduce((acc, store) => {
-      acc[store] = [];
-      return acc;
-    }, {});
-
-    const seededTargets = [...targets]
-      .sort((a, b) => marketplaceLoad[a] - marketplaceLoad[b])
-      .slice(0, Math.min(targets.length, queries.length));
-
-    queries.forEach((query, index) => {
-      if (index < seededTargets.length) {
-        const seededStore = seededTargets[index];
-        assignments[seededStore].push(query);
-        marketplaceLoad[seededStore] += 1;
-        return;
-      }
-
-      const selectedStore = targets.reduce((bestStore, currentStore) => {
-        if (!bestStore) return currentStore;
-
-        const bestLoad = marketplaceLoad[bestStore];
-        const currentLoad = marketplaceLoad[currentStore];
-        if (currentLoad !== bestLoad) {
-          return currentLoad < bestLoad ? currentStore : bestStore;
-        }
-
-        return assignments[currentStore].length < assignments[bestStore].length ? currentStore : bestStore;
-      }, null);
-
-      assignments[selectedStore].push(query);
-      marketplaceLoad[selectedStore] += 1;
-    });
-
-    targets.forEach((store) => {
-      if (assignments[store].length > 0) {
-        banks[store][categoryName] = buildCategoryQueryBank(assignments[store]);
-      }
-    });
-  });
-
-  return banks;
-}
-
-const GOLDEN_QUERIES = buildMarketplaceGoldenQueries();
+const DISCOVERY_QUERIES = buildDiscoveryQueries();
+const GOLDEN_QUERIES = DISCOVERY_QUERIES;
 
 const QUERY_ROTATION_STATE = {};
 
@@ -1236,20 +1251,45 @@ function rotateList(items, offset = 0) {
   return items.slice(shift).concat(items.slice(0, shift));
 }
 
+function seededShuffle(items, seed = 0) {
+  const shuffled = [...items];
+  let state = (seed + 1) * 2654435761;
+
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    const swapIndex = state % (index + 1);
+    [shuffled[index], shuffled[swapIndex]] = [shuffled[swapIndex], shuffled[index]];
+  }
+
+  return shuffled;
+}
+
 // #region debug-point A:query-meta
 function resolveQueryAuditMeta(store, query) {
-  const normalizedQuery = normalizeGoldenQuery(query);
-  const storeBank = GOLDEN_QUERIES[store] || {};
+  const source = normalizeDiscoverySource(query);
+  const normalizedQuery = source.source;
+  if (source.type === 'url') {
+    return {
+      category: 'Discovery',
+      variant: 'marketplace_url',
+      sourceType: 'url',
+      fallbackKeyword: source.fallbackKeyword || null
+    };
+  }
+  const storeBank = GOLDEN_QUERIES[store]?.discovery || {};
 
-  for (const [categoryName, variants] of Object.entries(storeBank)) {
-    for (const [variantName, queries] of Object.entries(variants)) {
-      if ((queries || []).some((candidate) => normalizeGoldenQuery(candidate) === normalizedQuery)) {
-        return { category: categoryName, variant: variantName };
-      }
+  for (const [variantName, queries] of Object.entries(storeBank)) {
+    if ((queries || []).some((candidate) => normalizeGoldenQuery(candidate) === normalizedQuery)) {
+      return { category: 'Discovery', variant: variantName, sourceType: 'keyword' };
     }
   }
 
-  return { category: 'Desconhecida', variant: 'unknown' };
+  const fallbackQueries = SPECIFIC_QUERY_FALLBACK_BLOCKS[store] || [];
+  if (fallbackQueries.some((candidate) => normalizeGoldenQuery(candidate) === normalizedQuery)) {
+    return { category: 'Fallback específico', variant: 'fallback', sourceType: 'keyword' };
+  }
+
+  return { category: 'Desconhecida', variant: 'unknown', sourceType: source.type };
 }
 // #endregion
 
@@ -1269,59 +1309,118 @@ function pickQueryFromCategory(categoryBank, variantOrder, usedQueries) {
   return null;
 }
 
-function getRandomQueries(store) {
-  const categories = Object.keys(GOLDEN_QUERIES[store] || {});
+function selectDiscoveryQueries(storeName) {
+  const store = storeName;
+  const discoveryBank = GOLDEN_QUERIES[store]?.discovery || null;
   const settings = STORE_QUERY_SETTINGS[store] || { categoriesPerRun: 12, queriesPerCategory: 2 };
-  const state = QUERY_ROTATION_STATE[store] || { categoryCursor: 0, variantCursor: 0 };
+  const configuredQueryLimit = Math.max(1, settings.categoriesPerRun * settings.queriesPerCategory);
+  const state = QUERY_ROTATION_STATE[store] || { cycleCursor: 0, variantCursor: 0, firstQueryKeys: [] };
   QUERY_ROTATION_STATE[store] = state;
 
-  if (categories.length === 0) {
-    return ['oferta'];
+  if (store === 'Shopee') {
+    const shopeeSources = MARKETPLACE_DISCOVERY_SOURCES.Shopee || [];
+    const selectedShopeeSources = rotateList(shopeeSources, state.cycleCursor)
+      .slice(0, Math.min(configuredQueryLimit, shopeeSources.length))
+      .map(normalizeDiscoverySource);
+    state.cycleCursor = (state.cycleCursor + 1) % 100000;
+    return selectedShopeeSources;
   }
 
-  const orderedCategories = rotateList(categories, state.categoryCursor);
-  const selectedCategories = orderedCategories.slice(0, Math.min(settings.categoriesPerRun, categories.length));
+  if (!discoveryBank) {
+    return [normalizeDiscoverySource('oferta')];
+  }
+
+  const variantOrder = rotateList(QUERY_VARIANT_ORDER, state.variantCursor);
   const usedQueries = new Set();
   const selected = [];
+  const firstQueryHistory = new Set(state.firstQueryKeys || []);
+  const marketplaceSources = (MARKETPLACE_DISCOVERY_SOURCES[store] || []).map(normalizeDiscoverySource);
+  const urlSources = marketplaceSources.filter((source) => source.type === 'url');
+  const queryLimit = urlSources.length > 0
+    ? Math.min(configuredQueryLimit, Math.max(urlSources.length, Math.ceil(urlSources.length / 0.7)))
+    : configuredQueryLimit;
+  const fallbackLimit = Math.floor(queryLimit * 0.2);
+  const discoveryQueryCount = Math.max(1, queryLimit - fallbackLimit);
+  const realUrlLimit = store === 'Mercado Livre'
+    ? Math.min(urlSources.length, Math.ceil(queryLimit * 0.7))
+    : (store === 'Amazon' ? Math.min(urlSources.length, queryLimit - fallbackLimit) : 0);
+  const keywordDiscoveryLimit = Math.max(1, queryLimit - Math.min(realUrlLimit, queryLimit) - fallbackLimit);
 
-  selectedCategories.forEach((categoryName, index) => {
-    const categoryBank = GOLDEN_QUERIES[store][categoryName];
-    const primaryOrder = rotateList(QUERY_VARIANT_ORDER, state.variantCursor + index);
-    const secondaryOrder = rotateList(QUERY_VARIANT_ORDER, state.variantCursor + index + 2);
-
-    const firstQuery = pickQueryFromCategory(categoryBank, primaryOrder, usedQueries);
-    if (firstQuery) {
-      usedQueries.add(firstQuery);
-      selected.push(firstQuery);
+  if (urlSources.length > 0) {
+    const rotatedUrls = rotateList(urlSources, state.cycleCursor);
+    for (let index = 0; selected.length < Math.min(realUrlLimit, queryLimit) && index < rotatedUrls.length; index++) {
+      const source = rotatedUrls[index];
+      const key = getDiscoverySourceKey(source);
+      if (usedQueries.has(key)) continue;
+      usedQueries.add(key);
+      selected.push(source);
     }
+  }
 
-    if ((settings.queriesPerCategory || 1) > 1) {
-      const secondQuery = pickQueryFromCategory(categoryBank, secondaryOrder, usedQueries);
-      if (secondQuery) {
-        usedQueries.add(secondQuery);
-        selected.push(secondQuery);
+  const keywordTarget = Math.min(queryLimit - fallbackLimit, selected.length + keywordDiscoveryLimit, discoveryQueryCount);
+  while (selected.length < keywordTarget) {
+    let addedThisRound = false;
+
+    for (const variant of variantOrder) {
+      const shuffledPool = seededShuffle(discoveryBank[variant] || [], state.cycleCursor + selected.length + variantOrder.indexOf(variant));
+
+      for (const rawQuery of shuffledPool) {
+        const query = normalizeGoldenQuery(rawQuery);
+        const key = `keyword:${query.toLowerCase()}`;
+        if (!query || usedQueries.has(key)) continue;
+        if (selected.length === 0 && firstQueryHistory.has(key)) continue;
+
+        usedQueries.add(key);
+        selected.push(normalizeDiscoverySource(query));
+        addedThisRound = true;
+        break;
       }
-    }
-  });
 
-  state.categoryCursor = (state.categoryCursor + selectedCategories.length) % categories.length;
+      if (selected.length >= discoveryQueryCount) break;
+    }
+
+    if (!addedThisRound) break;
+  }
+
+  const fallbackQueries = seededShuffle(
+    dedupeQueryList(SPECIFIC_QUERY_FALLBACK_BLOCKS[store] || []),
+    state.cycleCursor + 97
+  );
+
+  for (const rawQuery of fallbackQueries) {
+    if (selected.length >= queryLimit) break;
+    const query = normalizeGoldenQuery(rawQuery);
+    const key = `keyword:${query.toLowerCase()}`;
+    if (!query || usedQueries.has(key)) continue;
+    usedQueries.add(key);
+    selected.push(normalizeDiscoverySource(query));
+  }
+
+  const firstQueryKey = selected[0] ? getDiscoverySourceKey(selected[0]) : null;
+  if (firstQueryKey) {
+    state.firstQueryKeys = [firstQueryKey, ...(state.firstQueryKeys || [])].slice(0, Math.min(6, DISCOVERY_QUERY_BLOCKS[store].length + urlSources.length));
+  }
+
+  state.cycleCursor = (state.cycleCursor + 1) % 100000;
   state.variantCursor = (state.variantCursor + 1) % QUERY_VARIANT_ORDER.length;
 
   // #region debug-point A:selected-queries
-  const selectedCategorySet = new Set(selectedCategories);
-  const dormantCategories = categories.filter((categoryName) => !selectedCategorySet.has(categoryName));
   emitAuditEvent('A', 'oracle-scraper.cjs:getRandomQueries', 'query-batch-selected', {
     store,
-    totalCategoriesAvailable: categories.length,
-    selectedCategories,
-    dormantCategories,
-    queriesSelected: selected.map((query) => ({ query, ...resolveQueryAuditMeta(store, query) })),
+    totalCategoriesAvailable: DISCOVERY_QUERY_BLOCKS[store].length,
+    selectedCategories: variantOrder,
+    dormantCategories: [],
+    queriesSelected: selected.map((query) => ({ query: getDiscoverySourceValue(query), type: normalizeDiscoverySource(query).type, ...resolveQueryAuditMeta(store, query) })),
     settings,
-    rotationState: { categoryCursor: state.categoryCursor, variantCursor: state.variantCursor }
+    rotationState: { cycleCursor: state.cycleCursor, variantCursor: state.variantCursor }
   });
   // #endregion
 
   return selected;
+}
+
+function getRandomQueries(store) {
+  return selectDiscoveryQueries(store);
 }
 
 // ─── Telemetria Global do Ciclo ─────────────────────────────────
@@ -1790,6 +1889,102 @@ function buildAffiliateUrl(originalUrl, store) {
     if (store === 'Netshoes' && RAKUTEN_AFFILIATE_ID) return `https://click.linksynergy.com/deeplink?id=${RAKUTEN_AFFILIATE_ID}&mid=${RAKUTEN_NETSHOES_MID}&murl=${encodeURIComponent(originalUrl)}`;
   } catch (_) {}
   return originalUrl;
+}
+
+function extractOriginalRakutenUrl(linkUrl) {
+  if (!linkUrl) return null;
+  try {
+    const parsed = new URL(linkUrl);
+    const directUrl = parsed.searchParams.get('murl');
+    return directUrl ? decodeURIComponent(directUrl) : linkUrl;
+  } catch (_) {
+    return linkUrl;
+  }
+}
+
+async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE, page = 1) {
+  if (!ENABLE_NETSHOES_RAKUTEN) {
+    console.log('  [Rakuten Netshoes] Flag desabilitada. Retornando 0 produtos.');
+    return [];
+  }
+
+  if (!RAKUTEN_ACCESS_TOKEN || !RAKUTEN_CLIENT_ID || !RAKUTEN_CLIENT_SECRET || !RAKUTEN_SID || !RAKUTEN_NETSHOES_MID) {
+    console.warn('  [Rakuten Netshoes] Credenciais incompletas. Retornando 0 produtos.');
+    return [];
+  }
+
+  try {
+    const resp = await axios.get('https://api.linksynergy.com/productsearch/1.0', {
+      headers: {
+        Authorization: `Bearer ${RAKUTEN_ACCESS_TOKEN}`,
+        Accept: 'application/xml'
+      },
+      params: {
+        mid: RAKUTEN_NETSHOES_MID,
+        keyword: query,
+        max: limit,
+        pagenumber: page,
+        language: 'pt_BR'
+      },
+      timeout: 60000,
+      responseType: 'text',
+      validateStatus: () => true
+    });
+
+    if (resp.status !== 200) {
+      console.warn(`  [Rakuten Netshoes] HTTP ${resp.status}. Retornando 0 produtos.`);
+      return [];
+    }
+
+    const xml = typeof resp.data === 'string' ? resp.data : String(resp.data || '');
+    if (!xml) {
+      console.warn('  [Rakuten Netshoes] XML vazio. Retornando 0 produtos.');
+      return [];
+    }
+
+    const $ = cheerio.load(xml, { xmlMode: true });
+    const errorText = $('Errors > ErrorText').first().text().trim();
+    if (errorText) {
+      console.warn(`  [Rakuten Netshoes] Falha na API: ${errorText}. Retornando 0 produtos.`);
+      return [];
+    }
+
+    const converted = $('result > item').map((_, node) => {
+      const item = $(node);
+      const productName = item.find('productname').first().text().trim();
+      const merchantName = item.find('merchantname').first().text().trim();
+      const imageUrl = item.find('imageurl').first().text().trim() || null;
+      const affiliateUrl = item.find('linkurl').first().text().trim() || null;
+      const originalUrl = extractOriginalRakutenUrl(affiliateUrl);
+      const retailPrice = Number.parseFloat(item.find('price').first().text().trim());
+      const salePriceRaw = Number.parseFloat(item.find('saleprice').first().text().trim());
+      const hasSalePrice = Number.isFinite(salePriceRaw) && salePriceRaw > 0 && salePriceRaw < retailPrice;
+      const currentPrice = hasSalePrice ? salePriceRaw : retailPrice;
+      const oldPrice = hasSalePrice ? retailPrice : null;
+      const categoryPrimary = item.find('category > primary').first().text().trim() || 'Geral';
+
+      if (!productName || !Number.isFinite(currentPrice) || !originalUrl) return null;
+
+      return {
+        product_name: productName,
+        current_price: currentPrice,
+        old_price: oldPrice,
+        image_url: imageUrl,
+        original_url: originalUrl,
+        affiliate_url: affiliateUrl,
+        category: categoryPrimary,
+        marketplace: 'Netshoes',
+        platform: 'Netshoes',
+        merchant_name: merchantName || null
+      };
+    }).get().filter(Boolean);
+
+    console.log(`  [Rakuten Netshoes] HTTP ${resp.status} | Retornados: ${$('result > item').length} | Convertidos: ${converted.length}`);
+    return converted;
+  } catch (err) {
+    console.warn(`  [Rakuten Netshoes] Erro de requisição: ${err.message}. Retornando 0 produtos.`);
+    return [];
+  }
 }
 
 // ─── Shopee Affiliate Link (API Oficial) ─────────────────────
@@ -2337,6 +2532,228 @@ async function cleanupOldDrafts() {
 }
 
 // ─── Raspa Loja ───────────────────────────────────────────────
+function buildDiscoveryUrl(store, keyword) {
+  const query = normalizeGoldenQuery(keyword);
+  const urls = {
+    'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
+    'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
+    'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
+    'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
+    'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
+    'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
+  };
+  return urls[store] || query;
+}
+
+async function fetchProductsForDiscoverySource(store, discoverySource, limit = OFFERS_PER_STORE) {
+  const source = normalizeDiscoverySource(discoverySource);
+  const finalUrl = source.type === 'url' ? source.source : buildDiscoveryUrl(store, source.source);
+
+  if (store === 'Shopee') {
+    return {
+      products: await fetchShopeeProductsFromOfficialApi(source.source, limit),
+      finalUrl: `Shopee Official API keyword="${source.source}"`,
+      source
+    };
+  }
+
+  if (store === 'Netshoes' && ENABLE_NETSHOES_RAKUTEN) {
+    return {
+      products: await fetchNetshoesProductsFromRakuten(source.source, limit),
+      finalUrl,
+      source
+    };
+  }
+
+  let products = await crawleeExtract(finalUrl, limit, store);
+  let usedUrl = finalUrl;
+
+  if (source.type === 'url' && products.length === 0 && source.fallbackKeyword) {
+    const fallbackUrl = buildDiscoveryUrl(store, source.fallbackKeyword);
+    console.log(`  [Discovery] URL sem produtos aprovados. Fallback keyword: "${source.fallbackKeyword}" -> ${fallbackUrl}`);
+    products = await crawleeExtract(fallbackUrl, limit, store);
+    usedUrl = fallbackUrl;
+  }
+
+  return { products, finalUrl: usedUrl, source };
+}
+
+async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS_PER_STORE) {
+  const result = {
+    cardsFound: 0,
+    cardsWithPrice: 0,
+    products: [],
+    finalUrl: url
+  };
+
+  const crawler = new PlaywrightCrawler({
+    maxConcurrency: 1,
+    requestHandlerTimeoutSecs: 120,
+    navigationTimeoutSecs: 90,
+    launchContext: {
+      useIncognitoPages: false,
+      launcher: chromium,
+      launchOptions: {
+        headless: true,
+        args: [
+          '--disable-dev-shm-usage',
+          '--no-sandbox',
+          '--disable-gpu',
+          '--disable-blink-features=AutomationControlled',
+          '--no-first-run',
+          '--mute-audio'
+        ],
+        ...(storeName === 'Amazon' ? AMAZON_CONTEXT_OPTIONS : {})
+      }
+    },
+    preNavigationHooks: [
+      async ({ page }) => {
+        page.setDefaultNavigationTimeout(120000);
+        page.setDefaultTimeout(120000);
+      }
+    ],
+    async requestHandler({ page }) {
+      await page.route('**/*', (route) => {
+        const type = route.request().resourceType();
+        if (['image', 'font', 'media'].includes(type)) {
+          route.abort();
+        } else {
+          route.continue();
+        }
+      });
+
+      await page.waitForTimeout(2500);
+      for (let i = 0; i < 4; i++) {
+        await page.mouse.wheel(0, 700);
+        await page.waitForTimeout(700);
+      }
+
+      const evaluated = await page.evaluate(({ maxProducts }) => {
+        const selectors = [
+          'div[data-asin]',
+          'div[data-component-type="s-search-result"]',
+          '[data-testid="product-card"]',
+          '.ui-search-layout__item',
+          '.poly-card',
+          '.zg-grid-general-faceout',
+          '.p13n-sc-uncoverable-faceout'
+        ];
+        const cards = Array.from(document.querySelectorAll(selectors.join(',')));
+        const parsePrice = (text) => {
+          const normalized = String(text || '').replace(/\s+/g, ' ');
+          const match = normalized.match(/R\$\s*([\d.]+(?:,\d{2})?)/) || normalized.match(/\$\s*([\d.]+(?:,\d{2})?)/);
+          if (!match) return null;
+          const parsed = Number.parseFloat(match[1].replace(/\./g, '').replace(',', '.'));
+          return Number.isFinite(parsed) ? parsed : null;
+        };
+        const titleFrom = (card) => {
+          const candidates = [
+            card.querySelector('h2 span')?.textContent,
+            card.querySelector('h2')?.textContent,
+            card.querySelector('.a-size-base-plus')?.textContent,
+            card.querySelector('.a-size-medium')?.textContent,
+            card.querySelector('.p13n-sc-truncated')?.textContent,
+            card.querySelector('[class*="line-clamp"]')?.textContent,
+            card.querySelector('.poly-component__title')?.textContent,
+            card.querySelector('.ui-search-item__title')?.textContent,
+            card.querySelector('[class*="poly-component__title"]')?.textContent,
+            card.querySelector('[class*="ui-search-item__title"]')?.textContent,
+            card.querySelector('a[href] span')?.textContent,
+            card.querySelector('img')?.getAttribute('alt')
+          ];
+          return (candidates.find(Boolean) || '').trim();
+        };
+        const linkFrom = (card) => {
+          const anchors = Array.from(card.querySelectorAll('a[href]'));
+          const hrefs = anchors.map((a) => a.href).filter(Boolean);
+          return hrefs.find((href) => /\/(?:dp|gp\/product|MLB-)/i.test(href)) || hrefs[0] || location.href;
+        };
+        const imageFrom = (card) => {
+          const img = card.querySelector('img.s-image') || card.querySelector('img.ui-search-result-image__element') || card.querySelector('img[data-testid="image"]') || card.querySelector('img');
+          if (!img) return '';
+          const dyn = img.getAttribute('data-a-dynamic-image');
+          if (dyn) {
+            try {
+              const first = Object.keys(JSON.parse(dyn))[0];
+              if (first) return first;
+            } catch {}
+          }
+          return img.getAttribute('data-src') || img.getAttribute('src') || img.src || '';
+        };
+
+        const products = [];
+        let cardsWithPrice = 0;
+        for (const card of cards) {
+          const text = card.innerText || '';
+          const price = parsePrice(text);
+          if (price) cardsWithPrice++;
+          const title = titleFrom(card);
+          const url = linkFrom(card);
+          if (title && price && url && products.length < maxProducts) {
+            products.push({
+              product_name: title,
+              current_price: price,
+              old_price: null,
+              image_url: imageFrom(card),
+              url,
+              category: 'Geral'
+            });
+          }
+        }
+
+        return { cardsFound: cards.length, cardsWithPrice, products };
+      }, { maxProducts: limit });
+
+      result.cardsFound = evaluated.cardsFound;
+      result.cardsWithPrice = evaluated.cardsWithPrice;
+      result.products = evaluated.products;
+    }
+  });
+
+  await crawler.run([url]);
+  return result;
+}
+
+async function inspectDiscoverySourceDryRun(store, discoverySource, limit = OFFERS_PER_STORE) {
+  const source = normalizeDiscoverySource(discoverySource);
+
+  if (store === 'Shopee') {
+    const products = await fetchShopeeProductsFromOfficialApi(source.source, limit);
+    return {
+      store,
+      source: source.source,
+      type: 'keyword',
+      finalUrl: `Shopee Official API keyword="${source.source}"`,
+      cardsFound: products.length,
+      cardsWithPrice: products.filter((product) => product.current_price).length,
+      productsExtracted: products.length,
+      productsApproved: products.filter((product) => product.product_name && product.current_price && (product.original_url || product.url)).length,
+      dbWrites: 0
+    };
+  }
+
+  let finalUrl = source.type === 'url' ? source.source : buildDiscoveryUrl(store, source.source);
+  let inspected = await inspectMarketplaceCardsWithCrawlee(finalUrl, store, limit);
+
+  if (source.type === 'url' && inspected.cardsWithPrice === 0 && source.fallbackKeyword) {
+    finalUrl = buildDiscoveryUrl(store, source.fallbackKeyword);
+    inspected = await inspectMarketplaceCardsWithCrawlee(finalUrl, store, limit);
+  }
+
+  const approved = inspected.products.filter((product) => product.product_name && product.current_price && product.url).length;
+  return {
+    store,
+    source: source.source,
+    type: source.type,
+    finalUrl,
+    cardsFound: inspected.cardsFound,
+    cardsWithPrice: inspected.cardsWithPrice,
+    productsExtracted: inspected.products.length,
+    productsApproved: approved,
+    dbWrites: 0
+  };
+}
+
 async function scrapeStore(store) {
   const queries = getRandomQueries(store); // Pega 1 keyword de CADA categoria da loja
   let storeCandidates = [];
@@ -2344,9 +2761,11 @@ async function scrapeStore(store) {
 
   for (const query of queries) {
     try {
-      const queryMeta = resolveQueryAuditMeta(store, query);
+      const discoverySource = normalizeDiscoverySource(query);
+      const queryLabel = discoverySource.source;
+      const queryMeta = resolveQueryAuditMeta(store, discoverySource);
       SCRAPER_AUDIT_STATE.currentStore = store;
-      SCRAPER_AUDIT_STATE.currentQuery = query;
+      SCRAPER_AUDIT_STATE.currentQuery = queryLabel;
       SCRAPER_AUDIT_STATE.currentCategory = queryMeta.category;
       SCRAPER_AUDIT_STATE.currentVariant = queryMeta.variant;
       SCRAPER_AUDIT_STATE.queryStartedAt = Date.now();
@@ -2359,26 +2778,15 @@ async function scrapeStore(store) {
       // #region debug-point B:query-start
       emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'query-start', {
         store,
-        query,
+        query: queryLabel,
+        sourceType: discoverySource.type,
         queryCategory: queryMeta.category,
         queryVariant: queryMeta.variant
       });
       // #endregion
 
-      console.log(`\n🔍 [${store}] Buscando: "${query}"...`);
-      
-      const urls = {
-        'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
-        'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
-        'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
-        'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
-        'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
-        'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
-      };
-
-      const rawProducts = store === 'Shopee'
-        ? await fetchShopeeProductsFromOfficialApi(query, OFFERS_PER_STORE)
-        : await crawleeExtract(urls[store], OFFERS_PER_STORE, store);
+      console.log(`\n🔍 [${store}] Buscando (${discoverySource.type}): "${queryLabel}"...`);
+      const { products: rawProducts, finalUrl } = await fetchProductsForDiscoverySource(store, discoverySource, OFFERS_PER_STORE);
 
       for (const p of rawProducts) {
         // A Groq retorna product_name e image_url, mas também suporta title/image para compatibilidade
@@ -2393,8 +2801,8 @@ async function scrapeStore(store) {
         }
         
         const rawUrl = store === 'Shopee'
-          ? (p.original_url?.startsWith('http') ? p.original_url : (p.url?.startsWith('http') ? p.url : urls[store]))
-          : (p.url?.startsWith('http') ? p.url : urls[store]);
+          ? (p.original_url?.startsWith('http') ? p.original_url : (p.url?.startsWith('http') ? p.url : finalUrl))
+          : (p.url?.startsWith('http') ? p.url : finalUrl);
         const cleanUrl = cleanProductUrl(rawUrl);
         const affiliateUrl = store === 'Shopee'
           ? (p.affiliate_url?.startsWith('http') ? p.affiliate_url : await generateShopeeAffiliateUrl(cleanUrl))
@@ -2419,7 +2827,8 @@ async function scrapeStore(store) {
               affiliateUrl,
               score: res.score,
               audit: {
-                query,
+                query: queryLabel,
+                sourceType: discoverySource.type,
                 queryCategory: queryMeta.category,
                 queryVariant: queryMeta.variant
               }
@@ -2433,7 +2842,9 @@ async function scrapeStore(store) {
       // #region debug-point B:query-end
       emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'query-end', {
         store,
-        query,
+        query: queryLabel,
+        sourceType: discoverySource.type,
+        finalUrl,
         queryCategory: queryMeta.category,
         queryVariant: queryMeta.variant,
         approvedProductsFromValidator: rawProducts.length,
@@ -2452,15 +2863,15 @@ async function scrapeStore(store) {
       // #region debug-point B:query-error
       emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'query-error', {
         store,
-        query,
+        query: normalizeDiscoverySource(query).source,
         queryCategory: SCRAPER_AUDIT_STATE.currentCategory,
         queryVariant: SCRAPER_AUDIT_STATE.currentVariant,
         error: err.message,
         durationMs: SCRAPER_AUDIT_STATE.queryStartedAt ? Date.now() - SCRAPER_AUDIT_STATE.queryStartedAt : 0
       });
       // #endregion
-      console.error(`  [${store}] Erro na query "${query}": ${err.message}`);
-      await logErrorToSupabase('Oracle-Scraper', 'Scrape Query', err, { store, query });
+      console.error(`  [${store}] Erro na fonte "${normalizeDiscoverySource(query).source}": ${err.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Scrape Query', err, { store, query: normalizeDiscoverySource(query).source });
     }
   }
   
@@ -2711,6 +3122,51 @@ async function runScrapingCycle() {
   console.log(`\n🏁 Ciclo concluído em ${duration}s! IA gerou ${aiProcessed} posts. Próximo ciclo em 4h.\n`);
 }
 
+async function runDiscoveryDryRun() {
+  console.log('\n[DRY-RUN] Discovery Engine: 3 fontes por marketplace, sem IA e sem escrita no banco.\n');
+
+  const stores = ['Mercado Livre', 'Amazon', 'Shopee'];
+  const results = [];
+
+  for (const store of stores) {
+    const sources = selectDiscoveryQueries(store).slice(0, 3);
+    for (const source of sources) {
+      const result = await inspectDiscoverySourceDryRun(store, source, OFFERS_PER_STORE);
+      results.push(result);
+      console.log([
+        `[DRY-RUN] ${result.store}`,
+        `fonte="${result.source}"`,
+        `tipo=${result.type}`,
+        `url_final=${result.finalUrl}`,
+        `cards=${result.cardsFound}`,
+        `cards_com_preco=${result.cardsWithPrice}`,
+        `produtos_extraidos=${result.productsExtracted}`,
+        `produtos_aprovados=${result.productsApproved}`,
+        `db_writes=${result.dbWrites}`
+      ].join(' | '));
+    }
+  }
+
+  const byStore = stores.reduce((acc, store) => {
+    const storeResults = results.filter((result) => result.store === store);
+    acc[store] = {
+      fontesComProduto: storeResults.filter((result) => result.productsApproved > 0).length,
+      totalFontes: storeResults.length,
+      produtosAprovados: storeResults.reduce((sum, result) => sum + result.productsApproved, 0)
+    };
+    return acc;
+  }, {});
+
+  console.log('\n[DRY-RUN] Resumo:');
+  for (const store of stores) {
+    const summary = byStore[store];
+    console.log(`[DRY-RUN] ${store}: ${summary.fontesComProduto}/${summary.totalFontes} fontes com produto | produtos_aprovados=${summary.produtosAprovados}`);
+  }
+  console.log('[DRY-RUN] Nenhum insert/update/delete executado.');
+
+  return { results, byStore };
+}
+
 // ─── Inicialização ────────────────────────────────────────────
 console.log('\n╔══════════════════════════════════════════╗');
 console.log('║   ORACLE-SCRAPER IN-HOUSE (Crawlee)      ║');
@@ -2718,18 +3174,26 @@ console.log('╚═════════════════════�
 
 // Verifica se temos pelo menos um LLM provider configurado
 const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
+const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
 
-if (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+if (!isDiscoveryDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
   console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
 
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
-  runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
+  if (isDiscoveryDryRun) {
+    runDiscoveryDryRun().catch(e => {
+      console.error('❌ Erro no dry-run discovery:', e.message);
+      process.exitCode = 1;
+    });
+  } else {
+    runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
-  cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
-    name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
-  });
+    cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
+      name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
+    });
+  }
 }
 module.exports = { 
   callLLM,
@@ -2742,13 +3206,18 @@ module.exports = {
   calculateScoreV2,
   generateOfferAnalysis,
   generateFallback,
+  selectDiscoveryQueries,
   getRandomQueries,
   scrapeStore,
   upsertOffer,
   processTopOffers,
   fetchShopeeProductsFromOfficialApi,
+  fetchNetshoesProductsFromRakuten,
   runScrapingCycle,
+  runDiscoveryDryRun,
+  MARKETPLACE_DISCOVERY_SOURCES,
   logErrorToSupabase,
+  DISCOVERY_QUERY_BLOCKS,
   GOLDEN_QUERIES,
   PROVIDER_CONFIG
 };
