@@ -48,11 +48,63 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
 
   logger.info("Iniciando extração de metadados", { url });
 
-  // 1. Resolver URL final para identificar a plataforma corretamente
-  finalUrl = await resolveFinalUrl(url);
-  logger.info("URL Final resolvida", { finalUrl });
+  // 0. Detectar Plataforma pela URL Original ANTES do redirect (Evita CAPTCHA imediato no ML)
+  const originalUrlLower = url.toLowerCase();
+  let initialPlatform: Platform = "Outro";
+  if (originalUrlLower.includes("shope") || originalUrlLower.includes("shopee") || originalUrlLower.includes("shp.ee")) initialPlatform = "Shopee";
+  else if (originalUrlLower.includes("amzn") || originalUrlLower.includes("amazon")) initialPlatform = "Amazon";
+  else if (originalUrlLower.includes("magazineluiza") || originalUrlLower.includes("magalu")) initialPlatform = "Magalu";
+  else if (originalUrlLower.includes("mercadolivre") || originalUrlLower.includes("ml") || originalUrlLower.includes("meli.la")) initialPlatform = "Mercado Livre";
+  else if (originalUrlLower.includes("shein")) initialPlatform = "Shein";
+  else if (originalUrlLower.includes("netshoes")) initialPlatform = "Netshoes" as any;
 
-  // 2. Detectar Plataforma
+  // 1. Tentar API Oficial do Mercado Livre ANTES do resolveFinalUrl
+  if (initialPlatform === "Mercado Livre") {
+    try {
+      const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
+      const mlMetadata = await fetchMLProductDetails(url, userId);
+      if (mlMetadata && mlMetadata.price && mlMetadata.price > 0) {
+        logger.info("Extração via Mercado Livre API (URL Original) realizada com sucesso", { url });
+        return mlMetadata;
+      }
+    } catch (err) {
+      logger.error("Erro na API do Mercado Livre com URL original:", err);
+    }
+  }
+
+  // 1.5 Tentar API existente Shopee/Amazon/etc ANTES de resolver redirecionamento completo na Vercel (se possível)
+  // Como scrapeProductDetails lida internamente com shortlinks para outras plataformas (ex. amzn.to), podemos tentar já.
+  if (["Shopee", "Shein", "Magalu", "Amazon", "Netshoes"].includes(initialPlatform)) {
+    try {
+      const { scrapeProductDetails } = await import("@/lib/affiliates/scraper");
+      const scraped = await scrapeProductDetails(url);
+      if (scraped && scraped.current_price > 0) {
+        logger.info(`Extração via Scraper Integrado para ${initialPlatform} com sucesso`, { url });
+        // NOTE: Amazon official API debt
+        if (initialPlatform === "Amazon") {
+          logger.warn("AMAZON_OFFICIAL_API_REQUIRED: Usando Oracle/LLM pois não há API oficial instalada.");
+        }
+        return {
+          title: scraped.product_name,
+          platform: initialPlatform,
+          imageUrl: scraped.image_url || undefined,
+          price: scraped.current_price,
+          finalUrl: scraped.original_url || url,
+          imageSource: "integrated_api",
+          confidenceScore: 95,
+          extractionDate: new Date().toISOString()
+        };
+      }
+    } catch (err) {
+      logger.error(`Erro ao chamar Scraper Integrado para ${initialPlatform}:`, err);
+    }
+  }
+
+  // 2. Resolver URL final para fallbacks
+  finalUrl = await resolveFinalUrl(url);
+  logger.info("URL Final resolvida (Fallback)", { finalUrl });
+
+  // Re-detectar Plataforma
   const lowerUrl = finalUrl.toLowerCase();
   if (lowerUrl.includes("shope") || lowerUrl.includes("shopee")) platform = "Shopee";
   else if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon")) platform = "Amazon";
@@ -61,49 +113,52 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   else if (lowerUrl.includes("shein")) platform = "Shein";
   else if (lowerUrl.includes("netshoes")) platform = "Netshoes" as any;
 
-  // Se a plataforma for Mercado Livre, tenta obter pela API oficial
-  if (platform === "Mercado Livre") {
+  // Se a plataforma for Mercado Livre (após redirect, ex: meli.la -> mercadolivre), tenta obter pela API oficial novamente
+  if (platform === "Mercado Livre" && finalUrl !== url) {
     try {
       const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
       const mlMetadata = await fetchMLProductDetails(finalUrl, userId);
-      if (mlMetadata) {
-        logger.info("Extração via Mercado Livre API realizada com sucesso", { finalUrl });
+      if (mlMetadata && mlMetadata.price && mlMetadata.price > 0) {
+        logger.info("Extração via Mercado Livre API (URL Resolvida) realizada com sucesso", { finalUrl });
         return mlMetadata;
       }
-      logger.warn("Falha ao extrair dados via API do Mercado Livre, caindo de volta para Oracle API/Scraper genérico.");
     } catch (err) {
-      logger.error("Erro ao chamar API do Mercado Livre no fetchLinkMetadata:", err);
+      logger.error("Erro na API do Mercado Livre com URL resolvida:", err);
     }
   }
 
-  // Utiliza o scraper robusto para Netshoes, pois o extrator genérico falha em capturar o preço.
-  if (platform === "Netshoes") {
+  // 3. Fallback Scrapfly (Se não temos API ou se ela falhou)
+  const scrapflyKeys = process.env.SCRAPFLY_API_KEYS;
+  if (scrapflyKeys) {
+    logger.info("Tentando extração de HTML/Dados via Scrapfly", { finalUrl });
+    const keys = scrapflyKeys.split(",").map(k => k.trim());
+    const key = keys[0];
     try {
-      const { scrapeProductDetails } = await import("@/lib/affiliates/scraper");
-      const nsMetadata = await scrapeProductDetails(finalUrl);
-      if (nsMetadata && nsMetadata.current_price > 0) {
-        logger.info("Extração via Scraper Dedicado da Netshoes realizada com sucesso", { finalUrl });
-        return {
-          title: nsMetadata.product_name,
-          platform: "Netshoes",
-          imageUrl: nsMetadata.image_url || undefined,
-          price: nsMetadata.current_price,
-          finalUrl: finalUrl,
-          imageSource: "oracle_custom",
-          confidenceScore: 95,
-          extractionDate: new Date().toISOString()
-        };
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
+      const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${key}&url=${encodeURIComponent(finalUrl)}&render_js=false&asp=true`;
+      
+      const sfRes = await fetch(scrapflyUrl, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      if (sfRes.ok) {
+        const sfData = await sfRes.json();
+        if (sfData?.result?.content) {
+          html = sfData.result.content;
+          logger.info("HTML extraído com sucesso via Scrapfly");
+        }
       }
-      logger.warn("Falha ao extrair dados via Scraper da Netshoes, caindo de volta para Oracle API/Scraper genérico.");
     } catch (err) {
-      logger.error("Erro ao chamar Scraper Dedicado da Netshoes:", err);
+      logger.warn("Falha no fallback Scrapfly", { error: err instanceof Error ? err.message : String(err) });
     }
   }
+
+
 
   const oracleKey = process.env.ORACLE_API_KEY;
 
-  // 3. Extração via Micro-API Oracle In-House
-  if (oracleKey) {
+  // 4. Extração via Micro-API Oracle In-House (Se HTML não veio via Scrapfly)
+  if (oracleKey && !html) {
     try {
       logger.info("Tentando extração via Oracle API In-House", { finalUrl });
       const controller = new AbortController();
@@ -152,7 +207,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     }
   }
 
-  // 4. Fallback: Fetch HTTP simples se Oracle API falhou em trazer o HTML
+  // 5. Fallback: Fetch HTTP simples se Scrapfly/Oracle API falharam em trazer o HTML
   if (!html) {
     logger.info("Usando fetch simples como fallback", { finalUrl });
     const controller = new AbortController();
@@ -179,8 +234,8 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     }
   }
 
-  // 5. Parse de HTML (Se a Oracle API não extraiu os dados)
-  if (html) {
+  // 6. Parse de HTML (Para qualquer fluxo que gerou HTML e ainda precisa processar)
+  if (html && (!price || price === 0)) {
     // 5.1 Extract Title
     if (title === "Oferta Especial") {
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);

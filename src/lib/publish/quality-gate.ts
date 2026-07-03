@@ -55,6 +55,14 @@ export function evaluateQualityGate(metadata: LinkMetadata): QualityGateResult {
   });
 
   if (!persistenceValidation.valid) {
+    if (finalUrlLower.includes('/gz/account-verification')) {
+      return {
+        status: "REJECTED",
+        classification: "INVALID_PAGE",
+        reason: "MERCADO_LIVRE_ANTIBOT_BLOCK"
+      };
+    }
+
     return {
       status: "REJECTED",
       classification: "INVALID_PAGE",
