@@ -1,7 +1,7 @@
-// @ts-ignore sharp exports its runtime types in a path TypeScript does not resolve in this project setup.
+// @ts-expect-error sharp exports its runtime types in a path TypeScript does not resolve in this project setup.
 import sharp from "sharp";
 
-type OfferForOgPreview = {
+type OfferForPreview = {
   id: string;
   product_name: string | null;
   platform: string | null;
@@ -11,22 +11,45 @@ type OfferForOgPreview = {
   old_price: number | null;
 };
 
-export type OgPreviewResult = {
+type PreviewVariant = "og" | "whatsapp";
+
+type PreviewVariantConfig = {
+  width: number;
+  height: number;
+  productBoxWidth: number;
+  productBoxHeight: number;
+  quality: number;
+};
+
+export type OfferPreviewResult = {
   buffer: Buffer;
   contentType: "image/jpeg";
-  width: 1200;
-  height: 630;
+  width: number;
+  height: number;
   bytes: number;
   source: "remote" | "fallback";
   fallbackReason: string | null;
 };
 
-const CANVAS_WIDTH = 1200;
-const CANVAS_HEIGHT = 630;
-const PRODUCT_BOX_WIDTH = 760;
-const PRODUCT_BOX_HEIGHT = 510;
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const FETCH_TIMEOUT_MS = 8000;
+
+const PREVIEW_CONFIG: Record<PreviewVariant, PreviewVariantConfig> = {
+  og: {
+    width: 1200,
+    height: 630,
+    productBoxWidth: 760,
+    productBoxHeight: 510,
+    quality: 92,
+  },
+  whatsapp: {
+    width: 1200,
+    height: 1200,
+    productBoxWidth: 860,
+    productBoxHeight: 860,
+    quality: 90,
+  },
+};
 
 const MARKETPLACE_COLORS: Record<string, { bg: string; accent: string; label: string }> = {
   amazon: { bg: "#232f3e", accent: "#ff9900", label: "AMAZON" },
@@ -34,6 +57,9 @@ const MARKETPLACE_COLORS: Record<string, { bg: string; accent: string; label: st
   mercadolivre: { bg: "#fff159", accent: "#3483fa", label: "MERCADO LIVRE" },
   shopee: { bg: "#ee4d2d", accent: "#ffffff", label: "SHOPEE" },
   magalu: { bg: "#0086ff", accent: "#ffffff", label: "MAGALU" },
+  aliexpress: { bg: "#d71920", accent: "#ffffff", label: "ALIEXPRESS" },
+  "casas bahia": { bg: "#0046be", accent: "#ffffff", label: "CASAS BAHIA" },
+  casasbahia: { bg: "#0046be", accent: "#ffffff", label: "CASAS BAHIA" },
   shein: { bg: "#111111", accent: "#ffffff", label: "SHEIN" },
   netshoes: { bg: "#5a2d82", accent: "#ffffff", label: "NETSHOES" },
 };
@@ -46,7 +72,7 @@ function normalizePlatform(value: string | null | undefined) {
   return normalizeText(value).toLowerCase();
 }
 
-function isCouponOffer(offer: OfferForOgPreview) {
+function isCouponOffer(offer: OfferForPreview) {
   return Boolean(offer.coupon) || normalizeText(offer.product_name).startsWith("[CUPOM]");
 }
 
@@ -64,24 +90,44 @@ function formatPrice(value: number | null | undefined) {
   return value.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function getMarketplaceTheme(offer: OfferForOgPreview) {
+function cleanOfferTitle(value: string | null | undefined) {
+  return normalizeText(value).replace(/^\[CUPOM\]\s*/i, "");
+}
+
+function getMarketplaceTheme(offer: OfferForPreview) {
   const key = normalizePlatform(offer.platform);
   return MARKETPLACE_COLORS[key] || { bg: "#f8fafc", accent: "#059669", label: normalizeText(offer.platform) || "OFERTA" };
 }
 
-function buildFallbackSvg(offer: OfferForOgPreview) {
+function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
   const theme = getMarketplaceTheme(offer);
+  const config = PREVIEW_CONFIG[variant];
   const coupon = isCouponOffer(offer);
   const title = coupon ? "CUPOM LIBERADO" : "OFERTA ESPECIAL";
-  const subtitle = normalizeText(offer.product_name).replace(/^\[CUPOM\]\s*/i, "") || "Caça Oferta Oficial";
+  const subtitle = cleanOfferTitle(offer.product_name) || "Caça Oferta Oficial";
   const price = coupon ? normalizeText(offer.coupon) || "RESGATE DIRETO" : formatPrice(offer.current_price) || "CONFIRA";
 
+  if (variant === "whatsapp") {
+    return Buffer.from(`
+<svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${config.width}" height="${config.height}" fill="#f3f4f6"/>
+  <rect x="36" y="36" width="${config.width - 72}" height="${config.height - 72}" rx="54" fill="#ffffff"/>
+  <rect x="78" y="78" width="310" height="64" rx="32" fill="${theme.accent}"/>
+  <text x="233" y="120" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="${theme.accent === "#ffffff" ? "#111827" : "#ffffff"}">${escapeXml(theme.label)}</text>
+  <text x="${config.width / 2}" y="420" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#111827">${escapeXml(title)}</text>
+  <text x="${config.width / 2}" y="510" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700" fill="#4b5563">${escapeXml(subtitle.slice(0, 44))}</text>
+  <text x="${config.width / 2}" y="646" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="900" fill="#059669">${escapeXml(price)}</text>
+  <rect x="${config.width / 2 - 170}" y="${config.height - 172}" width="340" height="58" rx="29" fill="#111827"/>
+  <text x="${config.width / 2}" y="${config.height - 134}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" fill="#ffffff">Caça Oferta Oficial</text>
+</svg>`);
+  }
+
   return Buffer.from(`
-<svg width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}" viewBox="0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}" xmlns="http://www.w3.org/2000/svg">
-  <rect width="1200" height="630" fill="${theme.bg}"/>
-  <rect x="54" y="54" width="1092" height="522" rx="42" fill="#ffffff" opacity="0.96"/>
-  <circle cx="1032" cy="130" r="96" fill="${theme.accent}" opacity="0.18"/>
-  <circle cx="160" cy="502" r="128" fill="${theme.accent}" opacity="0.12"/>
+<svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${config.width}" height="${config.height}" fill="${theme.bg}"/>
+  <rect x="54" y="54" width="${config.width - 108}" height="${config.height - 108}" rx="42" fill="#ffffff" opacity="0.96"/>
+  <circle cx="${config.width - 168}" cy="130" r="96" fill="${theme.accent}" opacity="0.18"/>
+  <circle cx="160" cy="${config.height - 128}" r="128" fill="${theme.accent}" opacity="0.12"/>
   <text x="90" y="128" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="${theme.accent}">${escapeXml(theme.label)}</text>
   <text x="90" y="244" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#111827">${escapeXml(title)}</text>
   <text x="90" y="322" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#374151">${escapeXml(subtitle.slice(0, 52))}</text>
@@ -95,7 +141,7 @@ async function fetchRemoteImage(url: string) {
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     cache: "no-store",
     headers: {
-      "User-Agent": "Mozilla/5.0 (compatible; CacaOfertaOG/1.0)",
+      "User-Agent": "Mozilla/5.0 (compatible; CacaOfertaImage/1.0)",
       "Accept": "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8",
     },
   });
@@ -122,12 +168,14 @@ async function fetchRemoteImage(url: string) {
   return Buffer.from(arrayBuffer);
 }
 
-async function buildProductLayer(input: Buffer) {
+async function buildProductLayer(input: Buffer, variant: PreviewVariant) {
+  const config = PREVIEW_CONFIG[variant];
+
   return sharp(input)
     .rotate()
     .resize({
-      width: PRODUCT_BOX_WIDTH,
-      height: PRODUCT_BOX_HEIGHT,
+      width: config.productBoxWidth,
+      height: config.productBoxHeight,
       fit: "inside",
       withoutEnlargement: false,
       background: "#ffffff",
@@ -138,15 +186,15 @@ async function buildProductLayer(input: Buffer) {
     .toBuffer();
 }
 
-function buildWhitePremiumBackground() {
-  const raw = Buffer.allocUnsafe(CANVAS_WIDTH * CANVAS_HEIGHT * 3);
+function buildBaseBackground(width: number, height: number) {
+  const raw = Buffer.allocUnsafe(width * height * 3);
 
-  for (let y = 0; y < CANVAS_HEIGHT; y++) {
-    for (let x = 0; x < CANVAS_WIDTH; x++) {
-      const offset = (y * CANVAS_WIDTH + x) * 3;
-      const vignette = Math.round(((x - CANVAS_WIDTH / 2) ** 2 + (y - CANVAS_HEIGHT / 2) ** 2) / 180000);
-      const texture = ((x * 13 + y * 17 + ((x * y) % 29)) % 37) - 18;
-      const value = Math.max(224, Math.min(255, 244 + texture - vignette));
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const offset = (y * width + x) * 3;
+      const vignette = Math.round(((x - width / 2) ** 2 + (y - height / 2) ** 2) / (width * height * 0.24));
+      const texture = ((x * 13 + y * 17 + ((x * y) % 29)) % 31) - 15;
+      const value = Math.max(232, Math.min(255, 246 + texture - vignette));
 
       raw[offset] = value;
       raw[offset + 1] = value;
@@ -157,8 +205,30 @@ function buildWhitePremiumBackground() {
   return raw;
 }
 
-export async function generateOfferOgPreview(offer: OfferForOgPreview): Promise<OgPreviewResult> {
-  let source: OgPreviewResult["source"] = "remote";
+function buildWhatsAppOverlay(offer: OfferForPreview) {
+  const config = PREVIEW_CONFIG.whatsapp;
+  const theme = getMarketplaceTheme(offer);
+  const title = cleanOfferTitle(offer.product_name) || "Oferta";
+  const shortTitle = title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title;
+  const badgeTextColor = theme.accent === "#ffffff" ? "#111827" : "#ffffff";
+
+  return Buffer.from(`
+<svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
+  <rect x="26" y="26" width="${config.width - 52}" height="${config.height - 52}" rx="58" fill="none" stroke="#e5e7eb" stroke-width="4"/>
+  <rect x="76" y="76" width="292" height="58" rx="29" fill="${theme.accent}" opacity="0.96"/>
+  <text x="222" y="113" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="${badgeTextColor}">${escapeXml(theme.label)}</text>
+  <rect x="${config.width - 368}" y="76" width="292" height="58" rx="29" fill="#111827" opacity="0.94"/>
+  <text x="${config.width - 222}" y="112" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Caça Oferta Oficial</text>
+  <text x="${config.width / 2}" y="${config.height - 78}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#4b5563">${escapeXml(shortTitle)}</text>
+</svg>`);
+}
+
+async function generateOfferPreview(
+  offer: OfferForPreview,
+  variant: PreviewVariant
+): Promise<OfferPreviewResult> {
+  const config = PREVIEW_CONFIG[variant];
+  let source: OfferPreviewResult["source"] = "remote";
   let fallbackReason: string | null = null;
   let imageInput: Buffer;
 
@@ -171,33 +241,46 @@ export async function generateOfferOgPreview(offer: OfferForOgPreview): Promise<
   } catch (error) {
     source = "fallback";
     fallbackReason = error instanceof Error ? error.message : "REMOTE_IMAGE_FAILED";
-    imageInput = buildFallbackSvg(offer);
+    imageInput = buildFallbackSvg(offer, variant);
   }
 
-  const productLayer = await buildProductLayer(imageInput);
+  const productLayer = await buildProductLayer(imageInput, variant);
   const metadata = await sharp(productLayer).metadata();
-  const left = Math.round((CANVAS_WIDTH - (metadata.width || PRODUCT_BOX_WIDTH)) / 2);
-  const top = Math.round((CANVAS_HEIGHT - (metadata.height || PRODUCT_BOX_HEIGHT)) / 2);
+  const left = Math.round((config.width - (metadata.width || config.productBoxWidth)) / 2);
+  const top = Math.round((config.height - (metadata.height || config.productBoxHeight)) / 2);
 
-  const buffer = await sharp(buildWhitePremiumBackground(), {
+  let pipeline = sharp(buildBaseBackground(config.width, config.height), {
     raw: {
-      width: CANVAS_WIDTH,
-      height: CANVAS_HEIGHT,
+      width: config.width,
+      height: config.height,
       channels: 3,
     },
-  })
-    .composite([{ input: productLayer, left, top }])
+  }).composite([{ input: productLayer, left, top }]);
+
+  if (variant === "whatsapp" && source === "remote") {
+    pipeline = pipeline.composite([{ input: buildWhatsAppOverlay(offer), left: 0, top: 0 }]);
+  }
+
+  const buffer = await pipeline
     .toColorspace("srgb")
-    .jpeg({ quality: 92, mozjpeg: true })
+    .jpeg({ quality: config.quality, mozjpeg: true })
     .toBuffer();
 
   return {
     buffer,
     contentType: "image/jpeg",
-    width: CANVAS_WIDTH,
-    height: CANVAS_HEIGHT,
+    width: config.width,
+    height: config.height,
     bytes: buffer.length,
     source,
     fallbackReason,
   };
+}
+
+export async function generateOfferOgPreview(offer: OfferForPreview): Promise<OfferPreviewResult> {
+  return generateOfferPreview(offer, "og");
+}
+
+export async function generateOfferWhatsAppPreview(offer: OfferForPreview): Promise<OfferPreviewResult> {
+  return generateOfferPreview(offer, "whatsapp");
 }

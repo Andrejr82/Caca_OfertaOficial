@@ -6,6 +6,11 @@ function formatCurrency(value: number | null | undefined) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 }
 
+function normalizeMarketplace(value: string | null | undefined) {
+  const marketplace = String(value || "").trim();
+  return marketplace || "Loja parceira";
+}
+
 function discountPercent(offer: Pick<Offer, "old_price" | "current_price">) {
   if (!offer.old_price || offer.old_price <= offer.current_price) return 0;
   return Math.round(((offer.old_price - offer.current_price) / offer.old_price) * 100);
@@ -112,30 +117,42 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
 
 export function generateWhatsAppMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
   const hasPrice = offer.current_price > 0;
+  const couponOffer = Boolean(offer.coupon) || offer.product_name.startsWith("[CUPOM]");
+  const title = couponOffer ? "CUPOM LIBERADO" : offer.product_name;
+  const marketplace = normalizeMarketplace(offer.platform);
 
-  const priceLines = hasPrice 
-    ? [
-        offer.old_price && offer.old_price > offer.current_price ? `❌ De ${formatCurrency(offer.old_price)}` : null,
-        `✅ Por ${formatCurrency(offer.current_price)}`
-      ].filter(Boolean)
-    : [`⚠️ Preço no link`];
+  let priceBlock = "";
+  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+  
+  if (hasPrice) {
+    if (offer.old_price && offer.old_price > offer.current_price) {
+      priceBlock = `💰 De: ${formatCurrency(offer.old_price)}\n🔥 Por: ${formatCurrency(offer.current_price)}`;
+    } else {
+      priceBlock = `🔥 Por: ${formatCurrency(offer.current_price)}`;
+    }
+  } else {
+    priceBlock = `💰 Confira o preço no link`;
+  }
 
-  const lines = [
-    `🚨 *${offer.product_name}*`,
-    "",
-    ...priceLines,
-    "",
-    offer.coupon ? `🎟️ Use o cupom: ${offer.coupon}\n` : null,
-    `✨ link: ${link.tracked_url}`,
-    "",
-    `#ofertadodia #promoção #cupom #achadinho #desconto`,
-    "",
-    `Siga nossas Redes Sociais 👇`,
-    `📸 Instagram: https://www.instagram.com/${officialBrand.instagram}`,
-    `💬 Telegram: ${officialBrand.telegramUrl}`
+  const couponBlock = offer.coupon ? `\n🎟 Use o cupom: ${offer.coupon}` : "";
+
+  const searchableText = `${offer.product_name}`.toLowerCase();
+  const possibleBenefits = ['Prime Day', 'Black Friday', 'Oferta Relâmpago', 'Frete Grátis', 'Cashback', 'Desconto Progressivo', 'Loja Oficial', 'Oferta Exclusiva'];
+  const foundBenefits = possibleBenefits.filter(b => searchableText.includes(b.toLowerCase()));
+  const benefitBlock = foundBenefits.length > 0 ? `\n✨ ${foundBenefits.join(', ')}` : "";
+
+  const ctaBase = couponOffer ? "Resgate antes que acabe" : "Garantir oferta";
+  const finalCta = `🛒 ${ctaBase}`;
+
+  const blocks = [
+    `🚨 ${title}`,
+    priceBlock,
+    `🛒 ${marketplace}${couponBlock}${benefitBlock}`,
+    `🔗 ${link.tracked_url}`,
+    finalCta
   ];
 
-  return lines.filter(l => l !== null).join("\n");
+  return blocks.filter(Boolean).join("\n\n");
 }
 
 export function generateAllMessages(offer: Offer, link: AffiliateLink) {

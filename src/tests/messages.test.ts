@@ -53,7 +53,11 @@ describe("message generation", () => {
 
   it("generates concise WhatsApp copy", () => {
     const message = generateWhatsAppMessage(offer, link);
-    // WhatsApp costuma ter emojis e a URL
     expect(message).toContain(link.tracked_url);
+    expect(message).toContain("💰 *PREÇO*");
+    expect(message).toContain("🏷 *MARKETPLACE*");
+    expect(message).toContain("🎟 *CUPOM*");
+    expect(message).toContain("🔗 *LINK DA OFERTA*");
+    expect(message).toContain("👇 *CTA*");
   });
 });

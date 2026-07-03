@@ -210,6 +210,27 @@ Decisões arquiteturais tomadas:
 - Critério de aprovação: publicação única no Grupo com imagem e legenda nova
 - Critério de não regressão: Telegram, Instagram e motor WhatsApp permanecem inalterados
 
+### Sprint 07
+
+- Número: 07
+- Nome: Imagem Premium
+- Objetivo: Criar imagem premium (1200x1200) com moldura customizada e dados da oferta, otimizar copy para leitura rápida e melhorar UX do CTA.
+- Escopo: Geração dinâmica via rota API, ajuste na posição do selo institucional (safe area), enriquecimento da copy com benefícios automáticos e ajuste na estrutura da publicação.
+- Arquivos principais:
+  - `src/app/api/images/whatsapp-premium/route.ts`
+  - `src/app/api/whatsapp/publish/route.ts`
+  - `src/lib/images/og-preview.ts`
+  - `src/lib/post-builder/index.ts`
+  - `src/lib/messages/generate.ts`
+- Resultado: Imagem Premium homologada com selo no canto superior direito; CTA revisado; Copy otimizada e enriquecida; Marketplace testados (Amazon, Mercado Livre, Shopee).
+- Status: CONCLUÍDA
+- Data da conclusão: 03/07/2026
+- Oracle: não alterada
+- Homologação: Homologação visual aprovada com postagem real em Grupo via motor Oracle.
+- Melhorias implementadas: Selo em safe area, estrutura de copy enxuta, remoção de redundâncias no CTA, tags dinâmicas de benefícios (Ex: Frete Grátis, Black Friday).
+- Critério de aprovação: Selo não sobrepor produto, UX otimizada, leitura escaneável, nenhuma alteração em outras integrações.
+- Critério de não regressão: Telegram, Instagram e arquitetura base do motor mantidos intactos.
+
 ## 4. Arquitetura Final
 
 Fluxo operacional final:
