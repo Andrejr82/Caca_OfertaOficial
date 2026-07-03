@@ -7,7 +7,7 @@ Este inventário lista os scripts presentes no repositório (pasta `scripts/` e 
 | Nome | Localização | Finalidade | Quando utilizar | Dependências |
 |---|---|---|---|---|
 | Oracle Scraper | `scripts/oracle-scraper.cjs` | Robô V2: scraping (Crawlee/Playwright), LLM (Cerebras/Groq), criação/atualização de ofertas, links e posts no Supabase, logs em `integration_logs` | Execução contínua (processo longo) | Node, `crawlee`, `playwright`, `@supabase/supabase-js`, `axios`, `.env.local` (Supabase + LLM + Scrapfly) |
-| WhatsApp Engine | `scripts/whatsapp-engine.cjs` | Motor HTTP para envio ao WhatsApp via Baileys; mantém sessão no Supabase (`baileys_sessions`) e expõe `/status`, `/send`, `/resolve-channel/:code` | Execução contínua (Oracle ou local) para habilitar publicação em WhatsApp | Node, `express`, `@whiskeysockets/baileys`, `@supabase/supabase-js`, `ws`, `.env.local(.remote)` (Supabase + `WHATSAPP_*`) |
+| WhatsApp Engine | `scripts/whatsapp-engine.cjs` | Motor HTTP para envio ao WhatsApp via Baileys; mantém sessão no Supabase (`baileys_sessions`) e expõe `/status`, `/send`, `/resolve-target/:code` (com alias legado `/resolve-channel/:code`) | Execução contínua (Oracle ou local) para habilitar publicação em WhatsApp | Node, `express`, `@whiskeysockets/baileys`, `@supabase/supabase-js`, `ws`, `.env.local(.remote)` (Supabase + `WHATSAPP_*`) |
 | Oracle API | `scripts/oracle-api.cjs` | Micro-API de scraping: consulta Scrapfly e retorna `html/text/metadata` via `POST /api/scrape` | Execução contínua na Oracle para suportar scraping remoto pelo app | Node, `express`, `axios`, `.env.local` (`ORACLE_API_KEY`, `SCRAPFLY_API_KEYS`) |
 | AI Processor | `scripts/ai-processor.cjs` | Processa ofertas `draft` no Supabase, gera copy via `src/core/llm/factory`, cria links e posts e promove oferta | Execução manual/cron quando desejado um pipeline IA fora do Vercel | Node, `@supabase/supabase-js`, `ws`, `.env.local` (Supabase + LLM) |
 | Scraper Adapter | `scripts/scraper-adapter.cjs` | Funções utilitárias para validação/sanitização e prompts de scraping usadas por outros scrapers | Usado como dependência por scrapers | Node |
@@ -94,6 +94,8 @@ Este inventário lista os scripts presentes no repositório (pasta `scripts/` e 
 | Create Log Table | `scripts/legacy_tests/create-log-table.js` | Script legado de criação de tabela de logs | Diagnóstico | Node, Supabase |
 | Check Posts | `scripts/legacy_tests/check-posts.js` | Checagem de posts no banco | Diagnóstico | Node, Supabase |
 | Check Mismatch | `scripts/legacy_tests/check-mismatch.js` | Checagem de inconsistências de dados | Diagnóstico | Node |
+| Homologate Shopee Netshoes | `scripts/legacy_tests/homologate-shopee-netshoes.cjs` | Script de homologação Shopee/Netshoes | Referência histórica | Node |
+| WAHA Newsletter POC | `scripts/legacy_tests/waha-newsletter-poc.cjs` | POC histórica de homologação WAHA (alternativa ao Baileys). **Não usada em produção.** Valida envio de imagem + legenda + link + CTA para canal `@newsletter` via API WAHA. Requer `WAHA_URL`, `WAHA_API_KEY`, `WAHA_SESSION`, `WAHA_CHANNEL_ID`. | Referência histórica / diagnóstico comparativo | Node, WAHA self-hosted |
 
 ## Scripts na raiz do repositório
 

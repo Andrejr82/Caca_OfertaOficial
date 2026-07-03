@@ -7,6 +7,7 @@ import { fetchLinkMetadata } from "@/lib/publish/scraper";
 import { evaluateQualityGate } from "@/lib/publish/quality-gate";
 import { logger } from "@/lib/utils/logger";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
+import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import type { Channel, Offer } from "@/types/domain";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
 import {
@@ -313,21 +314,24 @@ export async function publishToWhatsAppAction(text: string, imageUrl?: string) {
     return { ok: false, message: "Usuário não autenticado." };
   }
 
-  const channelId = process.env.WHATSAPP_CHANNEL_ID;
-  if (!channelId) {
+  const targetId = resolveConfiguredWhatsAppTargetId();
+  if (!targetId) {
     return { 
       ok: false, 
-      message: "WHATSAPP_CHANNEL_ID não está configurado no .env.local. Coloque o ID do seu canal (ex: 120363...00@newsletter)." 
+      message: "WHATSAPP_TARGET_ID não está configurado no .env.local. Use um JID como 120363...@g.us ou ...@newsletter."
     };
   }
 
   try {
     const { whatsappService } = await import("@/lib/integrations/whatsapp");
-    const result = await whatsappService.sendChannelMedia(channelId, text, imageUrl);
+    const result = await whatsappService.sendMedia(targetId, text, imageUrl);
 
     return { ok: true, message: "Publicado com sucesso no WhatsApp via Motor (Oracle)!" };
   } catch (error: unknown) {
-    console.error("[PublishAction] Erro ao conectar com o Motor WhatsApp (Oracle):", error);
+    logger.error("Erro ao conectar com o Motor WhatsApp", error, {
+      event: "whatsapp_publish_action_failed",
+      targetId
+    });
     return { 
       ok: false, 
       message: "Erro ao comunicar com o motor WhatsApp. Verifique se o motor está rodando e conectado na Oracle (Settings → Connection Tests → WhatsApp)." 

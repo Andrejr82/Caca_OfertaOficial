@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
+import { logger } from "@/lib/utils/logger";
 
 export async function POST(request: Request) {
   try {
@@ -47,18 +49,13 @@ export async function POST(request: Request) {
     // O usuário pode ter editado o texto na tela antes de aprovar
     const finalContent = content || post.content;
 
-    const crypto = require('crypto');
-    const hash = (data: any) => crypto.createHash('sha256').update(JSON.stringify(data)).digest('hex').substring(0, 10);
-    
-    console.log('\n======================================================');
-    console.log(`🔎 [AUDITORIA NEXT.JS] INÍCIO DO FLUXO`);
-    console.log(`- Offer ID: ${offer.id}`);
-    console.log(`- Product ID: ${offer.product_id || 'N/A'}`);
-    console.log(`- Título: ${offer.title}`);
-    console.log(`- image_url recebida do banco: ${offer.image_url}`);
-    console.log(`- image_url final para envio: ${imageUrl}`);
-    console.log(`- Offer object hash: ${hash(offer)}`);
-    console.log(`- Post object hash: ${hash(post)}`);
+    logger.info("Início da publicação WhatsApp", {
+      event: "whatsapp_publish_start",
+      offerId: offer.id,
+      postId: post.id,
+      productId: offer.product_id || null,
+      hasImage: Boolean(imageUrl)
+    });
 
     // Se o conteúdo foi alterado, atualiza primeiro no banco de dados
     if (content && content !== post.content) {
@@ -69,36 +66,53 @@ export async function POST(request: Request) {
     }
 
     // 2. Executa a publicação real via WhatsApp API
-    const channelId = process.env.WHATSAPP_CHANNEL_ID;
-    if (!channelId) {
-      return NextResponse.json({ ok: false, message: "Canal do WhatsApp não configurado no .env" }, { status: 500 });
+    const targetId = resolveConfiguredWhatsAppTargetId();
+    if (!targetId) {
+      return NextResponse.json({ ok: false, message: "WHATSAPP_TARGET_ID não configurado no ambiente." }, { status: 500 });
     }
 
     const { whatsappService } = await import("@/lib/integrations/whatsapp");
     let whatsappResult;
     try {
-      console.log(`- Publisher payload info: channelId=${channelId}, image_url=${imageUrl}`);
-      console.log('======================================================\n');
-      
-      // A imagem será puxada automaticamente pelo Baileys lendo as tags OG do nosso link /go/
-      whatsappResult = await whatsappService.sendChannelMedia(channelId, finalContent, imageUrl);
+      logger.info("Enviando payload para WhatsApp Engine", {
+        event: "whatsapp_publish_engine_send",
+        postId,
+        offerId: offer.id,
+        targetId,
+        hasImage: Boolean(imageUrl)
+      });
+
+      whatsappResult = await whatsappService.sendMedia(targetId, finalContent, imageUrl);
     } catch (error: any) {
-      console.error("Erro na integração WhatsApp:", error);
+      logger.error("Erro na integração WhatsApp", error, {
+        event: "whatsapp_publish_engine_failed",
+        postId,
+        offerId: offer.id,
+        targetId
+      });
       try {
         await supabase.from("integration_logs").insert({
           user_id: user.id,
           integration: "WhatsApp",
           action: "Publicar",
           status: "error",
-          message: `Falha ao enviar para o canal ${channelId}`,
+          message: `Falha ao enviar para o alvo ${targetId}`,
           metadata: {
             postId,
             offerId: offer.id,
+            targetId,
             engineUrl: process.env.WHATSAPP_ENGINE_URL || null,
             error: error.message
           }
         });
-      } catch {}
+      } catch (logError) {
+        logger.warn("Falha ao registrar erro de integração WhatsApp", {
+          event: "whatsapp_publish_error_log_failed",
+          postId,
+          offerId: offer.id,
+          error: logError instanceof Error ? logError.message : String(logError)
+        });
+      }
       return NextResponse.json({ ok: false, message: `Erro ao enviar via WhatsApp: ${error.message}` }, { status: 502 });
     }
 
@@ -109,16 +123,25 @@ export async function POST(request: Request) {
         integration: "WhatsApp",
         action: "Publicar",
         status: "success",
-        message: `Disparo aceito pelo motor WhatsApp para o canal ${channelId}`,
+        message: `Disparo aceito pelo motor WhatsApp para o alvo ${targetId}`,
         metadata: {
           postId,
           offerId: offer.id,
+          targetId,
           externalId,
           engineUrl: process.env.WHATSAPP_ENGINE_URL || null,
           engine: whatsappResult.engine || null
         }
       });
-    } catch {}
+    } catch (logError) {
+      logger.warn("Falha ao registrar sucesso de integração WhatsApp", {
+        event: "whatsapp_publish_success_log_failed",
+        postId,
+        offerId: offer.id,
+        externalId,
+        error: logError instanceof Error ? logError.message : String(logError)
+      });
+    }
 
     // 3. Atualiza o status do post para published
     const now = new Date().toISOString();
@@ -147,7 +170,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, externalId });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Falha na publicação no WhatsApp.";
-    console.error("Erro ao publicar no WhatsApp:", error);
+    logger.error("Erro ao publicar no WhatsApp", error, { event: "whatsapp_publish_failed" });
     return NextResponse.json({ 
       ok: false, 
       message: errorMessage 

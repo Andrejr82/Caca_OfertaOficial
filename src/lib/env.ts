@@ -4,7 +4,7 @@ export const officialBrand = {
   telegramName: process.env.NEXT_PUBLIC_TELEGRAM_NAME || "Caça Oferta Oficial",
   telegramUrl: process.env.NEXT_PUBLIC_TELEGRAM_URL || "https://t.me/caca_ofertaoficial",
   whatsappName: "Caça Oferta Oficial",
-  whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_URL || "https://whatsapp.com/channel/0029VbCLje16rsQz9pKFeo3c"
+  whatsappUrl: process.env.NEXT_PUBLIC_WHATSAPP_URL || "https://chat.whatsapp.com/JxsNiCGyjnYEAmPhPRtd7G"
 };
 
 export function hasSupabasePublicEnv() {

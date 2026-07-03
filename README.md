@@ -9,7 +9,7 @@ Centralizar a curadoria, geração de criativos (IA), rastreamento (SubID) e pub
 - **Vercel**: hospeda o app Next.js (UI + rotas `/api/*`) e executa cron via `vercel.json`.
 - **Supabase**: PostgreSQL + Auth + Storage; é o repositório central de estado (ofertas, posts, links, logs).
 - **Oracle (VPS)**:
-  - **WhatsApp Engine** (Express + Baileys) em `:3001` para envio a canal Newsletter.
+  - **WhatsApp Engine** (Express + Baileys) em `:3001` para envio a Grupo ou Canal (destino configurável via `WHATSAPP_TARGET_ID`).
   - **Oracle API** (Express) em `:3002` para raspagem via Scrapfly e retorno de HTML/texto.
   - **Oracle Scraper** (Crawlee + Playwright) como processo longo que grava/atualiza dados no Supabase.
 - **Windows (desenvolvimento/execução local)**: roda o Next.js localmente e scripts auxiliares quando necessário.
@@ -42,7 +42,7 @@ Centralizar a curadoria, geração de criativos (IA), rastreamento (SubID) e pub
 - Conta/projeto Supabase (URL + keys)
 - Para publicar:
   - Telegram: Bot Token + Channel ID
-  - WhatsApp: WhatsApp Engine ativo (Oracle) + API Key + Channel ID
+  - WhatsApp: WhatsApp Engine ativo (Oracle) + `WHATSAPP_ENGINE_API_KEY` + `WHATSAPP_TARGET_ID` (JID do Grupo `...@g.us` ou Canal `...@newsletter`)
   - Instagram/Facebook: token Meta Graph API (e, opcionalmente, Cloudinary/GitHub Actions conforme o fluxo)
 - Para scraping:
   - Oracle API: Scrapfly API Key(s)
@@ -99,7 +99,7 @@ Componentes que rodam na VPS Oracle:
 ## Scripts principais
 
 - `scripts/oracle-scraper.cjs`: robô de descoberta/processamento (Crawlee + LLM + gravação no Supabase).
-- `scripts/whatsapp-engine.cjs`: motor de envio WhatsApp (Express + Baileys) com endpoints `/status`, `/send`, `/resolve-channel/:code`.
+- `scripts/whatsapp-engine.cjs`: motor de envio WhatsApp (Express + Baileys) com endpoints `/status`, `/send`, `/resolve-target/:code` e alias legado `/resolve-channel/:code`.
 - `scripts/oracle-api.cjs`: micro-API de scraping (Express) consumida pelo app via Oracle.
 - `scripts/ai-processor.cjs`: processador de ofertas draft → posts/links (LLM Factory).
 - `.github/workflows/publish-reel.yml` + `scripts/github-publish.ts`: renderiza vídeo (Remotion), faz upload no Supabase Storage e publica no Instagram.

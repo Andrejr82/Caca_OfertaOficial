@@ -9,9 +9,23 @@ const fs = require('fs');
 
 const envPath = fs.existsSync('.env.local.remote') ? '.env.local.remote' : '.env.local';
 require('dotenv').config({ path: envPath });
-console.log(`[WHATSAPP-ENGINE] ENV carregado: ${envPath}`);
 
-// Supabase no Node.js 20 exige 'ws' nativamente para conexões Realtime
+function engineLog(level, message, metadata = {}) {
+    const payload = {
+        level,
+        component: 'whatsapp-engine',
+        message,
+        timestamp: new Date().toISOString(),
+        ...metadata
+    };
+    const line = JSON.stringify(payload);
+    if (level === 'ERROR') return console.error(line);
+    if (level === 'WARN') return console.warn(line);
+    return console.log(line);
+}
+
+engineLog('INFO', 'Env carregado', { envPath });
+
 global.WebSocket = require('ws');
 
 const supabase = createClient(
@@ -23,11 +37,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// API Key Middleware
 const API_KEY = process.env.WHATSAPP_ENGINE_API_KEY || 'local-dev-key';
 
 app.use((req, res, next) => {
-    // Permitir status check sem key se desejar, mas vamos proteger tudo
     const key = req.headers['x-api-key'];
     if (!key || key !== API_KEY) {
         return res.status(401).json({ ok: false, message: 'Não autorizado. API Key ausente ou incorreta.' });
@@ -40,6 +52,84 @@ let isConnected = false;
 let connectionPromise = null;
 let lastDisconnectInfo = null;
 
+function sanitizeTargetId(value) {
+    if (!value) return null;
+    const sanitized = String(value).replace(/['"]/g, '').replace(/\s+/g, '').trim();
+    return sanitized || null;
+}
+
+function detectTargetKind(targetId) {
+    if (!targetId) return 'unknown';
+    if (targetId.endsWith('@g.us')) return 'group';
+    if (targetId.endsWith('@newsletter')) return 'newsletter';
+    return 'unknown';
+}
+
+function resolveConfiguredTargetId() {
+    return sanitizeTargetId(process.env.WHATSAPP_TARGET_ID)
+        || sanitizeTargetId(process.env.WHATSAPP_CHANNEL_ID)
+        || sanitizeTargetId(process.env.WHATSAPP_DEFAULT_CHANNEL_ID);
+}
+
+function normalizeParticipantPhone(value) {
+    return String(value || '').split(':')[0].replace(/\D/g, '');
+}
+
+function buildSenderMembership(metadata) {
+    const senderId = sock?.user?.id || null;
+    const senderLid = sock?.user?.lid || null;
+    const senderPhone = normalizeParticipantPhone(senderId);
+    const participants = metadata?.participants || [];
+    const senderParticipant = participants.find((participant) => {
+        return participant.id === senderId
+            || participant.id === senderLid
+            || participant.phoneNumber === senderId
+            || participant.phoneNumber === senderLid
+            || normalizeParticipantPhone(participant.id) === senderPhone
+            || normalizeParticipantPhone(participant.phoneNumber) === senderPhone;
+    }) || null;
+
+    return {
+        sender: senderId ? { id: senderId, lid: senderLid || null, phone: senderPhone || null, name: sock?.user?.name || null } : null,
+        isMember: Boolean(senderParticipant),
+        isAdmin: Boolean(senderParticipant?.admin),
+        participant: senderParticipant ? {
+            id: senderParticipant.id,
+            phoneNumber: senderParticipant.phoneNumber || null,
+            admin: senderParticipant.admin || null
+        } : null
+    };
+}
+
+async function buildProcessedImageBuffer(finalImageUrl) {
+    const crypto = require('crypto');
+    const sharp = require('sharp');
+    const hashBuf = (buf) => crypto.createHash('sha256').update(buf).digest('hex').substring(0, 10);
+
+    engineLog('INFO', 'Baixando imagem para envio', { imageUrl: finalImageUrl });
+    const imgRes = await fetch(finalImageUrl, {
+        headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
+        }
+    });
+    if (!imgRes.ok) throw new Error(`Falha ao baixar imagem: ${imgRes.statusText}`);
+
+    const arrayBuffer = await imgRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    engineLog('INFO', 'Imagem baixada', { originalBytes: buffer.length, originalHash: hashBuf(buffer) });
+
+    const imageBuffer = await sharp(buffer)
+        .resize({ width: 800, withoutEnlargement: true })
+        .jpeg({ quality: 80, force: true })
+        .toBuffer();
+
+    engineLog('INFO', 'Imagem processada', { processedBytes: imageBuffer.length, processedHash: hashBuf(imageBuffer) });
+
+    return { imageBuffer, hashBuf };
+}
+
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
 
@@ -50,16 +140,12 @@ async function connectToWhatsApp() {
         generateHighQualityLinkPreview: false, // Desligado para evitar cache de preview
     });
 
-    // Create a promise that resolves when connection is open
     connectionPromise = new Promise((resolve) => {
         sock.ev.on('connection.update', (update) => {
             const { connection, lastDisconnect, qr } = update;
 
             if (qr) {
-                console.log('\n======================================================');
-                console.log('📱 LEIA O QR CODE ABAIXO NO SEU WHATSAPP');
-                console.log('Vá em: Aparelhos Conectados > Conectar um aparelho');
-                console.log('======================================================\n');
+                engineLog('INFO', 'QR Code recebido. Leia no WhatsApp em Aparelhos Conectados > Conectar um aparelho.');
                 qrcode.generate(qr, { small: true });
             }
 
@@ -68,7 +154,7 @@ async function connectToWhatsApp() {
                 const statusCode = error?.output?.statusCode;
                 const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-                console.log(`⚠️ Conexão fechada. Código: ${statusCode}, Motivo: ${error?.message}`);
+                engineLog('WARN', 'Conexão fechada', { statusCode, reason: error?.message || null });
                 isConnected = false;
                 lastDisconnectInfo = {
                     statusCode,
@@ -77,22 +163,22 @@ async function connectToWhatsApp() {
                 };
 
                 if (shouldReconnect) {
-                    console.log('🔄 Reconectando em 3 segundos...');
+                    engineLog('INFO', 'Reconectando em 3 segundos');
                     setTimeout(connectToWhatsApp, 3000);
                 } else {
-                    console.log('❌ Você deslogou o aparelho no celular ou a conexão expirou.');
-                    console.log('🧹 Limpando as chaves velhas do banco de dados automaticamente...');
+                    engineLog('WARN', 'Sessão encerrada. Limpando credenciais antigas.');
                     supabase.from('baileys_sessions').delete().neq('id', '0').then(() => {
-                        console.log('✅ Banco limpo! Por favor, pare o servidor (Ctrl+C) e rode "npm run whatsapp" novamente para gerar um novo QR Code.');
+                        engineLog('INFO', 'Credenciais antigas removidas. Reinicie o motor para gerar um novo QR Code.');
+                    }).catch((cleanupError) => {
+                        engineLog('ERROR', 'Falha ao limpar credenciais antigas', { error: cleanupError.message || String(cleanupError) });
                     });
                 }
             } else if (connection === 'open') {
-                console.log('\n✅ CONECTADO AO WHATSAPP COM SUCESSO!');
-                console.log('O motor está pronto para receber disparos do Caça Ofertas.');
                 isConnected = true;
-                try {
-                    console.log(`[WHATSAPP-ENGINE] Conectado como: ${sock?.user?.id || 'N/A'} (${sock?.user?.name || 'sem nome'})`);
-                } catch {}
+                engineLog('INFO', 'Conectado ao WhatsApp', {
+                    senderId: sock?.user?.id || null,
+                    senderName: sock?.user?.name || null
+                });
                 resolve();
             }
         });
@@ -112,70 +198,148 @@ app.get('/status', (req, res) => {
     });
 });
 
-// ─── Resolve Channel ID ───
-app.get('/resolve-channel/:code', async (req, res) => {
+async function resolveTargetFromInvite(code) {
+    try {
+        const invite = await sock.groupGetInviteInfo(code);
+        const metadata = await sock.groupMetadata(invite.id);
+        return {
+            ok: true,
+            type: 'group',
+            id: metadata.id,
+            name: metadata.subject || invite.subject || null,
+            invite: {
+                code,
+                subject: invite.subject || null
+            },
+            membership: buildSenderMembership(metadata)
+        };
+    } catch (groupError) {
+        try {
+            const metadata = await sock.newsletterMetadata('invite', code);
+            return {
+                ok: true,
+                type: 'newsletter',
+                id: metadata.id,
+                name: metadata.name || null,
+                invite: { code },
+                membership: {
+                    sender: sock?.user ? { id: sock.user.id, lid: sock.user.lid || null, name: sock.user.name || null } : null,
+                    isMember: null,
+                    isAdmin: null,
+                    participant: null
+                }
+            };
+        } catch (newsletterError) {
+            throw new Error(`Não foi possível resolver convite como grupo ou canal. group=${groupError.message || String(groupError)} newsletter=${newsletterError.message || String(newsletterError)}`);
+        }
+    }
+}
+
+async function handleResolveTarget(req, res) {
     try {
         if (!isConnected || !sock) {
             return res.status(503).json({ ok: false, message: 'O WhatsApp não está conectado no terminal.' });
         }
-        const metadata = await sock.newsletterMetadata('invite', req.params.code);
-        res.json({ ok: true, id: metadata.id, name: metadata.name });
+        const result = await resolveTargetFromInvite(req.params.code);
+        res.json(result);
     } catch (error) {
-        res.status(500).json({ ok: false, message: 'Erro ao buscar canal: ' + (error.message || String(error)) });
+        res.status(500).json({ ok: false, message: 'Erro ao resolver destino: ' + (error.message || String(error)) });
     }
-});
+}
+
+app.get('/resolve-target/:code', handleResolveTarget);
+app.get('/resolve-channel/:code', handleResolveTarget);
 
 // ─── Send Message ───
 app.post('/send', async (req, res) => {
-    const { number, text, imageUrl } = req.body;
+    const { number, targetId, text, imageUrl } = req.body;
 
-    if (!number || !text) {
-        return res.status(400).json({ ok: false, message: 'Parâmetros "number" e "text" são obrigatórios.' });
+    if ((!number && !targetId) || !text) {
+        return res.status(400).json({ ok: false, message: 'Parâmetros "targetId" (ou legado "number") e "text" são obrigatórios.' });
     }
 
-    // Sanitize number (strip quotes, spaces)
-    const requestedJid = String(number).replace(/['"]/g, '').replace(/\s+/g, '').trim();
-    const configuredChannelId = process.env.WHATSAPP_CHANNEL_ID
-        ? String(process.env.WHATSAPP_CHANNEL_ID).replace(/['"]/g, '').replace(/\s+/g, '').trim()
-        : null;
-    const jid = configuredChannelId && configuredChannelId.endsWith('@newsletter') && requestedJid.endsWith('@newsletter') && configuredChannelId !== requestedJid
-        ? configuredChannelId
-        : requestedJid;
+    const requestedJid = sanitizeTargetId(targetId || number);
+    const jid = requestedJid || resolveConfiguredTargetId();
     const requestId = req.headers['x-request-id'] || `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
-    const isNewsletter = jid.endsWith('@newsletter');
+    const targetKind = detectTargetKind(jid);
+    const isNewsletter = targetKind === 'newsletter';
 
-    console.log('\n======================================================');
-    console.log(`🔎 [AUDITORIA ENGINE] INÍCIO DO DISPARO`);
-    console.log(`- Request ID: ${requestId}`);
-    console.log(`- JID solicitado: ${requestedJid}`);
-    if (jid !== requestedJid) console.log(`- JID efetivo (do ENV do motor): ${jid}`);
-    console.log(`- Texto recebido (${text.length} chars)`);
-    console.log(`- image_url recebida: ${imageUrl}`);
-    
-    // Log the exact full payload
+    if (!jid) {
+        return res.status(400).json({ ok: false, message: 'Nenhum targetId válido foi resolvido para o envio.' });
+    }
+
+    engineLog('INFO', 'Início do disparo', {
+        requestId,
+        requestedJid,
+        effectiveJid: jid,
+        targetKind,
+        textLength: text.length,
+        hasImage: Boolean(imageUrl)
+    });
+
     fs.appendFileSync('last_request.log', JSON.stringify(req.body, null, 2) + '\n\n');
 
     if (!isConnected || !sock) {
-        console.log('  ❌ Motor não está conectado ao WhatsApp!');
-        return res.status(503).json({ ok: false, message: 'Motor não conectado' });
+        engineLog('WARN', 'Envio recusado: motor desconectado', { requestId, jid });
+        return res.status(503).json({ ok: false, message: 'Motor WhatsApp não conectado.' });
     }
 
     try {
         if (isNewsletter) {
-            console.log('  → Newsletter detectada: enviando como TEXTO (sem upload de imagem)');
+            if (imageUrl) {
+                engineLog('INFO', 'Enviando mídia para canal', { requestId, jid, targetKind });
+                try {
+                    const { imageBuffer } = await buildProcessedImageBuffer(imageUrl);
+                    const result = await sock.sendMessage(jid, {
+                        image: imageBuffer,
+                        caption: text
+                    });
+
+                    engineLog('INFO', 'Mensagem enviada', { requestId, jid, targetKind, messageId: result?.key?.id || null, status: result?.status || null });
+                    return res.json({
+                        ok: true,
+                        message: 'Enviado via Baileys Local! (newsletter-media)',
+                        requestId,
+                        requestedJid,
+                        jid,
+                        targetKind,
+                        messageId: result?.key?.id,
+                        status: result?.status || null,
+                        sender: sock?.user ? { id: sock.user.id, name: sock.user.name } : null,
+                        serverTime: new Date().toISOString()
+                    });
+                } catch (newsletterMediaError) {
+                    engineLog('ERROR', 'Falha ao enviar mídia para canal', {
+                        requestId,
+                        jid,
+                        targetKind,
+                        error: newsletterMediaError.message,
+                        stack: newsletterMediaError.stack?.split('\n').slice(0, 3).join('\n') || null
+                    });
+                    return res.status(501).json({
+                        ok: false,
+                        code: 'NEWSLETTER_MEDIA_NOT_SUPPORTED',
+                        message: 'NEWSLETTER_MEDIA_NOT_SUPPORTED',
+                        details: newsletterMediaError.message,
+                        requestId,
+                        requestedJid,
+                        jid,
+                        targetKind
+                    });
+                }
+            }
+
+            engineLog('INFO', 'Enviando texto para canal', { requestId, jid, targetKind });
             const result = await sock.sendMessage(jid, { text: text });
 
-            console.log(`- Message ID retornado: ${result?.key?.id || 'N/A'}`);
-            console.log(`- Timestamp do envio: ${Date.now()}`);
-            console.log('======================================================\n');
-            console.log(`  ✅ ENVIADO! Message ID: ${result?.key?.id || 'N/A'}`);
-            console.log(`  ✅ Status: ${result?.status || 'N/A'}`);
+            engineLog('INFO', 'Mensagem enviada', { requestId, jid, targetKind, messageId: result?.key?.id || null, status: result?.status || null });
             return res.json({
                 ok: true,
                 message: 'Enviado via Baileys Local! (newsletter-text)',
                 requestId,
                 requestedJid,
                 jid,
+                targetKind,
                 messageId: result?.key?.id,
                 status: result?.status || null,
                 sender: sock?.user ? { id: sock.user.id, name: sock.user.name } : null,
@@ -197,38 +361,15 @@ app.post('/send', async (req, res) => {
             } else {
                 finalImageUrl = 'https://placehold.co/1200x630/E50914/FFFFFF/png?text=ALERTA+DE+CUPOM&font=Montserrat';
             }
-            console.log(`  → Imagem genérica definida: ${finalImageUrl}`);
+            engineLog('INFO', 'Imagem genérica definida', { requestId, imageUrl: finalImageUrl });
         }
 
         let result;
         if (finalImageUrl) {
-            console.log(`- finalImageUrl para fetch: ${finalImageUrl}`);
             try {
                 const crypto = require('crypto');
                 const hashStr = (str) => crypto.createHash('sha256').update(str).digest('hex').substring(0, 10);
-                const hashBuf = (buf) => crypto.createHash('sha256').update(buf).digest('hex').substring(0, 10);
-
-                const imgRes = await fetch(finalImageUrl, {
-                    headers: {
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
-                    }
-                });
-                if (!imgRes.ok) throw new Error(`Falha ao baixar imagem: ${imgRes.statusText}`);
-                const arrayBuffer = await imgRes.arrayBuffer();
-                const buffer = Buffer.from(arrayBuffer);
-                
-                console.log(`- imageBuffer original size: ${buffer.length} bytes`);
-                console.log(`- imageBuffer original hash: ${hashBuf(buffer)}`);
-                
-                const sharp = require('sharp');
-                const imageBuffer = await sharp(buffer)
-                    .resize({ width: 800, withoutEnlargement: true })
-                    .jpeg({ quality: 80, force: true })
-                    .toBuffer();
-
-                console.log(`- imageBuffer processado (Sharp) size: ${imageBuffer.length} bytes`);
-                console.log(`- imageBuffer processado (Sharp) hash: ${hashBuf(imageBuffer)}`);
+                const { imageBuffer, hashBuf } = await buildProcessedImageBuffer(finalImageUrl);
 
                 const urlMatch = text.match(/(https?:\/\/[^\s]+)/);
                 const clickUrl = urlMatch ? urlMatch[0] : finalImageUrl;
@@ -246,12 +387,15 @@ app.post('/send', async (req, res) => {
                         finalMessageText = text.split(clickUrl).join(uniqueSourceUrl);
                     }
                 } else {
-                    console.log(`- Newsletter detectada: desativando cache-buster de URL`);
+                    engineLog('INFO', 'Canal detectado. Cache-buster de URL desativado.', { requestId, jid });
                 }
 
-                console.log(`- Texto pós-modificação (hash): ${hashStr(finalMessageText)}`);
-                console.log(`- clickUrl encontrada: ${clickUrl}`);
-                console.log(`- uniqueSourceUrl final: ${uniqueSourceUrl}`);
+                engineLog('INFO', 'Payload de mídia preparado', {
+                    requestId,
+                    textHash: hashStr(finalMessageText),
+                    clickUrl,
+                    uniqueSourceUrl
+                });
 
                 const externalAdReplyObj = {
                     title: text.split('\n')[0].substring(0, 50).replace(/[^a-zA-Z0-9 ]/g, '') || "Oferta Especial",
@@ -263,44 +407,45 @@ app.post('/send', async (req, res) => {
                 };
 
                 const extAdReplyHashObj = { ...externalAdReplyObj, thumbnail: hashBuf(imageBuffer) };
-                console.log(`- externalAdReply hash (sem o buffer real): ${hashStr(JSON.stringify(extAdReplyHashObj))}`);
+                engineLog('INFO', 'External ad reply preparado', { requestId, hash: hashStr(JSON.stringify(extAdReplyHashObj)) });
 
-                // SEMPRE enviamos como Mídia Nativa para evitar cache de link preview!
-                console.log('  → Enviando como Mídia Nativa (Image Message)');
+                engineLog('INFO', 'Enviando mídia nativa', { requestId, jid, targetKind });
                 result = await sock.sendMessage(jid, {
                     image: imageBuffer,
                     caption: finalMessageText
                 });
             } catch (err) {
-                console.error('  ❌ Erro ao processar imagem:', err.message);
+                engineLog('ERROR', 'Erro ao processar imagem', { requestId, error: err.message });
                 throw err;
             }
         } else {
-            console.log('  → Enviando mensagem de texto...');
+            engineLog('INFO', 'Enviando texto', { requestId, jid, targetKind });
             result = await sock.sendMessage(jid, {
                 text: text
             });
         }
 
-        console.log(`- Message ID retornado: ${result?.key?.id || 'N/A'}`);
-        console.log(`- Timestamp do envio: ${Date.now()}`);
-        console.log('======================================================\n');
-        console.log(`  ✅ ENVIADO! Message ID: ${result?.key?.id || 'N/A'}`);
-        console.log(`  ✅ Status: ${result?.status || 'N/A'}`);
+        engineLog('INFO', 'Mensagem enviada', { requestId, jid, targetKind, messageId: result?.key?.id || null, status: result?.status || null });
         res.json({
             ok: true,
             message: 'Enviado via Baileys Local!',
             requestId,
             requestedJid,
             jid,
+            targetKind,
             messageId: result?.key?.id,
             status: result?.status || null,
             sender: sock?.user ? { id: sock.user.id, name: sock.user.name } : null,
             serverTime: new Date().toISOString()
         });
     } catch (sendError) {
-        console.error(`  ❌ ERRO AO ENVIAR:`, sendError.message);
-        console.error(`  ❌ Stack:`, sendError.stack?.split('\n').slice(0, 3).join('\n'));
+        engineLog('ERROR', 'Erro ao enviar mensagem', {
+            requestId,
+            jid,
+            targetKind,
+            error: sendError.message,
+            stack: sendError.stack?.split('\n').slice(0, 3).join('\n') || null
+        });
         return res.status(500).json({ ok: false, message: sendError.message || 'Erro ao enviar via Baileys' });
     }
 });
@@ -310,23 +455,18 @@ app.get('/test-send', async (req, res) => {
     if (!isConnected || !sock) {
         return res.status(503).json({ ok: false, message: 'Motor desconectado' });
     }
-    const jid = (process.env.WHATSAPP_CHANNEL_ID || '120363426476830692@newsletter')
-        .replace(/['"]/g, '')
-        .replace(/\s+/g, '')
-        .trim();
+    const jid = resolveConfiguredTargetId() || '120363426476830692@newsletter';
     try {
         const result = await sock.sendMessage(jid, { text: '🧪 Teste automático do motor — ' + new Date().toLocaleTimeString('pt-BR') });
-        console.log(`\n🧪 TESTE: Enviado! ID: ${result?.key?.id}`);
+        engineLog('INFO', 'Teste enviado', { jid, messageId: result?.key?.id || null, status: result?.status || null });
         res.json({ ok: true, messageId: result?.key?.id, status: result?.status });
     } catch (e) {
-        console.error(`\n🧪 TESTE FALHOU:`, e.message);
+        engineLog('ERROR', 'Teste falhou', { jid, error: e.message });
         res.status(500).json({ ok: false, error: e.message });
     }
 });
 
 const PORT = 3001;
 app.listen(PORT, () => {
-    console.log(`\n🚀 Motor do WhatsApp escutando na porta local ${PORT}`);
-    console.log(`📡 Aguardando conexão com os servidores da Meta...`);
-    console.log(`\n💡 Dica: Acesse http://localhost:${PORT}/test-send para testar o disparo.`);
+    engineLog('INFO', 'Motor do WhatsApp iniciado', { port: PORT });
 });

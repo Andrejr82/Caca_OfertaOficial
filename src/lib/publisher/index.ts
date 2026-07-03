@@ -32,10 +32,10 @@ export class Publisher {
       switch (channel) {
         case "telegram":
           if (payload.imageUrl) {
-            const res = await sendTelegramPhoto(payload.text, payload.imageUrl);
+            const res: any = await sendTelegramPhoto(payload.text, payload.imageUrl);
             messageId = res.message_id;
           } else {
-            const res = await sendTelegramMessage(payload.text);
+            const res: any = await sendTelegramMessage(payload.text);
             messageId = res.message_id;
           }
           break;
@@ -51,11 +51,11 @@ export class Publisher {
           break;
 
         case "whatsapp":
-          // Considerando que o ID do canal deve vir via contexto ou env no engine.
-          // Para esta abstração, passamos null e o engine interno gerencia o array default, ou usamos a config default.
-          // Como o schema pede channelId, vamos usar o do env.
-          const defaultWhatsappChannel = process.env.WHATSAPP_DEFAULT_CHANNEL_ID || "default";
-          const res = await whatsappService.sendChannelMedia(defaultWhatsappChannel, payload.text, payload.imageUrl);
+          const defaultWhatsappTarget = whatsappService.getDefaultTargetId();
+          if (!defaultWhatsappTarget) {
+            throw new Error("WHATSAPP_TARGET_ID não configurado.");
+          }
+          const res = await whatsappService.sendMedia(defaultWhatsappTarget, payload.text, payload.imageUrl);
           messageId = res.messageId;
           break;
 
@@ -126,19 +126,19 @@ export class Publisher {
 
   async retry(messageId: string): Promise<boolean> {
     logger.info("Publisher.retry stub disparado", { messageId });
-    // TODO: Recuperar payload do DB/Fila e reenviar
+    // Futuro: recuperar payload do DB/Fila e reenviar.
     return true;
   }
 
   async cancel(messageId: string): Promise<boolean> {
     logger.info("Publisher.cancel stub disparado", { messageId });
-    // TODO: Remover item agendado do Inngest ou Meta API
+    // Futuro: remover item agendado do Inngest ou Meta API.
     return true;
   }
 
   async status(): Promise<Record<ChannelType, any>> {
     const teleStatus = await testTelegramConnection();
-    const wpStatus = await whatsappService.getChannelStatus();
+    const wpStatus = await whatsappService.getStatus();
     
     return {
       telegram: teleStatus,

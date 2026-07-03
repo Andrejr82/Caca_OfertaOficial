@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { isInstagramConfigured } from "@/lib/instagram/client";
 import { hasTelegramEnv } from "@/lib/env";
+import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { logger } from "@/lib/utils/logger";
 
 export async function POST(request: Request) {
   try {
@@ -56,7 +58,7 @@ export async function POST(request: Request) {
     if (platform === "WhatsApp") {
       const engineUrl = process.env.WHATSAPP_ENGINE_URL;
       const engineKey = process.env.WHATSAPP_ENGINE_API_KEY;
-      const channelId = process.env.WHATSAPP_CHANNEL_ID;
+      const targetId = resolveConfiguredWhatsAppTargetId();
 
       if (!engineUrl) {
         return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_ENGINE_URL não configurado (Vercel deve apontar para o motor rodando na Oracle).", lastCheck: now });
@@ -64,31 +66,38 @@ export async function POST(request: Request) {
       if (!engineKey) {
         return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_ENGINE_API_KEY não configurado (precisa bater com o motor da Oracle).", lastCheck: now });
       }
-      if (!channelId) {
-        return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_CHANNEL_ID não configurado (ex: 120363...@newsletter).", lastCheck: now });
+      if (!targetId) {
+        return NextResponse.json({ ok: false, message: "Erro: WHATSAPP_TARGET_ID não configurado (ex: 120363...@g.us).", lastCheck: now });
       }
 
       const { whatsappService } = await import("@/lib/integrations/whatsapp");
-      const status = await whatsappService.getChannelStatus();
+      const status = await whatsappService.getStatus();
       if (status?.connected) {
         const sender = status?.sender?.id ? ` Motor conectado como ${status.sender.id}.` : "";
         if (sendTest) {
           const testText = `🧪 Teste Vercel → Motor Oracle (${new Date().toLocaleString("pt-BR")})`;
-          const result = await whatsappService.sendChannelMessage(channelId, testText);
+          const result = await whatsappService.sendMessage(targetId, testText);
           try {
             await supabase.from("integration_logs").insert({
               user_id: user.id,
               integration: "WhatsApp",
               action: "Connection Test (Send)",
               status: "success",
-              message: `Teste de envio disparado para o canal ${channelId}`,
+              message: `Teste de envio disparado para o alvo ${targetId}`,
               metadata: {
                 engineUrl,
+                targetId,
                 requestId: result?.requestId || null,
                 messageId: result?.messageId || null
               }
             });
-          } catch {}
+          } catch (logError) {
+            logger.warn("Falha ao registrar teste de conexão WhatsApp", {
+              event: "whatsapp_connection_test_log_failed",
+              targetId,
+              error: logError instanceof Error ? logError.message : String(logError)
+            });
+          }
           return NextResponse.json(
             {
               ok: true,

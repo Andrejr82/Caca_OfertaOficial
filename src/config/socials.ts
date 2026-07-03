@@ -9,7 +9,7 @@ export const SOCIALS = {
 
   whatsapp:
     process.env.NEXT_PUBLIC_WHATSAPP_URL ??
-    "https://whatsapp.com/channel/0029VbCLje16rsQz9pKFeo3c",
+    "https://chat.whatsapp.com/JxsNiCGyjnYEAmPhPRtd7G",
 
   tiktok:
     process.env.NEXT_PUBLIC_TIKTOK_URL ??

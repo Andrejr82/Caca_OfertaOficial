@@ -44,8 +44,9 @@ Este documento lista variáveis de ambiente referenciadas diretamente pelo códi
 |---|---|---|
 | `WHATSAPP_ENGINE_URL` | URL do motor WhatsApp (Oracle), consumida pelo app | Obrigatória para publicar via `/api/whatsapp/publish` e teste de conexão |
 | `WHATSAPP_ENGINE_API_KEY` | API key do motor (header `x-api-key`) | Obrigatória para publicar e para checar `/status` |
-| `WHATSAPP_CHANNEL_ID` | ID do canal Newsletter (formato `...@newsletter`) | Obrigatória para publicação no WhatsApp no app e no motor |
-| `WHATSAPP_DEFAULT_CHANNEL_ID` | Canal padrão usado pelo `Publisher` (abstração interna) | Opcional |
+| `WHATSAPP_TARGET_ID` | Destino principal do WhatsApp (grupo `...@g.us`, canal `...@newsletter` ou futuro alvo suportado) | Obrigatória para publicação no app e no motor |
+| `WHATSAPP_CHANNEL_ID` | Nome legado mantido como fallback de compatibilidade | Opcional |
+| `WHATSAPP_DEFAULT_CHANNEL_ID` | Fallback adicional legado usado pelo `Publisher` | Opcional |
 
 ## Telegram
 

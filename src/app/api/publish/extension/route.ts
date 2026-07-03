@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
+import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { generateOfferAnalysis } from "@/lib/ai/groq";
 import { publishToTelegramAction } from "@/lib/publish/actions";
@@ -174,12 +175,12 @@ export async function POST(req: Request) {
           // ou usamos publishToWhatsAppAction que depende de cookie?
           // O publishToWhatsAppAction pede auth. Então usamos o serviço direto!
           const { whatsappService } = await import("@/lib/integrations/whatsapp");
-          const channelId = process.env.WHATSAPP_CHANNEL_ID;
-          if (channelId) {
-            await whatsappService.sendChannelMedia(channelId, copy, imageUrl);
+          const targetId = resolveConfiguredWhatsAppTargetId();
+          if (targetId) {
+            await whatsappService.sendMedia(targetId, copy, imageUrl);
             results.push({ channel, status: "ok" });
           } else {
-            results.push({ channel, status: "error", error: "WHATSAPP_CHANNEL_ID não configurado" });
+            results.push({ channel, status: "error", error: "WHATSAPP_TARGET_ID não configurado" });
           }
         }
         else if (channel === "instagram") {
