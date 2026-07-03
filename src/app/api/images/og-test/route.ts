@@ -21,7 +21,7 @@ function buildExpires(value: string | null | undefined) {
   return base.toUTCString();
 }
 
-export async function GET(request: Request) {
+async function handleOgImageRequest(request: Request, includeBody: boolean) {
   const { searchParams } = new URL(request.url);
   const offerId = searchParams.get("offerId");
 
@@ -53,7 +53,7 @@ export async function GET(request: Request) {
     const etag = `"${createHash("sha256").update(result.buffer).digest("hex").slice(0, 24)}"`;
     const lastModifiedSource = offer.updated_at || offer.created_at;
 
-    return new NextResponse(new Uint8Array(result.buffer), {
+    return new NextResponse(includeBody ? new Uint8Array(result.buffer) : null, {
       status: 200,
       headers: {
         "Content-Type": result.contentType,
@@ -73,4 +73,12 @@ export async function GET(request: Request) {
     const message = error instanceof Error ? error.message : "Falha ao gerar preview OG.";
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
+}
+
+export async function GET(request: Request) {
+  return handleOgImageRequest(request, true);
+}
+
+export async function HEAD(request: Request) {
+  return handleOgImageRequest(request, false);
 }
