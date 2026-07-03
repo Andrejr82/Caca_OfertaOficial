@@ -21,11 +21,35 @@ interface PreparedPost {
   trackedUrl: string;
   copy: string;
   copies?: { telegram: string; whatsapp: string; instagram: string; };
-  status: "ready" | "publishing" | "published" | "error" | "partial_error";
+  status: "ready" | "confirming" | "publishing" | "published" | "error" | "partial_error";
   publishMessage: string;
   expanded: boolean;
   offerId?: string;
   targetChannels: string[];
+  platform?: string;
+}
+
+// ─── Subcomponents ───
+function PremiumImagePreview({ offerId, productName }: { offerId?: string; productName: string }) {
+  const [loading, setLoading] = useState(true);
+  if (!offerId) return null;
+  return (
+    <div className="relative rounded-lg overflow-hidden bg-black/40 border border-white/[0.05] flex items-center justify-center min-h-[320px]">
+      {loading && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="animate-spin text-emerald-500" size={28} />
+          <span className="text-xs text-white/50 font-medium">Renderizando Imagem Premium...</span>
+        </div>
+      )}
+      <img
+        src={`/api/images/whatsapp-premium?offerId=${encodeURIComponent(offerId)}`}
+        alt={productName}
+        className={`object-contain w-full h-full transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'}`}
+        onLoad={() => setLoading(false)}
+        onError={() => setLoading(false)}
+      />
+    </div>
+  );
 }
 
 // ─── Component ───
@@ -81,6 +105,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             publishMessage: "",
             expanded: i === 0, // Expand first post by default
             offerId: res.offer.id,
+            platform: res.offer?.platform,
           });
         } else {
           errors.push(`Link ${i + 1}: ${res.message || "Erro desconhecido"}`);
@@ -149,12 +174,26 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
     }
   }, [posts, channel]);
 
+  // ─── Preview state transition ───
+  function handlePreview(postId: string) {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, status: "confirming" as const } : p))
+    );
+  }
+
+  function cancelPreview(postId: string) {
+    setPosts((prev) =>
+      prev.map((p) => (p.id === postId ? { ...p, status: "ready" as const } : p))
+    );
+  }
+
   // ─── Publish ALL ready posts ───
   async function handlePublishAll() {
     const readyPosts = posts.filter((p) => p.status === "ready");
-    for (const post of readyPosts) {
-      await handlePublish(post.id);
-    }
+    // Change all ready to preview
+    setPosts((prev) =>
+      prev.map((p) => (p.status === "ready" ? { ...p, status: "confirming" as const, expanded: true } : p))
+    );
   }
 
   // ─── Toggle expand ───
@@ -284,7 +323,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             {readyCount > 1 && (
               <Button variant="gradient" onClick={handlePublishAll} className="text-xs h-8 px-4">
                 <Send size={14} />
-                Publicar Todas ({readyCount})
+                Pré-visualizar Todas ({readyCount})
               </Button>
             )}
             <Button
@@ -311,6 +350,8 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                 ? "border-red-500/20 bg-red-500/[0.03]"
                 : post.status === "publishing"
                 ? "border-blue-500/30 bg-blue-500/[0.05]"
+                : post.status === "confirming"
+                ? "border-amber-500/30 bg-amber-500/[0.05]"
                 : "border-white/[0.05] bg-white/[0.02]"
             }`}
           >
@@ -356,14 +397,19 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                     <Loader2 size={14} className="animate-spin" /> Publicando...
                   </span>
                 )}
+                {post.status === "confirming" && (
+                  <span className="flex items-center gap-1 text-xs text-amber-400">
+                    <CheckCircle2 size={14} /> Aguardando Confirmação
+                  </span>
+                )}
                 {post.status === "ready" && (
                   <Button
                     variant="primary"
-                    onClick={(e) => { e.stopPropagation(); handlePublish(post.id); }}
+                    onClick={(e) => { e.stopPropagation(); handlePreview(post.id); }}
                     className="text-xs h-8 px-4 bg-blue-600 hover:bg-blue-500 border-0 whitespace-nowrap"
                   >
                     <Send size={13} />
-                    Publicar
+                    Pré-visualizar
                   </Button>
                 )}
 
@@ -384,104 +430,150 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             {/* Expanded Content */}
             {post.expanded && (
               <div className="px-4 pb-4 pt-1 border-t border-white/[0.05] space-y-3 animate-fadeIn">
-                {/* Image + Copy side by side on desktop, stacked on mobile */}
-                <div className="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4">
-                  {/* Image preview */}
-                  {post.imageUrl && (
-                    <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full flex items-center justify-center">
-                      <img 
-                        src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} referrerPolicy="no-referrer"
-                        alt={post.productName} 
-                        className="object-contain w-full h-full p-2" 
-                      />
+                {post.status === "confirming" ? (
+                  /* ─── CONFIRMATION MOCKUP ─── */
+                  <div className="bg-[#0b141a] border border-white/[0.05] rounded-xl p-4 max-w-md mx-auto space-y-2 shadow-2xl relative mt-4">
+                    {/* Badges */}
+                    <div className="absolute -top-3 left-4 flex gap-2">
+                      {post.platform && <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px] px-2">{post.platform}</Badge>}
+                      <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] px-2">Premium Template</Badge>
                     </div>
-                  )}
 
-                  {/* Copy editor */}
-                  <div className="min-w-0 space-y-3">
-                    
-                    {/* Alerta Semi-Automático Shein */}
-                    {(post.url.includes("shein.com") || post.trackedUrl.includes("caca_oferta_manual_link")) && (
-                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
-                        <AlertCircle className="text-amber-500 mt-0.5 flex-shrink-0" size={16} />
-                        <div className="text-xs text-amber-500/90 leading-relaxed">
-                          <strong>Ação Manual Necessária:</strong> Este é um produto da Shein. Pegue o link que está no texto abaixo, abra no <strong>App Oficial da Shein</strong> para gerar seu link curto de afiliado e cole no lugar do link longo antes de clicar em Publicar!
+                    {/* Fake WhatsApp Bubble */}
+                    <div className="bg-[#005c4b] rounded-xl rounded-tr-none p-1 shadow-sm relative">
+                      {/* Triangle tail */}
+                      <div className="absolute top-0 -right-2 w-0 h-0 border-t-[10px] border-t-[#005c4b] border-r-[10px] border-r-transparent"></div>
+                      
+                      {/* Image */}
+                      {post.targetChannels.includes("whatsapp") ? (
+                        <PremiumImagePreview offerId={post.offerId} productName={post.productName} />
+                      ) : (
+                        <div className="relative rounded-lg overflow-hidden bg-black/20 flex items-center justify-center min-h-[200px]">
+                          <img src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} className="object-contain w-full h-full p-2" />
                         </div>
-                      </div>
-                    )}
-
-                    {post.targetChannels.length > 1 && post.copies ? (
-                      <div className="grid gap-3">
-                        {post.targetChannels.map((ch) => (
-                          <div key={ch} className="space-y-1">
-                            <div className="text-[10px] text-white/50 font-bold uppercase">{ch}</div>
-                            <textarea
-                              value={(post.copies as any)[ch]}
-                              onChange={(e) => updateCopy(post.id, e.target.value, ch)}
-                              className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[120px] overflow-auto whitespace-pre-wrap break-all"
-                              style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
-                              disabled={post.status === "publishing"}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <textarea
-                        value={post.copy}
-                        onChange={(e) => updateCopy(post.id, e.target.value)}
-                        className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[200px] overflow-auto whitespace-pre-wrap break-all"
-                        style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
-                        disabled={post.status === "publishing"}
-                      />
-                    )}
-
-                    {/* Action bar */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <Button
-                        variant="ghost"
-                        className="text-xs h-7 px-3"
-                        onClick={() => {
-                          navigator.clipboard.writeText(post.copy);
-                        }}
-                      >
-                        <Copy size={12} /> Copiar
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        className="text-xs h-7 px-3 text-red-400/60 hover:text-red-400"
-                        onClick={() => removePost(post.id)}
-                      >
-                        <Trash2 size={12} /> Remover
-                      </Button>
-
-                      {/* Spacer pushes publish button to the right */}
-                      <div className="flex-1" />
-
-                      {post.status === "ready" && (
-                        <Button
-                          variant="primary"
-                          onClick={() => handlePublish(post.id)}
-                          className="text-xs h-8 px-5 bg-blue-600 hover:bg-blue-500 border-0 whitespace-nowrap"
-                        >
-                          <Send size={13} />
-                          {post.targetChannels.length > 1 ? "Disparo Simultâneo" : `Publicar no ${post.targetChannels[0].toUpperCase()}`}
-                        </Button>
                       )}
 
-                      {post.status === "error" && (
-                        <Button
-                          variant="primary"
-                          onClick={() => {
-                            setPosts((prev) => prev.map((p) => p.id === post.id ? { ...p, status: "ready" as const, publishMessage: "" } : p));
-                          }}
-                          className="text-xs h-8 px-5 bg-orange-600 hover:bg-orange-500 border-0 whitespace-nowrap"
-                        >
-                          Tentar Novamente
-                        </Button>
-                      )}
+                      {/* Text */}
+                      <div className="px-2 pt-2 pb-1 text-[14px] text-white/95 whitespace-pre-wrap font-sans leading-relaxed break-words">
+                        {post.targetChannels.length > 1 && post.copies ? (post.copies as any)["whatsapp"] : post.copy}
+                      </div>
+                      
+                      {/* Time */}
+                      <div className="text-[10px] text-white/60 text-right px-2 pb-1 flex justify-end items-center gap-1">
+                        12:00 <CheckCircle2 size={10} className="text-blue-400" />
+                      </div>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex gap-2 pt-4">
+                      <Button variant="ghost" onClick={() => cancelPreview(post.id)} className="flex-1 text-xs h-10 border border-white/10 hover:bg-white/5">
+                        Voltar e Editar
+                      </Button>
+                      <Button variant="primary" onClick={() => handlePublish(post.id)} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-xs text-white border-0 h-10">
+                        <Send size={14} className="mr-2" /> Confirmar Envio
+                      </Button>
                     </div>
                   </div>
-                </div>
+                ) : (
+                  /* ─── EDIT FORM ─── */
+                  <div className="grid grid-cols-1 md:grid-cols-[180px_minmax(0,1fr)] gap-4">
+                    {/* Image preview */}
+                    {post.imageUrl && (
+                      <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full flex items-center justify-center">
+                        <img 
+                          src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} referrerPolicy="no-referrer"
+                          alt={post.productName} 
+                          className="object-contain w-full h-full p-2" 
+                        />
+                      </div>
+                    )}
+
+                    {/* Copy editor */}
+                    <div className="min-w-0 space-y-3">
+                      
+                      {/* Alerta Semi-Automático Shein */}
+                      {(post.url.includes("shein.com") || post.trackedUrl.includes("caca_oferta_manual_link")) && (
+                        <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
+                          <AlertCircle className="text-amber-500 mt-0.5 flex-shrink-0" size={16} />
+                          <div className="text-xs text-amber-500/90 leading-relaxed">
+                            <strong>Ação Manual Necessária:</strong> Este é um produto da Shein. Pegue o link que está no texto abaixo, abra no <strong>App Oficial da Shein</strong> para gerar seu link curto de afiliado e cole no lugar do link longo antes de clicar em Publicar!
+                          </div>
+                        </div>
+                      )}
+
+                      {post.targetChannels.length > 1 && post.copies ? (
+                        <div className="grid gap-3">
+                          {post.targetChannels.map((ch) => (
+                            <div key={ch} className="space-y-1">
+                              <div className="text-[10px] text-white/50 font-bold uppercase">{ch}</div>
+                              <textarea
+                                value={(post.copies as any)[ch]}
+                                onChange={(e) => updateCopy(post.id, e.target.value, ch)}
+                                className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[120px] overflow-auto whitespace-pre-wrap break-all"
+                                style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                                disabled={post.status === "publishing"}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <textarea
+                          value={post.copy}
+                          onChange={(e) => updateCopy(post.id, e.target.value)}
+                          className="glass-input focus-ring w-full max-w-full rounded-lg p-3 text-xs font-mono leading-relaxed resize-none h-[200px] overflow-auto whitespace-pre-wrap break-all"
+                          style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
+                          disabled={post.status === "publishing"}
+                        />
+                      )}
+
+                      {/* Action bar */}
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <Button
+                          variant="ghost"
+                          className="text-xs h-7 px-3"
+                          onClick={() => {
+                            navigator.clipboard.writeText(post.copy);
+                          }}
+                        >
+                          <Copy size={12} /> Copiar
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="text-xs h-7 px-3 text-red-400/60 hover:text-red-400"
+                          onClick={() => removePost(post.id)}
+                        >
+                          <Trash2 size={12} /> Remover
+                        </Button>
+
+                        {/* Spacer pushes publish button to the right */}
+                        <div className="flex-1" />
+
+                        {post.status === "ready" && (
+                          <Button
+                            variant="primary"
+                            onClick={() => handlePreview(post.id)}
+                            className="text-xs h-8 px-5 bg-blue-600 hover:bg-blue-500 border-0 whitespace-nowrap"
+                          >
+                            <Send size={13} />
+                            Pré-visualizar Publicação
+                          </Button>
+                        )}
+
+                        {post.status === "error" && (
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setPosts((prev) => prev.map((p) => p.id === post.id ? { ...p, status: "ready" as const, publishMessage: "" } : p));
+                            }}
+                            className="text-xs h-8 px-5 bg-orange-600 hover:bg-orange-500 border-0 whitespace-nowrap"
+                          >
+                            Tentar Novamente
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

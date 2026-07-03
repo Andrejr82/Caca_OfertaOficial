@@ -258,6 +258,25 @@ Decisões arquiteturais tomadas:
   - Oferta Exclusiva
 - Observação: A baixa qualidade visual observada em um dos exemplos decorre da imagem original da oferta, não do pipeline de geração.
 
+### Sprint 09
+
+- Número: 09
+- Nome: Dashboard de Publicação
+- Objetivo: Implementar o fluxo de preview fiel da imagem premium, garantindo confirmação antes do disparo real, e corrigir falha técnica da Publicação Expressa com vitrines/perfil social.
+- Escopo: UX da tela de edição/publicação, Mockup emulado de balão verde escuro, subcomponente de imagem premium e hotfix no backend para supressão do `PRECO_INVALIDO` em vitrines e perfil social.
+- Arquivos principais:
+  - `src/app/(dashboard)/publish/publish-client.tsx`
+  - `src/lib/publish/quality-gate.ts`
+  - `src/lib/publish/actions.ts`
+- Resultado: Fluxo visual desdobrado em "Pré-visualizar" e "Confirmar Envio", carregamento condicional do spinner, Mockup realista e links vitrine/social reestabelecidos na Publicação Expressa sem rejeição.
+- Status: CONCLUÍDA
+- Data da conclusão: 03/07/2026
+- Oracle: não alterada
+- Homologação: Preview testado isoladamente sem publicar e com pipeline visual mantido. Link testado: `https://meli.la/2iSefib`
+- Critério de aprovação: O preview e os blocos não engatilham mais o motor diretamente, operador precisa visualizar visual fidedigno.
+- Critério de não regressão: Componentes novos inline (sem modals adicionados) e `product-validator` intacto na camada profunda para continuar rejeitando preços inválidos unitários.
+- Observação: imagem local pode aparecer quebrada em dev; validação final visual da imagem deve ocorrer na Vercel/ambiente publicado.
+
 ## 4. Arquitetura Final
 
 Fluxo operacional final:

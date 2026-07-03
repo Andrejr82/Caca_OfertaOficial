@@ -102,12 +102,22 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     current_price: metadata.price,
   });
 
+  const isCollection = qualityGate.classification === "STORE_PAGE" || 
+                       qualityGate.classification === "CATEGORY_PAGE" || 
+                       qualityGate.classification === "SOCIAL_PAGE";
+
   if (!offerValidation.valid) {
-    return {
-      ok: false,
-      status: "REJECTED",
-      message: `Oferta rejeitada: ${offerValidation.rejectReason}`
-    };
+    if (isCollection && offerValidation.rejectReason === "PRECO_INVALIDO") {
+      offerValidation.valid = true;
+      offerValidation.platform = metadata.platform;
+      offerValidation.price = metadata.price || 0;
+    } else {
+      return {
+        ok: false,
+        status: "REJECTED",
+        message: `Oferta rejeitada: ${offerValidation.rejectReason}`
+      };
+    }
   }
 
   const duplicateOfferId = await findDuplicateOffer(supabase, userId, offerValidation);
