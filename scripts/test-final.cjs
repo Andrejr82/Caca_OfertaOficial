@@ -3,6 +3,8 @@ const fetch = require('node-fetch');
 const API_KEY = process.env.WHATSAPP_ENGINE_API_KEY || 'local-dev-key';
 const PORT = 3001;
 
+// LEGADO: este teste preserva JIDs @newsletter para reproduzir auditorias antigas.
+// Novas homologações operacionais devem usar WHATSAPP_TARGET_ID com Grupo (...@g.us).
 async function sendTest() {
     console.log("Enviando Oferta 1 (generateHighQualityLinkPreview=false)...");
     await fetch(`http://localhost:${PORT}/send`, {

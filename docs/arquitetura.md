@@ -16,7 +16,7 @@
 - **Supabase**
   - PostgreSQL + Auth + Storage (state central do sistema).
 - **Redes Sociais / Plataformas**
-  - WhatsApp (Newsletter via Baileys no Oracle)
+  - WhatsApp (Grupo via Baileys no Oracle; Newsletter apenas compatibilidade legada)
   - Telegram (Bot API)
   - Instagram (Meta Graph API + Webhook)
   - Facebook (Meta Graph API)
@@ -60,7 +60,7 @@ flowchart TB
 
   subgraph R[Redes Sociais / Plataformas]
     R1[Telegram Bot API]
-    R2[WhatsApp (Baileys/Newsletter)]
+    R2[WhatsApp (Baileys/Grupo)]
     R3[Instagram Graph API]
     R4[Facebook Graph API]
     R5[GitHub Actions (workflow)]

@@ -10,7 +10,7 @@ Este documento lista variáveis de ambiente referenciadas diretamente pelo códi
 | `NEXT_PUBLIC_INSTAGRAM_USERNAME` | Username exibido no app | Opcional (há fallback em código) |
 | `NEXT_PUBLIC_TELEGRAM_NAME` | Nome exibido no app | Opcional (há fallback em código) |
 | `NEXT_PUBLIC_TELEGRAM_URL` | URL do Telegram exibida no app e em `SOCIALS` | Opcional (há fallback em código) |
-| `NEXT_PUBLIC_WHATSAPP_URL` | URL do WhatsApp/Canal exibida no app e em `SOCIALS` | Opcional (há fallback em código) |
+| `NEXT_PUBLIC_WHATSAPP_URL` | URL pública do WhatsApp exibida no app e em `SOCIALS` | Opcional (há fallback em código) |
 | `NEXT_PUBLIC_INSTAGRAM_URL` | URL do Instagram exibida em `SOCIALS` | Opcional (há fallback em código) |
 | `NEXT_PUBLIC_TIKTOK_URL` | URL do TikTok exibida em `SOCIALS` | Opcional |
 | `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto Supabase (client/server) | Obrigatória para autenticação e acesso ao banco via app |
@@ -44,9 +44,9 @@ Este documento lista variáveis de ambiente referenciadas diretamente pelo códi
 |---|---|---|
 | `WHATSAPP_ENGINE_URL` | URL do motor WhatsApp (Oracle), consumida pelo app | Obrigatória para publicar via `/api/whatsapp/publish` e teste de conexão |
 | `WHATSAPP_ENGINE_API_KEY` | API key do motor (header `x-api-key`) | Obrigatória para publicar e para checar `/status` |
-| `WHATSAPP_TARGET_ID` | Destino principal do WhatsApp (grupo `...@g.us`, canal `...@newsletter` ou futuro alvo suportado) | Obrigatória para publicação no app e no motor |
-| `WHATSAPP_CHANNEL_ID` | Nome legado mantido como fallback de compatibilidade | Opcional |
-| `WHATSAPP_DEFAULT_CHANNEL_ID` | Fallback adicional legado usado pelo `Publisher` | Opcional |
+| `WHATSAPP_TARGET_ID` | Destino operacional oficial do WhatsApp. Padrão atual: Grupo `...@g.us`; Canal `...@newsletter` permanece apenas como compatibilidade legada | Obrigatória para publicação no app e no motor |
+| `WHATSAPP_CHANNEL_ID` | Nome legado mantido como fallback de compatibilidade; não usar como configuração principal | Opcional |
+| `WHATSAPP_DEFAULT_CHANNEL_ID` | Fallback adicional legado usado pelo `Publisher`; não usar como configuração principal | Opcional |
 
 ## Telegram
 

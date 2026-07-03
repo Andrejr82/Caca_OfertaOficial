@@ -1,5 +1,7 @@
 const testName = process.argv[2] || 'A';
-const jid = '120363410104792329@newsletter'; // Canal de Testes
+// LEGADO: este teste usa @newsletter apenas como referência histórica.
+// Operação oficial atual do WhatsApp usa Grupo via WHATSAPP_TARGET_ID (...@g.us).
+const jid = '120363410104792329@newsletter'; // Canal de Testes legado
 const url = 'http://localhost:3001/send';
 
 const offers = [

@@ -14,7 +14,7 @@ Somente integrações comprovadas pelo código estão listadas aqui.
 
 ## Oracle (WhatsApp Engine)
 
-- **Finalidade**: envio ao WhatsApp via Baileys (WhatsApp Web) para canal Newsletter.
+- **Finalidade**: envio ao Grupo WhatsApp oficial via Baileys (WhatsApp Web). Canal Newsletter permanece apenas como compatibilidade/legado.
 - **Arquivos responsáveis**
   - Motor: `scripts/whatsapp-engine.cjs`
   - Cliente no app: `src/lib/integrations/whatsapp/index.ts`

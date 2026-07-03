@@ -1,5 +1,7 @@
 const fetch = require('node-fetch');
 
+// LEGADO: este teste preserva o destino @newsletter de auditorias antigas.
+// Operação oficial atual do WhatsApp usa Grupo via WHATSAPP_TARGET_ID (...@g.us).
 (async () => {
     const payload = {
         number: "120363410104792329@newsletter",
