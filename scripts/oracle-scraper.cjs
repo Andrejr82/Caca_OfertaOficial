@@ -1987,6 +1987,207 @@ async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE,
   }
 }
 
+// ─── Shopee Quality Layer ─────────────────────────────────────
+// Auditoria de campos da API oficial (open-api.affiliate.shopee.com.br/graphql):
+//
+// DISPONÍVEIS na resposta productOfferV2.nodes:
+//   itemId, productName, priceMin, priceMax, imageUrl, productLink,
+//   offerLink, sales, commissionRate, sellerCommissionRate,
+//   shopeeCommissionRate, ratingStar, priceDiscountRate, shopId, shopName
+//
+// NÃO DISPONÍVEIS (CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL):
+//   is_shopee_mall        → sem campo direto; heurística via shopName
+//   is_official_store     → sem campo direto; heurística via shopName
+//   is_key_seller         → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   has_free_shipping     → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   has_national_shipping → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   has_cashback          → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   coupon                → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   store_location        → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   store_country         → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   estimated_delivery    → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   rating_count          → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   brand                 → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   variants              → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   stock                 → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+//   campaigns             → CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL (inferível via keyword)
+
+/**
+ * enrichShopeeOffer — captura todos os campos disponíveis na API oficial afiliada.
+ * Não faz chamadas HTTP. Usa apenas o node retornado pela API.
+ * Campos ausentes são registrados explicitamente como null.
+ */
+function enrichShopeeOffer(node) {
+  const shopName    = String(node.shopName    || '').trim();
+  const productName = String(node.productName || '').trim();
+
+  const commissionRate       = parseShopeeMoney(node.commissionRate);
+  const sellerCommissionRate = parseShopeeMoney(node.sellerCommissionRate);
+  const shopeeCommissionRate = parseShopeeMoney(node.shopeeCommissionRate);
+  const priceDiscountRate    = parseShopeeMoney(node.priceDiscountRate);
+  const ratingStar  = node.ratingStar != null ? parseFloat(String(node.ratingStar)) : null;
+  const salesCount  = node.sales      != null ? Number(node.sales) : null;
+
+  // Shopee Mall: sem campo direto. Heurística via shopName.
+  const isShopeeMall    = shopName.length > 0 && /shopee\s*mall/i.test(shopName);
+  // Loja Oficial: sem campo direto. Heurística via shopName.
+  const isOfficialStore = shopName.length > 0 &&
+    (/loja\s*oficial/i.test(shopName) || /official\s*store/i.test(shopName));
+
+  // Comissão Extra: commissionRate > 5% é evidência de campanha extra afiliados.
+  const totalCommission    = commissionRate != null ? commissionRate : (sellerCommissionRate ?? null);
+  const hasExtraCommission = totalCommission != null && totalCommission > 5;
+
+  // Campanhas: inferidas via keyword no productName — única fonte disponível.
+  // Não representa dado oficial de campanha da Shopee.
+  const campaignPatterns = [
+    { re: /\b7[\s._]?7\b/,    name: '7.7'         },
+    { re: /\b8[\s._]?8\b/,    name: '8.8'         },
+    { re: /\b9[\s._]?9\b/,    name: '9.9'         },
+    { re: /\b10[\s._]?10\b/,  name: '10.10'       },
+    { re: /\b11[\s._]?11\b/,  name: '11.11'       },
+    { re: /\b12[\s._]?12\b/,  name: '12.12'       },
+    { re: /black\s*friday/i,    name: 'Black Friday'},
+  ];
+  const detectedCampaigns = campaignPatterns
+    .filter(({ re }) => re.test(productName))
+    .map(({ name }) => name);
+
+  return {
+    // ── Campos disponíveis na API ────────────────────────────
+    shop_name:              shopName || null,
+    shop_id:                node.shopId  ?? null,
+    item_id:                node.itemId  ?? null,
+    commission_rate:        commissionRate,
+    seller_commission_rate: sellerCommissionRate,
+    shopee_commission_rate: shopeeCommissionRate,
+    price_discount_rate:    priceDiscountRate,
+    sales_count:            Number.isFinite(salesCount) ? salesCount : null,
+    rating_star:            Number.isFinite(ratingStar) ? ratingStar : null,
+    // ── Detectados via heurística no shopName ────────────────
+    is_shopee_mall:         isShopeeMall,
+    is_official_store:      isOfficialStore,
+    has_extra_commission:   hasExtraCommission,
+    total_commission_rate:  totalCommission,
+    detected_campaigns:     detectedCampaigns,
+    // ── CAMPOS NÃO DISPONÍVEIS NA INTEGRAÇÃO ATUAL ───────────
+    is_key_seller:          null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    has_free_shipping:      null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    has_national_shipping:  null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    has_cashback:           null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    coupon:                 null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    store_location:         null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    store_country:          null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    estimated_delivery:     null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    rating_count:           null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+    brand:                  null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
+  };
+}
+
+/**
+ * validateShopeeOrigin — valida origem Brasil com múltiplas evidências.
+ *
+ * A API open-api.affiliate.shopee.com.br é segmentada por país (BR).
+ * Não existe campo 'country' porque o endpoint já é BR. Mas lojas chinesas
+ * podem estar cadastradas na Shopee BR — detectamos via sinais negativos.
+ *
+ * Confiança:
+ *   HIGH_CONFIDENCE_BR   → URL .com.br + API BR + sem sinais negativos
+ *   MEDIUM_CONFIDENCE_BR → domínio BR confirmado, shopName neutro/ausente
+ *   LOW_CONFIDENCE       → dados insuficientes para classificar
+ *   INTERNATIONAL        → sinais explícitos de origem internacional
+ *
+ * Quality Gate:
+ *   HIGH/MEDIUM  → ACCEPTED     (segue para upsertOffer)
+ *   LOW          → NEEDS_REVIEW (logar, não bloquear automaticamente)
+ *   INTERNATIONAL → REJECTED    (descartar sem persistir)
+ */
+function validateShopeeOrigin(productUrl, productName, enriched) {
+  const urlStr  = String(productUrl  || '').toLowerCase();
+  const nameStr = String(productName || '').toLowerCase();
+  const shopStr = String(enriched.shop_name || '').toLowerCase();
+
+  const reasons = [];
+  let score = 0;
+
+  // ── Sinais positivos ────────────────────────────────────
+  if (urlStr.includes('shopee.com.br')) {
+    reasons.push('URL domínio shopee.com.br confirmado');
+    score += 3;
+  }
+  reasons.push('Produto retornado pela API afiliada open-api.affiliate.shopee.com.br (BR)');
+  score += 2;
+
+  if (enriched.is_shopee_mall) {
+    reasons.push('Shopee Mall detectado via shopName');
+    score += 2;
+  }
+  if (enriched.is_official_store) {
+    reasons.push('Loja Oficial detectada via shopName');
+    score += 2;
+  }
+  if (enriched.commission_rate != null) {
+    reasons.push('Comissão afiliada BR presente (commissionRate disponível)');
+    score += 1;
+  }
+
+  // ── Sinais negativos (indicadores internacionais) ────────
+  const intlKeywords = [
+    'china', ' cn ', 'overseas', 'importado', 'import ',
+    'cross border', 'cross-border', 'chinês', 'frete internacional'
+  ];
+  const nameHasIntl = intlKeywords.some(kw => nameStr.includes(kw));
+  const shopHasIntl = shopStr.length > 0 && intlKeywords.some(kw => shopStr.includes(kw));
+
+  let rejectionReason = null;
+  if (nameHasIntl) {
+    reasons.push('ALERTA: nome do produto contém indicador internacional');
+    score -= 4;
+    rejectionReason = rejectionReason || 'INDICADOR_INTERNACIONAL_NO_NOME';
+  }
+  if (shopHasIntl) {
+    reasons.push('ALERTA: nome da loja contém indicador internacional');
+    score -= 5;
+    rejectionReason = 'INDICADOR_INTERNACIONAL_NA_LOJA';
+  }
+
+  // ── Classificação ────────────────────────────────────────
+  let confidence, isBrazilian, qualityGate;
+  if (rejectionReason) {
+    confidence = 'INTERNATIONAL'; isBrazilian = false; qualityGate = 'REJECTED';
+  } else if (score >= 5) {
+    confidence = 'HIGH_CONFIDENCE_BR';   isBrazilian = true;  qualityGate = 'ACCEPTED';
+  } else if (score >= 3) {
+    confidence = 'MEDIUM_CONFIDENCE_BR'; isBrazilian = true;  qualityGate = 'ACCEPTED';
+  } else {
+    confidence = 'LOW_CONFIDENCE';       isBrazilian = null;  qualityGate = 'NEEDS_REVIEW';
+  }
+
+  return { isBrazilian, confidence, qualityGate, reasons, rejectionReason };
+}
+
+/**
+ * calcShopeeScoreBoost — bônus de score usando exclusivamente campos reais da API.
+ * Delta máximo +2.5 — não inverte ranking base do scoreV1.
+ *
+ * ★★★★★  Shopee Mall:     +1.0  (detectado via shopName)
+ * ★★★★★  Loja Oficial:    +0.8  (detectado via shopName)
+ * ★★★★★  Comissão Extra:  +0.5  (commissionRate > 5%)
+ * ★★★☆☆  ≥100 vendidos:   +0.3  (sales)
+ * ★★★☆☆  ≥4.5 avaliação:  +0.2  (ratingStar)
+ * ★★★☆☆  Campanha detect: +0.2  (via keyword no productName)
+ */
+function calcShopeeScoreBoost(enriched) {
+  let boost = 0;
+  if (enriched.is_shopee_mall)       boost += 1.0;
+  if (enriched.is_official_store)    boost += 0.8;
+  if (enriched.has_extra_commission) boost += 0.5;
+  if (enriched.sales_count != null && enriched.sales_count >= 100)  boost += 0.3;
+  if (enriched.rating_star  != null && enriched.rating_star  >= 4.5) boost += 0.2;
+  if (enriched.detected_campaigns && enriched.detected_campaigns.length > 0) boost += 0.2;
+  return Math.min(boost, 2.5);
+}
+
 // ─── Shopee Affiliate Link (API Oficial) ─────────────────────
 const crypto = require('crypto');
 async function generateShopeeAffiliateUrl(originalUrl) {
@@ -2074,7 +2275,7 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
         const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
         if (!node?.productName || !currentPrice || !node?.productLink) return null;
 
-        return {
+        const mapped = {
           product_name: String(node.productName).trim(),
           current_price: currentPrice,
           old_price: oldPrice,
@@ -2089,6 +2290,14 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
           shopee_item_id: node.itemId ?? null,
           shopee_shop_id: node.shopId ?? null,
         };
+
+        // Enriquecimento e validação de origem Brasil (campos reais da API)
+        const enriched = enrichShopeeOffer(node);
+        const origin   = validateShopeeOrigin(mapped.original_url, mapped.product_name, enriched);
+        mapped.shopee_enrichment = enriched;
+        mapped.shopee_origin     = origin;
+
+        return mapped;
       })
       .filter(Boolean);
 
@@ -2287,15 +2496,37 @@ async function upsertOffer(product, store, affiliateUrl) {
   const scoreV1 = calculateScoreV1(product);
   const scoreV2 = calculateScoreV2(product);
   
-  // A V1 continua mandando no sistema principal
-  const score = scoreV1;
-  
+  // ── Score boost Shopee (campos reais da API oficial) ───────────
+  // Aplicado APENAS para store=Shopee usando enrichment já calculado.
+  // Não altera calculateScoreV1/V2. Preserva todos os outros marketplaces.
+  let scoreBoost = 0;
+  if (store === 'Shopee' && product.shopee_enrichment) {
+    scoreBoost = calcShopeeScoreBoost(product.shopee_enrichment);
+  }
+  const scoreFinal = store === 'Shopee'
+    ? Number(Math.min(10, scoreV1 + scoreBoost).toFixed(2))
+    : scoreV1;
+
+  // A V1 continua base; Shopee recebe boost quando há dados afiliados
+  const score = scoreFinal;
+
   // Prepara explainability com os scores para armazenar
   const explainability = {
     score_v1: scoreV1,
     score_v2: scoreV2,
     timestamp: new Date().toISOString(),
     oracle_version: "2.0",
+    ...(store === 'Shopee' && product.shopee_enrichment ? {
+      shopee_enrichment: product.shopee_enrichment,
+      shopee_origin: product.shopee_origin ? {
+        confidence:      product.shopee_origin.confidence,
+        qualityGate:     product.shopee_origin.qualityGate,
+        isBrazilian:     product.shopee_origin.isBrazilian,
+        rejectionReason: product.shopee_origin.rejectionReason,
+        reasons:         product.shopee_origin.reasons,
+      } : null,
+      shopee_score_boost: scoreBoost,
+    } : {}),
   };
 
   // A/B Test Telemetry
@@ -2808,10 +3039,26 @@ async function scrapeStore(store) {
           ? (p.affiliate_url?.startsWith('http') ? p.affiliate_url : await generateShopeeAffiliateUrl(cleanUrl))
           : buildAffiliateUrl(cleanUrl, store);
         
+        // ── Quality Gate Shopee Brasil ──────────────────────────────
+        if (store === 'Shopee' && p.shopee_origin) {
+          const gate = p.shopee_origin.qualityGate;
+          if (gate === 'REJECTED') {
+            console.log(`  [SHOPEE][QUALITY] REJECTED | ${p.shopee_origin.rejectionReason} | "${productName.slice(0, 60)}"`);
+            skippedMissingCore++;
+            continue;
+          }
+          if (gate === 'NEEDS_REVIEW') {
+            // Registra mas não bloqueia: a API BR já é filtragem primária.
+            console.log(`  [SHOPEE][QUALITY] NEEDS_REVIEW | "${productName.slice(0, 60)}"`);
+          }
+        }
+
         const prodData = {
           product_name: productName, image_url: normalizeImageUrl(productImage || null),
           current_price: productPrice, old_price: productOldPrice && productOldPrice > productPrice ? productOldPrice : null,
-          rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral'
+          rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral',
+          shopee_enrichment: p.shopee_enrichment || null,
+          shopee_origin:     p.shopee_origin     || null,
         };
 
         const res = await upsertOffer(prodData, store, affiliateUrl);
