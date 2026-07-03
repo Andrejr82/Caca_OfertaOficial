@@ -45,8 +45,8 @@ const PREVIEW_CONFIG: Record<PreviewVariant, PreviewVariantConfig> = {
   whatsapp: {
     width: 1200,
     height: 1200,
-    productBoxWidth: 860,
-    productBoxHeight: 860,
+    productBoxWidth: 1040,
+    productBoxHeight: 920,
     quality: 90,
   },
 };
@@ -99,11 +99,49 @@ function getMarketplaceTheme(offer: OfferForPreview) {
   return MARKETPLACE_COLORS[key] || { bg: "#f8fafc", accent: "#059669", label: normalizeText(offer.platform) || "OFERTA" };
 }
 
+type VisualTemplate = "default" | "coupon" | "prime_day" | "black_friday" | "flash_sale" | "free_shipping" | "cashback" | "official_store" | "exclusive";
+
+const VISUAL_TEMPLATES: Record<VisualTemplate, { accent: string | null; label: string | null }> = {
+  default: { accent: null, label: null },
+  coupon: { accent: "#059669", label: "CUPOM" },
+  prime_day: { accent: "#00a8e1", label: "PRIME DAY" },
+  black_friday: { accent: "#111827", label: "BLACK FRIDAY" },
+  flash_sale: { accent: "#dc2626", label: "RELÂMPAGO" },
+  free_shipping: { accent: "#2563eb", label: "FRETE GRÁTIS" },
+  cashback: { accent: "#059669", label: "CASHBACK" },
+  official_store: { accent: "#7c3aed", label: "LOJA OFICIAL" },
+  exclusive: { accent: "#ea580c", label: "EXCLUSIVA" },
+};
+
+function resolveVisualTemplate(offer: OfferForPreview): VisualTemplate {
+  const title = normalizeText(offer.product_name).toUpperCase();
+  if (title.includes("BLACK FRIDAY")) return "black_friday";
+  if (title.includes("PRIME DAY")) return "prime_day";
+  if (title.includes("RELÂMPAGO") || title.includes("RELAMPAGO")) return "flash_sale";
+  if (title.includes("FRETE GRÁTIS") || title.includes("FRETE GRATIS")) return "free_shipping";
+  if (title.includes("CASHBACK")) return "cashback";
+  if (title.includes("LOJA OFICIAL")) return "official_store";
+  if (title.includes("EXCLUSIVA") || title.includes("EXCLUSIVO")) return "exclusive";
+  if (isCouponOffer(offer)) return "coupon";
+  return "default";
+}
+
 function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
   const theme = getMarketplaceTheme(offer);
+  const templateKey = resolveVisualTemplate(offer);
+  const template = VISUAL_TEMPLATES[templateKey];
+
+  const badgeBg = template.accent || theme.accent;
+  const badgeLabel = template.label || theme.label;
+
   const config = PREVIEW_CONFIG[variant];
   const coupon = isCouponOffer(offer);
-  const title = coupon ? "CUPOM LIBERADO" : "OFERTA ESPECIAL";
+  
+  let title = "OFERTA ESPECIAL";
+  if (templateKey !== "default") {
+    title = template.label === "CUPOM" ? "CUPOM LIBERADO" : (template.label || "OFERTA ESPECIAL");
+  }
+
   const subtitle = cleanOfferTitle(offer.product_name) || "Caça Oferta Oficial";
   const price = coupon ? normalizeText(offer.coupon) || "RESGATE DIRETO" : formatPrice(offer.current_price) || "CONFIRA";
 
@@ -112,8 +150,8 @@ function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
 <svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${config.width}" height="${config.height}" fill="#f3f4f6"/>
   <rect x="36" y="36" width="${config.width - 72}" height="${config.height - 72}" rx="54" fill="#ffffff"/>
-  <rect x="78" y="78" width="310" height="64" rx="32" fill="${theme.accent}"/>
-  <text x="233" y="120" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="${theme.accent === "#ffffff" ? "#111827" : "#ffffff"}">${escapeXml(theme.label)}</text>
+  <rect x="78" y="78" width="310" height="64" rx="32" fill="${badgeBg}"/>
+  <text x="233" y="120" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="${badgeBg === "#ffffff" ? "#111827" : "#ffffff"}">${escapeXml(badgeLabel)}</text>
   <text x="${config.width / 2}" y="420" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#111827">${escapeXml(title)}</text>
   <text x="${config.width / 2}" y="510" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700" fill="#4b5563">${escapeXml(subtitle.slice(0, 44))}</text>
   <text x="${config.width / 2}" y="646" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="900" fill="#059669">${escapeXml(price)}</text>
@@ -126,9 +164,9 @@ function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
 <svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
   <rect width="${config.width}" height="${config.height}" fill="${theme.bg}"/>
   <rect x="54" y="54" width="${config.width - 108}" height="${config.height - 108}" rx="42" fill="#ffffff" opacity="0.96"/>
-  <circle cx="${config.width - 168}" cy="130" r="96" fill="${theme.accent}" opacity="0.18"/>
-  <circle cx="160" cy="${config.height - 128}" r="128" fill="${theme.accent}" opacity="0.12"/>
-  <text x="90" y="128" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="${theme.accent}">${escapeXml(theme.label)}</text>
+  <circle cx="${config.width - 168}" cy="130" r="96" fill="${badgeBg}" opacity="0.18"/>
+  <circle cx="160" cy="${config.height - 128}" r="128" fill="${badgeBg}" opacity="0.12"/>
+  <text x="90" y="128" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="${badgeBg}">${escapeXml(badgeLabel)}</text>
   <text x="90" y="244" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#111827">${escapeXml(title)}</text>
   <text x="90" y="322" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#374151">${escapeXml(subtitle.slice(0, 52))}</text>
   <text x="90" y="438" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="900" fill="#059669">${escapeXml(price)}</text>
@@ -172,6 +210,7 @@ async function buildProductLayer(input: Buffer, variant: PreviewVariant) {
   const config = PREVIEW_CONFIG[variant];
 
   return sharp(input)
+    .trim({ threshold: 15 })
     .rotate()
     .resize({
       width: config.productBoxWidth,
@@ -208,15 +247,21 @@ function buildBaseBackground(width: number, height: number) {
 function buildWhatsAppOverlay(offer: OfferForPreview) {
   const config = PREVIEW_CONFIG.whatsapp;
   const theme = getMarketplaceTheme(offer);
+  const templateKey = resolveVisualTemplate(offer);
+  const template = VISUAL_TEMPLATES[templateKey];
+
+  const badgeBg = template.accent || theme.accent;
+  const badgeLabel = template.label || theme.label;
+  const badgeTextColor = badgeBg === "#ffffff" ? "#111827" : "#ffffff";
+
   const title = cleanOfferTitle(offer.product_name) || "Oferta";
   const shortTitle = title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title;
-  const badgeTextColor = theme.accent === "#ffffff" ? "#111827" : "#ffffff";
 
   return Buffer.from(`
 <svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
   <rect x="26" y="26" width="${config.width - 52}" height="${config.height - 52}" rx="58" fill="none" stroke="#e5e7eb" stroke-width="4"/>
-  <rect x="76" y="76" width="292" height="58" rx="29" fill="${theme.accent}" opacity="0.96"/>
-  <text x="222" y="113" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="${badgeTextColor}">${escapeXml(theme.label)}</text>
+  <rect x="76" y="76" width="292" height="58" rx="29" fill="${badgeBg}" opacity="0.96"/>
+  <text x="222" y="113" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="${badgeTextColor}">${escapeXml(badgeLabel)}</text>
   <rect x="${config.width - 368}" y="76" width="292" height="58" rx="29" fill="#111827" opacity="0.94"/>
   <text x="${config.width - 222}" y="112" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Caça Oferta Oficial</text>
   <text x="${config.width / 2}" y="${config.height - 78}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#4b5563">${escapeXml(shortTitle)}</text>
@@ -249,17 +294,19 @@ async function generateOfferPreview(
   const left = Math.round((config.width - (metadata.width || config.productBoxWidth)) / 2);
   const top = Math.round((config.height - (metadata.height || config.productBoxHeight)) / 2);
 
-  let pipeline = sharp(buildBaseBackground(config.width, config.height), {
+  const composites: sharp.OverlayOptions[] = [{ input: productLayer, left, top }];
+
+  if (variant === "whatsapp" && source === "remote") {
+    composites.push({ input: buildWhatsAppOverlay(offer), left: 0, top: 0 });
+  }
+
+  const pipeline = sharp(buildBaseBackground(config.width, config.height), {
     raw: {
       width: config.width,
       height: config.height,
       channels: 3,
     },
-  }).composite([{ input: productLayer, left, top }]);
-
-  if (variant === "whatsapp" && source === "remote") {
-    pipeline = pipeline.composite([{ input: buildWhatsAppOverlay(offer), left: 0, top: 0 }]);
-  }
+  }).composite(composites);
 
   const buffer = await pipeline
     .toColorspace("srgb")

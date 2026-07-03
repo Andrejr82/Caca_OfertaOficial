@@ -231,6 +231,33 @@ Decisões arquiteturais tomadas:
 - Critério de aprovação: Selo não sobrepor produto, UX otimizada, leitura escaneável, nenhuma alteração em outras integrações.
 - Critério de não regressão: Telegram, Instagram e arquitetura base do motor mantidos intactos.
 
+### Sprint 08
+
+- Número: 08
+- Nome: Templates Visuais
+- Objetivo: Consolidar um sistema de Templates Visuais reutilizável para as imagens publicadas no Grupo WhatsApp.
+- Escopo: Dicionário interno de templates, resolução por oferta, parametrização do SVG, sem alterar layout base, proporção ou pipeline, priorizando o produto na arte (enquadramento inteligente 70-80%).
+- Arquivos alterados:
+  - `src/lib/images/og-preview.ts`
+- Status: CONCLUÍDA
+- Data da conclusão: 03/07/2026
+- Oracle: não alterada
+- Pipeline reutilizado: sim, da Sprint 07
+- Arquitetura preservada: sim
+- Homologação visual aprovada: sim
+- Templates homologados:
+  - Oferta padrão
+  - Cupom
+  - Frete Grátis
+  - Loja Oficial
+- Templates pendentes por ausência de dados:
+  - Prime Day
+  - Black Friday
+  - Oferta Relâmpago
+  - Cashback
+  - Oferta Exclusiva
+- Observação: A baixa qualidade visual observada em um dos exemplos decorre da imagem original da oferta, não do pipeline de geração.
+
 ## 4. Arquitetura Final
 
 Fluxo operacional final:
