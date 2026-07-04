@@ -8,53 +8,36 @@ import { MINIMUM_DISCOUNT_BY_CATEGORY } from "./viral-intelligence";
 
 export interface CurationResult {
   score: number;
-  legacy_score?: number;
-  new_score?: number;
+  official_policy?: number;
+  historical_policy?: number;
   explainability?: any;
 }
 
 /**
  * Adapter Principal: Calcula o Score.
- * Se o Conversion Engine estiver ativado, retorna o Score V2.
- * Se o Shadow Mode estiver ativado, roda os dois e loga.
+ * Ativação da Commercial Policy (Sprint 04).
+ * Retorna o Score V2 como Oficial, mantendo V1 apenas como Histórico.
  */
 export function curateOfferScore(input: ScoreInput): CurationResult {
   const isCurationEnabled = featureFlags.ENABLE_CURATION_ENGINE;
-  const isShadowMode = featureFlags.ENABLE_SHADOW_SCORING;
+  
+  const historicalPolicyScore = calculateOfferScore(input);
+  const officialPolicyOutput = calculateOfferScoreV2(input);
 
-  // Se nada da V2 estiver ativado, roda puro Legacy V1
-  if (!isCurationEnabled && !isShadowMode) {
-    return { score: calculateOfferScore(input) };
-  }
-
-  const legacyScore = calculateOfferScore(input);
-  const v2Output = calculateOfferScoreV2(input);
-
-  if (isShadowMode) {
-    // Log estruturado para o Datadog / Observability
-    logger.info("Shadow Mode Scoring", {
-      event: "SHADOW_SCORING_RUN",
-      legacy_score: legacyScore,
-      new_score: v2Output.final_score,
-      explainability: v2Output.explainability
-    });
-  }
-
-  if (isCurationEnabled) {
-    return {
-      score: v2Output.final_score,
-      legacy_score: legacyScore,
-      new_score: v2Output.final_score,
-      explainability: v2Output.explainability
+  if (!isCurationEnabled) {
+    // Rollback: se desativado, retorna V1 como Oficial
+    return { 
+      score: historicalPolicyScore,
+      official_policy: historicalPolicyScore,
+      historical_policy: historicalPolicyScore
     };
   }
 
-  // Fallback: Retorna V1 mas anexa os dados V2 se Shadow Mode
   return {
-    score: legacyScore,
-    legacy_score: legacyScore,
-    new_score: v2Output.final_score,
-    explainability: v2Output.explainability
+    score: officialPolicyOutput.final_score,
+    official_policy: officialPolicyOutput.final_score,
+    historical_policy: historicalPolicyScore,
+    explainability: officialPolicyOutput.explainability
   };
 }
 
@@ -116,11 +99,11 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
       // Bate no motor quente
       const aiResult = await analyzeConversionPotential(offer, offer.score);
       
-      // Cálculo consistente com o rank ponderado da Curadoria V2
-      const commercialScore = offer.new_score || offer.score || 0;
+      // Ranking Oficial ativo
+      const officialScore = offer.official_policy || offer.score || 0;
       const conversionScore = offer.explainability?.conversion_score || 5.0;
       const aiCopyScore = aiResult.ai_score_boost * 2; // Escala 0-5 do boost mapeada para 0-10
-      const totalScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
+      const totalScore = calculateFinalRankScore(officialScore, conversionScore, aiCopyScore);
       
       aiEvaluated.push({
         ...offer,
@@ -129,7 +112,7 @@ export async function rankOffersBatch(offers: Offer[], options: RankingOptions =
           ...(offer.explainability || {}),
           ai_score_boost: aiResult.ai_score_boost,
           ai_copy_score: aiCopyScore,
-          commercial_score: commercialScore,
+          official_score: officialScore,
           conversion_score: conversionScore,
           final_rank_score: totalScore,
           ai_justification: aiResult.conversion_justification,
