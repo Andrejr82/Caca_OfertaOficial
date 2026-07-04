@@ -132,16 +132,16 @@ export async function POST(request: Request) {
         });
       }
 
-      const commercialScore = Number(offer.new_score || offer.score || 0);
+      const officialScore = Number(offer.official_policy || offer.score || 0);
       const conversionScore = Number(offer.explainability?.conversion_score || 5.0);
       const aiCopyScore = Number(analysis.score || 0);
-      const finalRankScore = calculateFinalRankScore(commercialScore, conversionScore, aiCopyScore);
+      const finalRankScore = calculateFinalRankScore(officialScore, conversionScore, aiCopyScore);
 
       const updatedExplainability = {
         ...(offer.explainability || {}),
         ai_copy_score: aiCopyScore,
         final_rank_score: finalRankScore,
-        commercial_score: commercialScore,
+        official_score: officialScore,
         conversion_score: conversionScore
       };
 

@@ -1946,8 +1946,8 @@ export async function discoverAndIngestTrendingOffers(
               category: product.category || "Geral",
               subcategory: product.subcategory || null,
               score: curation.score,
-              legacy_score: curation.legacy_score,
-              new_score: curation.new_score,
+              official_policy: curation.official_policy,
+              historical_policy: curation.historical_policy,
               explainability: curation.explainability,
               status: "draft", // reseta para draft se mudou preço/dados
               notes: updateNotes,
@@ -1993,8 +1993,8 @@ export async function discoverAndIngestTrendingOffers(
             category: product.category || "Geral",
             subcategory: product.subcategory || null,
             score: curation.score,
-            legacy_score: curation.legacy_score,
-            new_score: curation.new_score,
+            official_policy: curation.official_policy,
+            historical_policy: curation.historical_policy,
             explainability: curation.explainability,
             status: "draft",
             notes: notesValue
@@ -2029,8 +2029,8 @@ export async function discoverAndIngestTrendingOffers(
           category: product.category || "Geral",
           subcategory: product.subcategory || null,
           score: curation.score,
-          legacy_score: curation.legacy_score,
-          new_score: curation.new_score,
+          official_policy: curation.official_policy,
+          historical_policy: curation.historical_policy,
           explainability: curation.explainability,
           status: "draft",
           notes: notesValue

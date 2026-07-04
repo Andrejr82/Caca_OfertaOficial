@@ -23,8 +23,8 @@ export interface Offer {
   estimated_commission: number | null;
   commission_rate: number | null;
   score: number;
-  legacy_score?: number | null;
-  new_score?: number | null;
+  official_policy?: number | null;
+  historical_policy?: number | null;
   explainability?: any;
   status: OfferStatus;
   notes: string | null;
@@ -56,4 +56,17 @@ export interface Sale {
   status: SaleStatus;
   sold_at: string;
   created_at: string;
+}
+
+export type DeltaLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export interface CommercialComparison {
+  officialPolicy: number;
+  commercialPolicy: number;
+  delta: number;
+  deltaLevel: DeltaLevel;
+  changed: boolean;
+  confidence: string;
+  reasons: string[];
+  evaluatedAt: string;
 }
