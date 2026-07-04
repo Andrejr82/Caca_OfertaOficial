@@ -54,10 +54,9 @@ describe("message generation", () => {
   it("generates concise WhatsApp copy", () => {
     const message = generateWhatsAppMessage(offer, link);
     expect(message).toContain(link.tracked_url);
-    expect(message).toContain("💰 *PREÇO*");
-    expect(message).toContain("🏷 *MARKETPLACE*");
-    expect(message).toContain("🎟 *CUPOM*");
-    expect(message).toContain("🔗 *LINK DA OFERTA*");
-    expect(message).toContain("👇 *CTA*");
+    expect(message).toContain("💰 De: R$ 149,00");
+    expect(message).toContain("🔥 Por: R$ 99,00");
+    expect(message).toContain("Shopee");
+    expect(message).toContain("Use o cupom: CACA10");
   });
 });

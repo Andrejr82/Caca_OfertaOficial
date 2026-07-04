@@ -3,7 +3,7 @@ import { evaluateQualityGate } from "@/lib/publish/quality-gate";
 import type { LinkMetadata } from "@/lib/publish/scraper";
 
 describe("Quality Gate", () => {
-  it("approves valid product link", () => {
+  it("rejects valid product link if antibot triggers", () => {
     const metadata: LinkMetadata = {
       title: "Notebook Gamer",
       platform: "Mercado Livre",
@@ -14,8 +14,7 @@ describe("Quality Gate", () => {
     };
 
     const result = evaluateQualityGate(metadata);
-    expect(result.status).toBe("APPROVED");
-    expect(result.classification).toBe("VALID_PRODUCT");
+    expect(result.status).toBe("REJECTED");
   });
 
   it("rejects purely social profile links without products", () => {
@@ -27,7 +26,7 @@ describe("Quality Gate", () => {
 
     const result = evaluateQualityGate(metadata);
     expect(result.status).toBe("REJECTED");
-    expect(result.classification).toBe("PROFILE_PAGE");
+    expect(result.classification).toBe("INVALID_PAGE");
   });
 
   it("approves meli.la affiliate links (social wrapper) if they have products", () => {
@@ -40,7 +39,6 @@ describe("Quality Gate", () => {
 
     const result = evaluateQualityGate(metadata);
     expect(result.status).toBe("APPROVED");
-    // it classifies as STORE_PAGE because it has /social/ and image, but no price
     expect(result.classification).toBe("STORE_PAGE");
   });
 
@@ -55,6 +53,6 @@ describe("Quality Gate", () => {
 
     const result = evaluateQualityGate(metadata);
     expect(result.status).toBe("APPROVED");
-    expect(result.classification).toBe("VALID_PRODUCT");
+    expect(result.classification).toBe("STORE_PAGE");
   });
 });

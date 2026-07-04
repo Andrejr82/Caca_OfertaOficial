@@ -73,7 +73,7 @@ describe("Mercado Livre Integration", () => {
       expect(metadata).not.toBeNull();
       expect(metadata?.title).toBe("Celular Teste");
       expect(metadata?.price).toBe(1500);
-      expect(metadata?.imageUrl).toBe("https://http2.mlstatic.com/D_678-O.jpg"); // Check high-resolution replacement
+      expect(metadata?.imageUrl).toBe("https://http2.mlstatic.com/D_678-I.jpg"); // Check high-resolution replacement
       expect(metadata?.platform).toBe("Mercado Livre");
       expect(metadata?.imageSource).toBe("mercadolivre_api");
     });
@@ -95,7 +95,7 @@ describe("Mercado Livre Integration", () => {
       expect(metadata).not.toBeNull();
       expect(metadata?.title).toBe("Celular Catalogo Teste");
       expect(metadata?.price).toBe(2500);
-      expect(metadata?.imageUrl).toBe("https://http2.mlstatic.com/D_999-O.jpg");
+      expect(metadata?.imageUrl).toBe("https://http2.mlstatic.com/D_999-I.jpg");
       expect(metadata?.platform).toBe("Mercado Livre");
     });
   });

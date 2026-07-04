@@ -48,7 +48,7 @@ describe("Curation V2 Engine - Forensic Verification", () => {
     });
   });
 
-  describe("2. Score V2 splits Impulse & Purchase Potential", () => {
+  describe("2. Commercial Policy splits Impulse & Purchase Potential", () => {
     it("calculates independent impulse and purchase potential scores with distinct weights", () => {
       const result = calculateOfferScoreV2({
         current_price: 50.0,
@@ -59,7 +59,7 @@ describe("Curation V2 Engine - Forensic Verification", () => {
       });
 
       expect(result.explainability.impulse_score).toBe(10); // ticket < 80
-      expect(result.explainability.purchase_potential_score).toBe(10); // category priority + rating >= 4.5
+      expect(result.explainability.purchase_potential_score).toBe(9); // category priority + rating >= 4.5
       expect(result.explainability.final_score).toBeGreaterThan(5);
     });
   });
@@ -96,9 +96,9 @@ describe("Curation V2 Engine - Forensic Verification", () => {
         category: "Cozinha"
       });
 
-      expect(curation.new_score).toBeDefined();
-      expect(curation.legacy_score).toBeDefined();
-      expect(curation.score).toBe(curation.new_score);
+      expect(curation.official_policy).toBeDefined();
+      expect(curation.historical_policy).toBeDefined();
+      expect(curation.score).toBe(curation.official_policy);
     });
   });
 

@@ -45,77 +45,10 @@ function createTrackedUrl(subId) {
   return `${baseUrl}/go/${subId}`;
 }
 
+const { generateOfferAnalysis, generateFallback } = require('./oracle-scraper.cjs');
+
 // ─── Lógica de IA (Usando a Factory) ──────────────────────────
-async function generateOfferAnalysis(product, store) {
-  const baseSystemPrompt = `Você é um Copywriter de ELITE especializado em marketing de afiliados de alta conversão. Respond in JSON.
-Sua persona: Administrador eufórico de grupos de ofertas. Foco em escassez extrema e descontos.
-Regras:
-1. Ignore criação de links, injetaremos depois.
-2. Coloque hashtags no array 'hashtags'.
-3. Ignore preços monetários, injetaremos depois.
-Formato: JSON com strategies[{headline, hook, body, cta, score}], hashtags[].`;
 
-  const userPrompt = `Gerar copy para:
-Nome: ${product.product_name}
-Loja: ${store}
-
-RETORNE EXATAMENTE NESTE FORMATO JSON:
-{
-  "strategies": [
-    { "headline": "...", "hook": "...", "body": "...", "cta": "...", "score": 9.5 }
-  ],
-  "hashtags": ["#oferta"]
-}`;
-
-  console.log(`  [IA] Solicitando geração de Copy via LLM Factory...`);
-  
-  // Chama a Factory que gerencia o Fallback nativamente
-  let raw;
-  try {
-    raw = await LLMFactory.generateWithFallback(baseSystemPrompt, userPrompt, true);
-  } catch (error) {
-    console.error(`  [IA] Erro Crítico na geração: ${error.message}`);
-    return generateFallback(product, store);
-  }
-
-  const strategy = (raw.strategies && raw.strategies[0]) ? raw.strategies[0] : null;
-  if (!strategy) {
-    console.warn(`  [IA] JSON retornado não continha 'strategies'. Usando fallback.`);
-    return generateFallback(product, store);
-  }
-
-  const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
-
-  const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-  const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-  
-  const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
-  const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
-  const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
-
-  return {
-    score: strategy.score || 8.0,
-    telegram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}\n\n${hashtags}`,
-    instagram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${instagramBottomBlock}\n\n${hashtags}`,
-    whatsapp: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}`
-  };
-}
-
-function generateFallback(product, store) {
-  const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-  const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-  
-  const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
-  const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store || 'Especial'} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
-  const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store || 'Especial'}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
-
-  return {
-    score: 5.0,
-    telegram: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}\n\n#oferta`,
-    instagram: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${instagramBottomBlock}\n\n#oferta`,
-    whatsapp: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}`
-  };
-}
 
 // ─── Processamento Principal ────────────────────────────────────
 async function runAiProcessorCycle() {

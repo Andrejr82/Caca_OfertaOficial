@@ -147,8 +147,8 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
       current_price: offerValidation.price,
       status: "approved",
       score: curation.score,
-      legacy_score: curation.legacy_score,
-      new_score: curation.new_score,
+      official_policy: curation.official_policy,
+      historical_policy: curation.historical_policy,
       explainability: curation.explainability,
     })
     .select()

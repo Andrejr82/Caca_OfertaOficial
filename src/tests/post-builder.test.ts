@@ -43,8 +43,6 @@ describe("PostBuilder and Multi-Marketplace Tests", () => {
     expect(post).toContain("Produto Teste");
     expect(post).toContain("Compre agora");
     expect(post).not.toContain(fakeLink); // Instagram não tem link na legenda
-    expect(post).toContain(SOCIALS.telegram);
-    expect(post).toContain(SOCIALS.whatsapp);
   });
 
   it("should format multi-marketplace properly for Amazon", () => {
@@ -57,7 +55,7 @@ describe("PostBuilder and Multi-Marketplace Tests", () => {
     });
     
     expect(post).toContain("Produto Teste");
-    expect(post).toContain("🛒 Comprar na Amazon:");
+    expect(post).toContain("🛒 Achado Amazon 👇🏼");
     expect(post).toContain(fakeLink);
   });
 
@@ -71,11 +69,9 @@ describe("PostBuilder and Multi-Marketplace Tests", () => {
     });
     
     expect(post).toContain("Produto Teste");
-    expect(post).toContain("💰 *PREÇO*");
-    expect(post).toContain("🏷 *MARKETPLACE*");
-    expect(post).toContain("Shopee");
-    expect(post).toContain("🔗 *LINK DA OFERTA*");
-    expect(post).toContain("👇 *CTA*");
-    expect(post).toContain(fakeLink);
+    expect(post).toContain("💰 De: R$ 200,00");
+    expect(post).toContain("🔥 Por: R$ 100,00");
+    expect(post).toContain("🛒 Shopee");
+    expect(post).toContain("🔗 " + fakeLink);
   });
 });

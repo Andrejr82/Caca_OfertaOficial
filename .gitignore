@@ -38,3 +38,12 @@ scripts/test-ml.cjs
 scripts/test-oracle-controlled.cjs
 scripts/test-scrapedo.cjs
 scripts/test-scrapfly-api.cjs
+
+# IDE and AI Agents
+.agents/
+.augment/
+.claude/
+.commandcode/
+.continue/
+skills-lock.json
+tmp/

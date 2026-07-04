@@ -1,6 +1,15 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { scrapeProductDetails } from "@/lib/affiliates/scraper";
 
+vi.mock("@/lib/ai/groq", () => ({
+  callLLM: vi.fn().mockResolvedValue(JSON.stringify({
+    title: "Camiseta Dry Fit Masculina Shopee",
+    image: "https://cf.shopee.com.br/file/img1",
+    current_price: 39.90,
+    old_price: 79.90
+  }))
+}));
+
 describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
   let originalEnv: string | undefined;
 
@@ -22,23 +31,17 @@ describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
     expect(result).toBeNull();
   });
 
-  it("deve tentar raspar e estruturar os dados usando a API do Firecrawl se a chave estiver configurada", async () => {
-    process.env.FIRECRAWL_API_KEY = "fc-fake-key";
+  it("deve tentar raspar e estruturar os dados usando a Oracle API e IA se a chave estiver configurada", async () => {
+    process.env.ORACLE_API_KEY = "oracle-fake-key";
+    process.env.GROQ_API_KEY = "groq-fake-key";
 
-    // Simula resposta com sucesso da API do Firecrawl
+    // Simula resposta com sucesso da Oracle API
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       status: 200,
       json: async () => ({
         success: true,
-        data: {
-          extract: {
-            title: "Camiseta Dry Fit Masculina Shopee",
-            image: "https://cf.shopee.com.br/file/img1",
-            current_price: 39.90,
-            old_price: 79.90
-          }
-        }
+        data: { text: "HTML mockado da página. <a href='link'>Link</a> <img src='img'> r$ 10.00 price valor " + "x".repeat(1000) }
       })
     });
 
@@ -51,10 +54,10 @@ describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
     expect(result?.image_url).toBe("https://cf.shopee.com.br/file/img1");
   });
 
-  it("deve retornar null em caso de erro definitivo do Firecrawl", async () => {
-    process.env.FIRECRAWL_API_KEY = "fc-fake-key";
+  it("deve retornar null em caso de erro definitivo da Oracle API", async () => {
+    process.env.ORACLE_API_KEY = "oracle-fake-key";
 
-    // Simula falha do Firecrawl nas tentativas
+    // Simula falha nas tentativas
     (global.fetch as any).mockRejectedValue(new Error("Timeout ou rede indisponível"));
 
     const result = await scrapeProductDetails("https://shopee.com.br/dry-fit-i.123.456");
