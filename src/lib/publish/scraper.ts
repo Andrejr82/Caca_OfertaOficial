@@ -58,23 +58,9 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   else if (originalUrlLower.includes("shein")) initialPlatform = "Shein";
   else if (originalUrlLower.includes("netshoes")) initialPlatform = "Netshoes" as any;
 
-  // 1. Tentar API Oficial do Mercado Livre ANTES do resolveFinalUrl
-  if (initialPlatform === "Mercado Livre") {
-    try {
-      const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
-      const mlMetadata = await fetchMLProductDetails(url, userId);
-      if (mlMetadata && mlMetadata.price && mlMetadata.price > 0) {
-        logger.info("Extração via Mercado Livre API (URL Original) realizada com sucesso", { url });
-        return mlMetadata;
-      }
-    } catch (err) {
-      logger.error("Erro na API do Mercado Livre com URL original:", err);
-    }
-  }
-
-  // 1.5 Tentar API existente Shopee/Amazon/etc ANTES de resolver redirecionamento completo na Vercel (se possível)
-  // Como scrapeProductDetails lida internamente com shortlinks para outras plataformas (ex. amzn.to), podemos tentar já.
-  if (["Shopee", "Shein", "Magalu", "Amazon", "Netshoes"].includes(initialPlatform)) {
+  // 1. Tentar API unificada (Scraper Integrado) ANTES de resolver redirecionamento completo na Vercel
+  // scrapeProductDetails lida internamente com shortlinks e fallbacks robustos (incluindo ML)
+  if (["Shopee", "Shein", "Magalu", "Amazon", "Netshoes", "Mercado Livre"].includes(initialPlatform)) {
     try {
       const { scrapeProductDetails } = await import("@/lib/affiliates/scraper");
       const scraped = await scrapeProductDetails(url);
@@ -113,17 +99,26 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   else if (lowerUrl.includes("shein")) platform = "Shein";
   else if (lowerUrl.includes("netshoes")) platform = "Netshoes" as any;
 
-  // Se a plataforma for Mercado Livre (após redirect, ex: meli.la -> mercadolivre), tenta obter pela API oficial novamente
-  if (platform === "Mercado Livre" && finalUrl !== url) {
+  // Tentar API unificada após redirecionamento, para capturar links encurtados (ex: meli.la, shp.ee)
+  if (["Shopee", "Shein", "Magalu", "Amazon", "Netshoes", "Mercado Livre"].includes(platform) && finalUrl !== url) {
     try {
-      const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
-      const mlMetadata = await fetchMLProductDetails(finalUrl, userId);
-      if (mlMetadata && mlMetadata.price && mlMetadata.price > 0) {
-        logger.info("Extração via Mercado Livre API (URL Resolvida) realizada com sucesso", { finalUrl });
-        return mlMetadata;
+      const { scrapeProductDetails } = await import("@/lib/affiliates/scraper");
+      const scraped = await scrapeProductDetails(finalUrl);
+      if (scraped && scraped.current_price > 0) {
+        logger.info(`Extração via Scraper Integrado para ${platform} (após redirect) com sucesso`, { finalUrl });
+        return {
+          title: scraped.product_name,
+          platform: platform,
+          imageUrl: scraped.image_url || undefined,
+          price: scraped.current_price,
+          finalUrl: scraped.original_url || finalUrl,
+          imageSource: "integrated_api",
+          confidenceScore: 95,
+          extractionDate: new Date().toISOString()
+        };
       }
     } catch (err) {
-      logger.error("Erro na API do Mercado Livre com URL resolvida:", err);
+      logger.error(`Erro ao chamar Scraper Integrado para ${platform} após redirect:`, err);
     }
   }
 
@@ -137,10 +132,10 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 15000);
       const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${key}&url=${encodeURIComponent(finalUrl)}&render_js=false&asp=true`;
-      
+
       const sfRes = await fetch(scrapflyUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
-      
+
       if (sfRes.ok) {
         const sfData = await sfRes.json();
         if (sfData?.result?.content) {
@@ -163,7 +158,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
       logger.info("Tentando extração via Oracle API In-House", { finalUrl });
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
-      
+
       const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
         method: 'POST',
         headers: {
@@ -172,32 +167,32 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
         body: JSON.stringify({ url: finalUrl, token: oracleKey }),
         signal: controller.signal
       });
-      
+
       clearTimeout(timeoutId);
 
       if (oracleRes.ok) {
         const oracleData = await oracleRes.json();
         if (oracleData.success && oracleData.data) {
-           html = oracleData.data.html || "";
-           
-           if (oracleData.data.extract) {
-               if (oracleData.data.extract.title) title = oracleData.data.extract.title;
-               if (oracleData.data.extract.price) price = oracleData.data.extract.price;
-               if (oracleData.data.extract.image) {
-                   imageUrl = oracleData.data.extract.image;
-                   imageSource = "oracle_extract";
-               }
-           }
+          html = oracleData.data.html || "";
 
-           if (oracleData.data.metadata) {
-             apiMetadata = oracleData.data.metadata;
-             if (!title || title === "Oferta Especial") title = oracleData.data.metadata.title;
-             if (!imageUrl && oracleData.data.metadata.ogImage) {
-               imageUrl = oracleData.data.metadata.ogImage;
-               imageSource = "oracle_og";
-             }
-           }
-           logger.info("Oracle API sucesso", { finalUrl, hasHtml: !!html });
+          if (oracleData.data.extract) {
+            if (oracleData.data.extract.title) title = oracleData.data.extract.title;
+            if (oracleData.data.extract.price) price = oracleData.data.extract.price;
+            if (oracleData.data.extract.image) {
+              imageUrl = oracleData.data.extract.image;
+              imageSource = "oracle_extract";
+            }
+          }
+
+          if (oracleData.data.metadata) {
+            apiMetadata = oracleData.data.metadata;
+            if (!title || title === "Oferta Especial") title = oracleData.data.metadata.title;
+            if (!imageUrl && oracleData.data.metadata.ogImage) {
+              imageUrl = oracleData.data.metadata.ogImage;
+              imageSource = "oracle_og";
+            }
+          }
+          logger.info("Oracle API sucesso", { finalUrl, hasHtml: !!html });
         }
       } else {
         logger.warn("Oracle API retornou erro", { status: oracleRes.status });
@@ -212,7 +207,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     logger.info("Usando fetch simples como fallback", { finalUrl });
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 8000);
-    
+
     try {
       const response = await fetch(finalUrl, {
         redirect: "follow",
@@ -223,7 +218,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
           "Accept-Language": "pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7",
         }
       });
-      
+
       if (response.ok) {
         html = await response.text();
       }
@@ -263,8 +258,8 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
 
       // 2. og:image
       if (!imageUrl) {
-        imgMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) || 
-                   html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["'][^>]*>/i);
+        imgMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
+          html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["'][^>]*>/i);
         if (imgMatch && imgMatch[1]) {
           imageUrl = imgMatch[1];
           imageSource = "og:image";
@@ -291,14 +286,14 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
               if (parsed.image) {
                 imageUrl = Array.isArray(parsed.image) ? parsed.image[0] : parsed.image;
                 if (typeof imageUrl === "object" && (imageUrl as any).url) {
-                    imageUrl = (imageUrl as any).url;
+                  imageUrl = (imageUrl as any).url;
                 }
                 if (typeof imageUrl === "string") {
                   imageSource = "json-ld";
                   break;
                 }
               }
-            } catch (e) {}
+            } catch (e) { }
           }
         }
       }
@@ -306,7 +301,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
       // 5. Gallery fallback (Mercado Livre)
       if (!imageUrl && platform === "Mercado Livre") {
         imgMatch = html.match(/<img[^>]*class=["'][^"']*ui-pdp-image[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/i) ||
-                   html.match(/<img[^>]*class=["'][^"']*ui-pdp-gallery__figure__image[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/i);
+          html.match(/<img[^>]*class=["'][^"']*ui-pdp-gallery__figure__image[^"']*["'][^>]*src=["']([^"']+)["'][^>]*>/i);
         if (imgMatch && imgMatch[1]) {
           imageUrl = imgMatch[1];
           imageSource = "gallery_fallback";
@@ -317,10 +312,10 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
     // 5.3 Price Fallback
     if (!price || price === 0) {
       const priceMatch = html.match(/<meta[^>]*property=["']product:price:amount["'][^>]*content=["']([^"']+)["'][^>]*>/i) ||
-                         html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']product:price:amount["'][^>]*>/i) ||
-                         html.match(/"price":\s*(\d+(?:\.\d+)?)/i) ||
-                         html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
-      
+        html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']product:price:amount["'][^>]*>/i) ||
+        html.match(/"price":\s*(\d+(?:\.\d+)?)/i) ||
+        html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+
       if (priceMatch && priceMatch[1]) {
         price = parseFloat(priceMatch[1]);
       } else if (platform === "Mercado Livre") {
@@ -329,18 +324,18 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
           price = parseFloat(mlPriceMatch[1].replace(/\./g, "").replace(",", "."));
         }
       } else if (platform === "Amazon") {
-         const amzPriceMatch = html.match(/<span\s+class=["']a-price-whole["']>([^<]+)<\/span>/i);
-         if (amzPriceMatch && amzPriceMatch[1]) {
-             price = parseFloat(amzPriceMatch[1].replace(/\./g, "").replace(",", "."));
-         }
+        const amzPriceMatch = html.match(/<span\s+class=["']a-price-whole["']>([^<]+)<\/span>/i);
+        if (amzPriceMatch && amzPriceMatch[1]) {
+          price = parseFloat(amzPriceMatch[1].replace(/\./g, "").replace(",", "."));
+        }
       }
 
       // Injected price in title fallback
       if (!price && title) {
         const titlePriceMatch = title.match(/-\s*R\$\s*(\d+(?:[.,]\d+)?)/i);
         if (titlePriceMatch) {
-           price = parseFloat(titlePriceMatch[1].replace(/\./g, "").replace(",", "."));
-           title = title.replace(titlePriceMatch[0], "").trim();
+          price = parseFloat(titlePriceMatch[1].replace(/\./g, "").replace(",", "."));
+          title = title.replace(titlePriceMatch[0], "").trim();
         }
       }
     }
@@ -364,7 +359,7 @@ export async function fetchLinkMetadata(url: string, userId?: string): Promise<L
   if (price && price > 0) score += 40; // Preço é essencial
   if (title && title !== "Oferta Especial") {
     score += 30; // Título válido
-    
+
     // Proteção de Privacidade: Ocultar dados sigilosos do Perfil Social do ML
     if (title.toLowerCase().includes("perfil social no mercado livre")) {
       title = "Coleção Especial de Ofertas";

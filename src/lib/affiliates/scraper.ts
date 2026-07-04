@@ -576,31 +576,72 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
     // fetchMLProductDetails já lida com o token e fallback para App Token
     const metadata = await fetchMLProductDetails(productUrl);
     
-    if (!metadata) {
-      console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao extrair dados via API oficial: ${productUrl}`);
-      updateMetrics("Mercado Livre", "failures", 1);
-      return null;
-    }
-
-    const scraped = {
-      product_name: metadata.title || "Produto sem nome",
-      original_url: metadata.finalUrl || productUrl,
-      image_url: enhanceImageUrl(metadata.imageUrl || null),
-      current_price: metadata.price || 0,
-      old_price: null,
-      discount_badge: null,
-      rating: null,
-      category: null,
-      subcategory: null
-    };
-
-    if (scraped.product_name && scraped.image_url) {
-      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso ao raspar produto: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+    if (metadata && metadata.title && metadata.price && metadata.price > 0) {
+      const scraped = {
+        product_name: metadata.title || "Produto sem nome",
+        original_url: metadata.finalUrl || productUrl,
+        image_url: enhanceImageUrl(metadata.imageUrl || null),
+        current_price: metadata.price || 0,
+        old_price: null,
+        discount_badge: null,
+        rating: null,
+        category: null,
+        subcategory: null
+      };
+      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso ao raspar produto (API): ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
       updateMetrics("Mercado Livre", "found", 1);
       return scraped;
     }
 
-    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha ao extrair produto: ${productUrl} (Faltando nome ou imagem)`);
+    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] API oficial falhou ou sem preço para ${productUrl}. Tentando Oracle API + IA...`);
+    const oracleKey = process.env.ORACLE_API_KEY;
+    if (oracleKey) {
+      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+        method: "POST",
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: productUrl, token: oracleKey }),
+        signal: AbortSignal.timeout(60000)
+      });
+      if (oracleRes.ok) {
+        const oracleData = await oracleRes.json();
+        if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
+          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          const { validateHtml } = await import("@/core/scraper/validator");
+          const { callLLM } = await import("@/lib/ai/groq");
+          
+          if (validateHtml(textToAnalyze, "Trends_API")) {
+            const promptText = "Extraia o nome do produto do Mercado Livre, a URL da imagem principal do produto, o preço atual promocional (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
+            const schemaObj = {
+              type: "object",
+              properties: {
+                title: { type: "string" },
+                image: { type: "string" },
+                current_price: { type: "number" },
+                old_price: { type: "number", nullable: true }
+              },
+              required: ["title", "current_price"]
+            };
+            const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
+            const extract = JSON.parse(rawResult);
+            if (extract && extract.title && extract.current_price > 0) {
+              const scraped = {
+                product_name: extract.title,
+                original_url: productUrl,
+                image_url: enhanceImageUrl(extract.image || null),
+                current_price: extract.current_price,
+                old_price: extract.old_price || null,
+                rating: 4.8
+              };
+              console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso Oracle API: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
+              updateMetrics("Mercado Livre", "found", 1);
+              return scraped;
+            }
+          }
+        }
+      }
+    }
+
+    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha total ao extrair produto: ${productUrl}`);
     updateMetrics("Mercado Livre", "failures", 1);
     return null;
   } catch (error) {
