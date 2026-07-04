@@ -111,3 +111,4 @@ Componentes que rodam na VPS Oracle:
 3. Geração de links rastreáveis (`affiliate_links`) e criação de rascunhos (`posts`) via IA.
 4. Publicação por canal via rotas `/api/*` (Telegram/WhatsApp/Instagram/Facebook) e atualização de status no banco.
 5. Tracking de cliques via `/go/:subId` + eventos (Inngest) gravando em `click_events` e agregando em `affiliate_links`.
+
