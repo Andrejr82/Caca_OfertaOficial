@@ -257,6 +257,47 @@ function buildWhatsAppOverlay(offer: OfferForPreview) {
   const title = cleanOfferTitle(offer.product_name) || "Oferta";
   const shortTitle = title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title;
 
+  let extraLabels = '';
+
+  if (offer.current_price) {
+    const formattedPrice = formatPrice(offer.current_price);
+    const hasOldPrice = offer.old_price && offer.old_price > offer.current_price;
+    const oldPriceText = hasOldPrice ? formatPrice(offer.old_price) : null;
+    const discount = hasOldPrice ? Math.round((1 - (offer.current_price as number) / (offer.old_price as number)) * 100) : null;
+
+    const priceBoxHeight = hasOldPrice ? 120 : 80;
+    const priceBoxY = 1060 - priceBoxHeight - 20;
+
+    extraLabels += `
+  <rect x="76" y="${priceBoxY}" width="380" height="${priceBoxHeight}" rx="32" fill="#ffffff" opacity="0.96" stroke="#e5e7eb" stroke-width="3"/>`;
+
+    if (hasOldPrice) {
+      extraLabels += `
+  <text x="106" y="${priceBoxY + 45}" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="600" fill="#9ca3af" text-decoration="line-through">De ${oldPriceText}</text>
+  <text x="106" y="${priceBoxY + 98}" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#059669">${formattedPrice}</text>`;
+    } else {
+      extraLabels += `
+  <text x="106" y="${priceBoxY + 56}" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="900" fill="#059669">${formattedPrice}</text>`;
+    }
+
+    if (discount) {
+      extraLabels += `
+  <rect x="276" y="${priceBoxY - 16}" width="160" height="44" rx="22" fill="#ef4444"/>
+  <text x="356" y="${priceBoxY + 14}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="900" fill="#ffffff">-${discount}% OFF</text>`;
+    }
+  }
+
+  if (offer.platform) {
+    const platformLabel = normalizeText(offer.platform).toUpperCase();
+    const platformTextColor = (theme.bg === "#ffffff" || theme.bg === "#f8fafc" || theme.bg === "#fff159") ? "#111827" : "#ffffff";
+    const pWidth = 280;
+    const pX = config.width - 76 - pWidth; 
+    const pY = 1060 - 64 - 20;
+    extraLabels += `
+  <rect x="${pX}" y="${pY}" width="${pWidth}" height="64" rx="32" fill="${theme.bg}" opacity="0.96" stroke="#e5e7eb" stroke-width="2"/>
+  <text x="${pX + pWidth / 2}" y="${pY + 41}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="800" fill="${platformTextColor}">🛍️ ${escapeXml(platformLabel)}</text>`;
+  }
+
   return Buffer.from(`
 <svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
   <rect x="26" y="26" width="${config.width - 52}" height="${config.height - 52}" rx="58" fill="none" stroke="#e5e7eb" stroke-width="4"/>
@@ -264,6 +305,7 @@ function buildWhatsAppOverlay(offer: OfferForPreview) {
   <text x="222" y="113" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="${badgeTextColor}">${escapeXml(badgeLabel)}</text>
   <rect x="${config.width - 368}" y="76" width="292" height="58" rx="29" fill="#111827" opacity="0.94"/>
   <text x="${config.width - 222}" y="112" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Caça Oferta Oficial</text>
+  ${extraLabels}
   <text x="${config.width / 2}" y="${config.height - 78}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#4b5563">${escapeXml(shortTitle)}</text>
 </svg>`);
 }
