@@ -177,7 +177,7 @@ async function processCandidatesControlled(candidates) {
       continue;
     }
 
-    const finalScore = Number(((item.score * 0.7) + (analysis.score * 0.3)).toFixed(2));
+    const finalScore = item.score; // Desacoplado da IA
     await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
 
     const linksMap = {};

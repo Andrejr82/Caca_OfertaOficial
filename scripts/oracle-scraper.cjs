@@ -2800,7 +2800,19 @@ async function processTopOffers(candidates) {
       query: item.audit?.query || null
     });
     
-    const finalScore = Number(((item.score * 0.7) + (analysis.score * 0.3)).toFixed(2));
+    console.log(`\n  [RANKING]`);
+    console.log(`  Score Comercial: ${item.score}`);
+    console.log(`  Quality Gate: APROVADO`);
+    console.log(`  Produto enviado para IA.`);
+    console.log(`  --------------------------------`);
+
+    const finalScore = item.score; // Desacoplado da IA
+    
+    console.log(`  [IA]`);
+    console.log(`  Copy gerada.`);
+    console.log(`  Score IA: ${analysis.score}`);
+    console.log(`  Observação: Score IA não influencia aprovação.\n`);
+
     await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
 
     const channels = ['telegram', 'instagram', 'whatsapp'];

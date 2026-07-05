@@ -81,7 +81,18 @@ async function runAiProcessorCycle() {
     
     // Calcula Score Final
     const currentScore = item.score || 0;
-    const finalScore = Number(((currentScore * 0.7) + (analysis.score * 0.3)).toFixed(2));
+    console.log(`\n  [RANKING]`);
+    console.log(`  Score Comercial: ${currentScore}`);
+    console.log(`  Quality Gate: APROVADO`);
+    console.log(`  Produto enviado para IA.`);
+    console.log(`  --------------------------------`);
+
+    const finalScore = currentScore; // Desacoplado da IA
+    
+    console.log(`  [IA]`);
+    console.log(`  Copy gerada.`);
+    console.log(`  Score IA: ${analysis.score}`);
+    console.log(`  Observação: Score IA não influencia aprovação.\n`);
     
     // Remove rascunhos antigos da tabela posts se houver
     await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
