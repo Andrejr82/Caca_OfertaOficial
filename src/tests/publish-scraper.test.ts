@@ -1,6 +1,10 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fetchLinkMetadata } from "@/lib/publish/scraper";
 
+vi.mock("@/lib/affiliates/scraper", () => ({
+  scrapeProductDetails: vi.fn().mockResolvedValue(null)
+}));
+
 describe("Publish Scraper", () => {
   beforeEach(() => {
     vi.restoreAllMocks();

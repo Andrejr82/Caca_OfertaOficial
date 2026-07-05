@@ -1425,14 +1425,21 @@ function getRandomQueries(store) {
 
 // ─── Telemetria Global do Ciclo ─────────────────────────────────
 const cycleMetrics = {
+  startTime: Date.now(),
   produtos_encontrados: 0,
   produtos_enviados_llm: 0,
   produtos_retornados: 0,
   produtos_aprovados: 0,
   produtos_rejeitados: 0,
-  totalTokens: 0, // Nome consistente com o resto do código
+  totalTokens: 0,
   reject_reasons: {},
-  por_marketplace: {}
+  por_marketplace: {},
+  rejeicoes: { antiLixo: 0, priceFloor: 0, loja: 0, marca: 0, qualidade: 0 },
+  produtosAprovadosLista: [],
+  produtosDescartadosLista: [],
+  produtosPremium: 0,
+  erros: 0,
+  retries: 0
 };
 
 // ─── Extração via Crawlee + Groq ──────────────────────────────
@@ -1817,10 +1824,23 @@ async function crawleeExtract(url, limit, storeName) {
         limitApplied: limit
       });
       // #endregion
-      
+      const approvedNames = approvedProducts.map(p => p.product_name);
+      returnedProducts.forEach(p => {
+        if (!approvedNames.includes(p.product_name)) {
+          cycleMetrics.produtosDescartadosLista.push({
+            name: p.product_name,
+            store: storeName,
+            category: queryContext.category,
+            brand: 'Desconhecida',
+            reason: 'Rejeitado por Sanitização / LLM',
+            rule: 'Quality'
+          });
+        }
+      });
+
       cycleMetrics.produtos_aprovados += approvedProducts.length;
       cycleMetrics.produtos_rejeitados += (returnedProducts.length - approvedProducts.length);
-      cycleMetrics.por_marketplace[storeName] += approvedProducts.length;
+      cycleMetrics.por_marketplace[storeName] = (cycleMetrics.por_marketplace[storeName] || 0) + approvedProducts.length;
       
       return approvedProducts;
     } catch (parseErr) {
@@ -2275,6 +2295,23 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
         const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
         if (!node?.productName || !currentPrice || !node?.productLink) return null;
 
+        const nameLower = String(node.productName).toLowerCase();
+        
+        // 1. Anti-Lixo
+        const lixoKeywords = ['capinha', 'película', 'cabo', 'carregador', 'fone de fio', 'suporte', 'adaptador', 'pulseira'];
+        if (lixoKeywords.some(kw => nameLower.includes(kw))) {
+          cycleMetrics.rejeicoes.antiLixo++;
+          cycleMetrics.produtosDescartadosLista.push({ name: String(node.productName), store: 'Shopee', category: 'Geral', brand: 'Genérica', reason: 'Filtro Anti-Lixo Comercial', rule: 'Anti-Lixo' });
+          return null;
+        }
+
+        // 2. Price Floor
+        if (currentPrice < 30) {
+          cycleMetrics.rejeicoes.priceFloor++;
+          cycleMetrics.produtosDescartadosLista.push({ name: String(node.productName), store: 'Shopee', category: 'Geral', brand: 'Genérica', reason: 'Preço abaixo do mínimo comercial', rule: 'Price Floor' });
+          return null;
+        }
+
         const mapped = {
           product_name: String(node.productName).trim(),
           current_price: currentPrice,
@@ -2294,6 +2331,13 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
         // Enriquecimento e validação de origem Brasil (campos reais da API)
         const enriched = enrichShopeeOffer(node);
         const origin   = validateShopeeOrigin(mapped.original_url, mapped.product_name, enriched);
+        
+        if (origin.status === 'REJECTED') {
+          cycleMetrics.rejeicoes.loja++;
+          cycleMetrics.produtosDescartadosLista.push({ name: mapped.product_name, store: 'Shopee', category: 'Geral', brand: 'Genérica', reason: origin.reasons.join(' | '), rule: 'Loja/Origem Internacional' });
+          return null;
+        }
+
         mapped.shopee_enrichment = enriched;
         mapped.shopee_origin     = origin;
 
@@ -2748,6 +2792,19 @@ async function processTopOffers(candidates) {
       finalScore
     });
     // #endregion
+    
+    cycleMetrics.produtosAprovadosLista.push({
+      name: item.product.product_name,
+      store: item.store,
+      price: item.product.current_price,
+      category: item.product.category,
+      brand: item.product.brand || 'Genérica',
+      discount: item.product.old_price ? Math.round((1 - (item.product.current_price / item.product.old_price)) * 100) : 0,
+      score: finalScore,
+      quality: analysis.commercial_quality,
+      decision: analysis.commercial_decision
+    });
+    if (item.product.current_price > 1000) cycleMetrics.produtosPremium++;
 
     processed++;
     await new Promise(r => setTimeout(r, 6000)); 
@@ -3356,7 +3413,15 @@ async function runScrapingCycle() {
   });
   // #endregion
 
+  try {
+    const { generateReport } = require('./discovery-reporter.cjs');
+    generateReport(cycleMetrics);
+  } catch (err) {
+    console.error('Erro ao gerar Discovery Intelligence Report:', err.message);
+  }
+
   // Reset metrics for next cycle
+  cycleMetrics.startTime = Date.now();
   cycleMetrics.produtos_encontrados = 0;
   cycleMetrics.produtos_enviados_llm = 0;
   cycleMetrics.produtos_retornados = 0;
