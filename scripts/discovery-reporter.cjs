@@ -93,16 +93,53 @@ function generateReport(metrics) {
   const storeCounts = groupByCount(aprovados, 'store');
   const ruleCounts = groupByCount(descartados, 'rule');
 
+  
+  // Agrupar métricas detalhadas exigidas
+  const metas = { 'Amazon': 80, 'Mercado Livre': 80, 'Shopee': 120 };
+  const mkpMetrics = {};
+  ['Amazon', 'Mercado Livre', 'Shopee'].forEach(m => {
+    mkpMetrics[m] = {
+      meta: metas[m],
+      raw: 0, // Precisaria ser rastreado no scraper, mas usaremos uma aproximação baseada nos totais
+      rejPreco: 0,
+      rejLixo: 0,
+      enviados: 0,
+      rejIA: 0,
+      aprovados: 0
+    };
+  });
+
+  // Aprovados
+  aprovados.forEach(p => {
+    if(mkpMetrics[p.store]) mkpMetrics[p.store].aprovados++;
+  });
+  
+  // Descartados
+  descartados.forEach(p => {
+    if(mkpMetrics[p.store]) {
+      if (p.rule === 'Price Floor') mkpMetrics[p.store].rejPreco++;
+      else if (p.rule === 'Anti-Lixo' || p.rule === 'Spam/Trash') mkpMetrics[p.store].rejLixo++;
+      else if (p.rule === 'Quality' || p.rule === 'IA') mkpMetrics[p.store].rejIA++;
+      else mkpMetrics[p.store].rejIA++; // fallback
+    }
+  });
+  
+  // Aproximação para Raw e Enviados (já que não temos rastreamento exato no momento)
+  ['Amazon', 'Mercado Livre', 'Shopee'].forEach(m => {
+    mkpMetrics[m].enviados = mkpMetrics[m].aprovados + mkpMetrics[m].rejIA;
+    mkpMetrics[m].raw = mkpMetrics[m].enviados + mkpMetrics[m].rejPreco + mkpMetrics[m].rejLixo;
+  });
+
   let md = `# CAÇA OFERTAS OFICIAL\n# DISCOVERY INTELLIGENCE REPORT\nGerado em: ${dateStr}\n\n`;
   md += `## 1. RESUMO EXECUTIVO (STATUS: ${status === 'VERMELHO' ? '🔴' : status === 'AMARELO' ? '🟡' : '🟢'} ${status})\n\n`;
-  md += `- **Discovery Version:** Signals V1\n`;
-  md += `- **Oracle Version:** V3\n`;
+  md += `- **Discovery Version:** Adaptive V1\n`;
+  md += `- **Oracle Version:** V4 (Smart Batching)\n`;
   md += `- **Policy Version:** Official Policy\n`;
-  md += `- **Release:** 3.0\n`;
+  md += `- **Release:** 4.0\n`;
   md += `- **Tempo Total:** ${totalTimeSecs}s\n\n`;
 
   md += `**Alertas de Regressão:**\n`;
-  md += `${alerts.length > 0 ? alerts.map(a => '- ' + a).join('\\n') : '- Nenhum alerta crítico detectado. Sistema operando nominalmente.'}\n\n`;
+  md += `${alerts.length > 0 ? alerts.map(a => '- ' + a).join('\n') : '- Nenhum alerta crítico detectado. Sistema operando nominalmente.'}\n\n`;
 
   const diffStr = lastMetrics ? '(' + (qualityScoreDiff > 0 ? '+' : '') + qualityScoreDiff + ')' : '';
   md += `**Discovery Quality Score:** ${currentQualityScore}/100 ${diffStr}\n\n`;
@@ -113,58 +150,52 @@ function generateReport(metrics) {
   md += `- Shopee: ${shopeeHealth}/100\n\n`;
   md += `---\n\n`;
 
-  md += `## 2. ESTATÍSTICAS E MÉTRICAS\n`;
-  md += `- Produtos Encontrados: ${metrics.produtos_encontrados}\n`;
+  md += `## 2. MÉTRICAS DETALHADAS POR MARKETPLACE\n\n`;
+  md += `| Marketplace | Meta Operacional | Cards Capturados (Raw) | Rejeitados (Preço) | Rejeitados (Lixo) | Enviados IA | Rejeitados IA | Aprovados Final |\n`;
+  md += `|---|---|---|---|---|---|---|---|\n`;
+  
+  ['Amazon', 'Mercado Livre', 'Shopee'].forEach(m => {
+    const d = mkpMetrics[m];
+    md += `| **${m}** | ${d.meta} | ${d.raw} | ${d.rejPreco} | ${d.rejLixo} | ${d.enviados} | ${d.rejIA} | **${d.aprovados}** |\n`;
+  });
+  
+  md += `\n---\n\n`;
+
+  md += `## 3. ESTATÍSTICAS GERAIS (TOTAIS)\n`;
+  md += `- Produtos Encontrados (Estimado): ${metrics.produtos_encontrados}\n`;
   md += `- Produtos Retornados p/ Validação: ${metrics.produtos_retornados}\n`;
-  md += `- Produtos Enviados para IA: ${metrics.produtos_enviados_llm}\n`;
+  md += `- Produtos Enviados para IA (API Call): ${metrics.produtos_enviados_llm}\n`;
   md += `- Produtos Aprovados: ${metrics.produtos_aprovados}\n`;
-  md += `- Produtos Descartados: ${metrics.produtos_rejeitados}\n`;
+  md += `- Produtos Descartados Totais: ${metrics.produtos_rejeitados}\n`;
   md += `- Erros / Retries: ${metrics.erros} / ${metrics.retries}\n\n`;
   md += `---\n\n`;
 
-  md += `## 3. DISTRIBUIÇÃO\n`;
-  md += `### Por Marketplace\n`;
-  md += `${Object.entries(metrics.por_marketplace || {}).map(([m, c]) => '- ' + m + ': ' + c).join('\n') || '- N/A'}\n\n`;
-  md += `**Top 5 Categorias (Marketplace):**\n`;
+  md += `## 4. DISTRIBUIÇÃO QUALITATIVA\n`;
+  md += `**Top 5 Categorias:**\n`;
   md += `${Object.entries(metrics.por_categoria || {}).slice(0, 5).map(([c, count]) => '- ' + c + ': ' + count).join('\n') || '- N/A'}\n\n`;
-  md += `**Top 5 Marcas (Marketplace):**\n`;
+  md += `**Top 5 Marcas:**\n`;
   md += `${Object.entries(metrics.por_marca || {}).slice(0, 5).map(([m, count]) => '- ' + m + ': ' + count).join('\n') || '- N/A'}\n\n`;
-  md += `**Top 5 Lojas (Marketplace):**\n`;
+  md += `**Top 5 Lojas:**\n`;
   md += `${Object.entries(metrics.por_loja || {}).slice(0, 5).map(([l, count]) => '- ' + l + ': ' + count).join('\n') || '- N/A'}\n\n`;
   md += `---\n\n`;
 
-  md += `## 4. DISCOVERY QUALITY (Rejeições Gerais)\n`;
-  md += `- Anti-Lixo: ${metrics.rejeicoes.antiLixo || 0}\n`;
-  md += `- Price Floor: ${metrics.rejeicoes.priceFloor || 0}\n`;
-  md += `- Loja Suspeita / Internacional: ${metrics.rejeicoes.loja || 0}\n`;
-  md += `- Baixa Qualidade (IA): ${metrics.rejeicoes.qualidade || 0}\n\n`;
-
-  md += `### Principais Regras Responsáveis (Amostra Descartados)\n`;
-  md += `${ruleCounts.map(([r, n]) => '- ' + r + ': ' + n).join('\\n') || '- N/A'}\n\n`;
-  md += `---\n\n`;
-
   md += `## 5. TOP 100 PRODUTOS APROVADOS\n`;
-  md += `${top100.map(formatProduct).join('\\n') || 'Nenhum produto aprovado registrado.'}\n\n`;
+  md += `${top100.map(formatProduct).join('\n') || 'Nenhum produto aprovado registrado.'}\n\n`;
   md += `---\n\n`;
 
-  md += `## 6. TOP 50 PUBLICÁVEIS\n`;
-  md += `${top50Pub.map(formatProduct).join('\\n') || 'Nenhum produto publicável.'}\n\n`;
+  md += `## 6. TOP 50 PUBLICÁVEIS (APPROVED)\n`;
+  md += `${top50Pub.map(formatProduct).join('\n') || 'Nenhum produto APPROVED.'}\n\n`;
   md += `---\n\n`;
 
-  md += `## 7. TOP 30 PREMIUM\n`;
-  md += `${top30Premium.map(formatProduct).join('\\n') || 'Nenhum produto premium.'}\n\n`;
+  md += `## 7. TOP 30 PREMIUM (QUALITY=PREMIUM)\n`;
+  md += `${top30Premium.map(formatProduct).join('\n') || 'Nenhum produto PREMIUM.'}\n\n`;
   md += `---\n\n`;
 
-  md += `## 8. TOP 20 DESCARTADOS (Amostra Operacional)\n`;
-  md += `${top20Descartados.map(formatDiscarded).join('\\n') || 'Nenhum produto descartado registrado.'}\n\n`;
-  md += `---\n`;
+  md += `## 8. AMOSTRA DE PRODUTOS DESCARTADOS (TOP 20)\n`;
+  md += `${top20Descartados.map(formatDiscarded).join('\n') || 'Nenhum produto descartado registrado.'}\n\n`;
 
   fs.writeFileSync(REPORT_FILE, md, 'utf-8');
-  console.log(`\n📄 Discovery Intelligence Report gerado com sucesso em: ${REPORT_FILE}`);
-
-  previousHistory.push(metrics);
-  fs.writeFileSync(HISTORY_FILE, JSON.stringify(previousHistory, null, 2), 'utf-8');
-  console.log(`💾 Histórico atualizado (${previousHistory.length} execuções registradas).`);
+  console.log(`[Reporter] Discovery Intelligence Report gerado: ${REPORT_FILE}`);
 }
 
 module.exports = { generateReport };

@@ -1552,7 +1552,11 @@ async function crawleeExtract(url, limit, storeName) {
       }
 
       evalResult = await page.evaluate(({ maxProd, imageDebugCtx }) => {
-        const items = Array.from(document.querySelectorAll('div[data-asin], div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item, .poly-card'));
+        const candidates = Array.from(document.querySelectorAll('div[data-asin], .a-carousel-card, div[data-component-type="s-search-result"], [data-testid="product-card"], .ui-search-layout__item, .poly-card, .andes-card'));
+        const items = candidates.filter(el => {
+          return !candidates.some(child => child !== el && el.contains(child));
+        });
+        
         let results = [];
         const IMAGE_DEBUG_LIMIT = 5;
         let imageDebugLogged = 0;
@@ -1672,8 +1676,8 @@ async function crawleeExtract(url, limit, storeName) {
               }
             }
             if (url) {
+              const title = extractCardTitle(el);
               if (imageDebugLogged < IMAGE_DEBUG_LIMIT) {
-                const title = extractCardTitle(el);
                 const imagesInCard = collectCardImages(el);
                 console.log('IMAGE_DEBUG ' + JSON.stringify({
                   Marketplace: (imageDebugCtx && imageDebugCtx.marketplace) || '',
@@ -1685,27 +1689,52 @@ async function crawleeExtract(url, limit, storeName) {
                 }));
                 imageDebugLogged++;
               }
-              results.push(`[TEXTO]: ${text.replace(/\n/g, ' ')} | [LINK]: ${url} | [IMG]: ${img}`);
+              
+              let old_price = '';
+              let discount = '';
+              let rating = '';
+              const rawTextReplaced = text.replace(/\n/g, ' ');
+              
+              const dePorMatch = rawTextReplaced.match(/De:\s*R\$?\s*([\d.,]+)/i);
+              if (dePorMatch) old_price = dePorMatch[1];
+              
+              const offMatch = rawTextReplaced.match(/(\d+%)\s*off/i);
+              if (offMatch) discount = offMatch[1];
+              
+              const ratingMatch = rawTextReplaced.match(/([\d.,]+)\s*de\s*5\s*estrelas/i) || rawTextReplaced.match(/(\d+\.\d+)\s*\/\s*5/);
+              if (ratingMatch) rating = ratingMatch[1];
+              
+              const officialStore = rawTextReplaced.toLowerCase().includes('loja oficial') ? true : null;
+
+              results.push({
+                title,
+                price: '', // Let LLM extract exact price
+                old_price,
+                discount,
+                image_url: img,
+                product_url: url,
+                rating,
+                official_store: officialStore,
+                raw_text: rawTextReplaced
+              });
             }
           }
         }
         const unique = [];
         const seen = new Set();
         for(let r of results) {
-          const u = r.match(/\[LINK\]: (.*?)(?: \||$)/)?.[1];
-          if(u && !seen.has(u)){ seen.add(u); unique.push(r); }
+          if(r.product_url && !seen.has(r.product_url)){ seen.add(r.product_url); unique.push(r); }
         }
+        const finalProducts = unique.slice(0, maxProd);
         return { 
-          text: unique.slice(0, maxProd).join('\n'), 
+          products: finalProducts, 
           found: items.length,
           valid: results.length,
-          sent: Math.min(unique.length, maxProd),
-          longestText: results.reduce((max, r) => Math.max(max, r.length), 0),
-          avgText: results.length ? results.reduce((sum, r) => sum + r.length, 0) / results.length : 0
+          sent: finalProducts.length
         };
       }, { maxProd: maxProducts, imageDebugCtx: { marketplace: storeName, goldenQuery: queryContext.query || '' } });
-      console.log(`\n  [DIAGNÓSTICO ${storeName}] Seletores encontrados: ${evalResult.found} | Cards com preço: ${evalResult.valid} | Enviados: ${evalResult.sent} | Textos: (Max: ${evalResult.longestText}, Média: ${evalResult.avgText.toFixed(0)})`);
-      console.log(`[${storeName}] Itens raspados (únicos): ${evalResult.sent} | RAW size: ${evalResult.text.length}`);
+      console.log(`\n  [DIAGNÓSTICO ${storeName}] Seletores encontrados: ${evalResult.found} | Cards com preço: ${evalResult.valid} | Enviados: ${evalResult.sent}`);
+      console.log(`[${storeName}] Itens raspados (únicos): ${evalResult.sent}`);
     }
   });
 
@@ -1725,9 +1754,37 @@ async function crawleeExtract(url, limit, storeName) {
     return [];
   }
 
-  rawExtractedData = evalResult.text;
+function buildSafeProductPayload(products, options = {}) {
+  const maxChars = options.maxChars || 20000; // Limite seguro para Groq/Cerebras
+  let currentLength = 0;
+  const included = [];
+  const excluded = [];
+  
+  for (const prod of products) {
+    const prodJson = JSON.stringify(prod);
+    if (currentLength + prodJson.length > maxChars && included.length > 0) {
+      excluded.push(prod);
+    } else {
+      included.push(prod);
+      currentLength += prodJson.length;
+    }
+  }
+  
+  return {
+    payload: JSON.stringify(included, null, 2),
+    includedCount: included.length,
+    excludedCount: excluded.length,
+    reason: excluded.length > 0 ? 'Limit Reached' : 'All Fit'
+  };
+}
+
+  const safePayloadResult = buildSafeProductPayload(evalResult.products || [], { maxChars: 20000 });
+  rawExtractedData = safePayloadResult.payload;
+
+  console.log(`  [PAYLOAD DYNAMICS] Incluídos: ${safePayloadResult.includedCount} | Excluídos: ${safePayloadResult.excludedCount} | Motivo: ${safePayloadResult.reason}`);
+
   cycleMetrics.produtos_encontrados += evalResult.found;
-  cycleMetrics.produtos_enviados_llm += evalResult.sent;
+  cycleMetrics.produtos_enviados_llm += safePayloadResult.includedCount;
   if (!cycleMetrics.por_marketplace[storeName]) cycleMetrics.por_marketplace[storeName] = 0;
 
   // #region debug-point B:extract-summary
@@ -1736,13 +1793,13 @@ async function crawleeExtract(url, limit, storeName) {
     url: targetUrl,
     selectorsFound: evalResult.found,
     cardsWithPrice: evalResult.valid,
-    productsSentToLlm: evalResult.sent,
+    productsSentToLlm: safePayloadResult.includedCount,
     rawPayloadLength: rawExtractedData.length,
     durationMs: Date.now() - extractStartedAt
   });
   // #endregion
 
-  if (!rawExtractedData) {
+  if (!rawExtractedData || safePayloadResult.includedCount === 0) {
     // #region debug-point B:empty-extract
     emitAuditEvent('B', 'oracle-scraper.cjs:crawleeExtract', 'extract-empty', {
       ...queryContext,
@@ -1751,7 +1808,10 @@ async function crawleeExtract(url, limit, storeName) {
     // #endregion
     return [];
   }
-  if (!validateHtml(rawExtractedData, storeName)) {
+  
+  // validateHtml bypass for JSON payload: if it starts with '[', consider valid.
+  const isHtmlValid = rawExtractedData.trim().startsWith('[') ? true : validateHtml(rawExtractedData, storeName);
+  if (!isHtmlValid) {
     // #region debug-point B:html-rejected
     emitAuditEvent('B', 'oracle-scraper.cjs:crawleeExtract', 'html-validator-rejected', {
       ...queryContext,
@@ -1764,12 +1824,18 @@ async function crawleeExtract(url, limit, storeName) {
 
   // Chama o LLM para formatar os dados
   console.log(`  [LLM] Analisando dados brutos da ${storeName}...`);
-  if (storeName === "Amazon") console.log("RAW AMZ:", rawExtractedData.substring(0, 1000));
+  if (storeName === "Amazon") console.log("RAW AMZ (Start):", rawExtractedData.substring(0, 300));
   const prompt = getScrapingPrompt(storeName);
+
+  // Validate that JSON payload is at least valid before sending to LLM
+  try { JSON.parse(rawExtractedData); } catch (e) {
+    console.error("  [LLM] Payload JSON gerado não é válido!", e.message);
+    return [];
+  }
 
   const messages = [
     { role: 'system', content: prompt },
-    { role: 'user', content: rawExtractedData.substring(0, 4000) }
+    { role: 'user', content: rawExtractedData }
   ];
 
   try {
@@ -1781,7 +1847,7 @@ async function crawleeExtract(url, limit, storeName) {
         promptType: 'scraping',
         store: storeName,
         query: queryContext.query,
-        productsInBatch: maxProducts,
+        productsInBatch: safePayloadResult.includedCount,
         rawLength: rawExtractedData.length
       }
     });

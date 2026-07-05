@@ -16,9 +16,24 @@ export function sanitizeScrapedData(rawProducts: any[], source: string): any[] {
   let rejected = 0;
   
   const rejectStats: Record<string, number> = {};
+  const completeness = {
+    withImage: 0, withoutImage: 0,
+    withOldPrice: 0, withoutOldPrice: 0,
+    withDiscount: 0, withoutDiscount: 0,
+    withRating: 0, withoutRating: 0,
+    withSeller: 0, withoutSeller: 0
+  };
 
   const cleanProducts = rawProducts.filter((p) => {
     found++;
+    
+    // Telemetry: completeness
+    if (p.image_url) completeness.withImage++; else completeness.withoutImage++;
+    if (p.old_price) completeness.withOldPrice++; else completeness.withoutOldPrice++;
+    if (p.discount) completeness.withDiscount++; else completeness.withoutDiscount++;
+    if (p.rating) completeness.withRating++; else completeness.withoutRating++;
+    if (p.seller) completeness.withSeller++; else completeness.withoutSeller++;
+
     const { valid, confidence, rejectReason } = validateProduct(p, source);
     
     if (valid) {
@@ -47,7 +62,8 @@ export function sanitizeScrapedData(rawProducts: any[], source: string): any[] {
     found,
     approved,
     rejected,
-    rejectStats
+    rejectStats,
+    completeness
   });
 
   return cleanProducts;
