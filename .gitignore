@@ -47,3 +47,10 @@ scripts/test-scrapfly-api.cjs
 .continue/
 skills-lock.json
 tmp/
+
+# Discovery Reports
+discovery_intelligence_report.md
+discovery_certification_report.csv
+discovery_certification_report_raw.json
+discovery_history.json
+
