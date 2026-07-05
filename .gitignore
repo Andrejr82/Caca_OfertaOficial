@@ -54,3 +54,21 @@ discovery_certification_report.csv
 discovery_certification_report_raw.json
 discovery_history.json
 
+
+# Arquivos de log e dumps locais
+adapter_history.txt
+oracle_history.txt
+proxy_history.txt
+ml_dump.html
+ml_test.js
+replace.js
+test-scrapfly-proxy.js
+test_ml_crawlee.cjs
+test_results.txt
+oracle.env
+scripts/test-mercadolivre-scrapedo.cjs
+scripts/test-mercadolivre-signals-scrapedo.cjs
+scripts/test-ml-dump.cjs
+scripts/get-scraper-metrics.cjs
+.env.local.remote
+
