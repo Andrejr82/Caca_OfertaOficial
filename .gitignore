@@ -72,3 +72,9 @@ scripts/test-ml-dump.cjs
 scripts/get-scraper-metrics.cjs
 .env.local.remote
 
+
+# Arquivos de release V3
+dumps/
+reports/
+smoke-remote.js
+
