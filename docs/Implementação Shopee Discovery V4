@@ -1,0 +1,51 @@
+# Implementação Shopee Discovery V4
+
+Abaixo o plano de implementação para a nova arquitetura do Discovery V4 da Shopee.
+
+## User Review Required
+
+> [!WARNING]
+> O plano altera `scripts/oracle-scraper.cjs` e cria modo dry-run. Não salvará no DB e não alterará outros marketplaces (Amazon, ML).
+> As credenciais de produção da Shopee não serão expostas.
+
+## Proposed Changes
+
+### Fix de Bug
+
+#### [MODIFY] [oracle-scraper.cjs](file:///c:/Projetos_GitHub/Caca_OfertaOficial/scripts/oracle-scraper.cjs)
+#### [MODIFY] [test_ml_crawlee.cjs](file:///c:/Projetos_GitHub/Caca_OfertaOficial/scripts/test_ml_crawlee.cjs)
+- Substituir `origin.status === 'REJECTED'` por `origin.qualityGate === 'REJECTED'`.
+
+### Shopee Discovery V4
+
+#### [MODIFY] [oracle-scraper.cjs](file:///c:/Projetos_GitHub/Caca_OfertaOficial/scripts/oracle-scraper.cjs)
+- Criar helpers:
+  - `buildShopeeGraphQLPayload()` com suporte a queries parametrizáveis.
+  - `signShopeeAffiliateRequest()` para gerar o hash SHA256.
+  - `callShopeeAffiliateApi()` genérico para o request POST.
+- Implementar as buscas via `productOfferV2`:
+  - `fetchShopeeProductsByCommission(limit, page)` -> `sortType=5`
+  - `fetchShopeeProductsBySales(limit, page)` -> `sortType=2`
+  - `fetchShopeeProductsByDiscount(limit, page)` -> `sortType=4`
+  - `fetchShopeeProductsByRelevance(limit, page, keyword)` -> `sortType=1`
+- Implementar buscas alternativas:
+  - `fetchShopeeShopOffers(limit, page)` via `shopOfferV2`.
+  - `fetchShopeeCampaignOffers(limit, page)` via `campaignOfferV2`.
+  - `fetchShopeeItemFeedsIfAvailable()` (placeholder/teste via `listItemFeeds`).
+- Conversão e normalização de links:
+  - `generateShopeeBatchShortLinks()` via API.
+- Orquestrador principal:
+  - `fetchShopeeDiscoveryV4(options)` que une tudo (produtos por comissão, vendas, desconto, campanhas, lojas, deduplica por `itemId + shopId`, normaliza).
+- Modo `--shopee-v4-dry-run`:
+  - Se ativado, invoca o pipeline V4, loga telemetria, escreve nos arquivos CSV/JSON de relatório, mas retorna (sem chamar Amazon, ML, IA ou Banco).
+- Telemetria e relatórios:
+  - Salvar na pasta `reports/` gerando os arquivos de resumo exigidos.
+
+## Verification Plan
+
+### Automated Tests
+- Executar o comando: `node scripts/oracle-scraper.cjs --shopee-v4-dry-run`
+
+### Manual Verification
+- Verificar se os arquivos em `reports/sprint_07.0_*` foram criados e os valores correspondem às respostas reais da API da Shopee.
+- Verificar se a telemetria não aponta chamadas para Amazon ou ML durante o dry-run.

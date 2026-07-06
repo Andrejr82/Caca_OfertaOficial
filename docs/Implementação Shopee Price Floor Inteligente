@@ -1,0 +1,56 @@
+# Implementação Shopee Price Floor Inteligente
+
+Abaixo o plano de implementação para o filtro inteligente de Price Floor da Shopee (Sprint 07.1).
+
+## User Review Required
+
+> [!WARNING]
+> Este plano fará alterações EXCLUSIVAMENTE em `scripts/oracle-scraper.cjs` e gerará os relatórios do dry-run V4.
+> Amazon, Mercado Livre e outros fluxos permanecerão inalterados.
+
+## Proposed Changes
+
+### 1. Novo Helper: `evaluateShopeePriceFloor`
+
+#### [MODIFY] [oracle-scraper.cjs](file:///c:/Projetos_GitHub/Caca_OfertaOficial/scripts/oracle-scraper.cjs)
+Criaremos a função `evaluateShopeePriceFloor(product)` que receberá o objeto normalizado (ou um objeto que contém as props necessárias: `currentPrice`, `sales`, `ratingStar`, `priceDiscountRate`, `commissionRate`, `sellerCommissionRate`, `shopName`, `productName`, etc).
+
+Regras que serão codificadas na função:
+- Se `currentPrice < 15`: Retorna `{ status: 'REJECTED', reason: 'Preço abaixo de R$ 15', signals: [] }`
+- Se `currentPrice >= 30`: Retorna `{ status: 'ACCEPTED', reason: 'Preço acima de R$ 30', signals: [] }`
+- Se `15 <= currentPrice < 30`:
+  - Levanta os sinais fortes (cada um vira string num array `signals`):
+    1. `sales >= 500`
+    2. `ratingStar >= 4.7`
+    3. `priceDiscountRate >= 20`
+    4. `commissionRate >= 0.10`
+    5. `sellerCommissionRate >= 0.07`
+    6. `shopName` contém 'Oficial' (case-insensitive)
+    7. `shopName` contém 'Mall' (case-insensitive)
+  - Também verifica se não há `lixoKeyword` no `productName`.
+  - Se `signals.length >= 2` E não for lixo: Retorna `{ status: 'REVIEW', reason: 'Recuperado por Sinais Fortes', signals }`
+  - Caso contrário: Retorna `{ status: 'REJECTED', reason: 'Falta de sinais de qualidade', signals }`
+
+### 2. Substituir Lógica de Price Floor
+
+#### [MODIFY] [oracle-scraper.cjs](file:///c:/Projetos_GitHub/Caca_OfertaOficial/scripts/oracle-scraper.cjs)
+- Em `fetchShopeeProductsFromOfficialApi` (linha ~2458): Trocar o if hardcoded `currentPrice < 30` pelo uso do `evaluateShopeePriceFloor`.
+- Em `applyShopeeQualityGateV4` (novo V4): Trocar a mesma regra pelo `evaluateShopeePriceFloor`.
+- Adaptaremos os objetos para passar o contexto necessário para a nova função.
+
+### 3. Telemetria do Dry-Run
+
+#### [MODIFY] [oracle-scraper.cjs](file:///c:/Projetos_GitHub/Caca_OfertaOficial/scripts/oracle-scraper.cjs)
+- Em `runShopeeV4DryRun`:
+  - Adicionar no objeto `telemetry`: `descartados_price_floor_antigo`, `descartados_price_floor_novo`, `recuperados_price_floor`, e contadores de motivos de recuperação (`recuperados_com_rating`, `recuperados_com_sales`, etc).
+  - Atualizar os arquivos gerados em `reports/` para refletirem `sprint_07.1_shopee_price_floor_*`.
+  - Adicionar o CSV dos recuperados e descartados.
+
+## Verification Plan
+
+### Automated Tests
+- Executar: `node scripts/oracle-scraper.cjs --shopee-v4-dry-run`
+
+### Manual Verification
+- Confirmar no console ou nos arquivos CSV (`reports/sprint_07.1_shopee_price_floor_recuperados.csv`) se apareceram produtos cujo preço está entre 15 e 30, com os devidos sinais de qualidade marcados.
+- Confirmar que produtos abaixo de 15 continuam sendo bloqueados.

@@ -2481,7 +2481,7 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
         const enriched = enrichShopeeOffer(node);
         const origin   = validateShopeeOrigin(mapped.original_url, mapped.product_name, enriched);
         
-        if (origin.status === 'REJECTED') {
+        if (origin.qualityGate === 'REJECTED') {
           cycleMetrics.rejeicoes.loja++;
           cycleMetrics.produtosDescartadosLista.push({ name: mapped.product_name, store: 'Shopee', category: 'Geral', brand: 'Genérica', reason: origin.reasons.join(' | '), rule: 'Loja/Origem Internacional' });
           return null;
@@ -3215,10 +3215,122 @@ async function inspectDiscoverySourceDryRun(store, discoverySource, limit = OFFE
 }
 
 async function scrapeStore(store) {
-  const queries = getRandomQueries(store); // Pega 1 keyword de CADA categoria da loja
   let storeCandidates = [];
   const storeStartedAt = Date.now();
 
+  const shopeeVersion = store === 'Shopee' 
+    ? (process.env.SHOPEE_DISCOVERY_VERSION?.toLowerCase() || 'v4')
+    : null;
+
+  const useShopeeV4 = store === 'Shopee' && shopeeVersion !== 'legacy';
+
+  if (store === 'Shopee') {
+    console.log(`\n[SHOPEE] Discovery Version: ${useShopeeV4 ? 'V4' : 'LEGACY'}`);
+  }
+
+  if (useShopeeV4) {
+    console.log(`\n🔍 [Shopee] Iniciando Discovery V4 (Global)...`);
+    try {
+      const discovery = await fetchShopeeDiscoveryV4();
+      const telemetry = {
+        lista_recuperados: [],
+        lista_descartados_pf: [],
+        produtos_descartados_lixo_keyword: 0,
+        descartados_price_floor_antigo: 0,
+        descartados_price_floor_novo: 0,
+        recuperados_price_floor: 0,
+        recuperados_com_rating: 0,
+        recuperados_com_sales: 0,
+        recuperados_com_desconto: 0,
+        recuperados_com_comissao: 0,
+        recuperados_loja_oficial: 0,
+        produtos_descartados_internacional: 0,
+      };
+
+      const validProducts = applyShopeeQualityGateV4(discovery.normalized, telemetry);
+      console.log(`  [Shopee V4] Únicos: ${discovery.normalized.length} | Aprovados Quality Gate: ${validProducts.length}`);
+      
+      let scoredProducts = 0;
+      let newOffers = 0;
+      let existingOffers = 0;
+
+      for (const p of validProducts) {
+        const prodData = {
+          product_name: p.product_name, 
+          image_url: p.image_url ? normalizeImageUrl(p.image_url) : null,
+          current_price: p.current_price, 
+          old_price: p.old_price,
+          rating: p.rating, 
+          category: 'Geral',
+          shopee_enrichment: p.shopee_enrichment || null,
+          shopee_origin: p.shopee_origin || null,
+        };
+        const affiliateUrl = p.affiliate_url?.startsWith('http') ? p.affiliate_url : await generateShopeeAffiliateUrl(p.original_url);
+
+        const res = await upsertOffer(prodData, store, affiliateUrl);
+        if (res) {
+          scoredProducts++;
+          if (res.isNew) {
+            newOffers++;
+            storeCandidates.push({
+              id: res.id,
+              product: prodData,
+              store,
+              affiliateUrl,
+              score: res.score,
+              audit: {
+                query: 'V4_Global',
+                sourceType: 'API_BR',
+                queryCategory: 'V4',
+                queryVariant: 'V4'
+              }
+            });
+          } else {
+            existingOffers++;
+          }
+        }
+      }
+
+      const fs = require('fs');
+      const path = require('path');
+      const reportsDir = path.join(__dirname, '../reports');
+      if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
+      
+      const v4Metrics = {
+        discovery_source: 'v4',
+        retornados_productOfferV2_comissao: discovery.rawCommission.length,
+        retornados_productOfferV2_vendas: discovery.rawSales.length,
+        retornados_productOfferV2_desconto: discovery.rawDiscount.length,
+        retornados_shopOfferV2: discovery.shops.length,
+        retornados_campaignOfferV2: discovery.campaigns.length,
+        produtos_unicos: discovery.normalized.length,
+        ...telemetry,
+        produtos_aprovados: validProducts.length,
+        produtos_enviados_ao_ranking: storeCandidates.length,
+        tempo_total_ms: Date.now() - storeStartedAt
+      };
+
+      fs.writeFileSync(path.join(reportsDir, 'sprint_07.2_metricas.json'), JSON.stringify(v4Metrics, null, 2));
+
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
+        store,
+        queriesExecuted: 1,
+        candidatesCollected: storeCandidates.length,
+        durationMs: Date.now() - storeStartedAt
+      });
+
+      console.log(`  ✅ [${store}] ${storeCandidates.length} novas ofertas enviadas ao Ranking via V4.`);
+      return storeCandidates;
+
+    } catch (err) {
+      console.error(`  [Shopee V4] Erro fatal: ${err.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Scrape V4', err, { store });
+    }
+  }
+
+  // Fallback / Legacy Flow (e outros marketplaces)
+  const queries = getRandomQueries(store); // Pega 1 keyword de CADA categoria da loja
+  
   for (const query of queries) {
     try {
       const discoverySource = normalizeDiscoverySource(query);
@@ -3660,13 +3772,20 @@ console.log('╚═════════════════════�
 const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
 const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
 
-if (!isDiscoveryDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
+
+if (!isDiscoveryDryRun && !isShopeeV4DryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
   console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
 
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
-  if (isDiscoveryDryRun) {
+  if (isShopeeV4DryRun) {
+    runShopeeV4DryRun().catch(e => {
+      console.error('❌ Erro no shopee dry-run:', e.message);
+      process.exitCode = 1;
+    });
+  } else if (isDiscoveryDryRun) {
     runDiscoveryDryRun().catch(e => {
       console.error('❌ Erro no dry-run discovery:', e.message);
       process.exitCode = 1;
@@ -3708,4 +3827,301 @@ module.exports = {
 
 function getEnabledStores(stores) {
   return stores.filter(store => !SKIP_STORES.has(store));
+}
+
+// ======================================================================
+// SHOPEE DISCOVERY V4
+// ======================================================================
+
+function buildShopeeGraphQLPayload(operationName, query, variables) {
+  return JSON.stringify({ operationName, query, variables });
+}
+
+async function callShopeeAffiliateApi(payload) {
+  if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) return null;
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = crypto
+    .createHash('sha256')
+    .update(`${SHOPEE_APP_ID}${timestamp}${payload}${SHOPEE_APP_SECRET}`)
+    .digest('hex');
+
+  try {
+    const resp = await axios.post(SHOPEE_OFFICIAL_API_URL, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
+      },
+      timeout: 60000,
+      validateStatus: () => true,
+    });
+    return resp;
+  } catch (err) {
+    console.warn(`[Shopee API V4] Falha na request: ${err.message}`);
+    return null;
+  }
+}
+
+async function fetchShopeeProductsOfferV2(sortType, keyword = '', limit = 20, page = 1) {
+  const query = 'query ShopeeProductOfferSearch($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName } pageInfo { page limit hasNextPage } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeProductOfferSearch', query, { keyword, page, limit, sortType, isAMSOffer: true });
+  const resp = await callShopeeAffiliateApi(payload);
+  if (!resp || resp.status !== 200 || resp.data?.errors) return [];
+  return Array.isArray(resp.data?.data?.productOfferV2?.nodes) ? resp.data.data.productOfferV2.nodes : [];
+}
+
+async function fetchShopeeProductsByCommission(limit, page) { return fetchShopeeProductsOfferV2(5, '', limit, page); }
+async function fetchShopeeProductsBySales(limit, page) { return fetchShopeeProductsOfferV2(2, '', limit, page); }
+async function fetchShopeeProductsByDiscount(limit, page) { return fetchShopeeProductsOfferV2(4, '', limit, page); }
+async function fetchShopeeProductsByRelevance(limit, page, keyword) { return fetchShopeeProductsOfferV2(1, keyword, limit, page); }
+
+async function fetchShopeeShopOffers(limit = 20, page = 1) {
+  const query = 'query ShopeeShopOfferSearch($page: Int, $limit: Int) { shopOfferV2(page: $page, limit: $limit) { nodes { shopId shopName shopLink imageUrl commissionRate sellerCommissionRate offerLink } pageInfo { page limit hasNextPage } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeShopOfferSearch', query, { page, limit });
+  const resp = await callShopeeAffiliateApi(payload);
+  if (!resp || resp.status !== 200 || resp.data?.errors) return [];
+  return Array.isArray(resp.data?.data?.shopOfferV2?.nodes) ? resp.data.data.shopOfferV2.nodes : [];
+}
+
+async function fetchShopeeCampaignOffers(limit = 20, page = 1) {
+  const query = 'query ShopeeCampaignOfferSearch($page: Int, $limit: Int) { campaignOfferV2(page: $page, limit: $limit) { nodes { offerName offerLink originalLink imageUrl commissionRate periodStartTime periodEndTime offerType } pageInfo { page limit hasNextPage } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeCampaignOfferSearch', query, { page, limit });
+  const resp = await callShopeeAffiliateApi(payload);
+  if (!resp || resp.status !== 200 || resp.data?.errors) return [];
+  return Array.isArray(resp.data?.data?.campaignOfferV2?.nodes) ? resp.data.data.campaignOfferV2.nodes : [];
+}
+
+async function fetchShopeeItemFeedsIfAvailable() {
+  const query = 'query ShopeeListItemFeeds { listItemFeeds { nodes { id status } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeListItemFeeds', query, {});
+  const resp = await callShopeeAffiliateApi(payload);
+  if (!resp || resp.status !== 200 || resp.data?.errors) return null;
+  return resp.data?.data?.listItemFeeds?.nodes || [];
+}
+
+async function generateShopeeBatchShortLinks(originLinks) {
+  // Mock para dry-run. Não gera link final no banco, só demonstra.
+  return originLinks.map(url => ({ original: url, shortLink: url }));
+}
+
+function dedupeShopeeProducts(products) {
+  const seen = new Set();
+  return products.filter(p => {
+    const key = `${p.itemId}-${p.shopId}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizeShopeeProduct(node) {
+  const currentPrice = parseShopeeMoney(node?.priceMin) ?? parseShopeeMoney(node?.priceMax);
+  const oldPriceCandidate = parseShopeeMoney(node?.priceMax);
+  const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
+  if (!node?.productName || !currentPrice || !node?.productLink) return null;
+
+  return {
+    product_name: String(node.productName).trim(),
+    current_price: currentPrice,
+    old_price: oldPrice,
+    image_url: node.imageUrl || null,
+    original_url: node.productLink,
+    affiliate_url: node.offerLink || node.productLink,
+    rating: node.ratingStar ? parseFloat(String(node.ratingStar)) : null,
+    category: 'Geral',
+    platform: 'Shopee',
+    marketplace: 'Shopee',
+    sales: node.sales ?? null,
+    shopee_item_id: node.itemId ?? null,
+    shopee_shop_id: node.shopId ?? null,
+    commission_rate: node.commissionRate ?? null,
+    discount_rate: node.priceDiscountRate ?? null,
+    raw_node: node
+  };
+}
+
+function evaluateShopeePriceFloor(product) {
+  const currentPrice = product.current_price;
+  if (currentPrice < 15) return { status: 'REJECTED', reason: 'Preço abaixo de R$ 15', signals: [] };
+  if (currentPrice >= 30) return { status: 'ACCEPTED', reason: 'Preço acima de R$ 30', signals: [] };
+
+  const signals = [];
+  if (product.sales >= 500) signals.push('sales_high');
+  if (product.rating >= 4.7) signals.push('rating_high');
+  if (product.discount_rate >= 20) signals.push('discount_high');
+  if (product.commission_rate >= 0.10) signals.push('commission_high');
+  if (product.raw_node?.sellerCommissionRate >= 0.07) signals.push('seller_commission_high');
+  
+  const shopNameLower = (product.raw_node?.shopName || '').toLowerCase();
+  if (shopNameLower.includes('oficial')) signals.push('shop_official');
+  if (shopNameLower.includes('mall')) signals.push('shop_mall');
+
+  const nameLower = product.product_name.toLowerCase();
+  const lixoKeywords = ['capinha', 'película', 'cabo', 'carregador', 'fone de fio', 'suporte', 'adaptador', 'pulseira'];
+  const hasLixo = lixoKeywords.some(kw => nameLower.includes(kw));
+
+  if (signals.length >= 2 && !hasLixo) {
+    return { status: 'REVIEW', reason: 'Recuperado por Sinais Fortes', signals };
+  }
+  return { status: 'REJECTED', reason: 'Falta de sinais de qualidade', signals };
+}
+
+function applyShopeeQualityGateV4(products, telemetria) {
+  if (!telemetria.lista_recuperados) telemetria.lista_recuperados = [];
+  if (!telemetria.lista_descartados_pf) telemetria.lista_descartados_pf = [];
+
+  return products.filter(p => {
+    const nameLower = p.product_name.toLowerCase();
+    const lixoKeywords = ['capinha', 'película', 'cabo', 'carregador', 'fone de fio', 'suporte', 'adaptador', 'pulseira'];
+    if (lixoKeywords.some(kw => nameLower.includes(kw))) {
+      telemetria.produtos_descartados_lixo_keyword++;
+      return false;
+    }
+
+    if (p.current_price < 30) {
+      telemetria.descartados_price_floor_antigo = (telemetria.descartados_price_floor_antigo || 0) + 1;
+    }
+
+    const pf = evaluateShopeePriceFloor(p);
+    if (pf.status === 'REJECTED') {
+      telemetria.descartados_price_floor_novo = (telemetria.descartados_price_floor_novo || 0) + 1;
+      telemetria.lista_descartados_pf.push(p);
+      return false;
+    }
+
+    if (pf.status === 'REVIEW') {
+      telemetria.recuperados_price_floor = (telemetria.recuperados_price_floor || 0) + 1;
+      if (pf.signals.includes('rating_high')) telemetria.recuperados_com_rating = (telemetria.recuperados_com_rating || 0) + 1;
+      if (pf.signals.includes('sales_high')) telemetria.recuperados_com_sales = (telemetria.recuperados_com_sales || 0) + 1;
+      if (pf.signals.includes('discount_high')) telemetria.recuperados_com_desconto = (telemetria.recuperados_com_desconto || 0) + 1;
+      if (pf.signals.includes('commission_high') || pf.signals.includes('seller_commission_high')) telemetria.recuperados_com_comissao = (telemetria.recuperados_com_comissao || 0) + 1;
+      if (pf.signals.includes('shop_official') || pf.signals.includes('shop_mall')) telemetria.recuperados_loja_oficial = (telemetria.recuperados_loja_oficial || 0) + 1;
+      telemetria.lista_recuperados.push({ ...p, signals: pf.signals });
+    }
+
+    const enriched = enrichShopeeOffer(p.raw_node);
+    const origin = validateShopeeOrigin(p.original_url, p.product_name, enriched);
+    if (origin.qualityGate === 'REJECTED') {
+      telemetria.produtos_descartados_internacional++;
+      return false;
+    }
+    return true;
+  });
+}
+
+function rankShopeeDiscoveryCandidates(products) {
+  return products.map(p => ({ ...p, score: calculateScoreV1(p) })).sort((a, b) => b.score - a.score);
+}
+
+async function fetchShopeeDiscoveryV4(options = {}) {
+  console.log('[Shopee V4] Buscando produtos por comissão...');
+  const byCommission = await fetchShopeeProductsByCommission(50, 1);
+  console.log('[Shopee V4] Buscando produtos por vendas...');
+  const bySales = await fetchShopeeProductsBySales(50, 1);
+  console.log('[Shopee V4] Buscando produtos por desconto...');
+  const byDiscount = await fetchShopeeProductsByDiscount(50, 1);
+  console.log('[Shopee V4] Buscando lojas...');
+  const shops = await fetchShopeeShopOffers(20, 1);
+  console.log('[Shopee V4] Buscando campanhas...');
+  const campaigns = await fetchShopeeCampaignOffers(20, 1);
+  console.log('[Shopee V4] Buscando feeds (se disponíveis)...');
+  const feeds = await fetchShopeeItemFeedsIfAvailable();
+
+  const allRaw = [...byCommission, ...bySales, ...byDiscount];
+  const uniqueNodes = dedupeShopeeProducts(allRaw);
+  const normalized = uniqueNodes.map(normalizeShopeeProduct).filter(Boolean);
+
+  return {
+    rawCommission: byCommission,
+    rawSales: bySales,
+    rawDiscount: byDiscount,
+    shops,
+    campaigns,
+    feeds,
+    normalized
+  };
+}
+
+async function runShopeeV4DryRun() {
+  console.log('\n[DRY-RUN V4] Iniciando Shopee Discovery V4...\n');
+  const fs = require('fs');
+  const path = require('path');
+  
+  const telemetry = {
+    retornados_productOfferV2_comissao: 0,
+    retornados_productOfferV2_vendas: 0,
+    retornados_productOfferV2_desconto: 0,
+    retornados_shopOfferV2: 0,
+    retornados_campaignOfferV2: 0,
+    feeds_disponiveis: false,
+    produtos_unicos: 0,
+    produtos_descartados_lixo_keyword: 0,
+    produtos_descartados_internacional: 0,
+    descartados_price_floor_antigo: 0,
+    descartados_price_floor_novo: 0,
+    recuperados_price_floor: 0,
+    recuperados_com_rating: 0,
+    recuperados_com_sales: 0,
+    recuperados_com_desconto: 0,
+    recuperados_com_comissao: 0,
+    recuperados_loja_oficial: 0,
+    produtos_chegaram_ranking: 0,
+    produtos_que_chegariam_ia: 0,
+    top_lojas: [],
+    top_comissao: [],
+    top_desconto: [],
+    top_vendas: [],
+    lista_recuperados: [],
+    lista_descartados_pf: []
+  };
+
+  const discovery = await fetchShopeeDiscoveryV4();
+
+  telemetry.retornados_productOfferV2_comissao = discovery.rawCommission.length;
+  telemetry.retornados_productOfferV2_vendas = discovery.rawSales.length;
+  telemetry.retornados_productOfferV2_desconto = discovery.rawDiscount.length;
+  telemetry.retornados_shopOfferV2 = discovery.shops.length;
+  telemetry.retornados_campaignOfferV2 = discovery.campaigns.length;
+  telemetry.feeds_disponiveis = discovery.feeds !== null;
+  telemetry.produtos_unicos = discovery.normalized.length;
+
+  const validProducts = applyShopeeQualityGateV4(discovery.normalized, telemetry);
+  const rankedProducts = rankShopeeDiscoveryCandidates(validProducts);
+  
+  telemetry.produtos_chegaram_ranking = rankedProducts.length;
+  const top10 = rankedProducts.slice(0, 10);
+  telemetry.produtos_que_chegariam_ia = top10.length;
+
+  telemetry.top_lojas = discovery.shops.slice(0, 20);
+  telemetry.top_comissao = rankedProducts.sort((a,b) => (b.commission_rate||0) - (a.commission_rate||0)).slice(0, 20);
+  telemetry.top_desconto = rankedProducts.sort((a,b) => (b.discount_rate||0) - (a.discount_rate||0)).slice(0, 20);
+  telemetry.top_vendas = rankedProducts.sort((a,b) => (b.sales||0) - (a.sales||0)).slice(0, 20);
+
+  const reportsDir = path.join(__dirname, '../reports');
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
+
+  fs.writeFileSync(path.join(reportsDir, 'sprint_07.1_shopee_price_floor_summary.json'), JSON.stringify(telemetry, null, 2));
+  fs.writeFileSync(path.join(reportsDir, 'sprint_07.1_shopee_price_floor_recuperados.csv'), `name,price,sales,commission,discount,signals\n${telemetry.lista_recuperados.map(p => `"${p.product_name}",${p.current_price},${p.sales||0},${p.commission_rate||0},${p.discount_rate||0},"${(p.signals||[]).join(';')}"`).join('\n')}`);
+  fs.writeFileSync(path.join(reportsDir, 'sprint_07.1_shopee_price_floor_descartados.csv'), `name,price,sales,commission,discount\n${telemetry.lista_descartados_pf.map(p => `"${p.product_name}",${p.current_price},${p.sales||0},${p.commission_rate||0},${p.discount_rate||0}`).join('\n')}`);
+  
+  const mdReport = `
+# Sprint 07.1 Shopee Price Floor Inteligente
+- Produtos Retornados: ${telemetry.produtos_unicos}
+- Produtos Únicos Pré-Filtro: ${telemetry.produtos_unicos}
+- Descartados (Price Floor Antigo): ${telemetry.descartados_price_floor_antigo}
+- Descartados (Price Floor Novo): ${telemetry.descartados_price_floor_novo}
+- Recuperados (Price Floor): ${telemetry.recuperados_price_floor}
+- Recuperados com Rating: ${telemetry.recuperados_com_rating}
+- Recuperados com Sales: ${telemetry.recuperados_com_sales}
+- Recuperados com Desconto: ${telemetry.recuperados_com_desconto}
+- Recuperados com Comissão: ${telemetry.recuperados_com_comissao}
+- Recuperados Loja Oficial: ${telemetry.recuperados_loja_oficial}
+- Descartados (Lixo): ${telemetry.produtos_descartados_lixo_keyword}
+- Descartados (Internacional/Loja): ${telemetry.produtos_descartados_internacional}
+- Produtos ao Ranking: ${telemetry.produtos_chegaram_ranking}
+- Produtos para IA: ${telemetry.produtos_que_chegariam_ia}
+`;
+  fs.writeFileSync(path.join(reportsDir, 'sprint_07.1_shopee_price_floor.md'), mdReport);
+
+  console.log(mdReport);
+  console.log('[DRY-RUN V4] Relatórios salvos em /reports.');
 }
