@@ -81,6 +81,34 @@ const AMAZON_CONTEXT_OPTIONS = {
 
 const SHOPEE_OFFICIAL_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 
+// ─── Scrape.do / Mercado Livre Signals Setup ──────────────────
+function getMercadoLivreProvider() { return process.env.ML_PROVIDER || 'legacy'; }
+function getMercadoLivreDiscoveryMode() { return process.env.ML_DISCOVERY_MODE || 'legacy'; }
+function getMercadoLivreSignalUrls() { return process.env.ML_SIGNAL_URLS || ''; }
+function getMercadoLivreMaxScrapedoRequests() { return parseInt(process.env.ML_MAX_SCRAPEDO_REQUESTS || '20', 10); }
+function isMercadoLivreSignalsScrapedoEnabled() {
+  return getMercadoLivreProvider() === 'scrapedo' &&
+         getMercadoLivreDiscoveryMode() === 'signals' &&
+         !!process.env.SCRAPEDO_API_KEY;
+}
+
+async function fetchMercadoLivreViaScrapedo(url) {
+  const apiKey = process.env.SCRAPEDO_API_KEY;
+  if (!apiKey) throw new Error("SCRAPEDO_API_KEY não configurada.");
+  
+  const targetUrl = encodeURIComponent(url);
+  const scrapeDoUrl = `https://api.scrape.do?token=${apiKey}&url=${targetUrl}&super=true`;
+  
+  console.log(`  [Scrape.do] Buscando HTML via proxy residencial...`);
+  try {
+    const response = await axios.get(scrapeDoUrl, { timeout: 60000 });
+    return response.data;
+  } catch (error) {
+    console.error(`  [Scrape.do] Erro: ${error.message}`);
+    throw error;
+  }
+}
+
 // ─── LLM Provider Setup ────────────────────────────────────────
 const LLM_PROVIDER = process.env.LLM_PROVIDER || 'cerebras';
 const LLM_FALLBACK = process.env.LLM_FALLBACK || 'groq';
@@ -1311,6 +1339,21 @@ function pickQueryFromCategory(categoryBank, variantOrder, usedQueries) {
 
 function selectDiscoveryQueries(storeName) {
   const store = storeName;
+  if (store === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled()) {
+    console.log(`[ML] provider=scrapedo mode=signals legacyBlocked=true`);
+    const signalUrls = getMercadoLivreSignalUrls().split(',').map(s => s.trim()).filter(Boolean);
+    const selectedSignals = [];
+    for (const url of signalUrls) {
+      console.log(`[ML] URL=${url}`);
+      selectedSignals.push({
+        source: url,
+        type: 'url',
+        fallbackKeyword: null
+      });
+    }
+    return selectedSignals;
+  }
+
   const discoveryBank = GOLDEN_QUERIES[store]?.discovery || null;
   const settings = STORE_QUERY_SETTINGS[store] || { categoriesPerRun: 12, queriesPerCategory: 2 };
   const configuredQueryLimit = Math.max(1, settings.categoriesPerRun * settings.queriesPerCategory);
@@ -1508,7 +1551,17 @@ async function crawleeExtract(url, limit, storeName) {
       }
     },
     preNavigationHooks: [
-      async ({ page }) => {
+      async ({ page, request }) => {
+        if (storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled()) {
+           const html = await fetchMercadoLivreViaScrapedo(request.url);
+           await page.route(request.url, route => {
+              route.fulfill({
+                 status: 200,
+                 contentType: 'text/html',
+                 body: html
+              });
+           });
+        }
         page.setDefaultNavigationTimeout(150000);
         page.setDefaultTimeout(150000);
       }
@@ -3004,7 +3057,17 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
       }
     },
     preNavigationHooks: [
-      async ({ page }) => {
+      async ({ page, request }) => {
+        if (storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled()) {
+           const html = await fetchMercadoLivreViaScrapedo(request.url);
+           await page.route(request.url, route => {
+              route.fulfill({
+                 status: 200,
+                 contentType: 'text/html',
+                 body: html
+              });
+           });
+        }
         page.setDefaultNavigationTimeout(120000);
         page.setDefaultTimeout(120000);
       }
