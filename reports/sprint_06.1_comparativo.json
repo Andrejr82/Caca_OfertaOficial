@@ -1,0 +1,19 @@
+{
+  "baseline_06_0": {
+    "total_processed": 29,
+    "dropped_by_slice": 10,
+    "dropped_by_amazon_url": 3,
+    "final_approved": 0
+  },
+  "sprint_06_1": {
+    "total_processed": 39,
+    "dropped_by_slice": 0,
+    "dropped_by_amazon_url": 0,
+    "final_approved": 12
+  },
+  "gains": {
+    "slice_recovered": 10,
+    "amazon_recovered": 3,
+    "net_gain": 13
+  }
+}

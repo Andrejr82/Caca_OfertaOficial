@@ -1640,16 +1640,21 @@ async function crawleeExtract(url, limit, storeName) {
             .map((a) => (a.href || '').trim())
             .filter(Boolean);
 
+          let rawLink = '';
           const directAmazon = hrefs.find((href) => /amazon\.com\.br\/(?:dp|gp\/aw\/d|gp\/product)\//i.test(href));
-          if (directAmazon) return directAmazon;
+          if (directAmazon) rawLink = directAmazon;
+          else {
+            const embeddedAmazon = hrefs.find((href) => href.includes('https://www.amazon.com.br/'));
+            if (embeddedAmazon) rawLink = embeddedAmazon;
+            else {
+              const headingAnchor = cardEl.querySelector('h2 a[href]');
+              if (headingAnchor && headingAnchor.href) rawLink = headingAnchor.href;
+              else rawLink = hrefs[0] || '';
+            }
+          }
 
-          const embeddedAmazon = hrefs.find((href) => href.includes('https://www.amazon.com.br/'));
-          if (embeddedAmazon) return embeddedAmazon;
-
-          const headingAnchor = cardEl.querySelector('h2 a[href]');
-          if (headingAnchor && headingAnchor.href) return headingAnchor.href;
-
-          return hrefs[0] || '';
+          const match = rawLink.match(/https:\/\/(?:www\.)?amazon\.com\.br\/[^\s"'<>]+/i);
+          return match ? match[0] : rawLink;
         };
 
         for (let el of items) {
@@ -1857,6 +1862,30 @@ function buildSafeProductPayload(products, options = {}) {
       const cleanContent = content.trim().replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/\s*```$/, "").trim();
       const data = JSON.parse(cleanContent);
       const returnedProducts = data.products || [];
+      if (global.PIPELINE_FORENSICS) {
+         returnedProducts.forEach(p => {
+            global.PIPELINE_FORENSICS.push({
+               id: p.id || Math.random().toString(36).substr(2, 9),
+               marketplace: storeName,
+               url: p.url || p.original_url || '',
+               produto: p.title || p.product_name || 'Desconhecido',
+               preco: p.price || p.current_price || 0,
+               preco_antigo: p.old_price || 0,
+               desconto: p.discount || 0,
+               categoria: queryContext.category || '',
+               marca: p.brand || '',
+               loja: p.seller || storeName,
+               imagem: p.image_url || p.image || '',
+               status_atual: 'PARSED',
+               etapa_final: 'Parser',
+               motivo: '',
+               score: 0,
+               tempo_execucao: Date.now(),
+               publicado: false,
+               atributos_originais: { ...p }
+            });
+         });
+      }
       cycleMetrics.produtos_retornados += returnedProducts.length;
       const validationPreview = buildValidationPreview(returnedProducts, storeName);
       
@@ -1877,7 +1906,8 @@ function buildSafeProductPayload(products, options = {}) {
       });
       // #endregion
       
-      const approvedProducts = sanitizeScrapedData(returnedProducts, storeName).slice(0, limit);
+      const approvedProducts = sanitizeScrapedData(returnedProducts, storeName);
+      // Sprint 06.1: Nenhum produto é descartado aqui prematuramente.
       
       console.log(`\n  [DIAGNÓSTICO ${storeName}] Retornados: ${returnedProducts.length} | Aprovados: ${approvedProducts.length} | Rejeitados: ${returnedProducts.length - approvedProducts.length}`);
 
@@ -2706,7 +2736,8 @@ async function upsertOffer(product, store, affiliateUrl) {
     return { id: existing.id, isNew: false, score };
   }
 
-  const { data, error } = await supabase.from('offers').insert({
+  if (global.PIPELINE_FORENSICS) { const tf = global.PIPELINE_FORENSICS.find(f => f.url === affiliateUrl); if (tf) { tf.status_atual = 'PUBLISHED'; tf.etapa_final = 'Publicação'; tf.score = finalScore; tf.publicado = true; } }
+    const { data, error } = await supabase.from('offers').insert({
     user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
     image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
     rating: product.rating, category: product.category || 'Geral', score, status: 'draft',
