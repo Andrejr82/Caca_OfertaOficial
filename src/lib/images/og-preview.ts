@@ -247,12 +247,6 @@ function buildBaseBackground(width: number, height: number) {
 function buildWhatsAppOverlay(offer: OfferForPreview) {
   const config = PREVIEW_CONFIG.whatsapp;
   const theme = getMarketplaceTheme(offer);
-  const templateKey = resolveVisualTemplate(offer);
-  const template = VISUAL_TEMPLATES[templateKey];
-
-  const badgeBg = template.accent || theme.accent;
-  const badgeLabel = template.label || theme.label;
-  const badgeTextColor = badgeBg === "#ffffff" ? "#111827" : "#ffffff";
 
   const title = cleanOfferTitle(offer.product_name) || "Oferta";
   const shortTitle = title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title;
@@ -301,10 +295,6 @@ function buildWhatsAppOverlay(offer: OfferForPreview) {
   return Buffer.from(`
 <svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
   <rect x="26" y="26" width="${config.width - 52}" height="${config.height - 52}" rx="58" fill="none" stroke="#e5e7eb" stroke-width="4"/>
-  <rect x="76" y="76" width="292" height="58" rx="29" fill="${badgeBg}" opacity="0.96"/>
-  <text x="222" y="113" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="800" fill="${badgeTextColor}">${escapeXml(badgeLabel)}</text>
-  <rect x="${config.width - 368}" y="76" width="292" height="58" rx="29" fill="#111827" opacity="0.94"/>
-  <text x="${config.width - 222}" y="112" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" fill="#ffffff">Caça Oferta Oficial</text>
   ${extraLabels}
   <text x="${config.width / 2}" y="${config.height - 78}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#4b5563">${escapeXml(shortTitle)}</text>
 </svg>`);
