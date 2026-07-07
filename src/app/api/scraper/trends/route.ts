@@ -2,8 +2,20 @@ import { NextResponse } from "next/server";
 import { discoverAndIngestTrendingOffers } from "@/lib/affiliates/scraper";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { rankOffersBatch } from "@/lib/offers/curation-engine";
+import path from "path";
 
+// Força execução no runtime Node.js e impede cache estático do bundler
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 export const maxDuration = 300; // Limite de 5 minutos para Vercel Pro (Evita o Timeout 504 no scraping pesado)
+
+// Carregamento runtime-only: o bundler (Turbopack/Webpack) não consegue rastrear
+// eval('require') estaticamente, evitando que crawlee/esbuild/tsx sejam bundlados.
+function loadOracleScraper() {
+  const scraperPath = path.join(process.cwd(), "scripts", "oracle-scraper.cjs");
+  // eslint-disable-next-line no-eval
+  return (eval("require") as NodeRequire)(scraperPath);
+}
 
 export async function POST(request: Request) {
   try {
@@ -40,7 +52,29 @@ export async function POST(request: Request) {
       // Ignora erro se não houver corpo na requisição
     }
 
-    // Executa o robô de descoberta
+    // SPRINT 09.7 & 09.8: Intercepta fluxo da Shopee para usar a nova arquitetura (Candidate Queue)
+    // O oracle-scraper é carregado via eval('require') para evitar rastreamento estático do bundler.
+    if (sources.includes("Shopee")) {
+      const oracle = loadOracleScraper();
+      const { presentMarketplaceCandidate } = await import("@/lib/presenters/marketplace-candidate");
+
+      const pipelineResult = await oracle.runShopeeOfficialPipeline(category, limit);
+
+      // SPRINT 09.8: Camada de Apresentação (adapta Candidate para formato do Frontend)
+      const presentedOffers = pipelineResult.candidates.map((c: any) => presentMarketplaceCandidate(c));
+
+      console.log(`[API][TRENDS] Shopee Candidate Queue acionada. Retornando ${presentedOffers.length} candidates.`);
+
+      return NextResponse.json({
+        ok: true,
+        message: `Busca de Tendências Shopee concluída (Candidate Queue). ${presentedOffers.length} ofertas prontas para curadoria.`,
+        count: presentedOffers.length,
+        offers: presentedOffers, // Retorna os Candidates adaptados para o Frontend
+        telemetry: pipelineResult.telemetry
+      });
+    }
+
+    // Executa o robô de descoberta original para as demais fontes
     const offers = await discoverAndIngestTrendingOffers(limit, sources, undefined, category);
 
     // Filtra e ordena comercialmente usando o Curation V2 (Cold Ranking + Quality Gate >= 5.0)

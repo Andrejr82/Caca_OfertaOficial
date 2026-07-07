@@ -52,6 +52,7 @@ export function TrendsAction() {
   const [couponSources, setCouponSources] = useState(defaultCouponSources);
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [mode, setMode] = useState<"products" | "coupons">("products");
+  const [offers, setOffers] = useState<any[]>([]);
 
   useEffect(() => {
     try {
@@ -152,7 +153,12 @@ export function TrendsAction() {
           success: true,
           message: data.message || "Ação concluída com sucesso!"
         });
-        router.refresh();
+        if (data.offers && data.offers.length > 0) {
+          setOffers(data.offers);
+        } else {
+          setOffers([]);
+          router.refresh();
+        }
       } else {
         setResult({
           success: false,
@@ -301,6 +307,65 @@ export function TrendsAction() {
       {result && (
         <div className={`mt-4 rounded-lg p-3 text-sm ${result.success ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" : "bg-red-500/10 text-red-400 border border-red-500/20"}`}>
           {result.message}
+        </div>
+      )}
+
+      {offers.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-bold text-white/80 mb-3 border-b border-white/10 pb-2">Resultados Obtidos ({offers.length})</h3>
+          <div className="grid gap-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+            {offers.map((offer) => (
+              <div key={offer.id || offer.candidateId} className="flex gap-4 p-3 bg-white/5 border border-white/10 rounded-lg">
+                <div className="w-16 h-16 shrink-0 rounded-md overflow-hidden bg-black/50 border border-white/10 relative">
+                  {offer.image || offer.imageUrl ? (
+                    <img src={offer.image || offer.imageUrl} alt={offer.title || offer.productName} className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-white/30 text-[10px]">Sem foto</div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-400 bg-emerald-400/10 px-1.5 py-0.5 rounded">
+                      {offer.marketplace}
+                    </span>
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded">
+                      {offer.category}
+                    </span>
+                  </div>
+                  <h4 className="text-sm font-medium text-white/90 truncate" title={offer.title || offer.productName}>
+                    {offer.title || offer.productName}
+                  </h4>
+                  <div className="flex items-center gap-3 mt-1.5">
+                    <span className="text-sm font-bold text-emerald-400">
+                      R$ {Number(offer.price || offer.currentPrice || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                    </span>
+                    {(offer.score || offer.selectionScore) && (
+                      <span className="text-xs text-white/50">
+                        Score: {Math.round(offer.score || offer.selectionScore || 0)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                    {Array.isArray(offer.badges) && offer.badges.map((badge: string, i: number) => (
+                      <span key={i} className="text-[9px] uppercase font-bold text-white/70 bg-white/10 px-1.5 py-0.5 rounded border border-white/10">
+                        {badge}
+                      </span>
+                    ))}
+                    {(offer.url || offer.affiliateLink) && (
+                      <a 
+                        href={offer.url || offer.affiliateLink} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="text-[10px] text-emerald-400 hover:underline ml-auto"
+                      >
+                        Ver Produto ↗
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

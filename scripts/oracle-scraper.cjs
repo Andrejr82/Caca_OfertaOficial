@@ -3841,6 +3841,7 @@ const SHOPEE_DISCOVERY_SCORE_CONFIG = {
  * Nenhuma chamada externa, de IA, de Oracle ou Banco é feita aqui.
  */
 function calculateShopeeDiscoveryScore(product) {
+  if (product._memoizedDiscoveryScoreResult) return product._memoizedDiscoveryScoreResult;
   let score = 0;
   const breakdown = {};
   const signals = [];
@@ -3940,7 +3941,7 @@ function calculateShopeeDiscoveryScore(product) {
   else if (score >= 55) priority = 'MEDIUM';
   else priority = 'LOW';
 
-  return {
+  const result = {
     score,
     tier: matchedTier.name,
     priority,
@@ -3948,6 +3949,8 @@ function calculateShopeeDiscoveryScore(product) {
     penalties,
     breakdown
   };
+  product._memoizedDiscoveryScoreResult = result;
+  return result;
 }
 
 // ============================================================================
@@ -3981,6 +3984,7 @@ const HISTORY_REASON = {
 
 class FileSeenProductStore {
   constructor() {
+    const pathModule = require('path');
     this.dbPath = pathModule.join(__dirname, '..', 'data', 'shopee_seen_products.json');
     this.data = this._load();
   }
@@ -4796,6 +4800,54 @@ async function fetchShopeeOfficialDiscovery(options = {}) {
   return { products, rawReturns, isFallback, categories: resolvedCategories };
 }
 
+async function runShopeeOfficialPipeline(targetCategory, limit = 5) {
+  let catList = SHOPEE_OFFICIAL_CATEGORIES;
+  if (targetCategory && targetCategory !== 'Todas' && targetCategory !== 'Geral') {
+    catList = [targetCategory];
+  }
+  
+  const { products } = await fetchShopeeOfficialDiscovery({ categories: catList, limit: 50 });
+
+  const historyFiltered = [];
+  for (const p of products) {
+    const histDecision = shouldProcessProduct(p);
+    p.historyReason = histDecision.historyReason;
+    registerSeenProduct(p, histDecision.historyReason, false);
+    if (histDecision.shouldProcess) historyFiltered.push(p);
+  }
+
+  const scoredProducts = [];
+  for (const p of historyFiltered) {
+    const scoreResult = calculateShopeeDiscoveryScore(p);
+    p.discoveryScore = scoreResult.score;
+    p.tier = scoreResult.tier;
+    p.priority = scoreResult.priority;
+    scoredProducts.push(p);
+  }
+
+  const selectionResult = runMarketplaceSelectionEngine(scoredProducts, 'Shopee');
+  const queueResult = createMarketplaceCandidateQueue(selectionResult.selectedProducts, 'Shopee');
+
+  let finalCandidates = queueResult.candidates;
+  if (targetCategory && targetCategory !== 'Todas' && targetCategory !== 'Geral') {
+    finalCandidates = finalCandidates.filter(c => c.category === targetCategory || c.categoria_original === targetCategory);
+  }
+  
+  finalCandidates = finalCandidates.slice(0, limit);
+
+  return {
+    candidates: finalCandidates,
+    telemetry: {
+      marketplace: 'Shopee',
+      category: targetCategory || 'Todas',
+      received: products.length,
+      returned: finalCandidates.length,
+      filteredByCategory: queueResult.candidates.length - finalCandidates.length,
+      top10SelectionScore: finalCandidates.slice(0, 10).map(c => c.selectionScore)
+    }
+  };
+}
+
 async function runShopeeOfficialDryRun() {
   console.log('\n[Shopee Official Dry-Run 09.1] Iniciando...\n');
   const pathModule = require('path');
@@ -4804,14 +4856,63 @@ async function runShopeeOfficialDryRun() {
 
   const { products, rawReturns, isFallback, categories } = await fetchShopeeOfficialDiscovery();
 
+  // --- SPRINT 09.6: PIPELINE INTEGRATION ---
+  
+  // 1. Marketplace History
+  const historyFiltered = [];
+  const historyStats = { received: products.length, filtered: 0, passed: 0 };
+  
+  for (const p of products) {
+    const histDecision = shouldProcessProduct(p);
+    p.historyReason = histDecision.historyReason;
+    
+    // Register as SEEN to history provider
+    registerSeenProduct(p, histDecision.historyReason, false);
+    
+    if (histDecision.shouldProcess) {
+      historyFiltered.push(p);
+      historyStats.passed++;
+    } else {
+      historyStats.filtered++;
+    }
+  }
+
+  // 2. Discovery Score
+  const scoredProducts = [];
+  let scoredCount = 0;
+  
+  for (const p of historyFiltered) {
+    const scoreResult = calculateShopeeDiscoveryScore(p);
+    p.discoveryScore = scoreResult.score;
+    p.tier = scoreResult.tier;
+    p.priority = scoreResult.priority;
+    scoredProducts.push(p);
+    scoredCount++;
+  }
+
+  // 3. Marketplace Selection Engine
+  const selectionResult = runMarketplaceSelectionEngine(scoredProducts, 'Shopee');
+
+  // 4. Marketplace Candidate Queue
+  const queueResult = createMarketplaceCandidateQueue(selectionResult.selectedProducts, 'Shopee');
+
+  // --- FIM DA INTEGRAÇÃO DO PIPELINE ---
+
   const summary = {
-    sprint: '09.1',
+    sprint: '09.6',
     timestamp: new Date().toISOString(),
     categorias_origem: isFallback ? 'fallback' : 'extraida',
     categorias_usadas: categories.length,
     categorias: categories,
     produtos_brutos_retornados: rawReturns,
-    produtos_unicos: products.length,
+    
+    // Telemetria Atualizada
+    produtos_recebidos: products.length,
+    produtos_filtrados_history: historyStats.filtered,
+    produtos_pontuados: scoredCount,
+    produtos_selecionados: selectionResult.statistics.totalSelected,
+    candidates_gerados: queueResult.statistics.readyCandidates,
+    
     duplicados_removidos: rawReturns - products.length,
     ia_chamada: false,
     banco_alterado: false,
@@ -4908,7 +5009,128 @@ async function runShopeeOfficialDryRun() {
   console.log('\n[Shopee Official Dry-Run 09.1] Concluído. Relatórios em reports/');
 }
 
+const MANUAL_REVIEW_STATUS = {
+  PENDING: 'PENDING',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  EXPIRED: 'EXPIRED',
+  POSTED: 'POSTED',
+  ERROR: 'ERROR'
+};
 
+class MarketplaceManualReviewQueue {
+  constructor() {
+    this.queue = [];
+    this.stats = {
+      received: 0,
+      valid: 0,
+      rejected: 0,
+      pending: 0,
+      processingTimeMs: 0
+    };
+    const pathModule = require('path');
+    this.reportPath = pathModule.join(__dirname, '..', 'reports', 'manual_review_queue.json');
+    this._load();
+  }
+
+  _load() {
+    const fs = require('fs');
+    if (fs.existsSync(this.reportPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(this.reportPath, 'utf8'));
+        this.queue = data.queue || [];
+        this.stats = data.stats || this.stats;
+      } catch (e) {
+        console.warn('Erro ao carregar manual_review_queue.json', e.message);
+      }
+    }
+  }
+
+  enqueueMarketplaceCandidate(candidate) {
+    const start = Date.now();
+    this.stats.received++;
+    
+    // Reutilizar validação
+    const validation = validateMarketplaceCandidate(candidate);
+    if (!validation.isValid) {
+      this.stats.rejected++;
+      this.stats.processingTimeMs += (Date.now() - start);
+      return false;
+    }
+
+    // Não duplicar
+    if (!this.queue.find(c => c.candidateId === candidate.candidateId)) {
+      candidate.status = MANUAL_REVIEW_STATUS.PENDING;
+      if (!candidate.createdAt) candidate.createdAt = new Date().toISOString();
+      this.queue.push(candidate);
+      
+      this.stats.valid++;
+      this.stats.pending++;
+    }
+    
+    this.sortQueue();
+    this.persistQueue();
+    
+    this.stats.processingTimeMs += (Date.now() - start);
+    return true;
+  }
+
+  sortQueue() {
+    const prioValue = { 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'UNKNOWN': 0 };
+    
+    this.queue.sort((a, b) => {
+      if (b.selectionScore !== a.selectionScore) return b.selectionScore - a.selectionScore;
+      if (b.discoveryScore !== a.discoveryScore) return b.discoveryScore - a.discoveryScore;
+      const pA = prioValue[a.priority] || 0;
+      const pB = prioValue[b.priority] || 0;
+      if (pB !== pA) return pB - pA;
+      const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return dateA - dateB;
+    });
+  }
+
+  dequeueMarketplaceCandidate() {
+    const start = Date.now();
+    
+    const pendingIndex = this.queue.findIndex(c => c.status === MANUAL_REVIEW_STATUS.PENDING);
+    if (pendingIndex === -1) {
+      this.stats.processingTimeMs += (Date.now() - start);
+      return null;
+    }
+    
+    const candidate = this.queue[pendingIndex];
+    this.stats.processingTimeMs += (Date.now() - start);
+    return candidate;
+  }
+
+  updateMarketplaceCandidateStatus(candidateId, status) {
+    const start = Date.now();
+    const candidate = this.queue.find(c => c.candidateId === candidateId);
+    
+    if (candidate) {
+      if (candidate.status === MANUAL_REVIEW_STATUS.PENDING && status !== MANUAL_REVIEW_STATUS.PENDING) {
+        this.stats.pending--;
+      } else if (candidate.status !== MANUAL_REVIEW_STATUS.PENDING && status === MANUAL_REVIEW_STATUS.PENDING) {
+        this.stats.pending++;
+      }
+      candidate.status = status;
+      this.persistQueue();
+      this.stats.processingTimeMs += (Date.now() - start);
+      return true;
+    }
+    this.stats.processingTimeMs += (Date.now() - start);
+    return false;
+  }
+
+  persistQueue() {
+    const fs = require('fs');
+    fs.writeFileSync(this.reportPath, JSON.stringify({
+      stats: this.stats,
+      queue: this.queue
+    }, null, 2));
+  }
+}
 
 module.exports = { 
   callLLM,
@@ -4934,7 +5156,10 @@ module.exports = {
   logErrorToSupabase,
   DISCOVERY_QUERY_BLOCKS,
   GOLDEN_QUERIES,
-  PROVIDER_CONFIG
+  PROVIDER_CONFIG,
+  runShopeeOfficialPipeline,
+  MarketplaceManualReviewQueue,
+  MANUAL_REVIEW_STATUS
 };
 
 function getEnabledStores(stores) {
