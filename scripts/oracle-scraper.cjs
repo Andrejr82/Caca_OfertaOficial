@@ -3773,14 +3773,918 @@ const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.
 const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
 
 const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
+const isShopeeOfficialDryRun = process.argv.includes('--shopee-official-dry-run');
 
-if (!isDiscoveryDryRun && !isShopeeV4DryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+if (!isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
   console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
 
+// ponytail: categorias oficiais hardcoded como fallback seguro — extraídas da página /oficial na Sprint 09.0-A
+const SHOPEE_OFFICIAL_CATEGORIES = [
+  'Computadores e Acessórios', 'Acessórios de Moda', 'Brinquedos e Hobbies',
+  'Sapatos Femininos', 'Jogos e Consoles', 'Moda Infantil', 'Mãe e Bebê',
+  'Áudio', 'Bolsas Femininas', 'Roupas Masculinas', 'Beleza', 'Casa e Construção',
+  'Eletrodomésticos', 'Roupas Femininas', 'Esportes e Lazer', 'Automóveis',
+  'Celulares e Dispositivos', 'Alimentos e Bebidas', 'Sapatos Masculinos',
+  'Saúde', 'Bolsas Masculinas', 'Papelaria', 'Animais Domésticos', 'Livros e Revistas'
+];
+
+const SHOPEE_DISCOVERY_SCORE_CONFIG = {
+  sales: [
+    { threshold: 10000, points: 30 },
+    { threshold: 5000, points: 22 },
+    { threshold: 1000, points: 15 }
+  ],
+  discount: [
+    { threshold: 50, points: 25 },
+    { threshold: 40, points: 20 },
+    { threshold: 25, points: 15 }
+  ],
+  price: [
+    { threshold: 300, points: 12 },
+    { threshold: 100, points: 10 },
+    { threshold: 30, points: 8 },
+    { threshold: 15, points: 3 }
+  ],
+  rating: [
+    { threshold: 4.9, points: 15 },
+    { threshold: 4.7, points: 10 },
+    { threshold: 4.5, points: 5 }
+  ],
+  commission: [
+    { threshold: 15, points: 12 },
+    { threshold: 10, points: 8 },
+    { threshold: 7, points: 5 }
+  ],
+  signals: {
+    official_shop: 15,
+    brand: 10
+  },
+  penalties: {
+    price_below_15: -40,
+    rating_below_4_3: -20,
+    sales_below_100: -15,
+    no_discount: -8
+  },
+  tiers: [
+    { min: 90, name: 'PLATINUM', priority: 'HIGH' },
+    { min: 75, name: 'GOLD', priority: 'HIGH' },
+    { min: 60, name: 'SILVER', priority: 'MEDIUM' },
+    { min: 45, name: 'BRONZE', priority: 'LOW' }
+  ],
+  default_tier: { name: 'REJECT', priority: 'LOW' }
+};
+
+/**
+ * Calcula o Discovery Score objetivo baseado exclusivamente na Shopee Open API.
+ * Nenhuma chamada externa, de IA, de Oracle ou Banco é feita aqui.
+ */
+function calculateShopeeDiscoveryScore(product) {
+  let score = 0;
+  const breakdown = {};
+  const signals = [];
+  const penalties = [];
+  const c = SHOPEE_DISCOVERY_SCORE_CONFIG;
+
+  const sales = product.sales || 0;
+  const salesMatch = c.sales.find(rule => sales >= rule.threshold);
+  if (salesMatch) {
+    score += salesMatch.points;
+    breakdown.sales = salesMatch.points;
+    signals.push(`sales>=${salesMatch.threshold}`);
+  }
+  if (sales < 100) {
+    score += c.penalties.sales_below_100;
+    breakdown.sales_penalty = c.penalties.sales_below_100;
+    penalties.push('sales<100');
+  }
+
+  const discount = product.discount_rate || 0;
+  const discountMatch = c.discount.find(rule => discount >= rule.threshold);
+  if (discountMatch) {
+    score += discountMatch.points;
+    breakdown.discount = discountMatch.points;
+    signals.push(`discount>=${discountMatch.threshold}%`);
+  }
+  if (!discount || discount === 0) {
+    score += c.penalties.no_discount;
+    breakdown.discount_penalty = c.penalties.no_discount;
+    penalties.push('no_discount');
+  }
+
+  const price = product.current_price || 0;
+  const priceMatch = c.price.find(rule => price >= rule.threshold);
+  if (priceMatch) {
+    score += priceMatch.points;
+    breakdown.price = priceMatch.points;
+    signals.push(`price>=${priceMatch.threshold}`);
+  }
+  if (price < 15) {
+    score += c.penalties.price_below_15;
+    breakdown.price_penalty = c.penalties.price_below_15;
+    penalties.push('price<15');
+  }
+
+  const rating = product.rating || 0;
+  if (rating > 0) {
+    const ratingMatch = c.rating.find(rule => rating >= rule.threshold);
+    if (ratingMatch) {
+      score += ratingMatch.points;
+      breakdown.rating = ratingMatch.points;
+      signals.push(`rating>=${ratingMatch.threshold}`);
+    }
+    if (rating < 4.3) {
+      score += c.penalties.rating_below_4_3;
+      breakdown.rating_penalty = c.penalties.rating_below_4_3;
+      penalties.push('rating<4.3');
+    }
+  }
+
+  // A comissão pode vir como percentual (15) ou decimal (0.15)
+  let rawComm = product.commission_rate || 0;
+  if (!rawComm && product.raw_node?.sellerCommissionRate) rawComm = product.raw_node.sellerCommissionRate;
+  if (!rawComm && product.raw_node?.shopeeCommissionRate) rawComm = product.raw_node.shopeeCommissionRate;
+  
+  // Converte decimal para percentual (0.15 -> 15) para alinhar com o threshold do config
+  let commRate = parseFloat(rawComm) || 0;
+  if (commRate > 0 && commRate <= 1) {
+    commRate = commRate * 100;
+  }
+
+  const commMatch = c.commission.find(rule => commRate >= rule.threshold);
+  if (commMatch) {
+    score += commMatch.points;
+    breakdown.commission = commMatch.points;
+    signals.push(`commission>=${commMatch.threshold}%`);
+  }
+
+  if (product.official_shop_signal) {
+    score += c.signals.official_shop;
+    breakdown.official_shop = c.signals.official_shop;
+    signals.push('official_shop');
+  }
+
+  if (product.brand_signal) {
+    score += c.signals.brand;
+    breakdown.brand = c.signals.brand;
+    signals.push('brand');
+  }
+
+  const matchedTier = c.tiers.find(t => score >= t.min) || c.default_tier;
+  let priority = matchedTier.priority;
+
+  // Garantir a regra do Priority baseada nos pontos específicos que o prompt cita caso difira:
+  // "Priority: HIGH >=75, MEDIUM >=55, LOW <55"
+  if (score >= 75) priority = 'HIGH';
+  else if (score >= 55) priority = 'MEDIUM';
+  else priority = 'LOW';
+
+  return {
+    score,
+    tier: matchedTier.name,
+    priority,
+    signals,
+    penalties,
+    breakdown
+  };
+}
+
+// ============================================================================
+// SPRINT 09.3: Histórico Inteligente de Produtos
+// ============================================================================
+
+const SHOPEE_HISTORY_CONFIG = {
+  cooldownDays: 7,
+  significantPriceDropPercent: 15,
+  significantDiscountIncreasePercent: 15,
+  significantCommissionIncreasePercent: 3,
+  significantDiscoveryScoreIncrease: 15,
+  maxHistoryEntries: 20,
+  cleanupAfterDays: 60
+};
+
+const HISTORY_REASON = {
+  FIRST_SEEN: 'FIRST_SEEN',
+  NEW_PRODUCT: 'NEW_PRODUCT',
+  COOLDOWN_EXPIRED: 'COOLDOWN_EXPIRED',
+  PRICE_DROP: 'PRICE_DROP',
+  PRICE_INCREASE: 'PRICE_INCREASE',
+  DISCOUNT_INCREASE: 'DISCOUNT_INCREASE',
+  COMMISSION_INCREASE: 'COMMISSION_INCREASE',
+  DISCOVERY_SCORE_INCREASE: 'DISCOVERY_SCORE_INCREASE',
+  NEVER_PROCESSED: 'NEVER_PROCESSED',
+  NEVER_POSTED: 'NEVER_POSTED',
+  NO_SIGNIFICANT_CHANGE: 'NO_SIGNIFICANT_CHANGE',
+  FORCED_REPROCESS: 'FORCED_REPROCESS'
+};
+
+class FileSeenProductStore {
+  constructor() {
+    this.dbPath = pathModule.join(__dirname, '..', 'data', 'shopee_seen_products.json');
+    this.data = this._load();
+  }
+  _load() {
+    if (fs.existsSync(this.dbPath)) {
+      try { return JSON.parse(fs.readFileSync(this.dbPath, 'utf8')); }
+      catch(e) { return {}; }
+    }
+    return {};
+  }
+  _save() {
+    const dir = pathModule.dirname(this.dbPath);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(this.dbPath, JSON.stringify(this.data, null, 2), 'utf8');
+  }
+  getProduct(fingerprint) {
+    return this.data[fingerprint] || null;
+  }
+  saveProduct(fingerprint, productData) {
+    this.data[fingerprint] = productData;
+    this._save();
+  }
+  removeProduct(fingerprint) {
+    delete this.data[fingerprint];
+    this._save();
+  }
+  getAll() {
+    return Object.entries(this.data);
+  }
+}
+
+class SeenProductStore {
+  constructor() {
+    this.provider = new FileSeenProductStore();
+  }
+  get(fingerprint) { return this.provider.getProduct(fingerprint); }
+  save(fingerprint, data) { return this.provider.saveProduct(fingerprint, data); }
+  remove(fingerprint) { return this.provider.removeProduct(fingerprint); }
+  getAll() { return this.provider.getAll(); }
+}
+const seenProductStore = new SeenProductStore();
+
+function getProductFingerprint(product) {
+  if (product.itemId && product.shopee_shop_id) return `${product.itemId}_${product.shopee_shop_id}`;
+  if (product.shopee_item_id && product.shopee_shop_id) return `${product.shopee_item_id}_${product.shopee_shop_id}`;
+  if (product.itemId) return String(product.itemId);
+  if (product.shopee_item_id) return String(product.shopee_item_id);
+  if (product.offerLink) return product.offerLink.split('?')[0];
+  if (product.affiliate_url) return product.affiliate_url.split('?')[0];
+  if (product.productLink) return product.productLink.split('?')[0];
+  if (product.original_url) return product.original_url.split('?')[0];
+  const name = product.productName || product.product_name || '';
+  const shop = product.raw_node?.shopName || product.shopName || '';
+  const cat = product.categoria_original || product.category || '';
+  return Buffer.from(`${name}_${shop}_${cat}`).toString('base64');
+}
+
+function shouldProcessProduct(product) {
+  const fp = getProductFingerprint(product);
+  const prev = seenProductStore.get(fp);
+
+  const currentPrice = product.current_price || 0;
+  const currentDiscount = product.discount_rate || 0;
+  
+  let rawComm = product.commission_rate || product.raw_node?.sellerCommissionRate || product.raw_node?.shopeeCommissionRate || 0;
+  let currentComm = parseFloat(rawComm) || 0;
+  if (currentComm > 0 && currentComm <= 1) currentComm *= 100;
+  
+  const scoreResult = calculateShopeeDiscoveryScore(product);
+  const currentScore = scoreResult.score;
+
+  if (!prev) {
+    return {
+      shouldProcess: true,
+      historyReason: HISTORY_REASON.FIRST_SEEN,
+      previousRecord: null,
+      changes: {
+        price: { old: null, new: currentPrice },
+        discount: { old: null, new: currentDiscount },
+        commission: { old: null, new: currentComm },
+        score: { old: null, new: currentScore }
+      }
+    };
+  }
+
+  const oldPrice = prev.currentPrice || 0;
+  const oldDiscount = prev.priceDiscountRate || 0;
+  const oldComm = prev.commissionRate || 0;
+  const oldScore = prev.discoveryScore || 0;
+
+  const changes = {
+    price: { old: oldPrice, new: currentPrice },
+    discount: { old: oldDiscount, new: currentDiscount },
+    commission: { old: oldComm, new: currentComm },
+    score: { old: oldScore, new: currentScore }
+  };
+
+  const now = Date.now();
+  const lastProcessed = prev.lastProcessedAt || prev.lastSeenAt || 0;
+  const daysSinceProcessed = (now - lastProcessed) / (1000 * 60 * 60 * 24);
+
+  if (daysSinceProcessed >= SHOPEE_HISTORY_CONFIG.cooldownDays) {
+    return { shouldProcess: true, historyReason: HISTORY_REASON.COOLDOWN_EXPIRED, previousRecord: prev, changes };
+  }
+
+  if (oldPrice > 0 && currentPrice < oldPrice) {
+    const dropPercent = ((oldPrice - currentPrice) / oldPrice) * 100;
+    if (dropPercent >= SHOPEE_HISTORY_CONFIG.significantPriceDropPercent) {
+      return { shouldProcess: true, historyReason: HISTORY_REASON.PRICE_DROP, previousRecord: prev, changes };
+    }
+  }
+
+  if (currentDiscount > oldDiscount && (currentDiscount - oldDiscount) >= SHOPEE_HISTORY_CONFIG.significantDiscountIncreasePercent) {
+    return { shouldProcess: true, historyReason: HISTORY_REASON.DISCOUNT_INCREASE, previousRecord: prev, changes };
+  }
+
+  if (currentComm > oldComm && (currentComm - oldComm) >= SHOPEE_HISTORY_CONFIG.significantCommissionIncreasePercent) {
+    return { shouldProcess: true, historyReason: HISTORY_REASON.COMMISSION_INCREASE, previousRecord: prev, changes };
+  }
+
+  if (currentScore > oldScore && (currentScore - oldScore) >= SHOPEE_HISTORY_CONFIG.significantDiscoveryScoreIncrease) {
+    return { shouldProcess: true, historyReason: HISTORY_REASON.DISCOVERY_SCORE_INCREASE, previousRecord: prev, changes };
+  }
+
+  return { shouldProcess: false, historyReason: HISTORY_REASON.NO_SIGNIFICANT_CHANGE, previousRecord: prev, changes };
+}
+
+function registerSeenProduct(product, historyReason, processed = false) {
+  const fp = getProductFingerprint(product);
+  const prev = seenProductStore.get(fp) || {};
+  const now = Date.now();
+
+  let rawComm = product.commission_rate || product.raw_node?.sellerCommissionRate || product.raw_node?.shopeeCommissionRate || 0;
+  let currentComm = parseFloat(rawComm) || 0;
+  if (currentComm > 0 && currentComm <= 1) currentComm *= 100;
+
+  const scoreResult = calculateShopeeDiscoveryScore(product);
+
+  const newRecord = {
+    itemId: product.shopee_item_id || product.itemId,
+    shopId: product.shopee_shop_id || product.shopId || product.raw_node?.shopId,
+    productName: product.product_name || product.productName,
+    shopName: product.raw_node?.shopName || product.shopName,
+    categoria: product.categoria_original || product.category,
+    offerLink: product.affiliate_url || product.offerLink,
+    productLink: product.original_url || product.productLink,
+    currentPrice: product.current_price,
+    priceDiscountRate: product.discount_rate,
+    commissionRate: currentComm,
+    discoveryScore: scoreResult.score,
+    tier: scoreResult.tier,
+    priority: scoreResult.priority,
+    
+    firstSeenAt: prev.firstSeenAt || now,
+    lastSeenAt: now,
+    lastProcessedAt: processed ? now : (prev.lastProcessedAt || null),
+    timesSeen: (prev.timesSeen || 0) + 1,
+    timesProcessed: processed ? (prev.timesProcessed || 0) + 1 : (prev.timesProcessed || 0),
+    historyReason,
+    events: prev.events || []
+  };
+
+  const event = {
+    timestamp: now,
+    eventType: processed ? 'PROCESSED' : 'SEEN',
+    historyReason,
+    oldPrice: prev.currentPrice || null,
+    newPrice: newRecord.currentPrice,
+    oldDiscount: prev.priceDiscountRate || null,
+    newDiscount: newRecord.priceDiscountRate,
+    oldCommission: prev.commissionRate || null,
+    newCommission: newRecord.commissionRate,
+    oldDiscoveryScore: prev.discoveryScore || null,
+    newDiscoveryScore: newRecord.discoveryScore
+  };
+
+  newRecord.events.push(event);
+  if (newRecord.events.length > SHOPEE_HISTORY_CONFIG.maxHistoryEntries) {
+    newRecord.events = newRecord.events.slice(-SHOPEE_HISTORY_CONFIG.maxHistoryEntries);
+  }
+
+  seenProductStore.save(fp, newRecord);
+  return newRecord;
+}
+
+function cleanupSeenProducts() {
+  const all = seenProductStore.getAll();
+  const now = Date.now();
+  const maxAgeMs = SHOPEE_HISTORY_CONFIG.cleanupAfterDays * 24 * 60 * 60 * 1000;
+  let removedCount = 0;
+
+  for (const [fp, record] of all) {
+    const ageMs = now - (record.lastSeenAt || 0);
+    if (ageMs > maxAgeMs) {
+      seenProductStore.remove(fp);
+      removedCount++;
+    }
+  }
+  return removedCount;
+}
+
+// ============================================================================
+// SPRINT 09.4: Marketplace Selection Engine
+// ============================================================================
+
+const MARKETPLACE_SELECTION_CONFIG = {
+  Shopee: {
+    GLOBAL_LIMIT: 50,
+    CATEGORY_LIMIT: 10,
+    SHOP_LIMIT: 5,
+    BRAND_LIMIT: 3,
+    PRICE_RANGE_LIMIT: 15,
+    MIN_DISCOVERY_SCORE: 45,
+    MIN_HISTORY_SCORE: 0,
+    MIN_PRIORITY: 'MEDIUM',
+    ALLOW_LOW_PRIORITY: false,
+    ENABLE_CATEGORY_BALANCE: true,
+    ENABLE_SHOP_BALANCE: true,
+    ENABLE_BRAND_BALANCE: true,
+    ENABLE_PRICE_BALANCE: true,
+    PRICE_RANGES: [
+      { min: 0, max: 15, label: '0-15' },
+      { min: 15, max: 30, label: '15-30' },
+      { min: 30, max: 80, label: '30-80' },
+      { min: 80, max: 150, label: '80-150' },
+      { min: 150, max: 300, label: '150-300' },
+      { min: 300, max: 700, label: '300-700' },
+      { min: 700, max: Infinity, label: '700+' }
+    ],
+    BONUS: {
+      categoryDiversity: 15,
+      brandDiversity: 10,
+      shopDiversity: 10,
+      priceRangeDiversity: 5
+    }
+  }
+};
+
+const SELECTION_REASON = {
+  TOP_DISCOVERY_SCORE: 'TOP_DISCOVERY_SCORE',
+  TOP_HISTORY_SCORE: 'TOP_HISTORY_SCORE',
+  CATEGORY_BALANCE: 'CATEGORY_BALANCE',
+  SHOP_BALANCE: 'SHOP_BALANCE',
+  BRAND_BALANCE: 'BRAND_BALANCE',
+  PRICE_RANGE_BALANCE: 'PRICE_RANGE_BALANCE',
+  TOP_DISCOUNT: 'TOP_DISCOUNT',
+  TOP_COMMISSION: 'TOP_COMMISSION',
+  TOP_SALES: 'TOP_SALES',
+  FILLER_SELECTION: 'FILLER_SELECTION'
+};
+
+class MarketplaceSelectionAdapter {
+  constructor(marketplaceName) {
+    this.marketplace = marketplaceName;
+  }
+  
+  getCategory(product) {
+    if (this.marketplace === 'Shopee') return product.categoria_original || product.category || 'Geral';
+    return 'Geral';
+  }
+  getShop(product) {
+    if (this.marketplace === 'Shopee') return product.raw_node?.shopName || product.shopName || product.shopee_shop_id || 'UnknownShop';
+    return 'UnknownShop';
+  }
+  getBrand(product) {
+    if (this.marketplace === 'Shopee') {
+      const name = product.product_name || product.productName || '';
+      return name.split(' ')[0] || 'UnknownBrand'; 
+    }
+    return 'UnknownBrand';
+  }
+  getPrice(product) {
+    return product.current_price || 0;
+  }
+  getDiscount(product) {
+    return product.discount_rate || 0;
+  }
+  getCommission(product) {
+    let raw = product.commission_rate || product.raw_node?.sellerCommissionRate || product.raw_node?.shopeeCommissionRate || 0;
+    let c = parseFloat(raw) || 0;
+    if (c > 0 && c <= 1) c *= 100;
+    return c;
+  }
+  getSales(product) {
+    return product.sales || 0;
+  }
+  getRating(product) {
+    return product.rating || 0;
+  }
+  getPriority(product) {
+    return product.priority || 'LOW';
+  }
+  getDiscoveryScore(product) {
+    return product.discoveryScore || product.score || 0;
+  }
+  getHistoryScore(product) {
+    return product.historyScore || 0;
+  }
+  getId(product) {
+    if (this.marketplace === 'Shopee') return product.shopee_item_id || product.itemId || 'UnknownId';
+    return 'UnknownId';
+  }
+  getPriceRangeLabel(product, ranges) {
+    const p = this.getPrice(product);
+    for (const r of ranges) {
+      if (p >= r.min && p < r.max) return r.label;
+    }
+    return 'UnknownRange';
+  }
+}
+
+function calculateSelectionScore(product, adapter, config, inputFreqs) {
+  const ds = adapter.getDiscoveryScore(product);
+  const hs = adapter.getHistoryScore(product);
+  let bonus = 0;
+  
+  const cat = adapter.getCategory(product);
+  if (inputFreqs.category[cat] <= config.CATEGORY_LIMIT) bonus += config.BONUS.categoryDiversity;
+
+  const shop = adapter.getShop(product);
+  if (inputFreqs.shop[shop] <= config.SHOP_LIMIT) bonus += config.BONUS.shopDiversity;
+
+  const brand = adapter.getBrand(product);
+  if (inputFreqs.brand[brand] <= config.BRAND_LIMIT) bonus += config.BONUS.brandDiversity;
+  
+  const priceLabel = adapter.getPriceRangeLabel(product, config.PRICE_RANGES);
+  if (inputFreqs.priceRange[priceLabel] <= config.PRICE_RANGE_LIMIT) bonus += config.BONUS.priceRangeDiversity;
+
+  return ds + hs + bonus;
+}
+
+function runMarketplaceSelectionEngine(products, marketplaceName) {
+  const config = MARKETPLACE_SELECTION_CONFIG[marketplaceName];
+  if (!config) throw new Error(`Marketplace config not found: ${marketplaceName}`);
+  const adapter = new MarketplaceSelectionAdapter(marketplaceName);
+
+  const stats = {
+    totalReceived: products.length,
+    totalSelected: 0,
+    totalDiscarded: 0,
+    totalHigh: 0,
+    totalMedium: 0,
+    totalLow: 0,
+    removedByPriority: 0,
+    removedByCategoryLimit: 0,
+    removedByShopLimit: 0,
+    removedByBrandLimit: 0,
+    removedByPriceRangeLimit: 0,
+    removedByGlobalLimit: 0
+  };
+
+  const selectionReasons = {};
+  Object.values(SELECTION_REASON).forEach(r => selectionReasons[r] = 0);
+
+  const inputFreqs = { category: {}, shop: {}, brand: {}, priceRange: {} };
+  for (const p of products) {
+    const c = adapter.getCategory(p);
+    const s = adapter.getShop(p);
+    const b = adapter.getBrand(p);
+    const pr = adapter.getPriceRangeLabel(p, config.PRICE_RANGES);
+    
+    inputFreqs.category[c] = (inputFreqs.category[c] || 0) + 1;
+    inputFreqs.shop[s] = (inputFreqs.shop[s] || 0) + 1;
+    inputFreqs.brand[b] = (inputFreqs.brand[b] || 0) + 1;
+    inputFreqs.priceRange[pr] = (inputFreqs.priceRange[pr] || 0) + 1;
+    
+    const prio = adapter.getPriority(p);
+    if (prio === 'HIGH') stats.totalHigh++;
+    else if (prio === 'MEDIUM') stats.totalMedium++;
+    else if (prio === 'LOW') stats.totalLow++;
+  }
+
+  let candidates = [];
+  let discarded = [];
+  for (const p of products) {
+    const prio = adapter.getPriority(p);
+    if (!config.ALLOW_LOW_PRIORITY && prio === 'LOW') {
+      discarded.push({ product: p, reason: 'REJECTED_PRIORITY' });
+      stats.removedByPriority++;
+    } else {
+      p._selectionScore = calculateSelectionScore(p, adapter, config, inputFreqs);
+      candidates.push(p);
+    }
+  }
+
+  candidates.sort((a, b) => {
+    if (b._selectionScore !== a._selectionScore) return b._selectionScore - a._selectionScore;
+    const dsA = adapter.getDiscoveryScore(a), dsB = adapter.getDiscoveryScore(b);
+    if (dsB !== dsA) return dsB - dsA;
+    const hsA = adapter.getHistoryScore(a), hsB = adapter.getHistoryScore(b);
+    if (hsB !== hsA) return hsB - hsA;
+    const sA = adapter.getSales(a), sB = adapter.getSales(b);
+    if (sB !== sA) return sB - sA;
+    const dscA = adapter.getDiscount(a), dscB = adapter.getDiscount(b);
+    if (dscB !== dscA) return dscB - dscA;
+    const commA = adapter.getCommission(a), commB = adapter.getCommission(b);
+    if (commB !== commA) return commB - commA;
+    const rA = adapter.getRating(a), rB = adapter.getRating(b);
+    return rB - rA;
+  });
+
+  const selCat = {};
+  const selShop = {};
+  const selBrand = {};
+  const selPrice = {};
+  const selected = [];
+
+  for (const p of candidates) {
+    if (selected.length >= config.GLOBAL_LIMIT) {
+      discarded.push({ product: p, reason: 'REJECTED_GLOBAL_LIMIT' });
+      stats.removedByGlobalLimit++;
+      continue;
+    }
+
+    const cat = adapter.getCategory(p);
+    if (config.ENABLE_CATEGORY_BALANCE && (selCat[cat] || 0) >= config.CATEGORY_LIMIT) {
+      discarded.push({ product: p, reason: 'REJECTED_CATEGORY_LIMIT' });
+      stats.removedByCategoryLimit++;
+      continue;
+    }
+
+    const shop = adapter.getShop(p);
+    if (config.ENABLE_SHOP_BALANCE && (selShop[shop] || 0) >= config.SHOP_LIMIT) {
+      discarded.push({ product: p, reason: 'REJECTED_SHOP_LIMIT' });
+      stats.removedByShopLimit++;
+      continue;
+    }
+
+    const brand = adapter.getBrand(p);
+    if (config.ENABLE_BRAND_BALANCE && (selBrand[brand] || 0) >= config.BRAND_LIMIT) {
+      discarded.push({ product: p, reason: 'REJECTED_BRAND_LIMIT' });
+      stats.removedByBrandLimit++;
+      continue;
+    }
+
+    const priceL = adapter.getPriceRangeLabel(p, config.PRICE_RANGES);
+    if (config.ENABLE_PRICE_BALANCE && (selPrice[priceL] || 0) >= config.PRICE_RANGE_LIMIT) {
+      discarded.push({ product: p, reason: 'REJECTED_PRICE_RANGE_LIMIT' });
+      stats.removedByPriceRangeLimit++;
+      continue;
+    }
+
+    selCat[cat] = (selCat[cat] || 0) + 1;
+    selShop[shop] = (selShop[shop] || 0) + 1;
+    selBrand[brand] = (selBrand[brand] || 0) + 1;
+    selPrice[priceL] = (selPrice[priceL] || 0) + 1;
+
+    let reason = SELECTION_REASON.FILLER_SELECTION;
+    if (p._selectionScore >= 80) reason = SELECTION_REASON.TOP_DISCOVERY_SCORE;
+    else if (adapter.getHistoryScore(p) > 10) reason = SELECTION_REASON.TOP_HISTORY_SCORE;
+    else if (selCat[cat] === 1) reason = SELECTION_REASON.CATEGORY_BALANCE;
+    else if (selShop[shop] === 1) reason = SELECTION_REASON.SHOP_BALANCE;
+    else if (selBrand[brand] === 1) reason = SELECTION_REASON.BRAND_BALANCE;
+    else if (selPrice[priceL] === 1) reason = SELECTION_REASON.PRICE_RANGE_BALANCE;
+    else if (adapter.getDiscount(p) >= 50) reason = SELECTION_REASON.TOP_DISCOUNT;
+    else if (adapter.getCommission(p) >= 15) reason = SELECTION_REASON.TOP_COMMISSION;
+    else if (adapter.getSales(p) >= 5000) reason = SELECTION_REASON.TOP_SALES;
+    
+    p._selectionReason = reason;
+    selectionReasons[reason]++;
+    selected.push(p);
+  }
+
+  stats.totalSelected = selected.length;
+  stats.totalDiscarded = discarded.length;
+
+  const mkDist = (map) => {
+    const list = [];
+    for (const [name, qty] of Object.entries(map)) {
+      list.push({
+        nome: name,
+        quantidade: qty,
+        percentual: stats.totalSelected > 0 ? ((qty / stats.totalSelected) * 100).toFixed(2) + '%' : '0%'
+      });
+    }
+    return list.sort((a,b) => b.quantidade - a.quantidade);
+  };
+
+  return {
+    selectedProducts: selected,
+    discardedProducts: discarded,
+    statistics: stats,
+    selectionReasons,
+    categoryDistribution: mkDist(selCat),
+    shopDistribution: mkDist(selShop),
+    brandDistribution: mkDist(selBrand),
+    priceDistribution: mkDist(selPrice)
+  };
+}
+
+// ============================================================================
+// SPRINT 09.5: Marketplace Candidate Queue
+// ============================================================================
+
+const MARKETPLACE_CANDIDATE_CONFIG = {
+  MAX_QUEUE_SIZE: 500,
+  ALLOW_DUPLICATES: false,
+  VALIDATE_BEFORE_QUEUE: true,
+  AUTO_REMOVE_INVALID: true,
+  SORT_STABLE: true
+};
+
+const CANDIDATE_STATUS = {
+  DISCOVERED: 'DISCOVERED',
+  SELECTED: 'SELECTED',
+  READY_FOR_RANKING: 'READY_FOR_RANKING',
+  READY_FOR_AI: 'READY_FOR_AI',
+  READY_FOR_MANUAL_REVIEW: 'READY_FOR_MANUAL_REVIEW',
+  APPROVED: 'APPROVED',
+  REJECTED: 'REJECTED',
+  POSTED: 'POSTED',
+  EXPIRED: 'EXPIRED'
+};
+
+class MarketplaceCandidateFactory {
+  static createMarketplaceCandidate(product, marketplaceName, adapter) {
+    const now = Date.now();
+    const itemId = adapter.getId(product);
+    const shopId = product.shopee_shop_id || product.shopId || product.raw_node?.shopId || 'UnknownShopId';
+    
+    const rawId = `${marketplaceName}_${itemId}_${shopId}`;
+    const candidateId = Buffer.from(rawId).toString('base64');
+
+    return {
+      candidateId,
+      marketplace: marketplaceName,
+      marketplaceProductId: String(itemId),
+      shopId: String(shopId),
+      productName: String(product.product_name || product.productName || ''),
+      shopName: adapter.getShop(product),
+      brand: adapter.getBrand(product),
+      category: adapter.getCategory(product),
+      currentPrice: adapter.getPrice(product),
+      originalPrice: product.original_price || product.price_before_discount || adapter.getPrice(product),
+      discount: adapter.getDiscount(product),
+      commission: adapter.getCommission(product),
+      rating: adapter.getRating(product),
+      sales: adapter.getSales(product),
+      currency: product.currency || 'BRL',
+      image: product.image || product.product_image || product.cover || '',
+      affiliateLink: product.affiliate_url || product.offerLink || '',
+      productLink: product.original_url || product.productLink || '',
+      selectionScore: product._selectionScore || 0,
+      discoveryScore: adapter.getDiscoveryScore(product),
+      historyScore: adapter.getHistoryScore(product),
+      priority: adapter.getPriority(product),
+      tier: product.tier || 'UNKNOWN',
+      selectionReason: product._selectionReason || 'NONE',
+      historyReason: product.historyReason || 'NONE',
+      createdAt: now,
+      updatedAt: now,
+      status: CANDIDATE_STATUS.SELECTED,
+      selectionEngineVersion: '1.0',
+      discoveryVersion: '1.0',
+      historyVersion: '1.0',
+      selectionVersion: '1.0'
+    };
+  }
+}
+
+function validateMarketplaceCandidate(candidate) {
+  const errors = [];
+  
+  if (!candidate.candidateId) errors.push('Missing candidateId');
+  if (!candidate.marketplace) errors.push('Missing marketplace');
+  if (!candidate.productName) errors.push('Missing productName');
+  if (candidate.currentPrice == null || candidate.currentPrice < 0) errors.push('Invalid currentPrice');
+  if (!candidate.affiliateLink) errors.push('Missing affiliateLink');
+  if (candidate.selectionScore == null) errors.push('Missing selectionScore');
+  if (!candidate.status) errors.push('Missing status');
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+function createMarketplaceCandidateQueue(selectedProducts, marketplaceName) {
+  const adapter = new MarketplaceSelectionAdapter(marketplaceName);
+  const config = MARKETPLACE_SELECTION_CONFIG[marketplaceName];
+  
+  let candidates = [];
+  const stats = {
+    totalCandidates: 0,
+    validCandidates: 0,
+    invalidCandidates: 0,
+    duplicatedCandidates: 0,
+    discardedCandidates: 0,
+    readyCandidates: 0
+  };
+
+  const idMap = new Map();
+
+  for (const p of selectedProducts) {
+    stats.totalCandidates++;
+    const candidate = MarketplaceCandidateFactory.createMarketplaceCandidate(p, marketplaceName, adapter);
+    
+    if (MARKETPLACE_CANDIDATE_CONFIG.VALIDATE_BEFORE_QUEUE) {
+      const validation = validateMarketplaceCandidate(candidate);
+      if (!validation.isValid) {
+        stats.invalidCandidates++;
+        if (MARKETPLACE_CANDIDATE_CONFIG.AUTO_REMOVE_INVALID) {
+          stats.discardedCandidates++;
+          continue;
+        }
+      } else {
+        stats.validCandidates++;
+      }
+    }
+
+    if (!MARKETPLACE_CANDIDATE_CONFIG.ALLOW_DUPLICATES) {
+      if (idMap.has(candidate.candidateId)) {
+        stats.duplicatedCandidates++;
+        idMap.set(candidate.candidateId, candidate);
+      } else {
+        idMap.set(candidate.candidateId, candidate);
+      }
+    } else {
+      candidates.push(candidate);
+    }
+  }
+
+  if (!MARKETPLACE_CANDIDATE_CONFIG.ALLOW_DUPLICATES) {
+    candidates = Array.from(idMap.values());
+  }
+
+  const prioValue = { 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1, 'UNKNOWN': 0 };
+  
+  if (MARKETPLACE_CANDIDATE_CONFIG.SORT_STABLE) {
+    candidates.sort((a, b) => {
+      if (b.selectionScore !== a.selectionScore) return b.selectionScore - a.selectionScore;
+      if (b.discoveryScore !== a.discoveryScore) return b.discoveryScore - a.discoveryScore;
+      if (b.historyScore !== a.historyScore) return b.historyScore - a.historyScore;
+      
+      const pA = prioValue[a.priority] || 0;
+      const pB = prioValue[b.priority] || 0;
+      if (pB !== pA) return pB - pA;
+      
+      if (b.sales !== a.sales) return b.sales - a.sales;
+      if (b.discount !== a.discount) return b.discount - a.discount;
+      if (b.commission !== a.commission) return b.commission - a.commission;
+      return b.rating - a.rating;
+    });
+  }
+
+  if (candidates.length > MARKETPLACE_CANDIDATE_CONFIG.MAX_QUEUE_SIZE) {
+    stats.discardedCandidates += (candidates.length - MARKETPLACE_CANDIDATE_CONFIG.MAX_QUEUE_SIZE);
+    candidates = candidates.slice(0, MARKETPLACE_CANDIDATE_CONFIG.MAX_QUEUE_SIZE);
+  }
+
+  stats.readyCandidates = candidates.length;
+
+  const freqCat = {};
+  const freqShop = {};
+  const freqBrand = {};
+  const freqPrice = {};
+  const freqMk = {};
+
+  for (const c of candidates) {
+    freqCat[c.category] = (freqCat[c.category] || 0) + 1;
+    freqShop[c.shopName] = (freqShop[c.shopName] || 0) + 1;
+    freqBrand[c.brand] = (freqBrand[c.brand] || 0) + 1;
+    
+    let pLabel = 'UnknownRange';
+    const ranges = config?.PRICE_RANGES || [];
+    for (const r of ranges) {
+      if (c.currentPrice >= r.min && c.currentPrice < r.max) { pLabel = r.label; break; }
+    }
+    freqPrice[pLabel] = (freqPrice[pLabel] || 0) + 1;
+    freqMk[c.marketplace] = (freqMk[c.marketplace] || 0) + 1;
+  }
+
+  const mkDist = (map) => {
+    const list = [];
+    for (const [name, qty] of Object.entries(map)) {
+      list.push({
+        nome: name,
+        quantidade: qty,
+        percentual: stats.readyCandidates > 0 ? ((qty / stats.readyCandidates) * 100).toFixed(2) + '%' : '0%'
+      });
+    }
+    return list.sort((a,b) => b.quantidade - a.quantidade);
+  };
+
+  return {
+    candidates,
+    statistics: stats,
+    distributions: {
+      marketplaceDistribution: mkDist(freqMk),
+      categoryDistribution: mkDist(freqCat),
+      shopDistribution: mkDist(freqShop),
+      brandDistribution: mkDist(freqBrand),
+      priceDistribution: mkDist(freqPrice)
+    }
+  };
+}
+
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
-  if (isShopeeV4DryRun) {
+  if (isShopeeOfficialDryRun) {
+    runShopeeOfficialDryRun().catch(e => {
+      console.error('❌ Erro no shopee official dry-run:', e.message);
+      process.exitCode = 1;
+    });
+  } else if (isShopeeV4DryRun) {
     runShopeeV4DryRun().catch(e => {
       console.error('❌ Erro no shopee dry-run:', e.message);
       process.exitCode = 1;
@@ -3798,6 +4702,214 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
     });
   }
 }
+
+/**
+ * Sprint 09.1 — Shopee Official Discovery
+ * Fonte adicional à Shopee V4. Não substitui V4. Não chama IA. Não salva no banco.
+ * @param {object} options
+ * @param {string[]} [options.categories] — lista de categorias (default: SHOPEE_OFFICIAL_CATEGORIES)
+ * @param {number[]} [options.sortTypes] — sortTypes a usar (default: [2,4,5])
+ * @param {number[]} [options.pages] — páginas por categoria (default: [1,2])
+ * @param {number} [options.limit] — produtos por request (default: 50)
+ * @returns {{ products: object[], rawReturns: number, isFallback: boolean, categories: string[] }}
+ */
+async function fetchShopeeOfficialDiscovery(options = {}) {
+  const {
+    categories = SHOPEE_OFFICIAL_CATEGORIES,
+    sortTypes = [2, 4, 5],
+    pages = [1, 2],
+    limit = 50
+  } = options;
+
+  // Tenta extrair categorias da página /oficial dinamicamente
+  let resolvedCategories = categories;
+  let isFallback = true;
+
+  try {
+    const browser = await chromium.launch({ headless: true });
+    const pg = await browser.newPage();
+    await pg.goto('https://shopee.com.br/oficial', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await pg.waitForTimeout(4000);
+    const pageTexts = await pg.evaluate(() =>
+      Array.from(document.querySelectorAll('div, span, a'))
+        .map(el => (el.innerText || '').trim())
+        .filter(t => t.length > 2 && t.length < 40 && !t.includes('\n'))
+    );
+    await browser.close();
+    const found = SHOPEE_OFFICIAL_CATEGORIES.filter(c => pageTexts.includes(c));
+    if (found.length > 5) {
+      resolvedCategories = found;
+      isFallback = false;
+      console.log('[Shopee Official] Categorias extraídas da página /oficial:', found.length);
+    } else {
+      console.log('[Shopee Official] Poucas categorias encontradas na página. Usando fallback.');
+    }
+  } catch (err) {
+    console.log('[Shopee Official] Falha ao extrair categorias dinamicamente. Usando fallback. Motivo:', err.message);
+  }
+
+  const allRaw = [];
+  let rawReturns = 0;
+
+  for (const cat of resolvedCategories) {
+    console.log('[Shopee Official] Categoria:', cat);
+    const catRaw = [];
+    for (const sortType of sortTypes) {
+      for (const page of pages) {
+        try {
+          const nodes = await fetchShopeeProductsOfferV2(sortType, cat, limit, page);
+          if (nodes && nodes.length > 0) {
+            rawReturns += nodes.length;
+            // Adiciona metadados de origem antes de deduplicar
+            catRaw.push(...nodes.map(n => ({ ...n, _categoria_original: cat, _sortType: sortType, _page: page })));
+          }
+        } catch (e) {
+          console.warn('[Shopee Official] Erro cat=' + cat + ' sort=' + sortType + ' page=' + page + ':', e.message);
+        }
+      }
+    }
+    // Deduplica por categoria antes de empilhar globalmente
+    allRaw.push(...dedupeShopeeProducts(catRaw));
+  }
+
+  // Deduplica global
+  const uniqueNodes = dedupeShopeeProducts(allRaw);
+
+  // Normaliza usando helper existente + enriquece com campos do Official Discovery
+  const products = uniqueNodes.map(node => {
+    const base = normalizeShopeeProduct(node);
+    if (!base) return null;
+    const shopNameLower = (node.shopName || '').toLowerCase();
+    const officialSignal = ['oficial', 'official', 'loja oficial', 'mall', 'store', 'brasil', 'official store']
+      .some(s => shopNameLower.includes(s)) ? 1 : 0;
+    return {
+      ...base,
+      categoria_original: node._categoria_original || 'Geral',
+      sortType: node._sortType,
+      page: node._page,
+      official_shop_signal: officialSignal,
+      brand_signal: officialSignal && shopNameLower.split(' ').length <= 3 ? 1 : 0,
+      raw_node: node
+    };
+  }).filter(Boolean);
+
+  return { products, rawReturns, isFallback, categories: resolvedCategories };
+}
+
+async function runShopeeOfficialDryRun() {
+  console.log('\n[Shopee Official Dry-Run 09.1] Iniciando...\n');
+  const pathModule = require('path');
+  const reportsDir = pathModule.join(__dirname, '..', 'reports');
+  if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
+
+  const { products, rawReturns, isFallback, categories } = await fetchShopeeOfficialDiscovery();
+
+  const summary = {
+    sprint: '09.1',
+    timestamp: new Date().toISOString(),
+    categorias_origem: isFallback ? 'fallback' : 'extraida',
+    categorias_usadas: categories.length,
+    categorias: categories,
+    produtos_brutos_retornados: rawReturns,
+    produtos_unicos: products.length,
+    duplicados_removidos: rawReturns - products.length,
+    ia_chamada: false,
+    banco_alterado: false,
+    publicacao_ocorreu: false,
+    shopee_v4_preservada: true
+  };
+
+  fs.writeFileSync(
+    pathModule.join(reportsDir, 'sprint_09.1_shopee_official_summary.json'),
+    JSON.stringify(summary, null, 2)
+  );
+
+  // CSV candidatos
+  const csvHeader = 'itemId,shopId,productName,shopName,currentPrice,priceDiscountRate,sales,ratingStar,commissionRate,categoria_original,official_shop_signal,brand_signal,offerLink\n';
+  const csvRows = products.map(p => [
+    p.shopee_item_id, p.shopee_shop_id,
+    '"' + (p.product_name||'').replace(/"/g,'""') + '"',
+    '"' + (p.raw_node?.shopName||'').replace(/"/g,'""') + '"',
+    p.current_price, p.discount_rate, p.sales, p.rating, p.commission_rate,
+    '"' + p.categoria_original + '"',
+    p.official_shop_signal, p.brand_signal,
+    p.affiliate_url
+  ].join(',')).join('\n');
+  fs.writeFileSync(pathModule.join(reportsDir, 'sprint_09.1_shopee_official_candidates.csv'), csvHeader + csvRows);
+
+  // CSV categorias
+  const catStats = categories.map(cat => {
+    const catProds = products.filter(p => p.categoria_original === cat);
+    return [
+      '"' + cat + '"',
+      catProds.length,
+      catProds.filter(p => p.sales >= 1000).length,
+      catProds.filter(p => p.discount_rate >= 25).length,
+      catProds.filter(p => p.official_shop_signal).length
+    ].join(',');
+  });
+  fs.writeFileSync(
+    pathModule.join(reportsDir, 'sprint_09.1_shopee_official_categories.csv'),
+    'categoria,produtos_unicos,vendas_1k,desconto_25,loja_oficial\n' + catStats.join('\n')
+  );
+
+  // MD report
+  const top20sales = [...products].sort((a,b) => (b.sales||0)-(a.sales||0)).slice(0,20);
+  const top20disc = [...products].sort((a,b) => (b.discount_rate||0)-(a.discount_rate||0)).slice(0,20);
+  const top20comm = [...products].sort((a,b) => (b.commission_rate||0)-(a.commission_rate||0)).slice(0,20);
+
+  const fmt = (arr, field, label) => arr.map((p,i) =>
+    (i+1) + '. ' + (p.product_name||'') + ' | ' + label + ': ' + (p[field]||0) + ' | ' + (p.raw_node?.shopName||'')
+  ).join('\n');
+
+  const md = [
+    '# Sprint 09.1 — Shopee Official Discovery',
+    '',
+    '## Limpeza 09.0-A',
+    '- Código temporário encontrado: `runShopeeOficialExplore` (linhas 3807-4057), flag `isShopeeOficialExplore`, branch no dispatch',
+    '- Código removido: função `runShopeeOficialExplore` completa, flag, branch',
+    '- Código reaproveitado: lógica de categorias → `SHOPEE_OFFICIAL_CATEGORIES`; lógica de consulta → `fetchShopeeOfficialDiscovery`',
+    '- Risco: nenhum — V4 não foi tocada',
+    '',
+    '## Integração',
+    '- `fetchShopeeOfficialDiscovery` criada: SIM',
+    '- Reutiliza `fetchShopeeProductsOfferV2`: SIM',
+    '- Reutiliza `parseShopeeMoney`: SIM (via normalizeShopeeProduct)',
+    '- Reutiliza `dedupeShopeeProducts`: SIM',
+    '- Reutiliza `normalizeShopeeProduct`: SIM',
+    '- Shopee V4 preservada: SIM',
+    '',
+    '## Resultados',
+    '- Categorias origem: ' + (isFallback ? 'fallback' : 'extraída da página'),
+    '- Categorias usadas: ' + categories.length,
+    '- Produtos brutos: ' + rawReturns,
+    '- Produtos únicos: ' + products.length,
+    '- Duplicados removidos: ' + (rawReturns - products.length),
+    '- IA chamada: NÃO',
+    '- Banco alterado: NÃO',
+    '- Publicação automática: NÃO',
+    '',
+    '## TOP 20 Vendas',
+    fmt(top20sales, 'sales', 'vendas'),
+    '',
+    '## TOP 20 Desconto',
+    fmt(top20disc, 'discount_rate', 'desconto%'),
+    '',
+    '## TOP 20 Comissão',
+    fmt(top20comm, 'commission_rate', 'comissão'),
+    '',
+    '## Pendências Sprint 09.2',
+    '- Implementar `calculateShopeeDiscoveryScore`',
+    '- Aplicar Discovery Score aos produtos retornados por `fetchShopeeOfficialDiscovery`'
+  ].join('\n');
+
+  fs.writeFileSync(pathModule.join(reportsDir, 'sprint_09.1_shopee_official_discovery.md'), md);
+  console.log(md);
+  console.log('\n[Shopee Official Dry-Run 09.1] Concluído. Relatórios em reports/');
+}
+
+
+
 module.exports = { 
   callLLM,
   callLLMWithFallback,
