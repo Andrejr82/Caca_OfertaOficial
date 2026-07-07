@@ -16,6 +16,7 @@ const os = require('os');
 os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const fs           = require('fs');
+const path         = require('path');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
@@ -3979,13 +3980,13 @@ const HISTORY_REASON = {
   NEVER_PROCESSED: 'NEVER_PROCESSED',
   NEVER_POSTED: 'NEVER_POSTED',
   NO_SIGNIFICANT_CHANGE: 'NO_SIGNIFICANT_CHANGE',
+  MANUAL_REVIEW_REVISIT: 'MANUAL_REVIEW_REVISIT',
   FORCED_REPROCESS: 'FORCED_REPROCESS'
 };
 
 class FileSeenProductStore {
   constructor() {
-    const pathModule = require('path');
-    this.dbPath = pathModule.join(__dirname, '..', 'data', 'shopee_seen_products.json');
+    this.dbPath = path.join(__dirname, '..', 'data', 'shopee_seen_products.json');
     this.data = this._load();
   }
   _load() {
@@ -3996,7 +3997,7 @@ class FileSeenProductStore {
     return {};
   }
   _save() {
-    const dir = pathModule.dirname(this.dbPath);
+    const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(this.dbPath, JSON.stringify(this.data, null, 2), 'utf8');
   }
@@ -4042,7 +4043,7 @@ function getProductFingerprint(product) {
   return Buffer.from(`${name}_${shop}_${cat}`).toString('base64');
 }
 
-function shouldProcessProduct(product) {
+function shouldProcessProduct(product, options = {}) {
   const fp = getProductFingerprint(product);
   const prev = seenProductStore.get(fp);
 
@@ -4107,6 +4108,13 @@ function shouldProcessProduct(product) {
 
   if (currentScore > oldScore && (currentScore - oldScore) >= SHOPEE_HISTORY_CONFIG.significantDiscoveryScoreIncrease) {
     return { shouldProcess: true, historyReason: HISTORY_REASON.DISCOVERY_SCORE_INCREASE, previousRecord: prev, changes };
+  }
+
+  if (options.mode === 'manual_review') {
+    const isProcessed = prev && (prev.timesProcessed > 0 || prev.lastProcessedAt);
+    if (!isProcessed) {
+      return { shouldProcess: true, historyReason: HISTORY_REASON.MANUAL_REVIEW_REVISIT, previousRecord: prev, changes };
+    }
   }
 
   return { shouldProcess: false, historyReason: HISTORY_REASON.NO_SIGNIFICANT_CHANGE, previousRecord: prev, changes };
@@ -4192,11 +4200,12 @@ function cleanupSeenProducts() {
 
 const MARKETPLACE_SELECTION_CONFIG = {
   Shopee: {
-    GLOBAL_LIMIT: 50,
-    CATEGORY_LIMIT: 10,
+    GLOBAL_LIMIT: 500,
+    CATEGORY_LIMIT: 25,
+    CATEGORY_MIN_TARGET: 5,
     SHOP_LIMIT: 5,
     BRAND_LIMIT: 3,
-    PRICE_RANGE_LIMIT: 15,
+    PRICE_RANGE_LIMIT: 150,
     MIN_DISCOVERY_SCORE: 45,
     MIN_HISTORY_SCORE: 0,
     MIN_PRIORITY: 'MEDIUM',
@@ -4391,8 +4400,45 @@ function runMarketplaceSelectionEngine(products, marketplaceName) {
   const selBrand = {};
   const selPrice = {};
   const selected = [];
+  const selectedSet = new Set();
 
+  // PASSO 1: garantir CATEGORY_MIN_TARGET por categoria (somente HIGH/MEDIUM)
+  const catMinTarget = config.CATEGORY_MIN_TARGET || 0;
+  if (catMinTarget > 0) {
+    const catBuckets = {};
+    for (const p of candidates) {
+      const cat = adapter.getCategory(p);
+      if (!catBuckets[cat]) catBuckets[cat] = [];
+      catBuckets[cat].push(p);
+    }
+    for (const cat of Object.keys(catBuckets)) {
+      let filled = 0;
+      for (const p of catBuckets[cat]) {
+        if (filled >= catMinTarget) break;
+        if (selectedSet.has(p)) continue;
+        if (selected.length >= config.GLOBAL_LIMIT) break;
+        const shop = adapter.getShop(p);
+        const brand = adapter.getBrand(p);
+        const priceL = adapter.getPriceRangeLabel(p, config.PRICE_RANGES);
+        if (config.ENABLE_SHOP_BALANCE && (selShop[shop] || 0) >= config.SHOP_LIMIT) continue;
+        if (config.ENABLE_BRAND_BALANCE && (selBrand[brand] || 0) >= config.BRAND_LIMIT) continue;
+        if (config.ENABLE_PRICE_BALANCE && (selPrice[priceL] || 0) >= config.PRICE_RANGE_LIMIT) continue;
+        selCat[cat] = (selCat[cat] || 0) + 1;
+        selShop[shop] = (selShop[shop] || 0) + 1;
+        selBrand[brand] = (selBrand[brand] || 0) + 1;
+        selPrice[priceL] = (selPrice[priceL] || 0) + 1;
+        p._selectionReason = SELECTION_REASON.CATEGORY_BALANCE;
+        selectionReasons[SELECTION_REASON.CATEGORY_BALANCE]++;
+        selected.push(p);
+        selectedSet.add(p);
+        filled++;
+      }
+    }
+  }
+
+  // PASSO 2: preencher restante por score normal
   for (const p of candidates) {
+    if (selectedSet.has(p)) continue;
     if (selected.length >= config.GLOBAL_LIMIT) {
       discarded.push({ product: p, reason: 'REJECTED_GLOBAL_LIMIT' });
       stats.removedByGlobalLimit++;
@@ -4446,6 +4492,7 @@ function runMarketplaceSelectionEngine(products, marketplaceName) {
     p._selectionReason = reason;
     selectionReasons[reason]++;
     selected.push(p);
+    selectedSet.add(p);
   }
 
   stats.totalSelected = selected.length;
@@ -4800,7 +4847,7 @@ async function fetchShopeeOfficialDiscovery(options = {}) {
   return { products, rawReturns, isFallback, categories: resolvedCategories };
 }
 
-async function runShopeeOfficialPipeline(targetCategory, limit = 5) {
+async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = { mode: 'manual_review' }) {
   let catList = SHOPEE_OFFICIAL_CATEGORIES;
   if (targetCategory && targetCategory !== 'Todas' && targetCategory !== 'Geral') {
     catList = [targetCategory];
@@ -4808,14 +4855,26 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5) {
   
   const { products } = await fetchShopeeOfficialDiscovery({ categories: catList, limit: 50 });
 
+  const diagHistory = { received: products.length, accepted: 0, rejected: 0, reasons: {} };
   const historyFiltered = [];
   for (const p of products) {
-    const histDecision = shouldProcessProduct(p);
+    const histDecision = shouldProcessProduct(p, options);
     p.historyReason = histDecision.historyReason;
     registerSeenProduct(p, histDecision.historyReason, false);
-    if (histDecision.shouldProcess) historyFiltered.push(p);
+    if (histDecision.shouldProcess) {
+      historyFiltered.push(p);
+      diagHistory.accepted++;
+    } else {
+      diagHistory.rejected++;
+    }
+    diagHistory.reasons[histDecision.historyReason] = (diagHistory.reasons[histDecision.historyReason] || 0) + 1;
   }
 
+  const diagScore = {
+    high: 0, medium: 0, low: 0,
+    min: Infinity, max: -Infinity, total: 0, count: 0,
+    ranges: { '< 0': 0, '0-10': 0, '11-30': 0, '31-50': 0, '51-80': 0, '> 80': 0 }
+  };
   const scoredProducts = [];
   for (const p of historyFiltered) {
     const scoreResult = calculateShopeeDiscoveryScore(p);
@@ -4823,9 +4882,66 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5) {
     p.tier = scoreResult.tier;
     p.priority = scoreResult.priority;
     scoredProducts.push(p);
+
+    diagScore.count++;
+    diagScore.total += p.discoveryScore;
+    if (p.discoveryScore < diagScore.min) diagScore.min = p.discoveryScore;
+    if (p.discoveryScore > diagScore.max) diagScore.max = p.discoveryScore;
+    
+    if (p.priority === 'HIGH') diagScore.high++;
+    else if (p.priority === 'MEDIUM') diagScore.medium++;
+    else if (p.priority === 'LOW') diagScore.low++;
+    
+    if (p.discoveryScore < 0) diagScore.ranges['< 0']++;
+    else if (p.discoveryScore <= 10) diagScore.ranges['0-10']++;
+    else if (p.discoveryScore <= 30) diagScore.ranges['11-30']++;
+    else if (p.discoveryScore <= 50) diagScore.ranges['31-50']++;
+    else if (p.discoveryScore <= 80) diagScore.ranges['51-80']++;
+    else diagScore.ranges['> 80']++;
   }
+  if (diagScore.count === 0) { diagScore.min = 0; diagScore.max = 0; }
+  diagScore.avg = diagScore.count > 0 ? (diagScore.total / diagScore.count).toFixed(2) : 0;
 
   const selectionResult = runMarketplaceSelectionEngine(scoredProducts, 'Shopee');
+  
+  const diagSelection = {
+    recebidos: scoredProducts.length,
+    aceitos: selectionResult.statistics.totalSelected,
+    removidos: selectionResult.statistics.totalDiscarded,
+    reasons: {
+      priority: selectionResult.statistics.removedByPriority,
+      category_limit: selectionResult.statistics.removedByCategoryLimit,
+      shop_limit: selectionResult.statistics.removedByShopLimit,
+      brand_limit: selectionResult.statistics.removedByBrandLimit,
+      price_limit: selectionResult.statistics.removedByPriceRangeLimit,
+      global_limit: selectionResult.statistics.removedByGlobalLimit,
+      duplicates: 0,
+      outros: selectionResult.statistics.totalDiscarded - (
+        selectionResult.statistics.removedByPriority +
+        selectionResult.statistics.removedByCategoryLimit +
+        selectionResult.statistics.removedByShopLimit +
+        selectionResult.statistics.removedByBrandLimit +
+        selectionResult.statistics.removedByPriceRangeLimit +
+        selectionResult.statistics.removedByGlobalLimit
+      )
+    }
+  };
+
+  const diagCategory = {};
+  for (const p of products) {
+    const cat = p.category || p.categoria_original || 'Sem Categoria';
+    if (!diagCategory[cat]) diagCategory[cat] = { recebidos: 0, pontuados: 0, selecionados: 0 };
+    diagCategory[cat].recebidos++;
+  }
+  for (const p of scoredProducts) {
+    const cat = p.category || p.categoria_original || 'Sem Categoria';
+    if (diagCategory[cat]) diagCategory[cat].pontuados++;
+  }
+  for (const p of selectionResult.selectedProducts) {
+    const cat = p.category || p.categoria_original || 'Sem Categoria';
+    if (diagCategory[cat]) diagCategory[cat].selecionados++;
+  }
+
   const queueResult = createMarketplaceCandidateQueue(selectionResult.selectedProducts, 'Shopee');
 
   let finalCandidates = queueResult.candidates;
@@ -4835,178 +4951,201 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5) {
   
   finalCandidates = finalCandidates.slice(0, limit);
 
+  console.log('\n[DIAGNOSTICS] =======================================');
+  console.log('HISTORY:', JSON.stringify(diagHistory, null, 2));
+  console.log('DISCOVERY SCORE:', JSON.stringify(diagScore, null, 2));
+  console.log('SELECTION ENGINE:', JSON.stringify(diagSelection, null, 2));
+  console.log('CATEGORY:', JSON.stringify(diagCategory, null, 2));
+  console.log('=====================================================\n');
+
   return {
     candidates: finalCandidates,
     telemetry: {
       marketplace: 'Shopee',
       category: targetCategory || 'Todas',
       received: products.length,
+      historyPassed: historyFiltered.length,
+      historyFilteredOut: products.length - historyFiltered.length,
+      scored: scoredProducts.length,
+      selected: selectionResult.statistics.totalSelected,
+      candidatesGenerated: queueResult.statistics.readyCandidates,
       returned: finalCandidates.length,
       filteredByCategory: queueResult.candidates.length - finalCandidates.length,
-      top10SelectionScore: finalCandidates.slice(0, 10).map(c => c.selectionScore)
+      top10SelectionScore: finalCandidates.slice(0, 10).map(c => c.selectionScore),
+      _selectionStats: selectionResult.statistics
     }
   };
 }
 
 async function runShopeeOfficialDryRun() {
-  console.log('\n[Shopee Official Dry-Run 09.1] Iniciando...\n');
-  const pathModule = require('path');
-  const reportsDir = pathModule.join(__dirname, '..', 'reports');
+  console.log('\n[Shopee Official Pipeline Dry-Run 10.0] Iniciando...\n');
+  const reportsDir = path.join(__dirname, '..', 'reports');
   if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir, { recursive: true });
 
-  const { products, rawReturns, isFallback, categories } = await fetchShopeeOfficialDiscovery();
+  console.log('Executando runShopeeOfficialPipeline...');
+  // Limite alto no dry-run para processar o máximo possível
+  const { candidates, telemetry } = await runShopeeOfficialPipeline('Todas', 500);
 
-  // --- SPRINT 09.6: PIPELINE INTEGRATION ---
-  
-  // 1. Marketplace History
-  const historyFiltered = [];
-  const historyStats = { received: products.length, filtered: 0, passed: 0 };
-  
-  for (const p of products) {
-    const histDecision = shouldProcessProduct(p);
-    p.historyReason = histDecision.historyReason;
-    
-    // Register as SEEN to history provider
-    registerSeenProduct(p, histDecision.historyReason, false);
-    
-    if (histDecision.shouldProcess) {
-      historyFiltered.push(p);
-      historyStats.passed++;
-    } else {
-      historyStats.filtered++;
+  // Enviar para Manual Review Queue
+  console.log('Enviando itens para Manual Review Queue...');
+  const manualQueue = new MarketplaceManualReviewQueue();
+  let addedToQueue = 0;
+  for (const c of candidates) {
+    if (manualQueue.enqueueMarketplaceCandidate(c)) {
+      addedToQueue++;
     }
   }
 
-  // 2. Discovery Score
-  const scoredProducts = [];
-  let scoredCount = 0;
-  
-  for (const p of historyFiltered) {
-    const scoreResult = calculateShopeeDiscoveryScore(p);
-    p.discoveryScore = scoreResult.score;
-    p.tier = scoreResult.tier;
-    p.priority = scoreResult.priority;
-    scoredProducts.push(p);
-    scoredCount++;
-  }
-
-  // 3. Marketplace Selection Engine
-  const selectionResult = runMarketplaceSelectionEngine(scoredProducts, 'Shopee');
-
-  // 4. Marketplace Candidate Queue
-  const queueResult = createMarketplaceCandidateQueue(selectionResult.selectedProducts, 'Shopee');
-
-  // --- FIM DA INTEGRAÇÃO DO PIPELINE ---
-
   const summary = {
-    sprint: '09.6',
+    sprint: '10.0',
     timestamp: new Date().toISOString(),
-    categorias_origem: isFallback ? 'fallback' : 'extraida',
-    categorias_usadas: categories.length,
-    categorias: categories,
-    produtos_brutos_retornados: rawReturns,
-    
-    // Telemetria Atualizada
-    produtos_recebidos: products.length,
-    produtos_filtrados_history: historyStats.filtered,
-    produtos_pontuados: scoredCount,
-    produtos_selecionados: selectionResult.statistics.totalSelected,
-    candidates_gerados: queueResult.statistics.readyCandidates,
-    
-    duplicados_removidos: rawReturns - products.length,
+    telemetry: telemetry,
+    manualReviewQueueAdded: addedToQueue,
     ia_chamada: false,
     banco_alterado: false,
     publicacao_ocorreu: false,
     shopee_v4_preservada: true
   };
 
-  fs.writeFileSync(
-    pathModule.join(reportsDir, 'sprint_09.1_shopee_official_summary.json'),
-    JSON.stringify(summary, null, 2)
-  );
-
-  // CSV candidatos
-  const csvHeader = 'itemId,shopId,productName,shopName,currentPrice,priceDiscountRate,sales,ratingStar,commissionRate,categoria_original,official_shop_signal,brand_signal,offerLink\n';
-  const csvRows = products.map(p => [
-    p.shopee_item_id, p.shopee_shop_id,
-    '"' + (p.product_name||'').replace(/"/g,'""') + '"',
-    '"' + (p.raw_node?.shopName||'').replace(/"/g,'""') + '"',
-    p.current_price, p.discount_rate, p.sales, p.rating, p.commission_rate,
-    '"' + p.categoria_original + '"',
-    p.official_shop_signal, p.brand_signal,
-    p.affiliate_url
-  ].join(',')).join('\n');
-  fs.writeFileSync(pathModule.join(reportsDir, 'sprint_09.1_shopee_official_candidates.csv'), csvHeader + csvRows);
-
-  // CSV categorias
-  const catStats = categories.map(cat => {
-    const catProds = products.filter(p => p.categoria_original === cat);
-    return [
-      '"' + cat + '"',
-      catProds.length,
-      catProds.filter(p => p.sales >= 1000).length,
-      catProds.filter(p => p.discount_rate >= 25).length,
-      catProds.filter(p => p.official_shop_signal).length
-    ].join(',');
-  });
-  fs.writeFileSync(
-    pathModule.join(reportsDir, 'sprint_09.1_shopee_official_categories.csv'),
-    'categoria,produtos_unicos,vendas_1k,desconto_25,loja_oficial\n' + catStats.join('\n')
-  );
-
-  // MD report
-  const top20sales = [...products].sort((a,b) => (b.sales||0)-(a.sales||0)).slice(0,20);
-  const top20disc = [...products].sort((a,b) => (b.discount_rate||0)-(a.discount_rate||0)).slice(0,20);
-  const top20comm = [...products].sort((a,b) => (b.commission_rate||0)-(a.commission_rate||0)).slice(0,20);
-
-  const fmt = (arr, field, label) => arr.map((p,i) =>
-    (i+1) + '. ' + (p.product_name||'') + ' | ' + label + ': ' + (p[field]||0) + ' | ' + (p.raw_node?.shopName||'')
-  ).join('\n');
-
   const md = [
-    '# Sprint 09.1 — Shopee Official Discovery',
+    '# Sprint 10.0 — Shopee Official Pipeline Validation',
     '',
-    '## Limpeza 09.0-A',
-    '- Código temporário encontrado: `runShopeeOficialExplore` (linhas 3807-4057), flag `isShopeeOficialExplore`, branch no dispatch',
-    '- Código removido: função `runShopeeOficialExplore` completa, flag, branch',
-    '- Código reaproveitado: lógica de categorias → `SHOPEE_OFFICIAL_CATEGORIES`; lógica de consulta → `fetchShopeeOfficialDiscovery`',
-    '- Risco: nenhum — V4 não foi tocada',
+    '## Relatório de Execução do Pipeline',
+    '- Produtos recebidos (Discovery): ' + telemetry.received,
+    '- Filtrados pelo History: ' + telemetry.historyFilteredOut,
+    '- Pontuados pelo Discovery Score: ' + telemetry.scored,
+    '- Selecionados pelo Selection Engine: ' + telemetry.selected,
+    '- Candidates gerados (antes do limite final): ' + telemetry.candidatesGenerated,
+    '- Removidos pelo MAX_QUEUE_SIZE (500): ' + Math.max(0, telemetry.candidatesGenerated - telemetry.returned),
+    '- Candidates retornados no final: ' + telemetry.returned,
+    '- Itens enviados para Manual Review Queue: ' + addedToQueue,
     '',
-    '## Integração',
-    '- `fetchShopeeOfficialDiscovery` criada: SIM',
-    '- Reutiliza `fetchShopeeProductsOfferV2`: SIM',
-    '- Reutiliza `parseShopeeMoney`: SIM (via normalizeShopeeProduct)',
-    '- Reutiliza `dedupeShopeeProducts`: SIM',
-    '- Reutiliza `normalizeShopeeProduct`: SIM',
-    '- Shopee V4 preservada: SIM',
+    '## Distribuição por Categoria',
     '',
-    '## Resultados',
-    '- Categorias origem: ' + (isFallback ? 'fallback' : 'extraída da página'),
-    '- Categorias usadas: ' + categories.length,
-    '- Produtos brutos: ' + rawReturns,
-    '- Produtos únicos: ' + products.length,
-    '- Duplicados removidos: ' + (rawReturns - products.length),
+    '*Nota: O pipeline utiliza a categoria REAL (`categoria_original` ou `category`), caindo para "Sem Categoria" ou "Geral" apenas quando nenhuma das duas está presente.*',
+    '',
+    '| Categoria | Selecionados |',
+    '| --- | --- |'
+  ];
+
+  const catCounts = {};
+  const shopCounts = {};
+  const brandCounts = {};
+  const priceRangeCounts = {};
+
+  const adapter = new MarketplaceSelectionAdapter('Shopee');
+  const ranges = MARKETPLACE_SELECTION_CONFIG['Shopee'].PRICE_RANGES;
+
+  for (const c of candidates) {
+    catCounts[c.category] = (catCounts[c.category] || 0) + 1;
+    shopCounts[c.shopName] = (shopCounts[c.shopName] || 0) + 1;
+    brandCounts[c.brand] = (brandCounts[c.brand] || 0) + 1;
+    
+    // Convertendo candidate back to product mock para o adapter, pois o adapter espera um product
+    // Mas o candidate já tem currentPrice. O getPrice() no adapter lê current_price, então:
+    const mockP = { current_price: c.currentPrice };
+    const pLabel = adapter.getPriceRangeLabel(mockP, ranges);
+    priceRangeCounts[pLabel] = (priceRangeCounts[pLabel] || 0) + 1;
+  }
+
+  for (const [cat, count] of Object.entries(catCounts).sort((a, b) => b[1] - a[1])) {
+    md.push(`| ${cat} | ${count} |`);
+  }
+
+  md.push('', '## Distribuição por Loja', '| Loja | Selecionados |', '| --- | --- |');
+  for (const [shop, count] of Object.entries(shopCounts).sort((a, b) => b[1] - a[1])) {
+    md.push(`| ${shop} | ${count} |`);
+  }
+
+  md.push('', '## Distribuição por Marca', '| Marca | Selecionados |', '| --- | --- |');
+  for (const [brand, count] of Object.entries(brandCounts).sort((a, b) => b[1] - a[1])) {
+    md.push(`| ${brand} | ${count} |`);
+  }
+
+  md.push('', '## Distribuição por Faixa de Preço', '| Faixa | Selecionados |', '| --- | --- |');
+  for (const [pr, count] of Object.entries(priceRangeCounts).sort((a, b) => b[1] - a[1])) {
+    md.push(`| ${pr} | ${count} |`);
+  }
+
+  md.push('', '## Meta por Categoria', '| Categoria | Selecionados | Meta mínima | Situação |', '| --- | ---: | ---: | --- |');
+  
+  let totalCategories = Object.keys(catCounts).length;
+  let belowTarget = [];
+  
+  for (const [cat, count] of Object.entries(catCounts)) {
+    const isBelow = count < 5;
+    const status = isBelow ? 'ABAIXO' : (cat === 'Geral' || cat === 'Sem Categoria' ? 'VERIFICAR' : 'OK');
+    if (isBelow) belowTarget.push(cat);
+    md.push(`| ${cat} | ${count} | 5 | ${status} |`);
+  }
+
+  const allGeral = totalCategories === 1 && (catCounts['Geral'] || catCounts['Sem Categoria']);
+
+  md.push(
+    '',
+    '## Resumo da Categoria',
+    `- Quantas categorias diferentes chegaram à Candidate Queue? ${totalCategories}`,
+    `- Quantas categorias ficaram abaixo da meta de 5? ${belowTarget.length}`,
+    `- Existe concentração excessiva? ${Object.values(catCounts).some(c => c > 30) ? 'SIM' : 'NÃO'}`,
+    `- Existe uso de "Geral"? ${catCounts['Geral'] ? 'SIM' : 'NÃO'}`,
+    `- Quais são as categorias abaixo da meta? ${belowTarget.length > 0 ? belowTarget.join(', ') : 'Nenhuma'}`,
+    '',
+    allGeral 
+      ? `Todos os Candidates estão chegando como Geral. Próximo passo: corrigir propagação de categoria antes de aumentar GLOBAL_LIMIT.`
+      : `Categorias reais preservadas. Próximo passo: ajustar GLOBAL_LIMIT e mínimo por categoria.`
+  );
+
+  // Diagnóstico de removidos pelo Selection Engine
+  const selResult = telemetry._selectionStats || {};
+  md.push(
+    '',
+    '## Diagnóstico Selection Engine',
+    '| Motivo | Removidos |',
+    '| --- | --- |',
+    `| priority | ${selResult.removedByPriority || '-'} |`,
+    `| category_limit | ${selResult.removedByCategoryLimit || '-'} |`,
+    `| shop_limit | ${selResult.removedByShopLimit || '-'} |`,
+    `| brand_limit | ${selResult.removedByBrandLimit || '-'} |`,
+    `| price_limit | ${selResult.removedByPriceRangeLimit || '-'} |`,
+    `| global_limit | ${selResult.removedByGlobalLimit || '-'} |`
+  );
+
+  // Lista de produtos selecionados por categoria
+  md.push('', '## Produtos Selecionados por Categoria');
+  const catGroups = {};
+  for (const c of candidates) {
+    if (!catGroups[c.category]) catGroups[c.category] = [];
+    catGroups[c.category].push(c);
+  }
+  for (const [cat, items] of Object.entries(catGroups).sort((a, b) => a[0].localeCompare(b[0]))) {
+    md.push(``, `### ${cat} (${items.length} produtos)`);
+    md.push('| Produto | Loja | Preço | Desc% | Vendas | Nota | Comiss% | DScore | SScore | Tier |');
+    md.push('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |');
+    for (const c of items) {
+      const name = (c.productName || '').substring(0, 40).replace(/\|/g, '-');
+      const shop = (c.shopName || '').substring(0, 20).replace(/\|/g, '-');
+      md.push(`| ${name} | ${shop} | ${c.currentPrice} | ${c.discount} | ${c.sales} | ${c.rating} | ${c.commission} | ${c.discoveryScore} | ${c.selectionScore} | ${c.tier} |`);
+    }
+  }
+
+  md.push(
+    '',
+    '## Segurança',
     '- IA chamada: NÃO',
     '- Banco alterado: NÃO',
-    '- Publicação automática: NÃO',
-    '',
-    '## TOP 20 Vendas',
-    fmt(top20sales, 'sales', 'vendas'),
-    '',
-    '## TOP 20 Desconto',
-    fmt(top20disc, 'discount_rate', 'desconto%'),
-    '',
-    '## TOP 20 Comissão',
-    fmt(top20comm, 'commission_rate', 'comissão'),
-    '',
-    '## Pendências Sprint 09.2',
-    '- Implementar `calculateShopeeDiscoveryScore`',
-    '- Aplicar Discovery Score aos produtos retornados por `fetchShopeeOfficialDiscovery`'
-  ].join('\n');
+    '- Publicação ocorreu: NÃO',
+    '- Mercado Livre preservado: SIM',
+    '- Amazon preservada: SIM',
+    '- Cron preservado: SIM'
+  );
 
-  fs.writeFileSync(pathModule.join(reportsDir, 'sprint_09.1_shopee_official_discovery.md'), md);
-  console.log(md);
-  console.log('\n[Shopee Official Dry-Run 09.1] Concluído. Relatórios em reports/');
+  const mdText = md.join('\n');
+
+  fs.writeFileSync(path.join(reportsDir, 'sprint_10.0_shopee_official_pipeline_summary.json'), JSON.stringify(summary, null, 2));
+  fs.writeFileSync(path.join(reportsDir, 'sprint_10.0_shopee_official_pipeline_validation.md'), mdText);
+
+  console.log(mdText);
+  console.log('\n[Shopee Official Pipeline Dry-Run 10.0] Concluído. Relatórios em reports/');
 }
 
 const MANUAL_REVIEW_STATUS = {
@@ -5028,8 +5167,7 @@ class MarketplaceManualReviewQueue {
       pending: 0,
       processingTimeMs: 0
     };
-    const pathModule = require('path');
-    this.reportPath = pathModule.join(__dirname, '..', 'reports', 'manual_review_queue.json');
+    this.reportPath = path.join(__dirname, '..', 'reports', 'manual_review_queue.json');
     this._load();
   }
 
