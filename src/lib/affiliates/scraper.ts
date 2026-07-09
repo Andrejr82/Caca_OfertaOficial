@@ -74,83 +74,103 @@ function enhanceImageUrl(url: string | null): string | null {
   return enhanced;
 }
 
-export async function fetchShopeeTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca de tendências da Shopee via Oracle API...");
+function hasTokenOptimizedContent(payload: any): boolean {
+  return Boolean(payload?.title && (payload?.price != null || payload?.imageUrl || payload?.seller || payload?.specs?.length));
+}
+
+function logTokenOptimizationPayload(marketplace: string, payload: any) {
+  console.log(
+    `[Token Optimization] ${marketplace} source=${payload?.source || "fallback"} title=${payload?.title ? "sim" : "nao"} price=${payload?.price != null ? "sim" : "nao"} image=${payload?.imageUrl ? "sim" : "nao"}`
+  );
+}
+
+function buildTokenOptimizedLlmInput(oracleData: any, marketplace: string): string {
+  const normalized = oracleData?.data?.extract?.normalized;
+  if (normalized) {
+    if (!hasTokenOptimizedContent(normalized)) {
+      console.log(`[Token Optimization] fallback usado para ${marketplace}`);
+    }
+    logTokenOptimizationPayload(marketplace, normalized);
+    return JSON.stringify(normalized, null, 2);
+  }
+
+  const fallbackText = String(oracleData?.data?.text || "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 4000);
+
+  const fallbackPayload = {
+    marketplace,
+    title: null,
+    price: null,
+    oldPrice: null,
+    discount: null,
+    rating: null,
+    reviews: null,
+    imageUrl: null,
+    url: null,
+    seller: null,
+    specs: fallbackText ? [fallbackText] : [],
+    source: "fallback",
+    tokenOptimized: true,
+    fallbackText
+  };
+
+  console.log(`[Token Optimization] fallback usado para ${marketplace}`);
+  logTokenOptimizationPayload(marketplace, fallbackPayload);
+  return JSON.stringify(fallbackPayload, null, 2);
+}
+
+async function loadShopeeOfficialModule() {
+  return import("../../../scripts/oracle-scraper.cjs");
+}
+
+function normalizeShopeeComparableUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
   try {
-    const oracleKey = process.env.ORACLE_API_KEY;
-    if (!oracleKey) {
-      throw new Error("ORACLE_API_KEY não configurada.");
+    const parsed = new URL(url);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return String(url).trim().replace(/\/$/, "");
+  }
+}
+
+function mapShopeeCandidateToScrapedProduct(candidate: any): ScrapedProduct {
+  const { category: cat, subcategory: sub } = normalizeCategory(candidate.category || candidate.productName || "");
+  return {
+    product_name: candidate.productName,
+    original_url: candidate.productLink,
+    image_url: enhanceImageUrl(candidate.image || null),
+    current_price: candidate.currentPrice,
+    old_price: candidate.originalPrice && candidate.originalPrice > candidate.currentPrice ? candidate.originalPrice : null,
+    discount_badge: candidate.discount || null,
+    rating: candidate.rating ? parseFloat(String(candidate.rating)) : null,
+    category: cat,
+    subcategory: sub
+  };
+}
+
+export async function fetchShopeeTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
+  console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca oficial da Shopee...");
+  try {
+    const { runShopeeOfficialPipeline } = await loadShopeeOfficialModule();
+    const targetCategory = category || "Todas";
+    const { candidates, telemetry } = await runShopeeOfficialPipeline(targetCategory, Math.max(limit * 4, limit));
+
+    if (!candidates?.length) {
+      console.log(`[Shopee Official] query_sem_resultado query=${targetCategory}`);
+      return [];
     }
 
-    const fetchLimit = limit * 4;
-    const targetUrl = category ? `https://shopee.com.br/search?keyword=${encodeURIComponent(category + " oferta relâmpago")}` : "https://shopee.com.br/m/ofertas-do-dia";
-    const promptText = getScrapingPrompt();
+    const products = candidates.slice(0, limit).map(mapShopeeCandidateToScrapedProduct);
 
-    const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: targetUrl, token: oracleKey }),
-    });
-
-    if (!oracleRes.ok) throw new Error(`Falha na Oracle API Shopee Trends: ${oracleRes.status}`);
-    const oracleData = await oracleRes.json();
-    if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) throw new Error("Sem texto extraído da Shopee pela Oracle API");
-
-    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
-
-    const schemaObj = {
-      type: "object",
-      properties: {
-        products: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              title: { type: "string" },
-              url: { type: "string" },
-              image: { type: "string" },
-              price: { type: "number" },
-              old_price: { type: "number", nullable: true },
-              discount_badge: { type: "string", nullable: true },
-              rating: { type: "number", nullable: true },
-              category: { type: "string" }
-            },
-            required: ["title", "url", "price"]
-          }
-        }
-      },
-      required: ["products"]
-    };
-
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
-    const fcData = JSON.parse(rawResult);
-
-    if (!fcData.products) throw new Error("Sem produtos extraídos da Shopee pela IA");
-
-    const validProducts = sanitizeScrapedData(fcData.products, "Trends_API");
-
-    const products = validProducts.slice(0, limit).map((p: any) => {
-      const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
-      return {
-        product_name: p.title,
-        original_url: p.url.startsWith("http") ? p.url : `https://shopee.com.br${p.url}`,
-        image_url: enhanceImageUrl(p.image || null),
-        current_price: p.price,
-        old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-        discount_badge: p.discount_badge || null,
-        rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
-        category: cat,
-        subcategory: sub
-      };
-    });
-
-    console.log(`[SCRAPER][SHOPEE][TRENDS] Sucesso: ${products.length} tendências encontradas.`);
+    console.log(`[SCRAPER][SHOPEE][TRENDS] Sucesso oficial: ${products.length} tendências encontradas. returned=${telemetry?.returned ?? products.length}`);
     return products;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[SCRAPER][SHOPEE][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
+    console.error(`[SCRAPER][SHOPEE][TRENDS] Falha oficial ao buscar tendências: ${errorMsg}`);
     return [];
   }
 }
@@ -164,8 +184,6 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     }
 
     const fetchLimit = limit * 4;
-    // Corrigido: era /campaigns/best_sellers (best sellers ≠ promoções).
-    // Agora usa /promotion/flash-sale: página de vendas relâmpago com preço antigo riscado real.
     const targetUrl = category ? `https://br.shein.com/pdsearch/${encodeURIComponent(category + " venda flash")}/` : "https://br.shein.com/promotion/flash-sale";
     const promptText = getScrapingPrompt();
 
@@ -180,8 +198,8 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
     if (!oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) throw new Error("Sem texto extraído da Shein pela Oracle API");
 
     const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+    if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
     const schemaObj = {
       type: "object",
@@ -223,7 +241,7 @@ export async function fetchSheinTrendingProducts(limit = 5, category?: string): 
         current_price: p.price,
         old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
         discount_badge: p.discount_badge || null,
-        rating: p.rating ? parseFloat(String(p.rating)) : null, // rating real ou null (sem hardcode)
+        rating: p.rating ? parseFloat(String(p.rating)) : null,
         category: cat,
         subcategory: sub
       };
@@ -278,8 +296,8 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
         }
 
         const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+        if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+        if (!validateHtml(textToAnalyze, "Trends_API")) return [];
 
         const schemaObj = {
           type: "object",
@@ -414,7 +432,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
             required: ["products"]
           };
 
-          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
+          const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
           const fcData = JSON.parse(rawResult);
 
           if (fcData.products && fcData.products.length > 0) {
@@ -605,11 +623,11 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
       if (oracleRes.ok) {
         const oracleData = await oracleRes.json();
         if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
-          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
+          const textToAnalyze = buildTokenOptimizedLlmInput(oracleData, "Mercado Livre");
           const { validateHtml } = await import("@/core/scraper/validator");
           const { callLLM } = await import("@/lib/ai/groq");
           
-          if (validateHtml(textToAnalyze, "Trends_API")) {
+          if (validateHtml(oracleData.data?.text || oracleData.data?.html, "Trends_API")) {
             const promptText = "Extraia o nome do produto do Mercado Livre, a URL da imagem principal do produto, o preço atual promocional (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
             const schemaObj = {
               type: "object",
@@ -621,7 +639,7 @@ async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<Scr
               },
               required: ["title", "current_price"]
             };
-            const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
+            const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
             const extract = JSON.parse(rawResult);
             if (extract && extract.title && extract.current_price > 0) {
               const scraped = {
@@ -886,7 +904,7 @@ async function scrapeMagaluProductDetails(productUrl: string): Promise<ScrapedPr
 }
 
 async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
-  console.log(`[SCRAPER][SHOPEE][PRODUCT] Iniciando raspagem de produto com Firecrawl: ${productUrl}`);
+  console.log(`[SCRAPER][SHOPEE][PRODUCT] Iniciando busca oficial de produto: ${productUrl}`);
   try {
     let finalProductUrl = productUrl;
     
@@ -905,67 +923,30 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
 
 
 
-    let retries = 3;
-    let delay = 1000;
-    let oracleData = null;
-    const oracleKey = process.env.ORACLE_API_KEY;
-    if (!oracleKey) throw new Error("ORACLE_API_KEY não configurada.");
+    const { runShopeeOfficialPipeline, cleanProductUrl } = await loadShopeeOfficialModule();
+    const normalizedTargetUrl = normalizeShopeeComparableUrl(cleanProductUrl(finalProductUrl) || finalProductUrl);
+    const itemMatch = finalProductUrl.match(/-i\.(\d+)\.(\d+)/i);
+    const targetItemId = itemMatch?.[2] || null;
 
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        console.log(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} de raspagem Shopee via Oracle API...`);
-        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
-          method: "POST",
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url: finalProductUrl, token: oracleKey }),
-          signal: AbortSignal.timeout(60000)
-        });
+    const { candidates } = await runShopeeOfficialPipeline("Todas", 500);
+    const matched = (candidates || []).find((candidate: any) => {
+      const productLink = normalizeShopeeComparableUrl(candidate.productLink);
+      const affiliateLink = normalizeShopeeComparableUrl(candidate.affiliateLink);
+      const itemId = candidate.marketplaceProductId ? String(candidate.marketplaceProductId) : null;
+      return productLink === normalizedTargetUrl || affiliateLink === normalizedTargetUrl || (targetItemId && itemId === targetItemId);
+    });
 
-        if (!oracleRes.ok) {
-          throw new Error(`HTTP Status ${oracleRes.status}`);
-        }
-        
-        oracleData = await oracleRes.json();
-        break; // Sucesso
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        console.warn(`[SCRAPER][SHOPEE][PRODUCT] Tentativa ${attempt} falhou: ${msg}`);
-        if (attempt === retries) {
-          throw error;
-        }
-        await new Promise(resolve => setTimeout(resolve, delay));
-        delay *= 2;
+    if (!matched) {
+      if (targetItemId) {
+        console.log(`[Shopee Official] item_nao_retorornado item_id=${targetItemId}`);
       }
+      console.log(`[Shopee Official] fora_do_escopo url=${normalizedTargetUrl || finalProductUrl}`);
+      updateMetrics("Shopee", "failures", 1);
+      return null;
     }
 
-    if (!oracleData || !oracleData.success || (!oracleData.data?.text && !oracleData.data?.html)) {
-      throw new Error("Oracle API não retornou dados válidos para Shopee.");
-    }
-
-    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
-    const promptText = "Extraia o nome do produto Shopee, a URL da imagem principal do produto, o preço promocional atual do produto (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
-    const schemaObj = {
-      type: "object",
-      properties: {
-        title: { type: "string" },
-        image: { type: "string" },
-        current_price: { type: "number" },
-        old_price: { type: "number", nullable: true }
-      },
-      required: ["title", "current_price"]
-    };
-
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
-    const extract = JSON.parse(rawResult);
-    const scraped = {
-      product_name: extract.title.trim(),
-      original_url: finalProductUrl,
-      image_url: enhanceImageUrl(extract.image || null),
-      current_price: extract.current_price,
-      old_price: extract.old_price && extract.old_price > extract.current_price ? extract.old_price : null,
-      rating: 4.8
-    };
+    const scraped = mapShopeeCandidateToScrapedProduct(matched);
+    scraped.original_url = finalProductUrl;
 
     console.log(`[SCRAPER][SHOPEE][PRODUCT] Sucesso ao raspar produto Shopee: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
     updateMetrics("Shopee", "found", 1);
@@ -1001,9 +982,9 @@ async function scrapeSheinProductDetails(productUrl: string): Promise<ScrapedPro
         if (!oracleRes.ok) {
           throw new Error(`HTTP Status ${oracleRes.status}`);
         }
-        
+
         oracleData = await oracleRes.json();
-        break; // Sucesso
+        break;
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         console.warn(`[SCRAPER][SHEIN][PRODUCT] Tentativa ${attempt} falhou: ${msg}`);
@@ -1095,8 +1076,9 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
       throw new Error("Oracle API não retornou texto ou HTML válidos para Amazon.");
     }
 
-    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
+    const rawHtmlOrText = oracleData.data?.text || oracleData.data?.html;
+    if (!validateHtml(rawHtmlOrText, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
+    const textToAnalyze = buildTokenOptimizedLlmInput(oracleData, "Amazon");
     const promptText = "Extraia o nome do produto, a URL da imagem principal do produto, o preço atual promocional (somente número, ex: 99.90) e o preço original/antigo cortado (somente número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1109,7 +1091,7 @@ async function scrapeAmazonProductDetails(productUrl: string): Promise<ScrapedPr
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
     const titleLower = (extract.title || "").toLowerCase();
     
@@ -1168,8 +1150,9 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
       throw new Error("Oracle API não retornou texto ou HTML válidos para Netshoes.");
     }
 
-    const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-    if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
+    const rawHtmlOrText = oracleData.data?.text || oracleData.data?.html;
+    if (!validateHtml(rawHtmlOrText, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return null; }
+    const textToAnalyze = buildTokenOptimizedLlmInput(oracleData, "Netshoes");
     const promptText = "Extraia o nome do produto, a URL da imagem principal (garanta que é a URL real da imagem, frequentemente em data-src, e não um placeholder transparente ou genérico), o preço atual promocional como string (ex: 'R$ 159,99') e o preço antigo cortado como string (ex: 'R$ 199,99'). Se não houver preço antigo, retorne null. Se houver um selo de desconto, extraia-o EXATAMENTE como está no site. Responda em formato JSON válido.";
     const schemaObj = {
       type: "object",
@@ -1183,7 +1166,7 @@ async function scrapeNetshoesProductDetails(productUrl: string): Promise<Scraped
       required: ["title", "current_price"]
     };
 
-    const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
+    const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
     const extract = JSON.parse(rawResult);
 
     // Converte os valores extraídos de string para número
@@ -1499,7 +1482,30 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
 export async function fetchNetshoesTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][NETSHOES][TRENDS] Iniciando busca de tendências da Netshoes...");
   try {
-
+    try {
+      const { fetchNetshoesProductsFromRakuten } = await loadShopeeOfficialModule();
+      const officialProducts = await fetchNetshoesProductsFromRakuten(category || "oferta", Math.max(limit * 4, limit));
+      if (officialProducts?.length) {
+        const products = officialProducts.slice(0, limit).map((candidate: any) => {
+          const { category: cat, subcategory: sub } = normalizeCategory(candidate.category || candidate.product_name || "");
+          return {
+            product_name: candidate.product_name,
+            original_url: candidate.original_url,
+            image_url: enhanceImageUrl(candidate.image_url || null),
+            current_price: candidate.current_price,
+            old_price: candidate.old_price || null,
+            rating: null,
+            category: cat,
+            subcategory: sub
+          };
+        });
+        console.log(`[SCRAPER][NETSHOES][TRENDS] Sucesso oficial Rakuten: ${products.length} tendências encontradas.`);
+        return products;
+      }
+    } catch (officialError) {
+      const msg = officialError instanceof Error ? officialError.message : String(officialError);
+      console.warn(`[SCRAPER][NETSHOES][TRENDS] Rakuten indisponível. Seguindo fallback atual. Motivo: ${msg}`);
+    }
 
     const fetchLimit = limit * 4;
     const urls = category
@@ -1536,9 +1542,9 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
              throw new Error("Sem texto extraído da Netshoes");
           }
 
-          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
+          const rawHtmlOrText = oracleData.data?.text || oracleData.data?.html;
+          if (!validateHtml(rawHtmlOrText, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
+          const textToAnalyze = buildTokenOptimizedLlmInput(oracleData, "Netshoes");
 
           const schemaObj = {
             type: "object",
@@ -1563,7 +1569,7 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
             required: ["products"]
           };
 
-          const rawResult = await callLLM(promptText, textToAnalyze.slice(0, 120000), schemaObj, 0.2, 4000);
+          const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
           fcData = { success: true, data: { extract: JSON.parse(rawResult) } };
 
           console.log(`[SCRAPER][NETSHOES][TRENDS] Oracle API + IA success=${fcData.success}, products=${fcData?.data?.extract?.products?.length ?? 0}`);

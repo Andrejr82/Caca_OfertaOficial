@@ -31,6 +31,10 @@ const axios        = require('axios');
 const cheerio      = require('cheerio');
 require('dotenv').config({ path: '.env.local' });
 const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
+const {
+  normalizeProductContentForLLM,
+  createLLMInputFromNormalizedContent
+} = require('../src/lib/token-optimization.js');
 
 
 // ─── Supabase Admin Client ────────────────────────────────────
@@ -403,7 +407,7 @@ const RAKUTEN_CLIENT_ID = process.env.RAKUTEN_CLIENT_ID || '';
 const RAKUTEN_CLIENT_SECRET = process.env.RAKUTEN_CLIENT_SECRET || '';
 const RAKUTEN_SID = process.env.RAKUTEN_SID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
-const ENABLE_NETSHOES_RAKUTEN = process.env.ENABLE_NETSHOES_RAKUTEN === '1';
+const ENABLE_NETSHOES_RAKUTEN = process.env.ENABLE_NETSHOES_RAKUTEN !== '0';
 
 // #region debug-point A:golden-queries-audit-bootstrap
 const SCRAPER_AUDIT_ENV_FILE = '.dbg/golden-queries-audit.env';
@@ -1837,7 +1841,17 @@ function buildSafeProductPayload(products, options = {}) {
   };
 }
 
-  const safePayloadResult = buildSafeProductPayload(evalResult.products || [], { maxChars: 20000 });
+  const normalizedProducts = (evalResult.products || []).map((product) => JSON.parse(
+    createLLMInputFromNormalizedContent(
+      normalizeProductContentForLLM({
+        marketplace: storeName,
+        product,
+        url: product?.product_url || product?.original_url || targetUrl
+      })
+    )
+  ));
+
+  const safePayloadResult = buildSafeProductPayload(normalizedProducts, { maxChars: 20000 });
   rawExtractedData = safePayloadResult.payload;
 
   console.log(`  [PAYLOAD DYNAMICS] Incluídos: ${safePayloadResult.includedCount} | Excluídos: ${safePayloadResult.excludedCount} | Motivo: ${safePayloadResult.reason}`);
@@ -2072,6 +2086,36 @@ function extractOriginalRakutenUrl(linkUrl) {
   }
 }
 
+function parseRakutenNumber(value) {
+  if (value === null || value === undefined) return null;
+  const normalized = String(value).trim().replace(',', '.');
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseRakutenDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function computeRakutenDiscountBadge(retailPrice, salePrice, discountValue, discountType) {
+  const discountTypeNormalized = String(discountType || '').trim().toLowerCase();
+  const explicitDiscount = parseRakutenNumber(discountValue);
+  if (explicitDiscount && discountTypeNormalized === 'percentage') {
+    return `${Math.round(explicitDiscount)}%`;
+  }
+  if (explicitDiscount && discountTypeNormalized === 'amount') {
+    return explicitDiscount.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+  if (Number.isFinite(retailPrice) && Number.isFinite(salePrice) && retailPrice > salePrice && retailPrice > 0) {
+    const pct = Math.round(((retailPrice - salePrice) / retailPrice) * 100);
+    if (pct > 0) return `${pct}%`;
+  }
+  return null;
+}
+
 async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE, page = 1) {
   if (!ENABLE_NETSHOES_RAKUTEN) {
     console.log('  [Rakuten Netshoes] Flag desabilitada. Retornando 0 produtos.');
@@ -2121,31 +2165,56 @@ async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE,
 
     const converted = $('result > item').map((_, node) => {
       const item = $(node);
+      const productId = item.find('productid').first().text().trim() || null;
       const productName = item.find('productname').first().text().trim();
+      const sku = item.find('sku').first().text().trim() || item.find('skunumber').first().text().trim() || null;
       const merchantName = item.find('merchantname').first().text().trim();
       const imageUrl = item.find('imageurl').first().text().trim() || null;
       const affiliateUrl = item.find('linkurl').first().text().trim() || null;
       const originalUrl = extractOriginalRakutenUrl(affiliateUrl);
-      const retailPrice = Number.parseFloat(item.find('price').first().text().trim());
-      const salePriceRaw = Number.parseFloat(item.find('saleprice').first().text().trim());
-      const hasSalePrice = Number.isFinite(salePriceRaw) && salePriceRaw > 0 && salePriceRaw < retailPrice;
+      const retailPrice = parseRakutenNumber(item.find('price').first().text().trim());
+      const salePriceRaw = parseRakutenNumber(item.find('saleprice').first().text().trim());
+      const discountValue = item.find('discount').first().text().trim() || null;
+      const discountType = item.find('discounttype').first().text().trim() || null;
+      const beginDate = parseRakutenDate(item.find('begindate').first().text().trim());
+      const endDate = parseRakutenDate(item.find('enddate').first().text().trim());
+      const availability = item.find('availability').first().text().trim() || null;
+      const brand = item.find('brand').first().text().trim() || item.find('manufacturername').first().text().trim() || null;
+      const currency = item.find('currency').first().text().trim() || 'BRL';
+      const now = Date.now();
+      const promoStarted = !beginDate || new Date(beginDate).getTime() <= now;
+      const promoNotEnded = !endDate || new Date(endDate).getTime() >= now;
+      const hasSalePrice = Number.isFinite(salePriceRaw) && Number.isFinite(retailPrice) && salePriceRaw > 0 && salePriceRaw < retailPrice && promoStarted && promoNotEnded;
       const currentPrice = hasSalePrice ? salePriceRaw : retailPrice;
       const oldPrice = hasSalePrice ? retailPrice : null;
       const categoryPrimary = item.find('category > primary').first().text().trim() || 'Geral';
+      const discountBadge = hasSalePrice ? computeRakutenDiscountBadge(retailPrice, salePriceRaw, discountValue, discountType) : null;
 
       if (!productName || !Number.isFinite(currentPrice) || !originalUrl) return null;
 
       return {
+        source: 'api',
+        product_id: productId,
+        sku,
         product_name: productName,
         current_price: currentPrice,
         old_price: oldPrice,
+        discount_badge: discountBadge,
+        discount_type: discountType,
+        sale_price: salePriceRaw,
+        retail_price: retailPrice,
         image_url: imageUrl,
         original_url: originalUrl,
         affiliate_url: affiliateUrl,
         category: categoryPrimary,
         marketplace: 'Netshoes',
         platform: 'Netshoes',
-        merchant_name: merchantName || null
+        merchant_name: merchantName || null,
+        availability,
+        begin_date: beginDate,
+        end_date: endDate,
+        brand,
+        currency
       };
     }).get().filter(Boolean);
 
@@ -2438,6 +2507,10 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
       ? resp.data.data.productOfferV2.nodes
       : [];
 
+    if (nodes.length === 0) {
+      console.log(`[Shopee Official] query_sem_resultado query=${query}`);
+    }
+
     const converted = nodes
       .map((node) => {
         const currentPrice = parseShopeeMoney(node?.priceMin) ?? parseShopeeMoney(node?.priceMax);
@@ -2494,6 +2567,10 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
         return mapped;
       })
       .filter(Boolean);
+
+    if (nodes.length > 0 && converted.length === 0) {
+      console.log(`[Shopee Official] fora_do_escopo query=${query}`);
+    }
 
     console.log(`  [Shopee API] HTTP ${resp.status} | Retornados: ${nodes.length} | Convertidos: ${converted.length}`);
     return converted;
@@ -3229,7 +3306,50 @@ async function scrapeStore(store) {
     console.log(`\n[SHOPEE] Discovery Version: ${useShopeeV4 ? 'V4' : 'LEGACY'}`);
   }
 
-  if (useShopeeV4) {
+  // [HOTFIX 10.0-G] Shopee Official Pipeline (EPIC 09) — substitui V4 legado
+  // ponytail: bloco V4 legado preservado abaixo no fallback; rollback = reverter este if
+  if (store === 'Shopee') {
+    console.log(`\n[Shopee Official] Fluxo normal utilizando Pipeline EPIC 09`);
+    try {
+      const { candidates, telemetry } = await runShopeeOfficialPipeline('Todas', 500);
+      // Adaptador mínimo: mapeia shape do pipeline para shape esperado por processTopOffers
+      storeCandidates = candidates.map(c => ({
+        id: c.candidateId,
+        product: {
+          product_name: c.productName,
+          current_price: c.currentPrice,
+          old_price: c.originalPrice,
+          image_url: c.image || null,
+          category: c.category || 'Geral',
+          rating: c.rating
+        },
+        store: 'Shopee',
+        affiliateUrl: c.affiliateLink,
+        score: c.selectionScore
+      }));
+
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
+        store,
+        queriesExecuted: 1,
+        candidatesCollected: storeCandidates.length,
+        pipeline: 'EPIC09_official',
+        durationMs: Date.now() - storeStartedAt,
+        telemetry
+      });
+
+      console.log(`  ✅ [${store}] ${storeCandidates.length} candidatos via Pipeline EPIC 09.`);
+      return storeCandidates;
+
+    } catch (err) {
+      console.error(`  [Shopee Official] Erro fatal: ${err.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Shopee Official Pipeline', err, { store });
+    }
+  }
+
+  // [LEGADO] Shopee V4 e outros marketplaces — preservado para rollback e Amazon/ML
+  const useShopeeV4Legacy = store === 'Shopee' && (process.env.SHOPEE_DISCOVERY_VERSION?.toLowerCase() || 'v4') !== 'legacy';
+  if (useShopeeV4Legacy) {
+    // ponytail: código V4 legado mantido intacto para rollback imediato
     console.log(`\n🔍 [Shopee] Iniciando Discovery V4 (Global)...`);
     try {
       const discovery = await fetchShopeeDiscoveryV4();
@@ -3541,7 +3661,7 @@ async function runScrapingCycle() {
     if (isWindows) {
       console.log(`\n[MODE: LOCAL] 💻 NOTEBOOK WINDOWS DETECTADO. Iniciando Scraping Local...`);
       await updateHeartbeat();
-      const stores = getEnabledStores(['Mercado Livre', 'Amazon', 'Shopee']); // Magalu desativada: bloqueio 403 consistente. Shopee ativa quando SHOPEE_ADMITAD_CAMPAIGN_ID preenchido
+      const stores = getEnabledStores(['Mercado Livre', 'Amazon', 'Shopee', 'Netshoes']);
       
       for (const store of stores) {
         try {
@@ -3551,35 +3671,63 @@ async function runScrapingCycle() {
       }
       
       console.log(`\n✅ Scraping local concluído. ${allCandidates.length} ofertas raspadas neste ciclo.`);
-      console.log(`\n📦 Buscando TODOS os drafts pendentes no Supabase para processar com IA...`);
+      const draftCutoff = new Date(Date.now() - CLEANUP_DAYS * 24 * 60 * 60 * 1000).toISOString();
+      console.log(`\n📦 Buscando drafts pendentes no Supabase (últimos ${CLEANUP_DAYS} dias) para processar com IA...`);
 
       const { data: pendingDrafts, error: draftsError } = await supabase
         .from('offers')
         .select('*')
         .eq('status', 'draft')
-        .eq('user_id', ADMIN_USER_ID);
+        .eq('user_id', ADMIN_USER_ID)
+        .gte('updated_at', draftCutoff);
 
       if (draftsError) {
         console.error(`[DRAFTS] Erro ao buscar drafts: ${draftsError.message}`);
-      } else if (pendingDrafts && pendingDrafts.length > 0) {
-        console.log(`\n🚀 ${pendingDrafts.length} drafts encontrados. Iniciando IA...`);
-        const draftCandidates = pendingDrafts.map(d => ({
-          id: d.id,
-          product: {
-            product_name: d.product_name,
-            current_price: d.current_price,
-            old_price: d.old_price,
-            image_url: d.image_url,
-            category: d.category || 'Geral',
-            rating: d.rating
-          },
-          store: d.platform,
-          affiliateUrl: d.original_url,
-          score: d.score || 0
-        }));
-        aiProcessed = await processTopOffers(draftCandidates);
       } else {
-        console.log(`\n📭 Nenhum draft pendente no Supabase.`);
+        let draftCandidates = [];
+        if (pendingDrafts && pendingDrafts.length > 0) {
+          console.log(`\n🚀 ${pendingDrafts.length} drafts encontrados.`);
+          draftCandidates = pendingDrafts.map(d => ({
+            id: d.id,
+            product: {
+              product_name: d.product_name,
+              current_price: d.current_price,
+              old_price: d.old_price,
+              image_url: d.image_url,
+              category: d.category || 'Geral',
+              rating: d.rating
+            },
+            store: d.platform,
+            affiliateUrl: d.original_url,
+            score: d.score || 0
+          }));
+        }
+
+        // [HOTFIX 10.0-I] Unificar Fluxo de Candidates para todos os Marketplaces
+        const storesWithNewCandidates = [...new Set(allCandidates.map(c => c.store))];
+        
+        storesWithNewCandidates.forEach(store => {
+          const count = allCandidates.filter(c => c.store === store).length;
+          console.log(`\n[${store}] Utilizando Candidates da execução atual (${count} itens)`);
+        });
+
+        // Ignorar pendingDrafts dos marketplaces que produziram novos candidates
+        draftCandidates = draftCandidates.filter(c => !storesWithNewCandidates.includes(c.store));
+        
+        const fallbackStores = [...new Set(draftCandidates.map(c => c.store))];
+        fallbackStores.forEach(store => {
+          const count = draftCandidates.filter(c => c.store === store).length;
+          console.log(`\n[${store}] Fallback para pendingDrafts (${count} itens)`);
+        });
+        
+        const finalCandidates = draftCandidates.concat(allCandidates);
+
+        if (finalCandidates.length > 0) {
+          console.log(`\n🚀 Iniciando IA para ${finalCandidates.length} candidates combinados...`);
+          aiProcessed = await processTopOffers(finalCandidates);
+        } else {
+          console.log(`\n📭 Nenhum draft ou candidate pendente no momento.`);
+        }
       }
       await cleanupOldDrafts();
       
@@ -3626,7 +3774,7 @@ async function runScrapingCycle() {
     }
   } else if (mode === 'ORACLE' || mode === 'AUTO') {
     console.log(`\n[MODE: ${mode}] ⚠️ AVISO: Executando Scraping e Orquestração na mesma máquina (Uso para testes).`);
-    const stores = getEnabledStores(isWindows ? ['Mercado Livre', 'Amazon', 'Shopee'] : ['Mercado Livre', 'Amazon', 'Shopee']); // Magalu desativada: bloqueio 403 consistente
+    const stores = getEnabledStores(isWindows ? ['Mercado Livre', 'Amazon', 'Shopee', 'Netshoes'] : ['Mercado Livre', 'Amazon', 'Shopee', 'Netshoes']);
     
     for (const store of stores) {
       try {

@@ -4,6 +4,10 @@ os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const express = require('express');
 const axios = require('axios');
 require('dotenv').config({ path: '.env.local' });
+const {
+  normalizeProductContentForLLM,
+  createLLMInputFromNormalizedContent
+} = require('../src/lib/token-optimization.js');
 
 const app = express();
 app.use(express.json());
@@ -11,6 +15,14 @@ app.use(express.json());
 const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
+
+function detectMarketplaceFromUrl(url) {
+  const value = String(url || '').toLowerCase();
+  if (value.includes('shopee')) return 'Shopee';
+  if (value.includes('amazon')) return 'Amazon';
+  if (value.includes('mercadolivre') || value.includes('meli.la')) return 'Mercado Livre';
+  return 'Desconhecido';
+}
 
 
 app.post('/api/scrape', async (req, res) => {
@@ -82,7 +94,16 @@ app.post('/api/scrape', async (req, res) => {
     metaResult.title = $('title').text() || '';
     metaResult.ogImage = $('meta[property="og:image"]').attr('content') || '';
 
-    console.log(`[API] Raspagem concluída. Retornando HTML para extração no Vercel...`);
+    const marketplace = detectMarketplaceFromUrl(url);
+    const normalized = normalizeProductContentForLLM({
+      marketplace,
+      html: htmlResult,
+      text: textResult,
+      url
+    });
+    const normalizedPayload = JSON.parse(createLLMInputFromNormalizedContent(normalized, { fallbackText: textResult }));
+
+    console.log(`[API] Raspagem concluída. Retornando conteúdo normalizado para extração no Vercel...`);
 
     return res.json({
       success: true,
@@ -90,9 +111,10 @@ app.post('/api/scrape', async (req, res) => {
         html: htmlResult,
         text: textResult,
         extract: {
-          title: null,
-          price: null,
-          image: null
+          title: normalized.title,
+          price: normalized.price,
+          image: normalized.imageUrl,
+          normalized: normalizedPayload
         },
         metadata: metaResult
       }
