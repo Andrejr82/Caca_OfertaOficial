@@ -2671,17 +2671,32 @@ async function generateOfferAnalysis(product, store, diagnosticMeta = {}) {
     return generateFallback(product, store);
   }
   
-  const baseSystemPrompt = `Você é um Copywriter de ELITE especializado em marketing de afiliados de alta conversão. Respond in JSON.
-Sua persona: Administrador eufórico de grupos de ofertas. Foco em escassez extrema e descontos.
+  const baseSystemPrompt = `Você gera copy curta, objetiva e informativa no estilo de grandes agregadores de ofertas. Respond in JSON.
 Regras:
-1. Ignore criação de links, injetaremos depois.
-2. Coloque hashtags no array 'hashtags'.
-3. Ignore preços monetários, injetaremos depois.
+1. Título deve ser exatamente nome do produto, sem adaptação.
+2. Escreva resumo curto em até 2 frases e no máximo 30 palavras, destacando só benefício principal verificável pelo nome do produto.
+3. Nunca invente preços, desconto, cupom, características, urgência, escassez ou qualquer detalhe não informado.
+4. Nunca use: "Últimas unidades", "Corre antes que acabe", "Estoque acabando", "Oportunidade única", "Segredo das celebridades", "Imperdível", "Não perca", "Promoção histórica".
+5. Sem storytelling, sem parágrafos longos, sem gatilhos artificiais.
+6. Ignore criação de links, preços monetários e cupom nesta etapa; isso será injetado depois pelo sistema.
+7. Retorne 1 strategy. Use:
+- headline: nome exato do produto
+- hook: resumo curto de até 30 palavras
+- body: string vazia
+- cta: string vazia
+- score: nota numérica
+8. Coloque hashtags no array 'hashtags'. Use no máximo ["#oferta"].
 Formato: JSON com strategies[{headline, hook, body, cta, score}], hashtags[].`;
 
   const userPrompt = `Gerar copy para:
 Nome: ${product.product_name}
 Loja: ${store}
+
+Objetivo:
+- headline igual ao nome do produto
+- hook curto, factual e sem invenção
+- body vazio
+- cta vazio
 
 RETORNE EXATAMENTE NESTE FORMATO JSON:
 {
@@ -2725,20 +2740,15 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
       return generateFallback(product, store);
     }
 
-    const hashtags = (raw.hashtags || ["#promocao"]).map(h => h.startsWith('#') ? h : `#${h}`).join(' ');
-
-    const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-    const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-    
-    const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
-    const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
-    const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
+    const title = sanitizeOfferTitle(strategy.headline, product);
+    const description = sanitizeOfferDescription(strategy.hook, product);
+    const finalMessage = formatOfferMessage(product, store, title, description);
 
     return {
       score: strategy.score || 8.0,
-      telegram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}\n\n${hashtags}`,
-      instagram: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${instagramBottomBlock}\n\n${hashtags}`,
-      whatsapp: `🚨 *${strategy.headline}*\n\n${strategy.hook}\n\n${strategy.body}\n\n👉 ${strategy.cta}\n${bottomBlock}`
+      telegram: finalMessage,
+      instagram: finalMessage,
+      whatsapp: finalMessage
     };
   } catch (err) {
     console.error(`  [LLM] Falha na geração de copy: ${err.message}. Usando fallback.`);
@@ -2747,19 +2757,130 @@ RETORNE EXATAMENTE NESTE FORMATO JSON:
 }
 
 function generateFallback(product, store) {
-  const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-  const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
-  
-  const priceBlock = opStr ? `de ${opStr}\n🔥 por ${pStr}` : `🔥 por ${pStr}`;
-  const bottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store || 'Especial'} 👇🏼\n🔗 {LINK}\n\n🚨 CHAMA seus amigos para receber promoções\nhttps://t.me/caca_ofertaoficial`;
-  const instagramBottomBlock = `\n${priceBlock}\n\n🛒 Achado ${store || 'Especial'}\n\n🛍️ Quer garantir essa oferta?\n👉 Acesse a nossa **VITRINE** no link da BIO do perfil! Lá você encontra o link direto para comprar com segurança.\n\nCorre antes que esgote! 🏃‍♂️💨`;
-
   return {
     score: 5.0,
-    telegram: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}\n\n#oferta`,
-    instagram: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${instagramBottomBlock}\n\n#oferta`,
-    whatsapp: `🚨 *Oferta: ${product.product_name}*\n\nPreço especial detectado.\n\n👉 Compre agora!\n${bottomBlock}`
+    telegram: formatOfferMessage(product, store || 'Especial', sanitizeOfferTitle(product.product_name, product), buildNeutralDescription()),
+    instagram: formatOfferMessage(product, store || 'Especial', sanitizeOfferTitle(product.product_name, product), buildNeutralDescription()),
+    whatsapp: formatOfferMessage(product, store || 'Especial', sanitizeOfferTitle(product.product_name, product), buildNeutralDescription())
   };
+}
+
+function buildNeutralDescription() {
+  return 'Produto selecionado com preço em destaque.';
+}
+
+function sanitizeOfferTitle(rawTitle, product) {
+  const fallbackTitle = String(product?.product_name || 'Produto sem nome').trim();
+  const candidate = String(rawTitle || '').replace(/\*/g, '').trim();
+  return candidate || fallbackTitle;
+}
+
+function sanitizeOfferDescription(rawDescription, product) {
+  const fallbackDescription = buildNeutralDescription();
+  const candidate = String(rawDescription || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!candidate) return fallbackDescription;
+  if (candidate.length > 220) return fallbackDescription;
+
+  const words = candidate.split(/\s+/).filter(Boolean);
+  if (words.length > 30) return fallbackDescription;
+
+  const sentenceCount = (candidate.match(/[.!?]+/g) || []).length || 1;
+  if (sentenceCount > 2) return fallbackDescription;
+
+  const suspiciousPatterns = [
+    /ultimas unidades/i,
+    /corre/i,
+    /estoque acabando/i,
+    /oportunidade unica/i,
+    /segredo/i,
+    /imperdivel/i,
+    /nao perca/i,
+    /promocao historica/i,
+    /celebridades/i,
+    /exclusivo/i
+  ];
+  if (suspiciousPatterns.some((pattern) => pattern.test(candidate.normalize('NFD').replace(/[\u0300-\u036f]/g, '')))) {
+    return fallbackDescription;
+  }
+
+  const normalizedTitle = String(product?.product_name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  const normalizedCandidate = candidate
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const suspiciousTerms = [
+    'rapida', 'rapido', 'amplo', 'profissional', 'superior', 'premium', 'potente',
+    'eficiente', 'ideal', 'perfeito', 'revitalizar', 'proteger', 'uniforme',
+    'hermetica', 'hermetico', 'bpa', 'silicone', '5g', 'ram', 'armazenamento'
+  ];
+  if (suspiciousTerms.some((term) => normalizedCandidate.includes(term) && !normalizedTitle.includes(term))) {
+    return fallbackDescription;
+  }
+
+  const stopWords = new Set([
+    'a', 'o', 'e', 'de', 'do', 'da', 'dos', 'das', 'para', 'com', 'sem', 'por',
+    'em', 'no', 'na', 'nos', 'nas', 'um', 'uma', 'ou', 'dia', 'noite', 'mais'
+  ]);
+  const candidateTokens = normalizedCandidate
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((token) => token && token.length > 2 && !stopWords.has(token));
+  const titleTokens = new Set(
+    normalizedTitle
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .split(/\s+/)
+      .filter(Boolean)
+  );
+  const tokensOutsideTitle = candidateTokens.filter((token) => !titleTokens.has(token));
+  if (tokensOutsideTitle.length > 0) {
+    return fallbackDescription;
+  }
+
+  return candidate;
+}
+
+function formatOfferMessage(product, store, title, description) {
+  const pStr = product.current_price ? product.current_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+  const opStr = product.old_price ? product.old_price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+  const lines = [
+    `🚨 ${title}`,
+    '',
+    `✨ ${description}`,
+    ''
+  ];
+
+  if (opStr) {
+    lines.push(`💰 De ${opStr}`);
+    lines.push(`🔥 Por ${pStr}${buildDiscountSuffix(product.old_price, product.current_price)}`);
+  } else {
+    lines.push(`🔥 Por ${pStr}`);
+  }
+
+  if (product.coupon) {
+    lines.push('');
+    lines.push(`🎟️ Cupom: ${product.coupon}`);
+  }
+
+  lines.push('');
+  lines.push(`🛒 Achado ${store}`);
+  lines.push('🔗 {LINK}');
+  lines.push('');
+  lines.push('📲 Mais ofertas no Caça Ofertas Oficial');
+  lines.push('https://t.me/caca_ofertaoficial');
+  return lines.join('\n');
+}
+
+function buildDiscountSuffix(oldPrice, currentPrice) {
+  if (!oldPrice || !currentPrice || oldPrice <= currentPrice) return '';
+  const discount = Math.round(((oldPrice - currentPrice) / oldPrice) * 100);
+  return discount > 0 ? ` (${discount}% OFF)` : '';
 }
 
 // ─── Salva Oferta Básica (Rascunho) ───────────────────────────
