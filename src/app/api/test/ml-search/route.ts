@@ -1,62 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 
-/**
- * GET /api/test/ml-search?q=QUERY
- * Testa a busca oficial de produtos no Mercado Livre via API REST.
- * Remove esta rota após validação.
- */
 export async function GET(req: NextRequest) {
   const query = req.nextUrl.searchParams.get("q") ?? "smartphone";
-  const limit = req.nextUrl.searchParams.get("limit") ?? "2";
-
   const accessToken =
     process.env.MERCADO_LIVRE_ACCESS_TOKEN ??
     "APP_USR-4737683937591844-071006-bc36646b2024b785803a89afcd515921-707437677";
 
-  try {
-    const searchUrl = `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(query)}&limit=${limit}`;
-
-    console.log("[ML Test] Buscando:", searchUrl);
-
-    const response = await fetch(searchUrl, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "ML API error", status: response.status, detail: data },
-        { status: response.status }
-      );
+  const call = async (label: string, url: string, withToken = false) => {
+    try {
+      const headers: Record<string, string> = { Accept: "application/json" };
+      if (withToken) headers["Authorization"] = `Bearer ${accessToken}`;
+      const res = await fetch(url, { headers, cache: "no-store" });
+      const data = await res.json();
+      return { label, status: res.status, ok: res.ok, data };
+    } catch (e) {
+      return { label, status: 0, ok: false, error: String(e) };
     }
+  };
 
-    // Retorna apenas os campos relevantes dos 2 primeiros produtos
-    const products = (data.results ?? []).slice(0, Number(limit)).map((item: Record<string, unknown>) => ({
-      id: item.id,
-      title: item.title,
-      price: item.price,
-      currency: item.currency_id,
-      available_quantity: item.available_quantity,
-      condition: item.condition,
-      thumbnail: item.thumbnail,
-      permalink: item.permalink,
-      seller: (item.seller as Record<string, unknown>)?.nickname ?? null,
-      shipping_free: (item.shipping as Record<string, unknown>)?.free_shipping ?? false,
-    }));
+  const results = await Promise.all([
+    call("1_search_sem_token", `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(query)}&limit=2`),
+    call("2_search_com_token", `https://api.mercadolibre.com/sites/MLB/search?q=${encodeURIComponent(query)}&limit=2`, true),
+    call("3_users_me",         `https://api.mercadolibre.com/users/me`, true),
+    call("4_sites_MLB",        `https://api.mercadolibre.com/sites/MLB`),
+    call("5_categorias",       `https://api.mercadolibre.com/sites/MLB/categories`),
+    call("6_item_direto",      `https://api.mercadolibre.com/items/MLB3604966831`, true),
+    call("7_trends",           `https://api.mercadolibre.com/trends/MLB`),
+  ]);
 
-    return NextResponse.json({
-      query,
-      total_results: data.paging?.total ?? 0,
-      source: "Mercado Livre API Oficial",
-      products,
-    });
-  } catch (err) {
-    console.error("[ML Test] Erro:", err);
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+  // Resumo legível
+  const summary = results.map(r => ({
+    label: r.label,
+    status: r.status,
+    ok: r.ok,
+    info: r.ok
+      ? (r.label === "3_users_me"
+          ? `nickname=${(r.data as Record<string,unknown>).nickname}`
+          : r.label === "6_item_direto"
+            ? `title=${(r.data as Record<string,unknown>).title}`
+            : `paging.total=${((r.data as Record<string,unknown>).paging as Record<string,unknown>)?.total ?? "N/A"}`)
+      : `ERRO: ${(r.data as Record<string,unknown>)?.message ?? (r as Record<string,unknown>).error}`
+  }));
+
+  return NextResponse.json({
+    query,
+    token_valid: results[2].ok,
+    summary,
+    detail: results
+  });
 }
