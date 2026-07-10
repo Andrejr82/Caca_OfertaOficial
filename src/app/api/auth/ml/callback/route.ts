@@ -20,9 +20,13 @@ export async function GET(req: NextRequest) {
     const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET;
     const redirectUri = process.env.MERCADO_LIVRE_REDIRECT_URI;
 
+    // SETUP MODE: Se env vars não estiverem configuradas no servidor (ex: Vercel),
+    // redireciona com o code visível para exchange manual via script local.
     if (!appId || !clientSecret || !redirectUri) {
-      console.error("[ML OAuth] Variáveis de ambiente ausentes.");
-      return new NextResponse("Configuração do servidor incompleta.", { status: 500 });
+      console.warn("[ML OAuth] Env vars ausentes — modo setup ativo. Redirecionando com code.");
+      return NextResponse.redirect(
+        new URL(`/dashboard?ml_setup_code=${encodeURIComponent(code)}`, req.url)
+      );
     }
 
     // Troca o código pelo access_token
@@ -96,3 +100,4 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard?error=ml_auth_fatal", req.url));
   }
 }
+
