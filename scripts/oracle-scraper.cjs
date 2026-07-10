@@ -1841,7 +1841,7 @@ function buildSafeProductPayload(products, options = {}) {
   };
 }
 
-  const normalizedProducts = (evalResult.products || []).map((product) => JSON.parse(
+  let normalizedProducts = (evalResult.products || []).map((product) => JSON.parse(
     createLLMInputFromNormalizedContent(
       normalizeProductContentForLLM({
         marketplace: storeName,
@@ -1850,6 +1850,13 @@ function buildSafeProductPayload(products, options = {}) {
       })
     )
   ));
+
+  let amazonUrlStats = null;
+  if (storeName === 'Amazon') {
+    const sanitizedAmazon = sanitizeAmazonProductsBeforeLlm(normalizedProducts);
+    normalizedProducts = sanitizedAmazon.products;
+    amazonUrlStats = sanitizedAmazon.stats;
+  }
 
   const safePayloadResult = buildSafeProductPayload(normalizedProducts, { maxChars: 20000 });
   rawExtractedData = safePayloadResult.payload;
@@ -1921,7 +1928,8 @@ function buildSafeProductPayload(products, options = {}) {
         store: storeName,
         query: queryContext.query,
         productsInBatch: safePayloadResult.includedCount,
-        rawLength: rawExtractedData.length
+        rawLength: rawExtractedData.length,
+        amazonUrlStats
       }
     });
 
@@ -2033,25 +2041,128 @@ function buildSafeProductPayload(products, options = {}) {
 function cleanProductUrl(url) {
   if (!url) return null;
   try {
-    let candidate = url;
-
-    const embeddedAmazonMatch = candidate.match(/https:\/\/www\.amazon\.com\.br\/[^\s"'<>]+/gi);
-    if (embeddedAmazonMatch && embeddedAmazonMatch.length > 0) {
-      candidate = embeddedAmazonMatch[embeddedAmazonMatch.length - 1];
+    const amazonCanonical = canonicalizeAmazonProductUrl(url);
+    if (amazonCanonical.url) {
+      return amazonCanonical.url;
     }
 
-    const asinMatch = candidate.match(/\/(?:dp|gp\/aw\/d|gp\/product)\/([A-Z0-9]{10})/i);
-    if (asinMatch) {
-      return `https://www.amazon.com.br/dp/${asinMatch[1].toUpperCase()}`;
-    }
-
-    const obj = new URL(candidate);
+    const obj = new URL(url);
     obj.search = '';
     obj.hash = '';
     return obj.toString();
   } catch(e) {
     return url;
   }
+}
+
+function extractAmazonAsin(value) {
+  const match = String(value || '').match(/\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})(?=[/?#&]|$)/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function isSponsoredAmazonUrl(url) {
+  const lower = String(url || '').toLowerCase();
+  return lower.includes('sponsored-ads.amazon') || lower.includes('/s/al-na') || lower.includes('aax-us-east-retail');
+}
+
+function unwrapAmazonUrlCandidate(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+
+  const embedded = text.match(/https?:\/\/(?:www\.)?amazon\.com\.br\/[^\s"'<>]+/i);
+  if (embedded) {
+    return embedded[0];
+  }
+
+  try {
+    const parsed = new URL(text);
+    const unwrapParams = ['url', 'u', 'redirect', 'destination', 'dest', 'target', 'to', 'link', 'href', 'murl'];
+    for (const param of unwrapParams) {
+      const raw = parsed.searchParams.get(param);
+      if (!raw) continue;
+      const decoded = decodeURIComponent(raw);
+      if (/amazon\.com\.br|amzn\.to/i.test(decoded) || /\/(?:dp|gp\/product|gp\/aw\/d)\//i.test(decoded)) {
+        return decoded;
+      }
+    }
+  } catch (_) {}
+
+  try {
+    const decoded = decodeURIComponent(text);
+    if (decoded !== text && /(amazon\.com\.br|amzn\.to)/i.test(decoded)) {
+      return decoded;
+    }
+  } catch (_) {}
+
+  return text;
+}
+
+function canonicalizeAmazonProductUrl(url) {
+  const original = String(url || '').trim();
+  if (!original) {
+    return { url: null, asin: null, sponsored: false };
+  }
+
+  const sponsored = isSponsoredAmazonUrl(original);
+  let candidate = original;
+
+  for (let depth = 0; depth < 4; depth++) {
+    const asin = extractAmazonAsin(candidate);
+    if (asin) {
+      return {
+        url: `https://www.amazon.com.br/dp/${asin}`,
+        asin,
+        sponsored
+      };
+    }
+
+    const unwrapped = unwrapAmazonUrlCandidate(candidate);
+    if (!unwrapped || unwrapped === candidate) break;
+    candidate = unwrapped;
+  }
+
+  return { url: null, asin: null, sponsored };
+}
+
+function sanitizeAmazonProductsBeforeLlm(products) {
+  const stats = {
+    received: Array.isArray(products) ? products.length : 0,
+    canonicalized: 0,
+    sponsoredRejected: 0,
+    sentToLLM: 0
+  };
+
+  const accepted = [];
+
+  for (const product of Array.isArray(products) ? products : []) {
+    const rawUrl = product?.product_url || product?.original_url || product?.url || '';
+    const canonical = canonicalizeAmazonProductUrl(rawUrl);
+
+    if (!canonical.url) {
+      if (canonical.sponsored) {
+        stats.sponsoredRejected++;
+        console.log('[Amazon] sponsored URL descartada antes da IA');
+      }
+      continue;
+    }
+
+    if (canonical.url !== rawUrl) {
+      stats.canonicalized++;
+    }
+
+    accepted.push({
+      ...product,
+      url: canonical.url,
+      original_url: canonical.url,
+      product_url: canonical.url,
+      asin: canonical.asin
+    });
+  }
+
+  stats.sentToLLM = accepted.length;
+  console.log(`[Amazon URL] received=${stats.received} canonicalized=${stats.canonicalized} sponsoredRejected=${stats.sponsoredRejected} sentToLLM=${stats.sentToLLM}`);
+
+  return { products: accepted, stats };
 }
 
 function normalizeImageUrl(url) {
@@ -3464,6 +3575,7 @@ async function scrapeStore(store) {
     } catch (err) {
       console.error(`  [Shopee Official] Erro fatal: ${err.message}`);
       await logErrorToSupabase('Oracle-Scraper', 'Shopee Official Pipeline', err, { store });
+      return [];
     }
   }
 
@@ -4253,22 +4365,134 @@ const HISTORY_REASON = {
   FORCED_REPROCESS: 'FORCED_REPROCESS'
 };
 
+const PROJECT_ROOT = path.resolve(__dirname, '..');
+const DEFAULT_SHOPEE_HISTORY_FILE = path.join(PROJECT_ROOT, 'data', 'shopee_seen_products.json');
+
+function ensureDirectoryExists(dirPath) {
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+  }
+}
+
+function safeParseJsonObject(raw, fallback = {}) {
+  if (!raw || !String(raw).trim()) return fallback;
+  const parsed = JSON.parse(raw);
+  return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : fallback;
+}
+
 class FileSeenProductStore {
-  constructor() {
-    this.dbPath = path.join(__dirname, '..', 'data', 'shopee_seen_products.json');
+  constructor(dbPath = process.env.SHOPEE_HISTORY_FILE || DEFAULT_SHOPEE_HISTORY_FILE) {
+    this.dbPath = path.resolve(dbPath);
+    this.backupPath = `${this.dbPath}.bak`;
+    this.isWriteInProgress = false;
     this.data = this._load();
   }
-  _load() {
-    if (fs.existsSync(this.dbPath)) {
-      try { return JSON.parse(fs.readFileSync(this.dbPath, 'utf8')); }
-      catch(e) { return {}; }
+
+  _readJsonFile(filePath) {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      const raw = fs.readFileSync(filePath, 'utf8');
+      return safeParseJsonObject(raw, {});
+    } catch (_) {
+      return null;
     }
+  }
+
+  _recoverCorruptedFile(rawError) {
+    ensureDirectoryExists(path.dirname(this.dbPath));
+
+    const backupData = this._readJsonFile(this.backupPath);
+    const hasCurrentFile = fs.existsSync(this.dbPath);
+
+    if (hasCurrentFile) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const corruptPath = `${this.dbPath}.corrupt-${stamp}.bak`;
+      try {
+        fs.copyFileSync(this.dbPath, corruptPath);
+      } catch (_) {}
+    }
+
+    if (backupData) {
+      this.data = backupData;
+      this._save();
+      console.warn(`[Shopee History] JSON corrompido recuperado via backup. file=${this.dbPath} error=${rawError.message}`);
+      return backupData;
+    }
+
+    try {
+      this._saveObject({});
+    } catch (_) {}
+    console.warn(`[Shopee History] JSON corrompido resetado. file=${this.dbPath} error=${rawError.message}`);
     return {};
   }
-  _save() {
+
+  _load() {
+    try {
+      ensureDirectoryExists(path.dirname(this.dbPath));
+      if (!fs.existsSync(this.dbPath)) {
+        this._saveObject({});
+        return {};
+      }
+
+      const raw = fs.readFileSync(this.dbPath, 'utf8');
+      if (!String(raw).trim()) {
+        console.warn(`[Shopee History] Arquivo vazio recuperado. file=${this.dbPath}`);
+        this._saveObject({});
+        return {};
+      }
+
+      return safeParseJsonObject(raw, {});
+    } catch (error) {
+      if (error instanceof SyntaxError) {
+        return this._recoverCorruptedFile(error);
+      }
+
+      console.warn(`[Shopee History] Falha ao carregar history. file=${this.dbPath} error=${error.message}`);
+      const backupData = this._readJsonFile(this.backupPath);
+      if (backupData) return backupData;
+      return {};
+    }
+  }
+
+  _saveObject(data) {
     const dir = path.dirname(this.dbPath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(this.dbPath, JSON.stringify(this.data, null, 2), 'utf8');
+    ensureDirectoryExists(dir);
+
+    const tempPath = `${this.dbPath}.${process.pid}.${Date.now()}.tmp`;
+    const payload = JSON.stringify(data, null, 2);
+
+    fs.writeFileSync(tempPath, payload, 'utf8');
+
+    try {
+      fs.renameSync(tempPath, this.dbPath);
+    } catch (renameError) {
+      try {
+        if (fs.existsSync(this.dbPath)) fs.unlinkSync(this.dbPath);
+        fs.renameSync(tempPath, this.dbPath);
+      } catch (finalError) {
+        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+        throw finalError || renameError;
+      }
+    }
+
+    try {
+      fs.writeFileSync(this.backupPath, payload, 'utf8');
+    } catch (_) {}
+  }
+
+  _save() {
+    if (this.isWriteInProgress) {
+      return;
+    }
+
+    this.isWriteInProgress = true;
+    try {
+      this._saveObject(this.data);
+    } catch (error) {
+      console.warn(`[Shopee History] Falha ao salvar history. file=${this.dbPath} error=${error.message}`);
+    } finally {
+      this.isWriteInProgress = false;
+    }
   }
   getProduct(fingerprint) {
     return this.data[fingerprint] || null;
@@ -4287,8 +4511,8 @@ class FileSeenProductStore {
 }
 
 class SeenProductStore {
-  constructor() {
-    this.provider = new FileSeenProductStore();
+  constructor(provider = new FileSeenProductStore()) {
+    this.provider = provider;
   }
   get(fingerprint) { return this.provider.getProduct(fingerprint); }
   save(fingerprint, data) { return this.provider.saveProduct(fingerprint, data); }
@@ -4297,24 +4521,96 @@ class SeenProductStore {
 }
 const seenProductStore = new SeenProductStore();
 
-function getProductFingerprint(product) {
-  if (product.itemId && product.shopee_shop_id) return `${product.itemId}_${product.shopee_shop_id}`;
-  if (product.shopee_item_id && product.shopee_shop_id) return `${product.shopee_item_id}_${product.shopee_shop_id}`;
-  if (product.itemId) return String(product.itemId);
-  if (product.shopee_item_id) return String(product.shopee_item_id);
-  if (product.offerLink) return product.offerLink.split('?')[0];
-  if (product.affiliate_url) return product.affiliate_url.split('?')[0];
-  if (product.productLink) return product.productLink.split('?')[0];
-  if (product.original_url) return product.original_url.split('?')[0];
+function getShopeeStableKey(product) {
   const name = product.productName || product.product_name || '';
   const shop = product.raw_node?.shopName || product.shopName || '';
   const cat = product.categoria_original || product.category || '';
   return Buffer.from(`${name}_${shop}_${cat}`).toString('base64');
 }
 
-function shouldProcessProduct(product, options = {}) {
-  const fp = getProductFingerprint(product);
-  const prev = seenProductStore.get(fp);
+function getShopeeCanonicalUrl(product) {
+  const candidates = [
+    product.offerLink,
+    product.affiliate_url,
+    product.productLink,
+    product.original_url,
+    product.product_url,
+    product.url
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    try {
+      const parsed = new URL(String(candidate).trim());
+      parsed.search = '';
+      parsed.hash = '';
+      return parsed.toString().replace(/\/$/, '');
+    } catch (_) {}
+  }
+
+  return null;
+}
+
+function getShopeeDedupKeys(product) {
+  const itemId = product.itemId || product.shopee_item_id || product.productId || product.marketplaceProductId || null;
+  const shopId = product.shopId || product.shopee_shop_id || product.raw_node?.shopId || null;
+  const canonicalUrl = getShopeeCanonicalUrl(product);
+  const stableKey = getShopeeStableKey(product);
+  const keys = [];
+
+  if (itemId) {
+    keys.push(`item:${itemId}`);
+    keys.push(String(itemId));
+  }
+  if (itemId && shopId) {
+    keys.push(`shopItem:${shopId}:${itemId}`);
+    keys.push(`${itemId}_${shopId}`);
+  }
+  if (canonicalUrl) {
+    keys.push(`url:${canonicalUrl}`);
+    keys.push(canonicalUrl);
+  }
+  keys.push(`stable:${stableKey}`);
+  keys.push(stableKey);
+
+  return [...new Set(keys)];
+}
+
+function getProductFingerprint(product) {
+  return getShopeeDedupKeys(product)[0];
+}
+
+function findSeenProductRecord(product, store = seenProductStore) {
+  for (const key of getShopeeDedupKeys(product)) {
+    const record = store.get(key);
+    if (record) {
+      return { key, record };
+    }
+  }
+  return { key: getProductFingerprint(product), record: null };
+}
+
+function dedupeShopeeProductsDetailed(products) {
+  const accepted = [];
+  const seen = new Set();
+  let duplicatesRejected = 0;
+
+  for (const product of products || []) {
+    const keys = getShopeeDedupKeys(product);
+    const duplicated = keys.some((key) => seen.has(key));
+    if (duplicated) {
+      duplicatesRejected++;
+      continue;
+    }
+    keys.forEach((key) => seen.add(key));
+    accepted.push(product);
+  }
+
+  return { products: accepted, duplicatesRejected };
+}
+
+function shouldProcessProduct(product, options = {}, store = seenProductStore) {
+  const prevRecord = findSeenProductRecord(product, store);
+  const prev = prevRecord.record;
 
   const currentPrice = product.current_price || 0;
   const currentDiscount = product.discount_rate || 0;
@@ -4390,8 +4686,13 @@ function shouldProcessProduct(product, options = {}) {
 }
 
 function registerSeenProduct(product, historyReason, processed = false) {
-  const fp = getProductFingerprint(product);
-  const prev = seenProductStore.get(fp) || {};
+  return registerSeenProductWithStore(product, historyReason, processed, seenProductStore);
+}
+
+function registerSeenProductWithStore(product, historyReason, processed = false, store = seenProductStore) {
+  const prevRecord = findSeenProductRecord(product, store);
+  const primaryKey = getProductFingerprint(product);
+  const prev = prevRecord.record || {};
   const now = Date.now();
 
   let rawComm = product.commission_rate || product.raw_node?.sellerCommissionRate || product.raw_node?.shopeeCommissionRate || 0;
@@ -4443,12 +4744,15 @@ function registerSeenProduct(product, historyReason, processed = false) {
     newRecord.events = newRecord.events.slice(-SHOPEE_HISTORY_CONFIG.maxHistoryEntries);
   }
 
-  seenProductStore.save(fp, newRecord);
+  store.save(primaryKey, newRecord);
+  if (prevRecord.record && prevRecord.key !== primaryKey) {
+    store.remove(prevRecord.key);
+  }
   return newRecord;
 }
 
-function cleanupSeenProducts() {
-  const all = seenProductStore.getAll();
+function cleanupSeenProducts(store = seenProductStore) {
+  const all = store.getAll();
   const now = Date.now();
   const maxAgeMs = SHOPEE_HISTORY_CONFIG.cleanupAfterDays * 24 * 60 * 60 * 1000;
   let removedCount = 0;
@@ -4456,7 +4760,7 @@ function cleanupSeenProducts() {
   for (const [fp, record] of all) {
     const ageMs = now - (record.lastSeenAt || 0);
     if (ageMs > maxAgeMs) {
-      seenProductStore.remove(fp);
+      store.remove(fp);
       removedCount++;
     }
   }
@@ -5070,6 +5374,8 @@ async function fetchShopeeOfficialDiscovery(options = {}) {
 
   const allRaw = [];
   let rawReturns = 0;
+  let duplicatesRejected = 0;
+  const categoryStats = {};
 
   for (const cat of resolvedCategories) {
     console.log('[Shopee Official] Categoria:', cat);
@@ -5088,48 +5394,96 @@ async function fetchShopeeOfficialDiscovery(options = {}) {
         }
       }
     }
-    // Deduplica por categoria antes de empilhar globalmente
-    allRaw.push(...dedupeShopeeProducts(catRaw));
+    const categoryDedupe = dedupeShopeeProductsDetailed(catRaw);
+    duplicatesRejected += categoryDedupe.duplicatesRejected;
+    categoryStats[cat] = {
+      requested: cat,
+      received: catRaw.length,
+      uniqueAfterFetch: categoryDedupe.products.length,
+      approved: 0
+    };
+    allRaw.push(...categoryDedupe.products);
   }
 
   // Deduplica global
-  const uniqueNodes = dedupeShopeeProducts(allRaw);
+  const globalDedupe = dedupeShopeeProductsDetailed(allRaw);
+  duplicatesRejected += globalDedupe.duplicatesRejected;
+  const uniqueNodes = globalDedupe.products;
 
   // Normaliza usando helper existente + enriquece com campos do Official Discovery
   const products = uniqueNodes.map(node => {
     const base = normalizeShopeeProduct(node);
     if (!base) return null;
-    const shopNameLower = (node.shopName || '').toLowerCase();
-    const officialSignal = ['oficial', 'official', 'loja oficial', 'mall', 'store', 'brasil', 'official store']
-      .some(s => shopNameLower.includes(s)) ? 1 : 0;
+    const officialFieldCandidates = [
+      ['officialShop', node.officialShop],
+      ['isOfficialShop', node.isOfficialShop],
+      ['shopType', node.shopType],
+      ['badge', node.badge]
+    ];
+    const officialField = officialFieldCandidates.find(([, value]) => value !== undefined && value !== null) || null;
     return {
       ...base,
       categoria_original: node._categoria_original || 'Geral',
       sortType: node._sortType,
       page: node._page,
-      official_shop_signal: officialSignal,
-      brand_signal: officialSignal && shopNameLower.split(' ').length <= 3 ? 1 : 0,
+      official_shop_field: officialField ? officialField[0] : null,
+      official_shop_value: officialField ? officialField[1] : null,
+      official_shop_signal: 0,
+      brand_signal: 0,
       raw_node: node
     };
   }).filter(Boolean);
 
-  return { products, rawReturns, isFallback, categories: resolvedCategories };
+  return {
+    products,
+    rawReturns,
+    isFallback,
+    categories: resolvedCategories,
+    duplicatesRejected,
+    categoryStats,
+    officialShopField: null
+  };
 }
 
-async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = { mode: 'manual_review' }) {
+async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = {}) {
+  const mode = options.mode || 'manual_review';
+  const historyStore = options.historyStore || seenProductStore;
+  const fetcher = options.fetcher || fetchShopeeOfficialDiscovery;
+  const officialOnly = options.officialOnly === true || process.env.SHOPEE_OFFICIAL_ONLY === '1';
+
+  if (process.env.SHOPEE_OFFICIAL_FORCE_ERROR === '1') {
+    throw new Error('SHOPEE_OFFICIAL_FORCE_ERROR');
+  }
+
   let catList = SHOPEE_OFFICIAL_CATEGORIES;
   if (targetCategory && targetCategory !== 'Todas' && targetCategory !== 'Geral') {
     catList = [targetCategory];
   }
   
-  const { products } = await fetchShopeeOfficialDiscovery({ categories: catList, limit: 50 });
+  const discovery = await fetcher({ categories: catList, limit: 50 });
+  const incomingProducts = Array.isArray(discovery?.products) ? discovery.products : [];
+  const pipelineDedupe = dedupeShopeeProductsDetailed(incomingProducts);
+  let products = pipelineDedupe.products;
+  let nonOfficialRejected = 0;
+
+  if (officialOnly && discovery?.officialShopField) {
+    const officialFiltered = [];
+    for (const product of products) {
+      if (product.official_shop_value) {
+        officialFiltered.push(product);
+      } else {
+        nonOfficialRejected++;
+      }
+    }
+    products = officialFiltered;
+  }
 
   const diagHistory = { received: products.length, accepted: 0, rejected: 0, reasons: {} };
   const historyFiltered = [];
   for (const p of products) {
-    const histDecision = shouldProcessProduct(p, options);
+    const histDecision = shouldProcessProduct(p, { ...options, mode }, historyStore);
     p.historyReason = histDecision.historyReason;
-    registerSeenProduct(p, histDecision.historyReason, false);
+    registerSeenProductWithStore(p, histDecision.historyReason, false, historyStore);
     if (histDecision.shouldProcess) {
       historyFiltered.push(p);
       diagHistory.accepted++;
@@ -5139,13 +5493,14 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = { 
     diagHistory.reasons[histDecision.historyReason] = (diagHistory.reasons[histDecision.historyReason] || 0) + 1;
   }
 
+  const postHistoryDedupe = dedupeShopeeProductsDetailed(historyFiltered);
   const diagScore = {
     high: 0, medium: 0, low: 0,
     min: Infinity, max: -Infinity, total: 0, count: 0,
     ranges: { '< 0': 0, '0-10': 0, '11-30': 0, '31-50': 0, '51-80': 0, '> 80': 0 }
   };
   const scoredProducts = [];
-  for (const p of historyFiltered) {
+  for (const p of postHistoryDedupe.products) {
     const scoreResult = calculateShopeeDiscoveryScore(p);
     p.discoveryScore = scoreResult.score;
     p.tier = scoreResult.tier;
@@ -5198,17 +5553,24 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = { 
 
   const diagCategory = {};
   for (const p of products) {
-    const cat = p.category || p.categoria_original || 'Sem Categoria';
+    const cat = p.categoria_original || p.category || 'Sem Categoria';
     if (!diagCategory[cat]) diagCategory[cat] = { recebidos: 0, pontuados: 0, selecionados: 0 };
     diagCategory[cat].recebidos++;
   }
   for (const p of scoredProducts) {
-    const cat = p.category || p.categoria_original || 'Sem Categoria';
+    const cat = p.categoria_original || p.category || 'Sem Categoria';
     if (diagCategory[cat]) diagCategory[cat].pontuados++;
   }
   for (const p of selectionResult.selectedProducts) {
-    const cat = p.category || p.categoria_original || 'Sem Categoria';
+    const cat = p.categoria_original || p.category || 'Sem Categoria';
     if (diagCategory[cat]) diagCategory[cat].selecionados++;
+  }
+
+  for (const [cat, stats] of Object.entries(discovery?.categoryStats || {})) {
+    if (!diagCategory[cat]) {
+      diagCategory[cat] = { recebidos: 0, pontuados: 0, selecionados: 0 };
+    }
+    stats.approved = diagCategory[cat].selecionados;
   }
 
   const queueResult = createMarketplaceCandidateQueue(selectionResult.selectedProducts, 'Shopee');
@@ -5219,6 +5581,8 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = { 
   }
   
   finalCandidates = finalCandidates.slice(0, limit);
+
+  console.log(`[Shopee Official] categories=${catList.length} received=${products.length} historyRejected=${diagHistory.rejected} duplicatesRejected=${(discovery?.duplicatesRejected || 0) + pipelineDedupe.duplicatesRejected + postHistoryDedupe.duplicatesRejected + queueResult.statistics.duplicatedCandidates} nonOfficialRejected=${nonOfficialRejected} candidates=${finalCandidates.length}`);
 
   console.log('\n[DIAGNOSTICS] =======================================');
   console.log('HISTORY:', JSON.stringify(diagHistory, null, 2));
@@ -5239,6 +5603,10 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = { 
       selected: selectionResult.statistics.totalSelected,
       candidatesGenerated: queueResult.statistics.readyCandidates,
       returned: finalCandidates.length,
+      duplicatesRejected: (discovery?.duplicatesRejected || 0) + pipelineDedupe.duplicatesRejected + postHistoryDedupe.duplicatesRejected + queueResult.statistics.duplicatedCandidates,
+      nonOfficialRejected,
+      officialShopField: discovery?.officialShopField || null,
+      categoryStats: discovery?.categoryStats || {},
       filteredByCategory: queueResult.candidates.length - finalCandidates.length,
       top10SelectionScore: finalCandidates.slice(0, 10).map(c => c.selectionScore),
       _selectionStats: selectionResult.statistics
@@ -5565,8 +5933,14 @@ module.exports = {
   GOLDEN_QUERIES,
   PROVIDER_CONFIG,
   runShopeeOfficialPipeline,
+  fetchShopeeOfficialDiscovery,
   MarketplaceManualReviewQueue,
-  MANUAL_REVIEW_STATUS
+  MANUAL_REVIEW_STATUS,
+  canonicalizeAmazonProductUrl,
+  sanitizeAmazonProductsBeforeLlm,
+  createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
+  dedupeShopeeProductsDetailed,
+  getShopeeDedupKeys
 };
 
 function getEnabledStores(stores) {
@@ -5648,13 +6022,7 @@ async function generateShopeeBatchShortLinks(originLinks) {
 }
 
 function dedupeShopeeProducts(products) {
-  const seen = new Set();
-  return products.filter(p => {
-    const key = `${p.itemId}-${p.shopId}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  return dedupeShopeeProductsDetailed(products).products;
 }
 
 function normalizeShopeeProduct(node) {

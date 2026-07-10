@@ -3,535 +3,229 @@
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
 require('dotenv').config({ path: '.env.local' });
 
-const crypto = require('crypto');
-const axios = require('axios');
-const ws = require('ws');
-const { createClient } = require('@supabase/supabase-js');
-const { validateProduct } = require('./scraper-adapter.cjs');
+const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+
 const {
-  upsertOffer,
-  generateOfferAnalysis,
-  fetchShopeeProductsFromOfficialApi,
-  buildAffiliateUrl,
-  fetchNetshoesProductsFromRakuten,
-} = require('./oracle-scraper.cjs');
+  runShopeeOfficialPipeline,
+  fetchShopeeOfficialDiscovery,
+  scrapeStore,
+  canonicalizeAmazonProductUrl,
+  sanitizeAmazonProductsBeforeLlm,
+  createShopeeHistoryStore
+} = require('../oracle-scraper.cjs');
 
-const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
-const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
-const SHOPEE_OFFICIAL_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
-const DEFAULT_SHOPEE_QUERIES = [
-  'fone bluetooth',
-  'creatina',
-  'vestido midi',
-  'tenis corrida',
-  'mochila'
-];
-const NETSHOES_TEST_QUERIES = [
-  'tenis nike',
-  'tenis adidas',
-  'whey protein',
-  'creatina',
-  'camiseta seleção'
-];
-const CHANNELS = ['telegram', 'instagram', 'whatsapp'];
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY,
-  {
-    auth: { autoRefreshToken: false, persistSession: false },
-    realtime: { webSocketImpl: ws },
-  }
-);
-
-function parseMoney(value) {
-  if (value === null || value === undefined || value === '') return null;
-  const num = Number.parseFloat(String(value).replace(',', '.'));
-  return Number.isFinite(num) ? num : null;
+function createTempDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'cacaoferta-marketplace-'));
 }
 
-function buildShopeePayload(query, limit, page = 1) {
-  return JSON.stringify({
-    operationName: 'ShopeeProductOfferSearch',
-    query: 'query ShopeeProductOfferSearch($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName } pageInfo { page limit hasNextPage } } }',
-    variables: {
-      keyword: query,
-      page,
-      limit,
-      sortType: 2,
-      isAMSOffer: true,
-    },
+function makeShopeeProduct(id, overrides = {}) {
+  const itemId = String(overrides.itemId || id);
+  const shopId = String(overrides.shopId || 9000 + id);
+  const category = overrides.category || 'Eletrônicos';
+  const productName = overrides.product_name || `Produto Premium ${itemId}`;
+  return {
+    product_name: productName,
+    current_price: overrides.current_price ?? 199.9,
+    old_price: overrides.old_price ?? 399.9,
+    image_url: overrides.image_url || `https://cf.shopee.com.br/file/${itemId}.jpg`,
+    original_url: overrides.original_url || `https://shopee.com.br/${productName.replace(/\s+/g, '-').toLowerCase()}-i.${shopId}.${itemId}`,
+    affiliate_url: overrides.affiliate_url || `https://shopee.com.br/${productName.replace(/\s+/g, '-').toLowerCase()}-i.${shopId}.${itemId}?af_click_lookback=7d`,
+    rating: overrides.rating ?? 4.9,
+    sales: overrides.sales ?? 9000,
+    category,
+    categoria_original: category,
+    platform: 'Shopee',
+    marketplace: 'Shopee',
+    shopee_item_id: itemId,
+    shopee_shop_id: shopId,
+    commission_rate: overrides.commission_rate ?? 0.18,
+    discount_rate: overrides.discount_rate ?? 50,
+    raw_node: {
+      itemId,
+      shopId,
+      shopName: overrides.shopName || `Loja ${shopId}`,
+      productName,
+      productLink: overrides.original_url || `https://shopee.com.br/${productName.replace(/\s+/g, '-').toLowerCase()}-i.${shopId}.${itemId}`,
+      offerLink: overrides.affiliate_url || `https://shopee.com.br/${productName.replace(/\s+/g, '-').toLowerCase()}-i.${shopId}.${itemId}?af_click_lookback=7d`,
+      ratingStar: overrides.rating ?? 4.9,
+      sales: overrides.sales ?? 9000,
+      commissionRate: overrides.commission_rate ?? 0.18,
+      priceDiscountRate: overrides.discount_rate ?? 50,
+      imageUrl: overrides.image_url || `https://cf.shopee.com.br/file/${itemId}.jpg`
+    }
+  };
+}
+
+async function runWithHistoryFile(historyFile, fetcher) {
+  const historyStore = createShopeeHistoryStore(historyFile);
+  return runShopeeOfficialPipeline('Todas', 50, {
+    mode: 'manual_review',
+    historyStore,
+    fetcher
   });
-}
-
-async function fetchShopeeBatch(query, limit = 20, page = 1) {
-  if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) {
-    return {
-      query,
-      page,
-      status: 0,
-      errors: ['CREDENCIAIS_SHOPEE_AUSENTES'],
-      returned: 0,
-      converted: [],
-    };
-  }
-
-  const payload = buildShopeePayload(query, limit, page);
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = crypto
-    .createHash('sha256')
-    .update(`${SHOPEE_APP_ID}${timestamp}${payload}${SHOPEE_APP_SECRET}`)
-    .digest('hex');
-
-  const response = await axios.post(SHOPEE_OFFICIAL_API_URL, payload, {
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `SHA256 Credential=${SHOPEE_APP_ID}, Timestamp=${timestamp}, Signature=${signature}`,
-    },
-    timeout: 60000,
-    validateStatus: () => true,
-  });
-
-  const errors = Array.isArray(response.data?.errors)
-    ? response.data.errors.map((item) => item?.message).filter(Boolean)
-    : [];
-  const nodes = Array.isArray(response.data?.data?.productOfferV2?.nodes)
-    ? response.data.data.productOfferV2.nodes
-    : [];
-  const converted = nodes
-    .map((node) => {
-      const currentPrice = parseMoney(node?.priceMin) ?? parseMoney(node?.priceMax);
-      const oldPriceCandidate = parseMoney(node?.priceMax);
-      const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
-      if (!node?.productName || !currentPrice || !node?.productLink) return null;
-      return {
-        product_name: String(node.productName).trim(),
-        current_price: currentPrice,
-        old_price: oldPrice,
-        image_url: node.imageUrl || null,
-        original_url: node.productLink,
-        affiliate_url: node.offerLink || node.productLink,
-        rating: node.ratingStar ? parseFloat(String(node.ratingStar)) : null,
-        category: 'Geral',
-        platform: 'Shopee',
-        marketplace: 'Shopee',
-        sales: node.sales ?? null,
-        shopee_item_id: node.itemId ?? null,
-        shopee_shop_id: node.shopId ?? null,
-      };
-    })
-    .filter(Boolean);
-
-  return {
-    query,
-    page,
-    status: response.status,
-    errors,
-    returned: nodes.length,
-    converted,
-  };
-}
-
-function createSubId(channel, offerId) {
-  const shortId = offerId.replace(/-/g, '').slice(0, 8);
-  const prefixes = { telegram: 'tg', instagram: 'ig', whatsapp: 'wp' };
-  return `${prefixes[channel] || 'x'}_${shortId}`;
-}
-
-function createTrackedUrl(subId) {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://cacaoferta.com.br';
-  return `${baseUrl}/go/${subId}`;
-}
-
-function isLikelyFallbackAnalysis(analysis, productName) {
-  if (!analysis || typeof analysis !== 'object') return false;
-  const telegram = String(analysis.telegram || '');
-  return telegram.includes(`Oferta: ${productName}`) && telegram.includes('Preço especial detectado.');
-}
-
-async function processCandidatesControlled(candidates) {
-  const metrics = {
-    processed: 0,
-    iaErrors: [],
-    iaFallbacks: 0,
-    linkErrors: [],
-    postErrors: [],
-    offerUpdateErrors: [],
-    postsByChannel: { telegram: 0, instagram: 0, whatsapp: 0 },
-  };
-
-  for (const item of candidates) {
-    let analysis;
-    try {
-      analysis = await generateOfferAnalysis(item.product, item.store, {
-        offerId: item.id,
-        pipelineBatchSize: candidates.length,
-        query: item.query || null,
-      });
-      if (isLikelyFallbackAnalysis(analysis, item.product.product_name)) {
-        metrics.iaFallbacks += 1;
-      }
-    } catch (error) {
-      metrics.iaErrors.push({ offerId: item.id, error: error.message });
-      continue;
-    }
-
-    const finalScore = item.score; // Desacoplado da IA
-    await supabase.from('posts').delete().eq('offer_id', item.id).eq('status', 'draft');
-
-    const linksMap = {};
-    let linkFailed = false;
-
-    for (const channel of CHANNELS) {
-      const subId = createSubId(channel, item.id);
-      const trackedUrl = createTrackedUrl(subId);
-      const { data: linkData, error: linkError } = await supabase
-        .from('affiliate_links')
-        .upsert({
-          user_id: ADMIN_USER_ID,
-          offer_id: item.id,
-          channel,
-          original_url: item.affiliateUrl,
-          tracked_url: trackedUrl,
-          sub_id: subId
-        }, { onConflict: 'offer_id,channel' })
-        .select('id')
-        .single();
-
-      if (linkError || !linkData?.id) {
-        metrics.linkErrors.push({
-          offerId: item.id,
-          channel,
-          error: linkError?.message || 'LINKDATA_AUSENTE'
-        });
-        linkFailed = true;
-        break;
-      }
-
-      linksMap[channel] = { id: linkData.id, url: trackedUrl };
-    }
-
-    if (linkFailed) continue;
-
-    const postsToInsert = [
-      { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.telegram.id, channel: 'telegram', content: analysis.telegram.replace('{LINK}', linksMap.telegram.url), status: 'draft' },
-      { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.instagram.id, channel: 'instagram', content: analysis.instagram.replace('{LINK}', linksMap.instagram.url), status: 'draft' },
-      { user_id: ADMIN_USER_ID, offer_id: item.id, affiliate_link_id: linksMap.whatsapp.id, channel: 'whatsapp', content: analysis.whatsapp.replace('{LINK}', linksMap.whatsapp.url), status: 'draft' }
-    ];
-
-    const { error: postsError } = await supabase.from('posts').insert(postsToInsert);
-    if (postsError) {
-      metrics.postErrors.push({ offerId: item.id, error: postsError.message });
-      continue;
-    }
-
-    const { error: offerUpdateError } = await supabase
-      .from('offers')
-      .update({ status: 'approved', score: finalScore })
-      .eq('id', item.id);
-
-    if (offerUpdateError) {
-      metrics.offerUpdateErrors.push({ offerId: item.id, error: offerUpdateError.message });
-      continue;
-    }
-
-    metrics.processed += 1;
-    for (const channel of CHANNELS) {
-      metrics.postsByChannel[channel] += 1;
-    }
-  }
-
-  return metrics;
-}
-
-function summarizeRejectReasons(rejections) {
-  const counts = {};
-  for (const item of rejections) {
-    const key = item.reason || 'DESCONHECIDO';
-    counts[key] = (counts[key] || 0) + 1;
-  }
-  return counts;
-}
-
-function isValidHttpUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === 'http:' || url.protocol === 'https:';
-  } catch (_) {
-    return false;
-  }
-}
-
-function evaluateNetshoesCandidate(product) {
-  const reasons = [];
-  const title = String(product.product_name || '').trim();
-  const image = String(product.image_url || '').trim();
-  const url = String(product.original_url || '').trim();
-  const current = Number(product.current_price || 0);
-  const old = product.old_price == null ? null : Number(product.old_price);
-  const finalUrl = buildAffiliateUrl(url, 'Netshoes');
-
-  if (current <= 0) reasons.push('PRECO_INVALIDO');
-  if (!image) reasons.push('SEM_IMAGEM');
-  if (!url || !isValidHttpUrl(url)) reasons.push('URL_INVALIDA');
-  if (old == null || old <= current) reasons.push('SEM_DESCONTO_REAL');
-  if (title.length < 12 || !title.includes(' ')) reasons.push('TITULO_GENERICO');
-  if (!finalUrl || !isValidHttpUrl(finalUrl)) reasons.push('DOMINIO_FINAL_INVALIDO');
-  if (product.merchant_name && !String(product.merchant_name).toLowerCase().includes('netshoes')) reasons.push('MERCHANT_DIVERGENTE');
-
-  return {
-    valid: reasons.length === 0,
-    reasons,
-    finalUrl,
-  };
-}
-
-async function collectShopeeProducts(maxProducts = 100) {
-  const queries = DEFAULT_SHOPEE_QUERIES;
-  const batches = [];
-  const unique = new Map();
-  const apiErrors = [];
-
-  for (const query of queries) {
-    if (unique.size >= maxProducts) break;
-    const batch = await fetchShopeeBatch(query, 20, 1);
-    batches.push({
-      query: batch.query,
-      status: batch.status,
-      returned: batch.returned,
-      converted: batch.converted.length,
-      errors: batch.errors,
-    });
-
-    if (batch.status !== 200 || batch.errors.length > 0) {
-      apiErrors.push({
-        query,
-        status: batch.status,
-        errors: batch.errors,
-      });
-      continue;
-    }
-
-    for (const product of batch.converted) {
-      const key = product.original_url || product.affiliate_url || product.product_name;
-      if (!unique.has(key)) {
-        unique.set(key, { ...product, query });
-      }
-      if (unique.size >= maxProducts) break;
-    }
-  }
-
-  return {
-    batches,
-    apiErrors,
-    products: Array.from(unique.values()).slice(0, maxProducts),
-  };
-}
-
-async function runShopeeHomologation() {
-  const collection = await collectShopeeProducts(100);
-  const converted = collection.products;
-  const approved = [];
-  const rejected = [];
-
-  for (const product of converted) {
-    const validation = validateProduct(product, 'Shopee');
-    if (validation.valid) {
-      approved.push({ product, validation });
-    } else {
-      rejected.push({
-        product_name: product.product_name,
-        url: product.original_url,
-        reason: validation.rejectReason || 'DESCONHECIDO'
-      });
-    }
-  }
-
-  const upserted = [];
-  const insertErrors = [];
-  let duplicates = 0;
-
-  for (const entry of approved) {
-    const affiliateUrl = entry.product.affiliate_url || entry.product.original_url;
-    const result = await upsertOffer(entry.product, 'Shopee', affiliateUrl);
-    if (!result) {
-      insertErrors.push({
-        product_name: entry.product.product_name,
-        url: affiliateUrl
-      });
-      continue;
-    }
-    if (!result.isNew) duplicates += 1;
-    upserted.push({
-      id: result.id,
-      isNew: result.isNew,
-      score: result.score,
-      store: 'Shopee',
-      product: entry.product,
-      affiliateUrl,
-      query: entry.product.query || null,
-    });
-  }
-
-  const processingMetrics = await processCandidatesControlled(upserted);
-  const offerIds = upserted.map((item) => item.id);
-  const { data: postsData, error: postsQueryError } = offerIds.length === 0
-    ? { data: [], error: null }
-    : await supabase
-      .from('posts')
-      .select('offer_id,channel,status')
-      .in('offer_id', offerIds)
-      .eq('status', 'draft');
-
-  const draftCounts = { telegram: 0, instagram: 0, whatsapp: 0 };
-  const panelValidated = !postsQueryError && CHANNELS.every((channel) => {
-    const count = (postsData || []).filter((row) => row.channel === channel).length;
-    draftCounts[channel] = count;
-    return count > 0;
-  });
-
-  return {
-    apiBatches: collection.batches,
-    apiErrors: collection.apiErrors,
-    totalReturned: collection.batches.reduce((sum, item) => sum + item.returned, 0),
-    totalConverted: converted.length,
-    totalApproved: approved.length,
-    totalRejected: rejected.length,
-    rejectReasons: summarizeRejectReasons(rejected),
-    offersCreated: upserted.length,
-    duplicates,
-    insertErrors,
-    postsByChannel: draftCounts,
-    postsQueryError: postsQueryError?.message || null,
-    panelValidated,
-    processingMetrics,
-    sampleProducts: converted.slice(0, 3).map((item) => ({
-      product_name: item.product_name,
-      current_price: item.current_price,
-      old_price: item.old_price,
-      original_url: item.original_url,
-    })),
-  };
-}
-
-async function runNetshoesReadonlyTest() {
-  const rakutenIntegrationFound = true;
-  const rakutenAffiliateCredsFound = !!process.env.RAKUTEN_AFFILIATE_ID && !!process.env.RAKUTEN_NETSHOES_MID;
-  const rakutenApiCredsFound = !!process.env.RAKUTEN_ACCESS_TOKEN && !!process.env.RAKUTEN_CLIENT_ID && !!process.env.RAKUTEN_CLIENT_SECRET && !!process.env.RAKUTEN_SID;
-  const mainCycleActive = false;
-
-  const result = {
-    integrationFound: rakutenIntegrationFound,
-    affiliateCredsFound: rakutenAffiliateCredsFound,
-    apiCredsFound: rakutenApiCredsFound,
-    activeState: mainCycleActive ? 'ativa' : 'desativada',
-    apiStatus: rakutenApiCredsFound ? 'NAO_TESTADO' : 'BLOQUEADO_SEM_CREDENCIAIS_API_RAKUTEN',
-    totalReturned: 0,
-    totalApproved: 0,
-    totalRejected: 0,
-    rejectReasons: {},
-    approvedExamples: [],
-    rejectedExamples: [],
-    validatorRejectReasons: {},
-    validatorApproved: 0,
-    validatorRejected: 0,
-    queries: NETSHOES_TEST_QUERIES,
-    command: 'node scripts/legacy_tests/homologate-shopee-netshoes.cjs',
-  };
-
-  if (!rakutenApiCredsFound) {
-    result.rejectReasons = { SEM_CREDENCIAIS_API_RAKUTEN: NETSHOES_TEST_QUERIES.length };
-    return result;
-  }
-
-  const readonlyProducts = [];
-  const queryDiagnostics = [];
-  for (const query of NETSHOES_TEST_QUERIES) {
-    let page = 1;
-    let queryReturned = 0;
-    while (readonlyProducts.length < 100 && page <= 5) {
-      const products = await fetchNetshoesProductsFromRakuten(query, 20, page);
-      queryReturned += products.length;
-      if (products.length === 0) break;
-      for (const product of products) {
-        if (readonlyProducts.length < 100) {
-          readonlyProducts.push({ ...product, query, page });
-        }
-      }
-      page += 1;
-    }
-
-    queryDiagnostics.push({
-      query,
-      returned: queryReturned
-    });
-
-    if (readonlyProducts.length >= 100) break;
-  }
-
-  const validatorRejected = [];
-  const validatorApproved = [];
-  for (const product of readonlyProducts) {
-    const validation = validateProduct(product, 'Netshoes');
-    if (validation.valid) {
-      validatorApproved.push(product);
-    } else {
-      validatorRejected.push({
-        product_name: product.product_name,
-        reason: validation.rejectReason || 'DESCONHECIDO'
-      });
-    }
-  }
-
-  const approved = [];
-  const rejected = [];
-  for (const product of validatorApproved) {
-    const evaluation = evaluateNetshoesCandidate(product);
-    if (evaluation.valid) {
-      approved.push({ product, finalUrl: evaluation.finalUrl });
-    } else {
-      rejected.push({
-        product_name: product.product_name,
-        reasons: evaluation.reasons,
-        finalUrl: evaluation.finalUrl
-      });
-    }
-  }
-
-  const validatorRejectReasons = validatorRejected.reduce((acc, item) => {
-    acc[item.reason] = (acc[item.reason] || 0) + 1;
-    return acc;
-  }, {});
-
-  result.totalReturned = readonlyProducts.length;
-  result.totalApproved = approved.length;
-  result.totalRejected = validatorRejected.length + rejected.length;
-  result.rejectReasons = rejected.reduce((acc, item) => {
-    for (const reason of item.reasons) {
-      acc[reason] = (acc[reason] || 0) + 1;
-    }
-    return acc;
-  }, {});
-  result.validatorApproved = validatorApproved.length;
-  result.validatorRejected = validatorRejected.length;
-  result.validatorRejectReasons = validatorRejectReasons;
-  result.approvedExamples = approved.slice(0, 5);
-  result.rejectedExamples = rejected.slice(0, 5);
-  result.queryDiagnostics = queryDiagnostics;
-  return result;
 }
 
 async function main() {
-  const shopeeSmoke = await fetchShopeeProductsFromOfficialApi('fone bluetooth', 3);
-  const shopee = await runShopeeHomologation();
-  const netshoes = await runNetshoesReadonlyTest();
+  const tempDir = createTempDir();
+  const mockProducts = [
+    makeShopeeProduct(101, { category: 'Eletrônicos' }),
+    makeShopeeProduct(102, { category: 'Telefonia', current_price: 249.9, old_price: 499.9 }),
+    makeShopeeProduct(101, { category: 'Eletrônicos' })
+  ];
+  const mockFetcher = async () => ({
+    products: mockProducts,
+    categories: ['Eletrônicos', 'Telefonia'],
+    duplicatesRejected: 0,
+    categoryStats: {
+      Eletrônicos: { requested: 'Eletrônicos', received: 2, uniqueAfterFetch: 2, approved: 0 },
+      Telefonia: { requested: 'Telefonia', received: 1, uniqueAfterFetch: 1, approved: 0 }
+    },
+    officialShopField: null
+  });
+
+  const results = {
+    shopee: {},
+    amazon: {}
+  };
+
+  const missingHistoryFile = path.join(tempDir, 'missing', 'shopee_seen_products.json');
+  const missingRun = await runWithHistoryFile(missingHistoryFile, mockFetcher);
+  assert(fs.existsSync(missingHistoryFile), 'History inexistente não foi criado');
+  assert(missingRun.candidates.length >= 1, 'Pipeline não continuou após criar history');
+  results.shopee.historyMissing = true;
+
+  const emptyHistoryFile = path.join(tempDir, 'empty', 'shopee_seen_products.json');
+  fs.mkdirSync(path.dirname(emptyHistoryFile), { recursive: true });
+  fs.writeFileSync(emptyHistoryFile, '', 'utf8');
+  const emptyRun = await runWithHistoryFile(emptyHistoryFile, mockFetcher);
+  assert(emptyRun.candidates.length >= 1, 'Pipeline não continuou com history vazio');
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(emptyHistoryFile, 'utf8')), JSON.parse(fs.readFileSync(emptyHistoryFile, 'utf8')));
+  results.shopee.historyEmpty = true;
+
+  const corruptHistoryFile = path.join(tempDir, 'corrupt', 'shopee_seen_products.json');
+  fs.mkdirSync(path.dirname(corruptHistoryFile), { recursive: true });
+  fs.writeFileSync(corruptHistoryFile, '{invalid json', 'utf8');
+  fs.writeFileSync(`${corruptHistoryFile}.bak`, JSON.stringify({ preserved: { itemId: '1' } }, null, 2), 'utf8');
+  const corruptRun = await runWithHistoryFile(corruptHistoryFile, mockFetcher);
+  const corruptArtifacts = fs.readdirSync(path.dirname(corruptHistoryFile)).filter((name) => name.includes('.corrupt-'));
+  assert(corruptRun.candidates.length >= 1, 'Pipeline não continuou com history corrompido');
+  assert(corruptArtifacts.length >= 1, 'Backup de history corrompido não foi preservado');
+  results.shopee.historyCorrupt = true;
+
+  const writeHistoryFile = path.join(tempDir, 'writes', 'shopee_seen_products.json');
+  const writeStore = createShopeeHistoryStore(writeHistoryFile);
+  writeStore.save('item:1', { itemId: '1', lastSeenAt: Date.now() });
+  writeStore.save('item:2', { itemId: '2', lastSeenAt: Date.now() });
+  JSON.parse(fs.readFileSync(writeHistoryFile, 'utf8'));
+  results.shopee.atomicWrites = true;
+
+  const duplicateHistoryFile = path.join(tempDir, 'duplicate', 'shopee_seen_products.json');
+  const duplicateRun = await runWithHistoryFile(duplicateHistoryFile, mockFetcher);
+  assert(duplicateRun.telemetry.duplicatesRejected >= 1, 'Duplicado no mesmo payload não foi removido');
+  results.shopee.duplicatePayload = duplicateRun.telemetry.duplicatesRejected;
+
+  const repeatHistoryFile = path.join(tempDir, 'repeat', 'shopee_seen_products.json');
+  const repeatStore = createShopeeHistoryStore(repeatHistoryFile);
+  const repeatFetcher = async () => ({
+    products: [makeShopeeProduct(201, { category: 'Eletrônicos' })],
+    categories: ['Eletrônicos'],
+    duplicatesRejected: 0,
+    categoryStats: {
+      Eletrônicos: { requested: 'Eletrônicos', received: 1, uniqueAfterFetch: 1, approved: 0 }
+    },
+    officialShopField: null
+  });
+  const firstRepeat = await runShopeeOfficialPipeline('Todas', 50, { mode: 'manual_review', historyStore: repeatStore, fetcher: repeatFetcher });
+  const secondRepeat = await runShopeeOfficialPipeline('Todas', 50, { mode: 'auto', historyStore: repeatStore, fetcher: repeatFetcher });
+  assert(firstRepeat.candidates.length >= 1, 'Primeira execução deveria aceitar produto novo');
+  assert(secondRepeat.telemetry.historyFilteredOut >= 1, 'Produto já no history não foi bloqueado');
+  results.shopee.historyBlocksOld = true;
+
+  const originalForceFlag = process.env.SHOPEE_OFFICIAL_FORCE_ERROR;
+  process.env.SHOPEE_OFFICIAL_FORCE_ERROR = '1';
+  const forcedFailure = await scrapeStore('Shopee');
+  if (originalForceFlag === undefined) delete process.env.SHOPEE_OFFICIAL_FORCE_ERROR;
+  else process.env.SHOPEE_OFFICIAL_FORCE_ERROR = originalForceFlag;
+  assert(Array.isArray(forcedFailure) && forcedFailure.length === 0, 'Falha forçada ainda caiu no V4');
+  results.shopee.v4BlockedOnFailure = true;
+
+  const realHistoryFile = path.join(tempDir, 'real', 'shopee_seen_products.json');
+  const realStore = createShopeeHistoryStore(realHistoryFile);
+  let realPipeline = null;
+  let realPipelineError = null;
+  try {
+    realPipeline = await runShopeeOfficialPipeline('Todas', 500, {
+      mode: 'manual_review',
+      historyStore: realStore,
+      fetcher: (options) => fetchShopeeOfficialDiscovery({
+        ...options,
+        sortTypes: [2],
+        pages: [1],
+        limit: 10
+      })
+    });
+    assert(realPipeline.telemetry.received > 0, 'API oficial não retornou produtos reais');
+    results.shopee.officialApiWorking = true;
+  } catch (error) {
+    realPipelineError = error.message;
+    results.shopee.officialApiWorking = false;
+  }
+
+  const amazonDirect = canonicalizeAmazonProductUrl('https://www.amazon.com.br/dp/B0C1234567?tag=abc');
+  const amazonGpProduct = canonicalizeAmazonProductUrl('https://www.amazon.com.br/gp/product/B0C1234567/ref=something');
+  const amazonGpAw = canonicalizeAmazonProductUrl('https://www.amazon.com.br/gp/aw/d/B0C1234567?psc=1');
+  const amazonSponsored = canonicalizeAmazonProductUrl('https://sponsored-ads.amazon.com.br/clk?url=https%3A%2F%2Fwww.amazon.com.br%2Fgp%2Fproduct%2FB0C1234567%2Fref%3Dabc');
+  const amazonSanitized = sanitizeAmazonProductsBeforeLlm([
+    { product_url: 'https://www.amazon.com.br/dp/B0C1234567?tag=abc' },
+    { product_url: 'https://www.amazon.com.br/gp/product/B0C1234567/ref=something' },
+    { product_url: 'https://www.amazon.com.br/gp/aw/d/B0C1234567?psc=1' },
+    { product_url: 'https://sponsored-ads.amazon.com.br/clk?url=https%3A%2F%2Fwww.amazon.com.br%2Fgp%2Fproduct%2FB0C1234567%2Fref%3Dabc' },
+    { product_url: 'https://sponsored-ads.amazon.com.br/clk?foo=bar' }
+  ]);
+
+  assert.strictEqual(amazonDirect.url, 'https://www.amazon.com.br/dp/B0C1234567');
+  assert.strictEqual(amazonGpProduct.url, 'https://www.amazon.com.br/dp/B0C1234567');
+  assert.strictEqual(amazonGpAw.url, 'https://www.amazon.com.br/dp/B0C1234567');
+  assert.strictEqual(amazonSponsored.url, 'https://www.amazon.com.br/dp/B0C1234567');
+  assert.strictEqual(amazonSanitized.stats.sponsoredRejected, 1);
+  assert.strictEqual(amazonSanitized.products.some((product) => String(product.product_url).includes('sponsored-ads.amazon.com.br')), false);
+
+  results.amazon.canonicalization = true;
+  results.amazon.received = amazonSanitized.stats.received;
+  results.amazon.sentToLLM = amazonSanitized.stats.sentToLLM;
+  results.amazon.sponsoredRejected = amazonSanitized.stats.sponsoredRejected;
 
   const report = {
     generatedAt: new Date().toISOString(),
-    shopeeSmokeCount: shopeeSmoke.length,
-    shopee,
-    netshoes,
+    comparedFlow: {
+      productionEntry: 'scrapeStore("Shopee")',
+      testEntry: 'runShopeeOfficialPipeline("Todas", 50)',
+      sameOfficialFunction: true,
+      productionDifferenceFound: true,
+      exactDifference: 'Produção chamava mesmo pipeline oficial, mas em erro caía no V4 legado; teste controlado permanece no pipeline oficial completo.'
+    },
+    shopee: {
+      historyMissing: results.shopee.historyMissing,
+      historyEmpty: results.shopee.historyEmpty,
+      historyCorrupt: results.shopee.historyCorrupt,
+      atomicWrites: results.shopee.atomicWrites,
+      duplicatePayloadRejected: results.shopee.duplicatePayload,
+      historyBlocksOld: results.shopee.historyBlocksOld,
+      v4BlockedOnFailure: results.shopee.v4BlockedOnFailure,
+      officialApiWorking: results.shopee.officialApiWorking,
+      officialApiError: realPipelineError,
+      categoriesRequested: realPipeline?.telemetry?.categoryStats ? Object.keys(realPipeline.telemetry.categoryStats) : [],
+      categoryStats: realPipeline?.telemetry?.categoryStats || {},
+      productsReceived: realPipeline?.telemetry?.received ?? 0,
+      candidatesReturned: realPipeline?.telemetry?.returned ?? 0,
+      duplicatesRejected: realPipeline?.telemetry?.duplicatesRejected ?? duplicateRun.telemetry.duplicatesRejected,
+      historyRejected: realPipeline?.telemetry?.historyFilteredOut ?? 0,
+      officialShopField: realPipeline?.telemetry?.officialShopField || null
+    },
+    amazon: results.amazon
   };
 
   console.log(JSON.stringify(report, null, 2));
@@ -541,7 +235,7 @@ main().catch((error) => {
   console.error(JSON.stringify({
     fatal: true,
     message: error.message,
-    stack: error.stack,
+    stack: error.stack
   }, null, 2));
   process.exit(1);
 });
