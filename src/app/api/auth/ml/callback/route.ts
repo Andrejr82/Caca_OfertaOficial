@@ -4,7 +4,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 /**
  * GET /api/auth/ml/callback
  * Callback OAuth PKCE do Mercado Livre.
- * Lê o code_verifier do cookie e troca o authorization code por access_token.
+ * Lê o code_verifier do cookie (gerado em /api/auth/ml/login) e troca
+ * o authorization code por access_token + refresh_token.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -25,21 +26,20 @@ export async function GET(req: NextRequest) {
     const codeVerifier = req.cookies.get("ml_code_verifier")?.value;
 
     if (!codeVerifier) {
-      console.error("[ML OAuth] code_verifier não encontrado no cookie. Inicie o fluxo por /api/auth/ml/login");
+      console.error("[ML OAuth] code_verifier não encontrado. Inicie o fluxo por /api/auth/ml/login");
       return NextResponse.redirect(new URL("/dashboard?error=ml_missing_verifier", req.url));
     }
 
-    // Credenciais com fallback hardcoded para setup inicial
-    const appId = process.env.MERCADO_LIVRE_APP_ID ?? "4737683937591844";
-    const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET ?? "ghjolsSndOR1Mp591UskpOepNZ8hvyrw";
-    const redirectUri = process.env.MERCADO_LIVRE_REDIRECT_URI ?? "https://caca-oferta-oficial.vercel.app/api/auth/ml/callback";
+    const appId = process.env.MERCADO_LIVRE_APP_ID;
+    const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET;
+    const redirectUri = process.env.MERCADO_LIVRE_REDIRECT_URI;
 
-    console.log("[ML OAuth] Iniciando troca PKCE de code pelo token...");
-    console.log("[ML OAuth] client_id:", appId);
-    console.log("[ML OAuth] redirect_uri:", redirectUri);
-    console.log("[ML OAuth] code_verifier (primeiros 10):", codeVerifier.substring(0, 10) + "...");
+    if (!appId || !clientSecret || !redirectUri) {
+      console.error("[ML OAuth] Variáveis de ambiente MERCADO_LIVRE_* ausentes no servidor.");
+      return NextResponse.redirect(new URL("/dashboard?error=ml_env_missing", req.url));
+    }
 
-    // Troca o código pelo access_token (com code_verifier para PKCE)
+    // Troca o código pelo access_token (PKCE: inclui code_verifier)
     const tokenResponse = await fetch("https://api.mercadolibre.com/oauth/token", {
       method: "POST",
       headers: {
@@ -58,10 +58,17 @@ export async function GET(req: NextRequest) {
 
     const tokenData = await tokenResponse.json();
 
+    // Limpa cookies de PKCE independente do resultado
+    const clearPkceCookies = (res: NextResponse) => {
+      res.cookies.delete("ml_code_verifier");
+      res.cookies.delete("ml_oauth_state");
+      return res;
+    };
+
     if (!tokenResponse.ok) {
       console.error("[ML OAuth] Erro ao obter token:", JSON.stringify(tokenData));
-      const errMsg = encodeURIComponent(JSON.stringify(tokenData));
-      return NextResponse.redirect(new URL(`/dashboard?error=ml_token_failed&detail=${errMsg}`, req.url));
+      const res = NextResponse.redirect(new URL("/dashboard?error=ml_token_failed", req.url));
+      return clearPkceCookies(res);
     }
 
     const { access_token, refresh_token, expires_in, user_id } = tokenData;
@@ -76,24 +83,10 @@ export async function GET(req: NextRequest) {
     const { data: userData } = await supabase.auth.getUser();
     const systemUserId = userData?.user?.id;
 
-    // Limpa os cookies de PKCE
-    const cleanCookies = (res: NextResponse) => {
-      res.cookies.delete("ml_code_verifier");
-      res.cookies.delete("ml_oauth_state");
-      return res;
-    };
-
     if (!systemUserId) {
-      console.warn("[ML OAuth] Tokens obtidos mas usuário não está logado no dashboard.");
-      // Passa os tokens na URL para que possam ser salvos manualmente
-      const tokenParams = new URLSearchParams({
-        ml_access_token: access_token,
-        ml_refresh_token: refresh_token,
-        ml_user_id: String(user_id),
-        ml_status: "tokens_obtained"
-      });
-      const res = NextResponse.redirect(new URL(`/dashboard?${tokenParams.toString()}`, req.url));
-      return cleanCookies(res);
+      console.warn("[ML OAuth] Usuário do sistema não logado no callback.");
+      const res = NextResponse.redirect(new URL("/dashboard?error=ml_no_session", req.url));
+      return clearPkceCookies(res);
     }
 
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
@@ -111,20 +104,18 @@ export async function GET(req: NextRequest) {
           },
           updated_at: new Date().toISOString()
         },
-        {
-          onConflict: "user_id,key"
-        }
+        { onConflict: "user_id,key" }
       );
 
     if (upsertError) {
       console.error("[ML OAuth] Erro ao salvar credenciais no banco:", upsertError);
       const res = NextResponse.redirect(new URL("/dashboard?error=ml_save_failed", req.url));
-      return cleanCookies(res);
+      return clearPkceCookies(res);
     }
 
     console.log(`[ML OAuth] ✅ Credenciais salvas no Supabase para o usuário: ${systemUserId}`);
     const res = NextResponse.redirect(new URL("/dashboard?success=ml_connected", req.url));
-    return cleanCookies(res);
+    return clearPkceCookies(res);
 
   } catch (err) {
     console.error("[ML OAuth] Erro fatal no callback:", err);
