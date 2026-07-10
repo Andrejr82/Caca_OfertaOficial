@@ -1414,7 +1414,7 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
     for (const url of urls) {
       console.log(`[SCRAPER][AMAZON][TRENDS] Tentando URL: ${url}`);
       try {
-        const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
+        const oracleRes = await fetch(`${getOracleApiBaseUrl()}/api/scrape`, {
           method: "POST",
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url, token: oracleKey }),
@@ -1434,6 +1434,7 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
 
         const html = oracleData.data.html;
         const results: ScrapedProduct[] = [];
+        const seenAsins = new Set<string>();
         
         // Parse HTML com Cheerio
         const $ = cheerio.load(html);
@@ -1443,7 +1444,8 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
           if (results.length >= limit) return false; // Break loop
           
           const asin = $(el).attr('data-asin');
-          if (!asin || asin.trim() === '') return;
+          const normalizedAsin = String(asin || '').trim().toUpperCase();
+          if (!/^[A-Z0-9]{10}$/.test(normalizedAsin) || seenAsins.has(normalizedAsin)) return;
           
           // Title
           let title = $(el).find('h2 span').text().trim() || 
@@ -1458,10 +1460,12 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
           const image = extractImage($, el);
           
           // Link
-          let link = $(el).find('h2 a').attr('href') || $(el).find('a.a-link-normal').attr('href');
-          if (link && !link.startsWith('http')) link = 'https://www.amazon.com.br' + link;
+          const rawLink = $(el).find('h2 a').attr('href') || $(el).find('a.a-link-normal').attr('href') || '';
+          if (/sponsored-ads\.amazon|aax-us-east-retail|\/s\/al-na/i.test(rawLink)) return;
+          const link = `https://www.amazon.com.br/dp/${normalizedAsin}`;
 
           if (title && link && currentPrice > 0) {
+             seenAsins.add(normalizedAsin);
              const { category: cat, subcategory: sub } = normalizeCategory(category || title);
              results.push({
                product_name: title,

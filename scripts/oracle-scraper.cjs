@@ -408,6 +408,13 @@ const RAKUTEN_CLIENT_SECRET = process.env.RAKUTEN_CLIENT_SECRET || '';
 const RAKUTEN_SID = process.env.RAKUTEN_SID || '';
 const RAKUTEN_NETSHOES_MID = process.env.RAKUTEN_NETSHOES_MID || '43984';
 const ENABLE_NETSHOES_RAKUTEN = process.env.ENABLE_NETSHOES_RAKUTEN !== '0';
+const RAKUTEN_TOKEN_URL = 'https://api.linksynergy.com/token';
+let rakutenTokenState = {
+  accessToken: RAKUTEN_ACCESS_TOKEN || null,
+  refreshToken: process.env.RAKUTEN_REFRESH_TOKEN || null,
+  expiresAt: 0
+};
+let rakutenTokenRequest = null;
 
 // #region debug-point A:golden-queries-audit-bootstrap
 const SCRAPER_AUDIT_ENV_FILE = '.dbg/golden-queries-audit.env';
@@ -2227,21 +2234,73 @@ function computeRakutenDiscountBadge(retailPrice, salePrice, discountValue, disc
   return null;
 }
 
+async function requestRakutenAccessToken(refreshToken = null) {
+  const tokenKey = Buffer.from(`${RAKUTEN_CLIENT_ID}:${RAKUTEN_CLIENT_SECRET}`, 'utf8').toString('base64');
+  const body = new URLSearchParams({ scope: RAKUTEN_SID });
+  if (refreshToken) body.set('refresh_token', refreshToken);
+
+  const response = await axios.post(RAKUTEN_TOKEN_URL, body.toString(), {
+    headers: {
+      Authorization: `Bearer ${tokenKey}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Accept: 'application/json'
+    },
+    timeout: 30000,
+    validateStatus: () => true
+  });
+
+  if (response.status !== 200 || !response.data?.access_token) {
+    throw new Error(`Rakuten token HTTP ${response.status}`);
+  }
+
+  const expiresIn = Math.max(60, Number(response.data.expires_in) || 3600);
+  rakutenTokenState = {
+    accessToken: response.data.access_token,
+    refreshToken: response.data.refresh_token || refreshToken || rakutenTokenState.refreshToken,
+    expiresAt: Date.now() + (expiresIn * 1000)
+  };
+  return rakutenTokenState.accessToken;
+}
+
+async function getRakutenAccessToken(forceRefresh = false) {
+  if (!forceRefresh && rakutenTokenState.accessToken && rakutenTokenState.expiresAt > Date.now() + 60000) {
+    return rakutenTokenState.accessToken;
+  }
+  if (rakutenTokenRequest) return rakutenTokenRequest;
+
+  rakutenTokenRequest = (async () => {
+    if (rakutenTokenState.refreshToken) {
+      try {
+        return await requestRakutenAccessToken(rakutenTokenState.refreshToken);
+      } catch (_) {
+        // O refresh persistido pode ter sido rotacionado; o token-key permanece a fonte oficial.
+      }
+    }
+    return requestRakutenAccessToken();
+  })();
+
+  try {
+    return await rakutenTokenRequest;
+  } finally {
+    rakutenTokenRequest = null;
+  }
+}
+
 async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE, page = 1) {
   if (!ENABLE_NETSHOES_RAKUTEN) {
     console.log('  [Rakuten Netshoes] Flag desabilitada. Retornando 0 produtos.');
     return [];
   }
 
-  if (!RAKUTEN_ACCESS_TOKEN || !RAKUTEN_CLIENT_ID || !RAKUTEN_CLIENT_SECRET || !RAKUTEN_SID || !RAKUTEN_NETSHOES_MID) {
+  if (!RAKUTEN_CLIENT_ID || !RAKUTEN_CLIENT_SECRET || !RAKUTEN_SID || !RAKUTEN_NETSHOES_MID) {
     console.warn('  [Rakuten Netshoes] Credenciais incompletas. Retornando 0 produtos.');
     return [];
   }
 
   try {
-    const resp = await axios.get('https://api.linksynergy.com/productsearch/1.0', {
+    const requestProducts = async (accessToken) => axios.get('https://api.linksynergy.com/productsearch/1.0', {
       headers: {
-        Authorization: `Bearer ${RAKUTEN_ACCESS_TOKEN}`,
+        Authorization: `Bearer ${accessToken}`,
         Accept: 'application/xml'
       },
       params: {
@@ -2255,6 +2314,14 @@ async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE,
       responseType: 'text',
       validateStatus: () => true
     });
+
+    let accessToken = await getRakutenAccessToken();
+    let resp = await requestProducts(accessToken);
+    if (resp.status === 401) {
+      rakutenTokenState.expiresAt = 0;
+      accessToken = await getRakutenAccessToken(true);
+      resp = await requestProducts(accessToken);
+    }
 
     if (resp.status !== 200) {
       console.warn(`  [Rakuten Netshoes] HTTP ${resp.status}. Retornando 0 produtos.`);
@@ -5938,6 +6005,7 @@ module.exports = {
   MANUAL_REVIEW_STATUS,
   canonicalizeAmazonProductUrl,
   sanitizeAmazonProductsBeforeLlm,
+  fetchMercadoLivreViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
   dedupeShopeeProductsDetailed,
   getShopeeDedupKeys

@@ -48,8 +48,9 @@ app.post('/api/scrape', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
 
+  const marketplace = detectMarketplaceFromUrl(url);
   const mode = process.env.SCRAPER_MODE || 'LOCAL';
-  if (mode === 'LOCAL' && process.platform !== 'win32') {
+  if (mode === 'LOCAL' && process.platform !== 'win32' && marketplace !== 'Amazon') {
     console.log(`[API] Bloqueado: Tentativa de scraping na Oracle enquanto SCRAPER_MODE=LOCAL`);
     return res.status(403).json({ error: 'Scraping on Oracle is disabled in LOCAL mode. The Notebook is responsible for scraping.' });
   }
@@ -66,21 +67,27 @@ app.post('/api/scrape', async (req, res) => {
   const envKeys = process.env.SCRAPFLY_API_KEYS || process.env.SCRAPFLY_API_KEY || '';
   const SCRAPFLY_KEYS = envKeys.split(',').map(k => k.trim()).filter(Boolean);
 
-  if (SCRAPFLY_KEYS.length === 0) {
+  if (marketplace !== 'Amazon' && SCRAPFLY_KEYS.length === 0) {
     return res.status(500).json({ error: 'Nenhuma SCRAPFLY_API_KEY configurada na VPS.' });
   }
 
-  const SCRAPFLY_API_KEY = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
+  const SCRAPFLY_API_KEY = SCRAPFLY_KEYS.length > 0
+    ? SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)]
+    : null;
 
   try {
-    console.log(`[API] Solicitando HTML ao Scrapfly usando chave terminada em ...${SCRAPFLY_API_KEY.slice(-4)}`);
-    const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_API_KEY}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
-
-    const response = await axios.get(scrapflyUrl, { timeout: 60000 });
-    
-    htmlResult = response.data.result.content;
+    if (marketplace === 'Amazon') {
+      console.log('[API] Solicitando HTML da Amazon via Scrape.do.');
+      const { fetchMercadoLivreViaScrapedo } = require('./oracle-scraper.cjs');
+      htmlResult = await fetchMercadoLivreViaScrapedo(url);
+    } else {
+      console.log('[API] Solicitando HTML ao Scrapfly.');
+      const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${SCRAPFLY_API_KEY}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
+      const response = await axios.get(scrapflyUrl, { timeout: 60000 });
+      htmlResult = response.data.result.content;
+    }
     if (!htmlResult) {
-      throw new Error("Falha ao raspar a página. Retorno vazio do Scrapfly.");
+      throw new Error("Falha ao raspar a página. Retorno vazio do provider.");
     }
 
     const cheerio = require('cheerio');
@@ -110,7 +117,6 @@ app.post('/api/scrape', async (req, res) => {
     metaResult.title = $('title').text() || '';
     metaResult.ogImage = $('meta[property="og:image"]').attr('content') || '';
 
-    const marketplace = detectMarketplaceFromUrl(url);
     const normalized = normalizeProductContentForLLM({
       marketplace,
       html: htmlResult,
@@ -137,7 +143,7 @@ app.post('/api/scrape', async (req, res) => {
     });
 
   } catch (err) {
-    console.error("[API] Erro na raspagem:", err);
+    console.error(`[API] Erro na raspagem: ${err.message || String(err)} | HTTP ${err.response?.status || 'n/a'}`);
     return res.status(500).json({ error: err.message });
   }
 });
