@@ -18,6 +18,12 @@ export interface ScoreInput {
   seasonality?: number | null;
   /** Nome do produto — usado para calcular brand_score real no score-v2.ts */
   product_name?: string | null;
+  sales_signal?: number | string | null;
+  official_store?: boolean | string | null;
+  campaign?: boolean | string | null;
+  commission?: number | string | null;
+  shop_type?: string | null;
+  sold_quantity?: number | null;
 }
 
 export function calculateOfferScore(input: ScoreInput) {

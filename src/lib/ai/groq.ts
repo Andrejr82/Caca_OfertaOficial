@@ -509,6 +509,7 @@ REGRAS DE OURO:
 2. A IA NÃO DEVE REPROVAR PRODUTOS, apenas dar um BOOSTER de 0 a 5 com base no apelo visual orgânico, urgência da categoria, e ticket percebido de compra por impulso.
 3. Foque sua justificativa na "Probabilidade do Consumidor Clicar e Comprar no Impulso".`;
 
+  const explain = offer.explainability || {};
   const userPrompt = `DADOS DA OFERTA AVALIADA:
 - Nome: ${offer.product_name}
 - Preço Atual: R$ ${offer.current_price}
@@ -516,7 +517,17 @@ REGRAS DE OURO:
 - Plataforma/Marketplace: ${offer.platform}
 - Avaliação: ${offer.rating ? offer.rating + " estrelas" : "Dado não disponível"}
 - Desconto Detectado: ${hasDiscount ? discountPct + "%" : "Dado não disponível"}
+- Vendas/Popularidade (sales_signal/sold_quantity): ${explain.sales_signal || explain.sold_quantity || "Dado não disponível"}
+- Loja Oficial: ${explain.official_store ? "Sim (" + explain.official_store + ")" : "Não ou Dado não disponível"}
+- Em Campanha Promocional: ${explain.campaign ? "Sim" : "Dado não disponível"}
+- Comissão: ${explain.commission || "Dado não disponível"}
+- Tipo de Loja (shop_type): ${explain.shop_type || "Dado não disponível"}
 - Score Matemático Base: ${coldScore} de 10
+
+PERGUNTAS A RESPONDER (FOCO COMERCIAL):
+1. Este produto possui forte potencial comercial?
+2. Justifica publicação?
+3. O principal benefício é suficientemente atrativo?
 
 RESPONDA ESTRITAMENTE NESTE FORMATO JSON:
 ${JSON.stringify(jsonSchemaObj, null, 2)}`;

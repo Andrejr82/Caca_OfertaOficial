@@ -243,6 +243,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
     let imageUrl: string | undefined;
     let permalink = url;
 
+    let apiData: any = null;
     if (mlIdInfo.type === "item") {
       // Consulta detalhes do item
       const itemUrl = `https://api.mercadolibre.com/items/${mlIdInfo.id}`;
@@ -252,17 +253,17 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
         throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      title = data.title || title;
-      price = data.price || 0;
-      originalPrice = data.original_price || null;
-      permalink = data.permalink || permalink;
+      apiData = await response.json();
+      title = apiData.title || title;
+      price = apiData.price || 0;
+      originalPrice = apiData.original_price || null;
+      permalink = apiData.permalink || permalink;
 
-      if (data.pictures && data.pictures.length > 0) {
+      if (apiData.pictures && apiData.pictures.length > 0) {
         // Pega a primeira foto em alta qualidade
-        imageUrl = data.pictures[0].secure_url || data.pictures[0].url;
-      } else if (data.thumbnail) {
-        imageUrl = data.thumbnail;
+        imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
+      } else if (apiData.thumbnail) {
+        imageUrl = apiData.thumbnail;
       }
     } else {
       // Consulta detalhes do produto de catálogo
@@ -273,15 +274,15 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
         throw new Error(`Erro ao buscar produto de catálogo ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
-      const data = await response.json();
-      title = data.name || data.title || title;
-      permalink = data.permalink || permalink;
+      apiData = await response.json();
+      title = apiData.name || apiData.title || title;
+      permalink = apiData.permalink || permalink;
 
       // Obtém preço do buy box
-      if (data.buy_box_winner) {
-        price = data.buy_box_winner.price || 0;
-      } else if (data.price) {
-        price = data.price;
+      if (apiData.buy_box_winner) {
+        price = apiData.buy_box_winner.price || 0;
+      } else if (apiData.price) {
+        price = apiData.price;
       }
 
       // Fallback para quando o produto de catálogo não retorna o preço na API
@@ -306,10 +307,10 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
         }
       }
 
-      if (data.pictures && data.pictures.length > 0) {
-        imageUrl = data.pictures[0].secure_url || data.pictures[0].url;
-      } else if (data.thumbnail) {
-        imageUrl = data.thumbnail;
+      if (apiData && apiData.pictures && apiData.pictures.length > 0) {
+        imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
+      } else if (apiData && apiData.thumbnail) {
+        imageUrl = apiData.thumbnail;
       }
     }
 
@@ -333,7 +334,10 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       finalUrl: permalink,
       imageSource: "mercadolivre_api",
       confidenceScore,
-      extractionDate: new Date().toISOString()
+      extractionDate: new Date().toISOString(),
+      sold_quantity: apiData ? apiData.sold_quantity : undefined,
+      official_store_id: apiData ? apiData.official_store_id : undefined,
+      available_quantity: apiData ? apiData.available_quantity : undefined
     };
   } catch (error) {
     console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);

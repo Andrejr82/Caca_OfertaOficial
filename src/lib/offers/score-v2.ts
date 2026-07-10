@@ -83,6 +83,12 @@ export interface ScoreV2Output {
     viral_penalty: number;  // Multiplicador de penalidade viral (0.35-1.0). NOVO.
     final_score: number;
     chosen_reason: string;
+    sales_signal?: number | string | null;
+    official_store?: boolean | string | null;
+    campaign?: boolean | string | null;
+    commission?: number | string | null;
+    shop_type?: string | null;
+    sold_quantity?: number | null;
   };
 }
 
@@ -192,6 +198,13 @@ export function calculateOfferScoreV2(input: ScoreInput): ScoreV2Output {
     // Fallback/Proxy legado se a flag estiver desativada
     if (input.coupon) conversionScore += 3;
     if (input.rating && input.rating >= 4.5) conversionScore += 7;
+    
+    // Quick Win 3: adicionar demanda real ao ranking (sales_signal * 0.30)
+    const signal = Number(input.sales_signal || input.sold_quantity || 0);
+    if (signal > 0) {
+      const signalBoost = Math.min(signal * 0.30, 10);
+      conversionScore = Math.min(10, conversionScore + signalBoost);
+    }
   }
 
   // 7. Categoria/Comissão (Boost/Penalidade) - Aplicado no final (Multiplicadores)
@@ -277,7 +290,13 @@ export function calculateOfferScoreV2(input: ScoreInput): ScoreV2Output {
       historical_score: Number(historicalScore.toFixed(1)),
       viral_penalty: viralEligibility.penalty,
       final_score: finalScore,
-      chosen_reason: reason.trim()
+      chosen_reason: reason.trim(),
+      sales_signal: input.sales_signal,
+      official_store: input.official_store,
+      campaign: input.campaign,
+      commission: input.commission,
+      shop_type: input.shop_type,
+      sold_quantity: input.sold_quantity
     }
   };
 }

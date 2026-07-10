@@ -44,6 +44,12 @@ export interface ScrapedProduct {
   rating: number | null;
   category?: string | null;
   subcategory?: string | null;
+  sales_signal?: number | string | null;
+  official_store?: boolean | string | null;
+  campaign?: boolean | string | null;
+  commission?: number | string | null;
+  shop_type?: string | null;
+  sold_quantity?: number | null;
 }
 
 /**
@@ -173,7 +179,12 @@ function mapShopeeCandidateToScrapedProduct(candidate: any): ScrapedProduct {
     discount_badge: candidate.discount || null,
     rating: candidate.rating ? parseFloat(String(candidate.rating)) : null,
     category: cat,
-    subcategory: sub
+    subcategory: sub,
+    sales_signal: candidate.salesCount || null,
+    commission: candidate.commissionRate || null,
+    official_store: candidate.isOfficialStore || null,
+    campaign: candidate.isInCampaign || null,
+    shop_type: candidate.shopType || null
   };
 }
 
@@ -183,6 +194,7 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
     const targetCategory = category || "Todas";
     const payload = await callOracleRuntime<{ candidates: any[]; telemetry?: any }>("/api/shopee/trends", {
       category: targetCategory,
+      listType: 3,
       limit: Math.max(limit * 4, limit)
     });
     const { candidates, telemetry } = payload;
@@ -192,7 +204,8 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
       return [];
     }
 
-    const products = candidates.slice(0, limit).map(mapShopeeCandidateToScrapedProduct);
+    const filteredCandidates = candidates.filter((c: any) => c.commissionRate == null || c.commissionRate > 8);
+    const products = filteredCandidates.slice(0, limit).map(mapShopeeCandidateToScrapedProduct);
 
     console.log(`[SCRAPER][SHOPEE][TRENDS] Sucesso oficial: ${products.length} tendências encontradas. returned=${telemetry?.returned ?? products.length}`);
     return products;
