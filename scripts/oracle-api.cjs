@@ -16,6 +16,22 @@ const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 
+function isAuthorized(token) {
+  return token === API_KEY;
+}
+
+function normalizeShopeeComparableUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return String(url).trim().replace(/\/$/, "");
+  }
+}
+
 function detectMarketplaceFromUrl(url) {
   const value = String(url || '').toLowerCase();
   if (value.includes('shopee')) return 'Shopee';
@@ -28,7 +44,7 @@ function detectMarketplaceFromUrl(url) {
 app.post('/api/scrape', async (req, res) => {
   const { url, token } = req.body;
 
-  if (token !== API_KEY) {
+  if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
 
@@ -123,6 +139,75 @@ app.post('/api/scrape', async (req, res) => {
   } catch (err) {
     console.error("[API] Erro na raspagem:", err);
     return res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/shopee/trends', async (req, res) => {
+  const { token, category = 'Todas', limit = 5 } = req.body || {};
+
+  if (!isAuthorized(token)) {
+    return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
+  }
+
+  try {
+    const { runShopeeOfficialPipeline } = require('./oracle-scraper.cjs');
+    const result = await runShopeeOfficialPipeline(category, limit);
+    return res.json({
+      success: true,
+      candidates: result?.candidates || [],
+      telemetry: result?.telemetry || null
+    });
+  } catch (err) {
+    console.error('[API] Erro em /api/shopee/trends:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post('/api/shopee/product', async (req, res) => {
+  const { token, productUrl } = req.body || {};
+
+  if (!isAuthorized(token)) {
+    return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
+  }
+
+  if (!productUrl) {
+    return res.status(400).json({ error: 'Missing productUrl param' });
+  }
+
+  try {
+    const { runShopeeOfficialPipeline, cleanProductUrl } = require('./oracle-scraper.cjs');
+    const normalizedTargetUrl = normalizeShopeeComparableUrl(cleanProductUrl(productUrl) || productUrl);
+    const itemMatch = String(productUrl).match(/-i\.(\d+)\.(\d+)/i);
+    const targetItemId = itemMatch?.[2] || null;
+    const { candidates } = await runShopeeOfficialPipeline('Todas', 500);
+    const matched = (candidates || []).find((candidate) => {
+      const productLink = normalizeShopeeComparableUrl(candidate.productLink);
+      const affiliateLink = normalizeShopeeComparableUrl(candidate.affiliateLink);
+      const itemId = candidate.marketplaceProductId ? String(candidate.marketplaceProductId) : null;
+      return productLink === normalizedTargetUrl || affiliateLink === normalizedTargetUrl || (targetItemId && itemId === targetItemId);
+    }) || null;
+
+    return res.json({ success: true, candidate: matched });
+  } catch (err) {
+    console.error('[API] Erro em /api/shopee/product:', err);
+    return res.status(500).json({ error: err.message || String(err) });
+  }
+});
+
+app.post('/api/netshoes/trends', async (req, res) => {
+  const { token, category = 'oferta', limit = 5 } = req.body || {};
+
+  if (!isAuthorized(token)) {
+    return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
+  }
+
+  try {
+    const { fetchNetshoesProductsFromRakuten } = require('./oracle-scraper.cjs');
+    const products = await fetchNetshoesProductsFromRakuten(category, limit);
+    return res.json({ success: true, products: products || [] });
+  } catch (err) {
+    console.error('[API] Erro em /api/netshoes/trends:', err);
+    return res.status(500).json({ error: err.message || String(err) });
   }
 });
 

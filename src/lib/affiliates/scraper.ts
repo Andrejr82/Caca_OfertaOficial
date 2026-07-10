@@ -121,8 +121,33 @@ function buildTokenOptimizedLlmInput(oracleData: any, marketplace: string): stri
   return JSON.stringify(fallbackPayload, null, 2);
 }
 
-async function loadShopeeOfficialModule() {
-  return import("../../../scripts/oracle-scraper.cjs");
+function getOracleApiBaseUrl(): string {
+  const configured = process.env.ORACLE_REMOTE_URL || "http://193.122.242.178:3002/api/scrape";
+  return configured.replace(/\/api\/scrape\/?$/i, "");
+}
+
+async function callOracleRuntime<T>(endpoint: string, payload: Record<string, unknown>): Promise<T> {
+  const oracleKey = process.env.ORACLE_API_KEY;
+  if (!oracleKey) {
+    throw new Error("ORACLE_API_KEY não configurada.");
+  }
+
+  const response = await fetch(`${getOracleApiBaseUrl()}${endpoint}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...payload, token: oracleKey }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha na Oracle API ${endpoint}: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data?.success) {
+    throw new Error(data?.error || `Resposta inválida da Oracle API ${endpoint}`);
+  }
+
+  return data as T;
 }
 
 function normalizeShopeeComparableUrl(url: string | null | undefined): string | null {
@@ -155,9 +180,12 @@ function mapShopeeCandidateToScrapedProduct(candidate: any): ScrapedProduct {
 export async function fetchShopeeTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca oficial da Shopee...");
   try {
-    const { runShopeeOfficialPipeline } = await loadShopeeOfficialModule();
     const targetCategory = category || "Todas";
-    const { candidates, telemetry } = await runShopeeOfficialPipeline(targetCategory, Math.max(limit * 4, limit));
+    const payload = await callOracleRuntime<{ candidates: any[]; telemetry?: any }>("/api/shopee/trends", {
+      category: targetCategory,
+      limit: Math.max(limit * 4, limit)
+    });
+    const { candidates, telemetry } = payload;
 
     if (!candidates?.length) {
       console.log(`[Shopee Official] query_sem_resultado query=${targetCategory}`);
@@ -923,24 +951,13 @@ async function scrapeShopeeProductDetails(productUrl: string): Promise<ScrapedPr
 
 
 
-    const { runShopeeOfficialPipeline, cleanProductUrl } = await loadShopeeOfficialModule();
-    const normalizedTargetUrl = normalizeShopeeComparableUrl(cleanProductUrl(finalProductUrl) || finalProductUrl);
-    const itemMatch = finalProductUrl.match(/-i\.(\d+)\.(\d+)/i);
-    const targetItemId = itemMatch?.[2] || null;
-
-    const { candidates } = await runShopeeOfficialPipeline("Todas", 500);
-    const matched = (candidates || []).find((candidate: any) => {
-      const productLink = normalizeShopeeComparableUrl(candidate.productLink);
-      const affiliateLink = normalizeShopeeComparableUrl(candidate.affiliateLink);
-      const itemId = candidate.marketplaceProductId ? String(candidate.marketplaceProductId) : null;
-      return productLink === normalizedTargetUrl || affiliateLink === normalizedTargetUrl || (targetItemId && itemId === targetItemId);
+    const payload = await callOracleRuntime<{ candidate: any | null }>("/api/shopee/product", {
+      productUrl: finalProductUrl
     });
+    const matched = payload.candidate;
 
     if (!matched) {
-      if (targetItemId) {
-        console.log(`[Shopee Official] item_nao_retorornado item_id=${targetItemId}`);
-      }
-      console.log(`[Shopee Official] fora_do_escopo url=${normalizedTargetUrl || finalProductUrl}`);
+      console.log(`[Shopee Official] fora_do_escopo url=${finalProductUrl}`);
       updateMetrics("Shopee", "failures", 1);
       return null;
     }
@@ -1483,8 +1500,11 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
   console.log("[SCRAPER][NETSHOES][TRENDS] Iniciando busca de tendências da Netshoes...");
   try {
     try {
-      const { fetchNetshoesProductsFromRakuten } = await loadShopeeOfficialModule();
-      const officialProducts = await fetchNetshoesProductsFromRakuten(category || "oferta", Math.max(limit * 4, limit));
+      const payload = await callOracleRuntime<{ products: any[] }>("/api/netshoes/trends", {
+        category: category || "oferta",
+        limit: Math.max(limit * 4, limit)
+      });
+      const officialProducts = payload.products;
       if (officialProducts?.length) {
         const products = officialProducts.slice(0, limit).map((candidate: any) => {
           const { category: cat, subcategory: sub } = normalizeCategory(candidate.category || candidate.product_name || "");

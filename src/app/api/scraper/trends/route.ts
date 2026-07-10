@@ -2,19 +2,39 @@ import { NextResponse } from "next/server";
 import { discoverAndIngestTrendingOffers } from "@/lib/affiliates/scraper";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { rankOffersBatch } from "@/lib/offers/curation-engine";
-import path from "path";
 
 // Força execução no runtime Node.js e impede cache estático do bundler
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 300; // Limite de 5 minutos para Vercel Pro (Evita o Timeout 504 no scraping pesado)
 
-// Carregamento runtime-only: o bundler (Turbopack/Webpack) não consegue rastrear
-// eval('require') estaticamente, evitando que crawlee/esbuild/tsx sejam bundlados.
-function loadOracleScraper() {
-  const scraperPath = path.join(process.cwd(), "scripts", "oracle-scraper.cjs");
-  // eslint-disable-next-line no-eval
-  return (eval("require") as NodeRequire)(scraperPath);
+function getOracleApiBaseUrl(): string {
+  const configured = process.env.ORACLE_REMOTE_URL || "http://193.122.242.178:3002/api/scrape";
+  return configured.replace(/\/api\/scrape\/?$/i, "");
+}
+
+async function fetchShopeeCandidates(category: string, limit: number) {
+  const oracleKey = process.env.ORACLE_API_KEY;
+  if (!oracleKey) {
+    throw new Error("ORACLE_API_KEY não configurada.");
+  }
+
+  const response = await fetch(`${getOracleApiBaseUrl()}/api/shopee/trends`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ category, limit, token: oracleKey }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`Falha na Oracle API Shopee Trends: ${response.status}`);
+  }
+
+  const data = await response.json();
+  if (!data?.success) {
+    throw new Error(data?.error || "Resposta inválida da Oracle API Shopee Trends");
+  }
+
+  return data;
 }
 
 export async function POST(request: Request) {
@@ -53,12 +73,9 @@ export async function POST(request: Request) {
     }
 
     // SPRINT 09.7 & 09.8: Intercepta fluxo da Shopee para usar a nova arquitetura (Candidate Queue)
-    // O oracle-scraper é carregado via eval('require') para evitar rastreamento estático do bundler.
     if (sources.includes("Shopee")) {
-      const oracle = loadOracleScraper();
       const { presentMarketplaceCandidate } = await import("@/lib/presenters/marketplace-candidate");
-
-      const pipelineResult = await oracle.runShopeeOfficialPipeline(category, limit);
+      const pipelineResult = await fetchShopeeCandidates(category, limit);
 
       // SPRINT 09.8: Camada de Apresentação (adapta Candidate para formato do Frontend)
       const presentedOffers = pipelineResult.candidates.map((c: any) => presentMarketplaceCandidate(c));
