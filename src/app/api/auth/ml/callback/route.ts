@@ -16,9 +16,9 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Nenhum código de autorização fornecido.", { status: 400 });
     }
 
-    const appId = process.env.MERCADO_LIVRE_APP_ID;
-    const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET;
-    const redirectUri = process.env.MERCADO_LIVRE_REDIRECT_URI;
+    const appId = process.env.MERCADO_LIVRE_APP_ID ?? "4737683937591844";
+    const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET ?? "ghjolsSndOR1Mp591UskpOepNZ8hvyrw";
+    const redirectUri = process.env.MERCADO_LIVRE_REDIRECT_URI ?? "https://caca-oferta-oficial.vercel.app/api/auth/ml/callback";
 
     // SETUP MODE: Se env vars não estiverem configuradas no servidor (ex: Vercel),
     // redireciona com o code visível para exchange manual via script local.
@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
         new URL(`/dashboard?ml_setup_code=${encodeURIComponent(code)}`, req.url)
       );
     }
+
 
     // Troca o código pelo access_token
     const tokenResponse = await fetch("https://api.mercadolibre.com/oauth/token", {
