@@ -16,19 +16,15 @@ export async function GET(req: NextRequest) {
       return new NextResponse("Nenhum código de autorização fornecido.", { status: 400 });
     }
 
+    // Credenciais com fallback hardcoded para setup inicial
     const appId = process.env.MERCADO_LIVRE_APP_ID ?? "4737683937591844";
     const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET ?? "ghjolsSndOR1Mp591UskpOepNZ8hvyrw";
     const redirectUri = process.env.MERCADO_LIVRE_REDIRECT_URI ?? "https://caca-oferta-oficial.vercel.app/api/auth/ml/callback";
 
-    // SETUP MODE: Se env vars não estiverem configuradas no servidor (ex: Vercel),
-    // redireciona com o code visível para exchange manual via script local.
-    if (!appId || !clientSecret || !redirectUri) {
-      console.warn("[ML OAuth] Env vars ausentes — modo setup ativo. Redirecionando com code.");
-      return NextResponse.redirect(
-        new URL(`/dashboard?ml_setup_code=${encodeURIComponent(code)}`, req.url)
-      );
-    }
-
+    console.log("[ML OAuth] Iniciando troca de code pelo token...");
+    console.log("[ML OAuth] client_id:", appId);
+    console.log("[ML OAuth] redirect_uri:", redirectUri);
+    console.log("[ML OAuth] code recebido:", code.substring(0, 20) + "...");
 
     // Troca o código pelo access_token
     const tokenResponse = await fetch("https://api.mercadolibre.com/oauth/token", {
@@ -49,11 +45,15 @@ export async function GET(req: NextRequest) {
     const tokenData = await tokenResponse.json();
 
     if (!tokenResponse.ok) {
-      console.error("[ML OAuth] Erro ao obter token:", tokenData);
-      return NextResponse.redirect(new URL("/dashboard?error=ml_token_failed", req.url));
+      console.error("[ML OAuth] Erro ao obter token:", JSON.stringify(tokenData));
+      // Mostra erro detalhado na URL para diagnóstico
+      const errMsg = encodeURIComponent(JSON.stringify(tokenData));
+      return NextResponse.redirect(new URL(`/dashboard?error=ml_token_failed&detail=${errMsg}`, req.url));
     }
 
     const { access_token, refresh_token, expires_in, user_id } = tokenData;
+
+    console.log("[ML OAuth] Token obtido! user_id:", user_id);
 
     const supabase = await createServerSupabaseClient();
     if (!supabase) {
@@ -65,7 +65,14 @@ export async function GET(req: NextRequest) {
 
     if (!systemUserId) {
       console.warn("[ML OAuth] Usuário do sistema não logado no callback.");
-      return NextResponse.redirect(new URL("/dashboard?error=ml_no_session", req.url));
+      // Mesmo sem sessão, salva os tokens na URL para não perder o code
+      const tokenParams = new URLSearchParams({
+        error: "ml_no_session",
+        ml_access_token: access_token,
+        ml_refresh_token: refresh_token,
+        ml_user_id: String(user_id)
+      });
+      return NextResponse.redirect(new URL(`/dashboard?${tokenParams.toString()}`, req.url));
     }
 
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
@@ -101,4 +108,3 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL("/dashboard?error=ml_auth_fatal", req.url));
   }
 }
-
