@@ -104,13 +104,16 @@ export const VIRAL_SEARCH_TARGETS: Record<string, ViralSearchTarget[]> = {
 
   // ─── Netshoes ──────────────────────────────────────────────────────────────
   "Netshoes": [
-    { query: "tênis nike",          category: "Esporte e Lazer",          viralScore: 9,  source: "Netshoes" },
-    { query: "tênis adidas",        category: "Esporte e Lazer",          viralScore: 9,  source: "Netshoes" },
-    { query: "whey protein",        category: "Esporte e Lazer",          viralScore: 8,  source: "Netshoes" },
-    { query: "creatina",            category: "Esporte e Lazer",          viralScore: 8,  source: "Netshoes" },
-    { query: "tênis new balance",   category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
-    { query: "camiseta seleção",    category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
-    { query: "chuteira nike",       category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
+    { query: "corrida",             category: "Esporte e Lazer",          viralScore: 9,  source: "Netshoes" },
+    { query: "treino",              category: "Esporte e Lazer",          viralScore: 9,  source: "Netshoes" },
+    { query: "academia",            category: "Esporte e Lazer",          viralScore: 8,  source: "Netshoes" },
+    { query: "futebol",             category: "Esporte e Lazer",          viralScore: 8,  source: "Netshoes" },
+    { query: "basquete",            category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
+    { query: "casual",              category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
+    { query: "suplementos",         category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
+    { query: "equipamentos",        category: "Esporte e Lazer",          viralScore: 7,  source: "Netshoes" },
+    { query: "lançamentos",         category: "Esporte e Lazer",          viralScore: 6,  source: "Netshoes" },
+    { query: "promoções",           category: "Esporte e Lazer",          viralScore: 6,  source: "Netshoes" },
   ],
 };
 

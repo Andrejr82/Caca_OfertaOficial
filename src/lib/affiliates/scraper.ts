@@ -205,6 +205,19 @@ export async function fetchShopeeTrendingProducts(limit = 5, category?: string):
     }
 
     const filteredCandidates = candidates.filter((c: any) => c.commissionRate == null || c.commissionRate > 8);
+    filteredCandidates.sort((a: any, b: any) => {
+      let scoreA = 0;
+      let scoreB = 0;
+      if (a.isInCampaign) scoreA += 100;
+      if (b.isInCampaign) scoreB += 100;
+      if (a.isOfficialStore) scoreA += 50;
+      if (b.isOfficialStore) scoreB += 50;
+      const salesA = parseInt(a.salesCount) || 0;
+      const salesB = parseInt(b.salesCount) || 0;
+      scoreA += Math.min(salesA, 1000) / 10;
+      scoreB += Math.min(salesB, 1000) / 10;
+      return scoreB - scoreA;
+    });
     const products = filteredCandidates.slice(0, limit).map(mapShopeeCandidateToScrapedProduct);
 
     console.log(`[SCRAPER][SHOPEE][TRENDS] Sucesso oficial: ${products.length} tendências encontradas. returned=${telemetry?.returned ?? products.length}`);
@@ -426,14 +439,14 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
       console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Oracle API + IA...");
       const fetchLimit = limit * 4;
       const defaultUrls = [
-        "https://www.mercadolivre.com.br/ofertas",
         "https://www.mercadolivre.com.br/mais-vendidos",
+        "https://www.mercadolivre.com.br/mais-vendidos/eletronicos",
+        "https://www.mercadolivre.com.br/mais-vendidos/eletrodomesticos",
         "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-CELLPHONES",
-        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-TELEVISIONS",
-        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-COMPUTERS"
+        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-TELEVISIONS"
       ];
       const randomUrl = defaultUrls[Math.floor(Math.random() * defaultUrls.length)];
-      const targetUrl = category ? `https://www.mercadolivre.com.br/ofertas?q=${encodeURIComponent(category)}` : randomUrl;
+      const targetUrl = category ? `https://lista.mercadolivre.com.br/${encodeURIComponent(category)}_O_SaleCountDesc` : randomUrl;
       const promptText = getScrapingPrompt();
 
       const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
@@ -464,7 +477,9 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
                     old_price: { type: "number", nullable: true },
                     discount_badge: { type: "string", nullable: true },
                     rating: { type: "number", nullable: true },
-                    category: { type: "string" }
+                    category: { type: "string" },
+                    sales_signal: { type: "number", nullable: true },
+                    official_store: { type: "boolean", nullable: true }
                   },
                   required: ["title", "url", "price"]
                 }
@@ -473,7 +488,7 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
             required: ["products"]
           };
 
-          const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
+          const rawResult = await callLLM(promptText + " Extraia também o sales_signal (volume de vendas numérico) e official_store (true/false, procure por Loja Oficial).", textToAnalyze, schemaObj, 0.2, 4000);
           const fcData = JSON.parse(rawResult);
 
           if (fcData.products && fcData.products.length > 0) {
@@ -491,7 +506,9 @@ export async function fetchTrendingProductsFromLanding(limit = 5, category?: str
                   discount_badge: p.discount_badge || null,
                   rating: p.rating ? parseFloat(String(p.rating)) : null,
                   category: cat,
-                  subcategory: sub
+                  subcategory: sub,
+                  sales_signal: p.sales_signal || null,
+                  official_store: p.official_store || null
                 };
               });
 
@@ -1514,7 +1531,8 @@ async function fetchAmazonTrendingProductsFromGenericProvider(limit = 5, categor
 }
 
 export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  const reference = category ? `${category} oferta` : "ofertas";
+  const selectedSignal = "Best Sellers";
+  const reference = category ? `${category} ${selectedSignal}` : selectedSignal;
   try {
     const payload = await callOracleRuntime<{ products: any[]; telemetry?: any }>("/api/amazon/trends", {
       query: reference,
@@ -1551,8 +1569,10 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
   console.log("[SCRAPER][NETSHOES][TRENDS] Iniciando busca de tendências da Netshoes...");
   try {
     try {
+      const netshoesSignals = ["lancamentos", "promocoes", "eventos", "cupons", "ofertas"];
+      const targetCategory = category || netshoesSignals[Math.floor(Math.random() * netshoesSignals.length)];
       const payload = await callOracleRuntime<{ products: any[] }>("/api/netshoes/trends", {
-        category: category || "oferta",
+        category: targetCategory,
         limit: Math.max(limit * 4, limit)
       });
       const officialProducts = payload.products;
@@ -1580,8 +1600,8 @@ export async function fetchNetshoesTrendingProducts(limit = 5, category?: string
 
     const fetchLimit = limit * 4;
     const urls = category
-      ? [`https://www.netshoes.com.br/busca?q=${encodeURIComponent(category + " oferta")}`]
-      : ["https://www.netshoes.com.br/busca?q=oferta", "https://www.netshoes.com.br/lst/promocoes", "https://www.netshoes.com.br/especial/outlet"];
+      ? [`https://www.netshoes.com.br/busca?q=${encodeURIComponent(category + " promocoes")}`]
+      : ["https://www.netshoes.com.br/lst/promocoes", "https://www.netshoes.com.br/lst/lancamentos", "https://www.netshoes.com.br/especial/outlet"];
 
     const promptText = getScrapingPrompt();
 
@@ -1916,7 +1936,7 @@ export async function discoverAndIngestTrendingOffers(
         console.log(`[VIRAL_TARGET] Netshoes → query="${target.query}" viralScore=${target.viralScore}`);
       } else {
         const target = getNextViralTarget(source);
-        activeCategorySearch = target.query;
+        activeCategorySearch = source === "Amazon" ? target.category : target.query;
         // category do target é usada como hint mas normalizeCategory() decide o valor final
         console.log(`[VIRAL_TARGET] ${source} → query="${target.query}" category="${target.category}" viralScore=${target.viralScore}`);
       }

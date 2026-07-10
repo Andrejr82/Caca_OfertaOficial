@@ -2063,6 +2063,14 @@ function cleanProductUrl(url) {
 }
 
 const SCRAPEDO_AMAZON_SEARCH_URL = 'https://api.scrape.do/plugin/amazon/search';
+const SCRAPEDO_GENERAL_URL = 'https://api.scrape.do/';
+const AMAZON_OFFICIAL_REFERENCE_URLS = {
+  bestSellers: 'https://www.amazon.com.br/gp/bestsellers/electronics'
+};
+const AMAZON_BEST_SELLERS_PLAY_WITH_BROWSER = JSON.stringify([
+  { Action: 'ScrollTo', Selector: '.a-pagination' },
+  { Action: 'Wait', Timeout: 3000 }
+]);
 
 function parseAmazonApiNumber(value) {
   const raw = value && typeof value === 'object' ? value.amount : value;
@@ -2080,14 +2088,132 @@ function parseAmazonReviewCount(value) {
   return Math.round(amount * (match[2] === 'M' ? 1000000 : match[2] === 'K' ? 1000 : 1));
 }
 
+function parseAmazonBrazilPrice(value) {
+  const text = String(value || '').replace(/\s+/g, ' ');
+  const match = text.match(/R\$\s*([\d.]+,\d{2})/);
+  if (!match) return null;
+  const price = Number.parseFloat(match[1].replace(/\./g, '').replace(',', '.'));
+  return Number.isFinite(price) ? price : null;
+}
+
+function resolveAmazonOfficialReference(query) {
+  const reference = String(query || '').trim();
+  const normalized = reference.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const targets = [
+    { key: 'bestSellers', suffix: 'best sellers', label: 'Best Sellers' }
+  ];
+  const target = targets.find(item => normalized.endsWith(item.suffix));
+  if (!target) return null;
+  const category = reference.slice(0, Math.max(0, reference.length - target.suffix.length)).trim() || 'Eletronicos';
+  return {
+    key: target.key,
+    label: target.label,
+    category,
+    url: AMAZON_OFFICIAL_REFERENCE_URLS[target.key]
+  };
+}
+
+function buildAmazonOfficialProduct(raw, reference) {
+  const asin = String(raw.asin || '').trim().toUpperCase();
+  const title = String(raw.title || '').replace(/\s+/g, ' ').trim();
+  const price = Number(raw.price);
+  if (!/^[A-Z0-9]{10}$/.test(asin) || !title || !Number.isFinite(price) || price <= 0) return null;
+
+  const canonicalUrl = `https://www.amazon.com.br/dp/${asin}`;
+  const oldPrice = Number.isFinite(Number(raw.oldPrice)) && Number(raw.oldPrice) > price ? Number(raw.oldPrice) : null;
+  const discount = raw.discount ?? (oldPrice ? Math.round(((oldPrice - price) / oldPrice) * 100) : null);
+  const tokenPayload = JSON.parse(createLLMInputFromNormalizedContent(normalizeProductContentForLLM({
+    marketplace: 'Amazon',
+    product: {
+      source: 'official_page',
+      title,
+      price,
+      old_price: oldPrice,
+      discount,
+      rating: raw.rating || null,
+      reviews: raw.reviews || null,
+      image_url: raw.imageUrl || null,
+      url: canonicalUrl,
+      seller: null
+    },
+    url: canonicalUrl
+  })));
+
+  return {
+    marketplace: 'Amazon',
+    productId: asin,
+    title: tokenPayload.title,
+    price: tokenPayload.price,
+    oldPrice: tokenPayload.oldPrice,
+    discount: tokenPayload.discount,
+    imageUrl: tokenPayload.imageUrl,
+    url: canonicalUrl,
+    rating: tokenPayload.rating,
+    reviews: tokenPayload.reviews,
+    seller: tokenPayload.seller,
+    prime: null,
+    source: 'scrapedo_amazon_official_page',
+    reference: reference.label,
+    category: reference.category,
+    tokenOptimized: true
+  };
+}
+
+function normalizeAmazonOfficialRankingHtml(html, limit, reference) {
+  const $ = cheerio.load(String(html || ''));
+  let cards = $('.zg-grid-general-faceout').toArray();
+  if (!cards.length) cards = $('[id^="gridItemRoot"]').toArray();
+
+  const products = [];
+  const seenAsins = new Set();
+  const stats = { received: cards.length, valid: 0, duplicates: 0, rejected: 0, sponsoredRejected: 0 };
+
+  for (const card of cards) {
+    if (products.length >= Math.max(1, limit)) break;
+    const root = $(card);
+    const href = root.find('a[href*="/dp/"], a[href*="/gp/product/"]').first().attr('href');
+    const asin = extractAmazonAsin(href);
+    const title = root.find('img[alt]').first().attr('alt')
+      || root.find('._cDEzb_p13n-sc-css-line-clamp-3_g3dy1, ._cDEzb_p13n-sc-css-line-clamp-4_2q2cc').first().text();
+    const price = parseAmazonBrazilPrice(root.find('.a-price .a-offscreen').first().text()) || parseAmazonBrazilPrice(root.text());
+    const oldPrice = parseAmazonBrazilPrice(root.find('.a-text-price .a-offscreen').first().text());
+    const imageUrl = root.find('img[src]').first().attr('src') || null;
+    const ratingMatch = root.text().match(/(\d+[,.]\d+)\s+de\s+5/i);
+    const rating = ratingMatch ? parseAmazonApiNumber(ratingMatch[1]) : null;
+    const reviews = parseAmazonReviewCount(root.find('a[href*="#customerReviews"]').first().text());
+    const product = buildAmazonOfficialProduct({ asin, title, price, oldPrice, imageUrl, rating, reviews }, reference);
+    if (!product) {
+      stats.rejected++;
+      continue;
+    }
+    if (seenAsins.has(product.productId)) {
+      stats.duplicates++;
+      continue;
+    }
+    seenAsins.add(product.productId);
+    products.push(product);
+  }
+
+  stats.valid = products.length;
+  return { products, stats };
+}
+
+function normalizeAmazonOfficialReferenceHtml(html, limit, reference) {
+  return normalizeAmazonOfficialRankingHtml(html, limit, reference);
+}
+
 function normalizeScrapedoAmazonSearchProducts(payload, limit = OFFERS_PER_STORE) {
   const rawProducts = Array.isArray(payload?.products) ? payload.products : [];
   const products = [];
   const seenAsins = new Set();
-  const stats = { received: rawProducts.length, valid: 0, duplicates: 0, rejected: 0 };
+  const stats = { received: rawProducts.length, valid: 0, duplicates: 0, rejected: 0, sponsoredRejected: 0 };
 
   for (const raw of rawProducts) {
     if (products.length >= Math.max(1, limit)) break;
+    if (raw?.isSponsored === true) {
+      stats.sponsoredRejected++;
+      continue;
+    }
     const asin = String(raw?.asin || '').trim().toUpperCase();
     const title = String(raw?.title || '').trim();
     const price = parseAmazonApiNumber(raw?.price);
@@ -2150,6 +2276,66 @@ async function fetchAmazonProductsFromScrapedoApi(query, limit = OFFERS_PER_STOR
   const apiKey = process.env.SCRAPEDO_API_KEY;
   if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
   const reference = String(query || 'ofertas').trim() || 'ofertas';
+  const officialReference = resolveAmazonOfficialReference(reference);
+  if (officialReference) {
+    try {
+      const response = await axios.get(SCRAPEDO_GENERAL_URL, {
+        params: {
+          token: apiKey,
+          url: officialReference.url,
+          geocode: 'br',
+          render: true,
+          playWithBrowser: AMAZON_BEST_SELLERS_PLAY_WITH_BROWSER
+        },
+        timeout: 60000,
+        validateStatus: () => true
+      });
+      if (response.status !== 200) throw new Error(`Amazon Best Sellers HTTP ${response.status}`);
+
+      const normalized = normalizeAmazonOfficialReferenceHtml(response.data, limit, officialReference);
+      const credits = Number(response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost']);
+      const safeCredits = Number.isFinite(credits) ? credits : null;
+      console.log(`[Amazon Best Sellers] category=${officialReference.category} url=${officialReference.url} received=${normalized.stats.received} valid=${normalized.stats.valid} duplicates=${normalized.stats.duplicates} rejected=${normalized.stats.rejected} sponsoredRejected=${normalized.stats.sponsoredRejected} credits=${safeCredits ?? 'unavailable'}`);
+      if (normalized.products.length > 0) {
+        return {
+          ...normalized,
+          telemetry: {
+            ...normalized.stats,
+            credits: safeCredits,
+            httpStatus: response.status,
+            structuredJson: false,
+            htmlUsed: true,
+            endpoint: SCRAPEDO_GENERAL_URL,
+            reference: officialReference.label,
+            category: officialReference.category,
+            url: officialReference.url,
+            searchFallbackExecuted: false
+          }
+        };
+      }
+      console.warn(`[Amazon Best Sellers] fallback Search por zero candidates; category=${officialReference.category}`);
+    } catch (error) {
+      console.warn(`[Amazon Best Sellers] fallback Search por falha tecnica; category=${officialReference.category}; error=${error.message || String(error)}`);
+    }
+
+    const fallback = await fetchAmazonProductsFromScrapedoSearch(officialReference.category, limit);
+    return {
+      ...fallback,
+      telemetry: {
+        ...fallback.telemetry,
+        searchFallbackExecuted: true,
+        fallbackReason: 'Best Sellers sem candidates validos ou falha tecnica',
+        originalReference: officialReference.label
+      }
+    };
+  }
+
+  return fetchAmazonProductsFromScrapedoSearch(reference, limit);
+}
+
+async function fetchAmazonProductsFromScrapedoSearch(reference, limit = OFFERS_PER_STORE) {
+  const apiKey = process.env.SCRAPEDO_API_KEY;
+  if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
   const response = await axios.get(SCRAPEDO_AMAZON_SEARCH_URL, {
     params: {
       token: apiKey,
@@ -2396,7 +2582,8 @@ async function getRakutenAccessToken(forceRefresh = false) {
   }
 }
 
-async function fetchNetshoesProductsFromRakuten(query, limit = OFFERS_PER_STORE, page = 1) {
+async function fetchNetshoesProductsFromRakuten(originalQuery, limit = OFFERS_PER_STORE, page = 1) {
+  const query = originalQuery;
   if (!ENABLE_NETSHOES_RAKUTEN) {
     console.log('  [Rakuten Netshoes] Flag desabilitada. Retornando 0 produtos.');
     return [];
@@ -3596,7 +3783,7 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
           'div[data-component-type="s-search-result"]',
           '[data-testid="product-card"]',
           '.ui-search-layout__item',
-          '.poly-card',
+          '.poly-card', '.promotion-item', '.ui-recommendations-card', '.andes-card',
           '.zg-grid-general-faceout',
           '.p13n-sc-uncoverable-faceout'
         ];
@@ -3610,20 +3797,22 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
         };
         const titleFrom = (card) => {
           const candidates = [
+            card.querySelector('.promotion-item__title')?.textContent,
+            card.querySelector('.poly-component__title')?.textContent,
+            card.querySelector('.ui-search-item__title')?.textContent,
+            card.querySelector('[class*="poly-component__title"]')?.textContent,
+            card.querySelector('[class*="ui-search-item__title"]')?.textContent,
             card.querySelector('h2 span')?.textContent,
             card.querySelector('h2')?.textContent,
             card.querySelector('.a-size-base-plus')?.textContent,
             card.querySelector('.a-size-medium')?.textContent,
             card.querySelector('.p13n-sc-truncated')?.textContent,
             card.querySelector('[class*="line-clamp"]')?.textContent,
-            card.querySelector('.poly-component__title')?.textContent,
-            card.querySelector('.ui-search-item__title')?.textContent,
-            card.querySelector('[class*="poly-component__title"]')?.textContent,
-            card.querySelector('[class*="ui-search-item__title"]')?.textContent,
             card.querySelector('a[href] span')?.textContent,
             card.querySelector('img')?.getAttribute('alt')
           ];
-          return (candidates.find(Boolean) || '').trim();
+          const found = candidates.find(t => t && t.trim() && !t.toUpperCase().includes('MAIS VENDIDO'));
+          return (found || '').trim();
         };
         const linkFrom = (card) => {
           const anchors = Array.from(card.querySelectorAll('a[href]'));
@@ -6111,6 +6300,7 @@ module.exports = {
   generateOfferAnalysis,
   generateFallback,
   selectDiscoveryQueries,
+    inspectMarketplaceCardsWithCrawlee,
   getRandomQueries,
   scrapeStore,
   upsertOffer,
