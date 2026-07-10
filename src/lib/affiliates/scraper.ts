@@ -1244,7 +1244,7 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
 
 import * as cheerio from 'cheerio';
 
-export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
+async function fetchAmazonTrendingProductsFromGenericProvider(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][AMAZON][TRENDS] Iniciando busca de tendências da Amazon (Modo Cheerio Parser)...");
   try {
     const parsePriceValue = (raw: string | null | undefined): number | null => {
@@ -1497,6 +1497,40 @@ export async function fetchAmazonTrendingProducts(limit = 5, category?: string):
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[SCRAPER][AMAZON][TRENDS] Falha global no extrator Amazon: ${errorMsg}`);
     return [];
+  }
+}
+
+export async function fetchAmazonTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
+  const reference = category ? `${category} oferta` : "ofertas";
+  try {
+    const payload = await callOracleRuntime<{ products: any[]; telemetry?: any }>("/api/amazon/trends", {
+      query: reference,
+      limit
+    });
+    const products = (payload.products || []).slice(0, limit).map((candidate: any) => {
+      const { category: cat, subcategory: sub } = normalizeCategory(category || candidate.title || "");
+      return {
+        product_name: candidate.title,
+        original_url: candidate.url,
+        image_url: enhanceImageUrl(candidate.imageUrl || null),
+        current_price: candidate.price,
+        old_price: candidate.oldPrice || null,
+        discount_badge: candidate.discount != null ? String(candidate.discount) : null,
+        rating: candidate.rating ?? null,
+        category: cat,
+        subcategory: sub
+      };
+    });
+    if (!products.length) throw new Error("Amazon Search API retornou 0 produtos válidos.");
+    return products;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (process.env.AMAZON_DISCOVERY_GENERIC_FALLBACK !== "1") {
+      console.warn(`[Amazon API] erro=${message} fallback_generico=desativado`);
+      return [];
+    }
+    console.warn(`[Amazon API] erro=${message} fallback_generico=ativado_por_flag`);
+    return fetchAmazonTrendingProductsFromGenericProvider(limit, category);
   }
 }
 

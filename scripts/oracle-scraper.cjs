@@ -2062,6 +2062,116 @@ function cleanProductUrl(url) {
   }
 }
 
+const SCRAPEDO_AMAZON_SEARCH_URL = 'https://api.scrape.do/plugin/amazon/search';
+
+function parseAmazonApiNumber(value) {
+  const raw = value && typeof value === 'object' ? value.amount : value;
+  const parsed = Number.parseFloat(String(raw ?? '').replace(',', '.'));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseAmazonReviewCount(value) {
+  if (Number.isFinite(Number(value))) return Number(value);
+  const normalized = String(value || '').replace(/[()\s]/g, '').replace(',', '.').toUpperCase();
+  const match = normalized.match(/([\d.]+)([KM])?/);
+  if (!match) return null;
+  const amount = Number.parseFloat(match[1]);
+  if (!Number.isFinite(amount)) return null;
+  return Math.round(amount * (match[2] === 'M' ? 1000000 : match[2] === 'K' ? 1000 : 1));
+}
+
+function normalizeScrapedoAmazonSearchProducts(payload, limit = OFFERS_PER_STORE) {
+  const rawProducts = Array.isArray(payload?.products) ? payload.products : [];
+  const products = [];
+  const seenAsins = new Set();
+  const stats = { received: rawProducts.length, valid: 0, duplicates: 0, rejected: 0 };
+
+  for (const raw of rawProducts) {
+    if (products.length >= Math.max(1, limit)) break;
+    const asin = String(raw?.asin || '').trim().toUpperCase();
+    const title = String(raw?.title || '').trim();
+    const price = parseAmazonApiNumber(raw?.price);
+    if (!/^[A-Z0-9]{10}$/.test(asin) || !title || !price || price <= 0) {
+      stats.rejected++;
+      continue;
+    }
+    if (seenAsins.has(asin)) {
+      stats.duplicates++;
+      continue;
+    }
+
+    const oldPrice = parseAmazonApiNumber(raw?.listPrice || raw?.oldPrice || raw?.originalPrice);
+    const canonicalUrl = `https://www.amazon.com.br/dp/${asin}`;
+    const rating = parseAmazonApiNumber(raw?.rating?.value ?? raw?.rating);
+    const reviews = parseAmazonReviewCount(raw?.rating?.count ?? raw?.reviewCount);
+    const seller = raw?.seller?.name || raw?.seller || raw?.merchantName || null;
+    const discount = raw?.discount ?? (oldPrice && oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : null);
+    const tokenPayload = JSON.parse(createLLMInputFromNormalizedContent(normalizeProductContentForLLM({
+      marketplace: 'Amazon',
+      product: {
+        source: 'api',
+        title,
+        price,
+        old_price: oldPrice && oldPrice > price ? oldPrice : null,
+        discount,
+        rating,
+        reviews,
+        image_url: raw?.imageUrl || null,
+        url: canonicalUrl,
+        seller
+      },
+      url: canonicalUrl
+    })));
+
+    seenAsins.add(asin);
+    products.push({
+      marketplace: 'Amazon',
+      productId: asin,
+      title: tokenPayload.title,
+      price: tokenPayload.price,
+      oldPrice: tokenPayload.oldPrice,
+      discount: tokenPayload.discount,
+      imageUrl: tokenPayload.imageUrl,
+      url: canonicalUrl,
+      rating: tokenPayload.rating,
+      reviews: tokenPayload.reviews,
+      seller: tokenPayload.seller,
+      prime: typeof raw?.isPrime === 'boolean' ? raw.isPrime : null,
+      source: 'scrapedo_amazon_api',
+      tokenOptimized: true
+    });
+  }
+
+  stats.valid = products.length;
+  return { products, stats };
+}
+
+async function fetchAmazonProductsFromScrapedoApi(query, limit = OFFERS_PER_STORE) {
+  const apiKey = process.env.SCRAPEDO_API_KEY;
+  if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
+  const reference = String(query || 'ofertas').trim() || 'ofertas';
+  const response = await axios.get(SCRAPEDO_AMAZON_SEARCH_URL, {
+    params: {
+      token: apiKey,
+      keyword: reference,
+      geocode: 'br',
+      page: 1,
+      language: 'PT',
+      device: 'desktop',
+      include_html: false
+    },
+    timeout: 60000,
+    validateStatus: () => true
+  });
+  if (response.status !== 200) throw new Error(`Amazon Search API HTTP ${response.status}`);
+
+  const normalized = normalizeScrapedoAmazonSearchProducts(response.data, limit);
+  const credits = Number(response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost']);
+  const safeCredits = Number.isFinite(credits) ? credits : null;
+  console.log(`[Amazon API] query=${reference} received=${normalized.stats.received} valid=${normalized.stats.valid} duplicates=${normalized.stats.duplicates} rejected=${normalized.stats.rejected} credits=${safeCredits ?? 'unavailable'}`);
+  return { ...normalized, telemetry: { ...normalized.stats, credits: safeCredits, httpStatus: response.status, structuredJson: true, htmlUsed: false, endpoint: SCRAPEDO_AMAZON_SEARCH_URL } };
+}
+
 function extractAmazonAsin(value) {
   const match = String(value || '').match(/\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})(?=[/?#&]|$)/i);
   return match ? match[1].toUpperCase() : null;
@@ -3392,6 +3502,21 @@ async function fetchProductsForDiscoverySource(store, discoverySource, limit = O
     };
   }
 
+  if (store === 'Amazon') {
+    const reference = source.type === 'url' ? (source.fallbackKeyword || 'ofertas') : source.source;
+    try {
+      const result = await fetchAmazonProductsFromScrapedoApi(reference, limit);
+      return {
+        products: result.products,
+        finalUrl: `Scrape.do Amazon Search API keyword="${reference}"`,
+        source
+      };
+    } catch (error) {
+      if (process.env.AMAZON_DISCOVERY_GENERIC_FALLBACK !== '1') throw error;
+      console.warn(`[Amazon API] erro=${error.message} fallback_generico=ativado_por_flag`);
+    }
+  }
+
   let products = await crawleeExtract(finalUrl, limit, store);
   let usedUrl = finalUrl;
 
@@ -3784,9 +3909,9 @@ async function scrapeStore(store) {
       for (const p of rawProducts) {
         // A Groq retorna product_name e image_url, mas também suporta title/image para compatibilidade
         const productName = p.product_name || p.title;
-        const productImage = p.image_url || p.image;
+        const productImage = p.image_url || p.image || p.imageUrl;
         const productPrice = p.current_price || p.price;
-        const productOldPrice = p.old_price;
+        const productOldPrice = p.old_price || p.oldPrice;
         
         if (!productName || !productPrice) {
           skippedMissingCore++;
@@ -6005,6 +6130,8 @@ module.exports = {
   MANUAL_REVIEW_STATUS,
   canonicalizeAmazonProductUrl,
   sanitizeAmazonProductsBeforeLlm,
+  normalizeScrapedoAmazonSearchProducts,
+  fetchAmazonProductsFromScrapedoApi,
   fetchMercadoLivreViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
   dedupeShopeeProductsDetailed,
