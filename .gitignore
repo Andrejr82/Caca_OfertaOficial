@@ -47,6 +47,13 @@ scripts/test-scrapfly-api.cjs
 .continue/
 skills-lock.json
 tmp/
+.tmp/
+.tmp-*/
+tmp_homologation_output.txt
+
+# Local operational history
+data/shopee_seen_products.json
+data/shopee_seen_products.json.bak
 
 # Discovery Reports
 discovery_intelligence_report.md

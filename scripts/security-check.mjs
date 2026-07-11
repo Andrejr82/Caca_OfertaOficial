@@ -1,0 +1,1 @@
+import './security-check.cjs';
