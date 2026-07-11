@@ -3967,18 +3967,6 @@ async function scrapeStore(store) {
   let storeCandidates = [];
   const storeStartedAt = Date.now();
 
-  const shopeeVersion = store === 'Shopee' 
-    ? (process.env.SHOPEE_DISCOVERY_VERSION?.toLowerCase() || 'v4')
-    : null;
-
-  const useShopeeV4 = store === 'Shopee' && shopeeVersion !== 'legacy';
-
-  if (store === 'Shopee') {
-    console.log(`\n[SHOPEE] Discovery Version: ${useShopeeV4 ? 'V4' : 'LEGACY'}`);
-  }
-
-  // [HOTFIX 10.0-G] Shopee Official Pipeline (EPIC 09) — substitui V4 legado
-  // ponytail: bloco V4 legado preservado abaixo no fallback; rollback = reverter este if
   if (store === 'Shopee') {
     console.log(`\n[Shopee Official] Fluxo normal utilizando Pipeline EPIC 09`);
     try {
@@ -4020,110 +4008,7 @@ async function scrapeStore(store) {
     }
   }
 
-  // [LEGADO] Shopee V4 e outros marketplaces — preservado para rollback e Amazon/ML
-  const useShopeeV4Legacy = store === 'Shopee' && (process.env.SHOPEE_DISCOVERY_VERSION?.toLowerCase() || 'v4') !== 'legacy';
-  if (useShopeeV4Legacy) {
-    // ponytail: código V4 legado mantido intacto para rollback imediato
-    console.log(`\n🔍 [Shopee] Iniciando Discovery V4 (Global)...`);
-    try {
-      const discovery = await fetchShopeeDiscoveryV4();
-      const telemetry = {
-        lista_recuperados: [],
-        lista_descartados_pf: [],
-        produtos_descartados_lixo_keyword: 0,
-        descartados_price_floor_antigo: 0,
-        descartados_price_floor_novo: 0,
-        recuperados_price_floor: 0,
-        recuperados_com_rating: 0,
-        recuperados_com_sales: 0,
-        recuperados_com_desconto: 0,
-        recuperados_com_comissao: 0,
-        recuperados_loja_oficial: 0,
-        produtos_descartados_internacional: 0,
-      };
-
-      const validProducts = applyShopeeQualityGateV4(discovery.normalized, telemetry);
-      console.log(`  [Shopee V4] Únicos: ${discovery.normalized.length} | Aprovados Quality Gate: ${validProducts.length}`);
-      
-      let scoredProducts = 0;
-      let newOffers = 0;
-      let existingOffers = 0;
-
-      for (const p of validProducts) {
-        const prodData = {
-          product_name: p.product_name, 
-          image_url: p.image_url ? normalizeImageUrl(p.image_url) : null,
-          current_price: p.current_price, 
-          old_price: p.old_price,
-          rating: p.rating, 
-          category: 'Geral',
-          shopee_enrichment: p.shopee_enrichment || null,
-          shopee_origin: p.shopee_origin || null,
-        };
-        const affiliateUrl = p.affiliate_url?.startsWith('http') ? p.affiliate_url : await generateShopeeAffiliateUrl(p.original_url);
-
-        const res = await upsertOffer(prodData, store, affiliateUrl);
-        if (res) {
-          scoredProducts++;
-          if (res.isNew) {
-            newOffers++;
-            storeCandidates.push({
-              id: res.id,
-              product: prodData,
-              store,
-              affiliateUrl,
-              score: res.score,
-              audit: {
-                query: 'V4_Global',
-                sourceType: 'API_BR',
-                queryCategory: 'V4',
-                queryVariant: 'V4'
-              }
-            });
-          } else {
-            existingOffers++;
-          }
-        }
-      }
-
-      const fs = require('fs');
-      const path = require('path');
-      const reportsDir = path.join(__dirname, '../reports');
-      if (!fs.existsSync(reportsDir)) fs.mkdirSync(reportsDir);
-      
-      const v4Metrics = {
-        discovery_source: 'v4',
-        retornados_productOfferV2_comissao: discovery.rawCommission.length,
-        retornados_productOfferV2_vendas: discovery.rawSales.length,
-        retornados_productOfferV2_desconto: discovery.rawDiscount.length,
-        retornados_shopOfferV2: discovery.shops.length,
-        retornados_campaignOfferV2: discovery.campaigns.length,
-        produtos_unicos: discovery.normalized.length,
-        ...telemetry,
-        produtos_aprovados: validProducts.length,
-        produtos_enviados_ao_ranking: storeCandidates.length,
-        tempo_total_ms: Date.now() - storeStartedAt
-      };
-
-      fs.writeFileSync(path.join(reportsDir, 'sprint_07.2_metricas.json'), JSON.stringify(v4Metrics, null, 2));
-
-      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
-        store,
-        queriesExecuted: 1,
-        candidatesCollected: storeCandidates.length,
-        durationMs: Date.now() - storeStartedAt
-      });
-
-      console.log(`  ✅ [${store}] ${storeCandidates.length} novas ofertas enviadas ao Ranking via V4.`);
-      return storeCandidates;
-
-    } catch (err) {
-      console.error(`  [Shopee V4] Erro fatal: ${err.message}`);
-      await logErrorToSupabase('Oracle-Scraper', 'Scrape V4', err, { store });
-    }
-  }
-
-  // Fallback / Legacy Flow (e outros marketplaces)
+  // Fluxo genérico dos demais marketplaces.
   const queries = getRandomQueries(store); // Pega 1 keyword de CADA categoria da loja
   
   for (const query of queries) {
@@ -5583,6 +5468,7 @@ class MarketplaceCandidateFactory {
     
     const rawId = `${marketplaceName}_${itemId}_${shopId}`;
     const candidateId = Buffer.from(rawId).toString('base64');
+    const commission = adapter.getCommission(product);
 
     return {
       candidateId,
@@ -5596,7 +5482,7 @@ class MarketplaceCandidateFactory {
       currentPrice: adapter.getPrice(product),
       originalPrice: marketplaceName === 'Shopee' ? null : (product.original_price || product.price_before_discount || adapter.getPrice(product)),
       discount: adapter.getDiscount(product),
-      commission: adapter.getCommission(product),
+      commission: marketplaceName === 'Shopee' && Number.isFinite(commission) ? Number(commission.toFixed(2)) : commission,
       rating: adapter.getRating(product),
       sales: adapter.getSales(product),
       currency: product.currency || 'BRL',
@@ -5610,6 +5496,12 @@ class MarketplaceCandidateFactory {
       tier: product.tier || 'UNKNOWN',
       selectionReason: product._selectionReason || 'NONE',
       historyReason: product.historyReason || 'NONE',
+      ...(marketplaceName === 'Shopee' ? {
+        discoverySources: product.discoverySources || [],
+        productCatIds: product.product_cat_ids || [],
+        sourceFilter: product.sourceFilter || null,
+        isKeySellerFilterApplied: product.isKeySellerFilterApplied === true
+      } : {}),
       createdAt: now,
       updatedAt: now,
       status: CANDIDATE_STATUS.SELECTED,
@@ -5787,86 +5679,67 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
  * Sprint 09.1 — Shopee Official Discovery
  * Fonte adicional à Shopee V4. Não substitui V4. Não chama IA. Não salva no banco.
  * @param {object} options
- * @param {string[]} [options.categories] — lista de categorias (default: SHOPEE_OFFICIAL_CATEGORIES)
- * @param {number[]} [options.sortTypes] — sortTypes a usar (default: [2,4,5])
- * @param {number[]} [options.pages] — páginas por categoria (default: [1,2])
+ * @param {string[]} [options.categories] — usado apenas para filtro externo do pipeline
  * @param {number} [options.limit] — produtos por request (default: 50)
  * @returns {{ products: object[], rawReturns: number, isFallback: boolean, categories: string[] }}
  */
 async function fetchShopeeOfficialDiscovery(options = {}) {
-  const {
-    categories = SHOPEE_OFFICIAL_CATEGORIES,
-    sortTypes = [2, 4, 5],
-    pages = [1, 2],
-    limit = 50
-  } = options;
-
-  // Tenta extrair categorias da página /oficial dinamicamente
-  let resolvedCategories = categories;
-  let isFallback = true;
-
-  try {
-    const browser = await chromium.launch({ headless: true });
-    const pg = await browser.newPage();
-    await pg.goto('https://shopee.com.br/oficial', { waitUntil: 'domcontentloaded', timeout: 30000 });
-    await pg.waitForTimeout(4000);
-    const pageTexts = await pg.evaluate(() =>
-      Array.from(document.querySelectorAll('div, span, a'))
-        .map(el => (el.innerText || '').trim())
-        .filter(t => t.length > 2 && t.length < 40 && !t.includes('\n'))
-    );
-    await browser.close();
-    const found = SHOPEE_OFFICIAL_CATEGORIES.filter(c => pageTexts.includes(c));
-    if (found.length > 5) {
-      resolvedCategories = found;
-      isFallback = false;
-      console.log('[Shopee Official] Categorias extraídas da página /oficial:', found.length);
-    } else {
-      console.log('[Shopee Official] Poucas categorias encontradas na página. Usando fallback.');
-    }
-  } catch (err) {
-    console.log('[Shopee Official] Falha ao extrair categorias dinamicamente. Usando fallback. Motivo:', err.message);
-  }
-
+  const limit = Math.min(10, Math.max(5, options.limit || 10));
+  const limits = { categoryIds: 3, keySeller: 2, ams: 2, highCommission: 1, shopOffers: 1, shops: 1, campaigns: 1 };
   const allRaw = [];
   let rawReturns = 0;
-  let duplicatesRejected = 0;
   const categoryStats = {};
+  const trailStats = { category_seed: 0, category_sales: 0, key_seller: 0, ams: 0, high_commission: 0, shop_products: 0, shopeeOfferV2: 0 };
+  let graphqlCalls = 0;
 
-  for (const cat of resolvedCategories) {
-    console.log('[Shopee Official] Categoria:', cat);
-    const catRaw = [];
-    for (const sortType of sortTypes) {
-      for (const page of pages) {
-        try {
-          const nodes = await fetchShopeeProductsOfferV2(sortType, cat, limit, page);
-          if (nodes && nodes.length > 0) {
-            rawReturns += nodes.length;
-            // Adiciona metadados de origem antes de deduplicar
-            catRaw.push(...nodes.map(n => ({ ...n, _categoria_original: cat, _sortType: sortType, _page: page })));
-          }
-        } catch (e) {
-          console.warn('[Shopee Official] Erro cat=' + cat + ' sort=' + sortType + ' page=' + page + ':', e.message);
-        }
-      }
-    }
-    const categoryDedupe = dedupeShopeeProductsDetailed(catRaw);
-    duplicatesRejected += categoryDedupe.duplicatesRejected;
-    categoryStats[cat] = {
-      requested: cat,
-      received: catRaw.length,
-      uniqueAfterFetch: categoryDedupe.products.length,
-      approved: 0
-    };
-    allRaw.push(...categoryDedupe.products);
+  const seedRaw = await fetchShopeeProductsOfferV2({ sortType: 2, page: 1, limit, source: 'category_seed' });
+  graphqlCalls++;
+  trailStats.category_seed = seedRaw.length;
+
+  const nativeCategoryIds = collectShopeeProductCatIds(seedRaw, limits.categoryIds);
+  for (const productCatId of nativeCategoryIds) {
+    const nodes = await fetchShopeeProductsOfferV2({ productCatId, sortType: 2, page: 1, limit, source: 'category_sales', category: `cat:${productCatId}` });
+    graphqlCalls++; rawReturns += nodes.length; trailStats.category_sales += nodes.length; allRaw.push(...nodes);
+    categoryStats[String(productCatId)] = { requested: productCatId, received: nodes.length, uniqueAfterFetch: nodes.length, approved: 0 };
+    const sales = nodes.map(node => Number(node.sales)).filter(Number.isFinite);
+    const commissions = nodes.map(node => Number(node.commissionRate)).filter(Number.isFinite);
+    console.log(`[Shopee Official][category_sales] productCatId=${productCatId} returned=${nodes.length} avgSales=${sales.length ? Math.round(sales.reduce((a, b) => a + b, 0) / sales.length) : 0} avgCommission=${formatShopeePercent(commissions.length ? commissions.reduce((a, b) => a + b, 0) / commissions.length : 0)}`);
   }
 
-  // Deduplica global
-  const globalDedupe = dedupeShopeeProductsDetailed(allRaw);
-  duplicatesRejected += globalDedupe.duplicatesRejected;
-  const uniqueNodes = globalDedupe.products;
+  for (const productCatId of nativeCategoryIds.slice(0, limits.keySeller)) {
+    const nodes = await fetchShopeeProductsOfferV2({ productCatId, sortType: 2, page: 1, limit, isKeySeller: true, source: 'key_seller', sourceFilter: 'isKeySeller=true', category: `cat:${productCatId}` });
+    graphqlCalls++; rawReturns += nodes.length; trailStats.key_seller += nodes.length; allRaw.push(...nodes);
+  }
+  for (const productCatId of nativeCategoryIds.slice(0, limits.ams)) {
+    const nodes = await fetchShopeeProductsOfferV2({ productCatId, sortType: 2, page: 1, limit, isAMSOffer: true, source: 'ams', sourceFilter: 'isAMSOffer=true', category: `cat:${productCatId}` });
+    graphqlCalls++; rawReturns += nodes.length; trailStats.ams += nodes.length; allRaw.push(...nodes);
+  }
 
-  // Normaliza usando helper existente + enriquece com campos do Official Discovery
+  let highCommission = [];
+  if (limits.highCommission) {
+    highCommission = await fetchShopeeProductsOfferV2({ sortType: 5, page: 1, limit, source: 'high_commission' });
+    graphqlCalls++;
+    highCommission = highCommission.filter(node => isShopeeHighCommissionEligible(node));
+    rawReturns += highCommission.length; trailStats.high_commission += highCommission.length; allRaw.push(...highCommission);
+  }
+
+  const shops = limits.shopOffers ? await fetchShopeeShopOffers(limit, 1) : [];
+  if (limits.shopOffers) graphqlCalls++;
+  const validShops = shops.filter(shop => isShopeePeriodActive(shop) && Number(shop.ratingStar) > 0 && Number(shop.commissionRate) >= 0).slice(0, limits.shops);
+  for (const shop of validShops) {
+    const nodes = await fetchShopeeProductsOfferV2({ shopId: String(shop.shopId), sortType: 2, page: 1, limit, source: 'shop_products', category: 'Geral' });
+    graphqlCalls++; rawReturns += nodes.length; trailStats.shop_products += nodes.length; allRaw.push(...nodes);
+  }
+
+  const campaignsRaw = limits.campaigns ? await fetchShopeeCampaignOffers(limit, 1) : [];
+  if (limits.campaigns) graphqlCalls++;
+  const campaigns = campaignsRaw.filter(campaign => isShopeePeriodActive(campaign));
+  trailStats.shopeeOfferV2 = campaigns.length;
+
+  const activeRaw = allRaw.filter(node => isShopeePeriodActive(node));
+  const merged = mergeShopeeDiscoveryProducts(activeRaw);
+  const uniqueNodes = merged.products;
+
   const products = uniqueNodes.map(node => {
     const base = normalizeShopeeProduct(node);
     if (!base) return null;
@@ -5878,16 +5751,22 @@ async function fetchShopeeOfficialDiscovery(options = {}) {
       brand_signal: 0,
       raw_node: node
     };
-  }).filter(Boolean);
+  }).filter(product => product && product.current_price > 0 && product.image_url && product.original_url && product.affiliate_url);
 
   return {
     products,
     rawReturns,
-    isFallback,
-    categories: resolvedCategories,
-    duplicatesRejected,
+    isFallback: false,
+    categories: nativeCategoryIds.map(String),
+    duplicatesRejected: merged.duplicatesRejected,
     categoryStats,
-    officialShopField: null
+    officialShopField: null,
+    trailStats,
+    graphqlCalls,
+    campaigns,
+    shops: validShops,
+    nativeCategoryIds,
+    forbiddenSources: { baseline: 0, legacy: 0, broad: 0, category_keyword: 0, fallback_categories: 0 }
   };
 }
 
@@ -6029,7 +5908,7 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = {}
   
   finalCandidates = finalCandidates.slice(0, limit);
 
-  console.log(`[Shopee Official] categories=${catList.length} received=${products.length} historyRejected=${diagHistory.rejected} duplicatesRejected=${(discovery?.duplicatesRejected || 0) + pipelineDedupe.duplicatesRejected + postHistoryDedupe.duplicatesRejected + queueResult.statistics.duplicatedCandidates} nonOfficialRejected=${nonOfficialRejected} candidates=${finalCandidates.length}`);
+  console.log(`[Shopee Official] categoryIds=${(discovery?.nativeCategoryIds || []).length} received=${products.length} historyRejected=${diagHistory.rejected} duplicatesRejected=${(discovery?.duplicatesRejected || 0) + pipelineDedupe.duplicatesRejected + postHistoryDedupe.duplicatesRejected + queueResult.statistics.duplicatedCandidates} nonOfficialRejected=${nonOfficialRejected} candidates=${finalCandidates.length}`);
 
   console.log('\n[DIAGNOSTICS] =======================================');
   console.log('HISTORY:', JSON.stringify(diagHistory, null, 2));
@@ -6038,14 +5917,32 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = {}
   console.log('CATEGORY:', JSON.stringify(diagCategory, null, 2));
   console.log('=====================================================\n');
 
+  const averageCandidateField = (field) => {
+    const values = finalCandidates.map(candidate => Number(candidate[field])).filter(Number.isFinite);
+    return values.length ? Number((values.reduce((sum, value) => sum + value, 0) / values.length).toFixed(2)) : null;
+  };
+  const priceBands = { 'R$15–30': 0, 'R$30–80': 0, 'R$80–150': 0, 'R$150–300': 0, 'R$300–700': 0, 'R$700+': 0 };
+  for (const candidate of finalCandidates) {
+    const price = Number(candidate.currentPrice);
+    if (price < 30) priceBands['R$15–30']++;
+    else if (price < 80) priceBands['R$30–80']++;
+    else if (price < 150) priceBands['R$80–150']++;
+    else if (price < 300) priceBands['R$150–300']++;
+    else if (price < 700) priceBands['R$300–700']++;
+    else priceBands['R$700+']++;
+  }
+
   return {
     candidates: finalCandidates,
     telemetry: {
       marketplace: 'Shopee',
       category: targetCategory || 'Todas',
       received: products.length,
+      rawReturns: discovery?.rawReturns || 0,
+      uniqueProducts: incomingProducts.length,
       historyPassed: historyFiltered.length,
       historyFilteredOut: products.length - historyFiltered.length,
+      historyReasons: diagHistory.reasons,
       historySaved,
       scored: scoredProducts.length,
       selected: selectionResult.statistics.totalSelected,
@@ -6057,6 +5954,26 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = {}
       categoryStats: discovery?.categoryStats || {},
       filteredByCategory: queueResult.candidates.length - finalCandidates.length,
       top10SelectionScore: finalCandidates.slice(0, 10).map(c => c.selectionScore),
+      graphqlCalls: discovery?.graphqlCalls || 0,
+      productsByTrail: discovery?.trailStats || {},
+      activeCampaigns: discovery?.campaigns?.length || 0,
+      nativeCategoryIds: discovery?.nativeCategoryIds || [],
+      uniqueShops: new Set(finalCandidates.map(candidate => candidate.shopId)).size,
+      averageSales: averageCandidateField('sales'),
+      averageCommission: averageCandidateField('commission'),
+      averageRating: averageCandidateField('rating'),
+      averageDiscount: averageCandidateField('discount'),
+      averagePrice: averageCandidateField('currentPrice'),
+      priceBands,
+      top20: finalCandidates.slice(0, 20).map(candidate => ({
+        product: candidate.productName,
+        trail: candidate.discoverySources,
+        sales: candidate.sales,
+        commission: candidate.commission,
+        price: candidate.currentPrice,
+        rating: candidate.rating,
+        discount: candidate.discount
+      })),
       _selectionStats: selectionResult.statistics
     }
   };
@@ -6070,6 +5987,22 @@ async function runShopeeOfficialDryRun() {
   console.log('Executando runShopeeOfficialPipeline...');
   // Limite alto no dry-run para processar o máximo possível
   const { candidates, telemetry } = await runShopeeOfficialPipeline('Todas', 500);
+  console.log('[Shopee Official][TRAILS]', JSON.stringify({
+    ...telemetry.productsByTrail,
+    total_bruto: telemetry.rawReturns,
+    unicos: telemetry.uniqueProducts,
+    campanhas_vigentes: telemetry.activeCampaigns,
+    deduplicados: telemetry.duplicatesRejected,
+    history: { passed: telemetry.historyPassed, rejected: telemetry.historyFilteredOut },
+    selection_engine: telemetry.selected,
+    candidates_finais: telemetry.returned,
+    graphql_calls: telemetry.graphqlCalls,
+    baseline: 0,
+    legacy: 0,
+    broad: 0,
+    category_keyword: 0,
+    fallback_categories: 0
+  }));
 
   // Enviar para Manual Review Queue
   console.log('Enviando itens para Manual Review Queue...');
@@ -6391,6 +6324,12 @@ module.exports = {
   normalizeAmazonOfficialRankingHtml,
   applyMarketplaceDataContract,
   normalizeShopeeProduct,
+  buildShopeeProductOfferV2Payload,
+  collectShopeeProductCatIds,
+  isShopeePeriodActive,
+  mergeShopeeDiscoveryProducts,
+  isShopeeHighCommissionEligible,
+  formatShopeePercent,
   enrichShopeeOffer,
   createSubId,
   isUuid,
@@ -6438,33 +6377,62 @@ async function callShopeeAffiliateApi(payload) {
   }
 }
 
-async function fetchShopeeProductsOfferV2(sortType, keyword = '', limit = 20, page = 1) {
-  const query = 'query ShopeeProductOfferSearch($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName } pageInfo { page limit hasNextPage } } }';
-  const payload = buildShopeeGraphQLPayload('ShopeeProductOfferSearch', query, { keyword, page, limit, sortType, isAMSOffer: true });
-  const resp = await callShopeeAffiliateApi(payload);
-  if (!resp || resp.status !== 200 || resp.data?.errors) return [];
-  return Array.isArray(resp.data?.data?.productOfferV2?.nodes) ? resp.data.data.productOfferV2.nodes : [];
+function buildShopeeProductOfferV2Payload(options = {}) {
+  const variables = {
+    page: options.page || 1,
+    limit: Math.min(10, Math.max(1, options.limit || 10)),
+    sortType: options.sortType || 2
+  };
+  const definitions = ['$page: Int', '$limit: Int', '$sortType: Int'];
+  const args = ['page: $page', 'limit: $limit', 'sortType: $sortType'];
+  if (options.productCatId != null) {
+    definitions.push('$productCatId: Int'); args.push('productCatId: $productCatId');
+    variables.productCatId = Number(options.productCatId);
+  }
+  if (options.shopId != null) {
+    definitions.push('$shopId: Int64'); args.push('shopId: $shopId');
+    variables.shopId = String(options.shopId);
+  }
+  if (options.isKeySeller === true) {
+    definitions.push('$isKeySeller: Boolean'); args.push('isKeySeller: $isKeySeller');
+    variables.isKeySeller = true;
+  }
+  if (options.isAMSOffer === true) {
+    definitions.push('$isAMSOffer: Boolean'); args.push('isAMSOffer: $isAMSOffer');
+    variables.isAMSOffer = true;
+  }
+  const query = `query ShopeeProductOfferSearch(${definitions.join(', ')}) { productOfferV2(${args.join(', ')}) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds periodStartTime periodEndTime } pageInfo { page limit hasNextPage } } }`;
+  return buildShopeeGraphQLPayload('ShopeeProductOfferSearch', query, variables);
 }
 
-async function fetchShopeeProductsByCommission(limit, page) { return fetchShopeeProductsOfferV2(5, '', limit, page); }
-async function fetchShopeeProductsBySales(limit, page) { return fetchShopeeProductsOfferV2(2, '', limit, page); }
-async function fetchShopeeProductsByDiscount(limit, page) { return fetchShopeeProductsOfferV2(4, '', limit, page); }
-async function fetchShopeeProductsByRelevance(limit, page, keyword) { return fetchShopeeProductsOfferV2(1, keyword, limit, page); }
+async function fetchShopeeProductsOfferV2(options = {}) {
+  const payload = buildShopeeProductOfferV2Payload(options);
+  const resp = await callShopeeAffiliateApi(payload);
+  if (!resp || resp.status !== 200 || resp.data?.errors) return [];
+  return Array.isArray(resp.data?.data?.productOfferV2?.nodes)
+    ? resp.data.data.productOfferV2.nodes.map(node => ({ ...node, _discoverySource: options.source || 'category_seed', _categoria_original: options.category || 'Geral', _sourceFilter: options.sourceFilter || null }))
+    : [];
+}
 
-async function fetchShopeeShopOffers(limit = 20, page = 1) {
-  const query = 'query ShopeeShopOfferSearch($page: Int, $limit: Int) { shopOfferV2(page: $page, limit: $limit) { nodes { shopId shopName shopLink imageUrl commissionRate sellerCommissionRate offerLink } pageInfo { page limit hasNextPage } } }';
-  const payload = buildShopeeGraphQLPayload('ShopeeShopOfferSearch', query, { page, limit });
+async function fetchShopeeProductsByCommission(limit, page) { return fetchShopeeProductsOfferV2({ sortType: 5, limit, page, source: 'high_commission' }); }
+async function fetchShopeeProductsBySales(limit, page) { return fetchShopeeProductsOfferV2({ sortType: 2, limit, page, source: 'category_seed' }); }
+async function fetchShopeeProductsByDiscount(limit, page) { return fetchShopeeProductsOfferV2({ sortType: 2, limit, page, source: 'category_seed' }); }
+async function fetchShopeeProductsByRelevance(limit, page) { return fetchShopeeProductsOfferV2({ sortType: 2, limit, page, source: 'category_seed' }); }
+
+async function fetchShopeeShopOffers(limit = 10, page = 1) {
+  const query = 'query ShopeeShopOfferSearch($page: Int, $limit: Int, $sortType: Int) { shopOfferV2(page: $page, limit: $limit, sortType: $sortType) { nodes { shopId shopName ratingStar commissionRate remainingBudget sellerCommCoveRatio periodStartTime periodEndTime offerLink } pageInfo { page limit hasNextPage } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeShopOfferSearch', query, { page, limit: Math.min(10, limit), sortType: 2 });
   const resp = await callShopeeAffiliateApi(payload);
   if (!resp || resp.status !== 200 || resp.data?.errors) return [];
   return Array.isArray(resp.data?.data?.shopOfferV2?.nodes) ? resp.data.data.shopOfferV2.nodes : [];
 }
 
-async function fetchShopeeCampaignOffers(limit = 20, page = 1) {
-  const query = 'query ShopeeCampaignOfferSearch($page: Int, $limit: Int) { campaignOfferV2(page: $page, limit: $limit) { nodes { offerName offerLink originalLink imageUrl commissionRate periodStartTime periodEndTime offerType } pageInfo { page limit hasNextPage } } }';
-  const payload = buildShopeeGraphQLPayload('ShopeeCampaignOfferSearch', query, { page, limit });
+async function fetchShopeeCampaignOffers(limit = 10, page = 1) {
+  const query = 'query ShopeeCampaignOfferSearch($page: Int, $limit: Int) { shopeeOfferV2(page: $page, limit: $limit) { nodes { offerName offerLink commissionRate periodStartTime periodEndTime categoryId collectionId } pageInfo { page limit hasNextPage } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeCampaignOfferSearch', query, { page, limit: Math.min(10, limit) });
   const resp = await callShopeeAffiliateApi(payload);
   if (!resp || resp.status !== 200 || resp.data?.errors) return [];
-  return Array.isArray(resp.data?.data?.campaignOfferV2?.nodes) ? resp.data.data.campaignOfferV2.nodes : [];
+  return Array.isArray(resp.data?.data?.shopeeOfferV2?.nodes) ? resp.data.data.shopeeOfferV2.nodes : [];
 }
 
 async function fetchShopeeItemFeedsIfAvailable() {
@@ -6482,6 +6450,60 @@ async function generateShopeeBatchShortLinks(originLinks) {
 
 function dedupeShopeeProducts(products) {
   return dedupeShopeeProductsDetailed(products).products;
+}
+
+function collectShopeeProductCatIds(nodes, max = 3) {
+  const selected = [];
+  const maxDepth = Math.max(0, ...(nodes || []).map(n => Array.isArray(n.productCatIds) ? n.productCatIds.length : 0));
+  for (let depth = 0; depth < maxDepth && selected.length < max; depth++) {
+    for (const node of (nodes || [])) {
+      const id = Number(node.productCatIds?.[depth]);
+      if (Number.isInteger(id) && !selected.includes(id)) selected.push(id);
+      if (selected.length >= max) break;
+    }
+  }
+  return selected;
+}
+
+function isShopeePeriodActive(node, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const start = node?.periodStartTime == null ? null : Number(node.periodStartTime);
+  const end = node?.periodEndTime == null ? null : Number(node.periodEndTime);
+  if (Number.isFinite(start) && nowSeconds < start) return false;
+  if (Number.isFinite(end) && nowSeconds > end) return false;
+  return true;
+}
+
+function mergeShopeeDiscoveryProducts(nodes) {
+  const products = [];
+  const byKey = new Map();
+  let duplicatesRejected = 0;
+  for (const node of nodes || []) {
+    if (node._discoverySource === 'category_seed') continue;
+    const key = node.itemId != null ? `item:${node.shopId ?? ''}:${node.itemId}` : `url:${node.productLink || node.offerLink || ''}`;
+    const source = node._discoverySource || 'category_seed';
+    if (byKey.has(key)) {
+      const existing = byKey.get(key);
+      existing.discoverySources = [...new Set([...(existing.discoverySources || []), source])];
+      duplicatesRejected++;
+      continue;
+    }
+    const copy = { ...node, discoverySources: [source] };
+    byKey.set(key, copy);
+    products.push(copy);
+  }
+  return { products, duplicatesRejected };
+}
+
+function isShopeeHighCommissionEligible(node, nowSeconds = Math.floor(Date.now() / 1000)) {
+  const price = parseShopeeMoney(node?.priceMin) ?? parseShopeeMoney(node?.priceMax);
+  const rating = Number(node?.ratingStar);
+  return Number(node?.sales) > 0 && Number.isFinite(rating) && rating > 0 && price > 0 && Boolean(node?.imageUrl) && Boolean(node?.productLink) && Boolean(node?.offerLink) && isShopeePeriodActive(node, nowSeconds);
+}
+
+function formatShopeePercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return `${Number((number * 100).toFixed(2))}%`;
 }
 
 function normalizeShopeeProduct(node) {
@@ -6503,7 +6525,13 @@ function normalizeShopeeProduct(node) {
     shopee_item_id: node.itemId ?? null,
     shopee_shop_id: node.shopId ?? null,
     commission_rate: node.commissionRate ?? null,
+    seller_commission_rate: node.sellerCommissionRate ?? null,
+    shopee_commission_rate: node.shopeeCommissionRate ?? null,
     discount_rate: node.priceDiscountRate ?? null,
+    product_cat_ids: Array.isArray(node.productCatIds) ? node.productCatIds : [],
+    discoverySources: Array.isArray(node.discoverySources) ? node.discoverySources : [node._discoverySource || 'category_seed'],
+    sourceFilter: node._sourceFilter || null,
+    isKeySellerFilterApplied: node._discoverySource === 'key_seller',
     raw_node: node
   };
 }
@@ -6520,10 +6548,6 @@ function evaluateShopeePriceFloor(product) {
   if (product.commission_rate >= 0.10) signals.push('commission_high');
   if (product.raw_node?.sellerCommissionRate >= 0.07) signals.push('seller_commission_high');
   
-  const shopNameLower = (product.raw_node?.shopName || '').toLowerCase();
-  if (shopNameLower.includes('oficial')) signals.push('shop_official');
-  if (shopNameLower.includes('mall')) signals.push('shop_mall');
-
   const nameLower = product.product_name.toLowerCase();
   const lixoKeywords = ['capinha', 'película', 'cabo', 'carregador', 'fone de fio', 'suporte', 'adaptador', 'pulseira'];
   const hasLixo = lixoKeywords.some(kw => nameLower.includes(kw));
@@ -6563,7 +6587,6 @@ function applyShopeeQualityGateV4(products, telemetria) {
       if (pf.signals.includes('sales_high')) telemetria.recuperados_com_sales = (telemetria.recuperados_com_sales || 0) + 1;
       if (pf.signals.includes('discount_high')) telemetria.recuperados_com_desconto = (telemetria.recuperados_com_desconto || 0) + 1;
       if (pf.signals.includes('commission_high') || pf.signals.includes('seller_commission_high')) telemetria.recuperados_com_comissao = (telemetria.recuperados_com_comissao || 0) + 1;
-      if (pf.signals.includes('shop_official') || pf.signals.includes('shop_mall')) telemetria.recuperados_loja_oficial = (telemetria.recuperados_loja_oficial || 0) + 1;
       telemetria.lista_recuperados.push({ ...p, signals: pf.signals });
     }
 
