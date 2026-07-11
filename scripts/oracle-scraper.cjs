@@ -2097,6 +2097,17 @@ function normalizeOfferRating(value) {
   return Number.isFinite(rating) && rating >= 0 && rating <= 5 ? rating : null;
 }
 
+function applyMarketplaceDataContract(product, store) {
+  const normalized = { ...product };
+  if (store === 'Mercado Livre' || store === 'Netshoes') {
+    const category = String(normalized.category ?? '').trim();
+    normalized.rating = null;
+    normalized.category = category && category !== 'Geral' ? category : null;
+  }
+  if (store === 'Shopee') normalized.old_price = null;
+  return normalized;
+}
+
 function parseAmazonReviewCount(value) {
   if (Number.isFinite(Number(value))) return Number(value);
   const normalized = String(value || '').replace(/[()\s]/g, '').replace(',', '.').toUpperCase();
@@ -2195,7 +2206,7 @@ function normalizeAmazonOfficialRankingHtml(html, limit, reference) {
     const title = root.find('img[alt]').first().attr('alt')
       || root.find('._cDEzb_p13n-sc-css-line-clamp-3_g3dy1, ._cDEzb_p13n-sc-css-line-clamp-4_2q2cc').first().text();
     const price = parseAmazonBrazilPrice(root.find('.a-price .a-offscreen').first().text()) || parseAmazonBrazilPrice(root.text());
-    const oldPrice = parseAmazonBrazilPrice(root.find('.a-text-price .a-offscreen').first().text());
+    const oldPrice = null;
     const imageUrl = root.find('img[src]').first().attr('src') || null;
     const ratingMatch = root.text().match(/(\d+[,.]\d+)\s+de\s+5/i);
     const rating = ratingMatch ? normalizeOfferRating(ratingMatch[1]) : null;
@@ -2245,10 +2256,14 @@ function normalizeScrapedoAmazonSearchProducts(payload, limit = OFFERS_PER_STORE
       continue;
     }
 
-    const oldPrice = parseAmazonApiNumber(raw?.listPrice || raw?.oldPrice || raw?.originalPrice);
+    const oldPrice = null;
     const canonicalUrl = `https://www.amazon.com.br/dp/${asin}`;
-    const rating = normalizeOfferRating(raw?.rating?.value ?? raw?.rating);
-    const reviews = parseAmazonReviewCount(raw?.rating?.count ?? raw?.reviewCount);
+    const ratingValue = raw?.rating && typeof raw.rating === 'object' ? raw.rating.value : null;
+    const rating = typeof ratingValue === 'number' ? normalizeOfferRating(ratingValue) : null;
+    if (ratingValue != null && rating == null) {
+      console.warn(`[Amazon Search][Data Contract] rating rejeitado asin=${asin} value=${JSON.stringify(ratingValue)} type=${typeof ratingValue}`);
+    }
+    const reviews = null;
     const seller = raw?.seller?.name || raw?.seller || raw?.merchantName || null;
     const discount = raw?.discount ?? (oldPrice && oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : null);
     const tokenPayload = JSON.parse(createLLMInputFromNormalizedContent(normalizeProductContentForLLM({
@@ -2760,7 +2775,6 @@ async function fetchNetshoesProductsFromRakuten(originalQuery, limit = OFFERS_PE
  */
 function enrichShopeeOffer(node) {
   const shopName    = String(node.shopName    || '').trim();
-  const productName = String(node.productName || '').trim();
 
   const commissionRate       = parseShopeeMoney(node.commissionRate);
   const sellerCommissionRate = parseShopeeMoney(node.sellerCommissionRate);
@@ -2769,30 +2783,9 @@ function enrichShopeeOffer(node) {
   const ratingStar  = node.ratingStar != null ? parseFloat(String(node.ratingStar)) : null;
   const salesCount  = node.sales      != null ? Number(node.sales) : null;
 
-  // Shopee Mall: sem campo direto. Heurística via shopName.
-  const isShopeeMall    = shopName.length > 0 && /shopee\s*mall/i.test(shopName);
-  // Loja Oficial: sem campo direto. Heurística via shopName.
-  const isOfficialStore = shopName.length > 0 &&
-    (/loja\s*oficial/i.test(shopName) || /official\s*store/i.test(shopName));
-
   // Comissão Extra: commissionRate > 5% é evidência de campanha extra afiliados.
   const totalCommission    = commissionRate != null ? commissionRate : (sellerCommissionRate ?? null);
   const hasExtraCommission = totalCommission != null && totalCommission > 5;
-
-  // Campanhas: inferidas via keyword no productName — única fonte disponível.
-  // Não representa dado oficial de campanha da Shopee.
-  const campaignPatterns = [
-    { re: /\b7[\s._]?7\b/,    name: '7.7'         },
-    { re: /\b8[\s._]?8\b/,    name: '8.8'         },
-    { re: /\b9[\s._]?9\b/,    name: '9.9'         },
-    { re: /\b10[\s._]?10\b/,  name: '10.10'       },
-    { re: /\b11[\s._]?11\b/,  name: '11.11'       },
-    { re: /\b12[\s._]?12\b/,  name: '12.12'       },
-    { re: /black\s*friday/i,    name: 'Black Friday'},
-  ];
-  const detectedCampaigns = campaignPatterns
-    .filter(({ re }) => re.test(productName))
-    .map(({ name }) => name);
 
   return {
     // ── Campos disponíveis na API ────────────────────────────
@@ -2805,12 +2798,8 @@ function enrichShopeeOffer(node) {
     price_discount_rate:    priceDiscountRate,
     sales_count:            Number.isFinite(salesCount) ? salesCount : null,
     rating_star:            Number.isFinite(ratingStar) ? ratingStar : null,
-    // ── Detectados via heurística no shopName ────────────────
-    is_shopee_mall:         isShopeeMall,
-    is_official_store:      isOfficialStore,
     has_extra_commission:   hasExtraCommission,
     total_commission_rate:  totalCommission,
-    detected_campaigns:     detectedCampaigns,
     // ── CAMPOS NÃO DISPONÍVEIS NA INTEGRAÇÃO ATUAL ───────────
     is_key_seller:          null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
     has_free_shipping:      null, // CAMPO NÃO DISPONÍVEL NA INTEGRAÇÃO ATUAL
@@ -3016,8 +3005,6 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
     const converted = nodes
       .map((node) => {
         const currentPrice = parseShopeeMoney(node?.priceMin) ?? parseShopeeMoney(node?.priceMax);
-        const oldPriceCandidate = parseShopeeMoney(node?.priceMax);
-        const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
         if (!node?.productName || !currentPrice || !node?.productLink) return null;
 
         const nameLower = String(node.productName).toLowerCase();
@@ -3040,7 +3027,7 @@ async function fetchShopeeProductsFromOfficialApi(query, limit = OFFERS_PER_STOR
         const mapped = {
           product_name: String(node.productName).trim(),
           current_price: currentPrice,
-          old_price: oldPrice,
+          old_price: null,
           image_url: node.imageUrl || null,
           original_url: node.productLink,
           affiliate_url: node.offerLink || node.productLink,
@@ -3387,6 +3374,7 @@ function buildDiscountSuffix(oldPrice, currentPrice) {
 
 // ─── Salva Oferta Básica (Rascunho) ───────────────────────────
 async function upsertOffer(product, store, affiliateUrl) {
+  product = applyMarketplaceDataContract(product, store);
   const scoreV1 = calculateScoreV1(product);
   const scoreV2 = calculateScoreV2(product);
   const safeRating = normalizeOfferRating(product.rating);
@@ -3495,7 +3483,7 @@ async function upsertOffer(product, store, affiliateUrl) {
     const { data, error } = await supabase.from('offers').insert({
     user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
     image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
-    rating: safeRating, category: product.category || 'Geral', score, status: 'draft',
+    rating: safeRating, category: product.category ?? null, score, status: 'draft',
     explainability: explainability,
     notes: `[Oracle In-House] Importado às ${new Date().toLocaleString('pt-BR')}`,
   }).select('id').single();
@@ -5563,13 +5551,13 @@ class MarketplaceCandidateFactory {
       brand: adapter.getBrand(product),
       category: adapter.getCategory(product),
       currentPrice: adapter.getPrice(product),
-      originalPrice: product.original_price || product.price_before_discount || adapter.getPrice(product),
+      originalPrice: marketplaceName === 'Shopee' ? null : (product.original_price || product.price_before_discount || adapter.getPrice(product)),
       discount: adapter.getDiscount(product),
       commission: adapter.getCommission(product),
       rating: adapter.getRating(product),
       sales: adapter.getSales(product),
       currency: product.currency || 'BRL',
-      image: product.image || product.product_image || product.cover || '',
+      image: product.image_url || product.image || product.product_image || product.cover || '',
       affiliateLink: product.affiliate_url || product.offerLink || '',
       productLink: product.original_url || product.productLink || '',
       selectionScore: product._selectionScore || 0,
@@ -5839,21 +5827,11 @@ async function fetchShopeeOfficialDiscovery(options = {}) {
   const products = uniqueNodes.map(node => {
     const base = normalizeShopeeProduct(node);
     if (!base) return null;
-    const officialFieldCandidates = [
-      ['officialShop', node.officialShop],
-      ['isOfficialShop', node.isOfficialShop],
-      ['shopType', node.shopType],
-      ['badge', node.badge]
-    ];
-    const officialField = officialFieldCandidates.find(([, value]) => value !== undefined && value !== null) || null;
     return {
       ...base,
       categoria_original: node._categoria_original || 'Geral',
       sortType: node._sortType,
       page: node._page,
-      official_shop_field: officialField ? officialField[0] : null,
-      official_shop_value: officialField ? officialField[1] : null,
-      official_shop_signal: 0,
       brand_signal: 0,
       raw_node: node
     };
@@ -6367,6 +6345,10 @@ module.exports = {
   canonicalizeAmazonProductUrl,
   sanitizeAmazonProductsBeforeLlm,
   normalizeScrapedoAmazonSearchProducts,
+  normalizeAmazonOfficialRankingHtml,
+  applyMarketplaceDataContract,
+  normalizeShopeeProduct,
+  enrichShopeeOffer,
   fetchAmazonProductsFromScrapedoApi,
   fetchMercadoLivreViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
@@ -6458,14 +6440,12 @@ function dedupeShopeeProducts(products) {
 
 function normalizeShopeeProduct(node) {
   const currentPrice = parseShopeeMoney(node?.priceMin) ?? parseShopeeMoney(node?.priceMax);
-  const oldPriceCandidate = parseShopeeMoney(node?.priceMax);
-  const oldPrice = oldPriceCandidate && currentPrice && oldPriceCandidate > currentPrice ? oldPriceCandidate : null;
   if (!node?.productName || !currentPrice || !node?.productLink) return null;
 
   return {
     product_name: String(node.productName).trim(),
     current_price: currentPrice,
-    old_price: oldPrice,
+    old_price: null,
     image_url: node.imageUrl || null,
     original_url: node.productLink,
     affiliate_url: node.offerLink || node.productLink,

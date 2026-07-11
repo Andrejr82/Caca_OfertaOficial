@@ -1,0 +1,197 @@
+{
+  "certification": "Marketplace Data Contract Certification",
+  "generatedAt": "2026-07-11",
+  "scope": ["Amazon", "Mercado Livre", "Shopee", "Netshoes/Rakuten"],
+  "result": "APPROVED",
+  "rules": {
+    "scrapingExecuted": false,
+    "creditsConsumed": 0,
+    "llmCalled": false,
+    "databaseWritten": false,
+    "codeChanged": false
+  },
+  "statusVocabulary": [
+    "CONTRATO OFICIAL",
+    "CONTRATO OFICIAL MAS NÃO UTILIZADO",
+    "UTILIZADO CORRETAMENTE",
+    "UTILIZADO INCORRETAMENTE",
+    "AMBÍGUO",
+    "INFERIDO",
+    "SEM CONTRATO",
+    "NÃO PERSISTIDO"
+  ],
+  "databaseContract": {
+    "source": "supabase/schema.sql + supabase/migrations_platform_netshoes.sql",
+    "offersRatingCheck": "rating IS NULL OR (rating >= 0 AND rating <= 5)",
+    "columns": {
+      "platform": "text NOT NULL; offers_platform_check",
+      "product_name": "text NOT NULL",
+      "category": "text NULL",
+      "original_url": "text NOT NULL",
+      "image_url": "text NULL",
+      "current_price": "numeric(12,2) NOT NULL CHECK current_price >= 0",
+      "old_price": "numeric(12,2) NULL CHECK old_price IS NULL OR old_price >= 0",
+      "coupon": "text NULL",
+      "rating": "numeric(3,2) NULL CHECK rating IS NULL OR rating BETWEEN 0 AND 5",
+      "estimated_commission": "numeric(12,2) NULL CHECK estimated_commission IS NULL OR estimated_commission >= 0",
+      "commission_rate": "numeric(5,2) NULL CHECK commission_rate IS NULL OR commission_rate >= 0",
+      "explainability": "jsonb NULL DEFAULT '{}'::jsonb",
+      "status": "text NOT NULL DEFAULT 'draft' CHECK status IN ('draft','approved','posted','rejected')"
+    },
+    "missingSignalColumns": ["review_count", "sales_count", "sales_rank", "seller_id", "official_store_id", "availability", "product_id", "asin", "sku", "brand", "campaign"]
+  },
+  "fields": [
+    {
+      "marketplace": "Amazon", "endpoint": "Raw HTML Best Sellers /gp/bestsellers/electronics", "payload": "HTML .zg-grid-general-faceout", "externalField": "title", "type": "string", "realExample": "produto em img[alt]", "officialDocumentation": "https://www.amazon.com.br/gp/bestsellers/electronics", "officialMeaning": "nome exibido do produto", "parser": "normalizeAmazonOfficialRankingHtml", "candidateField": "title", "offerField": "product_name", "databaseColumn": "offers.product_name", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "Raw HTML Best Sellers /gp/bestsellers/electronics", "payload": ".a-price .a-offscreen", "externalField": "price", "type": "localized string", "realExample": "R$ 99,90", "officialDocumentation": "https://www.amazon.com.br/gp/bestsellers/electronics", "officialMeaning": "preço atual exibido", "parser": "parseAmazonBrazilPrice / normalizeAmazonOfficialRankingHtml", "candidateField": "price", "offerField": "current_price", "databaseColumn": "offers.current_price", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "Raw HTML Best Sellers /gp/bestsellers/electronics", "payload": ".a-text-price .a-offscreen", "externalField": "oldPrice", "type": "localized string|null", "realExample": "não preservado", "officialDocumentation": "NÃO LOCALIZADA para seletor", "officialMeaning": "preço riscado aparente", "parser": "normalizeAmazonOfficialRankingHtml", "candidateField": "oldPrice", "offerField": "old_price", "databaseColumn": "offers.old_price", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": true, "confidence": "BAIXA", "status": "INFERIDO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "Raw HTML Best Sellers /gp/bestsellers/electronics", "payload": "texto '(N de 5)'", "externalField": "rating", "type": "localized decimal string|null", "realExample": "4,8 de 5", "officialDocumentation": "NÃO LOCALIZADA para seletor", "officialMeaning": "avaliação exibida em escala de 5", "parser": "normalizeAmazonOfficialRankingHtml", "candidateField": "rating", "offerField": "rating", "databaseColumn": "offers.rating", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "MÉDIA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": true, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "Raw HTML Best Sellers /gp/bestsellers/electronics", "payload": "a[href*='#customerReviews']", "externalField": "reviewCount", "type": "localized string|null", "realExample": "não preservado", "officialDocumentation": "NÃO LOCALIZADA para seletor", "officialMeaning": "quantidade aparente de avaliações", "parser": "parseAmazonReviewCount", "candidateField": "reviews", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": true, "transformation": true, "normalization": true, "confidence": "BAIXA", "status": "NÃO PERSISTIDO", "persistImmediately": false, "additionalValidation": true, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "Raw HTML Best Sellers /gp/bestsellers/electronics", "payload": "href /dp/{ASIN}", "externalField": "ASIN", "type": "string(10)", "realExample": "B0CJF94M8J", "officialDocumentation": "https://www.amazon.com.br/gp/bestsellers/electronics", "officialMeaning": "identificador Amazon", "parser": "extractAmazonAsin", "candidateField": "productId", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "NÃO PERSISTIDO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].rating", "externalField": "rating", "type": "object", "realExample": "{value:4.6,count:9100,stars:5} (exemplo oficial); payload histórico real não preservado", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "objeto de avaliação", "parser": "normalizeScrapedoAmazonSearchProducts", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "MÉDIA", "status": "CONTRATO OFICIAL", "persistImmediately": false, "additionalValidation": true, "risk": "CRÍTICO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].rating.value", "externalField": "rating.value", "type": "number", "realExample": "logs reais posteriores: 6,7,8,9; payload bruto ausente", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "valor da avaliação; documentação exemplifica escala de 5", "parser": "normalizeScrapedoAmazonSearchProducts", "candidateField": "rating", "offerField": "rating", "databaseColumn": "offers.rating", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "BAIXA para execução histórica", "status": "AMBÍGUO", "persistImmediately": false, "additionalValidation": true, "risk": "CRÍTICO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].rating.count | products[].reviewCount", "externalField": "reviewCount", "type": "number|string", "realExample": "9100 / '(9.1K)' (exemplo oficial)", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "quantidade de avaliações", "parser": "parseAmazonReviewCount", "candidateField": "reviews", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].rating.stars", "externalField": "stars", "type": "number", "realExample": "5 (exemplo oficial)", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "escala máxima/estrelas", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].position", "externalField": "position", "type": "number", "realExample": "1 (exemplo oficial)", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "posição no resultado de busca", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].price.amount", "externalField": "price.amount", "type": "number", "realExample": "29.95 (exemplo oficial)", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "preço atual", "parser": "parseAmazonApiNumber", "candidateField": "price", "offerField": "current_price", "databaseColumn": "offers.current_price", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].listPrice|oldPrice|originalPrice", "externalField": "oldPrice", "type": "unknown", "realExample": "não preservado e não documentado no contrato Search", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "não definido", "parser": "normalizeScrapedoAmazonSearchProducts", "candidateField": "oldPrice", "offerField": "old_price", "databaseColumn": "offers.old_price", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": true, "confidence": "BAIXA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "GET https://api.scrape.do/plugin/amazon/search", "payload": "products[].asin", "externalField": "asin", "type": "string", "realExample": "B0C1HGKNG7 (exemplo oficial)", "officialDocumentation": "https://scrape.do/documentation/amazon-scraper-api/search/", "officialMeaning": "ASIN do produto", "parser": "normalizeScrapedoAmazonSearchProducts", "candidateField": "productId", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "NÃO PERSISTIDO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Amazon", "endpoint": "Scrape.do Amazon PDP API", "payload": "não preservado", "externalField": "todos", "type": "unknown", "realExample": "nenhum", "officialDocumentation": "não inspecionada; endpoint não ativo no parser certificado", "officialMeaning": "não comprovado", "parser": "nenhum parser PDP certificado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": false, "inference": false, "transformation": false, "normalization": false, "confidence": "NULA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "price", "externalField": "price", "type": "number", "realExample": "599.9", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "preço da publicação", "parser": "API oficial não usada pelo fluxo produtivo", "candidateField": null, "offerField": null, "databaseColumn": "offers.current_price", "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": true, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "original_price", "externalField": "original_price", "type": "number|null", "realExample": "null", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "preço original da publicação", "parser": "API oficial não usada pelo fluxo produtivo", "candidateField": null, "offerField": null, "databaseColumn": "offers.old_price", "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": true, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "sold_quantity", "externalField": "sold_quantity", "type": "integer", "realExample": "123", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "quantidade vendida; pode exigir token proprietário", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": true, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "available_quantity", "externalField": "available_quantity", "type": "integer", "realExample": "7", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "quantidade disponível; API pública pode retornar faixa referencial", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": true, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "seller_id", "externalField": "seller_id", "type": "integer", "realExample": "35204426", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "identificador do vendedor", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "official_store_id", "externalField": "official_store_id", "type": "integer|null", "realExample": "null", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "identificador da loja oficial", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "GET https://api.mercadolibre.com/items/{ITEM_ID}", "payload": "category_id", "externalField": "category_id", "type": "string", "realExample": "MLB268333", "officialDocumentation": "https://developers.mercadolivre.com.br/pt_br/produto-consulta-de-usuarios/publicacao-de-produtos", "officialMeaning": "identificador da categoria", "parser": "não utilizado", "candidateField": null, "offerField": "category='Geral'", "databaseColumn": "offers.category", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": true, "inference": true, "transformation": true, "normalization": false, "confidence": "BAIXA", "status": "UTILIZADO INCORRETAMENTE", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Mercado Livre", "endpoint": "HTML via Scrape.do", "payload": "card DOM/text enviado ao extrator", "externalField": "rating", "type": "unknown", "realExample": "44 registros persistidos entre 4.0 e 4.9", "officialDocumentation": "nenhuma para o seletor/saída atual", "officialMeaning": "não comprovado", "parser": "crawleeExtract + saída LLM", "candidateField": "rating", "offerField": "rating", "databaseColumn": "offers.rating", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": true, "confidence": "BAIXA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "CRÍTICO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].priceMin", "externalField": "priceMin", "type": "numeric string", "realExample": "'20.11'", "officialDocumentation": "selection set atual + payload real preservado; documentação pública de campo não localizada", "officialMeaning": "preço mínimo retornado da oferta", "parser": "normalizeShopeeProduct", "candidateField": "currentPrice", "offerField": "current_price", "databaseColumn": "offers.current_price", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].priceMax", "externalField": "priceMax", "type": "numeric string", "realExample": "'31.25'", "officialDocumentation": "selection set atual + payload real preservado; documentação pública de campo não localizada", "officialMeaning": "preço máximo da faixa, não preço anterior", "parser": "normalizeShopeeProduct", "candidateField": "originalPrice", "offerField": "old_price", "databaseColumn": "offers.old_price", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": true, "confidence": "ALTA sobre origem; baixa sobre uso", "status": "UTILIZADO INCORRETAMENTE", "persistImmediately": false, "additionalValidation": false, "risk": "CRÍTICO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].ratingStar", "externalField": "ratingStar", "type": "numeric string", "realExample": "'4.9'", "officialDocumentation": "selection set atual + payload real preservado", "officialMeaning": "avaliação em estrelas", "parser": "normalizeShopeeProduct / enrichShopeeOffer", "candidateField": "rating", "offerField": "rating", "databaseColumn": "offers.rating", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].sales", "externalField": "sales", "type": "integer", "realExample": "701", "officialDocumentation": "selection set atual + payload real preservado", "officialMeaning": "quantidade de vendas informada pela API", "parser": "normalizeShopeeProduct / enrichShopeeOffer", "candidateField": "sales", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "NÃO PERSISTIDO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].commissionRate", "externalField": "commissionRate", "type": "numeric string fraction", "realExample": "'0.13'", "officialDocumentation": "selection set atual + payload real preservado", "officialMeaning": "taxa total de comissão", "parser": "enrichShopeeOffer / MarketplaceSelectionAdapter", "candidateField": "commission", "offerField": "shopee_enrichment somente", "databaseColumn": "offers.explainability.shopee_enrichment", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].shopName", "externalField": "shopName", "type": "string", "realExample": "Choice Oficial", "officialDocumentation": "selection set atual + payload real preservado", "officialMeaning": "nome da loja", "parser": "normalizeShopeeProduct / enrichShopeeOffer", "candidateField": "shopName", "offerField": "shopee_enrichment.shop_name", "databaseColumn": "offers.explainability.shopee_enrichment.shop_name", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "não pertence ao selection set", "externalField": "shopType", "type": "absent", "realExample": "nenhum", "officialDocumentation": "não presente na query atual", "officialMeaning": "não comprovado", "parser": "fetchShopeeOfficialDiscovery tenta ler campo ausente", "candidateField": "official_shop_value potencial", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": false, "normalization": false, "confidence": "NULA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "não pertence ao selection set", "externalField": "officialShop/isOfficialShop", "type": "absent", "realExample": "nenhum", "officialDocumentation": "não presente na query atual", "officialMeaning": "não comprovado", "parser": "fetchShopeeOfficialDiscovery tenta ler campos ausentes", "candidateField": "official_shop_value potencial", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": false, "normalization": false, "confidence": "NULA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "productOfferV2", "payload": "shopName", "externalField": "official store", "type": "derived boolean", "realExample": "true para nome contendo 'Loja Oficial'", "officialDocumentation": "nenhuma", "officialMeaning": "não existe no payload atual", "parser": "enrichShopeeOffer", "candidateField": "official_shop_signal", "offerField": "shopee_enrichment.is_official_store", "databaseColumn": "offers.explainability.shopee_enrichment.is_official_store", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": false, "confidence": "BAIXA", "status": "INFERIDO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "productOfferV2", "payload": "productName", "externalField": "campaign", "type": "derived string[]", "realExample": "'Black Friday' quando título contém expressão", "officialDocumentation": "nenhuma", "officialMeaning": "não existe no payload atual", "parser": "enrichShopeeOffer", "candidateField": "detected_campaigns", "offerField": "shopee_enrichment.detected_campaigns", "databaseColumn": "offers.explainability.shopee_enrichment.detected_campaigns", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": false, "confidence": "BAIXA", "status": "INFERIDO", "persistImmediately": false, "additionalValidation": true, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Shopee", "endpoint": "POST https://open-api.affiliate.shopee.com.br/graphql productOfferV2", "payload": "nodes[].priceDiscountRate", "externalField": "discount", "type": "number", "realExample": "37", "officialDocumentation": "selection set atual + payload real preservado", "officialMeaning": "percentual de desconto", "parser": "normalizeShopeeProduct / enrichShopeeOffer", "candidateField": "discount", "offerField": "shopee_enrichment.price_discount_rate", "databaseColumn": "offers.explainability.shopee_enrichment.price_discount_rate", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "item/price", "externalField": "price", "type": "decimal text", "realExample": "relatórios reais: 179.99", "officialDocumentation": "https://developers.rakutenadvertising.com/guides/product_search/reference", "officialMeaning": "preço de varejo", "parser": "fetchNetshoesProductsFromRakuten", "candidateField": "retail_price/current_price", "offerField": "current_price ou old_price", "databaseColumn": "offers.current_price/offers.old_price", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "item/saleprice", "externalField": "salePrice", "type": "decimal text", "realExample": "0 ou valor menor que retailPrice", "officialDocumentation": "https://developers.rakutenadvertising.com/guides/product_search/reference", "officialMeaning": "preço promocional", "parser": "fetchNetshoesProductsFromRakuten", "candidateField": "sale_price/current_price", "offerField": "current_price", "databaseColumn": "offers.current_price", "persistedCurrently": true, "persistedCorrectly": true, "informationLoss": false, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO CORRETAMENTE", "persistImmediately": true, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "item/brand|manufacturername", "externalField": "brand", "type": "string|null", "realExample": "Nike", "officialDocumentation": "campo não aparece na referência Product Search inspecionada", "officialMeaning": "não comprovado neste endpoint", "parser": "fetchNetshoesProductsFromRakuten", "candidateField": "brand", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": true, "transformation": true, "normalization": true, "confidence": "BAIXA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "item/merchantname", "externalField": "merchant", "type": "string", "realExample": "Netshoes", "officialDocumentation": "https://developers.rakutenadvertising.com/guides/product_search/reference", "officialMeaning": "nome do anunciante", "parser": "fetchNetshoesProductsFromRakuten", "candidateField": "shopName", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "NÃO PERSISTIDO", "persistImmediately": false, "additionalValidation": false, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "item/availability", "externalField": "availability", "type": "string|null", "realExample": "não preservado", "officialDocumentation": "campo não aparece na referência Product Search inspecionada", "officialMeaning": "não comprovado", "parser": "fetchNetshoesProductsFromRakuten", "candidateField": "availability", "offerField": null, "databaseColumn": null, "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": true, "inference": true, "transformation": true, "normalization": true, "confidence": "BAIXA", "status": "SEM CONTRATO", "persistImmediately": false, "additionalValidation": true, "risk": "MÉDIO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "item/category/primary", "externalField": "category", "type": "string", "realExample": "Running", "officialDocumentation": "https://developers.rakutenadvertising.com/guides/product_search/reference", "officialMeaning": "categoria primária", "parser": "fetchNetshoesProductsFromRakuten", "candidateField": "category", "offerField": "category", "databaseColumn": "offers.category", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": true, "inference": false, "transformation": true, "normalization": true, "confidence": "ALTA", "status": "UTILIZADO INCORRETAMENTE", "persistImmediately": false, "additionalValidation": false, "risk": "ALTO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "nenhum campo coupon no parser/payload preservado", "externalField": "coupon", "type": "absent", "realExample": "nenhum", "officialDocumentation": "não consta na referência Product Search", "officialMeaning": "não fornecido", "parser": "não utilizado", "candidateField": null, "offerField": null, "databaseColumn": "offers.coupon", "persistedCurrently": false, "persistedCorrectly": false, "informationLoss": false, "inference": false, "transformation": false, "normalization": false, "confidence": "ALTA", "status": "CONTRATO OFICIAL MAS NÃO UTILIZADO", "persistImmediately": false, "additionalValidation": false, "risk": "BAIXO"
+    },
+    {
+      "marketplace": "Netshoes/Rakuten", "endpoint": "GET https://api.linksynergy.com/productsearch/1.0", "payload": "nenhum campo rating no parser/contrato", "externalField": "rating", "type": "absent", "realExample": "17 ratings antigos persistidos: 1,4,4.2,4.4,4.5,4.6,4.8,5", "officialDocumentation": "não consta na referência Product Search", "officialMeaning": "não fornecido por este contrato", "parser": "fluxo legado/LLM não certificado", "candidateField": "rating legado", "offerField": "rating", "databaseColumn": "offers.rating", "persistedCurrently": true, "persistedCorrectly": false, "informationLoss": false, "inference": true, "transformation": true, "normalization": true, "confidence": "NULA", "status": "UTILIZADO INCORRETAMENTE", "persistImmediately": false, "additionalValidation": true, "risk": "CRÍTICO"
+    }
+  ],
+  "postCorrectionCertification": {
+    "approved": true,
+    "test": "node scripts/test-marketplace-data-contracts.cjs",
+    "amazonSearchRating": "Somente rating.value numérico entre 0 e 5; demais valores viram null e geram log técnico.",
+    "amazonOldPrice": "Search API e Best Sellers sem contrato oficial persistem null.",
+    "mercadoLivreCategory": "Categoria ausente ou Geral vira null.",
+    "mercadoLivreRating": "Sempre null no contrato produtivo atual.",
+    "shopeeOldPrice": "priceMax não alimenta old_price; old_price permanece null.",
+    "shopeeInferences": "Official store, Mall e campaign não são derivados de texto nem emitidos pelo parser.",
+    "netshoesRating": "Sempre null no contrato Rakuten atual.",
+    "netshoesCategory": "Categoria oficial é preservada; ausente ou Geral vira null."
+  },
+  "historicalRequiredCorrections": [
+    "Amazon: preservar payload Search real e rejeitar rating.value fora de 0..5 com auditoria.",
+    "Amazon: não persistir oldPrice Search sem campo documentado e payload real.",
+    "Amazon: manter position, stars e reviewCount separados de rating.",
+    "Mercado Livre: proibir rating extraído por HTML/LLM sem seletor e contrato comprovados.",
+    "Mercado Livre: usar category_id oficial ou persistir null, nunca Geral como categoria real.",
+    "Shopee: não mapear priceMax para old_price.",
+    "Shopee: não persistir official store, Mall ou campaign inferidos de texto como fatos.",
+    "Shopee: manter commissionRate como taxa fracionária com unidade explícita.",
+    "Netshoes: proibir rating no fluxo Rakuten atual.",
+    "Netshoes: preservar category/merchant/SKU/productId sem substituição semântica.",
+    "Todos: registrar source, endpoint e versão do parser junto ao dado persistido.",
+    "Todos: atualizar ofertas existentes sem deixar rating/categoria antigos imutáveis quando a origem certificada mudar."
+  ]
+}
