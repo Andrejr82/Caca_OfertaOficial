@@ -20,7 +20,7 @@ const path         = require('path');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
-const { PlaywrightCrawler, Dataset, ProxyConfiguration } = require('crawlee');
+const { PlaywrightCrawler, Dataset, ProxyConfiguration, NonRetryableError } = require('crawlee');
 const { chromium } = require('playwright-extra');
 const stealthPlugin = require('puppeteer-extra-plugin-stealth');
 chromium.use(stealthPlugin());
@@ -101,17 +101,26 @@ async function fetchMercadoLivreViaScrapedo(url) {
   const apiKey = process.env.SCRAPEDO_API_KEY;
   if (!apiKey) throw new Error("SCRAPEDO_API_KEY não configurada.");
   
-  const targetUrl = encodeURIComponent(url);
-  const scrapeDoUrl = `https://api.scrape.do?token=${apiKey}&url=${targetUrl}&super=true`;
-  
   console.log(`  [Scrape.do] Buscando HTML via proxy residencial...`);
-  try {
-    const response = await axios.get(scrapeDoUrl, { timeout: 60000 });
-    return response.data;
-  } catch (error) {
-    console.error(`  [Scrape.do] Erro: ${error.message}`);
-    throw error;
+  const response = await axios.get('https://api.scrape.do', {
+    params: { token: apiKey, url, super: true },
+    timeout: 60000,
+    validateStatus: () => true
+  });
+
+  if (response.status === 200) return response.data;
+
+  const body = safeDiagnosticSnippet(response.data);
+  const cost = response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost'] ?? null;
+  console.error(`  [Scrape.do] HTTP ${response.status} url=${url} super=true body=${body || 'empty'} cost=${cost ?? 'unavailable'}`);
+  const error = new Error(`Scrape.do HTTP ${response.status}`);
+  error.status = response.status;
+  error.responseBody = body;
+  error.scrapeDoUrl = url;
+  if ([400, 401, 403].includes(response.status)) {
+    throw new NonRetryableError(error.message);
   }
+  throw error;
 }
 
 // ─── LLM Provider Setup ────────────────────────────────────────
@@ -466,7 +475,11 @@ function emitAuditEvent(hypothesisId, location, msg, data = {}) {
 
 function safeDiagnosticSnippet(value, maxLen = 280) {
   if (value === null || value === undefined) return null;
-  const text = typeof value === 'string' ? value : JSON.stringify(value);
+  let text = typeof value === 'string' ? value : JSON.stringify(value);
+  for (const secret of [process.env.SCRAPEDO_API_KEY, process.env.SCRAPFLY_API_KEYS, process.env.CEREBRAS_API_KEY, process.env.GROQ_API_KEY].filter(Boolean)) {
+    text = text.split(secret).join('[REDACTED]');
+  }
+  text = text.replace(/("(?:token|apiKey|key|secret)"\s*:\s*")([^"]+)(")/gi, '$1[REDACTED]$3');
   return text.replace(/\s+/g, ' ').trim().slice(0, maxLen);
 }
 
@@ -1167,10 +1180,7 @@ const MARKETPLACE_DISCOVERY_SOURCES = {
     { type: 'url', source: 'https://www.mercadolivre.com.br/lojas-oficiais', fallbackKeyword: 'ofertas oficiais' }
   ],
   'Amazon': [
-    { type: 'url', source: 'https://www.amazon.com.br/gp/bestsellers', fallbackKeyword: 'mais vendidos' },
-    { type: 'url', source: 'https://www.amazon.com.br/deals', fallbackKeyword: 'ofertas do dia' },
-    { type: 'url', source: 'https://www.amazon.com.br/gp/new-releases', fallbackKeyword: 'lançamentos amazon' },
-    { type: 'url', source: 'https://www.amazon.com.br/gp/movers-and-shakers', fallbackKeyword: 'produto viral' }
+    { type: 'url', source: 'https://www.amazon.com.br/gp/bestsellers/electronics', fallbackKeyword: 'Eletronicos best sellers' }
   ],
   'Shopee': DISCOVERY_QUERY_BLOCKS.Shopee.map((source) => ({ type: 'keyword', source }))
 };
@@ -1381,6 +1391,10 @@ function selectDiscoveryQueries(storeName) {
     return selectedShopeeSources;
   }
 
+  if (store === 'Amazon') {
+    return (MARKETPLACE_DISCOVERY_SOURCES.Amazon || []).map(normalizeDiscoverySource);
+  }
+
   if (!discoveryBank) {
     return [normalizeDiscoverySource('oferta')];
   }
@@ -1534,7 +1548,7 @@ async function crawleeExtract(url, limit, storeName) {
     maxConcurrency: 1,
     requestHandlerTimeoutSecs: 150,
     navigationTimeoutSecs: 120,
-    maxRequestRetries: 3, // Retry failed requests up to 3 times
+    maxRequestRetries: storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled() ? 0 : 3,
     autoscaledPoolOptions: {
       systemStatusOptions: {
         maxMemoryOverloadedRatio: 999,
@@ -2078,6 +2092,11 @@ function parseAmazonApiNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function normalizeOfferRating(value) {
+  const rating = Number.parseFloat(String(value ?? '').replace(',', '.'));
+  return Number.isFinite(rating) && rating >= 0 && rating <= 5 ? rating : null;
+}
+
 function parseAmazonReviewCount(value) {
   if (Number.isFinite(Number(value))) return Number(value);
   const normalized = String(value || '').replace(/[()\s]/g, '').replace(',', '.').toUpperCase();
@@ -2130,7 +2149,7 @@ function buildAmazonOfficialProduct(raw, reference) {
       price,
       old_price: oldPrice,
       discount,
-      rating: raw.rating || null,
+      rating: normalizeOfferRating(raw.rating),
       reviews: raw.reviews || null,
       image_url: raw.imageUrl || null,
       url: canonicalUrl,
@@ -2148,7 +2167,7 @@ function buildAmazonOfficialProduct(raw, reference) {
     discount: tokenPayload.discount,
     imageUrl: tokenPayload.imageUrl,
     url: canonicalUrl,
-    rating: tokenPayload.rating,
+    rating: normalizeOfferRating(tokenPayload.rating),
     reviews: tokenPayload.reviews,
     seller: tokenPayload.seller,
     prime: null,
@@ -2179,7 +2198,7 @@ function normalizeAmazonOfficialRankingHtml(html, limit, reference) {
     const oldPrice = parseAmazonBrazilPrice(root.find('.a-text-price .a-offscreen').first().text());
     const imageUrl = root.find('img[src]').first().attr('src') || null;
     const ratingMatch = root.text().match(/(\d+[,.]\d+)\s+de\s+5/i);
-    const rating = ratingMatch ? parseAmazonApiNumber(ratingMatch[1]) : null;
+    const rating = ratingMatch ? normalizeOfferRating(ratingMatch[1]) : null;
     const reviews = parseAmazonReviewCount(root.find('a[href*="#customerReviews"]').first().text());
     const product = buildAmazonOfficialProduct({ asin, title, price, oldPrice, imageUrl, rating, reviews }, reference);
     if (!product) {
@@ -2228,7 +2247,7 @@ function normalizeScrapedoAmazonSearchProducts(payload, limit = OFFERS_PER_STORE
 
     const oldPrice = parseAmazonApiNumber(raw?.listPrice || raw?.oldPrice || raw?.originalPrice);
     const canonicalUrl = `https://www.amazon.com.br/dp/${asin}`;
-    const rating = parseAmazonApiNumber(raw?.rating?.value ?? raw?.rating);
+    const rating = normalizeOfferRating(raw?.rating?.value ?? raw?.rating);
     const reviews = parseAmazonReviewCount(raw?.rating?.count ?? raw?.reviewCount);
     const seller = raw?.seller?.name || raw?.seller || raw?.merchantName || null;
     const discount = raw?.discount ?? (oldPrice && oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : null);
@@ -2259,7 +2278,7 @@ function normalizeScrapedoAmazonSearchProducts(payload, limit = OFFERS_PER_STORE
       discount: tokenPayload.discount,
       imageUrl: tokenPayload.imageUrl,
       url: canonicalUrl,
-      rating: tokenPayload.rating,
+      rating: normalizeOfferRating(tokenPayload.rating),
       reviews: tokenPayload.reviews,
       seller: tokenPayload.seller,
       prime: typeof raw?.isPrime === 'boolean' ? raw.isPrime : null,
@@ -2290,7 +2309,14 @@ async function fetchAmazonProductsFromScrapedoApi(query, limit = OFFERS_PER_STOR
         timeout: 60000,
         validateStatus: () => true
       });
-      if (response.status !== 200) throw new Error(`Amazon Best Sellers HTTP ${response.status}`);
+      if (response.status !== 200) {
+        const body = safeDiagnosticSnippet(response.data);
+        const error = new Error(`Amazon Best Sellers HTTP ${response.status}`);
+        error.status = response.status;
+        error.responseBody = body;
+        console.warn(`[Amazon Best Sellers] HTTP ${response.status} body=${body || 'empty'}`);
+        throw error;
+      }
 
       const normalized = normalizeAmazonOfficialReferenceHtml(response.data, limit, officialReference);
       const credits = Number(response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost']);
@@ -2315,6 +2341,7 @@ async function fetchAmazonProductsFromScrapedoApi(query, limit = OFFERS_PER_STOR
       }
       console.warn(`[Amazon Best Sellers] fallback Search por zero candidates; category=${officialReference.category}`);
     } catch (error) {
+      if (/HTTP\s+\d+/i.test(error.message || '')) throw error;
       console.warn(`[Amazon Best Sellers] fallback Search por falha tecnica; category=${officialReference.category}; error=${error.message || String(error)}`);
     }
 
@@ -3362,6 +3389,7 @@ function buildDiscountSuffix(oldPrice, currentPrice) {
 async function upsertOffer(product, store, affiliateUrl) {
   const scoreV1 = calculateScoreV1(product);
   const scoreV2 = calculateScoreV2(product);
+  const safeRating = normalizeOfferRating(product.rating);
   
   // ── Score boost Shopee (campos reais da API oficial) ───────────
   // Aplicado APENAS para store=Shopee usando enrichment já calculado.
@@ -3419,7 +3447,7 @@ async function upsertOffer(product, store, affiliateUrl) {
     productCategory: product.category || 'Geral',
     currentPrice: product.current_price,
     oldPrice: product.old_price,
-    rating: product.rating,
+    rating: safeRating,
     hasImage: !!product.image_url,
     scoreV1,
     scoreV2,
@@ -3467,7 +3495,7 @@ async function upsertOffer(product, store, affiliateUrl) {
     const { data, error } = await supabase.from('offers').insert({
     user_id: ADMIN_USER_ID, platform: store, product_name: product.product_name, original_url: affiliateUrl,
     image_url: product.image_url, current_price: product.current_price, old_price: product.old_price,
-    rating: product.rating, category: product.category || 'Geral', score, status: 'draft',
+    rating: safeRating, category: product.category || 'Geral', score, status: 'draft',
     explainability: explainability,
     notes: `[Oracle In-House] Importado às ${new Date().toLocaleString('pt-BR')}`,
   }).select('id').single();
@@ -3695,7 +3723,7 @@ async function fetchProductsForDiscoverySource(store, discoverySource, limit = O
       const result = await fetchAmazonProductsFromScrapedoApi(reference, limit);
       return {
         products: result.products,
-        finalUrl: `Scrape.do Amazon Search API keyword="${reference}"`,
+        finalUrl: result.telemetry?.htmlUsed ? result.telemetry.url : `Scrape.do Amazon Search API keyword="${reference}"`,
         source
       };
     } catch (error) {
@@ -3727,6 +3755,7 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
 
   const crawler = new PlaywrightCrawler({
     maxConcurrency: 1,
+    maxRequestRetries: storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled() ? 0 : 3,
     requestHandlerTimeoutSecs: 120,
     navigationTimeoutSecs: 90,
     launchContext: {
@@ -4132,7 +4161,7 @@ async function scrapeStore(store) {
         const prodData = {
           product_name: productName, image_url: normalizeImageUrl(productImage || null),
           current_price: productPrice, old_price: productOldPrice && productOldPrice > productPrice ? productOldPrice : null,
-          rating: p.rating ? parseFloat(String(p.rating)) : null, category: p.category || 'Geral',
+          rating: normalizeOfferRating(p.rating), category: p.category || 'Geral',
           shopee_enrichment: p.shopee_enrichment || null,
           shopee_origin:     p.shopee_origin     || null,
         };
@@ -4766,6 +4795,7 @@ class FileSeenProductStore {
     this.dbPath = path.resolve(dbPath);
     this.backupPath = `${this.dbPath}.bak`;
     this.isWriteInProgress = false;
+    this.dirty = false;
     this.data = this._load();
   }
 
@@ -4844,16 +4874,21 @@ class FileSeenProductStore {
 
     fs.writeFileSync(tempPath, payload, 'utf8');
 
-    try {
-      fs.renameSync(tempPath, this.dbPath);
-    } catch (renameError) {
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        if (fs.existsSync(this.dbPath)) fs.unlinkSync(this.dbPath);
         fs.renameSync(tempPath, this.dbPath);
-      } catch (finalError) {
-        try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
-        throw finalError || renameError;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (!['EPERM', 'EBUSY'].includes(error.code) || attempt === 2) break;
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * (attempt + 1));
       }
+    }
+    if (lastError) {
+      try { if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath); } catch (_) {}
+      throw lastError;
     }
 
     try {
@@ -4863,14 +4898,16 @@ class FileSeenProductStore {
 
   _save() {
     if (this.isWriteInProgress) {
-      return;
+      return false;
     }
 
     this.isWriteInProgress = true;
     try {
       this._saveObject(this.data);
+      return true;
     } catch (error) {
       console.warn(`[Shopee History] Falha ao salvar history. file=${this.dbPath} error=${error.message}`);
+      return false;
     } finally {
       this.isWriteInProgress = false;
     }
@@ -4880,14 +4917,20 @@ class FileSeenProductStore {
   }
   saveProduct(fingerprint, productData) {
     this.data[fingerprint] = productData;
-    this._save();
+    this.dirty = true;
   }
   removeProduct(fingerprint) {
     delete this.data[fingerprint];
-    this._save();
+    this.dirty = true;
   }
   getAll() {
     return Object.entries(this.data);
+  }
+  flush() {
+    if (!this.dirty) return true;
+    const saved = this._save();
+    if (saved) this.dirty = false;
+    return saved;
   }
 }
 
@@ -4899,6 +4942,7 @@ class SeenProductStore {
   save(fingerprint, data) { return this.provider.saveProduct(fingerprint, data); }
   remove(fingerprint) { return this.provider.removeProduct(fingerprint); }
   getAll() { return this.provider.getAll(); }
+  flush() { return typeof this.provider.flush === 'function' ? this.provider.flush() : true; }
 }
 const seenProductStore = new SeenProductStore();
 
@@ -5873,6 +5917,7 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = {}
     }
     diagHistory.reasons[histDecision.historyReason] = (diagHistory.reasons[histDecision.historyReason] || 0) + 1;
   }
+  const historySaved = historyStore.flush();
 
   const postHistoryDedupe = dedupeShopeeProductsDetailed(historyFiltered);
   const diagScore = {
@@ -5980,6 +6025,7 @@ async function runShopeeOfficialPipeline(targetCategory, limit = 5, options = {}
       received: products.length,
       historyPassed: historyFiltered.length,
       historyFilteredOut: products.length - historyFiltered.length,
+      historySaved,
       scored: scoredProducts.length,
       selected: selectionResult.statistics.totalSelected,
       candidatesGenerated: queueResult.statistics.readyCandidates,
