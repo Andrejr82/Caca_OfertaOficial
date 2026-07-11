@@ -3081,6 +3081,11 @@ function createTrackedUrl(subId) {
   return `${baseUrl}/go/${subId}`;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isUuid(value) {
+  return typeof value === 'string' && UUID_RE.test(value);
+}
+
 // ─── Score Matemático Frio ────────────────────────────────────
 function calculateScoreV1(product) {
   const price = product.current_price || 0;
@@ -3516,6 +3521,34 @@ async function upsertOffer(product, store, affiliateUrl) {
   return { id: data.id, isNew: true, score };
 }
 
+async function ensureShopeeOfferIdentity(item, deps = {}) {
+  if (item.store !== 'Shopee') {
+    return { ok: true, offerId: item.id, externalProductId: null };
+  }
+
+  const externalProductId = item.externalProductId || item.candidateId || (!isUuid(item.id) ? item.id : null);
+  if (externalProductId) {
+    item.externalProductId = externalProductId;
+    item.candidateId = item.candidateId || externalProductId;
+  }
+
+  if (isUuid(item.id)) {
+    item.offerId = item.id;
+    return { ok: true, offerId: item.id, externalProductId };
+  }
+
+  const persistOffer = deps.upsertOffer || upsertOffer;
+  const result = await persistOffer(item.product, 'Shopee', item.affiliateUrl);
+  if (!result?.id || !isUuid(result.id)) {
+    return { ok: false, reason: 'Shopee offer UUID ausente', externalProductId };
+  }
+
+  item.id = result.id;
+  item.offerId = result.id;
+  item.score = result.score ?? item.score;
+  return { ok: true, offerId: result.id, externalProductId, isNew: result.isNew };
+}
+
 // ─── Processamento Vip (IA, Links e Posts) ────────────────────
 async function processTopOffers(candidates) {
   candidates.sort((a, b) => b.score - a.score);
@@ -3567,6 +3600,14 @@ async function processTopOffers(candidates) {
   let processed = 0;
 
   for (const item of vipOffers) {
+    if (item.store === 'Shopee') {
+      const identity = await ensureShopeeOfferIdentity(item);
+      if (!identity.ok) {
+        console.error(`  [Erro] Shopee sem offers.id UUID: ${identity.reason}`);
+        continue;
+      }
+    }
+
     console.log(`  [IA] Gerando copy para: ${item.product.product_name.substring(0, 40)}...`);
     const analysis = await generateOfferAnalysis(item.product, item.store, {
       offerId: item.id,
@@ -3945,6 +3986,8 @@ async function scrapeStore(store) {
       // Adaptador mínimo: mapeia shape do pipeline para shape esperado por processTopOffers
       storeCandidates = candidates.map(c => ({
         id: c.candidateId,
+        candidateId: c.candidateId,
+        externalProductId: c.candidateId,
         product: {
           product_name: c.productName,
           current_price: c.currentPrice,
@@ -6349,6 +6392,9 @@ module.exports = {
   applyMarketplaceDataContract,
   normalizeShopeeProduct,
   enrichShopeeOffer,
+  createSubId,
+  isUuid,
+  ensureShopeeOfferIdentity,
   fetchAmazonProductsFromScrapedoApi,
   fetchMercadoLivreViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
