@@ -25,11 +25,9 @@ const card = ({ href, title = 'Produto', current = 90, old = 120, discount = 25 
     </a>
   </div>`;
 
-test('round-robin deterministico percorre paginas 1, 2 e 3', () => {
+test('round-robin deterministico percorre paginas 1 a 10', () => {
   const rotation = createMercadoLivreRoundRobin();
-  assert.equal(rotation.next().page, 1);
-  assert.equal(rotation.next().page, 2);
-  assert.equal(rotation.next().page, 3);
+  for(let i = 1; i <= 10; i++) assert.equal(rotation.next().page, i);
   assert.equal(rotation.next().page, 1);
 });
 

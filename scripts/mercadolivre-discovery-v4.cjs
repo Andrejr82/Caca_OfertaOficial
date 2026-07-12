@@ -4,8 +4,8 @@ const cheerio = require('cheerio');
 
 const API_BASE = 'https://api.mercadolibre.com';
 const HIGHLIGHTS_CATEGORY_ID = 'MLB432825';
-const MAX_PRODUCTS_PER_CYCLE = 6;
-const MAX_CANDIDATES_PER_SOURCE = 12;
+const MAX_PRODUCTS_PER_CYCLE = 18;
+const MAX_CANDIDATES_PER_SOURCE = 24;
 
 const FIXED_SSR_SOURCES = [
   { name: 'lightning', url: 'https://www.mercadolivre.com.br/ofertas?promotion_type=lightning' },
@@ -16,11 +16,11 @@ const FIXED_SSR_SOURCES = [
 ];
 
 function createMercadoLivreRoundRobin(initialCursor = 0) {
-  let cursor = Math.abs(Number(initialCursor) || 0) % 3;
+  let cursor = Math.abs(Number(initialCursor) || 0) % 10;
   return {
     next() {
       const page = cursor + 1;
-      cursor = (cursor + 1) % 3;
+      cursor = (cursor + 1) % 10;
       return { name: `offers_page_${page}`, page, url: `https://www.mercadolivre.com.br/ofertas?page=${page}` };
     }
   };
@@ -291,9 +291,29 @@ async function runMercadoLivreDiscoveryV4(options = {}) {
 
   const products = [];
   const productSources = new Map();
-  const productPriority = [...highlights.products, ...rawCandidates.filter(candidate => candidate.source !== 'highlights_product')];
-  for (const candidate of productPriority) {
+
+  const bySource = new Map();
+  for (const candidate of [...highlights.products, ...rawCandidates]) {
     if (!candidate.catalog_product_id) continue;
+    const source = candidate.source;
+    if (!bySource.has(source)) bySource.set(source, []);
+    bySource.get(source).push(candidate);
+  }
+
+  const productPriority = [];
+  let added = true;
+  while(added) {
+    added = false;
+    for (const source of bySource.keys()) {
+      const list = bySource.get(source);
+      if (list.length > 0) {
+        productPriority.push(list.shift());
+        added = true;
+      }
+    }
+  }
+
+  for (const candidate of productPriority) {
     if (!productSources.has(candidate.catalog_product_id)) products.push(candidate.catalog_product_id);
     const sourceNames = productSources.get(candidate.catalog_product_id) ?? [];
     productSources.set(candidate.catalog_product_id, [...new Set([...sourceNames, ...(candidate.discovery_sources ?? [candidate.source])])]);
