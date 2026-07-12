@@ -1,5 +1,5 @@
 export const platforms = ["Shopee", "Amazon", "Magalu", "Mercado Livre", "Shein", "Netshoes", "Outro"] as const;
-export const offerStatuses = ["draft", "approved", "posted", "rejected"] as const;
+export const offerStatuses = ["draft", "approved", "pending_manual_review", "selected", "posted", "rejected"] as const;
 export const channels = ["telegram", "instagram", "whatsapp", "facebook", "site", "blog"] as const;
 export const saleStatuses = ["pending", "confirmed", "cancelled"] as const;
 
@@ -22,6 +22,20 @@ export interface Offer {
   rating: number | null;
   estimated_commission: number | null;
   commission_rate: number | null;
+  shopee_item_id?: string | null;
+  shopee_shop_id?: string | null;
+  shopee_product_cat_id?: string | null;
+  native_category_order?: number | null;
+  native_category_position?: number | null;
+  marketplace_metrics?: {
+    sales?: number;
+    discount?: number;
+    rating?: number;
+    seller?: string | null;
+    productCatIds?: string[];
+    sellerCommissionRate?: number;
+    shopeeCommissionRate?: number;
+  } | null;
   score: number;
   official_policy?: number | null;
   historical_policy?: number | null;

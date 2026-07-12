@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { publishToInstagram } from "@/lib/instagram/client";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+import { assertShopeePublishable } from "@/lib/offers/shopee-manual-curation";
 
 export async function POST(request: Request) {
   try {
@@ -45,6 +46,11 @@ export async function POST(request: Request) {
 
     // O Supabase pode retornar a relação como um array dependendo de como a foreign key foi resolvida.
     const offer = Array.isArray(offerData) ? offerData[0] : offerData;
+    try {
+      assertShopeePublishable(offer);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
+    }
 
     const couponOffer = isCouponOffer(offer);
     const imageUrl = couponOffer ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;

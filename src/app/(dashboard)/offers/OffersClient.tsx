@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
+import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
 
 export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
@@ -105,6 +106,8 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
           
           const badges = expl.signals || [];
           const reason = comp?.reasons?.join(" | ") || expl.aiDecision?.reason || expl.quality?.reason || "N/A";
+          const nativeShopee = offer.platform === "Shopee" && Boolean(offer.shopee_product_cat_id);
+          const metrics = offer.marketplace_metrics || {};
 
           const tierColor = 
             tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
@@ -116,6 +119,9 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
           return (
             <div key={offer.id} className="border border-white/[0.05] rounded-lg p-4 bg-white/[0.01] flex flex-col gap-3">
               <div className="flex justify-between items-start gap-4">
+                {offer.image_url && (
+                  <img src={offer.image_url} alt="" className="h-20 w-20 rounded-md object-cover" />
+                )}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${tierColor}`}>Tier {tier}</span>
@@ -123,7 +129,17 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                     {badges.map((b: string) => <Badge key={b} label={b.replace(/_/g, " ")} tone="neutral" />)}
                   </div>
                   <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
-                  <p className="text-[11px] text-white/40">{offer.category || "Sem categoria"} • R$ {offer.current_price}</p>
+                  <p className="text-[11px] text-white/40">
+                    {offer.category || "Sem categoria"}
+                    {nativeShopee ? ` • Top ${offer.native_category_position} • productCatId ${offer.shopee_product_cat_id}` : ""}
+                    {` • R$ ${offer.current_price}`}
+                    {offer.old_price ? ` (de R$ ${offer.old_price})` : ""}
+                  </p>
+                  {nativeShopee && (
+                    <p className="mt-1 text-[11px] text-white/55">
+                      Vendas: {metrics.sales ?? 0} • Desconto: {metrics.discount ?? 0}% • Avaliação: {metrics.rating ?? "N/A"} • Comissão: {offer.commission_rate ?? 0}% • Seller: {metrics.seller || "N/A"}
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
@@ -151,6 +167,20 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
               <div className="text-xs text-white/50 bg-black/20 p-2 rounded">
                 <span className="font-semibold">Reason:</span> {reason}
               </div>
+
+              {nativeShopee && offer.status === "pending_manual_review" && (
+                <div className="flex gap-2">
+                  <form action={selectShopeeCandidateAction}>
+                    <input type="hidden" name="offer_id" value={offer.id} />
+                    <button className="rounded bg-emerald-500 px-3 py-2 text-xs font-bold text-black" type="submit">Selecionar</button>
+                  </form>
+                  <form action={rejectShopeeCandidateAction}>
+                    <input type="hidden" name="offer_id" value={offer.id} />
+                    <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
+                  </form>
+                  <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
+                </div>
+              )}
 
               {/* Timeline Horizontal */}
               <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-white/40 overflow-x-auto pb-1">

@@ -9,6 +9,7 @@ process.env.SCRAPEDO_API_KEY = 'dummy';
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const oracle = require('./oracle-scraper.cjs');
+const shopeeV5 = require('./shopee-native-discovery-v5.cjs');
 
 function amazonV3HtmlContract() {
   assert.equal(typeof oracle.normalizeAmazonRankingRawHtmlV3, 'function');
@@ -84,6 +85,32 @@ function shopeeContract() {
   assert.equal(source.includes('const oldPriceCandidate = parseShopeeMoney(node?.priceMax)'), false);
 }
 
+function shopeeV5Contract() {
+  assert.equal(typeof shopeeV5.validateShopeeV5Contract, 'function');
+  const valid = {
+    itemId: '22092998564',
+    productCatId: '100001',
+    category: 'New BAU Comm - Health',
+    rating: 4.9,
+    sales: 11651,
+    discount: 35,
+    commissionRate: 12,
+    score: 90,
+    status: 'pending_manual_review'
+  };
+
+  assert.deepEqual(shopeeV5.validateShopeeV5Contract(valid), { valid: true, errors: [] });
+  assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, rating: null }).valid, true);
+  assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, category: 'Geral' }).valid, false);
+  assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, productCatId: null }).valid, false);
+  assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, itemId: null }).valid, false);
+  for (const status of ['pending_manual_review', 'selected', 'rejected', 'posted']) {
+    assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, status }).valid, true);
+  }
+  assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, status: 'approved' }).valid, false);
+  assert.equal(shopeeV5.validateShopeeV5Contract({ ...valid, copy: null }).valid, true);
+}
+
 async function shopeeImageContract() {
   const imageUrl = 'https://cf.shopee.com.br/file/official-image.jpg';
   const node = {
@@ -121,7 +148,7 @@ async function shopeeImageContract() {
   assert.equal(candidates[0].image, imageUrl);
 }
 
-const tests = [amazonV3HtmlContract, amazonLegacySearchHtmlAbsentContract, persistenceContract, shopeeContract, shopeeImageContract];
+const tests = [amazonV3HtmlContract, amazonLegacySearchHtmlAbsentContract, persistenceContract, shopeeContract, shopeeV5Contract, shopeeImageContract];
 (async () => {
   let failures = 0;
   for (const test of tests) {

@@ -156,7 +156,22 @@ app.post('/api/shopee/trends', async (req, res) => {
   }
 
   try {
-    const { runShopeeOfficialPipeline } = require('./oracle-scraper.cjs');
+    const { runShopeeOfficialPipeline, executeShopeeNativeDiscoveryV5 } = require('./oracle-scraper.cjs');
+    if (process.env.SHOPEE_DISCOVERY_V5 === 'true') {
+      const result = await executeShopeeNativeDiscoveryV5({ persist: true });
+      return res.json({
+        success: true,
+        candidates: [],
+        telemetry: {
+          pipeline: 'ShopeeDiscoveryV5',
+          categories: result.categories.length,
+          calls: result.calls,
+          final: result.metrics.final,
+          aiCalled: false,
+          postsCreated: 0
+        }
+      });
+    }
     const result = await runShopeeOfficialPipeline(category, limit);
     return res.json({
       success: true,

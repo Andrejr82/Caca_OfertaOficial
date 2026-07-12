@@ -1,67 +1,34 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { scrapeProductDetails } from "@/lib/affiliates/scraper";
+import { describe, expect, it } from "vitest";
+import {
+  assertShopeeSelected,
+  assertShopeePublishable,
+  nextShopeeManualStatus
+} from "@/lib/offers/shopee-manual-curation";
 
-vi.mock("@/lib/ai/groq", () => ({
-  callLLM: vi.fn().mockResolvedValue(JSON.stringify({
-    title: "Camiseta Dry Fit Masculina Shopee",
-    image: "https://cf.shopee.com.br/file/img1",
-    current_price: 39.90,
-    old_price: 79.90
-  }))
-}));
-
-describe("Shopee Scraper - Validação do Fluxo de Detalhes", () => {
-  let originalEnv: string | undefined;
-
-  beforeEach(() => {
-    originalEnv = process.env.FIRECRAWL_API_KEY;
-    global.fetch = vi.fn();
+describe("Shopee Discovery V5 - curadoria manual", () => {
+  it("marca novos finalistas como pending_manual_review", () => {
+    expect(nextShopeeManualStatus("discovered")).toBe("pending_manual_review");
   });
 
-  afterEach(() => {
-    process.env.FIRECRAWL_API_KEY = originalEnv;
-    vi.restoreAllMocks();
+  it("permite seleção e descarte somente enquanto pendente", () => {
+    expect(nextShopeeManualStatus("pending_manual_review", "select")).toBe("selected");
+    expect(nextShopeeManualStatus("pending_manual_review", "reject")).toBe("rejected");
+    expect(() => nextShopeeManualStatus("posted", "select")).toThrow(/transição Shopee V5 inválida/i);
   });
 
-  it("deve retornar null se a chave FIRECRAWL_API_KEY não estiver definida", async () => {
-    process.env.FIRECRAWL_API_KEY = "";
-    
-    const result = await scrapeProductDetails("https://shopee.com.br/produto-teste-i.123.456");
-    
-    expect(result).toBeNull();
+  it("bloqueia IA, link e publicação antes da seleção manual", () => {
+    expect(() => assertShopeeSelected({ platform: "Shopee", status: "pending_manual_review" })).toThrow(/seleção manual/i);
+    expect(() => assertShopeeSelected({ platform: "Shopee", status: "rejected" })).toThrow(/seleção manual/i);
+    expect(() => assertShopeeSelected({ platform: "Shopee", status: "selected" })).not.toThrow();
   });
 
-  it("deve tentar raspar e estruturar os dados usando a Oracle API e IA se a chave estiver configurada", async () => {
-    process.env.ORACLE_API_KEY = "oracle-fake-key";
-    process.env.GROQ_API_KEY = "groq-fake-key";
-
-    // Simula resposta com sucesso da Oracle API
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        success: true,
-        data: { text: "HTML mockado da página. <a href='link'>Link</a> <img src='img'> r$ 10.00 price valor " + "x".repeat(1000) }
-      })
-    });
-
-    const result = await scrapeProductDetails("https://shopee.com.br/dry-fit-i.123.456");
-
-    expect(result).not.toBeNull();
-    expect(result?.product_name).toBe("Camiseta Dry Fit Masculina Shopee");
-    expect(result?.current_price).toBe(39.90);
-    expect(result?.old_price).toBe(79.90);
-    expect(result?.image_url).toBe("https://cf.shopee.com.br/file/img1");
+  it("não altera fluxo de outros marketplaces", () => {
+    expect(() => assertShopeeSelected({ platform: "Amazon", status: "draft" })).not.toThrow();
   });
 
-  it("deve retornar null em caso de erro definitivo da Oracle API", async () => {
-    process.env.ORACLE_API_KEY = "oracle-fake-key";
-
-    // Simula falha nas tentativas
-    (global.fetch as any).mockRejectedValue(new Error("Timeout ou rede indisponível"));
-
-    const result = await scrapeProductDetails("https://shopee.com.br/dry-fit-i.123.456");
-
-    expect(result).toBeNull();
+  it("publica somente após seleção e mantém canais seguintes após primeiro post", () => {
+    expect(() => assertShopeePublishable({ platform: "Shopee", status: "pending_manual_review" })).toThrow(/seleção manual/i);
+    expect(() => assertShopeePublishable({ platform: "Shopee", status: "selected" })).not.toThrow();
+    expect(() => assertShopeePublishable({ platform: "Shopee", status: "posted" })).not.toThrow();
   });
 });

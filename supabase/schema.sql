@@ -25,12 +25,22 @@ create table if not exists public.offers (
   legacy_score numeric(4,2) check (legacy_score is null or (legacy_score >= 0 and legacy_score <= 10)),
   new_score numeric(4,2) check (new_score is null or (new_score >= 0 and new_score <= 10)),
   explainability jsonb default '{}'::jsonb,
-  status text not null default 'draft' check (status in ('draft', 'approved', 'posted', 'rejected')),
+  status text not null default 'draft' check (status in ('draft', 'approved', 'pending_manual_review', 'selected', 'posted', 'rejected')),
+  shopee_item_id text,
+  shopee_shop_id text,
+  shopee_product_cat_id text,
+  native_category_order integer,
+  native_category_position integer,
+  marketplace_metrics jsonb not null default '{}'::jsonb,
   notes text,
   seasonality numeric(4,2) check (seasonality is null or (seasonality >= 0 and seasonality <= 2)),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create unique index if not exists offers_shopee_native_item_unique
+  on public.offers (user_id, platform, shopee_item_id)
+  where platform = 'Shopee' and shopee_item_id is not null;
 
 create table if not exists public.affiliate_links (
   id uuid primary key default gen_random_uuid(),

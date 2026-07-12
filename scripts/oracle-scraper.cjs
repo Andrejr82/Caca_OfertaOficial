@@ -31,8 +31,8 @@ const axios        = require('axios');
 const cheerio      = require('cheerio');
 require('dotenv').config({ path: '.env.local' });
 require('tsx/cjs');
-const { fetchWithMLAuth } = require('../src/lib/integrations/mercadolivre/token-manager.ts');
 const { runMercadoLivreDiscoveryV4 } = require('./mercadolivre-discovery-v4.cjs');
+const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
 const {
   normalizeProductContentForLLM,
@@ -4080,6 +4080,7 @@ async function runAmazonOfficialDryRun(deps = {}) {
 }
 
 async function executeMercadoLivreDiscoveryV4() {
+  const { fetchWithMLAuth } = require('../src/lib/integrations/mercadolivre/token-manager.ts');
   return runMercadoLivreDiscoveryV4({
     fetchImpl: global.fetch,
     apiFetchImpl: (url, options) => fetchWithMLAuth(url, options),
@@ -4091,6 +4092,12 @@ async function executeMercadoLivreDiscoveryV4() {
 async function scrapeStore(store) {
   let storeCandidates = [];
   const storeStartedAt = Date.now();
+
+  if (store === 'Shopee' && process.env.SHOPEE_DISCOVERY_V5 === 'true') {
+    const result = await executeShopeeNativeDiscoveryV5({ persist: true });
+    console.log(`[Shopee V5] categorias=${result.categories.length} finais=${result.metrics.final} chamadas=${result.calls}`);
+    return [];
+  }
 
   if (store === 'Mercado Livre') {
     console.log(`\n[Mercado Livre V4] Discovery oficial`);
@@ -4699,8 +4706,10 @@ const isMercadoLivreOfficialDryRun = process.argv.includes('--mercadolivre-offic
 
 const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
 const isShopeeOfficialDryRun = process.argv.includes('--shopee-official-dry-run');
+const isShopeeNativeTop20DryRun = process.argv.includes('--shopee-native-top20-dry-run');
+const isShopeeNativeCatalogRefresh = process.argv.includes('--refresh-shopee-native-catalog');
 
-if (!isAmazonOfficialDryRun && !isMercadoLivreOfficialDryRun && !isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+if (!isAmazonOfficialDryRun && !isMercadoLivreOfficialDryRun && !isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && !isShopeeNativeTop20DryRun && !isShopeeNativeCatalogRefresh && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
   console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
@@ -5868,7 +5877,17 @@ function createMarketplaceCandidateQueue(selectedProducts, marketplaceName) {
 }
 
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
-  if (isMercadoLivreOfficialDryRun) {
+  if (isShopeeNativeTop20DryRun) {
+    executeShopeeNativeDiscoveryV5({ dryRun: true }).catch(e => {
+      console.error('[Shopee V5 Dry-Run] erro:', e.message);
+      process.exitCode = 1;
+    });
+  } else if (isShopeeNativeCatalogRefresh) {
+    refreshShopeeNativeCatalog().catch(e => {
+      console.error('[Shopee V5 Catalog] erro:', e.message);
+      process.exitCode = 1;
+    });
+  } else if (isMercadoLivreOfficialDryRun) {
     runMercadoLivreOfficialDryRun().catch(e => {
       console.error('❌ Erro no Mercado Livre V4 dry-run:', e.message);
       process.exitCode = 1;
@@ -6572,6 +6591,8 @@ module.exports = {
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
   dedupeShopeeProductsDetailed,
   getShopeeDedupKeys
+  ,executeShopeeNativeDiscoveryV5
+  ,refreshShopeeNativeCatalog
 };
 
 function getEnabledStores(stores) {
@@ -6610,6 +6631,184 @@ async function callShopeeAffiliateApi(payload) {
     console.warn(`[Shopee API V4] Falha na request: ${err.message}`);
     return null;
   }
+}
+
+async function fetchShopeeNativeCategoriesFromApi() {
+  const query = 'query ShopeeNativeCategories($page: Int!, $limit: Int!) { shopeeOfferV2(page: $page, limit: $limit) { nodes { offerName categoryId collectionId commissionRate periodStartTime periodEndTime } pageInfo { page limit hasNextPage } } }';
+  const payload = buildShopeeGraphQLPayload('ShopeeNativeCategories', query, { page: 1, limit: 50 });
+  const response = await callShopeeAffiliateApi(payload);
+  if (!response || response.status !== 200 || response.data?.errors) return null;
+  const nodes = response.data?.data?.shopeeOfferV2?.nodes;
+  if (!Array.isArray(nodes)) return null;
+  const seen = new Set();
+  const categories = [];
+  for (const node of nodes) {
+    const productCatId = node.categoryId == null ? '' : String(node.categoryId);
+    const name = String(node.offerName || '').trim();
+    if (!productCatId || !name || seen.has(productCatId)) continue;
+    seen.add(productCatId);
+    categories.push({
+      productCatId,
+      name,
+      order: categories.length + 1,
+      active: true,
+      metadata: {
+        collectionId: node.collectionId ?? null,
+        commissionRate: node.commissionRate ?? null,
+        periodStartTime: node.periodStartTime ?? null,
+        periodEndTime: node.periodEndTime ?? null
+      }
+    });
+  }
+  return categories.length === 30 ? categories : null;
+}
+
+async function resolveShopeeNativeCategories() {
+  const dynamic = await fetchShopeeNativeCategoriesFromApi();
+  if (dynamic) return { categories: dynamic, source: 'shopeeOfferV2' };
+  const catalog = shopeeNativeV5.loadCertifiedCatalog();
+  console.warn(`[Shopee V5] catálogo dinâmico indisponível; usando catálogo certificado de ${catalog.certifiedAt}`);
+  return { categories: catalog.categories, source: 'certified_catalog' };
+}
+
+async function refreshShopeeNativeCatalog() {
+  const categories = await fetchShopeeNativeCategoriesFromApi();
+  if (!categories) throw new Error('shopeeOfferV2 não retornou exatamente 30 categorias; catálogo preservado');
+  const catalog = {
+    certifiedAt: new Date().toISOString(),
+    source: 'Shopee Affiliate Open API shopeeOfferV2',
+    categories
+  };
+  fs.writeFileSync(shopeeNativeV5.CATALOG_PATH, `${JSON.stringify(catalog, null, 2)}\n`, 'utf8');
+  console.log(`[Shopee V5 Catalog] atualizado categorias=${categories.length} arquivo=${shopeeNativeV5.CATALOG_PATH}`);
+  return catalog;
+}
+
+async function fetchShopeeNativeCategoryProducts(category, payloadObject) {
+  const response = await callShopeeAffiliateApi(JSON.stringify(payloadObject));
+  if (!response) return { http: 0, nodes: [] };
+  const retryAfter = response.headers?.['retry-after'] == null ? null : String(response.headers['retry-after']);
+  if (response.status === 429) {
+    console.warn(`[Shopee V5] HTTP 429 categoria=${category.productCatId} Retry-After=${retryAfter || 'ausente'}; categoria interrompida`);
+    return { http: 429, retryAfter, nodes: [] };
+  }
+  const errors = Array.isArray(response.data?.errors) ? response.data.errors : [];
+  if (response.status !== 200 || errors.length) {
+    return { http: response.status, nodes: [], error: errors.map(error => error.message).filter(Boolean).join(' | ') };
+  }
+  return { http: 200, nodes: response.data?.data?.productOfferV2?.nodes || [] };
+}
+
+async function loadShopeeNoveltyKeys() {
+  const { data, error } = await supabase
+    .from('offers')
+    .select('shopee_item_id, shopee_shop_id, original_url, status')
+    .eq('platform', 'Shopee')
+    .in('status', ['posted', 'draft', 'pending_manual_review', 'selected']);
+  if (error) throw new Error(`Novelty Shopee V5: ${error.message}`);
+  const keys = new Set();
+  for (const offer of data || []) {
+    if (offer.shopee_item_id) keys.add(`item:${offer.shopee_item_id}`);
+    if (offer.shopee_item_id && offer.shopee_shop_id) keys.add(`shopItem:${offer.shopee_shop_id}:${offer.shopee_item_id}`);
+    const url = offer.original_url ? shopeeNativeV5.sanitizeProduct({ itemId: 'probe', productName: 'probe', productLink: offer.original_url, priceMin: 1 }, { productCatId: 'probe', name: 'probe', order: 0 })?.normalizedUrl : null;
+    if (url) keys.add(`url:${url}`);
+  }
+  return keys;
+}
+
+async function persistShopeeNativeTop20(products) {
+  if (!products.length) return;
+  const rows = products.map(product => ({
+    user_id: ADMIN_USER_ID,
+    platform: 'Shopee',
+    product_name: product.productName,
+    category: product.category,
+    original_url: product.offerLink || product.productLink,
+    image_url: product.imageUrl,
+    current_price: product.price,
+    old_price: product.originalPrice,
+    rating: product.rating || null,
+    estimated_commission: product.price * ((product.commissionRate || 0) / 100),
+    commission_rate: product.commissionRate || null,
+    score: Math.max(0, Math.min(10, product.score / 10)),
+    status: 'pending_manual_review',
+    shopee_item_id: product.itemId,
+    shopee_shop_id: product.shopId,
+    shopee_product_cat_id: product.productCatId,
+    native_category_order: product.categoryOrder,
+    native_category_position: product.position,
+    marketplace_metrics: {
+      sales: product.sales,
+      discount: product.discount,
+      rating: product.rating,
+      seller: product.seller,
+      productCatIds: product.productCatIds,
+      sellerCommissionRate: product.sellerCommissionRate,
+      shopeeCommissionRate: product.shopeeCommissionRate
+    }
+  }));
+  const { error } = await supabase.from('offers').upsert(rows, { onConflict: 'user_id,platform,shopee_item_id' });
+  if (error) throw new Error(`Persistência Shopee V5: ${error.message}`);
+}
+
+function writeShopeeNativeReport(result) {
+  const reportsDir = path.join(__dirname, '..', 'reports');
+  fs.mkdirSync(reportsDir, { recursive: true });
+  const jsonPath = path.join(reportsDir, 'shopee-native-top20-latest.json');
+  const mdPath = path.join(reportsDir, 'shopee-native-top20-latest.md');
+  fs.writeFileSync(jsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  const lines = [
+    '# Shopee Native Top 20', '',
+    `Executado: ${result.executedAt}`,
+    `Fonte categorias: ${result.categorySource}`,
+    `Categorias: ${result.categories.length}`,
+    `Chamadas: ${result.calls}`,
+    `Produtos brutos: ${result.metrics.raw}`,
+    `Sanitizados: ${result.metrics.sanitized}`,
+    `Deduplicados: ${result.metrics.deduplicated}`,
+    `Finais: ${result.metrics.final}`,
+    `Tempo: ${result.elapsedMs} ms`,
+    'IA: NÃO', 'Banco: NÃO', 'Posts: 0', ''
+  ];
+  for (const category of result.categories) {
+    lines.push(`## ${category.order}. ${category.name} (${category.productCatId})`, '');
+    if (category.error) lines.push(`Erro: HTTP ${category.error.http}; Retry-After: ${category.error.retryAfter || 'N/A'}`, '');
+    for (const product of category.products) lines.push(`${product.position}. ${product.productName} | itemId=${product.itemId} | R$ ${product.price} | vendas=${product.sales} | score=${product.score}`);
+    lines.push('');
+  }
+  fs.writeFileSync(mdPath, `${lines.join('\n')}\n`, 'utf8');
+}
+
+async function executeShopeeNativeDiscoveryV5(options = {}) {
+  const startedAt = Date.now();
+  const dryRun = options.dryRun === true;
+  const resolved = await resolveShopeeNativeCategories();
+  const noveltyKeys = dryRun ? new Set() : await loadShopeeNoveltyKeys();
+  const result = await shopeeNativeV5.runNativeDiscovery({
+    categories: resolved.categories,
+    fetchProducts: fetchShopeeNativeCategoryProducts,
+    isNovel: product => ![
+      `item:${product.itemId}`,
+      product.shopId && `shopItem:${product.shopId}:${product.itemId}`,
+      product.normalizedUrl && `url:${product.normalizedUrl}`
+    ].filter(Boolean).some(key => noveltyKeys.has(key)),
+    dryRun,
+    persistFinalists: options.persist ? persistShopeeNativeTop20 : null
+  });
+  Object.assign(result, {
+    executedAt: new Date().toISOString(),
+    categorySource: resolved.source,
+    elapsedMs: Date.now() - startedAt,
+    aiCalled: false,
+    databaseChanged: options.persist === true && !dryRun,
+    postsCreated: 0
+  });
+  result.productCalls = result.calls;
+  result.categoryCalls = 1;
+  result.calls += result.categoryCalls;
+  if (dryRun) writeShopeeNativeReport(result);
+  console.log(`[Shopee V5] categorias=${result.categories.length} brutos=${result.metrics.raw} sanitizados=${result.metrics.sanitized} deduplicados=${result.metrics.deduplicated} finais=${result.metrics.final} chamadas=${result.calls} tempo_ms=${result.elapsedMs} IA=NÃO banco=${result.databaseChanged ? 'SIM' : 'NÃO'} posts=0`);
+  return result;
 }
 
 function buildShopeeProductOfferV2Payload(options = {}) {

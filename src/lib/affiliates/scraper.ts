@@ -191,6 +191,11 @@ function mapShopeeCandidateToScrapedProduct(candidate: any): ScrapedProduct {
 export async function fetchShopeeTrendingProducts(limit = 5, category?: string): Promise<ScrapedProduct[]> {
   console.log("[SCRAPER][SHOPEE][TRENDS] Iniciando busca oficial da Shopee...");
   try {
+    if (process.env.SHOPEE_DISCOVERY_V5 === "true") {
+      await callOracleRuntime<{ telemetry?: unknown }>("/api/shopee/trends", { nativeV5: true });
+      console.log("[SCRAPER][SHOPEE][V5] Top 20 persistido para revisão manual; zero candidatos enviados à IA.");
+      return [];
+    }
     const targetCategory = category || "Todas";
     const payload = await callOracleRuntime<{ candidates: any[]; telemetry?: any }>("/api/shopee/trends", {
       category: targetCategory,

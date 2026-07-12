@@ -9,6 +9,33 @@ import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { formDataToOfferInput } from "@/lib/validators/offer";
 import { saleInputSchema } from "@/lib/validators/sale";
 import type { Channel, Offer, Platform } from "@/types/domain";
+import { assertShopeeSelected, nextShopeeManualStatus } from "@/lib/offers/shopee-manual-curation";
+
+async function updateShopeeManualStatus(offerId: string, action: "select" | "reject") {
+  const supabase = await createServerSupabaseClient();
+  const userId = await getCurrentUserId();
+  if (!supabase || !userId) throw new Error("Usuário não autenticado.");
+  const status = nextShopeeManualStatus("pending_manual_review", action);
+  const { data, error } = await supabase
+    .from("offers")
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq("id", offerId)
+    .eq("user_id", userId)
+    .eq("platform", "Shopee")
+    .eq("status", "pending_manual_review")
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(error?.message || "Candidato Shopee não está pendente.");
+  revalidatePath("/offers");
+}
+
+export async function selectShopeeCandidateAction(formData: FormData) {
+  await updateShopeeManualStatus(String(formData.get("offer_id") || ""), "select");
+}
+
+export async function rejectShopeeCandidateAction(formData: FormData) {
+  await updateShopeeManualStatus(String(formData.get("offer_id") || ""), "reject");
+}
 
 export async function createOfferAction(formData: FormData) {
   const input = formDataToOfferInput(formData);
@@ -107,6 +134,7 @@ export async function generateAffiliateLinkAction(
     if (offerError || !fetchedOffer) return { ok: false, message: offerError?.message || "Oferta não encontrada.", timestamp: Date.now() };
     offer = fetchedOffer;
   }
+  assertShopeeSelected(offer);
 
   // Injeta parâmetros de afiliado oficiais (Mercado Livre e Shein)
   let finalAffiliateUrl = affiliateUrl;

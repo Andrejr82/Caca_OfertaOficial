@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { sendTelegramMessage } from "@/lib/telegram/client";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+import { assertShopeePublishable } from "@/lib/offers/shopee-manual-curation";
 
 type TelegramPublishResult = {
   message_id: number;
@@ -125,6 +126,11 @@ export async function POST(request: Request) {
     const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
     if (!offer) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
+    }
+    try {
+      assertShopeePublishable(offer);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
     }
 
     // O usuário pode ter editado o texto na tela antes de aprovar

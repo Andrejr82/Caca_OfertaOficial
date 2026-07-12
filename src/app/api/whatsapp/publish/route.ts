@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { logger } from "@/lib/utils/logger";
+import { assertShopeePublishable } from "@/lib/offers/shopee-manual-curation";
 
 function isValidRemoteImageUrl(value: string | null | undefined) {
   return /^https?:\/\//i.test(String(value || "").trim());
@@ -98,6 +99,11 @@ export async function POST(request: Request) {
     const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
     if (!offer) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
+    }
+    try {
+      assertShopeePublishable(offer);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
     }
 
     const baseImageUrl = isCouponOffer(offer) ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
