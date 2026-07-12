@@ -20,7 +20,7 @@ const path         = require('path');
 const cron         = require('node-cron');
 const { createClient } = require('@supabase/supabase-js');
 const ws           = require('ws');
-const { PlaywrightCrawler, Dataset, ProxyConfiguration, NonRetryableError } = require('crawlee');
+const { PlaywrightCrawler, Dataset } = require('crawlee');
 const { chromium } = require('playwright-extra');
 const stealthPlugin = require('puppeteer-extra-plugin-stealth');
 chromium.use(stealthPlugin());
@@ -30,6 +30,9 @@ process.env.CRAWLEE_MEMORY_MBYTES = '4096';
 const axios        = require('axios');
 const cheerio      = require('cheerio');
 require('dotenv').config({ path: '.env.local' });
+require('tsx/cjs');
+const { fetchWithMLAuth } = require('../src/lib/integrations/mercadolivre/token-manager.ts');
+const { runMercadoLivreDiscoveryV4 } = require('./mercadolivre-discovery-v4.cjs');
 const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
 const {
   normalizeProductContentForLLM,
@@ -86,21 +89,11 @@ const AMAZON_CONTEXT_OPTIONS = {
 
 const SHOPEE_OFFICIAL_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 
-// ─── Scrape.do / Mercado Livre Signals Setup ──────────────────
-function getMercadoLivreProvider() { return process.env.ML_PROVIDER || 'legacy'; }
-function getMercadoLivreDiscoveryMode() { return process.env.ML_DISCOVERY_MODE || 'legacy'; }
-function getMercadoLivreSignalUrls() { return process.env.ML_SIGNAL_URLS || ''; }
-function getMercadoLivreMaxScrapedoRequests() { return parseInt(process.env.ML_MAX_SCRAPEDO_REQUESTS || '20', 10); }
-function isMercadoLivreSignalsScrapedoEnabled() {
-  return getMercadoLivreProvider() === 'scrapedo' &&
-         getMercadoLivreDiscoveryMode() === 'signals' &&
-         !!process.env.SCRAPEDO_API_KEY;
-}
-
-async function fetchMercadoLivreViaScrapedo(url) {
+// Amazon mantém provider próprio; Mercado Livre V4 nunca usa proxy.
+async function fetchAmazonHtmlViaScrapedo(url) {
   const apiKey = process.env.SCRAPEDO_API_KEY;
   if (!apiKey) throw new Error("SCRAPEDO_API_KEY não configurada.");
-  
+
   console.log(`  [Scrape.do] Buscando HTML via proxy residencial...`);
   const response = await axios.get('https://api.scrape.do', {
     params: { token: apiKey, url, super: true },
@@ -118,7 +111,7 @@ async function fetchMercadoLivreViaScrapedo(url) {
   error.responseBody = body;
   error.scrapeDoUrl = url;
   if ([400, 401, 403].includes(response.status)) {
-    throw new NonRetryableError(error.message);
+    throw error;
   }
   throw error;
 }
@@ -578,7 +571,6 @@ function buildValidationPreview(products, storeName) {
 // ─── Sistema de Descoberta ─────────────────────────────────────
 const QUERY_VARIANT_ORDER = ['ofertas', 'mais_vendidos', 'tendencias', 'categoria', 'viral', 'lancamentos'];
 const STORE_QUERY_SETTINGS = {
-  'Mercado Livre': { categoriesPerRun: 12, queriesPerCategory: 2 },
   'Amazon': { categoriesPerRun: 12, queriesPerCategory: 2 },
   'Magalu': { categoriesPerRun: 12, queriesPerCategory: 2 },
   'Shopee': { categoriesPerRun: 12, queriesPerCategory: 2 },
@@ -1109,28 +1101,6 @@ const JARDINAGEM = [
 ];
 
 const DISCOVERY_QUERY_BLOCKS = {
-  'Mercado Livre': [
-    'ofertas do dia',
-    'mais vendidos',
-    'tendências',
-    'eletrônicos em oferta',
-    'celulares promoção',
-    'casa móveis decoração',
-    'utilidades domésticas',
-    'cozinha promoção',
-    'beleza cuidado pessoal',
-    'bebê promoção',
-    'pet shop promoção',
-    'games promoção',
-    'ferramentas construção',
-    'esporte fitness',
-    'automotivo promoção',
-    'informática promoção',
-    'moda feminina promoção',
-    'moda masculina promoção',
-    'organização casa',
-    'produto viral'
-  ],
   'Amazon': [],
   'Shopee': [
     'ofertas oficiais',
@@ -1151,29 +1121,11 @@ const DISCOVERY_QUERY_BLOCKS = {
 };
 
 const MARKETPLACE_DISCOVERY_SOURCES = {
-  'Mercado Livre': [
-    { type: 'url', source: 'https://www.mercadolivre.com.br/mais-vendidos', fallbackKeyword: 'mais vendidos' },
-    { type: 'url', source: 'https://www.mercadolivre.com.br/l/promocoes', fallbackKeyword: 'ofertas do dia' },
-    { type: 'url', source: 'https://tendencias.mercadolivre.com.br/', fallbackKeyword: 'tendências' },
-    { type: 'url', source: 'https://www.mercadolivre.com.br/categorias', fallbackKeyword: 'eletrônicos em oferta' },
-    { type: 'url', source: 'https://www.mercadolivre.com.br/lojas-oficiais', fallbackKeyword: 'ofertas oficiais' }
-  ],
   'Amazon': [],
   'Shopee': DISCOVERY_QUERY_BLOCKS.Shopee.map((source) => ({ type: 'keyword', source }))
 };
 
 const SPECIFIC_QUERY_FALLBACK_BLOCKS = {
-  'Mercado Livre': [
-    ...ELETRONICOS,
-    ...GAMES,
-    ...HARDWARE,
-    ...INFORMATICA,
-    ...CASA_INTELIGENTE,
-    ...COZINHA,
-    ...FERRAMENTAS,
-    ...AUTOMOTIVO,
-    ...CELULARES
-  ],
   'Amazon': [],
   'Shopee': [
     ...MODA_FEMININA,
@@ -1193,7 +1145,7 @@ function normalizeGoldenQuery(query) {
 
 function normalizeDiscoverySource(source) {
   if (source && typeof source === 'object') {
-    const type = source.type === 'url' ? 'url' : 'keyword';
+    const type = source.type === 'url' ? 'url' : (source.type === 'node' ? 'node' : 'keyword');
     const value = normalizeGoldenQuery(source.source || source.query || source.url || source.value);
     return {
       type,
@@ -1329,21 +1281,6 @@ function pickQueryFromCategory(categoryBank, variantOrder, usedQueries) {
 
 function selectDiscoveryQueries(storeName) {
   const store = storeName;
-  if (store === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled()) {
-    console.log(`[ML] provider=scrapedo mode=signals legacyBlocked=true`);
-    const signalUrls = getMercadoLivreSignalUrls().split(',').map(s => s.trim()).filter(Boolean);
-    const selectedSignals = [];
-    for (const url of signalUrls) {
-      console.log(`[ML] URL=${url}`);
-      selectedSignals.push({
-        source: url,
-        type: 'url',
-        fallbackKeyword: null
-      });
-    }
-    return selectedSignals;
-  }
-
   const discoveryBank = GOLDEN_QUERIES[store]?.discovery || null;
   const settings = STORE_QUERY_SETTINGS[store] || { categoriesPerRun: 12, queriesPerCategory: 2 };
   const configuredQueryLimit = Math.max(1, settings.categoriesPerRun * settings.queriesPerCategory);
@@ -1378,9 +1315,7 @@ function selectDiscoveryQueries(storeName) {
     : configuredQueryLimit;
   const fallbackLimit = Math.floor(queryLimit * 0.2);
   const discoveryQueryCount = Math.max(1, queryLimit - fallbackLimit);
-  const realUrlLimit = store === 'Mercado Livre'
-    ? Math.min(urlSources.length, Math.ceil(queryLimit * 0.7))
-    : (store === 'Amazon' ? Math.min(urlSources.length, queryLimit - fallbackLimit) : 0);
+  const realUrlLimit = store === 'Amazon' ? Math.min(urlSources.length, queryLimit - fallbackLimit) : 0;
   const keywordDiscoveryLimit = Math.max(1, queryLimit - Math.min(realUrlLimit, queryLimit) - fallbackLimit);
 
   if (urlSources.length > 0) {
@@ -1495,28 +1430,13 @@ async function crawleeExtract(url, limit, storeName) {
   const providerConfig = PROVIDER_CONFIG[LLM_PROVIDER];
   const maxProducts = providerConfig?.productsToProcess || 15;
   
-  const SCRAPFLY_KEYS = (process.env.SCRAPFLY_API_KEYS || "").split(",").map(k => k.trim()).filter(k => k);
-  let proxyConfiguration;
-  let targetUrl = url;
-  
-  const isLocal = process.platform === 'win32';
-
-  // Usamos Scrapfly apenas se não for execução local (para evitar proxy de datacenter no IP residencial)
-  if (!isLocal && storeName === 'Mercado Livre' && SCRAPFLY_KEYS.length > 0) {
-    const key = SCRAPFLY_KEYS[Math.floor(Math.random() * SCRAPFLY_KEYS.length)];
-    // Proxy Scrapfly: username = API_KEY, password = asp=true&country=br
-    proxyConfiguration = new ProxyConfiguration({
-      proxyUrls: [`http://${key}:asp=true&country=br@proxy.scrapfly.io:8080`]
-    });
-    console.log(`  [Scrapfly] Utilizando proxy na loja Mercado Livre`);
-  }
+  const targetUrl = url;
 
   const crawler = new PlaywrightCrawler({
-    proxyConfiguration,
     maxConcurrency: 1,
     requestHandlerTimeoutSecs: 150,
     navigationTimeoutSecs: 120,
-    maxRequestRetries: storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled() ? 0 : 3,
+    maxRequestRetries: 3,
     autoscaledPoolOptions: {
       systemStatusOptions: {
         maxMemoryOverloadedRatio: 999,
@@ -1545,17 +1465,7 @@ async function crawleeExtract(url, limit, storeName) {
       }
     },
     preNavigationHooks: [
-      async ({ page, request }) => {
-        if (storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled()) {
-           const html = await fetchMercadoLivreViaScrapedo(request.url);
-           await page.route(request.url, route => {
-              route.fulfill({
-                 status: 200,
-                 contentType: 'text/html',
-                 body: html
-              });
-           });
-        }
+      async ({ page }) => {
         page.setDefaultNavigationTimeout(150000);
         page.setDefaultTimeout(150000);
       }
@@ -2084,7 +1994,7 @@ function normalizeOfferRating(value) {
 
 function applyMarketplaceDataContract(product, store) {
   const normalized = { ...product };
-  if (store === 'Mercado Livre' || store === 'Netshoes') {
+  if (store === 'Netshoes') {
     const category = String(normalized.category ?? '').trim();
     normalized.rating = null;
     normalized.category = category && category !== 'Geral' ? category : null;
@@ -3427,7 +3337,6 @@ async function cleanupOldDrafts() {
 function buildDiscoveryUrl(store, keyword) {
   const query = normalizeGoldenQuery(keyword);
   const urls = {
-    'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
     'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
     'Amazon': 'Amazon Discovery V3 dedicado',
     'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
@@ -3489,7 +3398,7 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
 
   const crawler = new PlaywrightCrawler({
     maxConcurrency: 1,
-    maxRequestRetries: storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled() ? 0 : 3,
+    maxRequestRetries: 3,
     requestHandlerTimeoutSecs: 120,
     navigationTimeoutSecs: 90,
     launchContext: {
@@ -3509,17 +3418,7 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
       }
     },
     preNavigationHooks: [
-      async ({ page, request }) => {
-        if (storeName === 'Mercado Livre' && isMercadoLivreSignalsScrapedoEnabled()) {
-           const html = await fetchMercadoLivreViaScrapedo(request.url);
-           await page.route(request.url, route => {
-              route.fulfill({
-                 status: 200,
-                 contentType: 'text/html',
-                 body: html
-              });
-           });
-        }
+      async ({ page }) => {
         page.setDefaultNavigationTimeout(120000);
         page.setDefaultTimeout(120000);
       }
@@ -4180,9 +4079,66 @@ async function runAmazonOfficialDryRun(deps = {}) {
   return summary;
 }
 
+async function executeMercadoLivreDiscoveryV4() {
+  return runMercadoLivreDiscoveryV4({
+    fetchImpl: global.fetch,
+    apiFetchImpl: (url, options) => fetchWithMLAuth(url, options),
+    maxProducts: 6,
+    maxCandidatesPerSource: 12
+  });
+}
+
 async function scrapeStore(store) {
   let storeCandidates = [];
   const storeStartedAt = Date.now();
+
+  if (store === 'Mercado Livre') {
+    console.log(`\n[Mercado Livre V4] Discovery oficial`);
+    try {
+      const discovery = await executeMercadoLivreDiscoveryV4();
+      for (const candidate of discovery.candidates) {
+        if (!candidate.title || !candidate.current_price || !candidate.image_url || !candidate.product_url) continue;
+        const product = {
+          product_name: candidate.title,
+          current_price: candidate.current_price,
+          old_price: candidate.old_price,
+          image_url: normalizeImageUrl(candidate.image_url),
+          category: candidate.category_id,
+          rating: normalizeOfferRating(candidate.rating),
+          mercado_livre_v4: candidate
+        };
+        const affiliateUrl = buildAffiliateUrl(candidate.product_url, store);
+        const persisted = await upsertOffer(product, store, affiliateUrl);
+        if (!persisted?.isNew) continue;
+        storeCandidates.push({
+          id: persisted.id,
+          candidateId: candidate.item_id || candidate.catalog_product_id,
+          externalProductId: candidate.item_id || candidate.catalog_product_id,
+          product,
+          store,
+          affiliateUrl,
+          score: persisted.score,
+          audit: { pipeline: 'MercadoLivreDiscoveryV4', sources: candidate.discovery_sources }
+        });
+      }
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
+        store,
+        queriesExecuted: discovery.calls.total,
+        candidatesCollected: storeCandidates.length,
+        pipeline: 'MercadoLivreDiscoveryV4',
+        durationMs: Date.now() - storeStartedAt,
+        calls: discovery.calls,
+        productsBySource: discovery.products_by_source,
+        duplicates: discovery.duplicates
+      });
+      console.log(`  ✅ [Mercado Livre V4] ${storeCandidates.length} candidates novos.`);
+      return storeCandidates;
+    } catch (error) {
+      console.error(`  [Mercado Livre V4] Erro fatal: ${error.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Mercado Livre V4', error, { store });
+      return [];
+    }
+  }
 
   if (store === 'Amazon') {
     console.log(`\n[Amazon Official] Fluxo definitivo utilizando Discovery V3`);
@@ -4720,6 +4676,16 @@ async function runDiscoveryDryRun() {
   return { results, byStore };
 }
 
+async function runMercadoLivreOfficialDryRun() {
+  const result = await executeMercadoLivreDiscoveryV4();
+  console.log('[Mercado Livre V4 Dry-Run] sem banco, IA, publicacao ou Oracle');
+  for (const [source, products] of Object.entries(result.products_by_source)) {
+    console.log(`[Mercado Livre V4 Dry-Run] fonte=${source} produtos=${products}`);
+  }
+  console.log(`[Mercado Livre V4 Dry-Run] coletados=${result.raw_candidates} deduplicados=${result.deduplicated_candidates} duplicados_removidos=${result.duplicates} limite_fonte_rejeitados=${result.source_limit_rejections} candidates_finais=${result.candidates.length} tempo_ms=${result.elapsed_ms} chamadas=${result.calls.total}`);
+  return result;
+}
+
 // ─── Inicialização ────────────────────────────────────────────
 console.log('\n╔══════════════════════════════════════════╗');
 console.log('║   ORACLE-SCRAPER IN-HOUSE (Crawlee)      ║');
@@ -4729,11 +4695,12 @@ console.log('╚═════════════════════�
 const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
 const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
 const isAmazonOfficialDryRun = process.argv.includes('--amazon-official-dry-run');
+const isMercadoLivreOfficialDryRun = process.argv.includes('--mercadolivre-official-dry-run');
 
 const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
 const isShopeeOfficialDryRun = process.argv.includes('--shopee-official-dry-run');
 
-if (!isAmazonOfficialDryRun && !isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+if (!isAmazonOfficialDryRun && !isMercadoLivreOfficialDryRun && !isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
   console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
@@ -5901,7 +5868,12 @@ function createMarketplaceCandidateQueue(selectedProducts, marketplaceName) {
 }
 
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
-  if (isAmazonOfficialDryRun) {
+  if (isMercadoLivreOfficialDryRun) {
+    runMercadoLivreOfficialDryRun().catch(e => {
+      console.error('❌ Erro no Mercado Livre V4 dry-run:', e.message);
+      process.exitCode = 1;
+    });
+  } else if (isAmazonOfficialDryRun) {
     runAmazonOfficialDryRun().catch(e => {
       console.error('❌ Erro no amazon official dry-run:', e.message);
       process.exitCode = 1;
@@ -6594,7 +6566,9 @@ module.exports = {
   createSubId,
   isUuid,
   ensureShopeeOfferIdentity,
-  fetchMercadoLivreViaScrapedo,
+  executeMercadoLivreDiscoveryV4,
+  runMercadoLivreOfficialDryRun,
+  fetchAmazonHtmlViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
   dedupeShopeeProductsDetailed,
   getShopeeDedupKeys
@@ -6602,6 +6576,7 @@ module.exports = {
 
 function getEnabledStores(stores) {
   if (process.argv.includes('--amazon-official-dry-run')) return ['Amazon'];
+  if (process.argv.includes('--mercadolivre-official-dry-run')) return ['Mercado Livre'];
   return stores.filter(store => !SKIP_STORES.has(store));
 }
 
