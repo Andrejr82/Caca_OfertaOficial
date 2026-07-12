@@ -1,0 +1,262 @@
+[
+  {
+    "Campo": "ASIN",
+    "Origem": "URL/HTML/Scrape.do",
+    "Contrato": "string",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "categoria",
+    "Origem": "Breadcrumbs/HTML",
+    "Contrato": "string",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "subcategoria",
+    "Origem": "Breadcrumbs/HTML",
+    "Contrato": "string",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "browse node",
+    "Origem": "URL/HTML",
+    "Contrato": "string",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "ranking",
+    "Origem": "Search/Best Sellers",
+    "Contrato": "integer",
+    "Confiabilidade": "BAIXA",
+    "Persistir": false,
+    "Somente_IA": false,
+    "Somente_Ranking": true,
+    "Descartar": false
+  },
+  {
+    "Campo": "best seller rank",
+    "Origem": "PDP/HTML",
+    "Contrato": "string/integer",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": true,
+    "Descartar": false
+  },
+  {
+    "Campo": "choice",
+    "Origem": "Search/PDP",
+    "Contrato": "boolean",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": true,
+    "Somente_Ranking": true,
+    "Descartar": false
+  },
+  {
+    "Campo": "prime",
+    "Origem": "Search/PDP",
+    "Contrato": "boolean",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "coupon",
+    "Origem": "Search/PDP",
+    "Contrato": "boolean/string",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": true,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "deal",
+    "Origem": "Search/PDP/Deals",
+    "Contrato": "boolean",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "lightning deal",
+    "Origem": "PDP/Deals",
+    "Contrato": "boolean",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": true,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "availability",
+    "Origem": "PDP",
+    "Contrato": "string",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "seller",
+    "Origem": "PDP/Buy Box",
+    "Contrato": "string",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "official seller",
+    "Origem": "PDP",
+    "Contrato": "boolean",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "buy box",
+    "Origem": "PDP",
+    "Contrato": "boolean",
+    "Confiabilidade": "ALTA",
+    "Persistir": false,
+    "Somente_IA": true,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "review count",
+    "Origem": "Search/PDP",
+    "Contrato": "integer",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": true,
+    "Descartar": false
+  },
+  {
+    "Campo": "rating",
+    "Origem": "Search/PDP",
+    "Contrato": "float",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": true,
+    "Descartar": false
+  },
+  {
+    "Campo": "price",
+    "Origem": "Search/PDP",
+    "Contrato": "float",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "old price",
+    "Origem": "Search/PDP",
+    "Contrato": "float",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "discount",
+    "Origem": "Search/PDP",
+    "Contrato": "float",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "images",
+    "Origem": "PDP/Scrape.do",
+    "Contrato": "array",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "brand",
+    "Origem": "PDP",
+    "Contrato": "string",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "model",
+    "Origem": "PDP/Tech Specs",
+    "Contrato": "string",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": true,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "variations",
+    "Origem": "PDP",
+    "Contrato": "array",
+    "Confiabilidade": "MÉDIA",
+    "Persistir": true,
+    "Somente_IA": true,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "department",
+    "Origem": "Breadcrumbs",
+    "Contrato": "string",
+    "Confiabilidade": "ALTA",
+    "Persistir": true,
+    "Somente_IA": false,
+    "Somente_Ranking": false,
+    "Descartar": false
+  },
+  {
+    "Campo": "breadcrumbs",
+    "Origem": "PDP",
+    "Contrato": "array",
+    "Confiabilidade": "ALTA",
+    "Persistir": false,
+    "Somente_IA": true,
+    "Somente_Ranking": false,
+    "Descartar": false
+  }
+]

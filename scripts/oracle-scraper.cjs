@@ -1131,28 +1131,7 @@ const DISCOVERY_QUERY_BLOCKS = {
     'organização casa',
     'produto viral'
   ],
-  'Amazon': [
-    'mais vendidos',
-    'ofertas do dia',
-    'eletrônicos promoção',
-    'casa promoção',
-    'cozinha promoção',
-    'utilidades domésticas',
-    'beleza promoção',
-    'livros mais vendidos',
-    'kindle promoção',
-    'fire tv promoção',
-    'alexa promoção',
-    'brinquedos promoção',
-    'bebê promoção',
-    'pet promoção',
-    'games promoção',
-    'informática promoção',
-    'escritório promoção',
-    'produto viral',
-    'achadinhos amazon',
-    'lançamentos amazon'
-  ],
+  'Amazon': [],
   'Shopee': [
     'ofertas oficiais',
     'mais vendidos',
@@ -1179,9 +1158,7 @@ const MARKETPLACE_DISCOVERY_SOURCES = {
     { type: 'url', source: 'https://www.mercadolivre.com.br/categorias', fallbackKeyword: 'eletrônicos em oferta' },
     { type: 'url', source: 'https://www.mercadolivre.com.br/lojas-oficiais', fallbackKeyword: 'ofertas oficiais' }
   ],
-  'Amazon': [
-    { type: 'url', source: 'https://www.amazon.com.br/gp/bestsellers/electronics', fallbackKeyword: 'Eletronicos best sellers' }
-  ],
+  'Amazon': [],
   'Shopee': DISCOVERY_QUERY_BLOCKS.Shopee.map((source) => ({ type: 'keyword', source }))
 };
 
@@ -1197,16 +1174,7 @@ const SPECIFIC_QUERY_FALLBACK_BLOCKS = {
     ...AUTOMOTIVO,
     ...CELULARES
   ],
-  'Amazon': [
-    ...ELETRONICOS,
-    ...CASA_INTELIGENTE,
-    ...COZINHA,
-    ...LIVROS,
-    ...BRINQUEDOS,
-    ...BEBE,
-    ...PET,
-    ...ESCRITORIO
-  ],
+  'Amazon': [],
   'Shopee': [
     ...MODA_FEMININA,
     ...MODA_MASCULINA,
@@ -2076,21 +2044,38 @@ function cleanProductUrl(url) {
   }
 }
 
-const SCRAPEDO_AMAZON_SEARCH_URL = 'https://api.scrape.do/plugin/amazon/search';
-const SCRAPEDO_GENERAL_URL = 'https://api.scrape.do/';
-const AMAZON_OFFICIAL_REFERENCE_URLS = {
-  bestSellers: 'https://www.amazon.com.br/gp/bestsellers/electronics'
-};
-const AMAZON_BEST_SELLERS_PLAY_WITH_BROWSER = JSON.stringify([
-  { Action: 'ScrollTo', Selector: '.a-pagination' },
-  { Action: 'Wait', Timeout: 3000 }
-]);
-
-function parseAmazonApiNumber(value) {
-  const raw = value && typeof value === 'object' ? value.amount : value;
-  const parsed = Number.parseFloat(String(raw ?? '').replace(',', '.'));
-  return Number.isFinite(parsed) ? parsed : null;
-}
+const SCRAPEDO_AMAZON_BASE_URL = 'https://api.scrape.do/plugin/amazon';
+const SCRAPEDO_AMAZON_RAW_HTML_URL = `${SCRAPEDO_AMAZON_BASE_URL}/`;
+const AMAZON_DISCOVERY_V3_SOURCES = [
+  {
+    id: 'new_releases',
+    label: 'New Releases',
+    url: 'https://www.amazon.com.br/gp/new-releases/electronics',
+    category: 'Eletronicos',
+    parser: 'ranking'
+  },
+  {
+    id: 'most_wished',
+    label: 'Most Wished For',
+    url: 'https://www.amazon.com.br/gp/most-wished-for/electronics',
+    category: 'Eletronicos',
+    parser: 'ranking'
+  },
+  {
+    id: 'gift_ideas',
+    label: 'Gift Ideas',
+    url: 'https://www.amazon.com.br/gp/most-gifted/electronics',
+    category: 'Eletronicos',
+    parser: 'ranking'
+  },
+  {
+    id: 'amazon_outlet',
+    label: 'Amazon Outlet',
+    url: 'https://www.amazon.com.br/b?ie=UTF8&node=20967360011',
+    category: 'Outlet',
+    parser: 'outlet'
+  }
+];
 
 function normalizeOfferRating(value) {
   const rating = Number.parseFloat(String(value ?? '').replace(',', '.'));
@@ -2110,10 +2095,10 @@ function applyMarketplaceDataContract(product, store) {
 
 function parseAmazonReviewCount(value) {
   if (Number.isFinite(Number(value))) return Number(value);
-  const normalized = String(value || '').replace(/[()\s]/g, '').replace(',', '.').toUpperCase();
+  const normalized = String(value || '').replace(/[()\s]/g, '').toUpperCase();
   const match = normalized.match(/([\d.]+)([KM])?/);
   if (!match) return null;
-  const amount = Number.parseFloat(match[1]);
+  const amount = Number.parseFloat(match[2] ? match[1].replace(',', '.') : match[1].replace(/\./g, '').replace(',', '.'));
   if (!Number.isFinite(amount)) return null;
   return Math.round(amount * (match[2] === 'M' ? 1000000 : match[2] === 'K' ? 1000 : 1));
 }
@@ -2124,280 +2109,6 @@ function parseAmazonBrazilPrice(value) {
   if (!match) return null;
   const price = Number.parseFloat(match[1].replace(/\./g, '').replace(',', '.'));
   return Number.isFinite(price) ? price : null;
-}
-
-function resolveAmazonOfficialReference(query) {
-  const reference = String(query || '').trim();
-  const normalized = reference.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-  const targets = [
-    { key: 'bestSellers', suffix: 'best sellers', label: 'Best Sellers' }
-  ];
-  const target = targets.find(item => normalized.endsWith(item.suffix));
-  if (!target) return null;
-  const category = reference.slice(0, Math.max(0, reference.length - target.suffix.length)).trim() || 'Eletronicos';
-  return {
-    key: target.key,
-    label: target.label,
-    category,
-    url: AMAZON_OFFICIAL_REFERENCE_URLS[target.key]
-  };
-}
-
-function buildAmazonOfficialProduct(raw, reference) {
-  const asin = String(raw.asin || '').trim().toUpperCase();
-  const title = String(raw.title || '').replace(/\s+/g, ' ').trim();
-  const price = Number(raw.price);
-  if (!/^[A-Z0-9]{10}$/.test(asin) || !title || !Number.isFinite(price) || price <= 0) return null;
-
-  const canonicalUrl = `https://www.amazon.com.br/dp/${asin}`;
-  const oldPrice = Number.isFinite(Number(raw.oldPrice)) && Number(raw.oldPrice) > price ? Number(raw.oldPrice) : null;
-  const discount = raw.discount ?? (oldPrice ? Math.round(((oldPrice - price) / oldPrice) * 100) : null);
-  const tokenPayload = JSON.parse(createLLMInputFromNormalizedContent(normalizeProductContentForLLM({
-    marketplace: 'Amazon',
-    product: {
-      source: 'official_page',
-      title,
-      price,
-      old_price: oldPrice,
-      discount,
-      rating: normalizeOfferRating(raw.rating),
-      reviews: raw.reviews || null,
-      image_url: raw.imageUrl || null,
-      url: canonicalUrl,
-      seller: null
-    },
-    url: canonicalUrl
-  })));
-
-  return {
-    marketplace: 'Amazon',
-    productId: asin,
-    title: tokenPayload.title,
-    price: tokenPayload.price,
-    oldPrice: tokenPayload.oldPrice,
-    discount: tokenPayload.discount,
-    imageUrl: tokenPayload.imageUrl,
-    url: canonicalUrl,
-    rating: normalizeOfferRating(tokenPayload.rating),
-    reviews: tokenPayload.reviews,
-    seller: tokenPayload.seller,
-    prime: null,
-    source: 'scrapedo_amazon_official_page',
-    reference: reference.label,
-    category: reference.category,
-    tokenOptimized: true
-  };
-}
-
-function normalizeAmazonOfficialRankingHtml(html, limit, reference) {
-  const $ = cheerio.load(String(html || ''));
-  let cards = $('.zg-grid-general-faceout').toArray();
-  if (!cards.length) cards = $('[id^="gridItemRoot"]').toArray();
-
-  const products = [];
-  const seenAsins = new Set();
-  const stats = { received: cards.length, valid: 0, duplicates: 0, rejected: 0, sponsoredRejected: 0 };
-
-  for (const card of cards) {
-    if (products.length >= Math.max(1, limit)) break;
-    const root = $(card);
-    const href = root.find('a[href*="/dp/"], a[href*="/gp/product/"]').first().attr('href');
-    const asin = extractAmazonAsin(href);
-    const title = root.find('img[alt]').first().attr('alt')
-      || root.find('._cDEzb_p13n-sc-css-line-clamp-3_g3dy1, ._cDEzb_p13n-sc-css-line-clamp-4_2q2cc').first().text();
-    const price = parseAmazonBrazilPrice(root.find('.a-price .a-offscreen').first().text()) || parseAmazonBrazilPrice(root.text());
-    const oldPrice = null;
-    const imageUrl = root.find('img[src]').first().attr('src') || null;
-    const ratingMatch = root.text().match(/(\d+[,.]\d+)\s+de\s+5/i);
-    const rating = ratingMatch ? normalizeOfferRating(ratingMatch[1]) : null;
-    const reviews = parseAmazonReviewCount(root.find('a[href*="#customerReviews"]').first().text());
-    const product = buildAmazonOfficialProduct({ asin, title, price, oldPrice, imageUrl, rating, reviews }, reference);
-    if (!product) {
-      stats.rejected++;
-      continue;
-    }
-    if (seenAsins.has(product.productId)) {
-      stats.duplicates++;
-      continue;
-    }
-    seenAsins.add(product.productId);
-    products.push(product);
-  }
-
-  stats.valid = products.length;
-  return { products, stats };
-}
-
-function normalizeAmazonOfficialReferenceHtml(html, limit, reference) {
-  return normalizeAmazonOfficialRankingHtml(html, limit, reference);
-}
-
-function normalizeScrapedoAmazonSearchProducts(payload, limit = OFFERS_PER_STORE) {
-  const rawProducts = Array.isArray(payload?.products) ? payload.products : [];
-  const products = [];
-  const seenAsins = new Set();
-  const stats = { received: rawProducts.length, valid: 0, duplicates: 0, rejected: 0, sponsoredRejected: 0 };
-
-  for (const raw of rawProducts) {
-    if (products.length >= Math.max(1, limit)) break;
-    if (raw?.isSponsored === true) {
-      stats.sponsoredRejected++;
-      continue;
-    }
-    const asin = String(raw?.asin || '').trim().toUpperCase();
-    const title = String(raw?.title || '').trim();
-    const price = parseAmazonApiNumber(raw?.price);
-    if (!/^[A-Z0-9]{10}$/.test(asin) || !title || !price || price <= 0) {
-      stats.rejected++;
-      continue;
-    }
-    if (seenAsins.has(asin)) {
-      stats.duplicates++;
-      continue;
-    }
-
-    const oldPrice = null;
-    const canonicalUrl = `https://www.amazon.com.br/dp/${asin}`;
-    const ratingValue = raw?.rating && typeof raw.rating === 'object' ? raw.rating.value : null;
-    const rating = typeof ratingValue === 'number' ? normalizeOfferRating(ratingValue) : null;
-    if (ratingValue != null && rating == null) {
-      console.warn(`[Amazon Search][Data Contract] rating rejeitado asin=${asin} value=${JSON.stringify(ratingValue)} type=${typeof ratingValue}`);
-    }
-    const reviews = null;
-    const seller = raw?.seller?.name || raw?.seller || raw?.merchantName || null;
-    const discount = raw?.discount ?? (oldPrice && oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : null);
-    const tokenPayload = JSON.parse(createLLMInputFromNormalizedContent(normalizeProductContentForLLM({
-      marketplace: 'Amazon',
-      product: {
-        source: 'api',
-        title,
-        price,
-        old_price: oldPrice && oldPrice > price ? oldPrice : null,
-        discount,
-        rating,
-        reviews,
-        image_url: raw?.imageUrl || null,
-        url: canonicalUrl,
-        seller
-      },
-      url: canonicalUrl
-    })));
-
-    seenAsins.add(asin);
-    products.push({
-      marketplace: 'Amazon',
-      productId: asin,
-      title: tokenPayload.title,
-      price: tokenPayload.price,
-      oldPrice: tokenPayload.oldPrice,
-      discount: tokenPayload.discount,
-      imageUrl: tokenPayload.imageUrl,
-      url: canonicalUrl,
-      rating: normalizeOfferRating(tokenPayload.rating),
-      reviews: tokenPayload.reviews,
-      seller: tokenPayload.seller,
-      prime: typeof raw?.isPrime === 'boolean' ? raw.isPrime : null,
-      source: 'scrapedo_amazon_api',
-      tokenOptimized: true
-    });
-  }
-
-  stats.valid = products.length;
-  return { products, stats };
-}
-
-async function fetchAmazonProductsFromScrapedoApi(query, limit = OFFERS_PER_STORE) {
-  const apiKey = process.env.SCRAPEDO_API_KEY;
-  if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
-  const reference = String(query || 'ofertas').trim() || 'ofertas';
-  const officialReference = resolveAmazonOfficialReference(reference);
-  if (officialReference) {
-    try {
-      const response = await axios.get(SCRAPEDO_GENERAL_URL, {
-        params: {
-          token: apiKey,
-          url: officialReference.url,
-          geocode: 'br',
-          render: true,
-          playWithBrowser: AMAZON_BEST_SELLERS_PLAY_WITH_BROWSER
-        },
-        timeout: 60000,
-        validateStatus: () => true
-      });
-      if (response.status !== 200) {
-        const body = safeDiagnosticSnippet(response.data);
-        const error = new Error(`Amazon Best Sellers HTTP ${response.status}`);
-        error.status = response.status;
-        error.responseBody = body;
-        console.warn(`[Amazon Best Sellers] HTTP ${response.status} body=${body || 'empty'}`);
-        throw error;
-      }
-
-      const normalized = normalizeAmazonOfficialReferenceHtml(response.data, limit, officialReference);
-      const credits = Number(response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost']);
-      const safeCredits = Number.isFinite(credits) ? credits : null;
-      console.log(`[Amazon Best Sellers] category=${officialReference.category} url=${officialReference.url} received=${normalized.stats.received} valid=${normalized.stats.valid} duplicates=${normalized.stats.duplicates} rejected=${normalized.stats.rejected} sponsoredRejected=${normalized.stats.sponsoredRejected} credits=${safeCredits ?? 'unavailable'}`);
-      if (normalized.products.length > 0) {
-        return {
-          ...normalized,
-          telemetry: {
-            ...normalized.stats,
-            credits: safeCredits,
-            httpStatus: response.status,
-            structuredJson: false,
-            htmlUsed: true,
-            endpoint: SCRAPEDO_GENERAL_URL,
-            reference: officialReference.label,
-            category: officialReference.category,
-            url: officialReference.url,
-            searchFallbackExecuted: false
-          }
-        };
-      }
-      console.warn(`[Amazon Best Sellers] fallback Search por zero candidates; category=${officialReference.category}`);
-    } catch (error) {
-      if (/HTTP\s+\d+/i.test(error.message || '')) throw error;
-      console.warn(`[Amazon Best Sellers] fallback Search por falha tecnica; category=${officialReference.category}; error=${error.message || String(error)}`);
-    }
-
-    const fallback = await fetchAmazonProductsFromScrapedoSearch(officialReference.category, limit);
-    return {
-      ...fallback,
-      telemetry: {
-        ...fallback.telemetry,
-        searchFallbackExecuted: true,
-        fallbackReason: 'Best Sellers sem candidates validos ou falha tecnica',
-        originalReference: officialReference.label
-      }
-    };
-  }
-
-  return fetchAmazonProductsFromScrapedoSearch(reference, limit);
-}
-
-async function fetchAmazonProductsFromScrapedoSearch(reference, limit = OFFERS_PER_STORE) {
-  const apiKey = process.env.SCRAPEDO_API_KEY;
-  if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
-  const response = await axios.get(SCRAPEDO_AMAZON_SEARCH_URL, {
-    params: {
-      token: apiKey,
-      keyword: reference,
-      geocode: 'br',
-      page: 1,
-      language: 'PT',
-      device: 'desktop',
-      include_html: false
-    },
-    timeout: 60000,
-    validateStatus: () => true
-  });
-  if (response.status !== 200) throw new Error(`Amazon Search API HTTP ${response.status}`);
-
-  const normalized = normalizeScrapedoAmazonSearchProducts(response.data, limit);
-  const credits = Number(response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost']);
-  const safeCredits = Number.isFinite(credits) ? credits : null;
-  console.log(`[Amazon API] query=${reference} received=${normalized.stats.received} valid=${normalized.stats.valid} duplicates=${normalized.stats.duplicates} rejected=${normalized.stats.rejected} credits=${safeCredits ?? 'unavailable'}`);
-  return { ...normalized, telemetry: { ...normalized.stats, credits: safeCredits, httpStatus: response.status, structuredJson: true, htmlUsed: false, endpoint: SCRAPEDO_AMAZON_SEARCH_URL } };
 }
 
 function extractAmazonAsin(value) {
@@ -3718,7 +3429,7 @@ function buildDiscoveryUrl(store, keyword) {
   const urls = {
     'Mercado Livre': `https://lista.mercadolivre.com.br/${encodeURIComponent(query)}`,
     'Shopee': `https://shopee.com.br/search?keyword=${encodeURIComponent(query)}`,
-    'Amazon': `https://www.amazon.com.br/s?k=${encodeURIComponent(query)}&rh=p_n_availability%3A2661601011`,
+    'Amazon': 'Amazon Discovery V3 dedicado',
     'Shein': `https://br.shein.com/pdsearch/${encodeURIComponent(query)}/`,
     'Magalu': `https://www.magazineluiza.com.br/busca/${encodeURIComponent(query)}/`,
     'Netshoes': `https://www.netshoes.com.br/busca?nsCat=natural&q=${encodeURIComponent(query)}`
@@ -3747,18 +3458,12 @@ async function fetchProductsForDiscoverySource(store, discoverySource, limit = O
   }
 
   if (store === 'Amazon') {
-    const reference = source.type === 'url' ? (source.fallbackKeyword || 'ofertas') : source.source;
-    try {
-      const result = await fetchAmazonProductsFromScrapedoApi(reference, limit);
-      return {
-        products: result.products,
-        finalUrl: result.telemetry?.htmlUsed ? result.telemetry.url : `Scrape.do Amazon Search API keyword="${reference}"`,
-        source
-      };
-    } catch (error) {
-      if (process.env.AMAZON_DISCOVERY_GENERIC_FALLBACK !== '1') throw error;
-      console.warn(`[Amazon API] erro=${error.message} fallback_generico=ativado_por_flag`);
-    }
+    return {
+      products: [],
+      finalUrl: 'Amazon Discovery V3 usa somente fontes certificadas dedicadas',
+      source,
+      disabled: true
+    };
   }
 
   let products = await crawleeExtract(finalUrl, limit, store);
@@ -3926,6 +3631,21 @@ async function inspectMarketplaceCardsWithCrawlee(url, storeName, limit = OFFERS
 async function inspectDiscoverySourceDryRun(store, discoverySource, limit = OFFERS_PER_STORE) {
   const source = normalizeDiscoverySource(discoverySource);
 
+  if (store === 'Amazon') {
+    return {
+      store,
+      source: source.source,
+      type: source.type,
+      finalUrl: 'Amazon Discovery V3 usa somente dry-run dedicado',
+      cardsFound: 0,
+      cardsWithPrice: 0,
+      productsExtracted: 0,
+      productsApproved: 0,
+      dbWrites: 0,
+      disabled: true
+    };
+  }
+
   if (store === 'Shopee') {
     const products = await fetchShopeeProductsFromOfficialApi(source.source, limit);
     return {
@@ -3963,9 +3683,538 @@ async function inspectDiscoverySourceDryRun(store, discoverySource, limit = OFFE
   };
 }
 
+
+function createAmazonV3Stats(cardsDetected) {
+  return {
+    cardsDetected,
+    valid: 0,
+    duplicates: 0,
+    rejected: 0,
+    rejections: {
+      missingAsin: 0,
+      missingTitle: 0,
+      missingPrice: 0,
+      missingImage: 0,
+      invalidUrl: 0,
+      sponsored: 0,
+      invalidRating: 0
+    }
+  };
+}
+
+function normalizeAmazonCardTitle(value) {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/^\s*Patrocinado\s*/i, '')
+    .trim();
+}
+
+function normalizeAmazonOutletTitle(value) {
+  return normalizeAmazonCardTitle(value)
+    .replace(/(?:\d+\s*% off|Oferta|Menor preço|R\$|De:).*$/i, '')
+    .trim();
+}
+
+function findAmazonCardImage($, root) {
+  return root.find('img[src*="media-amazon"], img[src]').toArray()
+    .map((el) => $(el).attr('src') || '')
+    .find((src) => /^https?:\/\/[^ ]+/i.test(src) && !/transparent|sprite|grey-pixel|pixel|sponsored-ads/i.test(src)) || null;
+}
+
+function normalizeAmazonRankingRawHtmlV3(html, source, limit = OFFERS_PER_STORE) {
+  const $ = cheerio.load(String(html || ''));
+  const roots = $('[data-asin], [id^="gridItemRoot"], .zg-grid-general-faceout').toArray();
+  const products = [];
+  const seenAsins = new Set();
+  const stats = createAmazonV3Stats(roots.length);
+
+  for (const rootEl of roots) {
+    if (products.length >= Math.max(1, limit)) break;
+    const root = $(rootEl);
+    const firstProductHref = root.find('a[href*="/dp/"], a[href*="/gp/product/"], a[href*="/gp/aw/d/"]').first().attr('href') || '';
+    const allHrefs = root.find('a[href]').toArray().map((el) => $(el).attr('href') || '').join(' ');
+    if (isSponsoredAmazonUrl(firstProductHref) || isSponsoredAmazonUrl(allHrefs)) {
+      stats.rejected++;
+      stats.rejections.sponsored++;
+      continue;
+    }
+
+    const dataAsin = String(root.attr('data-asin') || '').trim().toUpperCase();
+    const asin = /^[A-Z0-9]{10}$/.test(dataAsin) ? dataAsin : extractAmazonAsin(firstProductHref);
+    if (!asin) {
+      stats.rejected++;
+      stats.rejections.missingAsin++;
+      continue;
+    }
+    if (seenAsins.has(asin)) {
+      stats.duplicates++;
+      continue;
+    }
+
+    const canonical = canonicalizeAmazonProductUrl(`https://www.amazon.com.br/dp/${asin}`);
+    if (!canonical.url || canonical.sponsored) {
+      stats.rejected++;
+      stats.rejections[canonical.sponsored ? 'sponsored' : 'invalidUrl']++;
+      continue;
+    }
+
+    const imageUrl = findAmazonCardImage($, root);
+    if (!imageUrl) {
+      stats.rejected++;
+      stats.rejections.missingImage++;
+      continue;
+    }
+
+    const title = normalizeAmazonCardTitle(
+      root.find('img[alt]').first().attr('alt')
+      || root.find('[class*="line-clamp"], .p13n-sc-truncate').first().text()
+      || root.find('a[href*="/dp/"], a[href*="/gp/product/"], a[href*="/gp/aw/d/"]').first().text()
+    );
+    if (!title) {
+      stats.rejected++;
+      stats.rejections.missingTitle++;
+      continue;
+    }
+
+    const price = parseAmazonBrazilPrice(root.find('.a-price .a-offscreen').first().text()) || parseAmazonBrazilPrice(root.text());
+    if (!price || price <= 0) {
+      stats.rejected++;
+      stats.rejections.missingPrice++;
+      continue;
+    }
+
+    const ratingText = root.find('.a-icon-alt').toArray().map((el) => $(el).text()).find((text) => /\bde\s+5\b/i.test(text)) || '';
+    const ratingMatch = ratingText.match(/(\d+(?:[,.]\d+)?)\s+de\s+5/i);
+    const rating = ratingMatch ? normalizeOfferRating(ratingMatch[1]) : null;
+    if (ratingMatch && rating === null) stats.rejections.invalidRating++;
+
+    const reviewText = root.find('a[href*="customerReviews"], a[href*="#customerReviews"]').first().text();
+    const reviews = /avalia|classifica|review/i.test(reviewText) ? parseAmazonReviewCount(reviewText) : null;
+    const rankingMatch = root.find('.zg-bdg-text').first().text().match(/#\s*(\d+)/) || root.text().match(/#\s*(\d{1,3})\b/);
+    const ranking = rankingMatch ? Number(rankingMatch[1]) : null;
+
+    seenAsins.add(asin);
+    products.push({
+      marketplace: 'Amazon',
+      productId: asin,
+      title,
+      price,
+      oldPrice: null,
+      discount: null,
+      imageUrl,
+      url: canonical.url,
+      rating,
+      reviews,
+      seller: null,
+      prime: null,
+      ranking,
+      category: source.category,
+      source: `amazon_v3_${source.id}`,
+      tokenOptimized: true
+    });
+  }
+
+  stats.valid = products.length;
+  return { products, stats };
+}
+
+function normalizeAmazonOutletRawHtmlV3(html, limit = OFFERS_PER_STORE) {
+  const $ = cheerio.load(String(html || ''));
+  const roots = $('li.a-carousel-card div.dcl-product-wrapper, div.dcl-product-wrapper').toArray();
+  const products = [];
+  const seenAsins = new Set();
+  const stats = createAmazonV3Stats(roots.length);
+
+  for (const rootEl of roots) {
+    if (products.length >= Math.max(1, limit)) break;
+    const root = $(rootEl);
+    const links = root.find('a[href*="/dp/"], a[href*="/gp/product/"], a[href*="/gp/aw/d/"]').toArray();
+    const firstProductHref = links.map((el) => $(el).attr('href') || '').find(Boolean) || '';
+    const allHrefs = links.map((el) => $(el).attr('href') || '').join(' ');
+    if (isSponsoredAmazonUrl(firstProductHref) || isSponsoredAmazonUrl(allHrefs)) {
+      stats.rejected++;
+      stats.rejections.sponsored++;
+      continue;
+    }
+
+    const canonical = canonicalizeAmazonProductUrl(firstProductHref.startsWith('http') ? firstProductHref : `https://www.amazon.com.br${firstProductHref}`);
+    if (!canonical.asin) {
+      stats.rejected++;
+      stats.rejections.missingAsin++;
+      continue;
+    }
+    if (!canonical.url || canonical.sponsored) {
+      stats.rejected++;
+      stats.rejections[canonical.sponsored ? 'sponsored' : 'invalidUrl']++;
+      continue;
+    }
+    if (seenAsins.has(canonical.asin)) {
+      stats.duplicates++;
+      continue;
+    }
+
+    const title = normalizeAmazonOutletTitle(
+      links.map((el) => $(el).text()).map(normalizeAmazonCardTitle).find(Boolean)
+      || root.find('img[alt]').first().attr('alt')
+    );
+    if (!title) {
+      stats.rejected++;
+      stats.rejections.missingTitle++;
+      continue;
+    }
+
+    const price = parseAmazonBrazilPrice(root.find('.a-price .a-offscreen').first().text()) || parseAmazonBrazilPrice(root.text());
+    if (!price || price <= 0) {
+      stats.rejected++;
+      stats.rejections.missingPrice++;
+      continue;
+    }
+
+    const imageUrl = findAmazonCardImage($, root);
+    if (!imageUrl) {
+      stats.rejected++;
+      stats.rejections.missingImage++;
+      continue;
+    }
+
+    const ratingText = root.find('.a-icon-alt').first().text();
+    const ratingMatch = ratingText.match(/(\d+(?:[,.]\d+)?)\s+de\s+5/i);
+    const rating = ratingMatch ? normalizeOfferRating(ratingMatch[1]) : null;
+    if (ratingMatch && rating === null) stats.rejections.invalidRating++;
+
+    const reviewText = root.find('a[href*="customerReviews"], a[href*="#customerReviews"]').first().text();
+    const reviews = /avalia|classifica|review/i.test(reviewText) ? parseAmazonReviewCount(reviewText) : null;
+
+    seenAsins.add(canonical.asin);
+    products.push({
+      marketplace: 'Amazon',
+      productId: canonical.asin,
+      title,
+      price,
+      oldPrice: null,
+      discount: null,
+      imageUrl,
+      url: canonical.url,
+      rating,
+      reviews,
+      seller: null,
+      prime: null,
+      ranking: null,
+      category: 'Outlet',
+      source: 'amazon_v3_amazon_outlet',
+      tokenOptimized: true
+    });
+  }
+
+  stats.valid = products.length;
+  return { products, stats };
+}
+
+async function findAmazonOffersByAsins(asins, client = supabase) {
+  const validAsins = [...new Set((asins || []).filter((asin) => /^[A-Z0-9]{10}$/.test(asin)))];
+  if (validAsins.length === 0) return [];
+  const filters = validAsins.map((asin) => `original_url.ilike.%/dp/${asin}%`).join(',');
+  const { data, error } = await client
+    .from('offers')
+    .select('id, original_url, status')
+    .eq('platform', 'Amazon')
+    .or(filters);
+  if (error) throw new Error(`Amazon Novelty Gate: ${error.message}`);
+  return data || [];
+}
+
+async function applyAmazonNoveltyGate(products, deps = {}) {
+  const uniqueProducts = [];
+  const seen = new Set();
+  let invalidAsins = 0;
+  let duplicates = 0;
+
+  for (const product of Array.isArray(products) ? products : []) {
+    const canonical = canonicalizeAmazonProductUrl(product?.url || product?.original_url || '');
+    const asin = String(product?.productId || canonical.asin || '').toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin) || canonical.asin !== asin) {
+      invalidAsins++;
+      continue;
+    }
+    if (seen.has(asin)) {
+      duplicates++;
+      continue;
+    }
+    seen.add(asin);
+    uniqueProducts.push({ ...product, productId: asin, url: canonical.url });
+  }
+
+  const findOffers = deps.findOffers || findAmazonOffersByAsins;
+  const offers = await findOffers([...seen]);
+  const statusByAsin = new Map();
+  for (const offer of offers || []) {
+    const asin = extractAmazonAsin(offer?.original_url);
+    if (asin && !statusByAsin.has(asin)) statusByAsin.set(asin, String(offer?.status || '').toLowerCase());
+  }
+
+  const telemetry = {
+    NEW: 0,
+    EXISTING_POSTED: 0,
+    EXISTING_DRAFT: 0,
+    EXISTING_OTHER_STATUS: 0,
+    INVALID_ASIN: invalidAsins,
+    duplicates,
+    queriedAsins: seen.size,
+    dbWrites: 0,
+    excluded: []
+  };
+  const newProducts = [];
+
+  for (const product of uniqueProducts) {
+    const status = statusByAsin.get(product.productId);
+    if (!status) {
+      telemetry.NEW++;
+      newProducts.push({ ...product, novelty: 'NEW', previousStatus: null });
+      continue;
+    }
+    const classification = status === 'posted'
+      ? 'EXISTING_POSTED'
+      : status === 'draft'
+        ? 'EXISTING_DRAFT'
+        : 'EXISTING_OTHER_STATUS';
+    telemetry[classification]++;
+    telemetry.excluded.push({ asin: product.productId, classification, status });
+  }
+
+  return { newProducts, telemetry };
+}
+
+function selectAmazonDiverseFinalists(products, limit = OFFERS_PER_STORE) {
+  const sourceOrder = AMAZON_DISCOVERY_V3_SOURCES.map((source) => `amazon_v3_${source.id}`);
+  const buckets = new Map(sourceOrder.map((source) => [source, []]));
+  for (const product of Array.isArray(products) ? products : []) {
+    if (!buckets.has(product.source)) buckets.set(product.source, []);
+    buckets.get(product.source).push(product);
+  }
+  for (const bucket of buckets.values()) {
+    bucket.sort((a, b) => {
+      const scoreDiff = (Number(b.score) || 0) - (Number(a.score) || 0);
+      if (scoreDiff) return scoreDiff;
+      return (Number(a.ranking) || Number.MAX_SAFE_INTEGER) - (Number(b.ranking) || Number.MAX_SAFE_INTEGER);
+    });
+  }
+
+  const selected = [];
+  const activeSources = [...buckets.keys()].filter((source) => buckets.get(source).length > 0);
+  while (selected.length < Math.max(0, limit) && activeSources.length > 0) {
+    for (let index = 0; index < activeSources.length && selected.length < limit;) {
+      const source = activeSources[index];
+      const product = buckets.get(source).shift();
+      if (product) selected.push(product);
+      if (buckets.get(source).length === 0) activeSources.splice(index, 1);
+      else index++;
+    }
+  }
+  return selected;
+}
+
+async function fetchAmazonDiscoveryV3(limit = OFFERS_PER_STORE, deps = {}) {
+  const apiKey = process.env.SCRAPEDO_API_KEY;
+  if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
+  const httpGet = deps.httpGet || axios.get;
+  const uniqueProducts = [];
+  const sourceStats = [];
+  const globalAsins = new Set();
+  let totalDuplicates = 0;
+  let totalRejected = 0;
+  let httpCalls = 0;
+  let credits = 0;
+
+  for (const source of AMAZON_DISCOVERY_V3_SOURCES) {
+    const startedAt = Date.now();
+    const params = {
+      token: apiKey,
+      url: source.url,
+      geocode: 'br',
+      device: 'desktop'
+    };
+    const sourceTelemetry = {
+      id: source.id,
+      label: source.label,
+      endpoint: SCRAPEDO_AMAZON_RAW_HTML_URL,
+      amazonUrl: source.url,
+      paramsSent: { ...params, token: '[REDACTED]' },
+      httpStatus: null,
+      contentType: null,
+      htmlSize: 0,
+      elapsedMs: 0,
+      cardsDetected: 0,
+      valid: 0,
+      duplicates: 0,
+      rejected: 0,
+      rejections: createAmazonV3Stats(0).rejections
+    };
+
+    httpCalls++;
+    const response = await httpGet(SCRAPEDO_AMAZON_RAW_HTML_URL, {
+      params,
+      timeout: 60000,
+      validateStatus: () => true
+    });
+    const html = typeof response.data === 'string' ? response.data : '';
+    const responseCost = Number(response.headers?.['scrape.do-request-cost'] ?? response.headers?.['scrapedo-request-cost']) || 0;
+    credits += responseCost;
+    sourceTelemetry.httpStatus = response.status;
+    sourceTelemetry.contentType = response.headers?.['content-type'] || null;
+    sourceTelemetry.htmlSize = html.length;
+    sourceTelemetry.elapsedMs = Date.now() - startedAt;
+    sourceTelemetry.credits = responseCost;
+
+    if (response.status !== 200) {
+      sourceTelemetry.error = {
+        httpStatus: response.status,
+        body: safeDiagnosticSnippet(response.data)
+      };
+      sourceStats.push(sourceTelemetry);
+      continue;
+    }
+
+    const normalized = source.parser === 'outlet'
+      ? normalizeAmazonOutletRawHtmlV3(html, limit)
+      : normalizeAmazonRankingRawHtmlV3(html, source, limit);
+    Object.assign(sourceTelemetry, normalized.stats);
+    sourceStats.push(sourceTelemetry);
+
+    for (const product of normalized.products) {
+      if (globalAsins.has(product.productId)) {
+        totalDuplicates++;
+        continue;
+      }
+      globalAsins.add(product.productId);
+      uniqueProducts.push(product);
+    }
+    totalDuplicates += normalized.stats.duplicates || 0;
+    totalRejected += normalized.stats.rejected || 0;
+  }
+
+  const novelty = await applyAmazonNoveltyGate(uniqueProducts, { findOffers: deps.findOffers });
+  const candidates = selectAmazonDiverseFinalists(novelty.newProducts, Math.max(1, limit));
+  const ratings = uniqueProducts.map((product) => product.rating).filter((rating) => Number.isFinite(rating));
+  const prices = uniqueProducts.map((product) => product.price).filter((price) => Number.isFinite(price));
+  return {
+    candidates,
+    telemetry: {
+      pipeline: 'AmazonV3_official',
+      sources: sourceStats,
+      httpCalls,
+      callsAttempted: httpCalls,
+      callsSucceeded: sourceStats.filter((source) => source.httpStatus === 200).length,
+      credits,
+      totalCollected: sourceStats.reduce((sum, source) => sum + (source.valid || 0), 0),
+      total_unique: uniqueProducts.length,
+      validProducts: candidates.length,
+      duplicates: totalDuplicates,
+      rejected: totalRejected,
+      categories: [...new Set(uniqueProducts.map((product) => product.category).filter(Boolean))],
+      averagePrice: prices.length ? Number((prices.reduce((sum, price) => sum + price, 0) / prices.length).toFixed(2)) : null,
+      averageRating: ratings.length ? Number((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length).toFixed(2)) : null,
+      asins: [...globalAsins],
+      novelty: novelty.telemetry,
+      representedSources: [...new Set(candidates.map((product) => product.source))],
+      searchExecuted: false,
+      htmlDiscoveryExecuted: true,
+      browserDiscoveryExecuted: false,
+      renderDiscoveryExecuted: false,
+      fallbackLegacyExecuted: false,
+      limit
+    }
+  };
+}
+
+async function fetchScrapedoInfo(httpGet = axios.get) {
+  const apiKey = process.env.SCRAPEDO_API_KEY;
+  if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
+  const response = await httpGet('https://api.scrape.do/info', {
+    params: { token: apiKey },
+    timeout: 30000,
+    validateStatus: () => true
+  });
+  return {
+    httpStatus: response.status,
+    IsActive: response.data?.IsActive,
+    RemainingMonthlyRequest: response.data?.RemainingMonthlyRequest
+  };
+}
+
+async function runAmazonOfficialDryRun(deps = {}) {
+  const httpGet = deps.httpGet || axios.get;
+  const before = await fetchScrapedoInfo(httpGet);
+  const { candidates, telemetry } = await fetchAmazonDiscoveryV3(OFFERS_PER_STORE, { httpGet, findOffers: deps.findOffers });
+  const after = await fetchScrapedoInfo(httpGet);
+  const asins = new Set(candidates.map((product) => product.productId).filter(Boolean));
+  const summary = {
+    store: 'Amazon',
+    calls: telemetry.callsAttempted || 0,
+    products: candidates.length,
+    uniqueAsins: asins.size,
+    duplicates: telemetry.duplicates || 0,
+    validProducts: telemetry.validProducts,
+    telemetry,
+    infoBefore: before,
+    infoAfter: after,
+    consumption: Number(before.RemainingMonthlyRequest) - Number(after.RemainingMonthlyRequest)
+  };
+
+  console.log('[Amazon Official Dry-Run] Somente Amazon. Supabase somente leitura. Sem IA, publicacao, Browser, Render ou fallback legado.');
+  console.log(`[Amazon Official Dry-Run] info_antes active=${before.IsActive} remaining=${before.RemainingMonthlyRequest}`);
+  for (const source of telemetry.sources || []) {
+    console.log(`[Amazon Official Dry-Run] fonte=${source.label} endpoint=${source.endpoint} url=${source.amazonUrl} http=${source.httpStatus} content_type=${source.contentType} html_size=${source.htmlSize} tempo_ms=${source.elapsedMs}`);
+    console.log(`[Amazon Official Dry-Run] fonte=${source.label} cards=${source.cardsDetected || 0} validos=${source.valid || 0} rejeitados=${source.rejected || 0} duplicados=${source.duplicates || 0}`);
+    if (source.rejections) {
+      console.log(`[Amazon Official Dry-Run] fonte=${source.label} rejeicoes=${JSON.stringify(source.rejections)}`);
+    }
+  }
+  for (const product of candidates.slice(0, 10)) {
+    console.log(`[Amazon Official Dry-Run] candidate asin=${product.productId} price=${product.price} rating=${product.rating} reviews=${product.reviews} ranking=${product.ranking} url=${product.url} title="${product.title}"`);
+  }
+  console.log(`[Amazon Official Dry-Run] info_depois active=${after.IsActive} remaining=${after.RemainingMonthlyRequest}`);
+  console.log(`[Amazon Official Dry-Run] chamadas=${summary.calls} produtos=${summary.products} asins_unicos=${summary.uniqueAsins} duplicados=${summary.duplicates} validos=${summary.validProducts} categorias=${(telemetry.categories || []).join('|')} preco_medio=${telemetry.averagePrice} rating_medio=${telemetry.averageRating} creditos=${telemetry.credits}`);
+  if (candidates.length < (deps.minCandidates ?? 5)) {
+    throw new Error(`Amazon V3 dry-run sem candidates suficientes: ${candidates.length}`);
+  }
+  return summary;
+}
+
 async function scrapeStore(store) {
   let storeCandidates = [];
   const storeStartedAt = Date.now();
+
+  if (store === 'Amazon') {
+    console.log(`\n[Amazon Official] Fluxo definitivo utilizando Discovery V3`);
+    try {
+      const { candidates, telemetry } = await fetchAmazonDiscoveryV3(OFFERS_PER_STORE);
+      storeCandidates = candidates.map(c => ({
+        id: c.productId,
+        candidateId: c.productId,
+        externalProductId: c.productId,
+        product: {
+          product_name: c.title,
+          current_price: c.price,
+          old_price: c.oldPrice,
+          image_url: c.imageUrl,
+          category: c.category || 'Geral',
+          rating: c.rating
+        },
+        store: 'Amazon',
+        affiliateUrl: c.url,
+        score: 100 // baseline score
+      }));
+      emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
+        store, queriesExecuted: telemetry.httpCalls || 0, candidatesCollected: storeCandidates.length, pipeline: 'AmazonV3_official', durationMs: Date.now() - storeStartedAt, telemetry
+      });
+      console.log(`  ✅ [Amazon] ${storeCandidates.length} candidatos via V3.`);
+      return storeCandidates;
+    } catch (err) {
+      console.error(`  [Amazon Official] Erro fatal: ${err.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Amazon Official Pipeline', err, { store });
+      return [];
+    }
+  }
 
   if (store === 'Shopee') {
     console.log(`\n[Shopee Official] Fluxo normal utilizando Pipeline EPIC 09`);
@@ -4479,11 +4728,12 @@ console.log('╚═════════════════════�
 // Verifica se temos pelo menos um LLM provider configurado
 const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
 const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
+const isAmazonOfficialDryRun = process.argv.includes('--amazon-official-dry-run');
 
 const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
 const isShopeeOfficialDryRun = process.argv.includes('--shopee-official-dry-run');
 
-if (!isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
+if (!isAmazonOfficialDryRun && !isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
   console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
   process.exit(1);
 }
@@ -5651,7 +5901,12 @@ function createMarketplaceCandidateQueue(selectedProducts, marketplaceName) {
 }
 
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
-  if (isShopeeOfficialDryRun) {
+  if (isAmazonOfficialDryRun) {
+    runAmazonOfficialDryRun().catch(e => {
+      console.error('❌ Erro no amazon official dry-run:', e.message);
+      process.exitCode = 1;
+    });
+  } else if (isShopeeOfficialDryRun) {
     runShopeeOfficialDryRun().catch(e => {
       console.error('❌ Erro no shopee official dry-run:', e.message);
       process.exitCode = 1;
@@ -6288,7 +6543,14 @@ class MarketplaceManualReviewQueue {
   }
 }
 
-module.exports = { 
+module.exports = {
+  fetchAmazonDiscoveryV3,
+  findAmazonOffersByAsins,
+  applyAmazonNoveltyGate,
+  selectAmazonDiverseFinalists,
+  normalizeAmazonRankingRawHtmlV3,
+  normalizeAmazonOutletRawHtmlV3,
+  runAmazonOfficialDryRun,
   callLLM,
   callLLMWithFallback,
   crawleeExtract,
@@ -6300,7 +6562,7 @@ module.exports = {
   generateOfferAnalysis,
   generateFallback,
   selectDiscoveryQueries,
-    inspectMarketplaceCardsWithCrawlee,
+  inspectMarketplaceCardsWithCrawlee,
   getRandomQueries,
   scrapeStore,
   upsertOffer,
@@ -6320,8 +6582,6 @@ module.exports = {
   MANUAL_REVIEW_STATUS,
   canonicalizeAmazonProductUrl,
   sanitizeAmazonProductsBeforeLlm,
-  normalizeScrapedoAmazonSearchProducts,
-  normalizeAmazonOfficialRankingHtml,
   applyMarketplaceDataContract,
   normalizeShopeeProduct,
   buildShopeeProductOfferV2Payload,
@@ -6334,7 +6594,6 @@ module.exports = {
   createSubId,
   isUuid,
   ensureShopeeOfferIdentity,
-  fetchAmazonProductsFromScrapedoApi,
   fetchMercadoLivreViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
   dedupeShopeeProductsDetailed,
@@ -6342,6 +6601,7 @@ module.exports = {
 };
 
 function getEnabledStores(stores) {
+  if (process.argv.includes('--amazon-official-dry-run')) return ['Amazon'];
   return stores.filter(store => !SKIP_STORES.has(store));
 }
 

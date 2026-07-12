@@ -10,32 +10,37 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const oracle = require('./oracle-scraper.cjs');
 
-function amazonSearchContract() {
-  const warnings = [];
-  const originalWarn = console.warn;
-  console.warn = (message) => warnings.push(String(message));
-  try {
-    const result = oracle.normalizeScrapedoAmazonSearchProducts({ products: [
-      { asin: 'B0AAAAAAA1', title: 'Valido', price: { amount: 10 }, rating: { value: 4.7, count: 900, stars: 5 }, reviewCount: '900', position: 1, badge: 'Best Seller', listPrice: { amount: 20 } },
-      { asin: 'B0AAAAAAA2', title: 'Invalido', price: { amount: 20 }, rating: { value: 7, count: 7, stars: 5 }, oldPrice: 30 },
-      { asin: 'B0AAAAAAA3', title: 'Sem origem', price: { amount: 30 }, rating: 4.8, originalPrice: 40 },
-      { asin: 'B0AAAAAAA5', title: 'Tipo invalido', price: { amount: 40 }, rating: { value: '4.8' } }
-    ] }, 4);
+function amazonV3HtmlContract() {
+  assert.equal(typeof oracle.normalizeAmazonRankingRawHtmlV3, 'function');
+  assert.equal(typeof oracle.normalizeAmazonOutletRawHtmlV3, 'function');
+  const ranking = oracle.normalizeAmazonRankingRawHtmlV3(`
+    <div data-asin="B0AAAAAAA1"><span class="zg-bdg-text">#1</span><a href="/dp/B0AAAAAAA1"><img src="https://m.media-amazon.com/images/I/a.jpg" alt="Produto V3 A"></a><span class="a-price"><span class="a-offscreen">R$ 10,00</span></span><span class="a-icon-alt">4,7 de 5 estrelas</span></div>
+    <div data-asin="B0AAAAAAA2"><span class="zg-bdg-text">#2</span><a href="/dp/B0AAAAAAA2"><img src="https://m.media-amazon.com/images/I/b.jpg" alt="Produto V3 B"></a><span class="a-price"><span class="a-offscreen">R$ 20,00</span></span><span class="a-icon-alt">7,0 de 5 estrelas</span></div>
+    <div data-asin="B0AAAAAAA2"><a href="/dp/B0AAAAAAA2"><img src="https://m.media-amazon.com/images/I/b2.jpg" alt="Duplicado"></a><span class="a-price"><span class="a-offscreen">R$ 30,00</span></span></div>
+  `, { id: 'contract', category: 'Eletronicos' }, 5);
+  const outlet = oracle.normalizeAmazonOutletRawHtmlV3(`
+    <li class="a-carousel-card"><div class="dcl-product-wrapper"><a href="/Produto-Outlet/dp/B0AAAAAAA3">Produto Outlet40% offOfertaR$ 15,00</a><span class="a-price"><span class="a-offscreen">R$ 15,00</span></span><img src="https://m.media-amazon.com/images/I/c.jpg"><span class="a-icon-alt">4,5 de 5 estrelas</span></div></li>
+  `, 5);
 
-    assert.deepEqual(result.products.map((p) => p.rating), [4.7, null, null, null]);
-    assert.deepEqual(result.products.map((p) => p.oldPrice), [null, null, null, null]);
-    assert.deepEqual(result.products.map((p) => p.reviews), [null, null, null, null]);
-    assert.ok(warnings.some((message) => message.includes('B0AAAAAAA2') && message.includes('7')));
-  } finally {
-    console.warn = originalWarn;
-  }
+  assert.deepEqual(ranking.products.map((p) => p.rating), [4.7, null]);
+  assert.deepEqual(ranking.products.map((p) => p.oldPrice), [null, null]);
+  assert.deepEqual(ranking.products.map((p) => p.url), ['https://www.amazon.com.br/dp/B0AAAAAAA1', 'https://www.amazon.com.br/dp/B0AAAAAAA2']);
+  assert.equal(ranking.stats.duplicates, 1);
+  assert.equal(outlet.products[0].title, 'Produto Outlet');
+  assert.equal(outlet.products[0].price, 15);
 }
 
-function amazonBestSellersOldPriceContract() {
-  assert.equal(typeof oracle.normalizeAmazonOfficialRankingHtml, 'function');
-  const html = '<div class="zg-grid-general-faceout"><a href="/dp/B0AAAAAAA4"></a><img alt="Produto" src="x"><span class="a-price"><span class="a-offscreen">R$ 10,00</span></span><span class="a-text-price"><span class="a-offscreen">R$ 20,00</span></span></div>';
-  const result = oracle.normalizeAmazonOfficialRankingHtml(html, 1, { label: 'Best Sellers', category: 'Eletronicos' });
-  assert.equal(result.products[0].oldPrice, null);
+function amazonLegacySearchHtmlAbsentContract() {
+  const source = fs.readFileSync(require.resolve('./oracle-scraper.cjs'), 'utf8');
+  assert.equal(source.includes('normalizeScrapedoAmazonSearchProducts'), false);
+  assert.equal(source.includes('normalizeAmazonOfficialRankingHtml'), false);
+  assert.equal(source.includes('normalizeAmazonBestSellersRawHtmlV2'), false);
+  assert.equal(source.includes('normalizeAmazonV2Json'), false);
+  assert.equal(source.includes('fetchAmazonBestSellersV2'), false);
+  assert.equal(source.includes('fetchAmazonDiscoveryV2'), false);
+  assert.equal(source.includes('AMAZON_BEST_SELLERS_ELECTRONICS_URL'), false);
+  assert.equal(source.includes('fetchAmazonProductsFromScrapedoApi'), false);
+  assert.equal(source.includes('AMAZON_DISCOVERY_GENERIC_FALLBACK'), false);
 }
 
 function persistenceContract() {
@@ -116,7 +121,7 @@ async function shopeeImageContract() {
   assert.equal(candidates[0].image, imageUrl);
 }
 
-const tests = [amazonSearchContract, amazonBestSellersOldPriceContract, persistenceContract, shopeeContract, shopeeImageContract];
+const tests = [amazonV3HtmlContract, amazonLegacySearchHtmlAbsentContract, persistenceContract, shopeeContract, shopeeImageContract];
 (async () => {
   let failures = 0;
   for (const test of tests) {
