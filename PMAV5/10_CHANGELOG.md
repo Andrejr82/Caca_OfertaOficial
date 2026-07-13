@@ -41,3 +41,16 @@ Governança PMAV5 congelada.
 - **Não certificados:** ativação produtiva de runtimes externos, schema produtivo e `PMAV5/13_PROTOCOLO_OPERACIONAL.md` ausente.
 - **Alteração funcional/operacional/produção:** nenhuma.
 - **Verificação autorizada:** inspeção Git, documental e estática; nenhum build, teste funcional, migration, deploy, scraping, IA, publicação ou runtime proibido.
+
+## PMAV5-003 — 2026-07-13
+
+- **Modo:** IMPLEMENTATION, restrito à implementação normativa documental de M-01.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `74a8e1a53775097fb717475ded6523372f6e6f43`.
+- **Documentos criados:** auditoria/fonte canônica, ficha da Sprint e contratos Candidate, State, AI, Posts, Publication, Receipt e Ingestion.
+- **Documentos atualizados:** `07_CHECKPOINTS.md` e este changelog.
+- **Resultado:** CP-003 `COMPLETED`; ambientes, variáveis, stores, flags, owners, contratos e dependências possuem definição normativa única e versionada.
+- **Legado governado:** aliases, fontes alternativas e flags arquiteturais foram classificados com owner e prazo; nenhuma remoção foi executada.
+- **Segredos:** nenhum valor lido, exibido, criado ou modificado.
+- **Alteração funcional/operacional/produção:** nenhuma.
+- **Verificação autorizada:** inspeção documental/estática e Git; nenhum build, teste funcional, migration, schema, deploy, restart ou runtime.

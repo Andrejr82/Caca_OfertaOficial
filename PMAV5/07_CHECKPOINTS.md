@@ -16,7 +16,7 @@ Nunca autorização.
 | CP-000 | Fundação e Arquitetura Oficial | **IMPLEMENTED** | documentos, commit e verificação de escopo da PMAV5-000 |
 | CP-001 | Certificação do Estado Operacional | **COMPLETED** | `AUDITORIAS/PMAV5-001_ESTADO_OPERACIONAL_CERTIFICADO.md`; matriz, grafo e ficha da Sprint |
 | CP-002 | Pipeline Compartilhado e Plano Oficial de Migração | **COMPLETED** | `AUDITORIAS/PMAV5-002_PIPELINE_COMPARTILHADO.md`; writers, autoridades, conflitos, grafos e plano M-01–M-10 |
-| CP-003 | Oracle Worker Discovery-Only | NOT_STARTED | Worker sem IA/publicação/legado, validado |
+| CP-003 | M-01 — Configuração e Contratos Canônicos | **COMPLETED** | `AUDITORIAS/PMAV5-003_CONFIGURACAO_CANONICA.md`; inventários, sete contratos, ownership, matriz e grafo |
 | CP-004 | Serviço Único de Estados | NOT_STARTED | todas as transições via serviço validado |
 | CP-005 | IA Única | NOT_STARTED | IA somente após selected, validada |
 | CP-006 | Publicação Única | NOT_STARTED | publicação única e estados consistentes |
@@ -48,6 +48,14 @@ CP-000 permanece aguardando homologação humana. Esse registro não bloqueia a 
 **Evidência:** `PMAV5/AUDITORIAS/PMAV5-002_PIPELINE_COMPARTILHADO.md` e `PMAV5/SPRINTS/PMAV5-002_PIPELINE_COMPARTILHADO.md`.
 
 **Escopo:** certificação, em modo `AUDIT`, do Pipeline Compartilhado atual, da Arquitetura Oficial de Migração e do Plano Oficial de Implementação M-01–M-10; nenhuma alteração funcional, operacional ou de produção.
+
+## CP-003
+
+**Status:** COMPLETED
+
+**Evidência:** `PMAV5/AUDITORIAS/PMAV5-003_CONFIGURACAO_CANONICA.md`, `PMAV5/SPRINTS/PMAV5-003_CONFIGURACAO_CANONICA.md` e sete contratos em `PMAV5/CONTRATOS/`.
+
+**Escopo:** implementação normativa M-01, exclusivamente documental; configuração, ambientes, flags, contratos, ownership e dependências canônicos, sem alteração funcional, operacional ou de produção.
 
 ## CP-CONST.2
 
