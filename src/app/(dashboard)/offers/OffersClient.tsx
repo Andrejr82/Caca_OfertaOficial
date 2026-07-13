@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
+import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
 
 export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
@@ -140,6 +141,7 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                       Vendas: {metrics.sales ?? 0} • Desconto: {metrics.discount ?? 0}% • Avaliação: {metrics.rating ?? "N/A"} • Comissão: {offer.commission_rate ?? 0}% • Seller: {metrics.seller || "N/A"}
                     </p>
                   )}
+                  {offer.platform === "Mercado Livre" && <p className="text-[11px] text-white/40">Posição {offer.source_position ?? "—"} • {offer.seller_name || "Seller não informado"} • {offer.shipping_free ? "Frete grátis" : "Frete não informado"}</p>}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
@@ -179,6 +181,13 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                     <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
                   </form>
                   <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
+                </div>
+              )}
+
+              {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
+                <div className="flex gap-2">
+                  <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                  <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
                 </div>
               )}
 

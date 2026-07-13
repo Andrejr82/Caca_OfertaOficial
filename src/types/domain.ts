@@ -14,6 +14,15 @@ export interface Offer {
   platform: Platform;
   product_name: string;
   category: string | null;
+  category_id?: string | null;
+  category_name?: string | null;
+  source_position?: number | null;
+  item_id?: string | null;
+  product_id?: string | null;
+  seller_id?: string | null;
+  seller_name?: string | null;
+  shipping_free?: boolean | null;
+  source_categories?: unknown[];
   original_url: string;
   image_url: string | null;
   current_price: number;

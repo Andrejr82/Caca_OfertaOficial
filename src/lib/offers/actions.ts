@@ -87,6 +87,38 @@ export async function createOfferAction(formData: FormData) {
   redirect("/offers");
 }
 
+export async function selectMercadoLivreOfferAction(formData: FormData) {
+  const offerId = String(formData.get("offer_id") || "");
+  const supabase = await createServerSupabaseClient();
+  const userId = await getCurrentUserId();
+  if (!supabase || !userId || !offerId) return;
+  const { error } = await supabase
+    .from("offers")
+    .update({ status: "selected", updated_at: new Date().toISOString() })
+    .eq("id", offerId)
+    .eq("user_id", userId)
+    .eq("platform", "Mercado Livre")
+    .eq("status", "pending_manual_review");
+  if (error) throw new Error(error.message);
+  revalidatePath("/offers");
+}
+
+export async function rejectMercadoLivreOfferAction(formData: FormData) {
+  const offerId = String(formData.get("offer_id") || "");
+  const supabase = await createServerSupabaseClient();
+  const userId = await getCurrentUserId();
+  if (!supabase || !userId || !offerId) return;
+  const { error } = await supabase
+    .from("offers")
+    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .eq("id", offerId)
+    .eq("user_id", userId)
+    .eq("platform", "Mercado Livre")
+    .eq("status", "pending_manual_review");
+  if (error) throw new Error(error.message);
+  revalidatePath("/offers");
+}
+
 export async function generateAffiliateLinkAction(
   prevState: { ok: boolean; message: string; timestamp: number } | null,
   formData: FormData

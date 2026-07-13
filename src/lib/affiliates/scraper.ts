@@ -1,7 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Offer } from "@/types/domain";
-import { generateMLAffiliateLink } from "@/lib/platforms/mercadolivre";
 import { curateOfferScore } from "@/lib/offers/curation-engine";
 import { normalizeCategory, MAIN_CATEGORY_NAMES } from "@/lib/offers/category-taxonomy";
 import { getNextViralTarget } from "@/lib/offers/discovery-config";
@@ -424,311 +423,6 @@ export async function fetchMagaluTrendingProducts(limit = 5, category?: string):
     const errorMsg = error instanceof Error ? error.message : String(error);
     console.error(`[SCRAPER][MAGALU][TRENDS] Falha ao buscar tendências: ${errorMsg}`);
     return [];
-  }
-}
-
-/**
- * Coleta os links e detalhes dos produtos mais vendidos no Mercado Livre diretamente da página principal
->>>>,StartLine:45,TargetContent:
- * Evita fazer requisições extras para páginas individuais de produtos, contornando bloqueios de captcha.
- * Híbrido: Extrai os dados publicamente e depois injeta a tag de afiliado.
- */
-export async function fetchTrendingProductsFromLanding(limit = 5, category?: string): Promise<ScrapedProduct[]> {
-  console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Iniciando busca de tendências do Mercado Livre...");
-  // Se rodando local (development), ignora a chave da Oracle para forçar o fetch direto com seu IP Residencial
-  const oracleKey = process.env.NODE_ENV !== 'production' ? null : process.env.ORACLE_API_KEY;
-
-  // === ESTRATÉGIA 1: Oracle API + IA Local (mais resiliente) ===
-  if (oracleKey) {
-    try {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1: Oracle API + IA...");
-      const fetchLimit = limit * 4;
-      const defaultUrls = [
-        "https://www.mercadolivre.com.br/mais-vendidos",
-        "https://www.mercadolivre.com.br/mais-vendidos/eletronicos",
-        "https://www.mercadolivre.com.br/mais-vendidos/eletrodomesticos",
-        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-CELLPHONES",
-        "https://www.mercadolivre.com.br/ofertas?domain_id=MLB-TELEVISIONS"
-      ];
-      const randomUrl = defaultUrls[Math.floor(Math.random() * defaultUrls.length)];
-      const targetUrl = category ? `https://lista.mercadolivre.com.br/${encodeURIComponent(category)}_O_SaleCountDesc` : randomUrl;
-      const promptText = getScrapingPrompt();
-
-      const oracleRes = await fetch('http://193.122.242.178:3002/api/scrape', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl, token: oracleKey }),
-      });
-
-      if (oracleRes.ok) {
-        const oracleData = await oracleRes.json();
-        if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
-          const textToAnalyze = oracleData.data?.text || oracleData.data?.html;
-          if (!validateHtml(textToAnalyze, "Trends_API")) { console.warn("[SCRAPER] HTML Inválido/Captcha detectado"); return []; }
-          if (!validateHtml(textToAnalyze, "Trends_API")) return [];
-
-          const schemaObj = {
-            type: "object",
-            properties: {
-              products: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    title: { type: "string" },
-                    url: { type: "string" },
-                    image: { type: "string" },
-                    price: { type: "number" },
-                    old_price: { type: "number", nullable: true },
-                    discount_badge: { type: "string", nullable: true },
-                    rating: { type: "number", nullable: true },
-                    category: { type: "string" },
-                    sales_signal: { type: "number", nullable: true },
-                    official_store: { type: "boolean", nullable: true }
-                  },
-                  required: ["title", "url", "price"]
-                }
-              }
-            },
-            required: ["products"]
-          };
-
-          const rawResult = await callLLM(promptText + " Extraia também o sales_signal (volume de vendas numérico) e official_store (true/false, procure por Loja Oficial).", textToAnalyze, schemaObj, 0.2, 4000);
-          const fcData = JSON.parse(rawResult);
-
-          if (fcData.products && fcData.products.length > 0) {
-            const validProducts = sanitizeScrapedData(fcData.products, "Trends_API");
-
-            const products = validProducts.slice(0, limit)
-              .map((p: any) => {
-                const { category: cat, subcategory: sub } = normalizeCategory(p.category || p.title || '');
-                return {
-                  product_name: p.title,
-                  original_url: p.url?.startsWith("http") ? p.url : `https://www.mercadolivre.com.br${p.url || ""}`,
-                  image_url: enhanceImageUrl(p.image || null),
-                  current_price: p.price,
-                  old_price: p.old_price && p.old_price > p.price ? p.old_price : null,
-                  discount_badge: p.discount_badge || null,
-                  rating: p.rating ? parseFloat(String(p.rating)) : null,
-                  category: cat,
-                  subcategory: sub,
-                  sales_signal: p.sales_signal || null,
-                  official_store: p.official_store || null
-                };
-              });
-
-            if (products.length > 0) {
-              console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 (IA) OK: ${products.length} produtos.`);
-              return products;
-            }
-          }
-        }
-        console.warn("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 retornou 0 produtos. Tentando fallback HTML...");
-      } else {
-        console.warn(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 1 falhou com status ${oracleRes.status}. Tentando fallback HTML...`);
-      }
-    } catch (extractError) {
-      const msg = extractError instanceof Error ? extractError.message : String(extractError);
-      console.warn(`[SCRAPER][MERCADO LIVRE][TRENDS] Erro na Estratégia 1: ${msg}. Tentando fallback HTML...`);
-    }
-  }
-
-  // === ESTRATÉGIA 2: Oracle API HTML + Regex Parsing (fallback) ===
-  try {
-    const url = "https://www.mercadolivre.com.br/mais-vendidos";
-    let html = "";
-
-    if (oracleKey) {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Oracle API HTML + Regex...");
-      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, token: oracleKey })
-      });
-
-      if (!oracleRes.ok) {
-        throw new Error(`Falha na Oracle API HTML. Status: ${oracleRes.status}`);
-      }
-
-      const oracleData = await oracleRes.json();
-      if (!oracleData.success || !oracleData.data?.html) {
-        throw new Error("Oracle API não retornou HTML válido.");
-      }
-      html = oracleData.data.html;
-      console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] HTML recebido: ${html.length} bytes.`);
-    } else {
-      console.log("[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2: Fetch direto (sujeito a bloqueio)...");
-      const response = await fetch(url, {
-        headers: {
-          "User-Agent": USER_AGENT,
-          "Accept-Language": "pt-BR,pt;q=0.9",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
-        },
-        next: { revalidate: 3600 }
-      });
-
-      if (!response.ok) {
-        throw new Error(`Falha ao carregar a página. Status: ${response.status}`);
-      }
-      html = await response.text();
-    }
-
-    // Detecta bloqueio/captcha
-    const isSmall = html.length < 50000;
-    const hasBlockKeywords = html.includes("captcha") || html.includes("tráfego suspeito") || html.includes("verifique que você não é um robô");
-    
-    if (isSmall && hasBlockKeywords) {
-      console.warn("[SCRAPER][MERCADO LIVRE][TRENDS] HTML parece ser captcha ou bloqueio. Abortando fallback HTML.");
-      return [];
-    }
-
-    const chunks = html.split('<div class="dynamic-carousel__item-container">');
-    const results: ScrapedProduct[] = [];
-
-    for (let i = 1; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const linkMatch = chunk.match(/href="([^"]+)"/);
-      const link = linkMatch ? linkMatch[1] : null;
-
-      let image: string | null = null;
-      const dataSrcMatch = chunk.match(/data-src="([^"]+)"/);
-      const srcMatch = chunk.match(/<img[^>]+src="([^"]+)"/);
-      if (dataSrcMatch && dataSrcMatch[1].startsWith("http")) {
-        image = dataSrcMatch[1];
-      } else if (srcMatch && srcMatch[1].startsWith("http")) {
-        image = srcMatch[1];
-      }
-
-      const titleMatch = chunk.match(/<h3 class="dynamic-carousel__title">([^<]+)<\/h3>/) ||
-                         chunk.match(/alt="([^"]+)"/);
-      const title = titleMatch ? titleMatch[1].trim() : null;
-
-      // Preço: captura o inteiro do span principal e os decimais do sup
-      let currentPrice = 0;
-      let oldPrice: number | null = null;
-
-      // Tenta extrair preço antigo riscado
-      const oldPriceMatch = chunk.match(/dynamic-carousel__oldprice[^>]*>R\$\s*(\d+(?:[.,]\d+)?)/);
-      if (oldPriceMatch) {
-        oldPrice = parseFloat(oldPriceMatch[1].replace(/\./g, "").replace(",", "."));
-      }
-
-      // Preço atual: inteiro + decimais
-      const priceIntMatch = chunk.match(/dynamic-carousel__price[^-][^>]*><span>R\$\s*(\d+(?:\.\d+)?)/);
-      const priceDecMatch = chunk.match(/dynamic-carousel__price-decimals[^>]*>(\d+)/);
-      if (priceIntMatch) {
-        const intPart = priceIntMatch[1].replace(/\./g, "");
-        const decPart = priceDecMatch ? priceDecMatch[1] : "00";
-        currentPrice = parseFloat(`${intPart}.${decPart}`);
-      }
-
-      if (title && link && currentPrice > 0) {
-        results.push({
-          product_name: title,
-          original_url: link,
-          image_url: enhanceImageUrl(image),
-          current_price: currentPrice,
-          old_price: oldPrice && oldPrice > currentPrice ? oldPrice : null,
-          rating: null // rating não disponível via HTML parsing (sem hardcode)
-        });
-      }
-
-      if (results.length >= limit) break;
-    }
-
-    console.log(`[SCRAPER][MERCADO LIVRE][TRENDS] Estratégia 2 (HTML): ${results.length} produtos.`);
-    return results;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[SCRAPER][MERCADO LIVRE][TRENDS] Falha total: ${errorMsg}`);
-    return [];
-  }
-}
-
-/**
- * Raspa detalhes de um produto individual do Mercado Livre
- * Nota: Pode sofrer redirecionamento para tela de tráfego suspeito dependendo do IP/Rate Limit.
- */
-async function scrapeMercadoLivreProductDetails(productUrl: string): Promise<ScrapedProduct | null> {
-  console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Iniciando raspagem via API oficial: ${productUrl}`);
-  try {
-    const { fetchMLProductDetails } = await import("@/lib/platforms/mercadolivre");
-    
-    // fetchMLProductDetails já lida com o token e fallback para App Token
-    const metadata = await fetchMLProductDetails(productUrl);
-    
-    if (metadata && metadata.title && metadata.price && metadata.price > 0) {
-      const scraped = {
-        product_name: metadata.title || "Produto sem nome",
-        original_url: metadata.finalUrl || productUrl,
-        image_url: enhanceImageUrl(metadata.imageUrl || null),
-        current_price: metadata.price || 0,
-        old_price: null,
-        discount_badge: null,
-        rating: null,
-        category: null,
-        subcategory: null
-      };
-      console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso ao raspar produto (API): ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
-      updateMetrics("Mercado Livre", "found", 1);
-      return scraped;
-    }
-
-    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] API oficial falhou ou sem preço para ${productUrl}. Tentando Oracle API + IA...`);
-    const oracleKey = process.env.ORACLE_API_KEY;
-    if (oracleKey) {
-      const oracleRes = await fetch("http://193.122.242.178:3002/api/scrape", {
-        method: "POST",
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: productUrl, token: oracleKey }),
-        signal: AbortSignal.timeout(60000)
-      });
-      if (oracleRes.ok) {
-        const oracleData = await oracleRes.json();
-        if (oracleData.success && (oracleData.data?.text || oracleData.data?.html)) {
-          const textToAnalyze = buildTokenOptimizedLlmInput(oracleData, "Mercado Livre");
-          const { validateHtml } = await import("@/core/scraper/validator");
-          const { callLLM } = await import("@/lib/ai/groq");
-          
-          if (validateHtml(oracleData.data?.text || oracleData.data?.html, "Trends_API")) {
-            const promptText = "Extraia o nome do produto do Mercado Livre, a URL da imagem principal do produto, o preço atual promocional (como número) e o preço antigo cortado (como número). Se não houver preço antigo, retorne null. Responda em formato JSON válido.";
-            const schemaObj = {
-              type: "object",
-              properties: {
-                title: { type: "string" },
-                image: { type: "string" },
-                current_price: { type: "number" },
-                old_price: { type: "number", nullable: true }
-              },
-              required: ["title", "current_price"]
-            };
-            const rawResult = await callLLM(promptText, textToAnalyze, schemaObj, 0.2, 4000);
-            const extract = JSON.parse(rawResult);
-            if (extract && extract.title && extract.current_price > 0) {
-              const scraped = {
-                product_name: extract.title,
-                original_url: productUrl,
-                image_url: enhanceImageUrl(extract.image || null),
-                current_price: extract.current_price,
-                old_price: extract.old_price || null,
-                rating: 4.8
-              };
-              console.log(`[SCRAPER][MERCADO LIVRE][PRODUCT] Sucesso Oracle API: ${scraped.product_name} - Preço: R$ ${scraped.current_price}`);
-              updateMetrics("Mercado Livre", "found", 1);
-              return scraped;
-            }
-          }
-        }
-      }
-    }
-
-    console.warn(`[SCRAPER][MERCADO LIVRE][PRODUCT] Falha total ao extrair produto: ${productUrl}`);
-    updateMetrics("Mercado Livre", "failures", 1);
-    return null;
-  } catch (error) {
-    console.error(`[SCRAPER][MERCADO LIVRE][PRODUCT] Erro:`, error);
-    updateMetrics("Mercado Livre", "failures", 1);
-    return null;
   }
 }
 
@@ -1273,8 +967,7 @@ export async function scrapeProductDetails(productUrl: string): Promise<ScrapedP
     return scrapeNetshoesProductDetails(productUrl);
   }
   
-  // Default fallback (Mercado Livre)
-  return scrapeMercadoLivreProductDetails(productUrl);
+  return null;
 }
 
 import * as cheerio from 'cheerio';
@@ -1792,9 +1485,7 @@ export async function discoverAndIngestCoupons(
 
     for (const coupon of scrapedCoupons) {
       let finalUrl = coupon.link;
-      if (source === "Mercado Livre") {
-        finalUrl = generateMLAffiliateLink(coupon.link, userId);
-      } else if (source === "Magalu") {
+      if (source === "Magalu") {
         const magaluId = process.env.MAGALU_PARTNER_ID || "";
         if (magaluId) {
           try {
@@ -1878,7 +1569,7 @@ export async function discoverAndIngestCoupons(
  */
 export async function discoverAndIngestTrendingOffers(
   limit = 5,
-  sources: string[] = ["Mercado Livre"],
+  sources: string[] = [],
   targetUserId?: string,
   categorySearchQuery?: string
 ): Promise<Offer[]> {
@@ -1927,7 +1618,7 @@ export async function discoverAndIngestTrendingOffers(
 
   const ingestedOffers: Offer[] = [];
 
-  for (const source of sources) {
+  for (const source of sources.filter(source => source !== "Mercado Livre")) {
     let scrapedProducts: ScrapedProduct[] = [];
     
     // ── Modo Viral Target: substitui a roleta aleatória de categorias genéricas ───────────────
@@ -1949,9 +1640,7 @@ export async function discoverAndIngestTrendingOffers(
       console.log(`[SCRAPER][TRENDS] Categoria explícita recebida: "${activeCategorySearch}" (override do viral target)`);
     }
 
-    if (source === "Mercado Livre") {
-      scrapedProducts = await fetchTrendingProductsFromLanding(overFetchLimit, activeCategorySearch);
-    } else if (source === "Shopee") {
+    if (source === "Shopee") {
       scrapedProducts = await fetchShopeeTrendingProducts(overFetchLimit, activeCategorySearch);
     } else if (source === "Shein") {
       scrapedProducts = await fetchSheinTrendingProducts(overFetchLimit, activeCategorySearch);
@@ -1966,9 +1655,7 @@ export async function discoverAndIngestTrendingOffers(
     for (const product of scrapedProducts) {
       // Processamento de URL de Afiliado para as respectivas plataformas ANTES da busca de duplicados
       let finalUrl = product.original_url;
-      if (source === "Mercado Livre") {
-        finalUrl = generateMLAffiliateLink(product.original_url, userId);
-      } else if (source === "Magalu") {
+      if (source === "Magalu") {
         const magaluId = process.env.MAGALU_PARTNER_ID || "";
         if (magaluId) {
           try {
