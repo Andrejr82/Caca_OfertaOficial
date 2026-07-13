@@ -31,8 +31,7 @@ const axios        = require('axios');
 const cheerio      = require('cheerio');
 require('dotenv').config({ path: '.env.local' });
 require('tsx/cjs');
-const { fetchWithMLAuth } = require('../src/lib/integrations/mercadolivre/token-manager.ts');
-const { runMercadoLivreDiscoveryV4 } = require('./mercadolivre-discovery-v4.cjs');
+const { runMercadoLivreNativeTop20, writeMercadoLivreNativeTop20Reports } = require('./mercadolivre-native-top20-v5.cjs');
 const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
 const {
   normalizeProductContentForLLM,
@@ -89,7 +88,7 @@ const AMAZON_CONTEXT_OPTIONS = {
 
 const SHOPEE_OFFICIAL_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 
-// Amazon mantém provider próprio; Mercado Livre V4 nunca usa proxy.
+// Amazon mantém provider próprio; Mercado Livre usa somente SSR público de ofertas.
 async function fetchAmazonHtmlViaScrapedo(url) {
   const apiKey = process.env.SCRAPEDO_API_KEY;
   if (!apiKey) throw new Error("SCRAPEDO_API_KEY não configurada.");
@@ -4079,13 +4078,77 @@ async function runAmazonOfficialDryRun(deps = {}) {
   return summary;
 }
 
-async function executeMercadoLivreDiscoveryV4() {
-  return runMercadoLivreDiscoveryV4({
-    fetchImpl: global.fetch,
-    apiFetchImpl: (url, options) => fetchWithMLAuth(url, options),
-    maxProducts: 6,
-    maxCandidatesPerSource: 12
+async function executeMercadoLivreNativeTop20() {
+  return runMercadoLivreNativeTop20({ fetchImpl: global.fetch });
+}
+
+async function persistMercadoLivreNativeTop20(products) {
+  const { data: history, error: historyError } = await supabase
+    .from('offers')
+    .select('id, item_id, product_id, original_url, status')
+    .eq('user_id', ADMIN_USER_ID)
+    .eq('platform', 'Mercado Livre');
+  if (historyError) throw historyError;
+
+  const activeItemIds = new Set();
+  const activeUrls = new Set();
+  const activeProductIds = new Set();
+  for (const row of history || []) {
+    if (row.status === 'rejected') continue;
+    if (row.item_id) activeItemIds.add(row.item_id);
+    if (row.original_url) activeUrls.add(row.original_url);
+    if (row.product_id) activeProductIds.add(row.product_id);
+  }
+
+  const finalProducts = products.filter((product) => !(
+    (product.item_id && activeItemIds.has(product.item_id)) ||
+    (product.product_url && activeUrls.has(product.product_url)) ||
+    (product.product_id && activeProductIds.has(product.product_id))
+  ));
+  if (!finalProducts.length) return { inserted: 0, novelty_rejected: products.length };
+
+  const rows = finalProducts.map((product) => {
+    const score = calculateScoreV1({
+      product_name: product.title,
+      current_price: product.current_price,
+      old_price: product.old_price,
+      category: product.category_name,
+      image_url: product.image_url,
+      rating: null
+    });
+    return {
+      user_id: ADMIN_USER_ID,
+      platform: 'Mercado Livre',
+      product_name: product.title,
+      category: product.category_name,
+      category_id: product.category_id,
+      category_name: product.category_name,
+      source_position: product.source_position,
+      item_id: product.item_id,
+      product_id: product.product_id,
+      seller_id: product.seller_id,
+      seller_name: product.seller_name,
+      shipping_free: product.shipping_free,
+      source_categories: product.source_categories,
+      original_url: product.product_url,
+      image_url: product.image_url,
+      current_price: product.current_price,
+      old_price: product.old_price,
+      score,
+      status: 'pending_manual_review',
+      explainability: {
+        source: product.source,
+        source_url: product.source_url,
+        source_position: product.source_position,
+        discount_percent: product.discount_percent,
+        discovered_at: product.discovered_at
+      },
+      notes: '[Mercado Livre Native Top 20] Aguardando seleção manual.'
+    };
   });
+  const { error } = await supabase.from('offers').insert(rows);
+  if (error) throw error;
+  return { inserted: rows.length, novelty_rejected: products.length - rows.length };
 }
 
 async function scrapeStore(store) {
@@ -4093,49 +4156,25 @@ async function scrapeStore(store) {
   const storeStartedAt = Date.now();
 
   if (store === 'Mercado Livre') {
-    console.log(`\n[Mercado Livre V4] Discovery oficial`);
+    console.log(`\n[Mercado Livre Native Top 20] Discovery oficial`);
     try {
-      const discovery = await executeMercadoLivreDiscoveryV4();
-      for (const candidate of discovery.candidates) {
-        if (!candidate.title || !candidate.current_price || !candidate.image_url || !candidate.product_url) continue;
-        const product = {
-          product_name: candidate.title,
-          current_price: candidate.current_price,
-          old_price: candidate.old_price,
-          image_url: normalizeImageUrl(candidate.image_url),
-          category: candidate.category_id,
-          rating: normalizeOfferRating(candidate.rating),
-          mercado_livre_v4: candidate
-        };
-        const affiliateUrl = buildAffiliateUrl(candidate.product_url, store);
-        const persisted = await upsertOffer(product, store, affiliateUrl);
-        if (!persisted?.isNew) continue;
-        storeCandidates.push({
-          id: persisted.id,
-          candidateId: candidate.item_id || candidate.catalog_product_id,
-          externalProductId: candidate.item_id || candidate.catalog_product_id,
-          product,
-          store,
-          affiliateUrl,
-          score: persisted.score,
-          audit: { pipeline: 'MercadoLivreDiscoveryV4', sources: candidate.discovery_sources }
-        });
-      }
+      const discovery = await executeMercadoLivreNativeTop20();
+      const persisted = await persistMercadoLivreNativeTop20(discovery.products);
       emitAuditEvent('B', 'oracle-scraper.cjs:scrapeStore', 'store-summary', {
         store,
-        queriesExecuted: discovery.calls.total,
-        candidatesCollected: storeCandidates.length,
-        pipeline: 'MercadoLivreDiscoveryV4',
+        queriesExecuted: discovery.calls,
+        candidatesCollected: discovery.products.length,
+        pipeline: 'MercadoLivreNativeTop20',
         durationMs: Date.now() - storeStartedAt,
         calls: discovery.calls,
-        productsBySource: discovery.products_by_source,
+        productsBySource: { mercadolivre_offers_ssr: discovery.valid_products },
         duplicates: discovery.duplicates
       });
-      console.log(`  ✅ [Mercado Livre V4] ${storeCandidates.length} candidates novos.`);
-      return storeCandidates;
+      console.log(`  ✅ [Mercado Livre Native Top 20] ${persisted.inserted} pendentes para seleção manual.`);
+      return [];
     } catch (error) {
-      console.error(`  [Mercado Livre V4] Erro fatal: ${error.message}`);
-      await logErrorToSupabase('Oracle-Scraper', 'Mercado Livre V4', error, { store });
+      console.error(`  [Mercado Livre Native Top 20] Erro fatal: ${error.message}`);
+      await logErrorToSupabase('Oracle-Scraper', 'Mercado Livre Native Top 20', error, { store });
       return [];
     }
   }
@@ -4677,12 +4716,10 @@ async function runDiscoveryDryRun() {
 }
 
 async function runMercadoLivreOfficialDryRun() {
-  const result = await executeMercadoLivreDiscoveryV4();
-  console.log('[Mercado Livre V4 Dry-Run] sem banco, IA, publicacao ou Oracle');
-  for (const [source, products] of Object.entries(result.products_by_source)) {
-    console.log(`[Mercado Livre V4 Dry-Run] fonte=${source} produtos=${products}`);
-  }
-  console.log(`[Mercado Livre V4 Dry-Run] coletados=${result.raw_candidates} deduplicados=${result.deduplicated_candidates} duplicados_removidos=${result.duplicates} limite_fonte_rejeitados=${result.source_limit_rejections} candidates_finais=${result.candidates.length} tempo_ms=${result.elapsed_ms} chamadas=${result.calls.total}`);
+  const result = await executeMercadoLivreNativeTop20();
+  writeMercadoLivreNativeTop20Reports(result);
+  console.log('[Mercado Livre Native Top 20 Dry-Run] sem banco, IA, publicacao ou Oracle');
+  console.log(`[Mercado Livre Native Top 20 Dry-Run] categorias=${result.categories.length} coletados=${result.raw_products} validos=${result.valid_products} descartados=${result.discarded_products} duplicados=${result.duplicates} unicos=${result.products.length} tempo_ms=${result.elapsed_ms} chamadas=${result.calls}`);
   return result;
 }
 
@@ -4695,7 +4732,7 @@ console.log('╚═════════════════════�
 const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
 const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
 const isAmazonOfficialDryRun = process.argv.includes('--amazon-official-dry-run');
-const isMercadoLivreOfficialDryRun = process.argv.includes('--mercadolivre-official-dry-run');
+const isMercadoLivreOfficialDryRun = process.argv.includes('--mercadolivre-native-top20-dry-run');
 
 const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
 const isShopeeOfficialDryRun = process.argv.includes('--shopee-official-dry-run');
@@ -5870,7 +5907,7 @@ function createMarketplaceCandidateQueue(selectedProducts, marketplaceName) {
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
   if (isMercadoLivreOfficialDryRun) {
     runMercadoLivreOfficialDryRun().catch(e => {
-      console.error('❌ Erro no Mercado Livre V4 dry-run:', e.message);
+      console.error('❌ Erro no Mercado Livre Native Top 20 dry-run:', e.message);
       process.exitCode = 1;
     });
   } else if (isAmazonOfficialDryRun) {
@@ -6566,7 +6603,7 @@ module.exports = {
   createSubId,
   isUuid,
   ensureShopeeOfferIdentity,
-  executeMercadoLivreDiscoveryV4,
+  executeMercadoLivreNativeTop20,
   runMercadoLivreOfficialDryRun,
   fetchAmazonHtmlViaScrapedo,
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
@@ -6576,7 +6613,7 @@ module.exports = {
 
 function getEnabledStores(stores) {
   if (process.argv.includes('--amazon-official-dry-run')) return ['Amazon'];
-  if (process.argv.includes('--mercadolivre-official-dry-run')) return ['Mercado Livre'];
+  if (process.argv.includes('--mercadolivre-native-top20-dry-run')) return ['Mercado Livre'];
   return stores.filter(store => !SKIP_STORES.has(store));
 }
 

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
+import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
 
 export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
@@ -124,6 +125,7 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                   </div>
                   <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
                   <p className="text-[11px] text-white/40">{offer.category || "Sem categoria"} • R$ {offer.current_price}</p>
+                  {offer.platform === "Mercado Livre" && <p className="text-[11px] text-white/40">Posição {offer.source_position ?? "—"} • {offer.seller_name || "Seller não informado"} • {offer.shipping_free ? "Frete grátis" : "Frete não informado"}</p>}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
@@ -151,6 +153,13 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
               <div className="text-xs text-white/50 bg-black/20 p-2 rounded">
                 <span className="font-semibold">Reason:</span> {reason}
               </div>
+
+              {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
+                <div className="flex gap-2">
+                  <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                  <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                </div>
+              )}
 
               {/* Timeline Horizontal */}
               <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-white/40 overflow-x-auto pb-1">
