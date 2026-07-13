@@ -28,3 +28,16 @@ Governança PMAV5 congelada.
 - **Não certificados:** ativação produtiva de runtimes externos, configuração integral PM2/cron, schema produtivo, flags não observadas e protocolo operacional 13 ausente.
 - **Alteração funcional/operacional/produção:** nenhuma.
 - **Verificação autorizada:** inspeção Git e documental; nenhum build, teste funcional, migration, deploy ou runtime proibido.
+
+## PMAV5-002 — 2026-07-13
+
+- **Modo:** AUDIT.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `43976b70a7e10d9e3a0475a14dc948b5bcc622e6`.
+- **Documentos criados:** `AUDITORIAS/PMAV5-002_PIPELINE_COMPARTILHADO.md` e `SPRINTS/PMAV5-002_PIPELINE_COMPARTILHADO.md`.
+- **Documentos atualizados:** `07_CHECKPOINTS.md` e este changelog.
+- **Resultado:** CP-002 `COMPLETED`; pipeline Discovery → estados finais reconstruído, escritores e orquestradores classificados, arquitetura final consolidada e Plano Oficial de Implementação M-01–M-10 documentado.
+- **Conflitos críticos certificados:** autoridades paralelas, escritas diretas, curadoria implícita, bypass para `approved`, finalização não transacional, estado `processing` incompatível e riscos de tenant/concorrência.
+- **Não certificados:** ativação produtiva de runtimes externos, schema produtivo e `PMAV5/13_PROTOCOLO_OPERACIONAL.md` ausente.
+- **Alteração funcional/operacional/produção:** nenhuma.
+- **Verificação autorizada:** inspeção Git, documental e estática; nenhum build, teste funcional, migration, deploy, scraping, IA, publicação ou runtime proibido.
