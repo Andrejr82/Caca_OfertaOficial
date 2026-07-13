@@ -26,9 +26,17 @@ describe("Shopee Discovery V5 - curadoria manual", () => {
     expect(() => assertShopeeSelected({ platform: "Amazon", status: "draft" })).not.toThrow();
   });
 
-  it("publica somente após seleção e mantém canais seguintes após primeiro post", () => {
-    expect(() => assertShopeePublishable({ platform: "Shopee", status: "pending_manual_review" })).toThrow(/seleção manual/i);
-    expect(() => assertShopeePublishable({ platform: "Shopee", status: "selected" })).not.toThrow();
-    expect(() => assertShopeePublishable({ platform: "Shopee", status: "posted" })).not.toThrow();
+  it.each(["Shopee", "Mercado Livre", "Amazon"])(
+    "protege a publicação de %s com mensagem dinâmica",
+    (platform) => {
+      expect(() => assertShopeePublishable({ platform, status: "pending_manual_review" }))
+        .toThrow(`${platform} V5 exige seleção manual antes da publicação.`);
+      expect(() => assertShopeePublishable({ platform, status: "selected" })).not.toThrow();
+      expect(() => assertShopeePublishable({ platform, status: "posted" })).not.toThrow();
+    }
+  );
+
+  it("não bloqueia marketplace fora da curadoria manual V5", () => {
+    expect(() => assertShopeePublishable({ platform: "Magalu", status: "approved" })).not.toThrow();
   });
 });
