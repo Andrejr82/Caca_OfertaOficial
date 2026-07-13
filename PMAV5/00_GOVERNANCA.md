@@ -48,3 +48,62 @@ Rollback documental preserva o histórico por novo commit e, quando alterar deci
 ## AUTORIDADE CONSTITUCIONAL
 
 Toda decisão do Programa deverá respeitar a Constituição.
+
+## MODOS OFICIAIS DE EXECUÇÃO
+
+- PMAV5-000: DOCUMENTATION
+- PMAV5-CONST: DOCUMENTATION
+- PMAV5-CONST.1: DOCUMENTATION
+- PMAV5-CONST.2: DOCUMENTATION
+- PMAV5-001: AUDIT
+- PMAV5-002: AUDIT
+- PMAV5-003: IMPLEMENTATION
+- PMAV5-004: IMPLEMENTATION
+- PMAV5-005: IMPLEMENTATION
+- PMAV5-006: IMPLEMENTATION
+- PMAV5-007: IMPLEMENTATION
+- PMAV5-008: IMPLEMENTATION
+- PMAV5-009: IMPLEMENTATION
+- PMAV5-010: IMPLEMENTATION
+
+## TIPOS OFICIAIS DE SPRINT
+
+Existem apenas três tipos oficiais de Sprint:
+- DOCUMENTATION
+- AUDIT
+- IMPLEMENTATION
+
+Nenhum outro tipo poderá ser criado.
+
+## REGRAS DE BLOQUEIO E INTERRUPÇÃO
+
+Somente IMPLEMENTATION MODE poderá bloquear a execução.
+AUDIT MODE nunca bloqueia.
+DOCUMENTATION MODE nunca bloqueia.
+
+Durante Auditorias:
+Toda incerteza deverá ser registrada.
+Nunca utilizada para interromper a Sprint.
+
+## ENTREGÁVEIS OBRIGATÓRIOS POR TIPO
+
+Toda Sprint de AUDIT deverá obrigatoriamente produzir:
+- Evidências
+- Grafos
+- Matrizes
+- Componentes certificados
+- Componentes não certificados
+Sem executar alterações.
+
+Toda Sprint de IMPLEMENTATION deverá obrigatoriamente produzir:
+- Alteração mínima
+- Evidência
+- Testes
+- Rollback
+- Atualização documental
+
+## FASE DE EXECUÇÃO
+
+O PMAV5 entra oficialmente em fase de execução.
+A partir desta Sprint:
+Toda evolução ocorrerá exclusivamente através das Sprints técnicas.

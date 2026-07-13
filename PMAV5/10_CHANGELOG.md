@@ -10,3 +10,21 @@
 - **Verificação autorizada:** inspeção Git e documental; nenhum build, teste funcional, migration, deploy ou chamada de runtime.
 - **Resultado:** CP-000 `IMPLEMENTED`.
 - **Bloqueio:** CP-001 e PMAV5-001 não podem iniciar até homologação humana de CP-000.
+
+## PMAV5-GOV-1.0 — 2026-07-13
+
+Governança PMAV5 congelada.
+- **Versão:** 1.0
+- **Estado:** ESTÁVEL
+
+## PMAV5-001 — 2026-07-13
+
+- **Modo:** AUDIT.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `c55bee1b7f32774e52f2d68d1d5feaf79f06d17b`.
+- **Documentos criados:** `AUDITORIAS/PMAV5-001_ESTADO_OPERACIONAL_CERTIFICADO.md` e `SPRINTS/PMAV5-001_CERTIFICACAO_ESTADO_OPERACIONAL.md`.
+- **Documentos atualizados:** `07_CHECKPOINTS.md` e este changelog.
+- **Resultado:** CP-001 `COMPLETED`; componentes classificados com evidências, matrizes e grafo operacional.
+- **Não certificados:** ativação produtiva de runtimes externos, configuração integral PM2/cron, schema produtivo, flags não observadas e protocolo operacional 13 ausente.
+- **Alteração funcional/operacional/produção:** nenhuma.
+- **Verificação autorizada:** inspeção Git e documental; nenhum build, teste funcional, migration, deploy ou runtime proibido.

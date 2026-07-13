@@ -2,31 +2,29 @@
 
 Toda LLM deverá declarar que leu a Constituição antes da execução de qualquer Sprint.
 
-Antes de executar qualquer Sprint, toda LLM deve responder integralmente:
+Toda LLM deverá determinar obrigatoriamente o modo da Sprint antes da execução.
+Responder:
 
-- [ ] README do PMAV5 lido
-- [ ] Governança lida
-- [ ] Arquitetura Atual lida
-- [ ] Arquitetura Oficial lida
-- [ ] Autoridades lidas
-- [ ] Contratos lidos
-- [ ] Máquina de Estados lida
-- [ ] Princípios lidos
-- [ ] Checkpoints lidos
-- [ ] Dependências verificadas
-- [ ] ADRs vigentes lidos
-- [ ] Changelog lido
-- [ ] Sprint anterior homologada
-- [ ] Branch correta confirmada
-- [ ] Working tree revisado
-- [ ] Arquivos proibidos identificados
-- [ ] Rollback compreendido
-- [ ] Nenhum conflito aberto
+Modo:
+- AUDIT
+- IMPLEMENTATION
+- DOCUMENTATION
 
-Se qualquer item for negativo:
+Cada modo possui regras próprias.
 
-```text
-EXECUÇÃO BLOQUEADA
-```
+Toda Sprint obrigatoriamente deverá iniciar respondendo:
 
-A LLM deve registrar o item negativo, evidência e ação necessária; não pode inferir homologação, contornar dependência, repetir Sprint ou iniciar trabalho funcional. A resposta ao protocolo integra as evidências da Sprint.
+Tipo:
+- DOCUMENTATION
+- AUDIT
+- IMPLEMENTATION
+
+A partir dessa resposta aplicam-se exclusivamente as regras daquele modo.
+
+Toda LLM deverá:
+1. Ler a Constituição.
+2. Ler a Governança.
+3. Determinar o tipo da Sprint.
+4. Executar a Sprint.
+
+Nenhuma outra validação estrutural será criada.

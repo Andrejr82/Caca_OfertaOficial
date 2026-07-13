@@ -161,3 +161,65 @@ Nova Sprint específica
 Novo ADR
 ↓
 Homologação humana
+
+# CAPÍTULO II — DOS MODOS OFICIAIS DE EXECUÇÃO
+
+O PMAV5 possui exatamente três modos constitucionais de execução:
+
+## MODO 1 — AUDIT MODE
+
+**Objetivo:**
+Descobrir. Certificar. Documentar. Reconstruir. Mapear. Classificar.
+
+**É proibido:**
+corrigir, implementar, alterar, refatorar, executar deploy, executar build, executar Discovery, executar Oracle Worker, executar IA, executar publicação.
+
+Durante Auditorias:
+incertezas encontradas **NÃO** bloqueiam automaticamente a Sprint.
+Devem ser classificadas como:
+- NÃO CERTIFICADO
+- HIPÓTESE
+- DESCARTADO
+- CERTIFICADO
+
+Somente interromper quando existir:
+risco de alteração indevida ou violação da Constituição.
+
+## MODO 2 — IMPLEMENTATION MODE
+
+**Objetivo:**
+Executar alterações.
+
+**Pré-requisitos obrigatórios:**
+Todos os checkpoints anteriores homologados. Dependências satisfeitas. Rollback definido. Critérios de aceite definidos.
+Pode bloquear.
+
+## MODO 3 — DOCUMENTATION MODE
+
+**Objetivo:**
+Governança. ADRs. Constituição. Arquitetura. Relatórios. Checkpoints.
+
+Não altera runtime. Não altera código. Não altera produção.
+
+# CAPÍTULO III — DO CONGELAMENTO DA GOVERNANÇA (VERSÃO 1.0)
+
+## ARTIGO 11 — CONGELAMENTO V1.0
+Esta Constituição encontra-se congelada na versão 1.0.
+Nenhuma nova regra estrutural poderá ser adicionada durante a migração.
+Somente ADRs poderão alterar decisões arquiteturais.
+A Constituição somente poderá ser revisada após a conclusão integral do PMAV5.
+
+## ARTIGO 12 — VEDAÇÃO A NOVAS REGRAS
+Não serão mais criadas Sprints para evoluir Governança.
+Não serão mais criadas Sprints para alterar Constituição.
+Não serão mais criadas Sprints para alterar Checkpoints.
+Não serão mais criados novos Protocolos.
+A Governança está congelada.
+
+## ARTIGO 13 — IMUTABILIDADE DOCUMENTAL
+Nenhuma Sprint futura poderá modificar:
+- Constituição
+- Governança
+- Protocolos
+- Checkpoints
+Exceto mediante decisão humana explícita após o encerramento do PMAV5.
