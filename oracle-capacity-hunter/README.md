@@ -1,47 +1,53 @@
-# Oracle Capacity Hunter
+# Oracle Capacity Hunter v2
 
-Bot para monitoramento de disponibilidade de instâncias Free Tier na Oracle Cloud (OCI).
+Monitor operacional one-shot da VPS do Caça Oferta Oficial. Coleta somente métricas locais, metadata read-only da VM, PM2, scheduler e Git. Não cria nem altera recursos OCI, não usa IA e não chama marketplaces.
+
+## Arquitetura e fluxo
+
+`oracle-capacity-hunter.timer` executa o service a cada cinco minutos. Cada execução coleta CPU, RAM, disco, uptime, metadata OCI, processos PM2, reinícios, duplicidades, o único `cron.schedule` esperado no scraper e o SHA Git. O estado em `data/state.json` impede relatório diário duplicado e aplica cooldown aos alertas.
+
+O relatório é enviado uma vez entre 08:00–08:59 em `America/Sao_Paulo`. Alertas críticos são enviados no máximo uma vez por chave dentro de `ALERT_COOLDOWN_MINUTES`. O processo termina após cada verificação.
+
+Módulos:
+
+- `src/monitor/metrics.js`: métricas locais e metadata Oracle.
+- `src/monitor/alerts.js`: regras críticas e cooldown.
+- `src/monitor/report.js`: mensagens curtas em HTML Telegram.
+- `src/monitor/schedule.js`: horário e trava diária.
+- `src/monitor/state.js`: estado atômico local.
+- `src/telegram/bot.js`: envio HTTPS com timeout de 8 s.
 
 ## Instalação
 
-1. Clone o repositório
-2. Execute `npm install`
-3. Copie o arquivo `.env.example` para `.env`
-4. Preencha as configurações necessárias no arquivo `.env`
+Requisitos: Node.js 20, PM2 já operando para os serviços observados e systemd. Copie `.env.example` para `.env`, configure exclusivamente o token e chat do canal do monitor e mantenha o arquivo com permissão `600`.
 
-## Configuração
-
-### Como obter credenciais OCI
-1. Acesse o console da OCI
-2. Vá em Profile -> User Settings -> API Keys
-3. Gere uma nova chave ou adicione a sua existente
-4. Copie os dados fornecidos (Tenancy OCID, User OCID, Fingerprint, Region) para o arquivo `.env`
-5. Salve a chave privada localmente e adicione o caminho em `OCI_PRIVATE_KEY_PATH`
-6. Obtenha os OCIDs do Compartment, Subnet, e Availability Domain nas respectivas áreas de configuração (Networking, Compute)
-
-### Como criar um canal no Telegram
-1. Abra o Telegram
-2. Crie um novo Canal ou Grupo
-3. Crie um Bot pelo @BotFather e anote o Token (adicione em `TELEGRAM_BOT_TOKEN`)
-
-### Como adicionar o bot como administrador
-1. Vá nas configurações do Canal
-2. Adicione o seu Bot como Administrador com permissões de postagem
-
-### Como descobrir o CHAT_ID
-1. Adicione o bot a um grupo provisório ou envie uma mensagem para o canal.
-2. Acesse `https://api.telegram.org/bot<SEU_TOKEN>/getUpdates`
-3. Localize o `chat.id` nas mensagens enviadas (geralmente começa com um `-` para grupos e `-100` para canais).
-4. Insira este valor em `TELEGRAM_CHAT_ID`.
-
-### Como habilitar o envio
-Altere a variável no `.env` para `SEND_TELEGRAM_ALERTS=true`. 
-
-### Como executar o primeiro teste
-Com o `SEND_TELEGRAM_ALERTS=true` e o `TELEGRAM_CHAT_ID` configurado, inicie o bot para realizar o teste de envio e verificar logs de sucesso.
-
-### Como iniciar em produção
-Para produção e execução contínua via PM2:
 ```bash
-npm run pm2:start
+npm ci --omit=dev
+npm test
+sudo cp config/systemd/oracle-capacity-hunter.{service,timer} /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now oracle-capacity-hunter.timer
 ```
+
+Não habilite o service diretamente: o timer é o único owner.
+
+## Configuração OCI
+
+O monitor não recebe OCIDs nem credenciais. Como a VPS não possui permissão de billing, os campos `OCI_*` de custo são valores declarativos opcionais e só devem ser preenchidos após certificação read-only no Console/CLI. Vazios são exibidos como `INDETERMINADO`; isso produz status `ATENÇÃO`, nunca uma falsa garantia financeira.
+
+## Operação e testes controlados
+
+```bash
+npm run test:telegram  # exatamente uma mensagem simples
+npm run test:daily     # exatamente um relatório completo
+systemctl list-timers oracle-capacity-hunter.timer
+journalctl -u oracle-capacity-hunter.service -n 30 --no-pager
+```
+
+Alertas: serviço offline/ausente, metadata Oracle inacessível, RAM ou disco ≥90%, scheduler diferente de 1, aumento de reinícios, duplicidade, heartbeat >15 minutos ou custo/previsão/recurso faturável positivo confirmado.
+
+## Recuperação, troubleshooting e rollback
+
+Se o Telegram falhar, confirme apenas presença das variáveis, permissão do bot no canal, DNS e saída HTTPS; nunca imprima `.env`. Se não houver relatório, confira timer, último journal e `data/state.json`. Se PM2 aparecer ausente, execute como usuário `ubuntu` e confirme o daemon já existente, sem reiniciar os serviços observados.
+
+Rollback: desative somente `oracle-capacity-hunter.timer`, restaure o backup identificado no deploy, execute `daemon-reload` e reative o timer. O rollback não deve tocar `oracle-api`, `oracle-scraper` nem `whatsapp-bot`.

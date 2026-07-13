@@ -4,15 +4,12 @@
   "description": "Monitoramento de capacidade OCI com alertas no Telegram",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "pm2:start": "pm2 start config/pm2.config.js"
+    "start": "node src/index.js --run",
+    "test": "node --test test",
+    "test:telegram": "node src/index.js --test",
+    "test:daily": "node src/index.js --daily-test"
   },
   "dependencies": {
-    "oci-common": "^2.93.0",
-    "oci-core": "^2.93.0",
-    "dotenv": "^16.4.5",
-    "node-telegram-bot-api": "^0.65.0",
-    "winston": "^3.12.0",
-    "moment": "^2.30.1"
+    "dotenv": "^16.4.5"
   }
 }

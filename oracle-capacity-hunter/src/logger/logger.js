@@ -1,22 +1,17 @@
-const winston = require('winston');
+const fs = require('node:fs');
+const path = require('node:path');
 const config = require('../utils/config');
 
-const logger = winston.createLogger({
-  level: 'info',
-  format: winston.format.combine(
-    winston.format.timestamp({
-      format: 'YYYY-MM-DD HH:mm:ss'
-    }),
-    winston.format.printf(info => `${info.timestamp} ${info.level}: ${info.message}`)
-  ),
-  transports: [
-    new winston.transports.Console()
-  ]
-});
+const logDir = path.join(__dirname, '../../logs');
 
-if (config.logsEnabled) {
-  logger.add(new winston.transports.File({ filename: 'logs/error.log', level: 'error' }));
-  logger.add(new winston.transports.File({ filename: 'logs/combined.log' }));
+function write(level, message) {
+  const line = `${new Date().toISOString()} ${level}: ${message}`;
+  console[level === 'error' ? 'error' : 'log'](line);
+  if (config.logsEnabled) {
+    fs.mkdirSync(logDir, { recursive: true });
+    fs.appendFileSync(path.join(logDir, 'combined.log'), `${line}\n`);
+    if (level === 'error') fs.appendFileSync(path.join(logDir, 'error.log'), `${line}\n`);
+  }
 }
 
-module.exports = logger;
+module.exports = { info: (message) => write('info', message), error: (message) => write('error', message) };

@@ -1,0 +1,20 @@
+[Unit]
+Description=Oracle Capacity Hunter operational check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter
+EnvironmentFile=/home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter/.env
+ExecStart=/usr/bin/node src/index.js --run
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter/logs /home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter/data
+
+[Install]
+WantedBy=multi-user.target
