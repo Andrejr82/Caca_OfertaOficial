@@ -7,6 +7,7 @@ import { calculateFinalRankScore } from "@/lib/offers/score-v2";
 import { validateOfferForPersistence } from "@/core/scraper/product-validator";
 import { isCouponOffer } from "@/lib/coupons/presentation";
 import { generateInstagramMessage, generateTelegramMessage, generateWhatsAppMessage } from "@/lib/messages/generate";
+import { assertMercadoLivreSelected } from "@/lib/offers/mercadolivre-manual-curation";
 
 export async function POST(request: Request) {
   try {
@@ -39,6 +40,11 @@ export async function POST(request: Request) {
     }
 
     const offer = offerData as Offer;
+    try {
+      assertMercadoLivreSelected(offer);
+    } catch (error) {
+      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
+    }
     const couponOffer = isCouponOffer(offer);
     if (!couponOffer) {
       const offerValidation = validateOfferForPersistence({

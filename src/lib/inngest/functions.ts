@@ -109,7 +109,7 @@ export const runUserScrapingBackground = inngest.createFunction(
 
     // 1. Executa o descobrimento de tendências
     const offers = await step.run("discover-offers", async () => {
-      return await discoverAndIngestTrendingOffers(5, ["Mercado Livre", "Shopee", "Shein"], userId);
+      return await discoverAndIngestTrendingOffers(5, ["Shopee", "Shein"], userId);
     });
 
     if (offers.length === 0) {
