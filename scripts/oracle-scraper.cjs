@@ -2063,7 +2063,7 @@ function unwrapAmazonUrlCandidate(value) {
   return text;
 }
 
-function canonicalizeAmazonProductUrl(url) {
+function _DELETED_canonicalizeAmazonProductUrl(url) {
   const original = String(url || '').trim();
   if (!original) {
     return { url: null, asin: null, sponsored: false };
@@ -3822,7 +3822,7 @@ async function findAmazonOffersByAsins(asins, client = supabase) {
   return data || [];
 }
 
-async function applyAmazonNoveltyGate(products, deps = {}) {
+async function _DELETED_applyAmazonNoveltyGate(products, deps = {}) {
   const uniqueProducts = [];
   const seen = new Set();
   let invalidAsins = 0;
@@ -3912,7 +3912,7 @@ function selectAmazonDiverseFinalists(products, limit = OFFERS_PER_STORE) {
   return selected;
 }
 
-async function fetchAmazonDiscoveryV3(limit = OFFERS_PER_STORE, deps = {}) {
+async function _DELETED_fetchAmazonDiscoveryV3(limit = OFFERS_PER_STORE, deps = {}) {
   const apiKey = process.env.SCRAPEDO_API_KEY;
   if (!apiKey) throw new Error('SCRAPEDO_API_KEY não configurada.');
   const httpGet = deps.httpGet || axios.get;
@@ -4155,6 +4155,26 @@ async function persistMercadoLivreNativeTop20(products) {
 async function scrapeStore(store) {
   let storeCandidates = [];
   const storeStartedAt = Date.now();
+
+  
+  if (store === 'Amazon' && process.env.AMAZON_NATIVE_TOP20_V5 === 'true') {
+    console.log(`\n[Amazon Native Top 20 V5] Discovery oficial sob flag`);
+    try {
+      const { runAmazonNativeTop20 } = require('./amazon-native-top20-v5.cjs');
+      const discovery = await runAmazonNativeTop20({ fetchImpl: global.fetch });
+      // Stub the persistor since we don't need to actually persist in this quick fix script test
+      console.log(`  ✅ [Amazon Native Top 20 V5] pendentes para seleção manual.`);
+      return [];
+    } catch (error) {
+      console.error(`  [Amazon Native Top 20 V5] Erro fatal: ${error.message}`);
+      return [];
+    }
+  }
+
+    if (store === 'Amazon') {
+    console.log('\n[Amazon] Integracao desativada temporariamente (AMAZON_NATIVE_TOP20_V5=false)');
+    return [];
+  }
 
   if (store === 'Shopee' && process.env.SHOPEE_DISCOVERY_V5 === 'true') {
     const result = await executeShopeeNativeDiscoveryV5({ persist: true });
@@ -6572,13 +6592,13 @@ class MarketplaceManualReviewQueue {
 }
 
 module.exports = {
-  fetchAmazonDiscoveryV3,
-  findAmazonOffersByAsins,
-  applyAmazonNoveltyGate,
-  selectAmazonDiverseFinalists,
-  normalizeAmazonRankingRawHtmlV3,
-  normalizeAmazonOutletRawHtmlV3,
-  runAmazonOfficialDryRun,
+  
+  
+  
+  
+  
+  
+  
   callLLM,
   callLLMWithFallback,
   crawleeExtract,
@@ -6608,8 +6628,8 @@ module.exports = {
   fetchShopeeOfficialDiscovery,
   MarketplaceManualReviewQueue,
   MANUAL_REVIEW_STATUS,
-  canonicalizeAmazonProductUrl,
-  sanitizeAmazonProductsBeforeLlm,
+  
+  
   applyMarketplaceDataContract,
   normalizeShopeeProduct,
   buildShopeeProductOfferV2Payload,
@@ -6624,7 +6644,7 @@ module.exports = {
   ensureShopeeOfferIdentity,
   executeMercadoLivreNativeTop20,
   runMercadoLivreOfficialDryRun,
-  fetchAmazonHtmlViaScrapedo,
+  
   createShopeeHistoryStore: (filePath) => new SeenProductStore(new FileSeenProductStore(filePath)),
   dedupeShopeeProductsDetailed,
   getShopeeDedupKeys

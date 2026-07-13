@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
 import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
+import { rejectAmazonOfferAction, selectAmazonOfferAction } from "@/lib/offers/actions";
 
 export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
@@ -188,6 +189,13 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                 <div className="flex gap-2">
                   <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                </div>
+              )}
+
+              {offer.platform === "Amazon" && offer.status === "pending_manual_review" && (
+                <div className="flex gap-2">
+                  <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                  <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
                 </div>
               )}
 

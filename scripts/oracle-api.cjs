@@ -233,20 +233,8 @@ app.post('/api/netshoes/trends', async (req, res) => {
 });
 
 app.post('/api/amazon/trends', async (req, res) => {
-  const { token, query = 'ofertas', limit = 5 } = req.body || {};
-
-  if (!isAuthorized(token)) {
-    return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
-  }
-
-  try {
-    const { fetchAmazonProductsFromScrapedoApi } = require('./oracle-scraper.cjs');
-    const result = await fetchAmazonProductsFromScrapedoApi(query, limit);
-    return res.json({ success: true, products: result.products, telemetry: result.telemetry });
-  } catch (err) {
-    console.error(`[API] Erro em /api/amazon/trends: ${err.message || String(err)}`);
-    return res.status(500).json({ error: err.message || String(err) });
-  }
+  console.log('[API] Rota /api/amazon/trends desativada (Legado Amazon)');
+  return res.status(403).json({ error: 'Amazon Discovery API desativada.' });
 });
 
 app.listen(PORT, () => {
