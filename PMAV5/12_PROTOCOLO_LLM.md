@@ -1,5 +1,7 @@
 # Protocolo Obrigatório para LLMs
 
+Toda LLM deverá declarar que leu a Constituição antes da execução de qualquer Sprint.
+
 Antes de executar qualquer Sprint, toda LLM deve responder integralmente:
 
 - [ ] README do PMAV5 lido

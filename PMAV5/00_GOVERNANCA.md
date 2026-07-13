@@ -44,3 +44,7 @@ A branch única do programa é `codex/pmav5-architecture-unification`, nascida d
 Os únicos status de checkpoint são `NOT_STARTED`, `IN_PROGRESS`, `BLOCKED`, `IMPLEMENTED`, `VALIDATED`, `HOMOLOGATED` e `ROLLED_BACK`. Falha fechada é obrigatória: incerteza, evidência ausente, conflito ou dependência não homologada bloqueia a execução.
 
 Rollback documental preserva o histórico por novo commit e, quando alterar decisão, por novo ADR. Nunca reescreve a história compartilhada. Rollback funcional será definido e autorizado na Sprint correspondente.
+
+## AUTORIDADE CONSTITUCIONAL
+
+Toda decisão do Programa deverá respeitar a Constituição.

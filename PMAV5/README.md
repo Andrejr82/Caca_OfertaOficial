@@ -65,3 +65,7 @@ Nenhuma decisão arquitetural vigente pode ser desfeita, contornada ou substitu�
 - evidências;
 - homologação;
 - rollback.
+
+## HIERARQUIA DOCUMENTAL
+
+CONSTITUICAO_PMAV5.md é a autoridade máxima do Programa.
