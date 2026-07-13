@@ -3,7 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { logger } from "@/lib/utils/logger";
-import { assertShopeePublishable } from "@/lib/offers/shopee-manual-curation";
+import { prepareOfferForPublication } from "@/lib/offers/shopee-manual-curation";
 
 function isValidRemoteImageUrl(value: string | null | undefined) {
   return /^https?:\/\//i.test(String(value || "").trim());
@@ -96,12 +96,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Este post não é do canal WhatsApp." }, { status: 400 });
     }
 
-    const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
+    let offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
     if (!offer) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
     }
     try {
-      assertShopeePublishable(offer);
+      offer = await prepareOfferForPublication(offer, async (pendingOffer) => {
+        const { error: selectionError } = await supabase
+          .from("offers")
+          .update({ status: "selected", updated_at: new Date().toISOString() })
+          .eq("id", pendingOffer.id)
+          .eq("user_id", user.id)
+          .eq("platform", pendingOffer.platform)
+          .eq("status", "pending_manual_review");
+        if (selectionError) throw new Error(selectionError.message);
+
+        const { data: persistedOffer, error: confirmationError } = await supabase
+          .from("offers")
+          .select("*")
+          .eq("id", pendingOffer.id)
+          .eq("user_id", user.id)
+          .eq("platform", pendingOffer.platform)
+          .single();
+        if (confirmationError || !persistedOffer) {
+          throw new Error(confirmationError?.message || "Não foi possível confirmar selected.");
+        }
+        return persistedOffer;
+      });
     } catch (error) {
       return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
     }
