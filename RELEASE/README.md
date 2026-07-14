@@ -20,6 +20,6 @@ graph TD
 ```
 
 ## STATUS ATUAL
-- **Fase:** R5.03 - Production Cutover (Concluída)
-- **Status:** PASS (Arquitetura V5 promovida oficialmente para produção)
-- **Próxima Etapa:** R5.04 - Deploy
+- **Fase:** R5.04 - Deploy (Concluída)
+- **Status:** PASS (Arquitetura V5 implantada e verificada — 355/355 testes aprovados)
+- **Próxima Etapa:** R5.05 - Hypercare
