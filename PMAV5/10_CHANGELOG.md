@@ -138,3 +138,16 @@ Governança PMAV5 congelada.
 - **Qualidade:** ESLint direcionado aprovado; typecheck direcionado com 19 arquivos e zero diagnósticos; typecheck global mantém somente dívida preexistente fora do diff.
 - **Resultado:** CP-009 `COMPLETED`; Discovery, Estado, IA e Publicação possuem uma única autoridade executável.
 - **Escopo negativo:** nenhum deploy, publicação real, IA real, Discovery real, banco/schema/migration, secret, `.env`, produção, PM2 ou Scheduler foi alterado/executado.
+
+## PMAV5-010 — 2026-07-14
+
+- **Modo:** IMPLEMENTATION, M-08 Legado Arquivado e Removido.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `0099c01c74ea883c011caf267a7729230b367c7c`.
+- **Remoção:** 95 arquivos e 15.950 linhas legadas; Oracle V3/V4, providers/gateways IA paralelos, Generic Publisher, scrapers Next/local, flags e testes/diagnósticos órfãos.
+- **Oracle:** `oracle-scraper.cjs` reduzido ao Discovery-Only Native V5 de Shopee, Mercado Livre e Amazon; endpoints externos antigos preservados em 410.
+- **Preservação:** serviços oficiais, contratos, transportes, clientes Inngest/Extension/GitHub e itens com caller externo não certificado.
+- **Testes:** regressão serial com 332 testes; suites arquiteturais e marketplaces aprovadas; ESLint, typecheck direcionado, parser CJS e `git diff --check` aprovados.
+- **Typecheck global:** mantém somente dívida preexistente fora do diff.
+- **Resultado:** CP-010 `COMPLETED`; zero autoridade paralela executável certificada.
+- **Escopo negativo:** nenhum deploy, publicação real, IA real, Discovery real, banco/schema/migration, `.env` real, segredo, produção, PM2, Oracle VPS ou Vercel foi alterado/executado.

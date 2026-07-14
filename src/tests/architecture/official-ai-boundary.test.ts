@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it, vi } from "vitest";
-import { analyzeConversionPotential, callLLM, generateOfferAnalysis } from "@/lib/ai/groq";
+import { describe, expect, it } from "vitest";
 
 describe("fronteira oficial de IA", () => {
   it("a rota oficial chama somente generateOfficialAI e não persiste domínio diretamente", () => {
@@ -22,7 +21,6 @@ describe("fronteira oficial de IA", () => {
 
     for (const path of [
       "src/app/api/ai/generate/route.ts",
-      "src/lib/ai/groq.ts",
       "src/core/ai/official-ai-service.ts"
     ]) {
       const source = readFileSync(path, "utf8");
@@ -30,27 +28,10 @@ describe("fronteira oficial de IA", () => {
     }
   });
 
-  it("gateways legados falham fechados antes de qualquer fetch", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch");
-    const legacyOffer = {
-      id: "offer-1", user_id: "tenant-1", platform: "Shopee", product_name: "Produto",
-      original_url: "https://example.com/1", image_url: "https://example.com/1.jpg",
-      current_price: 10, old_price: 20, category: "Geral", status: "selected"
-    } as never;
-    const disabled = "LEGACY_AI_DISABLED: use generateOfficialAI";
-
-    await expect(callLLM("system", "user", {})).rejects.toThrow(disabled);
-    await expect(generateOfferAnalysis(legacyOffer, { telegram: "t", instagram: "i", whatsapp: "w" })).rejects.toThrow(disabled);
-    await expect(analyzeConversionPotential(legacyOffer, 7)).rejects.toThrow(disabled);
-    expect(fetchSpy).not.toHaveBeenCalled();
-    fetchSpy.mockRestore();
-  });
-
   it("Oracle e Discovery não importam a composição nem providers oficiais", () => {
     for (const path of [
       "scripts/oracle-scraper.cjs",
-      "scripts/oracle-worker-discovery-only.cjs",
-      "src/lib/affiliates/scraper.ts"
+      "scripts/oracle-worker-discovery-only.cjs"
     ]) {
       const source = readFileSync(path, "utf8");
       expect(source).not.toContain("createOfficialAIServiceDependencies");

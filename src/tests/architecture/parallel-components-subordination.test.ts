@@ -13,34 +13,15 @@ const officialClients = {
 } as const;
 
 const blockedComponents = [
-  "src/lib/publisher/index.ts",
   "src/lib/publish/actions.ts",
-  "src/lib/publish/automated.ts",
-  "src/lib/publish/router.ts",
   "src/app/api/scraper/cron/route.ts",
   "src/app/api/scraper/trends/route.ts",
   "src/app/api/scraper/coupons/route.ts",
   "src/app/api/scraper/import/route.ts",
-  "src/app/api/instagram/poll-comments/route.ts",
-  "scripts/ai-processor.cjs",
-  "scripts/backfill-approved-posts.cjs",
-  "scripts/sanitize-posts-integrity.cjs",
-  "scripts/panel-cleanup-apply.cjs",
-  "scripts/crawlee_groq_test.cjs",
-  "scripts/diagnose-cerebras-fallback.cjs",
-  "scripts/test-extract.cjs",
-  "scripts/create_drive_structure.gs"
+  "src/app/api/instagram/poll-comments/route.ts"
 ] as const;
 
 const parallelComponents = [...Object.keys(officialClients), ...blockedComponents];
-
-const legacyAIGateways = [
-  "src/core/llm/groq.ts",
-  "src/core/llm/cerebras.ts",
-  "src/core/llm/groq.js",
-  "src/core/llm/cerebras.js",
-  "src/core/llm/factory.js"
-] as const;
 
 describe("PMAV5-009 parallel component subordination", () => {
   it.each(Object.entries(officialClients))("%s consumes only its official command boundary", (path, boundaries) => {
@@ -69,12 +50,6 @@ describe("PMAV5-009 parallel component subordination", () => {
     const component = source(path);
     expect(component).not.toMatch(/sendTelegram(?:Message|Photo)|whatsappService|sendMedia\(|await\s+publish(?:Video)?To(?:Instagram|Facebook)|from\s+["'][^"']*(?:telegram|instagram|facebook)\/(?:client|index)/);
     expect(component).not.toMatch(/api\.telegram\.org|graph\.facebook\.com|media_publish/);
-  });
-
-  it.each(legacyAIGateways)("%s is fail-closed before provider access", (path) => {
-    const gateway = source(path);
-    expect(gateway).toContain("PARALLEL_COMPONENT_DISABLED");
-    expect(gateway).not.toMatch(/fetch\(|axios\.|api\.groq\.com|api\.cerebras\.ai|chat\/completions/);
   });
 
   it("GitHub Actions delegates without content, media, database or transport authority", () => {

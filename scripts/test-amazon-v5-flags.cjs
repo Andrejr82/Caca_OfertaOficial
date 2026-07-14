@@ -27,8 +27,3 @@ test('/api/amazon/trends is fail-closed', () => {
   const source = fs.readFileSync(path.join(__dirname, 'oracle-api.cjs'), 'utf8');
   assert.match(source, /res\.status\(403\)\.json\(\{\s*error:\s*'Amazon Discovery API desativada\.'\s*\}\)/);
 });
-
-test('Amazon frontend scraping functions are stubbed out', () => {
-  const source = fs.readFileSync(path.join(__dirname, '../src/lib/affiliates/scraper.ts'), 'utf8');
-  assert.match(source, /export async function fetchAmazonTrendingProducts[\s\S]*?return\s*\[\];/);
-});

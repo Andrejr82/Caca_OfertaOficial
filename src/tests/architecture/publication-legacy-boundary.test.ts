@@ -5,12 +5,6 @@ import { describe, expect, it } from "vitest";
 const source = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 
 describe("publication legacy and parallel boundaries", () => {
-  it("blocks the generic publisher fail-closed before every transport", () => {
-    const publisher = source("src/lib/publisher/index.ts");
-    expect(publisher).toContain("LEGACY_PUBLISHER_DISABLED");
-    expect(publisher).not.toMatch(/sendTelegram|whatsappService|instagramService|facebookService|tiktokService/);
-  });
-
   it("keeps quick publication actions fail-closed", () => {
     const actions = source("src/lib/publish/actions.ts");
     expect(actions).toContain("PARALLEL_COMPONENT_DISABLED");

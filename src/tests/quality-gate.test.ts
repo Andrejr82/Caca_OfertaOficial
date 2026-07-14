@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { evaluateQualityGate } from "@/lib/publish/quality-gate";
-import type { LinkMetadata } from "@/lib/publish/scraper";
+import type { LinkMetadata } from "@/lib/publish/quality-gate";
 
 describe("Quality Gate", () => {
   it("rejects valid product link if antibot triggers", () => {

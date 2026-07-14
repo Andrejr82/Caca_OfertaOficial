@@ -14,22 +14,10 @@ app.use(express.json());
 
 const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
-const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const LEGACY_ENDPOINT_DISABLED = 'LEGACY_ENDPOINT_DISABLED: Oracle API is a technical gateway; Discovery belongs to the Oracle Worker';
 
 function isAuthorized(token) {
   return token === API_KEY;
-}
-
-function normalizeShopeeComparableUrl(url) {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    parsed.search = "";
-    parsed.hash = "";
-    return parsed.toString().replace(/\/$/, "");
-  } catch {
-    return String(url).trim().replace(/\/$/, "");
-  }
 }
 
 function detectMarketplaceFromUrl(url) {
@@ -49,12 +37,6 @@ app.post('/api/scrape', async (req, res) => {
   }
 
   const marketplace = detectMarketplaceFromUrl(url);
-  const mode = process.env.SCRAPER_MODE || 'LOCAL';
-  if (mode === 'LOCAL' && process.platform !== 'win32' && marketplace !== 'Amazon') {
-    console.log(`[API] Bloqueado: Tentativa de scraping na Oracle enquanto SCRAPER_MODE=LOCAL`);
-    return res.status(403).json({ error: 'Scraping on Oracle is disabled in LOCAL mode. The Notebook is responsible for scraping.' });
-  }
-
   if (!url) {
     return res.status(400).json({ error: 'Missing url param' });
   }
@@ -149,87 +131,30 @@ app.post('/api/scrape', async (req, res) => {
 });
 
 app.post('/api/shopee/trends', async (req, res) => {
-  const { token, category = 'Todas', limit = 5 } = req.body || {};
+  const { token } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
-
-  try {
-    const { runShopeeOfficialPipeline, executeShopeeNativeDiscoveryV5 } = require('./oracle-scraper.cjs');
-    if (process.env.SHOPEE_DISCOVERY_V5 === 'true') {
-      const result = await executeShopeeNativeDiscoveryV5({ persist: true });
-      return res.json({
-        success: true,
-        candidates: [],
-        telemetry: {
-          pipeline: 'ShopeeDiscoveryV5',
-          categories: result.categories.length,
-          calls: result.calls,
-          final: result.metrics.final,
-          aiCalled: false,
-          postsCreated: 0
-        }
-      });
-    }
-    const result = await runShopeeOfficialPipeline(category, limit);
-    return res.json({
-      success: true,
-      candidates: result?.candidates || [],
-      telemetry: result?.telemetry || null
-    });
-  } catch (err) {
-    console.error('[API] Erro em /api/shopee/trends:', err);
-    return res.status(500).json({ error: err.message || String(err) });
-  }
+  return res.status(410).json({ success: false, code: 'LEGACY_ENDPOINT_DISABLED', error: LEGACY_ENDPOINT_DISABLED });
 });
 
 app.post('/api/shopee/product', async (req, res) => {
-  const { token, productUrl } = req.body || {};
+  const { token } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
-
-  if (!productUrl) {
-    return res.status(400).json({ error: 'Missing productUrl param' });
-  }
-
-  try {
-    const { runShopeeOfficialPipeline, cleanProductUrl } = require('./oracle-scraper.cjs');
-    const normalizedTargetUrl = normalizeShopeeComparableUrl(cleanProductUrl(productUrl) || productUrl);
-    const itemMatch = String(productUrl).match(/-i\.(\d+)\.(\d+)/i);
-    const targetItemId = itemMatch?.[2] || null;
-    const { candidates } = await runShopeeOfficialPipeline('Todas', 500);
-    const matched = (candidates || []).find((candidate) => {
-      const productLink = normalizeShopeeComparableUrl(candidate.productLink);
-      const affiliateLink = normalizeShopeeComparableUrl(candidate.affiliateLink);
-      const itemId = candidate.marketplaceProductId ? String(candidate.marketplaceProductId) : null;
-      return productLink === normalizedTargetUrl || affiliateLink === normalizedTargetUrl || (targetItemId && itemId === targetItemId);
-    }) || null;
-
-    return res.json({ success: true, candidate: matched });
-  } catch (err) {
-    console.error('[API] Erro em /api/shopee/product:', err);
-    return res.status(500).json({ error: err.message || String(err) });
-  }
+  return res.status(410).json({ success: false, code: 'LEGACY_ENDPOINT_DISABLED', error: LEGACY_ENDPOINT_DISABLED });
 });
 
 app.post('/api/netshoes/trends', async (req, res) => {
-  const { token, category = 'oferta', limit = 5 } = req.body || {};
+  const { token } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
-
-  try {
-    const { fetchNetshoesProductsFromRakuten } = require('./oracle-scraper.cjs');
-    const products = await fetchNetshoesProductsFromRakuten(category, limit);
-    return res.json({ success: true, products: products || [] });
-  } catch (err) {
-    console.error('[API] Erro em /api/netshoes/trends:', err);
-    return res.status(500).json({ error: err.message || String(err) });
-  }
+  return res.status(410).json({ success: false, code: 'LEGACY_ENDPOINT_DISABLED', error: LEGACY_ENDPOINT_DISABLED });
 });
 
 app.post('/api/amazon/trends', async (req, res) => {

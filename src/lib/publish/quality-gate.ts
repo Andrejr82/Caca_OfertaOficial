@@ -1,5 +1,19 @@
-import { LinkMetadata } from "./scraper";
+import type { Platform } from "@/types/domain";
 import { validateOfferForPersistence } from "@/core/scraper/product-validator";
+
+export interface LinkMetadata {
+  title: string;
+  platform: Platform;
+  imageUrl?: string;
+  price?: number;
+  finalUrl?: string;
+  imageSource?: string;
+  confidenceScore?: number;
+  extractionDate?: string;
+  sold_quantity?: number;
+  available_quantity?: number;
+  official_store_id?: number | string | null;
+}
 
 export type PageClassification =
   | "VALID_PRODUCT"
