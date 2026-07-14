@@ -17,6 +17,7 @@ import { publishToInstagram } from "@/lib/instagram/client";
 import { publishToFacebook } from "@/lib/platforms/facebook";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { OfficialPublicationStateAdapter, SupabaseOfficialPublicationAdapter } from "./supabase-official-publication-adapter";
+import { createServerObservabilityDependencies, PublicationObservabilityAuditAdapter } from "@/lib/observability";
 
 export class OfficialPublicationTransportRegistry implements PublicationTransportRegistryPort {
   private readonly transports: Map<OfficialPublicationChannel, PublicationTransportPort>;
@@ -109,7 +110,7 @@ export function createOfficialPublicationServiceDependencies(client: SupabaseCli
     receipts: adapter,
     reservations: adapter,
     state: new OfficialPublicationStateAdapter(stateDependencies),
-    audit: adapter,
+    audit: new PublicationObservabilityAuditAdapter(adapter, createServerObservabilityDependencies()),
     clock: { now: () => new Date().toISOString() },
     uuid: { generate: () => randomUUID() }
   };

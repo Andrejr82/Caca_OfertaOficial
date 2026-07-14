@@ -73,13 +73,43 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
+  const startedAt = Date.now();
+  const executionId = crypto.randomUUID();
+  const safeObserve = async (eventType, details = {}) => {
+    if (typeof observe !== 'function') return;
+    try {
+      await observe(Object.freeze({
+        eventVersion: 'pmav5.observability/v1',
+        eventId: crypto.randomUUID(),
+        eventType,
+        timestamp: new Date().toISOString(),
+        service: 'oracle-worker',
+        component: 'discovery-only',
+        environment: process.env.NODE_ENV || 'unknown',
+        commandId: null,
+        idempotencyKey: null,
+        correlationId,
+        causationId: null,
+        executionId,
+        tenantId,
+        ...details,
+      }));
+    } catch {
+      // Telemetry is best-effort and must never change Discovery behavior.
+    }
+  };
+  await safeObserve('discovery.started');
+  await safeObserve('worker.heartbeat');
   const summaries = [];
-  for (const marketplace of MARKETPLACES) {
-    const products = await discover(marketplace);
+  try {
+    for (const marketplace of MARKETPLACES) {
+      const marketplaceStartedAt = Date.now();
+      await safeObserve('discovery.marketplace.started', { marketplace });
+      const products = await discover(marketplace);
     if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
     const uniqueProducts = [];
     const seenSourceItems = new Set();
@@ -112,21 +142,44 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     if (persisted?.state !== FINAL_STATE) {
       throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
     }
-    summaries.push(Object.freeze({
-      marketplace,
-      discovered: products.length,
-      duplicatesRejected,
-      rejected,
-      persisted: Number(persisted.accepted || 0),
-      state: FINAL_STATE,
-    }));
+      const summary = Object.freeze({
+        marketplace,
+        discovered: products.length,
+        duplicatesRejected,
+        rejected,
+        persisted: Number(persisted.accepted || 0),
+        state: FINAL_STATE,
+      });
+      summaries.push(summary);
+      await safeObserve('discovery.marketplace.completed', {
+        marketplace,
+        finalState: FINAL_STATE,
+        durationMs: Date.now() - marketplaceStartedAt,
+        metadata: summary,
+      });
+    }
+  } catch (error) {
+    await safeObserve('discovery.failed', {
+      result: 'failed',
+      severity: 'ERROR',
+      errorCode: 'DISCOVERY_CYCLE_FAILED',
+      failureStage: 'discovery',
+      durationMs: Date.now() - startedAt,
+    });
+    throw error;
   }
 
-  return Object.freeze({
+  const result = Object.freeze({
     correlationId,
     marketplaces: Object.freeze(summaries),
     finalState: FINAL_STATE,
   });
+  await safeObserve('discovery.completed', {
+    result: 'success',
+    finalState: FINAL_STATE,
+    durationMs: Date.now() - startedAt,
+  });
+  return result;
 }
 
 module.exports = {

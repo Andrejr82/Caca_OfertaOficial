@@ -151,3 +151,14 @@ Governança PMAV5 congelada.
 - **Typecheck global:** mantém somente dívida preexistente fora do diff.
 - **Resultado:** CP-010 `COMPLETED`; zero autoridade paralela executável certificada.
 - **Escopo negativo:** nenhum deploy, publicação real, IA real, Discovery real, banco/schema/migration, `.env` real, segredo, produção, PM2, Oracle VPS ou Vercel foi alterado/executado.
+
+## PMAV5-011 — 2026-07-14
+
+- **Modo:** IMPLEMENTATION, M-09 Observabilidade, Recuperação e Rastreabilidade End-to-End.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `75bb21c3b71063eae25487007d85726bdd020b64`.
+- **Código:** núcleo `src/core/observability/` contendo catálogo, eventos, métricas, health, recovery e reconciliação. Adapters `integration_logs` atualizados.
+- **Instrumentação:** instrumentação mínima nos módulos oficiais de State, AI, Publication, e Oracle Worker, preservando `audit_port` end-to-end.
+- **Testes:** 22 testes Vitest aprovados em 4 arquivos da camada, provando isolamento da camada. ESLint e typecheck direcionados aprovados.
+- **Resultado:** CP-011 `COMPLETED`; implementados endpoints `health` e `readiness`. Observabilidade 100% read-only garantida. Replay delegado aos serviços oficiais, rastreável e idempotente.
+- **Escopo negativo:** nenhum provider paralelo criado, nenhum writer paralelo criado. Nenhuma IA nova. Nenhuma mudança na base de dados ou regras de acesso. Nenhum deploy real executado.

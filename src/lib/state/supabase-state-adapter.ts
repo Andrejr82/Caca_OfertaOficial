@@ -10,6 +10,7 @@ import type {
 import type { CompareAndSetInput } from "@/core/state/types";
 import type { IdempotencyBeginResult } from "@/core/state/ports/idempotency-port";
 import { offerStateVersion, postStateVersion } from "./official-state-service";
+import { createServerObservabilityDependencies, StateObservabilityAuditAdapter } from "@/lib/observability";
 
 interface PendingTransition {
   fingerprint: string;
@@ -215,7 +216,7 @@ export function createSupabaseStateDependencies(client: SupabaseClient, tenantId
   const adapter = new SupabaseStateAdapter(client, tenantId);
   return {
     repository: adapter,
-    audit: adapter,
+    audit: new StateObservabilityAuditAdapter(adapter, createServerObservabilityDependencies()),
     idempotency: adapter,
     clock: { now: () => new Date().toISOString() },
     uuid: { generate: () => crypto.randomUUID() }

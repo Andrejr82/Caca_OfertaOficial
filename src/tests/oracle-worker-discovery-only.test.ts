@@ -15,6 +15,26 @@ function functionSource(name: string): string {
 }
 
 describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
+  it("emite eventos correlacionados sem alterar o resultado", async () => {
+    const { FINAL_STATE, runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const events: Array<Record<string, unknown>> = [];
+    const result = await runDiscoveryOnlyCycle({
+      tenantId: "tenant-1",
+      correlationId: "correlation-observed",
+      requestedAt: "2026-07-14T12:00:00.000Z",
+      discover: async () => [],
+      persist: async () => ({ state: FINAL_STATE, accepted: 0 }),
+      observe: async (event: Record<string, unknown>) => { events.push(event); }
+    });
+
+    expect(result.finalState).toBe(FINAL_STATE);
+    expect(events.map((event) => event.eventType)).toEqual(expect.arrayContaining([
+      "discovery.started", "discovery.marketplace.started",
+      "discovery.marketplace.completed", "discovery.completed", "worker.heartbeat"
+    ]));
+    expect(events.every((event) => event.correlationId === "correlation-observed")).toBe(true);
+  });
+
   it("rejeita Candidate V1 com preço original inferior ao preço atual", () => {
     const { createCandidateV1 } = require("../../scripts/oracle-worker-discovery-only.cjs");
     expect(() => createCandidateV1({
@@ -74,7 +94,8 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     expect(result.marketplaces).toHaveLength(3);
     expect(result.finalState).toBe("pending_manual_review");
 
-    for (const [ingestions] of persist.mock.calls) {
+    for (const [ingestionsRaw] of persist.mock.calls) {
+      const ingestions = ingestionsRaw as any[];
       expect(ingestions).toHaveLength(1);
       expect(ingestions[0]).toMatchObject({
         contractVersion: "pmav5.ingestion/v1",

@@ -4,6 +4,7 @@ import { CerebrasOfficialAIProvider } from "@/core/ai/providers/cerebras-provide
 import { GroqOfficialAIProvider } from "@/core/ai/providers/groq-provider";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { withSupabaseOfficialAIAdapters } from "./supabase-official-ai-adapter";
+import { AIObservabilityAuditAdapter, createServerObservabilityDependencies } from "@/lib/observability";
 
 class OfficialAIProviderRegistry implements AIProviderRegistryPort {
   private readonly providers = new Map<"groq" | "cerebras", AIProviderPort>();
@@ -33,7 +34,7 @@ class OfficialAIProviderRegistry implements AIProviderRegistryPort {
 }
 
 export function createOfficialAIServiceDependencies(client: SupabaseClient, tenantId: string) {
-  return withSupabaseOfficialAIAdapters(
+  const dependencies = withSupabaseOfficialAIAdapters(
     client,
     tenantId,
     createSupabaseStateDependencies(client, tenantId),
@@ -42,4 +43,11 @@ export function createOfficialAIServiceDependencies(client: SupabaseClient, tena
       clock: { now: () => new Date().toISOString() }
     }
   );
+  return {
+    ...dependencies,
+    audit: new AIObservabilityAuditAdapter(
+      dependencies.audit,
+      createServerObservabilityDependencies()
+    )
+  };
 }
