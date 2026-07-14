@@ -56,7 +56,8 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postId: post.id,
-          content: caption
+          offerId: post.offers.id,
+          requestSource: "whatsapp-dashboard"
         })
       });
       const data = await response.json();

@@ -22,7 +22,7 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 | CP-005 | M-03 Oracle Worker Discovery-Only | **COMPLETED** | `AUDITORIAS/PMAV5-005_ORACLE_WORKER_DISCOVERY_ONLY.md` |
 | CP-006 | M-04 Ingestão e Curadoria | **COMPLETED** | `AUDITORIAS/PMAV5-006_CURADORIA_INGESTAO_OFICIAL.md` |
 | CP-007 | M-05 Serviço Oficial de IA e Posts | **COMPLETED** | `AUDITORIAS/PMAV5-007_SERVICO_OFICIAL_IA.md` |
-| CP-008 | M-06 Publicação | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
+| CP-008 | M-06 Serviço Oficial de Publicação | **COMPLETED** | `AUDITORIAS/PMAV5-008_SERVICO_OFICIAL_PUBLICACAO.md` |
 | CP-009 | M-07 Fluxos Paralelos | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
 | CP-010 | M-08 Legado | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
 | CP-011 | M-09 Observabilidade | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
@@ -37,6 +37,7 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 - CP-005 registra o Oracle Worker Discovery-Only, com Shopee, Mercado Livre e Amazon encerrando em `pending_manual_review`.
 - CP-006 registra Curadoria, Aprovação, Rejeição e Publicação do runtime oficial exclusivamente pelo State Service, com CAS, idempotência e AuditPort.
 - CP-007 registra o Official AI Service como única autoridade oficial de geração e criação de posts draft, exclusivamente após `selected` e com aprovação pelo State Service.
+- CP-008 registra o Official Publication Service como única autoridade das quatro rotas oficiais, com receipts anteriores às transições, transportes puros, idempotência, concorrência e reconciliação sem reenvio.
 
 ## Regras obsoletas
 

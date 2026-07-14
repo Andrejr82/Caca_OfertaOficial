@@ -30,8 +30,10 @@ describe("official state writers", () => {
     expect(source("src/lib/ai/official/supabase-official-ai-adapter.ts")).toContain("transitionOfficialOfferState");
 
     for (const path of officialCallers.filter((item) => item.includes("/publish/") && item.includes("/api/"))) {
-      expect(source(path)).toContain("completeOfficialPublication");
+      expect(source(path)).toContain("publishOfficialPost");
     }
-    expect(source("src/lib/state/official-publication-service.ts")).toContain("transitionOfficialPostState");
+    const publicationStateAdapter = source("src/lib/publication/official/supabase-official-publication-adapter.ts");
+    expect(publicationStateAdapter).toContain("transitionOfficialPostState");
+    expect(publicationStateAdapter).toContain("transitionOfficialOfferState");
   });
 });

@@ -101,7 +101,8 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           postId: post.id,
-          content: caption
+          offerId: post.offers.id,
+          requestSource: "instagram-dashboard"
         })
       });
       const data = await response.json();

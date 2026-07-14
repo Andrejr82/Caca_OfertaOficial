@@ -1,120 +1,52 @@
 import { NextResponse } from "next/server";
+import { publishOfficialPost, type OfficialPublicationCommand } from "@/core/publication";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { publishToInstagram } from "@/lib/instagram/client";
-import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
-import { completeOfficialPublication } from "@/lib/state/official-publication-service";
-import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
+import {
+  createOfficialPublicationServiceDependencies,
+  publicationIdempotencyKey,
+  publicationPayloadReference
+} from "@/lib/publication/official/create-official-publication-service";
+
+type PublicationBody = {
+  postId?: string; offerId?: string; commandId?: string; idempotencyKey?: string;
+  correlationId?: string; causationId?: string | null; requestedAt?: string; requestSource?: string;
+};
+
+function rejectionStatus(code: string) {
+  if (code.endsWith("NOT_FOUND")) return 404;
+  if (code === "TRANSPORT_FAILED") return 502;
+  if (code.startsWith("INVALID_")) return 400;
+  return 409;
+}
 
 export async function POST(request: Request) {
   try {
-    const { postId, content } = (await request.json()) as { postId?: string; content?: string };
-    if (!postId) {
-      return NextResponse.json({ ok: false, message: "postId é obrigatório." }, { status: 400 });
-    }
+    const body = await request.json() as PublicationBody;
+    if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
+    const client = await createServerSupabaseClient();
+    if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    const supabase = await createServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
-    }
-
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
-    }
-
-    // 1. Carrega o post e a oferta associada
-    const { data: post, error: postError } = await supabase
-      .from("posts")
-      .select("*, offers(*)")
-      .eq("id", postId)
-      .neq("status", "deleted")
-      .single();
-
-    if (postError || !post) {
-      return NextResponse.json({ ok: false, message: "Post não encontrado." }, { status: 404 });
-    }
-
-    if (post.channel !== "instagram") {
-      return NextResponse.json({ ok: false, message: "Este post não é do canal Instagram." }, { status: 400 });
-    }
-
-    const offerData = post.offers;
-    if (!offerData) {
-      return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
-    }
-
-    // O Supabase pode retornar a relação como um array dependendo de como a foreign key foi resolvida.
-    const offer = Array.isArray(offerData) ? offerData[0] : offerData;
-    if (offer.status !== "approved" || post.status !== "draft") {
-      return NextResponse.json({ ok: false, message: "Publicação exige oferta approved e post draft." }, { status: 409 });
-    }
-
-    const couponOffer = isCouponOffer(offer);
-    const imageUrl = couponOffer ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
-    if (!imageUrl) {
-      return NextResponse.json({ 
-        ok: false, 
-        message: "O produto não possui uma URL de imagem. Para publicar no Instagram, é obrigatório definir uma imagem." 
-      }, { status: 422 });
-    }
-
-    // O usuário pode ter editado o texto na tela antes de aprovar
-    const finalContent = content || post.content;
-
-    if (content && content !== post.content) {
-      await supabase
-        .from("posts")
-        .update({ content: finalContent })
-        .eq("id", post.id);
-    }
-
-    let publishCaption = finalContent;
-    if (finalContent.includes("=== STORIES SUGERIDOS ===")) {
-      publishCaption = finalContent.split("=== STORIES SUGERIDOS ===")[0].trim();
-    }
-
-    if (couponOffer) {
-      const externalId = await publishToInstagram(imageUrl, publishCaption);
-
-      await completeOfficialPublication({
-        tenantId: user.id,
-        actorId: "nextjs-instagram-publication",
-        offerId: offer.id,
-        postId: post.id,
-        origin: "publication.instagram",
-        requestedAt: post.created_at,
-        idempotencyKey: `publication:${post.id}:${externalId}`,
-        receiptRef: `receipt:instagram:${externalId}`
-      }, createSupabaseStateDependencies(supabase, user.id));
-
-      const { error: metadataError } = await supabase
-        .from("posts")
-        .update({
-          external_id: externalId,
-          posted_at: new Date().toISOString()
-        })
-        .eq("id", post.id);
-      if (metadataError) throw new Error(metadataError.message);
-
-      return NextResponse.json({
-        ok: true,
-        message: "Cupom publicado com sucesso no Instagram."
-      });
-    }
-
-    return NextResponse.json({
-      ok: false,
-      message: "Publicação assíncrona por GitHub Actions está desconectada do fluxo oficial de estados."
-    }, { status: 409 });
-
+    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "instagram");
+    const commandId = body.commandId ?? crypto.randomUUID();
+    const command: OfficialPublicationCommand = {
+      contractVersion: "pmav5.publication/v1", commandId, idempotencyKey,
+      correlationId: body.correlationId ?? commandId, causationId: body.causationId ?? null,
+      offerId: body.offerId, postId: body.postId, tenantId: user.id, channel: "instagram",
+      expectedOfferState: "approved", expectedOfferVersion: 2,
+      expectedPostState: "draft", expectedPostVersion: 0,
+      payloadReference: publicationPayloadReference(body.postId),
+      requestedAt: body.requestedAt ?? new Date().toISOString(),
+      actor: { type: "user", id: user.id, service: "nextjs-publication-route" },
+      origin: "publication.instagram.route", reason: { code: "USER_REQUESTED_PUBLICATION" },
+      metadata: { requestSource: body.requestSource ?? "instagram-dashboard" }
+    };
+    const result = await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, user.id));
+    return result.status === "published"
+      ? NextResponse.json({ ok: true, result })
+      : NextResponse.json({ ok: false, code: result.code, message: result.message, result }, { status: rejectionStatus(result.code) });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Falha na publicação no Instagram.";
-    console.error("Erro ao publicar no Instagram:", error);
-    return NextResponse.json({ 
-      ok: false, 
-      message: errorMessage 
-    }, { status: 500 });
+    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Falha na publicação oficial." }, { status: 500 });
   }
 }

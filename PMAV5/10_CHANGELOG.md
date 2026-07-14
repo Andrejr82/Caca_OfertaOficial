@@ -113,3 +113,15 @@ Governança PMAV5 congelada.
 - **Testes:** 177 Vitest aprovados em 34 arquivos; ESLint e typecheck direcionados aprovados; cobertura não emitida porque o provider V8 não está instalado.
 - **Resultado:** CP-007 `COMPLETED`; o commit final é `refactor(pmav5): centralize ai and draft posts in official service`.
 - **Escopo negativo:** Oracle Worker, Discovery, marketplaces, Inngest, Extension, Scheduler, PM2, publicação, banco/schema/migrations, produção e deploy não foram alterados/executados.
+
+## PMAV5-008 — 2026-07-14
+
+- **Modo:** IMPLEMENTATION, M-06 Serviço Oficial de Publicação.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `70448a6a38eef363b8e6611095a0b5e7221431b8`.
+- **Código:** núcleo hexagonal `src/core/publication/`, composição server-side, persistência operacional e transportes puros Telegram, WhatsApp, Instagram e Facebook.
+- **Rotas:** as quatro rotas oficiais chamam exclusivamente `publishOfficialPost()` e não recebem conteúdo governante nem acessam banco ou SDK de canal.
+- **Garantias:** receipt persistido antes das transições; `draft → published` e `approved → posted` exclusivamente pelo State Service; regra A; replay sem reenvio; concorrência de envio unitária; reconciliação segura; Instagram assíncrono fail-closed.
+- **Testes:** 236 Vitest aprovados em 39 arquivos; ESLint e typecheck direcionados aprovados; cobertura não emitida porque o provider V8 não está instalado.
+- **Resultado:** CP-008 `COMPLETED`; o commit final é `refactor(pmav5): centralize publication in official service`.
+- **Escopo negativo:** Oracle Worker, Discovery, marketplaces, Official AI Service, Curadoria, Inngest, Extensão, GitHub Actions, Scheduler, PM2, banco/schema/migrations, `.env`, segredos, produção e deploy não foram alterados/executados.
