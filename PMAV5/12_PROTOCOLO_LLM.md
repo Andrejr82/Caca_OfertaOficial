@@ -28,3 +28,16 @@ Toda LLM deverá:
 4. Executar a Sprint.
 
 Nenhuma outra validação estrutural será criada.
+
+## Referência operacional obrigatória
+
+Toda LLM deve ler e cumprir `PMAV5/13_PROTOCOLO_OPERACIONAL.md` antes de executar a Sprint vigente.
+
+Regras de reconciliação:
+
+- checkpoints registram progresso e não bloqueiam execução por si só;
+- dependências em `COMPLETED` ou `APPROVED` autorizam a Sprint seguinte;
+- PMAV5-005 corresponde exclusivamente a M-03 Oracle Worker Discovery-Only;
+- uma LLM não pode interromper uma Sprint por regra classificada como obsoleta pelo ADR-013;
+- conflito entre sequência antiga e ADR-013 é resolvido em favor do ADR-013;
+- uma LLM não pode reinterpretar ou renumerar a sequência canônica.

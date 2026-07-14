@@ -68,3 +68,12 @@ Governança PMAV5 congelada.
 - **Desacoplamento:** núcleo sem Supabase, Next.js, Oracle, Inngest, relógio/UUID concretos, variáveis de ambiente ou side effects de infraestrutura.
 - **Alteração funcional/operacional/produção:** nenhuma; nenhum caller foi migrado e nenhum adapter foi conectado automaticamente.
 - **Typecheck:** núcleo strict aprovado; verificação global permanece bloqueada exclusivamente por dívida preexistente fora do escopo.
+
+## PMAV5-ALIGN-001 — 2026-07-13
+
+- **Modo:** DOCUMENTATION.
+- **Objetivo:** reconciliar definitivamente a sequência PMAV5, checkpoints, dependências e protocolo operacional.
+- **Resultado:** ADR-013 criado; dependências alinhadas; checkpoints alinhados; protocolo operacional criado; PMAV5-005 autorizada.
+- **Alteração funcional:** nenhuma.
+- **Alteração operacional/produção:** nenhuma.
+- **Verificação autorizada:** histórico Git, inspeção documental, buscas de consistência, revisão de diff e validação de escopo; nenhum build, teste funcional, runtime, migration, banco, scraping, IA, publicação ou deploy.

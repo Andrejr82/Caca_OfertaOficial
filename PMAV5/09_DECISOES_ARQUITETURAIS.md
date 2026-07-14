@@ -73,3 +73,46 @@ Todos os ADRs abaixo têm status **APPROVED** em 13/07/2026. Contexto comum: a a
 **Decisão:** avanço depende de evidência e homologação do checkpoint anterior.
 
 **Trade-off/consequência:** reduz velocidade nominal; aumenta governança, reversibilidade e confiança. Exceção somente por ADR aprovado.
+
+**OBSOLETO — substituído pelo ADR-013:** a homologação do checkpoint anterior como gate automático. Permanece vigente a exigência de checkpoint e evidência como registro de progresso.
+
+## ADR-013 — Sequência Canônica Definitiva das Sprints PMAV5
+
+**Status:** APPROVED
+
+**Contexto:** os documentos iniciais foram criados antes da consolidação do Plano Oficial M-01 a M-10. A execução real seguiu outra numeração, causando divergência entre checkpoints, dependências e prompts.
+
+**Decisão:** a sequência efetivamente executada e versionada passa a ser a única sequência canônica do Programa.
+
+### Sequência oficial
+
+1. PMAV5-000 — Arquitetura Oficial e Fundação
+2. PMAV5-001 — Estado Operacional
+3. PMAV5-002 — Pipeline Compartilhado e Plano de Migração
+4. PMAV5-003 — M-01 Configuração e Contratos Canônicos
+5. PMAV5-004 — M-02 Serviço Oficial de Estados
+6. PMAV5-005 — M-03 Oracle Worker Discovery-Only
+7. PMAV5-006 — M-04 Ingestão e Curadoria
+8. PMAV5-007 — M-05 IA e Posts Únicos
+9. PMAV5-008 — M-06 Publicação Única
+10. PMAV5-009 — M-07 Fluxos Paralelos Subordinados
+11. PMAV5-010 — M-08 Legado Arquivado e Removido
+12. PMAV5-011 — M-09 Observabilidade e Recuperação
+13. PMAV5-012 — M-10 Homologação End-to-End e Cutover
+
+**Consequência:** qualquer numeração anterior conflitante fica classificada como **OBSOLETA**.
+
+Em particular, ficam classificados como **OBSOLETO — substituído pelo ADR-013**:
+
+- a sequência antiga registrada em `README.md` e nas versões anteriores de `08_DEPENDENCIAS_DAS_SPRINTS.md`;
+- a associação de PMAV5-003 a Oracle Worker Discovery-Only;
+- a associação de PMAV5-005 a IA Única;
+- a associação de CP-005 a IA Única;
+- a exigência automática de checkpoint anterior `HOMOLOGATED` como gate de Sprint, presente em textos históricos de Governança, Constituição, ADR-012 e critérios iniciais;
+- a imutabilidade de checkpoints e protocolos quando impedir esta reconciliação documental formalmente autorizada.
+
+Checkpoints passam a registrar progresso, sem bloquear execução por si só. A autorização decorre das dependências técnicas em `COMPLETED` ou `APPROVED`, conforme `08_DEPENDENCIAS_DAS_SPRINTS.md`, e do protocolo operacional vigente.
+
+**Motivo:** correção documental e alinhamento com o Plano Oficial já certificado.
+
+**Risco e compensações:** a renumeração documental pode divergir de registros históricos preservados. A compensação é manter os textos históricos versionados, classificá-los nominalmente como obsoletos neste ADR e centralizar a sequência vigente nos documentos `07`, `08`, `12` e `13`.

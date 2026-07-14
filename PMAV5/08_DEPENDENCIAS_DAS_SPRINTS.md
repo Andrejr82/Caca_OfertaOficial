@@ -1,20 +1,81 @@
 # Dependências e Ordem Oficial das Sprints
 
-A ordem é obrigatória e linear. Cada saída depende do checkpoint anterior homologado; exceções exigem ADR aprovado.
+Este documento aplica a sequência canônica definitiva aprovada no ADR-013. Dependências em `COMPLETED` ou `APPROVED` autorizam a Sprint seguinte; checkpoints registram progresso e não são gates.
 
-| Sprint | Depende de | Bloqueia | Critério de entrada | Critério de saída | Rollback | Checkpoint |
-|---|---|---|---|---|---|---|
-| PMAV5-000 — Arquitetura Oficial V5 | `origin/main` certificado; auditoria disponível | PMAV5-001 | branch exclusiva limpa; escopo documental | documentos, ADRs, contratos e commit exclusivos verificados | novo commit documental; sem reescrita de história | CP-000 |
-| PMAV5-001 — Fechar Incertezas Operacionais | CP-000 HOMOLOGATED | PMAV5-002 | protocolo lido; lacunas NÃO CERTIFICADO enumeradas | cada lacuna provada ou explicitamente encerrada com evidência | preservar evidências; reclassificar por relatório/ADR | CP-001 |
-| PMAV5-002 — Configuração Canônica | CP-001 HOMOLOGATED | PMAV5-003 | runtimes e configurações reais certificados | fonte canônica, precedência e consumidores validados | restaurar configuração anterior documentada, sem fallback oculto | CP-002 |
-| PMAV5-003 — Oracle Worker Discovery-Only | CP-002 HOMOLOGATED | PMAV5-004 | configuração canônica ativa em ambiente autorizado | Worker só descobre e termina em pending, com evidência | restaurar versão anterior controladamente; impedir execução concorrente | CP-003 |
-| PMAV5-004 — Serviço Único de Estados | CP-003 HOMOLOGATED | PMAV5-005 | produtores Discovery conformes | transições oficiais centralizadas, concorrência/auditoria validadas | reverter consumidores e serviço de forma coordenada | CP-004 |
-| PMAV5-005 — IA Única | CP-004 HOMOLOGATED | PMAV5-006 | serviço de estados e gate selected validados | um serviço de IA; nenhum bypass; drafts consistentes | desabilitar nova IA e restaurar caminho homologado anterior | CP-005 |
-| PMAV5-006 — Publicação Única | CP-005 HOMOLOGATED | PMAV5-007 | approved + post draft produzidos oficialmente | canais usam serviço único; published/posted consistentes | suspender envios e restaurar versão homologada sem duplicar publicação | CP-006 |
-| PMAV5-007 — Fluxos Paralelos | CP-006 HOMOLOGATED | PMAV5-008 | autoridades principais únicas | Extensão, Inngest, Actions e demais fluxos delegados ou bloqueados | desabilitar adaptador problemático; manter autoridades oficiais | CP-007 |
-| PMAV5-008 — Remoção do Legado | CP-007 HOMOLOGATED | PMAV5-009 | substitutos homologados e inventário de legado fechado | V4, fallbacks e código morto removidos com prova | restaurar somente artefato necessário sob incidente/ADR, nunca fallback automático | CP-008 |
-| PMAV5-009 — Observabilidade | CP-008 HOMOLOGATED | PMAV5-010 | arquitetura única sem legado | rastreio E2E, métricas, logs e alertas certificados | restaurar configuração de observabilidade sem afetar estados | CP-009 |
-| PMAV5-010 — Homologação End-to-End | CP-009 HOMOLOGATED | encerramento do programa | ambientes, dados de teste, rollback e evidências prontos | fluxo completo e falhas homologados por humanos | executar rollback aprovado do estágio falho e registrar ROLLED_BACK | CP-010 |
+## Fundação e auditorias concluídas
+
+| Sprint | Entrega | Estado |
+|---|---|---|
+| PMAV5-000 | Arquitetura Oficial e Fundação | COMPLETED / PASS |
+| PMAV5-CONST | Constituição Oficial | COMPLETED / PASS |
+| PMAV5-GOV-1.0 | Governança consolidada | COMPLETED / PASS |
+| PMAV5-001 | Estado Operacional | COMPLETED |
+| PMAV5-002 | Pipeline Compartilhado e Plano Oficial de Migração | COMPLETED |
+
+## Entregas M-01 a M-10
+
+### PMAV5-003 — M-01 Configuração e Contratos Canônicos
+
+- Dependência: PMAV5-002 `COMPLETED`.
+- Estado: `COMPLETED`.
+
+### PMAV5-004 — M-02 Serviço Oficial de Estados
+
+- Dependência: PMAV5-003 `COMPLETED`.
+- Estado: `COMPLETED`.
+
+### PMAV5-005 — M-03 Oracle Worker Discovery-Only
+
+- Dependência: PMAV5-003 `COMPLETED`.
+- Dependência: PMAV5-004 `COMPLETED`.
+- Estado: autorizada como próxima Sprint de implementação.
+
+### PMAV5-006 — M-04 Ingestão e Curadoria
+
+- Dependência: PMAV5-004 `COMPLETED`.
+- Dependência: PMAV5-005 `COMPLETED`.
+
+### PMAV5-007 — M-05 IA e Posts Únicos
+
+- Dependência: PMAV5-004 `COMPLETED`.
+- Dependência: PMAV5-006 `COMPLETED`.
+
+### PMAV5-008 — M-06 Publicação Única
+
+- Dependência: PMAV5-004 `COMPLETED`.
+- Dependência: PMAV5-007 `COMPLETED`.
+
+### PMAV5-009 — M-07 Fluxos Paralelos Subordinados
+
+- Dependência: PMAV5-005 `COMPLETED`.
+- Dependência: PMAV5-006 `COMPLETED`.
+- Dependência: PMAV5-007 `COMPLETED`.
+- Dependência: PMAV5-008 `COMPLETED`.
+
+### PMAV5-010 — M-08 Legado Arquivado e Removido
+
+- Dependência: PMAV5-009 `COMPLETED`.
+
+### PMAV5-011 — M-09 Observabilidade e Recuperação
+
+- Dependência: PMAV5-004 `COMPLETED`.
+- Dependência: PMAV5-008 `COMPLETED`.
+
+### PMAV5-012 — M-10 Homologação End-to-End e Cutover
+
+- Dependências: PMAV5-003 a PMAV5-011 `COMPLETED`.
+
+## Regra de autorização
+
+Uma Sprint de implementação pode iniciar quando suas dependências técnicas estiverem em `COMPLETED` ou `APPROVED`. A autorização decorre deste documento e dos ADRs vigentes. Rollback, escopo e testes proporcionais ao risco continuam obrigatórios para implementação.
+
+## Declarações obsoletas
+
+**OBSOLETO — substituído pelo ADR-013:** PMAV5-003 como Oracle Worker Discovery-Only.
+
+**OBSOLETO — substituído pelo ADR-013:** PMAV5-005 como IA Única.
+
+**OBSOLETO — substituído pelo ADR-013:** dependência automática de checkpoint anterior `HOMOLOGATED` como condição de entrada. Checkpoint não é gate.
 
 ## Regra de não repetição
 
