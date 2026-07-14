@@ -20,6 +20,6 @@ graph TD
 ```
 
 ## STATUS ATUAL
-- **Fase:** R5.02 - Cutover Validation (Concluída)
-- **Status:** PASS (Arquitetura certificada e validada)
-- **Próxima Etapa:** R5.03 - Production Cutover
+- **Fase:** R5.03 - Production Cutover (Concluída)
+- **Status:** PASS (Arquitetura V5 promovida oficialmente para produção)
+- **Próxima Etapa:** R5.04 - Deploy
