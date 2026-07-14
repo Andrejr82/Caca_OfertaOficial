@@ -54,3 +54,17 @@ Governança PMAV5 congelada.
 - **Segredos:** nenhum valor lido, exibido, criado ou modificado.
 - **Alteração funcional/operacional/produção:** nenhuma.
 - **Verificação autorizada:** inspeção documental/estática e Git; nenhum build, teste funcional, migration, schema, deploy, restart ou runtime.
+
+## PMAV5-004 — 2026-07-13
+
+- **Modo:** IMPLEMENTATION, restrito à fundação M-02 do Serviço Oficial de Estados.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `e8b08d171411072196e23796443d75fa28132181`.
+- **Código criado:** `src/core/state/` com contratos State v1, máquina oficial, validações, resultados, erros, cinco Ports, State Service e três adapters opt-in.
+- **Testes criados:** `src/tests/core/state/` para transições, CAS, conflitos, idempotência, auditoria, concorrência, entidade inexistente, comando inválido e adapters.
+- **Documentos criados:** `AUDITORIAS/PMAV5-004_STATE_SERVICE.md` e `SPRINTS/PMAV5-004_STATE_SERVICE.md`.
+- **Documentos atualizados:** `07_CHECKPOINTS.md` e este changelog.
+- **Resultado:** CP-004 `COMPLETED`; 122 testes globais aprovados, 2 ignorados e 0 falhas; cobertura direcionada de 89,31% statements e 90,4% linhas.
+- **Desacoplamento:** núcleo sem Supabase, Next.js, Oracle, Inngest, relógio/UUID concretos, variáveis de ambiente ou side effects de infraestrutura.
+- **Alteração funcional/operacional/produção:** nenhuma; nenhum caller foi migrado e nenhum adapter foi conectado automaticamente.
+- **Typecheck:** núcleo strict aprovado; verificação global permanece bloqueada exclusivamente por dívida preexistente fora do escopo.

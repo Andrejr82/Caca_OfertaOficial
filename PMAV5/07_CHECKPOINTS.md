@@ -17,7 +17,7 @@ Nunca autorização.
 | CP-001 | Certificação do Estado Operacional | **COMPLETED** | `AUDITORIAS/PMAV5-001_ESTADO_OPERACIONAL_CERTIFICADO.md`; matriz, grafo e ficha da Sprint |
 | CP-002 | Pipeline Compartilhado e Plano Oficial de Migração | **COMPLETED** | `AUDITORIAS/PMAV5-002_PIPELINE_COMPARTILHADO.md`; writers, autoridades, conflitos, grafos e plano M-01–M-10 |
 | CP-003 | M-01 — Configuração e Contratos Canônicos | **COMPLETED** | `AUDITORIAS/PMAV5-003_CONFIGURACAO_CANONICA.md`; inventários, sete contratos, ownership, matriz e grafo |
-| CP-004 | Serviço Único de Estados | NOT_STARTED | todas as transições via serviço validado |
+| CP-004 | M-02 — Serviço Oficial de Estados | **COMPLETED** | `AUDITORIAS/PMAV5-004_STATE_SERVICE.md`; núcleo hexagonal, Ports, adapters, CAS, idempotência, auditoria e testes |
 | CP-005 | IA Única | NOT_STARTED | IA somente após selected, validada |
 | CP-006 | Publicação Única | NOT_STARTED | publicação única e estados consistentes |
 | CP-007 | Fluxos Paralelos Adequados | NOT_STARTED | Inngest/Extensão/outros subordinados aos contratos |
@@ -56,6 +56,14 @@ CP-000 permanece aguardando homologação humana. Esse registro não bloqueia a 
 **Evidência:** `PMAV5/AUDITORIAS/PMAV5-003_CONFIGURACAO_CANONICA.md`, `PMAV5/SPRINTS/PMAV5-003_CONFIGURACAO_CANONICA.md` e sete contratos em `PMAV5/CONTRATOS/`.
 
 **Escopo:** implementação normativa M-01, exclusivamente documental; configuração, ambientes, flags, contratos, ownership e dependências canônicos, sem alteração funcional, operacional ou de produção.
+
+## CP-004
+
+**Status:** COMPLETED
+
+**Evidência:** `PMAV5/AUDITORIAS/PMAV5-004_STATE_SERVICE.md`, `PMAV5/SPRINTS/PMAV5-004_STATE_SERVICE.md`, `src/core/state/` e `src/tests/core/state/`.
+
+**Escopo:** implementação da fundação M-02 em Arquitetura Hexagonal, com máquina oficial, CAS, idempotência, auditoria e adapters opt-in; nenhum caller, runtime, marketplace, schema ou comportamento funcional foi alterado.
 
 ## CP-CONST.2
 
