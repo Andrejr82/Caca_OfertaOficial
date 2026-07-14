@@ -11,9 +11,9 @@ O processo de Release V5 é completamente independente da LLM utilizada. O repos
 graph TD
     A[PMAV5 Encerrado] --> B[Release Program V5]
     B --> C[Freeze]
-    C --> D[Cutover]
-    D --> E[Deploy]
-    E --> F[Smoke]
+    C --> D[Cutover Validation]
+    D --> E[Production Cutover]
+    E --> F[Deploy]
     F --> G[Hypercare]
     G --> H[Release Closure]
     H --> I[V5 Oficial]
