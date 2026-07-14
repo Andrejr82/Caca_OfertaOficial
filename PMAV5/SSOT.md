@@ -23,3 +23,10 @@ A partir deste checkpoint:
   - Histórico Git
 - Caso exista divergência, o código deverá prevalecer apenas se estiver homologado pelos documentos oficiais.
 - Caso contrário, a divergência deverá ser registrada e corrigida em Sprint dedicada.
+
+---
+## DECLARAÇÃO DE ENCERRAMENTO DO PMAV5 E TRANSIÇÃO PARA RELEASE PROGRAM V5
+
+**O Programa PMAV5 encerrou oficialmente sua missão.**
+
+Toda evolução futura, incluindo Cutover, Deploy, Hypercare e Encerramento da versão V5, ocorrerá exclusivamente através do **Release Program V5**, conforme as diretrizes e a constituição estabelecidas no diretório `RELEASE/`.
