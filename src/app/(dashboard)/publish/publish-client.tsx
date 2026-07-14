@@ -91,7 +91,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
       try {
         const res = await generateQuickPostAction(links[i], channel === "omnichannel" ? "telegram" : channel);
-        if (res.ok && res.copy) {
+        if (res.ok && res.copy && res.offer) {
           newPosts.push({
             id: `post-${Date.now()}-${i}`,
             url: links[i],

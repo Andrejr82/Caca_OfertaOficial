@@ -1,201 +1,52 @@
 import { NextResponse } from "next/server";
+import { publishOfficialPost, type OfficialPublicationCommand } from "@/core/publication";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { publishToInstagram } from "@/lib/instagram/client";
-import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
-import { prepareOfferForPublication } from "@/lib/offers/shopee-manual-curation";
+import {
+  createOfficialPublicationServiceDependencies,
+  publicationIdempotencyKey,
+  publicationPayloadReference
+} from "@/lib/publication/official/create-official-publication-service";
+
+type PublicationBody = {
+  postId?: string; offerId?: string; commandId?: string; idempotencyKey?: string;
+  correlationId?: string; causationId?: string | null; requestedAt?: string; requestSource?: string;
+};
+
+function rejectionStatus(code: string) {
+  if (code.endsWith("NOT_FOUND")) return 404;
+  if (code === "TRANSPORT_FAILED") return 502;
+  if (code.startsWith("INVALID_")) return 400;
+  return 409;
+}
 
 export async function POST(request: Request) {
   try {
-    const { postId, content } = (await request.json()) as { postId?: string; content?: string };
-    if (!postId) {
-      return NextResponse.json({ ok: false, message: "postId é obrigatório." }, { status: 400 });
-    }
+    const body = await request.json() as PublicationBody;
+    if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
+    const client = await createServerSupabaseClient();
+    if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    const supabase = await createServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
-    }
-
-    const {
-      data: { user }
-    } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
-    }
-
-    // 1. Carrega o post e a oferta associada
-    const { data: post, error: postError } = await supabase
-      .from("posts")
-      .select("*, offers(*)")
-      .eq("id", postId)
-      .neq("status", "deleted")
-      .single();
-
-    if (postError || !post) {
-      return NextResponse.json({ ok: false, message: "Post não encontrado." }, { status: 404 });
-    }
-
-    if (post.channel !== "instagram") {
-      return NextResponse.json({ ok: false, message: "Este post não é do canal Instagram." }, { status: 400 });
-    }
-
-    const offerData = post.offers;
-    if (!offerData) {
-      return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
-    }
-
-    // O Supabase pode retornar a relação como um array dependendo de como a foreign key foi resolvida.
-    let offer = Array.isArray(offerData) ? offerData[0] : offerData;
-    try {
-      offer = await prepareOfferForPublication(offer, async (pendingOffer) => {
-        const { error: selectionError } = await supabase
-          .from("offers")
-          .update({ status: "selected", updated_at: new Date().toISOString() })
-          .eq("id", pendingOffer.id)
-          .eq("user_id", user.id)
-          .eq("platform", pendingOffer.platform)
-          .eq("status", "pending_manual_review");
-        if (selectionError) throw new Error(selectionError.message);
-
-        const { data: persistedOffer, error: confirmationError } = await supabase
-          .from("offers")
-          .select("*")
-          .eq("id", pendingOffer.id)
-          .eq("user_id", user.id)
-          .eq("platform", pendingOffer.platform)
-          .single();
-        if (confirmationError || !persistedOffer) {
-          throw new Error(confirmationError?.message || "Não foi possível confirmar selected.");
-        }
-        return persistedOffer;
-      });
-    } catch (error) {
-      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
-    }
-
-    const couponOffer = isCouponOffer(offer);
-    const imageUrl = couponOffer ? await resolveCouponPublishImageUrl(offer, request) : offer.image_url;
-    if (!imageUrl) {
-      return NextResponse.json({ 
-        ok: false, 
-        message: "O produto não possui uma URL de imagem. Para publicar no Instagram, é obrigatório definir uma imagem." 
-      }, { status: 422 });
-    }
-
-    // O usuário pode ter editado o texto na tela antes de aprovar
-    const finalContent = content || post.content;
-
-    if (content && content !== post.content) {
-      await supabase
-        .from("posts")
-        .update({ content: finalContent })
-        .eq("id", post.id);
-    }
-
-    let publishCaption = finalContent;
-    if (finalContent.includes("=== STORIES SUGERIDOS ===")) {
-      publishCaption = finalContent.split("=== STORIES SUGERIDOS ===")[0].trim();
-    }
-
-    if (couponOffer) {
-      const externalId = await publishToInstagram(imageUrl, publishCaption);
-
-      await supabase
-        .from("posts")
-        .update({
-          status: "published",
-          external_id: externalId,
-          posted_at: new Date().toISOString()
-        })
-        .eq("id", post.id);
-
-      await supabase
-        .from("offers")
-        .update({
-          status: "posted",
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", offer.id);
-
-      return NextResponse.json({
-        ok: true,
-        message: "Cupom publicado com sucesso no Instagram."
-      });
-    }
-
-    // 2. Dispara o GitHub Actions para Renderizar e Postar o Vídeo
-    console.log("[Instagram API] Disparando GitHub Actions para geração do vídeo...");
-    
-    const githubToken = process.env.GITHUB_TOKEN;
-    if (!githubToken) {
-      return NextResponse.json({ 
-        ok: false, 
-        message: "Variável de ambiente GITHUB_TOKEN não configurada na Vercel." 
-      }, { status: 500 });
-    }
-
-    // O format do original price e current price precisa vir da oferta de forma segura
-    const currentPriceNum = Number(offer.current_price);
-    const currentPrice = !isNaN(currentPriceNum) && currentPriceNum > 0 ? currentPriceNum.toFixed(2).replace('.', ',') : "0,00";
-
-    const originalPriceNum = Number(offer.original_price || offer.old_price);
-    const originalPrice = !isNaN(originalPriceNum) && originalPriceNum > 0 ? originalPriceNum.toFixed(2).replace('.', ',') : "";
-
-    const repoOwner = "Andrejr82"; // Substitua pelo usuário correto se necessário, mas em repositórios pessoais é o owner do repo
-    const repoName = "Caca_OfertaOficial";
-    
-    // O GitHub aceita workflow dispatches através dessa API REST
-    const githubUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/publish-reel.yml/dispatches`;
-
-    const githubRes = await fetch(githubUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${githubToken}`,
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ref: "main", // ou "master" dependendo do repositório
-        inputs: {
-          postId: post.id,
-          offerId: offer.id,
-          productName: offer.product_name || "Oferta Especial",
-          originalPrice: originalPrice,
-          currentPrice: currentPrice,
-          imageUrl: imageUrl,
-          caption: publishCaption
-        }
-      })
-    });
-
-    if (!githubRes.ok) {
-      const gitError = await githubRes.text();
-      console.error("[GitHub Actions Error]:", gitError);
-      return NextResponse.json({ 
-        ok: false, 
-        message: `Falha ao acionar o GitHub Actions: ${githubRes.statusText}. Verifique o GITHUB_TOKEN.` 
-      }, { status: 500 });
-    }
-
-    // 3. Atualiza o status do post para processing (já que o github assumiu)
-    await supabase
-      .from("posts")
-      .update({
-        status: "processing"
-      })
-      .eq("id", post.id);
-
-    return NextResponse.json({ 
-      ok: true, 
-      message: "Renderização do Vídeo iniciada no servidor! A publicação ocorrerá em até 2 minutos." 
-    });
-
+    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "instagram");
+    const commandId = body.commandId ?? crypto.randomUUID();
+    const command: OfficialPublicationCommand = {
+      contractVersion: "pmav5.publication/v1", commandId, idempotencyKey,
+      correlationId: body.correlationId ?? commandId, causationId: body.causationId ?? null,
+      offerId: body.offerId, postId: body.postId, tenantId: user.id, channel: "instagram",
+      expectedOfferState: "approved", expectedOfferVersion: 2,
+      expectedPostState: "draft", expectedPostVersion: 0,
+      payloadReference: publicationPayloadReference(body.postId),
+      requestedAt: body.requestedAt ?? new Date().toISOString(),
+      actor: { type: "user", id: user.id, service: "nextjs-publication-route" },
+      origin: "publication.instagram.route", reason: { code: "USER_REQUESTED_PUBLICATION" },
+      metadata: { requestSource: body.requestSource ?? "instagram-dashboard" }
+    };
+    const result = await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, user.id));
+    return result.status === "published"
+      ? NextResponse.json({ ok: true, result })
+      : NextResponse.json({ ok: false, code: result.code, message: result.message, result }, { status: rejectionStatus(result.code) });
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : "Falha na publicação no Instagram.";
-    console.error("Erro ao publicar no Instagram:", error);
-    return NextResponse.json({ 
-      ok: false, 
-      message: errorMessage 
-    }, { status: 500 });
+    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Falha na publicação oficial." }, { status: 500 });
   }
 }

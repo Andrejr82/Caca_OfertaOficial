@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { LinkMetadata } from "@/lib/publish/scraper";
+import type { LinkMetadata } from "@/lib/publish/quality-gate";
 import { Platform } from "@/types/domain";
 
 export interface MLCredentials {

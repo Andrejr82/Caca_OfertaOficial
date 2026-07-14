@@ -1,48 +1,27 @@
-import ws from 'ws';
-(global as any).WebSocket = ws;
-
-import { createSupabaseAdminClient } from '@/lib/supabase/admin';
-import { whatsappService } from '@/lib/integrations/whatsapp';
-import { resolveConfiguredWhatsAppTargetId } from '@/lib/integrations/whatsapp/target';
+import { publishOfficialPost, type OfficialPublicationChannel, type OfficialPublicationCommand } from "../src/core/publication";
+import { createOfficialPublicationServiceDependencies, publicationIdempotencyKey, publicationPayloadReference } from "../src/lib/publication/official/create-official-publication-service";
+import { createSupabaseAdminClient } from "../src/lib/supabase/admin";
 
 async function run() {
-  const db = createSupabaseAdminClient();
-  if (!db) {
-      console.log('No DB client');
-      return;
-  }
-  
-  const targetId = resolveConfiguredWhatsAppTargetId();
-  if (!targetId) {
-      console.log('No target ID');
-      return;
-  }
-
-  const ids = {
-    amazon: "438270e7-76de-4f3c-9b05-108f73dea469",
-    mercadolivre: "7e03967c-873e-4219-9e50-8ed6d5820d71",
-    shopee: "e7baf992-f71e-4347-a580-c001a0406163",
+  const tenantId = process.env.TENANT_ID || "";
+  const offerId = process.env.OFFER_ID || "";
+  const postId = process.env.POST_ID || "";
+  const channel = (process.env.CHANNEL || "whatsapp") as OfficialPublicationChannel;
+  const commandId = process.env.COMMAND_ID || `admin:${postId}:${channel}`;
+  const client = createSupabaseAdminClient();
+  if (!client) throw new Error("Official publication dependencies are unavailable");
+  const command: OfficialPublicationCommand = {
+    contractVersion: "pmav5.publication/v1", commandId,
+    idempotencyKey: publicationIdempotencyKey(postId, channel), correlationId: commandId, causationId: null,
+    offerId, postId, tenantId, channel, expectedOfferState: "approved", expectedOfferVersion: 2,
+    expectedPostState: "draft", expectedPostVersion: 0, payloadReference: publicationPayloadReference(postId),
+    requestedAt: new Date().toISOString(), actor: { type: "service", id: "admin-script", service: "publish-direct" },
+    origin: "scripts.publish-direct", reason: { code: "PUBLISH_OFFICIAL_POST" },
+    metadata: channel === "instagram" ? { instagramMode: "synchronous" } : undefined
   };
-
-  for (const [name, offerId] of Object.entries(ids)) {
-    console.log(`\n--- Fetching ${name} ---`);
-    // Find post for this offer
-    const { data: posts, error } = await db.from('posts').select('id, content, offers!inner(id, platform)').eq('offers.id', offerId).limit(1);
-    if (error || !posts || posts.length === 0) {
-        console.log(`No post found for offer ${offerId}:`, error);
-        continue;
-    }
-    
-    const post = posts[0];
-    const premiumImageUrl = `http://localhost:3005/api/images/whatsapp-premium?offerId=${offerId}`;
-    
-    console.log(`Publishing ${name}:`, post.id);
-    try {
-        const result = await whatsappService.sendMedia(targetId, post.content, premiumImageUrl);
-        console.log(`Success:`, result.messageId);
-    } catch (e: any) {
-        console.log(`Failed:`, e.message);
-    }
-  }
+  const result = await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, tenantId));
+  if (result.status !== "published") throw new Error(`${result.code}: ${result.message}`);
+  console.log(JSON.stringify({ status: result.status, receiptId: result.receiptId }));
 }
-run();
+
+run().catch((error) => { console.error(error instanceof Error ? error.message : error); process.exitCode = 1; });

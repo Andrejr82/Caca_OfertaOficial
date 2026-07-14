@@ -9,32 +9,48 @@ import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { formDataToOfferInput } from "@/lib/validators/offer";
 import { saleInputSchema } from "@/lib/validators/sale";
 import type { Channel, Offer, Platform } from "@/types/domain";
-import { assertShopeeSelected, nextShopeeManualStatus } from "@/lib/offers/shopee-manual-curation";
+import { assertShopeeSelected } from "@/lib/offers/shopee-manual-curation";
+import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
+import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 
-async function updateShopeeManualStatus(offerId: string, action: "select" | "reject") {
+async function transitionManualStatus(
+  formData: FormData,
+  marketplace: "Shopee" | "Mercado Livre" | "Amazon",
+  action: "select" | "reject"
+) {
+  const offerId = String(formData.get("offer_id") || "");
   const supabase = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
-  if (!supabase || !userId) throw new Error("Usuário não autenticado.");
-  const status = nextShopeeManualStatus("pending_manual_review", action);
-  const { data, error } = await supabase
-    .from("offers")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", offerId)
-    .eq("user_id", userId)
-    .eq("platform", "Shopee")
-    .eq("status", "pending_manual_review")
-    .select("id")
-    .single();
-  if (error || !data) throw new Error(error?.message || "Candidato Shopee não está pendente.");
+  if (!supabase || !userId || !offerId) throw new Error("Usuário não autenticado ou oferta inválida.");
+
+  const requestedAt = String(formData.get("requested_at") || new Date().toISOString());
+  const commandId = String(formData.get("command_id") || `${offerId}:${action}:${requestedAt}`);
+  const toState = action === "select" ? "selected" : "rejected";
+  const result = await transitionOfficialOfferState({
+    commandId,
+    idempotencyKey: commandId,
+    correlationId: commandId,
+    causationId: null,
+    tenantId: userId,
+    actor: { type: "user", id: userId, service: "nextjs-curation" },
+    requestedAt,
+    entityId: offerId,
+    fromState: "pending_manual_review",
+    toState,
+    origin: `offers.action.${action}`,
+    reason: { code: action === "select" ? "MANUAL_SELECTION" : "MANUAL_REJECTION", detail: marketplace },
+    evidenceRefs: [`marketplace:${marketplace}`, `offer:${offerId}`]
+  }, createSupabaseStateDependencies(supabase, userId));
+  if (result.status === "rejected") throw new Error(result.message);
   revalidatePath("/offers");
 }
 
 export async function selectShopeeCandidateAction(formData: FormData) {
-  await updateShopeeManualStatus(String(formData.get("offer_id") || ""), "select");
+  await transitionManualStatus(formData, "Shopee", "select");
 }
 
 export async function rejectShopeeCandidateAction(formData: FormData) {
-  await updateShopeeManualStatus(String(formData.get("offer_id") || ""), "reject");
+  await transitionManualStatus(formData, "Shopee", "reject");
 }
 
 export async function createOfferAction(formData: FormData) {
@@ -78,7 +94,8 @@ export async function createOfferAction(formData: FormData) {
     seasonality: input.seasonality ?? null,
     notes: input.notes || null,
     score,
-    user_id: userId
+    user_id: userId,
+    status: "pending_manual_review"
   });
 
   if (error) throw new Error(error.message);
@@ -88,67 +105,19 @@ export async function createOfferAction(formData: FormData) {
 }
 
 export async function selectMercadoLivreOfferAction(formData: FormData) {
-  const offerId = String(formData.get("offer_id") || "");
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-  if (!supabase || !userId || !offerId) return;
-  const { error } = await supabase
-    .from("offers")
-    .update({ status: "selected", updated_at: new Date().toISOString() })
-    .eq("id", offerId)
-    .eq("user_id", userId)
-    .eq("platform", "Mercado Livre")
-    .eq("status", "pending_manual_review");
-  if (error) throw new Error(error.message);
-  revalidatePath("/offers");
+  await transitionManualStatus(formData, "Mercado Livre", "select");
 }
 
 export async function rejectMercadoLivreOfferAction(formData: FormData) {
-  const offerId = String(formData.get("offer_id") || "");
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-  if (!supabase || !userId || !offerId) return;
-  const { error } = await supabase
-    .from("offers")
-    .update({ status: "rejected", updated_at: new Date().toISOString() })
-    .eq("id", offerId)
-    .eq("user_id", userId)
-    .eq("platform", "Mercado Livre")
-    .eq("status", "pending_manual_review");
-  if (error) throw new Error(error.message);
-  revalidatePath("/offers");
+  await transitionManualStatus(formData, "Mercado Livre", "reject");
 }
 
 export async function selectAmazonOfferAction(formData: FormData) {
-  const offerId = String(formData.get("offer_id") || "");
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-  if (!supabase || !userId || !offerId) return;
-  const { error } = await supabase
-    .from("offers")
-    .update({ status: "selected", updated_at: new Date().toISOString() })
-    .eq("id", offerId)
-    .eq("user_id", userId)
-    .eq("platform", "Amazon")
-    .eq("status", "pending_manual_review");
-  if (error) throw new Error(error.message);
-  revalidatePath("/offers");
+  await transitionManualStatus(formData, "Amazon", "select");
 }
 
 export async function rejectAmazonOfferAction(formData: FormData) {
-  const offerId = String(formData.get("offer_id") || "");
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-  if (!supabase || !userId || !offerId) return;
-  const { error } = await supabase
-    .from("offers")
-    .update({ status: "rejected", updated_at: new Date().toISOString() })
-    .eq("id", offerId)
-    .eq("user_id", userId)
-    .eq("platform", "Amazon")
-    .eq("status", "pending_manual_review");
-  if (error) throw new Error(error.message);
-  revalidatePath("/offers");
+  await transitionManualStatus(formData, "Amazon", "reject");
 }
 
 export async function generateAffiliateLinkAction(
@@ -185,7 +154,7 @@ export async function generateAffiliateLinkAction(
       product_name: productNameManual || "Link Manual",
       original_url: affiliateUrl,
       current_price: 0,
-      status: "approved",
+      status: "pending_manual_review",
       score: 0
     }).select().single<Offer>();
 

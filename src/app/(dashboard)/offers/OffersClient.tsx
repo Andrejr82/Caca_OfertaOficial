@@ -110,6 +110,7 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
           const reason = comp?.reasons?.join(" | ") || expl.aiDecision?.reason || expl.quality?.reason || "N/A";
           const nativeShopee = offer.platform === "Shopee" && Boolean(offer.shopee_product_cat_id);
           const metrics = offer.marketplace_metrics || {};
+          const transitionRequestedAt = offer.updated_at || offer.created_at;
 
           const tierColor = 
             tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
@@ -175,10 +176,14 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                 <div className="flex gap-2">
                   <form action={selectShopeeCandidateAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
+                    <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
+                    <input type="hidden" name="requested_at" value={transitionRequestedAt} />
                     <button className="rounded bg-emerald-500 px-3 py-2 text-xs font-bold text-black" type="submit">Selecionar</button>
                   </form>
                   <form action={rejectShopeeCandidateAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
+                    <input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} />
+                    <input type="hidden" name="requested_at" value={transitionRequestedAt} />
                     <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
                   </form>
                   <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
@@ -187,15 +192,15 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
 
               {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
                 <div className="flex gap-2">
-                  <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
-                  <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                  <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                  <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
                 </div>
               )}
 
               {offer.platform === "Amazon" && offer.status === "pending_manual_review" && (
                 <div className="flex gap-2">
-                  <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
-                  <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                  <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                  <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
                 </div>
               )}
 

@@ -1,69 +1,52 @@
 import { NextResponse } from "next/server";
+import { publishOfficialPost, type OfficialPublicationCommand } from "@/core/publication";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { publishToFacebook } from "@/lib/platforms/facebook";
-import { logger } from "@/lib/utils/logger";
+import {
+  createOfficialPublicationServiceDependencies,
+  publicationIdempotencyKey,
+  publicationPayloadReference
+} from "@/lib/publication/official/create-official-publication-service";
+
+type PublicationBody = {
+  postId?: string; offerId?: string; commandId?: string; idempotencyKey?: string;
+  correlationId?: string; causationId?: string | null; requestedAt?: string; requestSource?: string;
+};
+
+function rejectionStatus(code: string) {
+  if (code.endsWith("NOT_FOUND")) return 404;
+  if (code === "TRANSPORT_FAILED") return 502;
+  if (code.startsWith("INVALID_")) return 400;
+  return 409;
+}
 
 export async function POST(request: Request) {
   try {
-    const supabase = await createServerSupabaseClient();
-    if (!supabase) {
-      return NextResponse.json({ error: "Supabase not configured" }, { status: 500 });
-    }
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    const body = await request.json() as PublicationBody;
+    if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
+    const client = await createServerSupabaseClient();
+    if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
+    const { data: { user } } = await client.auth.getUser();
+    if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const { postId } = await request.json();
-    if (!postId) {
-      return NextResponse.json({ error: "postId is required" }, { status: 400 });
-    }
-
-    // 1. Obter o post
-    const { data: post, error: postError } = await supabase
-      .from("posts")
-      .select("*, offers(*)")
-      .eq("id", postId)
-      .neq("status", "deleted")
-      .eq("user_id", user.id)
-      .single();
-
-    if (postError || !post) {
-      logger.error("Post não encontrado", { postId, error: postError });
-      return NextResponse.json({ error: "Post não encontrado" }, { status: 404 });
-    }
-
-    // 2. Chamar o publicador do Facebook
-    const imageUrl = post.offers?.image_url;
-    const result = await publishToFacebook(post.content, imageUrl);
-
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.message, details: result.error },
-        { status: 500 }
-      );
-    }
-
-    // 3. Atualizar status no banco
-    const { error: updateError } = await supabase
-      .from("posts")
-      .update({
-        status: "published",
-        external_id: result.postId,
-        posted_at: new Date().toISOString(),
-      })
-      .eq("id", postId);
-
-    if (updateError) {
-      logger.error("Falha ao atualizar post no BD (Facebook)", { updateError });
-    }
-
-    return NextResponse.json({ success: true, result });
-  } catch (error: any) {
-    logger.error("Erro interno no endpoint de Facebook", { error: error.message });
-    return NextResponse.json({ error: "Internal Error" }, { status: 500 });
+    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "facebook");
+    const commandId = body.commandId ?? crypto.randomUUID();
+    const command: OfficialPublicationCommand = {
+      contractVersion: "pmav5.publication/v1", commandId, idempotencyKey,
+      correlationId: body.correlationId ?? commandId, causationId: body.causationId ?? null,
+      offerId: body.offerId, postId: body.postId, tenantId: user.id, channel: "facebook",
+      expectedOfferState: "approved", expectedOfferVersion: 2,
+      expectedPostState: "draft", expectedPostVersion: 0,
+      payloadReference: publicationPayloadReference(body.postId),
+      requestedAt: body.requestedAt ?? new Date().toISOString(),
+      actor: { type: "user", id: user.id, service: "nextjs-publication-route" },
+      origin: "publication.facebook.route", reason: { code: "USER_REQUESTED_PUBLICATION" },
+      metadata: { requestSource: body.requestSource ?? "facebook-dashboard" }
+    };
+    const result = await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, user.id));
+    return result.status === "published"
+      ? NextResponse.json({ ok: true, result })
+      : NextResponse.json({ ok: false, code: result.code, message: result.message, result }, { status: rejectionStatus(result.code) });
+  } catch (error) {
+    return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Falha na publicação oficial." }, { status: 500 });
   }
 }

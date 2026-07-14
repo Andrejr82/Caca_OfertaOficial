@@ -13,6 +13,7 @@ export type IntegrationLog = {
 
 export async function getIntegrationLogs(limit = 50): Promise<IntegrationLog[]> {
   const supabase = await createServerSupabaseClient();
+  if (!supabase) return [];
 
   const { data, error } = await supabase
     .from("integration_logs")

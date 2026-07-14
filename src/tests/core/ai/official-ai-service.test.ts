@@ -1,0 +1,298 @@
+import { describe, expect, it, vi } from "vitest";
+import {
+  generateOfficialAI,
+  type OfficialAICommand,
+  type OfficialAIContent,
+  type OfficialAIOffer,
+  type OfficialAIServiceDependencies
+} from "@/core/ai";
+
+const command: OfficialAICommand = {
+  contractVersion: "pmav5.ai/v1",
+  commandId: "command-007",
+  idempotencyKey: "ai:offer-1:v1",
+  correlationId: "correlation-007",
+  causationId: "curation-command",
+  offerId: "offer-1",
+  tenantId: "tenant-1",
+  expectedState: "selected",
+  expectedVersion: 1,
+  providerPreference: "groq",
+  channels: ["telegram", "instagram", "whatsapp"],
+  requestedAt: "2026-07-13T20:00:00.000Z",
+  actor: { type: "user", id: "user-1", service: "nextjs-ai-route" },
+  origin: "api.ai.generate",
+  reason: { code: "GENERATE_OFFICIAL_CONTENT" }
+};
+
+const offer: OfficialAIOffer = {
+  id: "offer-1",
+  tenantId: "tenant-1",
+  state: "selected",
+  version: 1,
+  marketplace: "Shopee",
+  productName: "Produto oficial",
+  originalUrl: "https://shopee.com.br/product/1",
+  imageUrl: "https://cdn.example.com/product.jpg",
+  currentPrice: 99.9,
+  originalPrice: 149.9,
+  category: "Eletrônicos",
+  explainability: {
+    contract_version: "pmav5.candidate/v1",
+    candidate_id: "candidate-1",
+    ingestion_id: "ingestion-1",
+    correlation_id: "discovery-1",
+    discovery_evidence: { provider: "Shopee Native V5" },
+    marketplace_metrics: { sourceItemId: "source-1" }
+  }
+};
+
+const content: OfficialAIContent = {
+  title: "Oferta oficial",
+  description: "Descrição validada da oferta.",
+  shortCopy: "Oferta por tempo limitado.",
+  longCopy: "Aproveite esta oferta selecionada por tempo limitado.",
+  hashtags: ["#oferta", "#promocao"],
+  callToAction: "Garanta agora",
+  highlights: ["Preço especial", "Produto selecionado"],
+  explanation: "Conteúdo aderente ao produto e aos canais.",
+  channelCopies: {
+    telegram: "Telegram oficial",
+    instagram: "Instagram oficial",
+    whatsapp: "WhatsApp oficial"
+  }
+};
+
+function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = {}) {
+  const dependencies: OfficialAIServiceDependencies = {
+    offers: { findById: vi.fn().mockResolvedValue(offer) },
+    providers: {
+      resolve: vi.fn().mockReturnValue({
+        name: "groq",
+        model: "llama-3.3-70b-versatile",
+        generate: vi.fn().mockResolvedValue({
+          content,
+          provider: "groq",
+          model: "llama-3.3-70b-versatile",
+          latencyMs: 25,
+          usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
+          finishReason: "stop"
+        })
+      })
+    },
+    content: {
+      persistDrafts: vi.fn().mockResolvedValue([
+        { postId: "post-tg", affiliateLinkId: "link-tg", channel: "telegram", state: "draft" },
+        { postId: "post-ig", affiliateLinkId: "link-ig", channel: "instagram", state: "draft" },
+        { postId: "post-wa", affiliateLinkId: "link-wa", channel: "whatsapp", state: "draft" }
+      ])
+    },
+    approval: {
+      approveSelected: vi.fn().mockResolvedValue({
+        status: "applied",
+        auditId: "state-audit-1",
+        newState: "approved"
+      })
+    },
+    idempotency: {
+      begin: vi.fn().mockResolvedValue({ status: "started" }),
+      complete: vi.fn().mockResolvedValue(undefined)
+    },
+    audit: { register: vi.fn().mockResolvedValue(undefined) },
+    clock: { now: vi.fn().mockReturnValue("2026-07-13T20:00:01.000Z") },
+    ...overrides
+  };
+  return dependencies;
+}
+
+describe("generateOfficialAI", () => {
+  it("gera uma vez, persiste três drafts e aprova somente depois dos posts", async () => {
+    const order: string[] = [];
+    const dependencies = createDependencies();
+    const provider = dependencies.providers.resolve("groq");
+    vi.mocked(provider.generate).mockImplementation(async () => {
+      order.push("provider");
+      return {
+        content,
+        provider: "groq",
+        model: provider.model,
+        latencyMs: 25,
+        finishReason: "stop"
+      };
+    });
+    vi.mocked(dependencies.content.persistDrafts).mockImplementation(async () => {
+      order.push("drafts");
+      return command.channels.map((channel) => ({
+        postId: `post-${channel}`,
+        affiliateLinkId: `link-${channel}`,
+        channel,
+        state: "draft" as const
+      }));
+    });
+    vi.mocked(dependencies.approval.approveSelected).mockImplementation(async () => {
+      order.push("approved");
+      return { status: "applied", auditId: "state-audit-1", newState: "approved" };
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result.status).toBe("approved");
+    expect(provider.generate).toHaveBeenCalledTimes(1);
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
+    expect(dependencies.approval.approveSelected).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(["provider", "drafts", "approved"]);
+    expect(dependencies.idempotency.complete).toHaveBeenCalledTimes(1);
+    expect(dependencies.audit.register).toHaveBeenCalledWith(expect.objectContaining({
+      commandId: command.commandId,
+      correlationId: command.correlationId,
+      causationId: command.causationId,
+      provider: "groq",
+      model: "llama-3.3-70b-versatile",
+      result: "approved",
+      postsPersisted: 3,
+      transitionCompleted: true
+    }));
+  });
+
+  it.each(["pending_manual_review", "approved", "posted", "rejected"] as const)(
+    "rejeita estado %s antes do provider",
+    async (state) => {
+      const dependencies = createDependencies({
+        offers: { findById: vi.fn().mockResolvedValue({ ...offer, state }) }
+      });
+
+      const result = await generateOfficialAI(command, dependencies);
+
+      expect(result).toMatchObject({ status: "rejected", code: "INVALID_OFFER_STATE" });
+      expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+      expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+      expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    ["ENTITY_NOT_FOUND", null],
+    ["TENANT_MISMATCH", { ...offer, tenantId: "tenant-2" }],
+    ["VERSION_CONFLICT", { ...offer, version: 2 }],
+    ["INVALID_CANDIDATE_CONTRACT", { ...offer, explainability: { ...offer.explainability, contract_version: "legacy" } }]
+  ])("falha com %s sem inferência ou persistência", async (code, foundOffer) => {
+    const dependencies = createDependencies({
+      offers: { findById: vi.fn().mockResolvedValue(foundOffer) }
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toMatchObject({ status: "rejected", code });
+    expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+    expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+  });
+
+  it("rejeita comando AI v1 inválido e canais duplicados", async () => {
+    const dependencies = createDependencies();
+    const invalid = {
+      ...command,
+      contractVersion: "pmav5.ai/v0",
+      channels: ["telegram", "telegram"]
+    } as unknown as OfficialAICommand;
+
+    const result = await generateOfficialAI(invalid, dependencies);
+
+    expect(result).toMatchObject({ status: "rejected", code: "INVALID_AI_COMMAND" });
+    expect(dependencies.offers.findById).not.toHaveBeenCalled();
+    expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+  });
+
+  it("não persiste saída estrutural inválida do provider", async () => {
+    const dependencies = createDependencies();
+    const provider = dependencies.providers.resolve("groq");
+    vi.mocked(provider.generate).mockResolvedValue({
+      content: { ...content, channelCopies: { telegram: "somente um canal" } } as OfficialAIContent,
+      provider: "groq",
+      model: provider.model,
+      latencyMs: 10,
+      finishReason: "stop"
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toMatchObject({ status: "rejected", code: "INVALID_PROVIDER_OUTPUT" });
+    expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+    expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+  });
+
+  it("mantém selected quando provider, posts ou aprovação falham", async () => {
+    for (const stage of ["provider", "posts", "approval"] as const) {
+      const dependencies = createDependencies();
+      if (stage === "provider") {
+        vi.mocked(dependencies.providers.resolve("groq").generate).mockRejectedValue(new Error("provider down"));
+      }
+      if (stage === "posts") {
+        vi.mocked(dependencies.content.persistDrafts).mockRejectedValue(new Error("posts down"));
+      }
+      if (stage === "approval") {
+        vi.mocked(dependencies.approval.approveSelected).mockResolvedValue({
+          status: "rejected",
+          code: "CAS_CONFLICT",
+          message: "conflict"
+        });
+      }
+
+      const result = await generateOfficialAI(command, dependencies);
+
+      expect(result.status).toBe("rejected");
+      expect(result).toMatchObject({ offerState: "selected" });
+    }
+  });
+
+  it("retorna replay sem ler oferta, chamar provider ou duplicar posts", async () => {
+    const original = { status: "approved", commandId: command.commandId, offerId: command.offerId } as const;
+    const dependencies = createDependencies({
+      idempotency: {
+        begin: vi.fn().mockResolvedValue({ status: "replay", result: original }),
+        complete: vi.fn()
+      }
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toEqual(original);
+    expect(dependencies.offers.findById).not.toHaveBeenCalled();
+    expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+    expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+  });
+
+  it("rejeita payload divergente com a mesma chave antes da inferência", async () => {
+    const dependencies = createDependencies({
+      idempotency: {
+        begin: vi.fn().mockResolvedValue({ status: "conflict" }),
+        complete: vi.fn()
+      }
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toMatchObject({ status: "rejected", code: "IDEMPOTENCY_CONFLICT" });
+    expect(dependencies.offers.findById).not.toHaveBeenCalled();
+    expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+  });
+
+  it("comando concorrente idêntico aguarda e reutiliza o primeiro resultado", async () => {
+    const original = Promise.resolve({
+      status: "approved" as const,
+      commandId: command.commandId,
+      offerId: command.offerId
+    });
+    const dependencies = createDependencies({
+      idempotency: {
+        begin: vi.fn().mockResolvedValue({ status: "pending", result: original }),
+        complete: vi.fn()
+      }
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toEqual(await original);
+    expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+    expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+  });
+});

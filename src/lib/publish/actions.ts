@@ -1,351 +1,40 @@
 "use server";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getCurrentUserId } from "@/lib/offers/queries";
-import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
-import { fetchLinkMetadata } from "@/lib/publish/scraper";
-import { evaluateQualityGate } from "@/lib/publish/quality-gate";
-import { logger } from "@/lib/utils/logger";
-import { generateOfferAnalysis } from "@/lib/ai/groq";
-import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import type { Channel, Offer } from "@/types/domain";
-import { curateOfferScore } from "@/lib/offers/curation-engine";
-import {
-  canonicalizeOfferUrl,
-  normalizeProductTitle,
-  validateOfferForPersistence,
-  type StrongOfferValidationResult
-} from "@/core/scraper/product-validator";
 
-async function findDuplicateOffer(
-  supabase: any,
-  userId: string,
-  validation: StrongOfferValidationResult
-): Promise<string | null> {
-  const { data } = await supabase
-    .from("offers")
-    .select("id, platform, product_name, current_price, original_url")
-    .eq("user_id", userId)
-    .eq("platform", validation.platform)
-    .limit(1000);
+const PARALLEL_COMPONENT_DISABLED = "PARALLEL_COMPONENT_DISABLED: use official curation, AI and publication screens";
 
-  const same = (data || []).find((offer: any) => {
-    const canonicalUrl = canonicalizeOfferUrl(offer.original_url);
-    const normalizedTitle = normalizeProductTitle(offer.product_name || "");
-    const samePrice = Number(offer.current_price) === Number(validation.price);
-
-    return (
-      canonicalUrl === validation.canonicalUrl ||
-      (normalizedTitle === validation.normalizedTitle && samePrice)
-    );
-  });
-
-  return same?.id || null;
+interface QuickPostResult {
+  ok: boolean;
+  message: string;
+  status?: string;
+  offer?: Offer;
+  trackedUrl?: string;
+  copy?: string;
+  copies?: { telegram: string; whatsapp: string; instagram: string };
 }
 
-export async function generateQuickPostAction(affiliateUrl: string, channel: Channel) {
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-
-  if (!supabase || !userId) {
-    return { ok: false, message: "Usuário não autenticado." };
-  }
-
-  if (!affiliateUrl) {
-    return { ok: false, message: "O link de afiliado é obrigatório." };
-  }
-
-  // 1. Scraping do link
-  const startScrapeTime = Date.now();
-  const metadata = await fetchLinkMetadata(affiliateUrl, userId);
-  const processingTimeMs = Date.now() - startScrapeTime;
-
-  // Quality Gate Avaliação Flexível
-  const qualityGate = evaluateQualityGate(metadata);
-
-  // Observabilidade Estruturada
-  logger.info("Processamento de Link Finalizado", {
-    event: "LINK_PROCESSED",
-    originalUrl: affiliateUrl,
-    finalUrl: metadata.finalUrl,
-    marketplace: metadata.platform,
-    pageType: qualityGate.classification,
-    imageFound: !!metadata.imageUrl,
-    imageSource: metadata.imageSource || "none",
-    priceFound: !!metadata.price && metadata.price > 0,
-    qualityGateResult: qualityGate.status,
-    rejectionReason: qualityGate.reason || "none",
-    processingTimeMs
-  });
-
-  if (qualityGate.status === "REJECTED") {
-    return { 
-      ok: false, 
-      status: "REJECTED", 
-      message: `Publicação Rejeitada (Quality Gate). Motivo: ${qualityGate.reason}` 
-    };
-  }
-
-  // Preenchimento de Segurança se a Vercel for bloqueada de raspar
-  if (!metadata.title || metadata.title === "Oferta Especial" || metadata.title.length < 5) {
-    metadata.title = "Oferta Imperdível Encontrada!";
-  }
-  if (!metadata.platform || metadata.platform === "Outro") {
-    metadata.platform = "Link Externo" as any;
-  }
-
-  const offerValidation = validateOfferForPersistence({
-    product_name: metadata.title,
-    platform: metadata.platform,
-    original_url: metadata.finalUrl || affiliateUrl,
-    image_url: metadata.imageUrl,
-    current_price: metadata.price,
-  });
-
-  const isCollection = qualityGate.classification === "STORE_PAGE" || 
-                       qualityGate.classification === "CATEGORY_PAGE" || 
-                       qualityGate.classification === "SOCIAL_PAGE";
-
-  if (!offerValidation.valid) {
-    if (isCollection && offerValidation.rejectReason === "PRECO_INVALIDO") {
-      offerValidation.valid = true;
-      offerValidation.platform = metadata.platform;
-      offerValidation.price = metadata.price || 0;
-    } else {
-      return {
-        ok: false,
-        status: "REJECTED",
-        message: `Oferta rejeitada: ${offerValidation.rejectReason}`
-      };
-    }
-  }
-
-  const duplicateOfferId = await findDuplicateOffer(supabase, userId, offerValidation);
-  if (duplicateOfferId) {
-    return {
-      ok: false,
-      status: "REJECTED",
-      message: `Oferta duplicada bloqueada antes da gravação: ${duplicateOfferId}`
-    };
-  }
-
-  // Processamento do Score pelo Curation Engine
-  const curation = curateOfferScore({
-    current_price: metadata.price || 0,
-    category: "Geral" // fallback até extrairmos categoria rica
-  });
-
-  // 2. Criar Oferta na base
-  const { data: newOffer, error: offerError } = await supabase
-    .from("offers")
-    .insert({
-      user_id: userId,
-      platform: offerValidation.platform,
-      product_name: metadata.title,
-      original_url: offerValidation.canonicalUrl,
-      image_url: metadata.imageUrl,
-      current_price: offerValidation.price,
-      status: "approved",
-      score: curation.score,
-      official_policy: curation.official_policy,
-      historical_policy: curation.historical_policy,
-      explainability: curation.explainability,
-    })
-    .select()
-    .single<Offer>();
-
-  if (offerError || !newOffer) {
-    return { ok: false, message: "Erro ao criar oferta avulsa: " + offerError?.message };
-  }
-
-  // 3. Criar Links Rastreados (Para a IA ter acesso aos 3 canais se precisar)
-  // Mas para o disparo rápido, priorizamos o canal escolhido.
-  // Vamos criar um link para o canal principal.
-  const utmSource = channel;
-  const utmMedium = "social";
-  const utmCampaign = "caca_oferta_express";
-  
-  // Injeta parâmetros de afiliado oficiais (Mercado Livre e Shein)
-  let finalAffiliateUrl = affiliateUrl;
-  if (metadata.platform === "Mercado Livre") {
-    const { generateMLAffiliateLink } = await import("@/lib/platforms/mercadolivre");
-    finalAffiliateUrl = generateMLAffiliateLink(metadata.finalUrl || affiliateUrl, userId);
-  } else if (metadata.platform === "Shein") {
-    const { generateSheinAffiliateLink } = await import("@/lib/platforms/shein");
-    finalAffiliateUrl = await generateSheinAffiliateLink(metadata.finalUrl || affiliateUrl, userId);
-  } else if (metadata.platform === "Netshoes" as any) {
-    const { generateNetshoesAffiliateLink } = await import("@/lib/platforms/netshoes");
-    finalAffiliateUrl = generateNetshoesAffiliateLink(metadata.finalUrl || affiliateUrl);
-  }
-
-  const subId = createSubId(channel, newOffer.product_name, newOffer.id);
-  const trackedUrl = createTrackedUrl(finalAffiliateUrl, subId, utmSource, utmMedium, utmCampaign);
-
-  const { error: linkError } = await supabase.from("affiliate_links").upsert(
-    {
-      user_id: userId,
-      offer_id: newOffer.id,
-      channel,
-      original_url: finalAffiliateUrl,
-      tracked_url: trackedUrl,
-      sub_id: subId
-    },
-    { onConflict: "offer_id,channel" }
-  );
-
-  if (linkError) {
-    return { ok: false, message: "Erro ao criar tracking: " + linkError.message };
-  }
-
-  // Vamos montar os links falsos/reais para a IA. 
-  // Na Publish Express, queremos o post especificamente para 1 canal ou pra todos? 
-  // O ideal é a IA gerar pra todos, pois ela já retorna o JSON completo.
-  const aiLinks = {
-    telegram: channel === "telegram" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("telegram", newOffer.product_name, newOffer.id), "telegram", utmMedium, utmCampaign),
-    instagram: channel === "instagram" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("instagram", newOffer.product_name, newOffer.id), "instagram", utmMedium, utmCampaign),
-    whatsapp: channel === "whatsapp" ? trackedUrl : createTrackedUrl(finalAffiliateUrl, createSubId("whatsapp", newOffer.product_name, newOffer.id), "whatsapp", utmMedium, utmCampaign),
-  };
-
-  // 4. Invocar a IA (Groq Exclusivo)
-  const aiResult = await generateOfferAnalysis(newOffer, aiLinks);
-
-  // 5. Retornar os dados prontos
-  return {
-    ok: true,
-    offer: newOffer,
-    trackedUrl,
-    copies: {
-      telegram: aiResult.telegram,
-      whatsapp: aiResult.whatsapp,
-      instagram: aiResult.instagram_feed,
-    },
-    copy: channel === "telegram" ? aiResult.telegram 
-        : channel === "whatsapp" ? aiResult.whatsapp 
-        : aiResult.instagram_feed // Retrocompatibilidade
-  };
+export async function generateQuickPostAction(affiliateUrl: string, channel: Channel): Promise<QuickPostResult> {
+  void affiliateUrl;
+  void channel;
+  return { ok: false, status: "DISABLED", message: PARALLEL_COMPONENT_DISABLED };
 }
 
 export async function publishToTelegramAction(text: string, imageUrl?: string) {
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-
-  if (!supabase || !userId) {
-    return { ok: false, message: "Usuário não autenticado." };
-  }
-
-  try {
-    const { sendTelegramMessage, sendTelegramPhoto } = await import("@/lib/telegram/client");
-    if (imageUrl) {
-      await sendTelegramPhoto(text, imageUrl);
-    } else {
-      await sendTelegramMessage(text);
-    }
-    return { ok: true, message: "Publicado com sucesso no Telegram!" };
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      return { ok: false, message: error.message || "Erro ao publicar no Telegram." };
-    }
-    return { ok: false, message: "Erro desconhecido ao publicar no Telegram." };
-  }
+  void text;
+  void imageUrl;
+  return { ok: false, message: PARALLEL_COMPONENT_DISABLED };
 }
 
 export async function publishToInstagramAction(caption: string, imageUrl: string, offerId?: string) {
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-
-  if (!supabase || !userId) {
-    return { ok: false, message: "Usuário não autenticado." };
-  }
-
-  if (!imageUrl) {
-    return { ok: false, message: "O Instagram exige uma imagem para publicar no Feed. Esse link não tinha uma imagem extraída." };
-  }
-
-  try {
-    const { publishToInstagram, isInstagramConfigured, testInstagramConnection } = await import("@/lib/instagram/client");
-    
-    // Pré-check: Token existe?
-    if (!isInstagramConfigured()) {
-      return { ok: false, message: "INSTAGRAM_ACCESS_TOKEN não está configurado. Vá em Configurações e adicione o token da Meta Graph API." };
-    }
-
-    // Pré-check: Conexão válida?
-    console.log("[PublishAction] Verificando conexão com Instagram...");
-    const connTest = await testInstagramConnection();
-    if (!connTest.ok) {
-      return { ok: false, message: `Instagram desconectado: ${connTest.message}. Verifique se o token da Meta Graph API não expirou.` };
-    }
-
-    console.log("[PublishAction] Conexão OK. Preparando mídia...");
-    
-    // NOVIDADE: Em vez de postar a imagem crua, vamos gerar o Reels no Cloudinary!
-    const { uploadImageAndGenerateVideo } = await import("@/lib/cloudinary");
-    const videoResult = await uploadImageAndGenerateVideo(imageUrl);
-    
-    let postId: string;
-    
-    if (videoResult.success && videoResult.videoUrl) {
-      console.log("[PublishAction] Vídeo gerado no Cloudinary. Publicando como Reels...");
-      const { publishVideoToInstagram } = await import("@/lib/instagram/client");
-      postId = await publishVideoToInstagram(videoResult.videoUrl, caption);
-    } else {
-      console.log("[PublishAction] Falha ao gerar vídeo, fazendo fallback para post estático...");
-      const { publishToInstagram } = await import("@/lib/instagram/client");
-      postId = await publishToInstagram(imageUrl, caption);
-    }
-
-    if (offerId) {
-      await supabase.from("posts").insert({
-        offer_id: offerId,
-        user_id: userId,
-        channel: "instagram",
-        content: caption,
-        status: "published",
-        external_id: postId,
-        posted_at: new Date().toISOString()
-      });
-    }
-
-    return { ok: true, message: `Publicado com sucesso no Instagram! (Post ID: ${postId})` };
-  } catch (error: unknown) {
-    console.error("[PublishAction] Erro ao publicar no Instagram:", error);
-    if (error instanceof Error) {
-      return { ok: false, message: error.message || "Erro ao publicar no Instagram." };
-    }
-    return { ok: false, message: "Erro desconhecido ao publicar no Instagram." };
-  }
+  void caption;
+  void imageUrl;
+  void offerId;
+  return { ok: false, message: PARALLEL_COMPONENT_DISABLED };
 }
 
 export async function publishToWhatsAppAction(text: string, imageUrl?: string) {
-  const supabase = await createServerSupabaseClient();
-  const userId = await getCurrentUserId();
-
-  if (!supabase || !userId) {
-    return { ok: false, message: "Usuário não autenticado." };
-  }
-
-  const targetId = resolveConfiguredWhatsAppTargetId();
-  if (!targetId) {
-    return { 
-      ok: false, 
-      message: "WHATSAPP_TARGET_ID não está configurado no .env.local. Use um JID como 120363...@g.us ou ...@newsletter."
-    };
-  }
-
-  try {
-    const { whatsappService } = await import("@/lib/integrations/whatsapp");
-    const result = await whatsappService.sendMedia(targetId, text, imageUrl);
-
-    return { ok: true, message: "Publicado com sucesso no WhatsApp via Motor (Oracle)!" };
-  } catch (error: unknown) {
-    logger.error("Erro ao conectar com o Motor WhatsApp", error, {
-      event: "whatsapp_publish_action_failed",
-      targetId
-    });
-    return { 
-      ok: false, 
-      message: "Erro ao comunicar com o motor WhatsApp. Verifique se o motor está rodando e conectado na Oracle (Settings → Connection Tests → WhatsApp)." 
-    };
-  }
+  void text;
+  void imageUrl;
+  return { ok: false, message: PARALLEL_COMPONENT_DISABLED };
 }
-
