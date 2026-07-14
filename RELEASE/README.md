@@ -20,6 +20,6 @@ graph TD
 ```
 
 ## STATUS ATUAL
-- **Fase:** R5.04 - Deploy (Concluída)
-- **Status:** PASS (Arquitetura V5 implantada e verificada — 355/355 testes aprovados)
-- **Próxima Etapa:** R5.05 - Hypercare
+- **Fase:** R5.05 - Hypercare (Concluída)
+- **Status:** PASS (Arquitetura estável, nenhuma regressão identificada)
+- **Próxima Etapa:** R5.06 - Release Closure
