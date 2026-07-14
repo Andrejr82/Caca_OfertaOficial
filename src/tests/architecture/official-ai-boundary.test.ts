@@ -46,16 +46,23 @@ describe("fronteira oficial de IA", () => {
     fetchSpy.mockRestore();
   });
 
-  it("arquivos proibidos não importam a composição nem providers oficiais", () => {
+  it("Oracle e Discovery não importam a composição nem providers oficiais", () => {
     for (const path of [
       "scripts/oracle-scraper.cjs",
       "scripts/oracle-worker-discovery-only.cjs",
-      "src/lib/inngest/functions.ts",
-      "src/app/api/publish/extension/route.ts",
       "src/lib/affiliates/scraper.ts"
     ]) {
       const source = readFileSync(path, "utf8");
       expect(source).not.toContain("createOfficialAIServiceDependencies");
+      expect(source).not.toMatch(/core\/ai\/providers\//);
+    }
+  });
+
+  it("Inngest e Extension são clientes da composição oficial sem importar providers", () => {
+    for (const path of ["src/lib/inngest/functions.ts", "src/app/api/publish/extension/route.ts"]) {
+      const source = readFileSync(path, "utf8");
+      expect(source).toContain("generateOfficialAI");
+      expect(source).toContain("createOfficialAIServiceDependencies");
       expect(source).not.toMatch(/core\/ai\/providers\//);
     }
   });

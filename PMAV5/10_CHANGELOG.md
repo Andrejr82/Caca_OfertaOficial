@@ -125,3 +125,16 @@ Governança PMAV5 congelada.
 - **Testes:** 236 Vitest aprovados em 39 arquivos; ESLint e typecheck direcionados aprovados; cobertura não emitida porque o provider V8 não está instalado.
 - **Resultado:** CP-008 `COMPLETED`; o commit final é `refactor(pmav5): centralize publication in official service`.
 - **Escopo negativo:** Oracle Worker, Discovery, marketplaces, Official AI Service, Curadoria, Inngest, Extensão, GitHub Actions, Scheduler, PM2, banco/schema/migrations, `.env`, segredos, produção e deploy não foram alterados/executados.
+
+## PMAV5-009 — 2026-07-14
+
+- **Modo:** IMPLEMENTATION, M-07 Subordinação dos Componentes Paralelos.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `8f282d61ca38b4ba120797d24811c18bdc58d471`.
+- **Clientes:** Inngest e Extension consomem Official AI/Publication Services; GitHub Actions e scripts de publicação consomem `publishOfficialPost()`.
+- **Fail-closed:** Publish Express, Generic Publisher, automação, Next.js Discovery, jobs auxiliares, scripts administrativos, LLM legado e experimentos não alcançam estado, posts, providers ou transportes.
+- **Órfãos:** scrapers Next/local, publish scraper e comment polling foram removidos dos entrypoints oficiais e preservados sem caller por restrição de escopo.
+- **Provas:** 96 testes arquiteturais PMAV5-009; regressão completa com 333 testes em 40 arquivos, zero falhas.
+- **Qualidade:** ESLint direcionado aprovado; typecheck direcionado com 19 arquivos e zero diagnósticos; typecheck global mantém somente dívida preexistente fora do diff.
+- **Resultado:** CP-009 `COMPLETED`; Discovery, Estado, IA e Publicação possuem uma única autoridade executável.
+- **Escopo negativo:** nenhum deploy, publicação real, IA real, Discovery real, banco/schema/migration, secret, `.env`, produção, PM2 ou Scheduler foi alterado/executado.

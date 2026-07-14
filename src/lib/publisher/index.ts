@@ -13,7 +13,8 @@ export interface PublishResult {
   channel: ChannelType;
 }
 
-const LEGACY_PUBLISHER_DISABLED = "LEGACY_PUBLISHER_DISABLED: use publishOfficialPost() through an authenticated official route";
+const PARALLEL_COMPONENT_DISABLED = "PARALLEL_COMPONENT_DISABLED";
+const LEGACY_PUBLISHER_DISABLED = `${PARALLEL_COMPONENT_DISABLED}: use publishOfficialPost() through an authenticated official route`;
 
 export class Publisher {
   async publish(channel: ChannelType, payload: PublishPayload): Promise<PublishResult> {

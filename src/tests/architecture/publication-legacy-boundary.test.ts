@@ -13,9 +13,7 @@ describe("publication legacy and parallel boundaries", () => {
 
   it("keeps quick publication actions fail-closed", () => {
     const actions = source("src/lib/publish/actions.ts");
-    for (const route of ["/api/telegram/publish", "/api/whatsapp/publish", "/api/instagram/publish"]) {
-      expect(actions).toContain(route);
-    }
+    expect(actions).toContain("PARALLEL_COMPONENT_DISABLED");
     expect(actions).not.toMatch(/from\s+["'][^"']*telegram\/client|whatsappService\.|publishToInstagram\(/);
   });
 

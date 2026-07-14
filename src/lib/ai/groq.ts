@@ -2,7 +2,8 @@ import type { Offer } from "@/types/domain";
 import { PostBuilder } from "@/lib/post-builder";
 import type { GeneratedCopyInput } from "@/lib/ai/schemas/generated-copy.schema";
 
-const LEGACY_AI_DISABLED = "LEGACY_AI_DISABLED: use generateOfficialAI";
+const PARALLEL_COMPONENT_DISABLED = "PARALLEL_COMPONENT_DISABLED";
+const LEGACY_AI_DISABLED = `LEGACY_AI_DISABLED: use generateOfficialAI (${PARALLEL_COMPONENT_DISABLED})`;
 
 export interface AIAnalysisResult {
   score: number;
