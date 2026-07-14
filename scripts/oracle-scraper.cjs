@@ -1,14 +1,27 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  ORACLE-SCRAPER.CJS — Robô Caçador de Ofertas V2 (In-House)
+ *  ORACLE-SCRAPER.CJS — Oracle Worker Discovery-Only V5
  * ═══════════════════════════════════════════════════════════════
  * 
  * Processo permanente gerenciado pelo PM2.
- * Roda a cada 4 horas: raspa as lojas (Crawlee), formata (Groq),
- * gera links de afiliado e posta rascunhos.
+ * Roda a cada 4 horas: executa Discovery nativo, normaliza, sanitiza,
+ * deduplica, aplica novelty/score determinístico e persiste candidatos
+ * exclusivamente em pending_manual_review.
  */
 
 'use strict';
+
+const RETIRED_WORKER_FLAGS = [
+  '--amazon-official-dry-run',
+  '--discovery-dry-run',
+  '--shopee-official-dry-run',
+  '--shopee-v4-dry-run',
+];
+const retiredWorkerFlag = RETIRED_WORKER_FLAGS.find((flag) => process.argv.includes(flag));
+if (require.main === module && retiredWorkerFlag) {
+  console.error(`Modo legado desativado no Oracle Worker Discovery-Only: ${retiredWorkerFlag}`);
+  process.exit(1);
+}
 
 global.WebSocket = require('ws');
 
@@ -33,6 +46,7 @@ require('dotenv').config({ path: '.env.local' });
 require('tsx/cjs');
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { runMercadoLivreNativeTop20, writeMercadoLivreNativeTop20Reports } = require('./mercadolivre-native-top20-v5.cjs');
+const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { validateHtml, validateProduct, getScrapingPrompt, sanitizeScrapedData } = require('./scraper-adapter.cjs');
 const {
   normalizeProductContentForLLM,
@@ -4152,7 +4166,181 @@ async function persistMercadoLivreNativeTop20(products) {
   return { inserted: rows.length, novelty_rejected: products.length - rows.length };
 }
 
+async function loadActiveDiscoveryHistory(marketplace) {
+  const { data, error } = await supabase
+    .from('offers')
+    .select('item_id, product_id, shopee_item_id, original_url, status')
+    .eq('user_id', ADMIN_USER_ID)
+    .eq('platform', marketplace);
+  if (error) throw new Error(`Novelty ${marketplace}: ${error.message}`);
+  return (data || []).filter((row) => row.status !== 'rejected');
+}
+
+function normalizeShopeeCandidate(product, discoveredAt) {
+  return {
+    sourceItemId: product.itemId,
+    sourceUrl: product.offerLink || product.productLink,
+    title: product.productName,
+    imageUrl: product.imageUrl,
+    currentPrice: product.price,
+    originalPrice: product.originalPrice,
+    category: { id: product.productCatId, name: product.category, source: 'Shopee Affiliate Open API' },
+    marketplaceMetrics: {
+      sourcePosition: product.position,
+      itemId: product.itemId,
+      shopId: product.shopId,
+      productCatId: product.productCatId,
+      categoryOrder: product.categoryOrder,
+      sales: product.sales,
+      discount: product.discount,
+      rating: product.rating,
+      commissionRate: product.commissionRate,
+    },
+    deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
+    discoveredAt,
+  };
+}
+
+function normalizeMercadoLivreCandidate(product) {
+  const rawScore = calculateScoreV1({
+    product_name: product.title,
+    current_price: product.current_price,
+    old_price: product.old_price,
+    category: product.category_name,
+    image_url: product.image_url,
+    rating: null,
+  });
+  return {
+    sourceItemId: product.item_id || product.product_id || product.product_url,
+    sourceUrl: product.product_url,
+    title: product.title,
+    imageUrl: product.image_url,
+    currentPrice: product.current_price,
+    originalPrice: product.old_price,
+    category: { id: product.category_id, name: product.category_name, source: 'Mercado Livre Ofertas SSR' },
+    marketplaceMetrics: {
+      sourcePosition: product.source_position,
+      itemId: product.item_id,
+      productId: product.product_id,
+      sellerId: product.seller_id,
+      sellerName: product.seller_name,
+      shippingFree: product.shipping_free,
+      discountPercent: product.discount_percent,
+      sourceCategories: product.source_categories,
+    },
+    deterministicScore: Math.max(0, Math.min(10, Number(rawScore || 0))),
+    discoveredAt: product.discovered_at,
+  };
+}
+
+function normalizeAmazonCandidate(product, discoveredAt) {
+  return {
+    sourceItemId: product.asin,
+    sourceUrl: product.canonical_url,
+    title: product.title,
+    imageUrl: product.image,
+    currentPrice: product.price,
+    originalPrice: product.original_price,
+    category: { id: product.node_id, name: product.subcategory, source: 'Amazon Best Sellers' },
+    marketplaceMetrics: {
+      sourcePosition: product.rank,
+      asin: product.asin,
+      nodeId: product.node_id,
+      parentNodeId: product.parent_node_id,
+      category: product.category,
+      subcategory: product.subcategory,
+      seller: product.seller,
+      discount: product.discount,
+      novelty: product.novelty,
+    },
+    deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0))),
+    discoveredAt,
+  };
+}
+
 async function scrapeStore(store) {
+  const discoveredAt = new Date().toISOString();
+  if (store === 'Shopee') {
+    const result = await executeShopeeNativeDiscoveryV5({ persist: false });
+    return result.categories.flatMap((category) => category.products).map((product) => normalizeShopeeCandidate(product, discoveredAt));
+  }
+  if (store === 'Mercado Livre') {
+    const history = await loadActiveDiscoveryHistory(store);
+    const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
+    const result = await executeMercadoLivreNativeTop20();
+    return result.products
+      .filter((product) => ![product.item_id, product.product_id, product.product_url].filter(Boolean).some((key) => known.has(String(key))))
+      .map(normalizeMercadoLivreCandidate);
+  }
+  if (store === 'Amazon') {
+    const history = await loadActiveDiscoveryHistory(store);
+    const knownAsins = new Set(history.flatMap((row) => [row.product_id, row.item_id].filter(Boolean).map(String)));
+    const { runAmazonNativeTop20 } = require('./amazon-native-top20-v5.cjs');
+    const result = await runAmazonNativeTop20({ fetchImpl: global.fetch, knownAsins });
+    return result.products
+      .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
+      .map((product) => normalizeAmazonCandidate(product, discoveredAt));
+  }
+  throw new Error(`Marketplace não autorizado no Oracle Worker: ${store}`);
+}
+
+async function persistDiscoveryIngestionV1(ingestions, marketplace) {
+  if (!ingestions.length) return { accepted: 0, state: FINAL_STATE };
+  const rows = ingestions.map(({ candidate, ingestionId, correlationId }) => {
+    const metrics = candidate.marketplaceMetrics;
+    const row = {
+      user_id: candidate.tenantId,
+      platform: candidate.marketplace,
+      product_name: candidate.title,
+      category: candidate.category.name,
+      original_url: candidate.sourceUrl,
+      image_url: candidate.imageUrl,
+      current_price: candidate.currentPrice,
+      old_price: candidate.originalPrice,
+      score: candidate.deterministicScore,
+      status: FINAL_STATE,
+      explainability: {
+        contract_version: candidate.contractVersion,
+        ingestion_contract_version: 'pmav5.ingestion/v1',
+        candidate_id: candidate.candidateId,
+        ingestion_id: ingestionId,
+        correlation_id: correlationId,
+        discovery_evidence: candidate.discoveryEvidence,
+        marketplace_metrics: metrics,
+      },
+      notes: `[Oracle Discovery-Only V5] ${marketplace}; aguardando revisão manual.`,
+    };
+    if (marketplace === 'Shopee') {
+      Object.assign(row, {
+        shopee_item_id: metrics.itemId,
+        shopee_shop_id: metrics.shopId,
+        shopee_product_cat_id: metrics.productCatId,
+        native_category_order: metrics.categoryOrder,
+        native_category_position: metrics.sourcePosition,
+      });
+    } else if (marketplace === 'Mercado Livre') {
+      Object.assign(row, {
+        item_id: metrics.itemId,
+        product_id: metrics.productId,
+        category_id: candidate.category.id,
+        category_name: candidate.category.name,
+        source_position: metrics.sourcePosition,
+        seller_id: metrics.sellerId,
+        seller_name: metrics.sellerName,
+        shipping_free: metrics.shippingFree,
+        source_categories: metrics.sourceCategories,
+      });
+    } else if (marketplace === 'Amazon') {
+      Object.assign(row, { product_id: metrics.asin, source_position: metrics.sourcePosition });
+    }
+    return row;
+  });
+  const { error } = await supabase.from('offers').insert(rows);
+  if (error) throw new Error(`Ingestion V1 ${marketplace}: ${error.message}`);
+  return { accepted: rows.length, state: FINAL_STATE };
+}
+
+async function scrapeStoreLegacy(store) {
   let storeCandidates = [];
   const storeStartedAt = Date.now();
 
@@ -4478,6 +4666,24 @@ async function checkHeartbeat() {
 
 // ─── Ciclo Principal ──────────────────────────────────────────
 async function runScrapingCycle() {
+  const startedAt = Date.now();
+  const requestedAt = new Date().toISOString();
+  const result = await runDiscoveryOnlyCycle({
+    tenantId: ADMIN_USER_ID,
+    correlationId: crypto.randomUUID(),
+    requestedAt,
+    discover: scrapeStore,
+    persist: persistDiscoveryIngestionV1,
+  });
+  const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+  console.log(`[Oracle Discovery-Only V5] ciclo=${result.correlationId} duração=${durationSeconds}s estado=${result.finalState}`);
+  for (const summary of result.marketplaces) {
+    console.log(`[Oracle Discovery-Only V5] ${summary.marketplace}: descobertos=${summary.discovered} persistidos=${summary.persisted} estado=${summary.state}`);
+  }
+  return result;
+}
+
+async function runScrapingCycleLegacy() {
   const startTime = Date.now();
   SCRAPER_AUDIT_STATE.cycleStartedAt = startTime;
   console.log(`\n${'═'.repeat(60)}\n🚀 ORACLE-SCRAPER IN-HOUSE — Início em ${new Date().toLocaleString('pt-BR')}\n${'═'.repeat(60)}`);
@@ -4752,22 +4958,14 @@ async function runMercadoLivreOfficialDryRun() {
 
 // ─── Inicialização ────────────────────────────────────────────
 console.log('\n╔══════════════════════════════════════════╗');
-console.log('║   ORACLE-SCRAPER IN-HOUSE (Crawlee)      ║');
+console.log('║   ORACLE WORKER — DISCOVERY-ONLY V5      ║');
 console.log('╚══════════════════════════════════════════╝\n');
 
-// Verifica se temos pelo menos um LLM provider configurado
-const hasAtLeastOneLLM = !!PROVIDER_CONFIG.cerebras.apiKey || !!PROVIDER_CONFIG.groq.apiKey;
-const isDiscoveryDryRun = process.argv.includes('--discovery-dry-run');
-const isAmazonOfficialDryRun = process.argv.includes('--amazon-official-dry-run');
 const isMercadoLivreOfficialDryRun = process.argv.includes('--mercadolivre-native-top20-dry-run');
-
-const isShopeeV4DryRun = process.argv.includes('--shopee-v4-dry-run');
-const isShopeeOfficialDryRun = process.argv.includes('--shopee-official-dry-run');
 const isShopeeNativeTop20DryRun = process.argv.includes('--shopee-native-top20-dry-run');
 const isShopeeNativeCatalogRefresh = process.argv.includes('--refresh-shopee-native-catalog');
-
-if (!isAmazonOfficialDryRun && !isMercadoLivreOfficialDryRun && !isDiscoveryDryRun && !isShopeeV4DryRun && !isShopeeOfficialDryRun && !isShopeeNativeTop20DryRun && !isShopeeNativeCatalogRefresh && (!hasAtLeastOneLLM || !process.env.SUPABASE_SERVICE_ROLE_KEY)) {
-  console.log("Missing required API keys (Supabase and at least one LLM provider: Cerebras or Groq)");
+if (!isMercadoLivreOfficialDryRun && !isShopeeNativeTop20DryRun && !isShopeeNativeCatalogRefresh && !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.log('Missing required API key: Supabase service role');
   process.exit(1);
 }
 
@@ -5949,31 +6147,11 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
       console.error('❌ Erro no Mercado Livre Native Top 20 dry-run:', e.message);
       process.exitCode = 1;
     });
-  } else if (isAmazonOfficialDryRun) {
-    runAmazonOfficialDryRun().catch(e => {
-      console.error('❌ Erro no amazon official dry-run:', e.message);
-      process.exitCode = 1;
-    });
-  } else if (isShopeeOfficialDryRun) {
-    runShopeeOfficialDryRun().catch(e => {
-      console.error('❌ Erro no shopee official dry-run:', e.message);
-      process.exitCode = 1;
-    });
-  } else if (isShopeeV4DryRun) {
-    runShopeeV4DryRun().catch(e => {
-      console.error('❌ Erro no shopee dry-run:', e.message);
-      process.exitCode = 1;
-    });
-  } else if (isDiscoveryDryRun) {
-    runDiscoveryDryRun().catch(e => {
-      console.error('❌ Erro no dry-run discovery:', e.message);
-      process.exitCode = 1;
-    });
   } else {
     runScrapingCycle().catch(e => console.error('❌ Erro no ciclo:', e.message));
 
     cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch(e => console.error('❌ Erro:', e.message)), {
-      name: 'oracle-scraper-v2', timezone: 'America/Sao_Paulo', noOverlap: true
+      name: 'oracle-worker-discovery-v5', timezone: 'America/Sao_Paulo', noOverlap: true
     });
   }
 }
@@ -6613,6 +6791,7 @@ module.exports = {
   inspectMarketplaceCardsWithCrawlee,
   getRandomQueries,
   scrapeStore,
+  scrapeStoreLegacy,
   upsertOffer,
   processTopOffers,
   fetchShopeeProductsFromOfficialApi,
@@ -6761,7 +6940,7 @@ async function loadShopeeNoveltyKeys() {
     .from('offers')
     .select('shopee_item_id, shopee_shop_id, original_url, status')
     .eq('platform', 'Shopee')
-    .in('status', ['posted', 'draft', 'pending_manual_review', 'selected']);
+    .eq('user_id', ADMIN_USER_ID);
   if (error) throw new Error(`Novelty Shopee V5: ${error.message}`);
   const keys = new Set();
   for (const offer of data || []) {

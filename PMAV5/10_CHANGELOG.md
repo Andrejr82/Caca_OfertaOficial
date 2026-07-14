@@ -77,3 +77,15 @@ Governança PMAV5 congelada.
 - **Alteração funcional:** nenhuma.
 - **Alteração operacional/produção:** nenhuma.
 - **Verificação autorizada:** histórico Git, inspeção documental, buscas de consistência, revisão de diff e validação de escopo; nenhum build, teste funcional, runtime, migration, banco, scraping, IA, publicação ou deploy.
+
+## PMAV5-005 — 2026-07-13
+
+- **Modo:** IMPLEMENTATION, M-03 Oracle Worker Discovery-Only.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `5fdb734f52ebd7bcf56f33c282a9d1ca40ccc2fb`.
+- **Código:** núcleo Candidate V1 → Ingestion V1, adapters nativos Shopee/Mercado Livre/Amazon e persistência exclusiva em `pending_manual_review`.
+- **Desconexão:** IA, Groq, Cerebras, posts, publicação, drafts, `processTopOffers`, EPIC09, Selection Engine, Candidate Queue e fallbacks V3/V4 não possuem caminho a partir do Worker executável.
+- **Legado:** módulos com consumidores externos preservados fisicamente em funções não exportadas/não chamadas pelo Worker.
+- **Testes:** 132 Vitest aprovados e 2 ignorados; 19 regressões Node e 6 cenários Shopee aprovados; validação final registrada na auditoria da Sprint.
+- **Resultado:** CP-005 `COMPLETED`; os três marketplaces encerram em `pending_manual_review`.
+- **Produção:** nenhum Discovery real, IA, publicação, deploy, PM2, Oracle VPS, banco/schema/migration, `.env` ou segredo foi executado/alterado.
