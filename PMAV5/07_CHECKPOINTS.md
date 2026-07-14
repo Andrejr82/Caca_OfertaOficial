@@ -26,7 +26,8 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 | CP-009 | M-07 Fluxos Paralelos | **COMPLETED** | `AUDITORIAS/PMAV5-009_COMPONENTES_PARALELOS.md` |
 | CP-010 | M-08 Legado Arquivado e Removido | **COMPLETED** | `AUDITORIAS/PMAV5-010_REMOCAO_LEGADO.md` |
 | CP-011 | M-09 Observabilidade | **COMPLETED** | `AUDITORIAS/PMAV5-011_OBSERVABILIDADE_RECUPERACAO.md` |
-| CP-012 | M-10 E2E e Cutover | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
+| CP-012A | M-10A Homologação E2E | **COMPLETED** | PMAV5-012A concluída e certificada |
+| CP-012B | M-10B Cutover e Ativação | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
 
 ## Progresso certificado
 
@@ -41,6 +42,7 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 - CP-009 registra a subordinação de Inngest, Extension, GitHub Actions, Publish Express, Generic Publisher, scripts e jobs; componentes são clientes oficiais ou falham fechados.
 - CP-010 registra a remoção física dos runtimes legados certificados sem callers, preservando componentes oficiais e integrações externas não certificadas em fail-closed.
 - CP-011 registra a camada de observabilidade end-to-end, rastreabilidade técnica (Integration Logs) e reconciliação controlada com delegação segura, endpoints de Health/Readiness e detecção read-only de falhas e pendências operacionais.
+- CP-012A registra a homologação End-to-End da arquitetura oficial, sem alterações em produção.
 ## Regras obsoletas
 
 **OBSOLETO — substituído pelo ADR-013:** exigir `HOMOLOGATED` em CP-004 para iniciar PMAV5-005.

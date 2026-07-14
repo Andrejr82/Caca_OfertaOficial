@@ -1,5 +1,15 @@
 # Changelog do PMAV5
 
+## PMAV5-012A — 2026-07-14
+
+- **Modo:** IMPLEMENTATION.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **Documentos criados:** `AUDITORIAS/PMAV5-012A_HOMOLOGACAO_END_TO_END.md`, `SPRINTS/PMAV5-012A_HOMOLOGACAO_END_TO_END.md`, `ROLLBACKS/PMAV5-012A_ROLLBACK.md`.
+- **Documentos atualizados:** `07_CHECKPOINTS.md` e este changelog.
+- **Resultado:** CP-012A `COMPLETED`; Arquitetura certificada End-to-End em ambiente controlado. Testes unitários, de arquitetura, integridade e observabilidade validados e aprovados.
+- **Alteração funcional/operacional/produção:** Nenhuma; sem deploy, sem manipulação de banco em produção.
+- **Conclusão:** O sistema encontra-se oficialmente apto para Cutover (PMAV5-012B).
+
 ## PMAV5-000 — 2026-07-13
 
 - **Branch:** `codex/pmav5-architecture-unification`
