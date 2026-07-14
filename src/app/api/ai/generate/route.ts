@@ -10,6 +10,8 @@ import { generateInstagramMessage, generateTelegramMessage, generateWhatsAppMess
 import { assertShopeeSelected } from "@/lib/offers/shopee-manual-curation";
 import { assertMercadoLivreSelected } from "@/lib/offers/mercadolivre-manual-curation";
 import { assertAmazonSelected } from "@/lib/offers/amazon-manual-curation";
+import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
+import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 
 export async function POST(request: Request) {
   try {
@@ -103,6 +105,7 @@ export async function POST(request: Request) {
     let whatsappContent: string;
     let responseScore = Number(offer.score || 0);
     let responseStatus = offer.status;
+    let shouldApprove = couponOffer;
 
     if (couponOffer) {
       const instagramCopy = generateInstagramMessage(offer, { tracked_url: links.instagram.tracked_url } as AffiliateLink);
@@ -155,13 +158,12 @@ export async function POST(request: Request) {
         conversion_score: conversionScore
       };
 
-      const newStatus = finalRankScore >= 7.0 ? "approved" : offer.status;
+      shouldApprove = finalRankScore >= 7.0;
       const { error: updateError } = await supabase
         .from("offers")
         .update({
           score: finalRankScore,
           explainability: updatedExplainability,
-          status: newStatus,
           updated_at: new Date().toISOString()
         })
         .eq("id", offer.id);
@@ -177,11 +179,7 @@ export async function POST(request: Request) {
       instagramCarousel = analysis.instagram_carousel;
       whatsappContent = analysis.whatsapp;
       responseScore = analysis.score;
-      responseStatus = newStatus;
     }
-
-    // 5. Deleta rascunhos antigos de posts desta oferta para evitar duplicações
-    await supabase.from("posts").update({ status: "deleted", deleted_at: new Date().toISOString() }).eq("offer_id", offer.id).eq("status", "draft");
 
     // 6. Insere os novos rascunhos na tabela de posts
     // Para Instagram, formatamos as sugestões de Stories, Reels e Carrossel no conteúdo de forma amigável
@@ -238,23 +236,42 @@ export async function POST(request: Request) {
     const activeChannels = new Set((activePosts || []).map((post: any) => post.channel));
     const missingPostsToInsert = postsToInsert.filter((post) => !activeChannels.has(post.channel));
 
-    if (missingPostsToInsert.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        message: "Nenhum rascunho novo criado: já existem posts ativos para todos os canais.",
-        score: responseScore,
-        status: responseStatus
-      });
+    if (missingPostsToInsert.length > 0) {
+      const { error: postsError } = await supabase.from("posts").insert(missingPostsToInsert);
+      if (postsError) {
+        return NextResponse.json({ ok: false, message: "Erro ao salvar rascunhos de posts." }, { status: 500 });
+      }
     }
 
-    const { error: postsError } = await supabase.from("posts").insert(missingPostsToInsert);
-    if (postsError) {
-      return NextResponse.json({ ok: false, message: "Erro ao salvar rascunhos de posts." }, { status: 500 });
+    if (shouldApprove) {
+      const requestedAt = offer.updated_at || offer.created_at;
+      const commandId = `approval:${offer.id}:${requestedAt}`;
+      const approval = await transitionOfficialOfferState({
+        commandId,
+        idempotencyKey: commandId,
+        correlationId: commandId,
+        causationId: null,
+        tenantId: user.id,
+        actor: { type: "service", id: "nextjs-ai", service: "nextjs-ai" },
+        requestedAt,
+        entityId: offer.id,
+        fromState: "selected",
+        toState: "approved",
+        origin: "ai.generate.approval",
+        reason: { code: "AI_POSTS_VALIDATED" },
+        evidenceRefs: channels.map((channel) => `post:draft:${channel}`)
+      }, createSupabaseStateDependencies(supabase, user.id));
+      if (approval.status === "rejected") {
+        return NextResponse.json({ ok: false, message: approval.message }, { status: 409 });
+      }
+      responseStatus = "approved";
     }
 
     return NextResponse.json({
       ok: true,
-      message: "Copys e rascunhos de posts gerados com sucesso!",
+      message: missingPostsToInsert.length > 0
+        ? "Copys e rascunhos de posts gerados com sucesso!"
+        : "Posts draft já existentes foram preservados.",
       score: responseScore,
       status: responseStatus
     });

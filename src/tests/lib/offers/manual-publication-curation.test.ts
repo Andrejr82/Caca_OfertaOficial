@@ -75,19 +75,17 @@ describe("curadoria manual compartilhada antes da publicação", () => {
   });
 
   it.each(["whatsapp", "telegram", "instagram"])(
-    "integra a preparação persistida antes da publicação em %s",
+    "exige approved + draft e usa o State Service na publicação em %s",
     (channel) => {
       const routeSource = readFileSync(
         resolve(process.cwd(), `src/app/api/${channel}/publish/route.ts`),
         "utf8"
       );
 
-      expect(routeSource).toContain("prepareOfferForPublication");
-      expect(routeSource).toContain('.eq("status", "pending_manual_review")');
-      expect(routeSource).toContain('.select("*")');
-      expect(routeSource.indexOf('.select("*")')).toBeGreaterThan(
-        routeSource.indexOf('.eq("status", "pending_manual_review")')
-      );
+      expect(routeSource).not.toContain("prepareOfferForPublication");
+      expect(routeSource).toContain('offer.status !== "approved"');
+      expect(routeSource).toContain('post.status !== "draft"');
+      expect(routeSource).toContain("completeOfficialPublication");
     }
   );
 });

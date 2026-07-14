@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { sendTelegramMessage } from "@/lib/telegram/client";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
-import { prepareOfferForPublication } from "@/lib/offers/shopee-manual-curation";
+import { completeOfficialPublication } from "@/lib/state/official-publication-service";
+import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 
 type TelegramPublishResult = {
   message_id: number;
@@ -123,35 +124,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "Este post não é do canal Telegram." }, { status: 400 });
     }
 
-    let offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
+    const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
     if (!offer) {
       return NextResponse.json({ ok: false, message: "Oferta vinculada não encontrada." }, { status: 404 });
     }
-    try {
-      offer = await prepareOfferForPublication(offer, async (pendingOffer) => {
-        const { error: selectionError } = await supabase
-          .from("offers")
-          .update({ status: "selected", updated_at: new Date().toISOString() })
-          .eq("id", pendingOffer.id)
-          .eq("user_id", user.id)
-          .eq("platform", pendingOffer.platform)
-          .eq("status", "pending_manual_review");
-        if (selectionError) throw new Error(selectionError.message);
-
-        const { data: persistedOffer, error: confirmationError } = await supabase
-          .from("offers")
-          .select("*")
-          .eq("id", pendingOffer.id)
-          .eq("user_id", user.id)
-          .eq("platform", pendingOffer.platform)
-          .single();
-        if (confirmationError || !persistedOffer) {
-          throw new Error(confirmationError?.message || "Não foi possível confirmar selected.");
-        }
-        return persistedOffer;
-      });
-    } catch (error) {
-      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
+    if (offer.status !== "approved" || post.status !== "draft") {
+      return NextResponse.json({ ok: false, message: "Publicação exige oferta approved e post draft." }, { status: 409 });
     }
 
     // O usuário pode ter editado o texto na tela antes de aprovar
@@ -181,13 +159,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: `Erro ao enviar para o Telegram: ${error.message || 'Timeout/Conexão'}` }, { status: 502 });
     }
 
-    // 3. Atualiza o status do post para published
     const now = telegramPost.date ? new Date(telegramPost.date * 1000).toISOString() : new Date().toISOString();
+    const externalId = String(telegramPost.message_id);
+    await completeOfficialPublication({
+      tenantId: user.id,
+      actorId: "nextjs-telegram-publication",
+      offerId: offer.id,
+      postId: post.id,
+      origin: "publication.telegram",
+      requestedAt: post.created_at,
+      idempotencyKey: `publication:${post.id}:${externalId}`,
+      receiptRef: `receipt:telegram:${externalId}`
+    }, createSupabaseStateDependencies(supabase, user.id));
+
     const { error: postUpdateError } = await supabase
       .from("posts")
       .update({
-        status: "published",
-        external_id: String(telegramPost.message_id),
+        external_id: externalId,
         posted_at: now
       })
       .eq("id", post.id);
@@ -195,15 +183,6 @@ export async function POST(request: Request) {
     if (postUpdateError) {
       return NextResponse.json({ ok: false, message: "Erro ao atualizar status do post." }, { status: 500 });
     }
-
-    // 4. Atualiza o status da oferta para posted
-    await supabase
-      .from("offers")
-      .update({
-        status: "posted",
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", offer.id);
 
     return NextResponse.json({ ok: true, messageId: telegramPost.message_id });
   } catch (error) {

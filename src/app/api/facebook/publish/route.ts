@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { publishToFacebook } from "@/lib/platforms/facebook";
 import { logger } from "@/lib/utils/logger";
+import { completeOfficialPublication } from "@/lib/state/official-publication-service";
+import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 
 export async function POST(request: Request) {
   try {
@@ -35,9 +37,13 @@ export async function POST(request: Request) {
       logger.error("Post não encontrado", { postId, error: postError });
       return NextResponse.json({ error: "Post não encontrado" }, { status: 404 });
     }
+    const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
+    if (!offer || offer.status !== "approved" || post.status !== "draft") {
+      return NextResponse.json({ error: "Publicação exige oferta approved e post draft." }, { status: 409 });
+    }
 
     // 2. Chamar o publicador do Facebook
-    const imageUrl = post.offers?.image_url;
+    const imageUrl = offer.image_url;
     const result = await publishToFacebook(post.content, imageUrl);
 
     if (!result.success) {
@@ -47,12 +53,22 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Atualizar status no banco
+    const externalId = String(result.postId);
+    await completeOfficialPublication({
+      tenantId: user.id,
+      actorId: "nextjs-facebook-publication",
+      offerId: offer.id,
+      postId: post.id,
+      origin: "publication.facebook",
+      requestedAt: post.created_at,
+      idempotencyKey: `publication:${post.id}:${externalId}`,
+      receiptRef: `receipt:facebook:${externalId}`
+    }, createSupabaseStateDependencies(supabase, user.id));
+
     const { error: updateError } = await supabase
       .from("posts")
       .update({
-        status: "published",
-        external_id: result.postId,
+        external_id: externalId,
         posted_at: new Date().toISOString(),
       })
       .eq("id", postId);

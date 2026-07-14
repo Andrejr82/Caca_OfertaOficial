@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { publishToInstagram } from "@/lib/instagram/client";
 import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
-import { prepareOfferForPublication } from "@/lib/offers/shopee-manual-curation";
+import { completeOfficialPublication } from "@/lib/state/official-publication-service";
+import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 
 export async function POST(request: Request) {
   try {
@@ -45,32 +46,9 @@ export async function POST(request: Request) {
     }
 
     // O Supabase pode retornar a relação como um array dependendo de como a foreign key foi resolvida.
-    let offer = Array.isArray(offerData) ? offerData[0] : offerData;
-    try {
-      offer = await prepareOfferForPublication(offer, async (pendingOffer) => {
-        const { error: selectionError } = await supabase
-          .from("offers")
-          .update({ status: "selected", updated_at: new Date().toISOString() })
-          .eq("id", pendingOffer.id)
-          .eq("user_id", user.id)
-          .eq("platform", pendingOffer.platform)
-          .eq("status", "pending_manual_review");
-        if (selectionError) throw new Error(selectionError.message);
-
-        const { data: persistedOffer, error: confirmationError } = await supabase
-          .from("offers")
-          .select("*")
-          .eq("id", pendingOffer.id)
-          .eq("user_id", user.id)
-          .eq("platform", pendingOffer.platform)
-          .single();
-        if (confirmationError || !persistedOffer) {
-          throw new Error(confirmationError?.message || "Não foi possível confirmar selected.");
-        }
-        return persistedOffer;
-      });
-    } catch (error) {
-      return NextResponse.json({ ok: false, message: (error as Error).message }, { status: 409 });
+    const offer = Array.isArray(offerData) ? offerData[0] : offerData;
+    if (offer.status !== "approved" || post.status !== "draft") {
+      return NextResponse.json({ ok: false, message: "Publicação exige oferta approved e post draft." }, { status: 409 });
     }
 
     const couponOffer = isCouponOffer(offer);
@@ -100,22 +78,25 @@ export async function POST(request: Request) {
     if (couponOffer) {
       const externalId = await publishToInstagram(imageUrl, publishCaption);
 
-      await supabase
+      await completeOfficialPublication({
+        tenantId: user.id,
+        actorId: "nextjs-instagram-publication",
+        offerId: offer.id,
+        postId: post.id,
+        origin: "publication.instagram",
+        requestedAt: post.created_at,
+        idempotencyKey: `publication:${post.id}:${externalId}`,
+        receiptRef: `receipt:instagram:${externalId}`
+      }, createSupabaseStateDependencies(supabase, user.id));
+
+      const { error: metadataError } = await supabase
         .from("posts")
         .update({
-          status: "published",
           external_id: externalId,
           posted_at: new Date().toISOString()
         })
         .eq("id", post.id);
-
-      await supabase
-        .from("offers")
-        .update({
-          status: "posted",
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", offer.id);
+      if (metadataError) throw new Error(metadataError.message);
 
       return NextResponse.json({
         ok: true,
@@ -123,72 +104,10 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Dispara o GitHub Actions para Renderizar e Postar o Vídeo
-    console.log("[Instagram API] Disparando GitHub Actions para geração do vídeo...");
-    
-    const githubToken = process.env.GITHUB_TOKEN;
-    if (!githubToken) {
-      return NextResponse.json({ 
-        ok: false, 
-        message: "Variável de ambiente GITHUB_TOKEN não configurada na Vercel." 
-      }, { status: 500 });
-    }
-
-    // O format do original price e current price precisa vir da oferta de forma segura
-    const currentPriceNum = Number(offer.current_price);
-    const currentPrice = !isNaN(currentPriceNum) && currentPriceNum > 0 ? currentPriceNum.toFixed(2).replace('.', ',') : "0,00";
-
-    const originalPriceNum = Number(offer.original_price || offer.old_price);
-    const originalPrice = !isNaN(originalPriceNum) && originalPriceNum > 0 ? originalPriceNum.toFixed(2).replace('.', ',') : "";
-
-    const repoOwner = "Andrejr82"; // Substitua pelo usuário correto se necessário, mas em repositórios pessoais é o owner do repo
-    const repoName = "Caca_OfertaOficial";
-    
-    // O GitHub aceita workflow dispatches através dessa API REST
-    const githubUrl = `https://api.github.com/repos/${repoOwner}/${repoName}/actions/workflows/publish-reel.yml/dispatches`;
-
-    const githubRes = await fetch(githubUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${githubToken}`,
-        "Accept": "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        ref: "main", // ou "master" dependendo do repositório
-        inputs: {
-          postId: post.id,
-          offerId: offer.id,
-          productName: offer.product_name || "Oferta Especial",
-          originalPrice: originalPrice,
-          currentPrice: currentPrice,
-          imageUrl: imageUrl,
-          caption: publishCaption
-        }
-      })
-    });
-
-    if (!githubRes.ok) {
-      const gitError = await githubRes.text();
-      console.error("[GitHub Actions Error]:", gitError);
-      return NextResponse.json({ 
-        ok: false, 
-        message: `Falha ao acionar o GitHub Actions: ${githubRes.statusText}. Verifique o GITHUB_TOKEN.` 
-      }, { status: 500 });
-    }
-
-    // 3. Atualiza o status do post para processing (já que o github assumiu)
-    await supabase
-      .from("posts")
-      .update({
-        status: "processing"
-      })
-      .eq("id", post.id);
-
-    return NextResponse.json({ 
-      ok: true, 
-      message: "Renderização do Vídeo iniciada no servidor! A publicação ocorrerá em até 2 minutos." 
-    });
+    return NextResponse.json({
+      ok: false,
+      message: "Publicação assíncrona por GitHub Actions está desconectada do fluxo oficial de estados."
+    }, { status: 409 });
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Falha na publicação no Instagram.";

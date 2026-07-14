@@ -20,7 +20,7 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 | CP-003 | M-01 Configuração e Contratos | **COMPLETED** | `AUDITORIAS/PMAV5-003_CONFIGURACAO_CANONICA.md` |
 | CP-004 | M-02 Serviço Oficial de Estados | **COMPLETED** | `AUDITORIAS/PMAV5-004_STATE_SERVICE.md` |
 | CP-005 | M-03 Oracle Worker Discovery-Only | **COMPLETED** | `AUDITORIAS/PMAV5-005_ORACLE_WORKER_DISCOVERY_ONLY.md` |
-| CP-006 | M-04 Ingestão e Curadoria | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
+| CP-006 | M-04 Ingestão e Curadoria | **COMPLETED** | `AUDITORIAS/PMAV5-006_CURADORIA_INGESTAO_OFICIAL.md` |
 | CP-007 | M-05 IA e Posts | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
 | CP-008 | M-06 Publicação | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
 | CP-009 | M-07 Fluxos Paralelos | **PLANNED** | dependências definidas em `08_DEPENDENCIAS_DAS_SPRINTS.md` |
@@ -35,6 +35,7 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 - CP-003 registra a conclusão de M-01, Configuração e Contratos Canônicos.
 - CP-004 registra a conclusão de M-02, Serviço Oficial de Estados.
 - CP-005 registra o Oracle Worker Discovery-Only, com Shopee, Mercado Livre e Amazon encerrando em `pending_manual_review`.
+- CP-006 registra Curadoria, Aprovação, Rejeição e Publicação do runtime oficial exclusivamente pelo State Service, com CAS, idempotência e AuditPort.
 
 ## Regras obsoletas
 

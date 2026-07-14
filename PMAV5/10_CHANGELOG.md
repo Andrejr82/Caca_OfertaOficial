@@ -89,3 +89,15 @@ Governança PMAV5 congelada.
 - **Testes:** 132 Vitest aprovados e 2 ignorados; 19 regressões Node e 6 cenários Shopee aprovados; validação final registrada na auditoria da Sprint.
 - **Resultado:** CP-005 `COMPLETED`; os três marketplaces encerram em `pending_manual_review`.
 - **Produção:** nenhum Discovery real, IA, publicação, deploy, PM2, Oracle VPS, banco/schema/migration, `.env` ou segredo foi executado/alterado.
+
+## PMAV5-006 — 2026-07-13
+
+- **Modo:** IMPLEMENTATION, M-04 Curadoria e Ingestão Oficial.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `1abba0f381ecc13e5e0f4a7cba0ca1568cf6d421`.
+- **Código:** adapter Supabase do State Service, serviço oficial de publicação e migração dos callers oficiais de Curadoria, Aprovação, Rejeição e Publicação.
+- **Garantias:** CAS por tenant/estado/versão lógica, idempotência persistida em `app_settings` e AuditPort em `integration_logs`, sem schema/migration.
+- **Desconexão:** auto-seleção na publicação, Publish Express com IA/publicação direta, rejeição de posts fora da máquina e dispatch Instagram/GitHub sem reconciliação oficial.
+- **Testes:** 152 Vitest aprovados e 2 ignorados; ESLint direcionado e typecheck direcionado sem erros da Sprint.
+- **Resultado:** CP-006 `COMPLETED`; nenhum update direto de `offers.status` ou `posts.status` permanece nos fluxos oficiais.
+- **Escopo negativo:** Oracle Worker, Discovery, marketplaces, Scheduler, PM2, Inngest, Extension, GitHub Actions, Capacity Hunter, feature flags, banco, schema, migrations e produção não foram alterados.
