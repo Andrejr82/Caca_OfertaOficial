@@ -101,3 +101,15 @@ Governança PMAV5 congelada.
 - **Testes:** 152 Vitest aprovados e 2 ignorados; ESLint direcionado e typecheck direcionado sem erros da Sprint.
 - **Resultado:** CP-006 `COMPLETED`; nenhum update direto de `offers.status` ou `posts.status` permanece nos fluxos oficiais.
 - **Escopo negativo:** Oracle Worker, Discovery, marketplaces, Scheduler, PM2, Inngest, Extension, GitHub Actions, Capacity Hunter, feature flags, banco, schema, migrations e produção não foram alterados.
+
+## PMAV5-007 — 2026-07-13
+
+- **Modo:** IMPLEMENTATION, M-05 Serviço Oficial de IA e Posts.
+- **Branch:** `codex/pmav5-architecture-unification`.
+- **SHA inicial:** `746abb2b7967315c55cf0070ae8a753ed8d02573`.
+- **Código:** núcleo `src/core/ai/`, providers puros Groq/Cerebras, adapter Supabase oficial, composição server-side e rota `/api/ai/generate` subordinada ao serviço.
+- **Garantias:** IA apenas após `selected`; Candidate/AI/State contracts antes do provider; links/posts idempotentes; posts somente `draft`; aprovação somente por `transitionOfficialOfferState()` com CAS.
+- **Desconexão:** `callLLM`, `generateOfferAnalysis` e `analyzeConversionPotential` compartilhados falham fechados sem rede; callers proibidos permanecem inalterados e sem acesso aos providers oficiais.
+- **Testes:** 177 Vitest aprovados em 34 arquivos; ESLint e typecheck direcionados aprovados; cobertura não emitida porque o provider V8 não está instalado.
+- **Resultado:** CP-007 `COMPLETED`; o commit final é `refactor(pmav5): centralize ai and draft posts in official service`.
+- **Escopo negativo:** Oracle Worker, Discovery, marketplaces, Inngest, Extension, Scheduler, PM2, publicação, banco/schema/migrations, produção e deploy não foram alterados/executados.

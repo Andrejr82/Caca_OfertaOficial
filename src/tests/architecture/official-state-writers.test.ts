@@ -26,7 +26,8 @@ describe("official state writers", () => {
 
   it("routes curation, approval and publication through the official service", () => {
     expect(source("src/lib/offers/actions.ts")).toContain("transitionOfficialOfferState");
-    expect(source("src/app/api/ai/generate/route.ts")).toContain("transitionOfficialOfferState");
+    expect(source("src/app/api/ai/generate/route.ts")).toContain("generateOfficialAI");
+    expect(source("src/lib/ai/official/supabase-official-ai-adapter.ts")).toContain("transitionOfficialOfferState");
 
     for (const path of officialCallers.filter((item) => item.includes("/publish/") && item.includes("/api/"))) {
       expect(source(path)).toContain("completeOfficialPublication");
