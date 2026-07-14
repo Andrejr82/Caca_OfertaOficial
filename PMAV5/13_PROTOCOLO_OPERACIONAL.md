@@ -1,5 +1,9 @@
 # Protocolo Operacional PMAV5 V1.0
 
+## 0. ASSERÇÃO SSOT
+- Iniciar operação ignorando o histórico da LLM.
+- A Fonte da Verdade é exclusivamente o repositório e seus arquivos.
+
 ## Objetivo
 
 Padronizar a execução de Sprints por qualquer LLM.

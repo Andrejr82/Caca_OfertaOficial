@@ -50,3 +50,5 @@ A autorização de uma Sprint de implementação decorre das dependências técn
 **OBSOLETO — substituído pelo ADR-013:** declarar checkpoints imutáveis ou transformá-los em bloqueio automático de auditorias ou implementações.
 
 **OBSOLETO — substituído pelo ADR-013:** associar CP-005 a IA Única. CP-005 corresponde exclusivamente a M-03 Oracle Worker Discovery-Only.
+
+| CP-011.5 | Certificação Canônica SSOT | **COMPLETED** | AUDITORIAS/PMAV5-011.5_CERTIFICACAO_CANONICA.md |

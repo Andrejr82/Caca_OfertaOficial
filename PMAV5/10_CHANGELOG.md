@@ -1,5 +1,15 @@
 # Changelog do PMAV5
 
+## PMAV5-011.5 — 2026-07-14
+
+- **Modo:** AUDIT.
+- **Branch:** codex/pmav5-architecture-unification.
+- **SHA inicial e final:** 92dfa9035b8162aebc4e037c1e727402891b63f1.
+- **Arquivos criados:** SSOT.md, AUDITORIAS/PMAV5-011.5_CERTIFICACAO_CANONICA.md, SPRINTS/PMAV5-011.5_CERTIFICACAO_CANONICA.md, RELATORIOS/PMAV5-SSOT.md, MATRIZES/PMAV5-011.5_RASTREABILIDADE.md, DIAGRAMAS/PMAV5-011.5_GRAFO_CANONICO.md.
+- **Documentos atualizados:** 07_CHECKPOINTS.md, 10_CHANGELOG.md, 12_PROTOCOLO_LLM.md, 13_PROTOCOLO_OPERACIONAL.md, CONSTITUICAO_PMAV5.md.
+- **Resultado:** O repositório foi certificado como Fonte Única da Verdade (SSOT).
+- **Conclusão:** A partir deste checkpoint, qualquer LLM poderá executar novas Sprints utilizando exclusivamente o repositório, sem depender do histórico desta conversa.
+
 ## PMAV5-012A — 2026-07-14
 
 - **Modo:** IMPLEMENTATION.
