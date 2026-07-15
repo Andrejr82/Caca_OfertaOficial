@@ -64,7 +64,8 @@ describe("SupabaseOfficialAIAdapter", () => {
         id: "offer-1", user_id: "tenant-1", status: "selected", platform: "Amazon",
         product_name: "Produto", original_url: "https://amazon.com.br/dp/1",
         image_url: "https://images.example.com/1.jpg", current_price: 100, old_price: 120,
-        category: "Casa", explainability: { contract_version: "pmav5.candidate/v1" }
+        category: "Casa", explainability: { contract_version: "pmav5.candidate/v1" },
+        created_at: "2026-07-15T14:00:00.000Z"
       }, error: null
     });
     const client = { from: vi.fn(() => builder) };
@@ -128,6 +129,26 @@ describe("SupabaseOfficialAIAdapter", () => {
     expect(audit.insert).toHaveBeenCalledWith(expect.objectContaining({ integration: "official-ai-service", action: "ai_generation" }));
     expect(reserve.insert).toHaveBeenCalledWith(expect.objectContaining({ key: `pmav5.ai.idempotency.${command.idempotencyKey}` }));
     expect(complete.update).toHaveBeenCalledWith(expect.objectContaining({ value: expect.objectContaining({ status: "completed" }) }));
+  });
+
+  it("classifica pending antigo como stale sem aguardar nem apagar a chave", async () => {
+    const duplicate = chain({ data: null, error: null });
+    duplicate.insert.mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate" } });
+    const stored = chain({
+      data: {
+        value: { fingerprint: "fingerprint", status: "pending" },
+        created_at: "2020-01-01T00:00:00.000Z"
+      },
+      error: null
+    });
+    const client = { from: vi.fn().mockReturnValueOnce(duplicate).mockReturnValueOnce(stored) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await expect(adapter.begin("ai:draft:old:v2", "fingerprint")).resolves.toMatchObject({
+      status: "stale_pending",
+      pendingSince: "2020-01-01T00:00:00.000Z"
+    });
+    expect(duplicate.delete).toBeUndefined();
   });
 
   describe("findPendingWithoutDrafts (ADR-014 / V5 Bugfix)", () => {

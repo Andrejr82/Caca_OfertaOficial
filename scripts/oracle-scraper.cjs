@@ -338,7 +338,7 @@ async function scrapeStore(store) {
 }
 
 async function persistDiscoveryIngestionV1(ingestions, marketplace) {
-  if (!ingestions.length) return { accepted: 0, state: FINAL_STATE };
+  if (!ingestions.length) return { accepted: 0, offerIds: [], state: FINAL_STATE };
   const rows = ingestions.map(({ candidate, ingestionId, correlationId }) => {
     const metrics = candidate.marketplaceMetrics;
     const row = {
@@ -389,7 +389,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace) {
     return row;
   });
   const { data, error } = await getSupabase().rpc(
-    'upsert_discovery_offers_v1',
+    'upsert_discovery_offers_v2',
     {
       p_marketplace: marketplace,
       p_rows: rows,
@@ -403,6 +403,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace) {
     updated: data.updated,
     ignored: data.ignored,
     failed: data.failed,
+    offerIds: [...new Set(Array.isArray(data.offer_ids) ? data.offer_ids : [])],
     state: FINAL_STATE 
   };
 }
@@ -473,9 +474,10 @@ async function notifyWorkPendingToOfficialAI(cycleResult) {
     const response = await axios.post(
       endpoint,
       {
-        offerId: 'ALL_PENDING',
+        command: 'PROCESS_OFFERS',
+        offerIds: cycleResult.offerIds,
         correlationId: cycleResult.correlationId,
-        commandId: `ai:batch:${cycleResult.correlationId}:v1`,
+        commandId: `ai:cycle:${cycleResult.correlationId}:v1`,
         tenantId: ADMIN_USER_ID,
         requestedAt: new Date().toISOString(),
       },

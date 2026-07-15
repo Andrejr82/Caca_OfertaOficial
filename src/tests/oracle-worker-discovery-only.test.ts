@@ -306,12 +306,49 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       correlationId: "cycle-pmav5-notify",
       requestedAt: "2026-07-13T12:00:00.000Z",
       discover: async (marketplace: string) => marketplace === "Shopee" ? [valid] : [],
-      persist: async (ingestions: unknown[]) => ({ accepted: ingestions.length, persisted: ingestions.length, state: "pending_manual_review" }),
+      persist: async (ingestions: unknown[]) => ({
+        accepted: ingestions.length,
+        persisted: ingestions.length,
+        offerIds: ingestions.length ? ["offer-cycle-1", "offer-cycle-1"] : [],
+        state: "pending_manual_review"
+      }),
       notifyWorkPending,
     });
 
     expect(result.finalState).toBe(FINAL_STATE);
+    expect(result.offerIds).toEqual(["offer-cycle-1"]);
     expect(notifyWorkPending).toHaveBeenCalledTimes(1);
-    expect(notifyWorkPending).toHaveBeenCalledWith(result);
+    expect(notifyWorkPending).toHaveBeenCalledWith(expect.objectContaining({
+      correlationId: "cycle-pmav5-notify",
+      offerIds: ["offer-cycle-1"]
+    }));
+  });
+
+  it("não notifica a Official AI sem IDs reais materializados", async () => {
+    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const notifyWorkPending = vi.fn();
+    await runDiscoveryOnlyCycle({
+      tenantId: "00000000-0000-4000-8000-000000000001",
+      correlationId: "cycle-without-ids",
+      requestedAt: "2026-07-15T12:00:00.000Z",
+      discover: async () => [],
+      persist: async () => ({ accepted: 0, offerIds: [], state: "pending_manual_review" }),
+      notifyWorkPending
+    });
+    expect(notifyWorkPending).not.toHaveBeenCalled();
+  });
+
+  it("disparo pós-Discovery usa PROCESS_OFFERS e nunca ALL_PENDING", () => {
+    const notify = functionSource("notifyWorkPendingToOfficialAI");
+    expect(notify).toContain("PROCESS_OFFERS");
+    expect(notify).toContain("cycleResult.offerIds");
+    expect(notify).not.toContain("ALL_PENDING");
+  });
+
+  it("persistência usa o RPC v2 e acumula os UUIDs materializados", () => {
+    const persist = functionSource("persistDiscoveryIngestionV1");
+    expect(persist).toContain("upsert_discovery_offers_v2");
+    expect(persist).toContain("data.offer_ids");
+    expect(persist).toContain("offerIds");
   });
 });

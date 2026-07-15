@@ -47,7 +47,13 @@ function buildOfficialAIFingerprint(command: OfficialAICommand): string {
     providerPreference: command.providerPreference ?? null,
     actor: command.actor,
     origin: command.origin,
-    reason: command.reason
+    reason: command.reason,
+    batch: command.batch ? {
+      operation: command.batch.operation,
+      pageNumber: command.batch.pageNumber,
+      totalPages: command.batch.totalPages,
+      offerIds: [...command.batch.offerIds]
+    } : null
   };
   return stableSerialize(stable);
 }
@@ -192,6 +198,22 @@ export async function generateOfficialAI(
   if (reservation.status === "conflict") {
     return rejectAndRecord(command, dependencies, null, "IDEMPOTENCY_CONFLICT", "Idempotency key was used with a different payload", "idempotency");
   }
+  if (reservation.status === "stale_pending") {
+    const result = rejected(
+      command,
+      dependencies,
+      "STALE_IDEMPOTENCY_PENDING",
+      `Idempotency command has been pending since ${reservation.pendingSince}`,
+      "idempotency"
+    );
+    await dependencies.audit.register({
+      ...auditBase(command, dependencies), provider: null, model: null, latencyMs: null,
+      result: "rejected", replay: false, failureStage: "idempotency", errorCode: "STALE_IDEMPOTENCY_PENDING",
+      postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false,
+      batchCompleted: command.batch ? false : undefined
+    });
+    return result;
+  }
   if (reservation.status === "replay" || reservation.status === "pending") {
     const result = reservation.status === "replay" ? reservation.result : await reservation.result;
     await dependencies.audit.register({
@@ -199,7 +221,82 @@ export async function generateOfficialAI(
       result: "idempotent_replay", replay: true, failureStage: null, errorCode: null,
       postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
     });
-    return result;
+    const replayResult = { ...result };
+    Object.defineProperty(replayResult, "replay", { value: true, enumerable: false });
+    return replayResult;
+  }
+
+  // 2.5. Página determinística do ciclo atual. A IA não seleciona nem busca ofertas:
+  // processa exclusivamente os IDs fornecidos pelo Discovery, em página limitada a 50.
+  if (command.batch?.operation === "PROCESS_OFFERS") {
+    const metrics = {
+      pageNumber: command.batch.pageNumber,
+      totalPages: command.batch.totalPages,
+      offerIdsReceived: command.batch.offerIds.length,
+      offersVisited: 0,
+      draftedOffers: 0,
+      draftsPersisted: 0,
+      rejectedOffers: 0,
+      idempotentReplays: 0,
+      stalePending: 0,
+      batchCompleted: command.batch.pageNumber === command.batch.totalPages
+    };
+    const draftsCreated: NonNullable<OfficialAIDraftedResult["drafts"]>[number][] = [];
+
+    try {
+      for (const offerId of command.batch.offerIds) {
+        metrics.offersVisited += 1;
+        const subCommand: OfficialAICommand = {
+          ...command,
+          commandId: `${command.commandId}:offer:${offerId}`,
+          idempotencyKey: `ai:draft:${offerId}:v2`,
+          offerId,
+          batch: undefined
+        };
+        try {
+          const subResult = await generateOfficialAI(subCommand, dependencies);
+          if (subResult.replay) {
+            metrics.idempotentReplays += 1;
+          } else if (subResult.status === "drafted" || subResult.status === "approved") {
+            metrics.draftedOffers += 1;
+            metrics.draftsPersisted += subResult.drafts?.length ?? 0;
+            if (subResult.drafts) draftsCreated.push(...subResult.drafts);
+          } else {
+            metrics.rejectedOffers += 1;
+            if (subResult.code === "STALE_IDEMPOTENCY_PENDING") metrics.stalePending += 1;
+          }
+        } catch (error) {
+          metrics.rejectedOffers += 1;
+          await dependencies.audit.register({
+            ...auditBase(subCommand, dependencies), provider: null, model: null, latencyMs: null,
+            result: "rejected", replay: false, failureStage: "cycle_page_item", errorCode: "CYCLE_PAGE_ITEM_ERROR",
+            postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
+          }).catch(() => undefined);
+        }
+      }
+
+      const result: OfficialAIDraftedResult = {
+        status: "drafted", commandId: command.commandId, offerId: command.offerId,
+        offerState: "pending_manual_review", drafts: draftsCreated,
+        completedAt: dependencies.clock.now(), batchCompleted: metrics.batchCompleted, batch: metrics
+      };
+      await dependencies.audit.register({
+        ...auditBase(command, dependencies), provider: "official-ai-cycle", model: "deterministic-page",
+        latencyMs: 0, result: "drafted", replay: false, failureStage: null, errorCode: null,
+        postsPrepared: metrics.draftedOffers * command.channels.length,
+        postsPersisted: metrics.draftsPersisted, transitionRequested: false, transitionCompleted: false,
+        batchCompleted: metrics.batchCompleted
+      });
+      await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
+      return result;
+    } catch (error) {
+      return rejectAndRecord(
+        command, dependencies, fingerprint, "CYCLE_PAGE_FAILED",
+        error instanceof Error ? error.message : String(error), "cycle_page",
+        "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length,
+        metrics.draftsPersisted
+      );
+    }
   }
 
   // 2.5. Processamento completo ALL_PENDING — percorre toda a fila em páginas de até 50 (ADR-014).

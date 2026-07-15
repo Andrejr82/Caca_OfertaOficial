@@ -12,7 +12,22 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   // Idempotency key deve ser estável por offer (ADR-014: a IA detecta o modo internamente).
   // Formato v1 (approval e legado): ai:{offerId}:v1
   // Formato v2 (draft batch): ai:draft:{offerId}:v2
-  if (command.offerId !== "ALL_PENDING") {
+  if (command.batch) {
+    if (command.batch.operation !== "PROCESS_OFFERS") return "Unsupported AI batch operation";
+    if (!Number.isInteger(command.batch.pageNumber) || command.batch.pageNumber < 1
+      || !Number.isInteger(command.batch.totalPages) || command.batch.totalPages < command.batch.pageNumber) {
+      return "AI cycle page coordinates are invalid";
+    }
+    if (!Array.isArray(command.batch.offerIds) || command.batch.offerIds.length === 0 || command.batch.offerIds.length > 50) {
+      return "AI cycle page must contain between 1 and 50 offer IDs";
+    }
+    if (new Set(command.batch.offerIds).size !== command.batch.offerIds.length
+      || command.batch.offerIds.some((id) => !nonEmpty(id))) {
+      return "AI cycle page offer IDs must be unique and non-empty";
+    }
+    const expectedPageKey = `ai:cycle:${command.correlationId}:page:${command.batch.pageNumber}:v1`;
+    if (command.idempotencyKey !== expectedPageKey) return "AI cycle page idempotency key is invalid";
+  } else if (command.offerId !== "ALL_PENDING") {
     const isV1 = command.idempotencyKey === `ai:${command.offerId}:v1`;
     const isV2Draft = command.idempotencyKey === `ai:draft:${command.offerId}:v2`;
     if (!isV1 && !isV2Draft) {

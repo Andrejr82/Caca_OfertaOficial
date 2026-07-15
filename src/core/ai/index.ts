@@ -1,6 +1,8 @@
 export { generateOfficialAI } from "./official-ai-service";
 export { buildOfficialPrompt } from "./prompt";
 export { validateOfficialAIContent } from "./content-schema";
+export { createOfficialAICyclePages, processOfficialAICyclePages, OFFICIAL_AI_CYCLE_PAGE_SIZE } from "./official-ai-cycle";
+export type { OfficialAICyclePage, OfficialAICyclePageOutcome } from "./official-ai-cycle";
 export type {
   AIProviderPort,
   AIProviderRegistryPort,
@@ -16,6 +18,7 @@ export type {
 } from "./ports";
 export type {
   OfficialAIAuditRecord,
+  OfficialAIBatchMetrics,
   OfficialAIChannel,
   OfficialAICommand,
   OfficialAIContent,

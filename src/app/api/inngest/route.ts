@@ -3,6 +3,7 @@ import { inngest } from "@/lib/inngest/client";
 import { 
   publishPostBackground, 
   processOfferBackground, 
+  processOfferCycleBackground,
   syncAnalyticsBackground,
   runUserScrapingBackground,
   processClickBackground,
@@ -14,6 +15,7 @@ export const { GET, POST, PUT } = serve({
   functions: [
     publishPostBackground,
     processOfferBackground,
+    processOfferCycleBackground,
     syncAnalyticsBackground,
     runUserScrapingBackground,
     processClickBackground,

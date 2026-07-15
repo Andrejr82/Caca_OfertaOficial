@@ -3,8 +3,12 @@ import { generateOfficialAI, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
+import { inngest } from "@/lib/inngest/client";
 
 interface GenerateAIRequest {
+  command?: "PROCESS_OFFERS";
+  offerIds?: string[];
   offerId?: string;
   commandId?: string;
   correlationId?: string;
@@ -26,8 +30,9 @@ const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
 export async function POST(request: Request) {
   try {
     const body = await request.json() as GenerateAIRequest;
-    if (!body.offerId) {
-      return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "offerId é obrigatório." }, { status: 400 });
+    const isCycleCommand = body.command === "PROCESS_OFFERS";
+    if (!body.offerId && !isCycleCommand) {
+      return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "offerId é obrigatório para chamada individual." }, { status: 400 });
     }
 
     const authHeader = request.headers.get("authorization")?.replace("Bearer ", "").trim();
@@ -54,18 +59,65 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "Não autenticado." }, { status: 401 });
     }
 
-    const commandId = body.commandId || request.headers.get("x-command-id") || `ai:${body.offerId}:v1`;
+    if (isCycleCommand) {
+      if (!isServiceWorker) {
+        return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "PROCESS_OFFERS é exclusivo do Oracle Worker." }, { status: 403 });
+      }
+      const correlationId = body.correlationId || request.headers.get("x-correlation-id");
+      const offerIds = [...new Set((body.offerIds || []).filter((id) => typeof id === "string" && id.trim().length > 0))];
+      if (!correlationId || offerIds.length === 0) {
+        return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "correlationId e offerIds são obrigatórios." }, { status: 400 });
+      }
+      const pages = createOfficialAICyclePages(correlationId, offerIds);
+      await inngest.send({
+        id: `official-ai-cycle-${correlationId}`,
+        name: "offer/cycle.process",
+        data: {
+          correlationId,
+          tenantId: userId,
+          requestedAt: body.requestedAt || new Date().toISOString(),
+          providerPreference: body.providerPreference,
+          offerIds
+        }
+      });
+      const { error: auditError } = await supabase.from("integration_logs").insert({
+        user_id: userId,
+        integration: "official-ai-service",
+        action: "ai_cycle_queued",
+        status: "success",
+        message: `${correlationId}:cycle_queued`,
+        metadata: {
+          correlationId,
+          offerIds,
+          offerIdsReceived: offerIds.length,
+          pagesQueued: pages.length,
+          batchCompleted: false
+        }
+      });
+      if (auditError) throw new Error(`Official AI cycle enqueue audit failed: ${auditError.message}`);
+      return NextResponse.json({
+        ok: true,
+        status: "accepted",
+        correlationId,
+        offerIdsReceived: offerIds.length,
+        pagesQueued: pages.length,
+        batchCompleted: false
+      }, { status: 202 });
+    }
+
+    const offerId = body.offerId!;
+    const commandId = body.commandId || request.headers.get("x-command-id") || `ai:${offerId}:v1`;
 
     // O comando não inclui expectedState nem mode — a IA determina internamente (ADR-014).
     const command: OfficialAICommand = {
       contractVersion: "pmav5.ai/v1",
       commandId,
-      idempotencyKey: body.offerId === "ALL_PENDING"
+      idempotencyKey: offerId === "ALL_PENDING"
         ? (body.commandId || `ai:batch:${body.correlationId || commandId}:v1`)
-        : `ai:${body.offerId}:v1`,
+        : `ai:draft:${offerId}:v2`,
       correlationId: body.correlationId || request.headers.get("x-correlation-id") || commandId,
       causationId: body.causationId ?? request.headers.get("x-causation-id"),
-      offerId: body.offerId,
+      offerId,
       tenantId: userId,
       providerPreference: body.providerPreference,
       channels: ["telegram", "instagram", "whatsapp"],

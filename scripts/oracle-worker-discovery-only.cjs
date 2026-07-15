@@ -105,6 +105,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
   await safeObserve('discovery.started');
   await safeObserve('worker.heartbeat');
   const summaries = [];
+  const materializedOfferIds = new Set();
   try {
     for (const marketplace of MARKETPLACES) {
       const marketplaceStartedAt = Date.now();
@@ -142,6 +143,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       if (persisted?.state !== FINAL_STATE) {
         throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
       }
+      for (const offerId of persisted.offerIds || []) {
+        if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
+      }
       const summary = Object.freeze({
         marketplace,
         discovered: products.length,
@@ -172,6 +176,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
   const result = Object.freeze({
     correlationId,
     marketplaces: Object.freeze(summaries),
+    offerIds: Object.freeze([...materializedOfferIds]),
     finalState: FINAL_STATE,
   });
   await safeObserve('discovery.completed', {
@@ -180,7 +185,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     durationMs: Date.now() - startedAt,
   });
 
-  if (typeof notifyWorkPending === 'function' && summaries.some((s) => s.persisted > 0)) {
+  if (typeof notifyWorkPending === 'function' && result.offerIds.length > 0) {
     try {
       await notifyWorkPending(result);
     } catch (error) {

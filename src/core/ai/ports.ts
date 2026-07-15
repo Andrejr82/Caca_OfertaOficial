@@ -72,7 +72,8 @@ export type OfficialAIIdempotencyBegin =
   | { status: "started" }
   | { status: "conflict" }
   | { status: "replay"; result: OfficialAIResult }
-  | { status: "pending"; result: Promise<OfficialAIResult> };
+  | { status: "pending"; result: Promise<OfficialAIResult> }
+  | { status: "stale_pending"; pendingSince: string };
 
 export interface OfficialAIIdempotencyPort {
   begin(idempotencyKey: string, fingerprint: string): Promise<OfficialAIIdempotencyBegin>;

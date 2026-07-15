@@ -24,6 +24,25 @@ export interface OfficialAICommand {
   origin: string;
   reason: StateReason;
   metadata?: Readonly<Record<string, string | number | boolean>>;
+  batch?: Readonly<{
+    operation: "PROCESS_OFFERS";
+    offerIds: readonly string[];
+    pageNumber: number;
+    totalPages: number;
+  }>;
+}
+
+export interface OfficialAIBatchMetrics {
+  pageNumber: number;
+  totalPages: number;
+  offerIdsReceived: number;
+  offersVisited: number;
+  draftedOffers: number;
+  draftsPersisted: number;
+  rejectedOffers: number;
+  idempotentReplays: number;
+  stalePending: number;
+  batchCompleted: boolean;
 }
 
 export interface OfficialAIOffer {
@@ -88,6 +107,8 @@ export interface OfficialAIDraftedResult {
   providerEvidence?: OfficialAIProviderEvidence;
   completedAt?: string;
   batchCompleted?: boolean;
+  batch?: OfficialAIBatchMetrics;
+  replay?: boolean;
 }
 
 /**
@@ -104,6 +125,7 @@ export interface OfficialAIApprovedResult {
   providerEvidence?: OfficialAIProviderEvidence;
   stateAuditId?: string;
   completedAt?: string;
+  replay?: boolean;
 }
 
 export interface OfficialAIRejectedResult {
@@ -115,6 +137,7 @@ export interface OfficialAIRejectedResult {
   offerState: "pending_manual_review" | "selected" | "unknown";
   failureStage: string;
   rejectedAt: string;
+  replay?: boolean;
 }
 
 export type OfficialAIResult = OfficialAIApprovedResult | OfficialAIDraftedResult | OfficialAIRejectedResult;

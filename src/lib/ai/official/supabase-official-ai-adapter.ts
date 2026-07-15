@@ -16,6 +16,7 @@ import { offerStateVersion, transitionOfficialOfferState } from "@/lib/state/off
 const IDEMPOTENCY_PREFIX = "pmav5.ai.idempotency.";
 const POLL_ATTEMPTS = 50;
 const POLL_INTERVAL_MS = 100;
+export const STALE_PENDING_AFTER_MS = 5 * 60 * 1000;
 
 export const DEFAULT_BATCH_SIZE = 50;
 const MAX_BATCH_SIZE = 1000;
@@ -42,7 +43,13 @@ export function getOfficialAIBatchSize(): number {
 interface StoredAIIdempotency {
   fingerprint: string;
   status: "pending" | "completed";
+  startedAt?: string;
   result?: OfficialAIResult | OfficialAIDraftedResult;
+}
+
+interface StoredAIIdempotencyRow {
+  value: StoredAIIdempotency;
+  created_at: string;
 }
 
 interface PendingAICommand {
@@ -245,7 +252,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     const local = this.pending.get(key);
     if (local) return local.fingerprint === fingerprint ? { status: "pending" as const, result: local.result } : { status: "conflict" as const };
 
-    const value: StoredAIIdempotency = { fingerprint, status: "pending" };
+    const value: StoredAIIdempotency = { fingerprint, status: "pending", startedAt: new Date().toISOString() };
     const { error } = await this.client.from("app_settings").insert({ user_id: this.tenantId, key, value });
     if (!error) {
       let resolve!: (result: OfficialAIResult) => void;
@@ -254,9 +261,14 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       return { status: "started" as const };
     }
     if (error.code !== "23505") throw new Error(`Official AI idempotency reservation failed: ${error.message}`);
-    const stored = await this.readIdempotency(key);
+    const row = await this.readIdempotency(key);
+    const stored = row.value;
     if (stored.fingerprint !== fingerprint) return { status: "conflict" as const };
     if (stored.status === "completed" && stored.result) return { status: "replay" as const, result: stored.result };
+    const pendingSince = stored.startedAt ?? row.created_at;
+    if (Date.now() - Date.parse(pendingSince) > STALE_PENDING_AFTER_MS) {
+      return { status: "stale_pending" as const, pendingSince };
+    }
     return { status: "pending" as const, result: this.waitForCompleted(key, fingerprint) };
   }
 
@@ -272,16 +284,16 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     this.pending.delete(key);
   }
 
-  private async readIdempotency(key: string): Promise<StoredAIIdempotency> {
-    const { data, error } = await this.client.from("app_settings").select("value").eq("user_id", this.tenantId).eq("key", key).single();
+  private async readIdempotency(key: string): Promise<StoredAIIdempotencyRow> {
+    const { data, error } = await this.client.from("app_settings").select("value,created_at").eq("user_id", this.tenantId).eq("key", key).single();
     if (error || !data) throw new Error(`Official AI idempotency read failed: ${error?.message ?? "record not found"}`);
-    return data.value as unknown as StoredAIIdempotency;
+    return data as unknown as StoredAIIdempotencyRow;
   }
 
   private async waitForCompleted(key: string, fingerprint: string): Promise<OfficialAIResult> {
     for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
       await wait(POLL_INTERVAL_MS);
-      const stored = await this.readIdempotency(key);
+      const stored = (await this.readIdempotency(key)).value;
       if (stored.fingerprint !== fingerprint) throw new Error("Official AI idempotency fingerprint changed while pending");
       if (stored.status === "completed" && stored.result) return stored.result;
     }
