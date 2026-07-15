@@ -18,6 +18,7 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // Nenhum parâmetro externo seleciona o modo. A máquina de estados é a autoridade.
 // ---------------------------------------------------------------------------
 type InternalMode = "draft_generation" | "approval";
+export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
 // ---------------------------------------------------------------------------
 // Utilitários internos
@@ -244,35 +245,38 @@ export async function generateOfficialAI(
     const draftsCreated: NonNullable<OfficialAIDraftedResult["drafts"]>[number][] = [];
 
     try {
-      for (const offerId of command.batch.offerIds) {
-        metrics.offersVisited += 1;
-        const subCommand: OfficialAICommand = {
-          ...command,
-          commandId: `${command.commandId}:offer:${offerId}`,
-          idempotencyKey: `ai:draft:${offerId}:v2`,
-          offerId,
-          batch: undefined
-        };
-        try {
-          const subResult = await generateOfficialAI(subCommand, dependencies);
-          if (subResult.replay) {
-            metrics.idempotentReplays += 1;
-          } else if (subResult.status === "drafted" || subResult.status === "approved") {
-            metrics.draftedOffers += 1;
-            metrics.draftsPersisted += subResult.drafts?.length ?? 0;
-            if (subResult.drafts) draftsCreated.push(...subResult.drafts);
-          } else {
+      for (let offset = 0; offset < command.batch.offerIds.length; offset += OFFICIAL_AI_PAGE_CONCURRENCY) {
+        const group = command.batch.offerIds.slice(offset, offset + OFFICIAL_AI_PAGE_CONCURRENCY);
+        await Promise.all(group.map(async (offerId) => {
+          metrics.offersVisited += 1;
+          const subCommand: OfficialAICommand = {
+            ...command,
+            commandId: `${command.commandId}:offer:${offerId}`,
+            idempotencyKey: `ai:draft:${offerId}:v2`,
+            offerId,
+            batch: undefined
+          };
+          try {
+            const subResult = await generateOfficialAI(subCommand, dependencies);
+            if (subResult.replay) {
+              metrics.idempotentReplays += 1;
+            } else if (subResult.status === "drafted" || subResult.status === "approved") {
+              metrics.draftedOffers += 1;
+              metrics.draftsPersisted += subResult.drafts?.length ?? 0;
+              if (subResult.drafts) draftsCreated.push(...subResult.drafts);
+            } else {
+              metrics.rejectedOffers += 1;
+              if (subResult.code === "STALE_IDEMPOTENCY_PENDING") metrics.stalePending += 1;
+            }
+          } catch (error) {
             metrics.rejectedOffers += 1;
-            if (subResult.code === "STALE_IDEMPOTENCY_PENDING") metrics.stalePending += 1;
+            await dependencies.audit.register({
+              ...auditBase(subCommand, dependencies), provider: null, model: null, latencyMs: null,
+              result: "rejected", replay: false, failureStage: "cycle_page_item", errorCode: "CYCLE_PAGE_ITEM_ERROR",
+              postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
+            }).catch(() => undefined);
           }
-        } catch (error) {
-          metrics.rejectedOffers += 1;
-          await dependencies.audit.register({
-            ...auditBase(subCommand, dependencies), provider: null, model: null, latencyMs: null,
-            result: "rejected", replay: false, failureStage: "cycle_page_item", errorCode: "CYCLE_PAGE_ITEM_ERROR",
-            postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
-          }).catch(() => undefined);
-        }
+        }));
       }
 
       const result: OfficialAIDraftedResult = {

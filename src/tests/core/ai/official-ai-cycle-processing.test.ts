@@ -11,6 +11,7 @@ import {
   type OfficialAIOffer,
   type OfficialAIServiceDependencies
 } from "@/core/ai";
+import { OFFICIAL_AI_PAGE_CONCURRENCY } from "@/core/ai/official-ai-service";
 
 const content: OfficialAIContent = {
   title: "Oferta", description: "Descrição", shortCopy: "Curta", longCopy: "Longa",
@@ -93,6 +94,26 @@ describe("Oracle cycle pages", () => {
     expect(deps.offers.findById).toHaveBeenCalledTimes(9);
     expect(deps.offers.findPendingWithoutDrafts).not.toHaveBeenCalled();
     expect(deps.content.persistDrafts).toHaveBeenCalledTimes(9);
+  });
+
+  it("limita concorrência dentro da página sem manter 50 ofertas sequenciais", async () => {
+    const rows = Array.from({ length: 20 }, (_, i) => offer(`parallel-${i}`));
+    const deps = dependencies(rows);
+    let active = 0;
+    let peak = 0;
+    deps.providers.resolve = vi.fn(() => ({
+      name: "groq" as const, model: "test", generate: vi.fn(async () => {
+        active += 1;
+        peak = Math.max(peak, active);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        active -= 1;
+        return { content, provider: "groq" as const, model: "test", latencyMs: 5 };
+      })
+    }));
+    const result = await generateOfficialAI(pageCommand(rows.map((row) => row.id)), deps);
+    expect(result.status).toBe("drafted");
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(OFFICIAL_AI_PAGE_CONCURRENCY);
   });
 
   it("120 IDs são divididos em 3 páginas, no máximo 50, e a segunda página é executada", async () => {
