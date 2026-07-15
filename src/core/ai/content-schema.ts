@@ -17,9 +17,20 @@ const contentSchema = z.object({
   }).strict()
 }).strict();
 
+const forbiddenOpening = /^\s*(?:[^\p{L}\p{N}]{0,4}\s*)?(?:Olá|Temos um novo|Você vai amar|Confira|Conheça|Não perca)(?=\s|[!,:;.-]|$)/iu;
+const forbiddenLink = /\[\s*link\s*\]|(?:[a-z][a-z0-9+.-]*:)?\/\/\S+|\bwww\.\S+/iu;
+
+export function isCopyV2TextSafe(copy: string) {
+  return !forbiddenOpening.test(copy) && !forbiddenLink.test(copy);
+}
+
 export function validateOfficialAIContent(value: unknown, channels: readonly OfficialAIChannel[]): OfficialAIContent | null {
   const parsed = contentSchema.safeParse(value);
   if (!parsed.success) return null;
   if (channels.some((channel) => !parsed.data.channelCopies[channel])) return null;
+  if (channels.some((channel) => {
+    const copy = parsed.data.channelCopies[channel] ?? "";
+    return !isCopyV2TextSafe(copy);
+  })) return null;
   return parsed.data as OfficialAIContent;
 }

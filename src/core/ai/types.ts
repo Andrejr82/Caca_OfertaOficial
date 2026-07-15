@@ -73,6 +73,64 @@ export interface OfficialAIContent {
   channelCopies: Partial<Record<OfficialAIChannel, string>>;
 }
 
+export interface OfficialAIRegenerationFilters {
+  marketplace?: string;
+  channel?: OfficialAIChannel;
+  postIds?: readonly string[];
+  limit?: number;
+  after?: Readonly<{ createdAt: string; postId: string }>;
+}
+
+export interface OfficialAIRegenerationCommand {
+  contractVersion: "pmav5.ai-regeneration/v1";
+  commandId: string;
+  correlationId: string;
+  tenantId: string;
+  providerPreference?: "groq" | "cerebras";
+  filters: OfficialAIRegenerationFilters;
+}
+
+export interface OfficialAIDraftForRegeneration {
+  postId: string;
+  offerId: string;
+  affiliateLinkId: string;
+  channel: OfficialAIChannel;
+  status: "draft";
+  createdAt: string;
+  currentContent: string;
+  trackedUrl: string;
+  marketplace: string;
+  productName: string;
+  currentPrice: number;
+  originalPrice: number | null;
+  category: string | null;
+  shippingFree: boolean | null;
+  rating: number | null;
+  coupon: string | null;
+  evidence: Record<string, unknown>;
+}
+
+export interface OfficialAIRegenerationItem {
+  postId: string;
+  offerId: string;
+  affiliateLinkId: string;
+  channel: OfficialAIChannel;
+  status: "draft";
+  createdAt: string;
+  beforeContent: string;
+  afterContent?: string;
+  error?: string;
+}
+
+export interface OfficialAIRegenerationResult {
+  commandId: string;
+  matched: number;
+  updated: number;
+  failed: number;
+  nextCursor: { createdAt: string; postId: string } | null;
+  items: readonly OfficialAIRegenerationItem[];
+}
+
 export interface OfficialDraftPost {
   postId: string;
   affiliateLinkId: string;

@@ -6,8 +6,11 @@ import type {
   OfficialAIIdempotencyPort,
   OfficialAIOffer,
   OfficialAIOfferPort,
+  OfficialAIRegenerationFilters,
+  OfficialAIRegenerationPort,
   OfficialAIResult
 } from "@/core/ai";
+import { getOfficialAIRegenerationBatchLimit, isOfficialAIRegenerationCursor } from "@/core/ai/official-ai-regeneration-service";
 import type { BatchCursor, OfficialAIApprovalPort, OfficialAIServiceDependencies } from "@/core/ai/ports";
 import type { StateServiceDependencies } from "@/core/state";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
@@ -312,6 +315,88 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       if (stored.status === "completed" && stored.result) return stored.result;
     }
     throw new Error("Official AI command remained pending");
+  }
+}
+
+export class SupabaseOfficialAIRegenerationAdapter implements OfficialAIRegenerationPort {
+  constructor(
+    private readonly client: SupabaseClient,
+    private readonly tenantId: string
+  ) {}
+
+  async findDrafts(tenantId: string, filters: OfficialAIRegenerationFilters) {
+    if (tenantId !== this.tenantId) return [];
+    const postIds = [...new Set((filters.postIds ?? []).filter(Boolean))];
+    if (filters.postIds !== undefined && postIds.length === 0) return [];
+    let query = this.client
+      .from("posts")
+      .select(`
+        id, offer_id, affiliate_link_id, channel, status, content, created_at,
+        offers!inner(platform, product_name, current_price, old_price, category, shipping_free, rating, coupon, explainability, marketplace_metrics),
+        affiliate_links!inner(id, tracked_url)
+      `)
+      .eq("user_id", tenantId)
+      .eq("status", "draft");
+    if (filters.channel) query = query.eq("channel", filters.channel);
+    if (postIds.length > 0) query = query.in("id", postIds);
+    if (filters.marketplace) {
+      const exactMarketplace = filters.marketplace.replace(/([\\%_])/gu, "\\$1");
+      query = query.ilike("offers.platform", exactMarketplace);
+    }
+    if (filters.after) {
+      if (!isOfficialAIRegenerationCursor(filters.after)) throw new Error("INVALID_REGENERATION_CURSOR");
+      query = (query as any).or(`created_at.gt.${filters.after.createdAt},and(created_at.eq.${filters.after.createdAt},id.gt.${filters.after.postId})`);
+    }
+
+    const { data, error } = await query
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .limit(getOfficialAIRegenerationBatchLimit(filters.limit));
+    if (error) throw new Error(`Official AI draft regeneration read failed: ${error.message}`);
+
+    return ((data ?? []) as any[]).flatMap((row) => {
+      const offer = Array.isArray(row.offers) ? row.offers[0] : row.offers;
+      const link = Array.isArray(row.affiliate_links) ? row.affiliate_links[0] : row.affiliate_links;
+      if (!offer || !link || row.status !== "draft" || !row.affiliate_link_id) return [];
+      if (filters.marketplace && offer.platform.toLocaleLowerCase("pt-BR") !== filters.marketplace.toLocaleLowerCase("pt-BR")) return [];
+      return [{
+        postId: row.id,
+        offerId: row.offer_id,
+        affiliateLinkId: row.affiliate_link_id,
+        channel: row.channel,
+        status: "draft" as const,
+        createdAt: row.created_at,
+        currentContent: row.content,
+        trackedUrl: link.tracked_url,
+        marketplace: offer.platform,
+        productName: offer.product_name,
+        currentPrice: Number(offer.current_price),
+        originalPrice: offer.old_price == null ? null : Number(offer.old_price),
+        category: offer.category,
+        shippingFree: offer.shipping_free ?? null,
+        rating: offer.rating == null ? null : Number(offer.rating),
+        coupon: offer.coupon ?? null,
+        evidence: {
+          explainability: offer.explainability ?? {},
+          marketplaceMetrics: offer.marketplace_metrics ?? {}
+        }
+      }];
+    });
+  }
+
+  async updateContent(input: Parameters<OfficialAIRegenerationPort["updateContent"]>[0]) {
+    if (input.tenantId !== this.tenantId) return false;
+    const { data, error } = await this.client
+      .from("posts")
+      .update({ content: input.content })
+      .eq("user_id", input.tenantId)
+      .eq("id", input.postId)
+      .eq("status", "draft")
+      .eq("content", input.expectedContent)
+      .select("id")
+      .maybeSingle();
+    if (error) throw new Error(`Official AI draft regeneration update failed: ${error.message}`);
+    return Boolean(data);
   }
 }
 

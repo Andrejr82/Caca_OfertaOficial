@@ -1,7 +1,7 @@
 import type { OfficialAIServiceDependencies } from "./ports";
 import type { BatchCursor } from "./ports";
-import { validateOfficialAIContent } from "./content-schema";
-import { buildOfficialPrompt } from "./prompt";
+import { isCopyV2TextSafe, validateOfficialAIContent } from "./content-schema";
+import { buildCopyV2ChannelCopy, buildOfficialPrompt } from "./prompt";
 import type {
   OfficialAIAuditRecord,
   OfficialAICommand,
@@ -522,13 +522,25 @@ export async function generateOfficialAI(
   }
 
   // 8. Validação do conteúdo gerado (comum a ambos os modos).
-  const content = validateOfficialAIContent(inference.content, command.channels);
-  if (!content) {
+  const providerContent = validateOfficialAIContent(inference.content, command.channels);
+  if (!providerContent) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
       "provider_output",
       mode === "draft_generation" ? "pending_manual_review" : "selected",
+      inference.provider, inference.model, inference.latencyMs
+    );
+  }
+  const content = {
+    ...providerContent,
+    channelCopies: Object.fromEntries(command.channels.map((channel) => [channel, buildCopyV2ChannelCopy(offer!, channel)]))
+  };
+  if (command.channels.some((channel) => !isCopyV2TextSafe(content.channelCopies[channel]))) {
+    return rejectAndRecord(
+      command, dependencies, fingerprint,
+      "INVALID_FINAL_COPY", "Rendered Copy V2 contains forbidden content",
+      "provider_output", mode === "draft_generation" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs
     );
   }

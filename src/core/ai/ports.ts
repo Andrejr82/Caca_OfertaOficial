@@ -3,7 +3,9 @@ import type {
   OfficialAIChannel,
   OfficialAICommand,
   OfficialAIContent,
+  OfficialAIDraftForRegeneration,
   OfficialAIOffer,
+  OfficialAIRegenerationFilters,
   OfficialAIResult,
   OfficialDraftPost
 } from "./types";
@@ -86,6 +88,21 @@ export interface OfficialAIAuditPort {
 
 export interface OfficialAIClockPort {
   now(): string;
+}
+
+export interface OfficialAIRegenerationPort {
+  findDrafts(tenantId: string, filters: OfficialAIRegenerationFilters): Promise<readonly OfficialAIDraftForRegeneration[]>;
+  updateContent(input: {
+    tenantId: string;
+    postId: string;
+    expectedContent: string;
+    content: string;
+  }): Promise<boolean>;
+}
+
+export interface OfficialAIRegenerationDependencies {
+  drafts: OfficialAIRegenerationPort;
+  providers: AIProviderRegistryPort;
 }
 
 export interface OfficialAIServiceDependencies {

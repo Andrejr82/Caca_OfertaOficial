@@ -14,6 +14,14 @@ describe("fronteira oficial de IA", () => {
     expect(source).not.toContain("transitionOfficialOfferState");
   });
 
+  it("regeneração possui rota própria, sem geração inicial nem persistência direta", () => {
+    const source = readFileSync("src/app/api/ai/regenerate/route.ts", "utf8");
+    expect(source).toContain("regenerateOfficialDrafts");
+    expect(source).toContain("createOfficialAIRegenerationDependencies");
+    expect(source).not.toContain("generateOfficialAI");
+    expect(source).not.toMatch(/\.from\(["'](?:posts|affiliate_links|offers)["']\)/);
+  });
+
   it("somente a composição oficial importa providers concretos", () => {
     const composition = readFileSync("src/lib/ai/official/create-official-ai-service.ts", "utf8");
     expect(composition).toContain("GroqOfficialAIProvider");

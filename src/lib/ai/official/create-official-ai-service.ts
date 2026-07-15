@@ -3,7 +3,7 @@ import type { AIProviderPort, AIProviderRegistryPort } from "@/core/ai";
 import { CerebrasOfficialAIProvider } from "@/core/ai/providers/cerebras-provider";
 import { GroqOfficialAIProvider } from "@/core/ai/providers/groq-provider";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
-import { withSupabaseOfficialAIAdapters } from "./supabase-official-ai-adapter";
+import { SupabaseOfficialAIRegenerationAdapter, withSupabaseOfficialAIAdapters } from "./supabase-official-ai-adapter";
 import { AIObservabilityAuditAdapter, createServerObservabilityDependencies } from "@/lib/observability";
 
 class OfficialAIProviderRegistry implements AIProviderRegistryPort {
@@ -49,5 +49,12 @@ export function createOfficialAIServiceDependencies(client: SupabaseClient, tena
       dependencies.audit,
       createServerObservabilityDependencies()
     )
+  };
+}
+
+export function createOfficialAIRegenerationDependencies(client: SupabaseClient, tenantId: string) {
+  return {
+    drafts: new SupabaseOfficialAIRegenerationAdapter(client, tenantId),
+    providers: new OfficialAIProviderRegistry()
   };
 }
