@@ -17,6 +17,28 @@ const IDEMPOTENCY_PREFIX = "pmav5.ai.idempotency.";
 const POLL_ATTEMPTS = 50;
 const POLL_INTERVAL_MS = 100;
 
+export const DEFAULT_BATCH_SIZE = 50;
+const MAX_BATCH_SIZE = 1000;
+
+export function getOfficialAIBatchSize(): number {
+  const raw = process.env.OFFICIAL_AI_BATCH_SIZE;
+  if (raw === undefined || raw === null || raw.trim() === "") {
+    return DEFAULT_BATCH_SIZE;
+  }
+  const parsed = Number(raw);
+  if (Number.isNaN(parsed) || !Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_BATCH_SIZE;
+  }
+  const floored = Math.floor(parsed);
+  if (floored <= 0) {
+    return DEFAULT_BATCH_SIZE;
+  }
+  if (floored > MAX_BATCH_SIZE) {
+    return MAX_BATCH_SIZE;
+  }
+  return floored;
+}
+
 interface StoredAIIdempotency {
   fingerprint: string;
   status: "pending" | "completed";
@@ -73,11 +95,14 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
 
   async findPendingWithoutDrafts(tenantId: string): Promise<readonly OfficialAIOffer[]> {
     if (tenantId !== this.tenantId) return [];
+    const batchSize = getOfficialAIBatchSize();
     const { data: offersData, error: offersError } = await this.client
       .from("offers")
       .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability")
       .eq("user_id", tenantId)
-      .eq("status", "pending_manual_review");
+      .eq("status", "pending_manual_review")
+      .order("discovered_at", { ascending: true })
+      .limit(batchSize);
     if (offersError) {
       const parts = [offersError.message];
       if (offersError.code) parts.push(`code=${offersError.code}`);

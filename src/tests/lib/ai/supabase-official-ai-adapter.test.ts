@@ -2,16 +2,18 @@ import { describe, expect, it, vi } from "vitest";
 import { MemoryStateAdapter } from "@/core/state/adapters/memory-state-adapter";
 import type { OfficialAICommand, OfficialAIContent, OfficialAIOffer } from "@/core/ai";
 import {
+  DEFAULT_BATCH_SIZE,
+  getOfficialAIBatchSize,
   OfficialAIApprovalAdapter,
   SupabaseOfficialAIAdapter
 } from "@/lib/ai/official/supabase-official-ai-adapter";
 
 function chain(result: unknown) {
-  const builder = {
-    select: vi.fn(), insert: vi.fn(), upsert: vi.fn(), update: vi.fn(), eq: vi.fn(),
+  const builder: any = {
+    select: vi.fn(), insert: vi.fn(), upsert: vi.fn(), update: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn(),
     maybeSingle: vi.fn(async () => result), single: vi.fn(async () => result)
   };
-  for (const method of ["select", "insert", "upsert", "update", "eq"] as const) {
+  for (const method of ["select", "insert", "upsert", "update", "eq", "order", "limit"] as const) {
     builder[method].mockReturnValue(builder);
   }
   return builder;
@@ -129,9 +131,9 @@ describe("SupabaseOfficialAIAdapter", () => {
   describe("findPendingWithoutDrafts (ADR-014 / V5 Bugfix)", () => {
     function mockChain(result: unknown) {
       const builder: any = {
-        select: vi.fn(), eq: vi.fn(), in: vi.fn(async () => result)
+        select: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn(), in: vi.fn(async () => result)
       };
-      for (const method of ["select", "eq"] as const) {
+      for (const method of ["select", "eq", "order", "limit"] as const) {
         builder[method].mockReturnValue(builder);
       }
       return builder;
@@ -141,6 +143,8 @@ describe("SupabaseOfficialAIAdapter", () => {
       const offersBuilder = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
         then: vi.fn((resolve) => resolve({
           data: [
             { id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" },
@@ -173,6 +177,8 @@ describe("SupabaseOfficialAIAdapter", () => {
       const offersBuilder = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
         then: vi.fn((resolve) => resolve({ data: manyOffers, error: null }))
       };
       const postsBuilder = {
@@ -203,6 +209,8 @@ describe("SupabaseOfficialAIAdapter", () => {
       const offersBuilder = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
         then: vi.fn((resolve) => resolve({
           data: [{ id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" }],
           error: null
@@ -226,6 +234,79 @@ describe("SupabaseOfficialAIAdapter", () => {
         expect(err.details).toBe("URI Too Long");
         expect(err.hint).toBe("Reduce array size");
       }
+    });
+  });
+
+  describe("Configurable Official AI Batch Size (ADR-014)", () => {
+    it("1. OFFICIAL_AI_BATCH_SIZE=50 -> retorna no máximo 50 offers via getOfficialAIBatchSize()", () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "50");
+      expect(getOfficialAIBatchSize()).toBe(50);
+      vi.unstubAllEnvs();
+    });
+
+    it("2. OFFICIAL_AI_BATCH_SIZE=10 -> retorna no máximo 10 via getOfficialAIBatchSize()", () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "10");
+      expect(getOfficialAIBatchSize()).toBe(10);
+      vi.unstubAllEnvs();
+    });
+
+    it("3. OFFICIAL_AI_BATCH_SIZE ausente -> usa 50 via getOfficialAIBatchSize()", () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "");
+      expect(getOfficialAIBatchSize()).toBe(DEFAULT_BATCH_SIZE);
+      vi.unstubAllEnvs();
+    });
+
+    it("4. OFFICIAL_AI_BATCH_SIZE=abc -> usa 50 via getOfficialAIBatchSize()", () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "abc");
+      expect(getOfficialAIBatchSize()).toBe(DEFAULT_BATCH_SIZE);
+      vi.unstubAllEnvs();
+    });
+
+    it("5. OFFICIAL_AI_BATCH_SIZE=-1 -> usa 50 via getOfficialAIBatchSize()", () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "-1");
+      expect(getOfficialAIBatchSize()).toBe(DEFAULT_BATCH_SIZE);
+      vi.unstubAllEnvs();
+    });
+
+    it("6. OFFICIAL_AI_BATCH_SIZE=2000 -> usa 1000 via getOfficialAIBatchSize()", () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "2000");
+      expect(getOfficialAIBatchSize()).toBe(1000);
+      vi.unstubAllEnvs();
+    });
+
+    it("7 & 8. ORDER BY discovered_at ASC permanece preservado e limit e exclusão de offers com drafts são aplicados", async () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "10");
+      const offersBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        then: vi.fn((resolve) => resolve({
+          data: [
+            { id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" },
+            { id: "offer-2", user_id: "tenant-1", status: "pending_manual_review", platform: "Shopee", product_name: "P2", current_price: 20, category: "C2" }
+          ],
+          error: null
+        }))
+      };
+      const postsBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn(async () => ({
+          data: [{ offer_id: "offer-1" }],
+          error: null
+        }))
+      };
+      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+      const result = await adapter.findPendingWithoutDrafts("tenant-1");
+
+      expect(offersBuilder.order).toHaveBeenCalledWith("discovered_at", { ascending: true });
+      expect(offersBuilder.limit).toHaveBeenCalledWith(10);
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("offer-2");
+      vi.unstubAllEnvs();
     });
   });
 });
