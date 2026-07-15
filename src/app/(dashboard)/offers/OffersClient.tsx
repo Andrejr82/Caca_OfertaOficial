@@ -6,6 +6,7 @@ import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
 import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
 import { rejectAmazonOfferAction, selectAmazonOfferAction } from "@/lib/offers/actions";
+import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
 
@@ -182,7 +183,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
               </div>
 
               {nativeShopee && offer.status === "pending_manual_review" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectShopeeCandidateAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
                     <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
@@ -195,21 +196,27 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                     <input type="hidden" name="requested_at" value={transitionRequestedAt} />
                     <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
                   </form>
+                  {/* ADR-014: Official AI Modo 1 — gera drafts sem alterar estado da offer */}
+                  <GenerateAIMessagesButton offerId={offer.id} />
                   <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
                 </div>
               )}
 
               {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                  {/* ADR-014: Official AI Modo 1 */}
+                  <GenerateAIMessagesButton offerId={offer.id} />
                 </div>
               )}
 
               {offer.platform === "Amazon" && offer.status === "pending_manual_review" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                  {/* ADR-014: Official AI Modo 1 */}
+                  <GenerateAIMessagesButton offerId={offer.id} />
                 </div>
               )}
 
