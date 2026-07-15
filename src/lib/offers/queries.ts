@@ -48,15 +48,33 @@ export async function listOffersWithDraftStatus() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as Array<Offer & { draft_count: number }>;
 
-  const { data: offers } = await supabase
+  const { data: recentDraftRows } = await supabase
+    .from("posts")
+    .select("offer_id,created_at")
+    .eq("status", "draft")
+    .order("created_at", { ascending: false })
+    .limit(300);
+  const latestDraftOfferIds = [...new Set(
+    ((recentDraftRows || []) as Array<{ offer_id: string }>).map((row) => row.offer_id)
+  )].slice(0, 100);
+
+  const { data: draftOffers } = latestDraftOfferIds.length > 0
+    ? await supabase.from("offers").select("*").in("id", latestDraftOfferIds)
+    : { data: [] as Offer[] };
+
+  const { data: recentOffers } = await supabase
     .from("offers")
     .select("*")
     .order("created_at", { ascending: false })
     .limit(100);
 
-  if (!offers || offers.length === 0) return [] as Array<Offer & { draft_count: number }>;
+  const draftOfferById = new Map(((draftOffers || []) as Offer[]).map((offer) => [offer.id, offer]));
+  const actionable = latestDraftOfferIds.flatMap((id) => draftOfferById.get(id) ? [draftOfferById.get(id)!] : []);
+  const actionableIds = new Set(actionable.map((offer) => offer.id));
+  const offers = [...actionable, ...((recentOffers || []) as Offer[]).filter((offer) => !actionableIds.has(offer.id))].slice(0, 100);
+  if (offers.length === 0) return [] as Array<Offer & { draft_count: number }>;
 
-  const offerIds = (offers as Offer[]).map((o) => o.id);
+  const offerIds = offers.map((o) => o.id);
   const { data: drafts } = await supabase
     .from("posts")
     .select("offer_id")
@@ -68,7 +86,7 @@ export async function listOffersWithDraftStatus() {
     draftCountByOffer[d.offer_id] = (draftCountByOffer[d.offer_id] || 0) + 1;
   }
 
-  return (offers as Offer[]).map((offer) => ({
+  return offers.map((offer) => ({
     ...offer,
     draft_count: draftCountByOffer[offer.id] || 0
   }));
