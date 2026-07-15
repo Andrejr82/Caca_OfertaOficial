@@ -342,6 +342,9 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     const notify = functionSource("notifyWorkPendingToOfficialAI");
     expect(notify).toContain("PROCESS_OFFERS");
     expect(notify).toContain("cycleResult.offerIds");
+    expect(notify).toContain("batchCompleted");
+    expect(notify).toContain("totalPages");
+    expect(notify).toContain("visitedPages");
     expect(notify).not.toContain("ALL_PENDING");
   });
 

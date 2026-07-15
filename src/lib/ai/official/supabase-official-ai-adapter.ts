@@ -267,6 +267,20 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (stored.status === "completed" && stored.result) return { status: "replay" as const, result: stored.result };
     const pendingSince = stored.startedAt ?? row.created_at;
     if (Date.now() - Date.parse(pendingSince) > STALE_PENDING_AFTER_MS) {
+      if (idempotencyKey.startsWith("ai:cycle:")) {
+        const restartedAt = new Date().toISOString();
+        const { error: restartError } = await this.client.from("app_settings")
+          .update({ value: { fingerprint, status: "pending", startedAt: restartedAt } satisfies StoredAIIdempotency })
+          .eq("user_id", this.tenantId).eq("key", key);
+        if (restartError) throw new Error(`Official AI stale page restart failed: ${restartError.message}`);
+        const { error: auditError } = await this.client.from("integration_logs").insert({
+          user_id: this.tenantId, integration: "official-ai-service", action: "ai_cycle_page_stale_restarted",
+          status: "success", message: `${idempotencyKey}:stale_restarted`,
+          metadata: { idempotencyKey, pendingSince, restartedAt }
+        });
+        if (auditError) throw new Error(`Official AI stale page restart audit failed: ${auditError.message}`);
+        return { status: "started" as const };
+      }
       return { status: "stale_pending" as const, pendingSince };
     }
     return { status: "pending" as const, result: this.waitForCompleted(key, fingerprint) };

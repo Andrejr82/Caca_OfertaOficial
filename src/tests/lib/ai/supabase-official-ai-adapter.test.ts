@@ -151,6 +151,24 @@ describe("SupabaseOfficialAIAdapter", () => {
     expect(duplicate.delete).toBeUndefined();
   });
 
+  it("retoma página stale no mesmo registro e audita sem apagar a chave", async () => {
+    const duplicate = chain({ data: null, error: null });
+    duplicate.insert.mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate" } });
+    const stored = chain({
+      data: { value: { fingerprint: "fingerprint", status: "pending" }, created_at: "2020-01-01T00:00:00.000Z" },
+      error: null
+    });
+    const restart = chain({ data: null, error: null });
+    const audit = chain({ data: null, error: null });
+    const client = { from: vi.fn().mockReturnValueOnce(duplicate).mockReturnValueOnce(stored).mockReturnValueOnce(restart).mockReturnValueOnce(audit) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await expect(adapter.begin("ai:cycle:cycle-1:page:2:v1", "fingerprint")).resolves.toEqual({ status: "started" });
+    expect(restart.update).toHaveBeenCalledWith(expect.objectContaining({ value: expect.objectContaining({ status: "pending", startedAt: expect.any(String) }) }));
+    expect(audit.insert).toHaveBeenCalledWith(expect.objectContaining({ action: "ai_cycle_page_stale_restarted" }));
+    expect(restart.delete).toBeUndefined();
+  });
+
   describe("findPendingWithoutDrafts (ADR-014 / V5 Bugfix)", () => {
     it("1. & 7. ORDER BY created_at ASC permanece preservado e limit e exclusão de offers com drafts são aplicados", async () => {
       vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "10");

@@ -468,33 +468,42 @@ function resolveOfficialAITriggerEndpoint() {
 
 async function notifyWorkPendingToOfficialAI(cycleResult) {
   const endpoint = resolveOfficialAITriggerEndpoint();
-
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const offerIds = [...new Set(cycleResult.offerIds || [])];
+  const totalPages = Math.ceil(offerIds.length / 50);
+  const visitedPages = new Set();
   try {
-    const response = await axios.post(
-      endpoint,
-      {
-        command: 'PROCESS_OFFERS',
-        offerIds: cycleResult.offerIds,
-        correlationId: cycleResult.correlationId,
-        commandId: `ai:cycle:${cycleResult.correlationId}:v1`,
-        tenantId: ADMIN_USER_ID,
-        requestedAt: new Date().toISOString(),
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'x-correlation-id': cycleResult.correlationId,
-          ...(serviceKey ? { Authorization: `Bearer ${serviceKey}` } : {}),
+    for (let invocation = 0; invocation <= totalPages; invocation += 1) {
+      const response = await axios.post(
+        endpoint,
+        {
+          command: 'PROCESS_OFFERS', offerIds, correlationId: cycleResult.correlationId,
+          commandId: `ai:cycle:${cycleResult.correlationId}:v1`, tenantId: ADMIN_USER_ID,
+          requestedAt: cycleResult.requestedAt || new Date().toISOString(),
         },
-        timeout: 120_000,
+        {
+          headers: {
+            'Content-Type': 'application/json', 'x-correlation-id': cycleResult.correlationId,
+            ...(serviceKey ? { Authorization: `Bearer ${serviceKey}` } : {}),
+          },
+          timeout: 120_000,
+        }
+      );
+      if (response.data?.batchCompleted === true) {
+        console.log(`[Disparo Oficial da Official AI] Sucesso para ciclo=${cycleResult.correlationId}: status=${response.status} páginas=${response.data.totalPages}`);
+        return response.data;
       }
-    );
-    console.log(`[Disparo Oficial da Official AI] Sucesso para ciclo=${cycleResult.correlationId}: status=${response.status}`);
-    return response.data;
+      const pageNumber = Number(response.data?.pageNumber);
+      if (!Number.isInteger(pageNumber) || pageNumber < 1 || pageNumber > totalPages || visitedPages.has(pageNumber)) {
+        throw new Error(`Official AI não avançou o checkpoint do ciclo (pageNumber=${response.data?.pageNumber})`);
+      }
+      visitedPages.add(pageNumber);
+    }
+    throw new Error(`Official AI excedeu o limite determinístico de ${totalPages} páginas`);
   } catch (error) {
     const msg = error.response?.data?.message || error.message;
     console.warn(`[Disparo Oficial da Official AI] Aviso para ciclo=${cycleResult.correlationId}: ${msg}`);
+    throw error;
   }
 }
 

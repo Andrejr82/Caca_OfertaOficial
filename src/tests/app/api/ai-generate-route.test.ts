@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { generateOfficialAI, createOfficialAIServiceDependencies, getUser, supabase, inngestSend, auditInsert, adminSupabase } = vi.hoisted(() => {
+const { generateOfficialAI, createOfficialAIServiceDependencies, getUser, supabase, auditInsert, adminSupabase, loadCycleCheckpoint, advanceCycleCheckpoint } = vi.hoisted(() => {
   const getUser = vi.fn();
   const auditInsert = vi.fn().mockResolvedValue({ error: null });
   return {
@@ -10,7 +10,8 @@ const { generateOfficialAI, createOfficialAIServiceDependencies, getUser, supaba
     supabase: { auth: { getUser } },
     adminSupabase: { auth: { getUser }, from: vi.fn(() => ({ insert: auditInsert })) },
     auditInsert,
-    inngestSend: vi.fn().mockResolvedValue({ ids: ["event-1"] })
+    loadCycleCheckpoint: vi.fn(),
+    advanceCycleCheckpoint: vi.fn()
   };
 });
 
@@ -18,7 +19,7 @@ vi.mock("@/core/ai", () => ({ generateOfficialAI }));
 vi.mock("@/lib/ai/official/create-official-ai-service", () => ({ createOfficialAIServiceDependencies }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabaseClient: vi.fn().mockResolvedValue(supabase) }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn(() => adminSupabase) }));
-vi.mock("@/lib/inngest/client", () => ({ inngest: { send: inngestSend } }));
+vi.mock("@/lib/ai/official/official-ai-cycle-checkpoint", () => ({ loadCycleCheckpoint, advanceCycleCheckpoint }));
 
 import { POST } from "@/app/api/ai/generate/route";
 
@@ -29,6 +30,13 @@ describe("POST /api/ai/generate", () => {
     generateOfficialAI.mockResolvedValue({
       status: "approved", commandId: "command-1", offerId: "offer-1", offerState: "approved"
     });
+    loadCycleCheckpoint.mockResolvedValue({ nextPage: 1, status: "pending", metrics: { pagesProcessed: 0 } });
+    advanceCycleCheckpoint.mockImplementation(async (_client, _tenant, checkpoint, result) => ({
+      ...checkpoint,
+      nextPage: checkpoint.nextPage + 1,
+      status: checkpoint.nextPage === 3 ? "completed" : "pending",
+      metrics: { pagesProcessed: checkpoint.nextPage, offersVisited: result.batch?.offersVisited ?? 0 }
+    }));
   });
 
   it("rejeita entrada sem offerId antes de compor o serviço", async () => {
@@ -59,7 +67,7 @@ describe("POST /api/ai/generate", () => {
     }), { dependency: true });
   });
 
-  it("enfileira exclusivamente os IDs do ciclo em páginas determinísticas", async () => {
+  it("processa somente uma página e devolve checkpoint para a próxima invocação", async () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
     const offerIds = Array.from({ length: 120 }, (_, index) => `offer-${index}`);
     const response = await POST(new Request("http://localhost/api/ai/generate", {
@@ -69,20 +77,31 @@ describe("POST /api/ai/generate", () => {
         command: "PROCESS_OFFERS", correlationId: "cycle-120", tenantId: "tenant-1", offerIds
       })
     }));
-    expect(response.status).toBe(202);
+    generateOfficialAI.mockResolvedValue({ status: "drafted", batch: { offersVisited: 50, draftedOffers: 50, draftsPersisted: 150 } });
+    expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      status: "accepted", offerIdsReceived: 120, pagesQueued: 3, batchCompleted: false
+      offerIdsReceived: 120, pageNumber: 1, totalPages: 3, nextPage: 2, batchCompleted: false
     });
-    expect(inngestSend).toHaveBeenCalledWith(expect.objectContaining({
-      id: "official-ai-cycle-cycle-120",
-      name: "offer/cycle.process",
-      data: expect.objectContaining({ offerIds })
+    expect(generateOfficialAI).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: "ai:cycle:cycle-120:page:1:v1",
+      batch: expect.objectContaining({ offerIds: offerIds.slice(0, 50), pageNumber: 1, totalPages: 3 })
+    }), { dependency: true });
+    expect(advanceCycleCheckpoint).toHaveBeenCalledTimes(1);
+    vi.unstubAllEnvs();
+  });
+
+  it("não reprocessa ciclo cujo checkpoint já está completed", async () => {
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+    loadCycleCheckpoint.mockResolvedValue({
+      nextPage: 4, status: "completed", metrics: { pagesProcessed: 3, offersVisited: 120 }
+    });
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: "Bearer service-key" },
+      body: JSON.stringify({ command: "PROCESS_OFFERS", correlationId: "cycle-done", tenantId: "tenant-1", offerIds: ["offer-1"] })
     }));
-    expect(auditInsert).toHaveBeenCalledWith(expect.objectContaining({
-      integration: "official-ai-service",
-      action: "ai_cycle_queued",
-      metadata: expect.objectContaining({ correlationId: "cycle-120", offerIds, pagesQueued: 3 })
-    }));
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ batchCompleted: true, nextPage: null });
     expect(generateOfficialAI).not.toHaveBeenCalled();
     vi.unstubAllEnvs();
   });

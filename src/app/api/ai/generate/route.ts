@@ -4,7 +4,7 @@ import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-of
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
-import { inngest } from "@/lib/inngest/client";
+import { advanceCycleCheckpoint, loadCycleCheckpoint } from "@/lib/ai/official/official-ai-cycle-checkpoint";
 
 interface GenerateAIRequest {
   command?: "PROCESS_OFFERS";
@@ -69,40 +69,43 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "correlationId e offerIds são obrigatórios." }, { status: 400 });
       }
       const pages = createOfficialAICyclePages(correlationId, offerIds);
-      await inngest.send({
-        id: `official-ai-cycle-${correlationId}`,
-        name: "offer/cycle.process",
-        data: {
-          correlationId,
-          tenantId: userId,
-          requestedAt: body.requestedAt || new Date().toISOString(),
-          providerPreference: body.providerPreference,
-          offerIds
-        }
-      });
-      const { error: auditError } = await supabase.from("integration_logs").insert({
-        user_id: userId,
-        integration: "official-ai-service",
-        action: "ai_cycle_queued",
-        status: "success",
-        message: `${correlationId}:cycle_queued`,
-        metadata: {
-          correlationId,
-          offerIds,
-          offerIdsReceived: offerIds.length,
-          pagesQueued: pages.length,
-          batchCompleted: false
-        }
-      });
-      if (auditError) throw new Error(`Official AI cycle enqueue audit failed: ${auditError.message}`);
+      const checkpoint = await loadCycleCheckpoint(supabase, userId, correlationId, offerIds, pages.length);
+      if (checkpoint.status === "completed") {
+        return NextResponse.json({
+          ok: true, status: "completed", correlationId, offerIdsReceived: offerIds.length,
+          pageNumber: null, totalPages: pages.length, nextPage: null,
+          batchCompleted: true, metrics: checkpoint.metrics, pageStatuses: checkpoint.pageStatuses
+        });
+      }
+      const page = pages[checkpoint.nextPage - 1];
+      if (!page) throw new Error(`Official AI cycle checkpoint points to invalid page ${checkpoint.nextPage}`);
+      const command: OfficialAICommand = {
+        contractVersion: "pmav5.ai/v1", commandId: page.idempotencyKey, idempotencyKey: page.idempotencyKey,
+        correlationId, causationId: `oracle:${correlationId}`, offerId: `CYCLE_PAGE_${page.pageNumber}`,
+        tenantId: userId, providerPreference: body.providerPreference,
+        channels: ["telegram", "instagram", "whatsapp"], requestedAt: body.requestedAt || new Date().toISOString(),
+        actor: { type: "service", id: "oracle-worker", service: "oracle-worker" }, origin: "oracle.discovery",
+        reason: { code: "GENERATE_OFFICIAL_CONTENT" },
+        batch: { operation: "PROCESS_OFFERS", offerIds: page.offerIds, pageNumber: page.pageNumber, totalPages: page.totalPages }
+      };
+      const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(supabase, userId));
+      const advanced = await advanceCycleCheckpoint(supabase, userId, checkpoint, result);
+      const batchCompleted = advanced.status === "completed";
+      if (batchCompleted) {
+        const { error: auditError } = await supabase.from("integration_logs").insert({
+          user_id: userId, integration: "official-ai-service", action: "ai_cycle_completed", status: "success",
+          message: `${correlationId}:cycle_completed`,
+          metadata: { correlationId, offerIds, offerIdsReceived: offerIds.length, ...advanced.metrics,
+            pageStatuses: advanced.pageStatuses, batchCompleted: true }
+        });
+        if (auditError) throw new Error(`Official AI cycle completion audit failed: ${auditError.message}`);
+      }
       return NextResponse.json({
-        ok: true,
-        status: "accepted",
-        correlationId,
-        offerIdsReceived: offerIds.length,
-        pagesQueued: pages.length,
-        batchCompleted: false
-      }, { status: 202 });
+        ok: result.status !== "rejected", status: advanced.status, correlationId,
+        offerIdsReceived: offerIds.length, pageNumber: page.pageNumber, totalPages: pages.length,
+        nextPage: batchCompleted ? null : advanced.nextPage, batchCompleted,
+        metrics: advanced.metrics, pageStatuses: advanced.pageStatuses, result
+      });
     }
 
     const offerId = body.offerId!;

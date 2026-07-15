@@ -111,7 +111,7 @@ async function rejectAndRecord(
   postsPersisted = 0,
   transitionRequested = false
 ): Promise<OfficialAIRejectedResult> {
-  const isBatch = command.offerId === "ALL_PENDING";
+  const isBatch = command.offerId === "ALL_PENDING" || Boolean(command.batch);
   const result = rejected(command, dependencies, code, message, stage, offerState);
   await dependencies.audit.register({
     ...auditBase(command, dependencies), provider, model, latencyMs, result: "rejected", replay: false,
