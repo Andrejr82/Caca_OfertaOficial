@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Trash2 } from "lucide-react";
 import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
@@ -38,6 +39,7 @@ export function BatchApprovalList({
   posts: PostWithOffer[], 
   channel: "telegram" | "instagram" | "whatsapp" | "facebook" 
 }) {
+  const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
@@ -69,19 +71,20 @@ export function BatchApprovalList({
       const response = await fetch("/api/posts/bulk-reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postIds: Array.from(selectedIds) })
+        body: JSON.stringify({ postIds: Array.from(selectedIds), channel })
       });
       const data = await response.json();
 
-      if (response.ok && data.ok) {
+      if (response.ok && typeof data.successCount === "number" && typeof data.failureCount === "number") {
         alert(data.message);
-        window.location.reload();
+        setSelectedIds(new Set());
+        router.refresh();
       } else {
         alert(data.message || "Erro desconhecido ao tentar excluir em lote.");
-        setLoading(false);
       }
     } catch {
       alert("Ocorreu um erro de conexão.");
+    } finally {
       setLoading(false);
     }
   }

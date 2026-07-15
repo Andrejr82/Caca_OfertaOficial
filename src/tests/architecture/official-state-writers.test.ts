@@ -19,9 +19,18 @@ function source(path: string) {
 }
 
 describe("official state writers", () => {
-  it.each(officialCallers)("contains no direct status update in %s", (path) => {
-    expect(source(path)).not.toMatch(/\.from\(["'](?:offers|posts)["']\)\s*\.update\(\s*\{[^}]*status\s*:/);
+  it.each(officialCallers)("contains no direct promotional status write in %s", (path) => {
+    expect(source(path)).not.toMatch(/\.from\(["'](?:offers|posts)["']\)\s*\.update\(\s*\{[^}]*status\s*:\s*["'](?:selected|approved|posted|published)["']/);
     expect(source(path)).not.toMatch(/\.from\(["'](?:offers|posts)["']\)\s*\.insert\(\s*\{[^}]*status\s*:\s*["'](?:selected|approved|posted|published)["']/);
+  });
+
+  it("keeps panel rejection as the historical post-only soft delete", () => {
+    for (const path of ["src/app/api/posts/reject/route.ts", "src/app/api/posts/bulk-reject/route.ts"]) {
+      const route = source(path);
+      expect(route).toMatch(/\.from\(["']posts["']\)\s*\.update\(\s*\{[^}]*status\s*:\s*["']deleted["']/);
+      expect(route).not.toContain("publishOfficialPost");
+      expect(route).not.toContain("transitionOfficialPostState");
+    }
   });
 
   it("routes curation, approval and publication through the official service", () => {

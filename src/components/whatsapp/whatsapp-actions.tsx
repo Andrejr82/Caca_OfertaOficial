@@ -96,7 +96,7 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
       const response = await fetch("/api/posts/reject", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: post.id })
+        body: JSON.stringify({ postId: post.id, channel: "whatsapp" })
       });
       const data = await response.json();
 
@@ -113,13 +113,13 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
           success: false,
           message: data.message || "Erro desconhecido ao tentar excluir."
         });
-        setLoading(false);
       }
     } catch {
       setStatus({
         success: false,
         message: "Ocorreu um erro de conexão."
       });
+    } finally {
       setLoading(false);
     }
   }
