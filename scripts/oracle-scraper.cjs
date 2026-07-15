@@ -407,8 +407,67 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace) {
   };
 }
 
+function validateOfficialAIUrl(url) {
+  if (process.env.NODE_ENV === 'production') {
+    if (!url.startsWith('https://')) {
+      throw new Error('URL da Official AI deve usar HTTPS em produção');
+    }
+    if (url.includes('localhost') || url.includes('127.0.0.1')) {
+      throw new Error('URL da Official AI não pode usar localhost em produção');
+    }
+  }
+  if (!url.endsWith('/api/ai/generate')) {
+    throw new Error('URL da Official AI deve terminar em /api/ai/generate');
+  }
+  if (url.includes('//api/ai/generate') || url.includes('///api/ai/generate')) {
+    throw new Error('URL da Official AI não pode conter duas barras antes de api');
+  }
+  if (url.includes('@') || url.includes('?') || url.includes('#')) {
+    throw new Error('URL da Official AI não pode conter credenciais, tokens ou query strings');
+  }
+  return url;
+}
+
+function resolveOfficialAITriggerEndpoint() {
+  const explicitTriggerUrl = process.env.OFFICIAL_AI_TRIGGER_URL?.trim();
+  if (explicitTriggerUrl) {
+    return validateOfficialAIUrl(explicitTriggerUrl);
+  }
+
+  const vercelUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim();
+  const normalizedVercel = vercelUrl
+    ? vercelUrl.startsWith('http://') || vercelUrl.startsWith('https://')
+      ? vercelUrl
+      : `https://${vercelUrl}`
+    : null;
+
+  const configuredBaseUrl =
+    process.env.APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.PUBLIC_APP_URL?.trim() ||
+    process.env.NEXTAUTH_URL?.trim() ||
+    process.env.AUTH_URL?.trim() ||
+    normalizedVercel;
+
+  let endpoint = null;
+  if (configuredBaseUrl) {
+    endpoint = `${configuredBaseUrl.replace(/\/+$/, '')}/api/ai/generate`;
+  } else if (process.env.NODE_ENV !== 'production') {
+    endpoint = 'http://127.0.0.1:3000/api/ai/generate';
+  }
+
+  if (!endpoint) {
+    throw new Error(
+      'URL pública da aplicação não configurada para o disparo da Official AI'
+    );
+  }
+
+  return validateOfficialAIUrl(endpoint);
+}
+
 async function notifyWorkPendingToOfficialAI(cycleResult) {
-  const endpoint = process.env.OFFICIAL_AI_TRIGGER_URL || 'http://127.0.0.1:3000/api/ai/generate';
+  const endpoint = resolveOfficialAITriggerEndpoint();
+
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
   try {
     const response = await axios.post(
@@ -492,7 +551,9 @@ module.exports = {
   executeShopeeNativeDiscoveryV5,
   fetchAmazonHtmlViaScrapedo,
   fetchMercadoLivreViaScrapedo: fetchAmazonHtmlViaScrapedo,
+  notifyWorkPendingToOfficialAI,
   persistDiscoveryIngestionV1,
+  resolveOfficialAITriggerEndpoint,
   refreshShopeeNativeCatalog,
   runMercadoLivreOfficialDryRun,
   runScrapingCycle,
