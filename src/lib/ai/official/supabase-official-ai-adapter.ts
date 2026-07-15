@@ -101,7 +101,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability")
       .eq("user_id", tenantId)
       .eq("status", "pending_manual_review")
-      .order("discovered_at", { ascending: true })
+      .order("created_at", { ascending: true })
       .limit(batchSize);
     if (offersError) {
       const parts = [offersError.message];

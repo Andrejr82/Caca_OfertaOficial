@@ -10,10 +10,11 @@ import {
 
 function chain(result: unknown) {
   const builder: any = {
-    select: vi.fn(), insert: vi.fn(), upsert: vi.fn(), update: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn(),
+    select: vi.fn(), insert: vi.fn(), upsert: vi.fn(), update: vi.fn(), eq: vi.fn(), order: vi.fn(),
+    limit: vi.fn(async () => result), in: vi.fn(async () => result),
     maybeSingle: vi.fn(async () => result), single: vi.fn(async () => result)
   };
-  for (const method of ["select", "insert", "upsert", "update", "eq", "order", "limit"] as const) {
+  for (const method of ["select", "insert", "upsert", "update", "eq", "order"] as const) {
     builder[method].mockReturnValue(builder);
   }
   return builder;
@@ -129,17 +130,8 @@ describe("SupabaseOfficialAIAdapter", () => {
   });
 
   describe("findPendingWithoutDrafts (ADR-014 / V5 Bugfix)", () => {
-    function mockChain(result: unknown) {
-      const builder: any = {
-        select: vi.fn(), eq: vi.fn(), order: vi.fn(), limit: vi.fn(), in: vi.fn(async () => result)
-      };
-      for (const method of ["select", "eq", "order", "limit"] as const) {
-        builder[method].mockReturnValue(builder);
-      }
-      return builder;
-    }
-
-    it("1. consulta encontra offers sem drafts e 2. exclui offers com draft ativo", async () => {
+    it("1. & 7. ORDER BY created_at ASC permanece preservado e limit e exclusão de offers com drafts são aplicados", async () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "10");
       const offersBuilder = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -165,74 +157,89 @@ describe("SupabaseOfficialAIAdapter", () => {
       const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
 
       const result = await adapter.findPendingWithoutDrafts("tenant-1");
+
+      expect(offersBuilder.order).toHaveBeenCalledWith("created_at", { ascending: true });
+      expect(offersBuilder.order).not.toHaveBeenCalledWith("discovered_at", expect.anything());
+      expect(offersBuilder.limit).toHaveBeenCalledWith(10);
       expect(result).toHaveLength(1);
       expect(result[0].id).toBe("offer-2");
-      expect(postsBuilder.in).toHaveBeenCalledWith("offer_id", ["offer-1", "offer-2"]);
+      vi.unstubAllEnvs();
     });
 
-    it("3. não falha com 400 ao processar muitos IDs realizando chunking de 150 em 150", async () => {
-      const manyOffers = Array.from({ length: 350 }, (_, idx) => ({
-        id: `offer-${idx}`, user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: `P${idx}`, current_price: 10, category: "C1"
+    it("findPendingWithoutDrafts usa created_at ASC, limite 50 por padrão, exclui ofertas com drafts e faz chunking de 150 IDs", async () => {
+      const fakeOffersData = Array.from({ length: 200 }, (_, i) => ({
+        id: `offer-${i}`, user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon",
+        product_name: `Produto ${i}`, original_url: `https://amazon.com.br/dp/${i}`,
+        image_url: `https://images.example.com/${i}.jpg`, current_price: 100 + i, old_price: 120 + i,
+        category: "Casa", explainability: {}
       }));
-      const offersBuilder = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        then: vi.fn((resolve) => resolve({ data: manyOffers, error: null }))
+      const offersQuery = chain({ data: fakeOffersData, error: null });
+      const postsChunk1 = chain({ data: [{ offer_id: "offer-0" }, { offer_id: "offer-1" }], error: null });
+      const postsChunk2 = chain({ data: [{ offer_id: "offer-160" }], error: null });
+      const client = {
+        from: vi.fn()
+          .mockReturnValueOnce(offersQuery)
+          .mockReturnValueOnce(postsChunk1)
+          .mockReturnValueOnce(postsChunk2)
       };
-      const postsBuilder = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn(async (col, ids) => ({ data: [], error: null }))
-      };
-      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
       const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
 
-      const result = await adapter.findPendingWithoutDrafts("tenant-1");
-      expect(result).toHaveLength(350);
-      expect(postsBuilder.in).toHaveBeenCalledTimes(3);
-      expect(postsBuilder.in.mock.calls[0][1]).toHaveLength(150);
-      expect(postsBuilder.in.mock.calls[1][1]).toHaveLength(150);
-      expect(postsBuilder.in.mock.calls[2][1]).toHaveLength(50);
+      const pending = await adapter.findPendingWithoutDrafts("tenant-1");
+
+      expect(client.from).toHaveBeenNthCalledWith(1, "offers");
+      expect(offersQuery.eq).toHaveBeenCalledWith("user_id", "tenant-1");
+      expect(offersQuery.eq).toHaveBeenCalledWith("status", "pending_manual_review");
+      expect(offersQuery.order).toHaveBeenCalledWith("created_at", { ascending: true });
+      expect(offersQuery.order).not.toHaveBeenCalledWith("discovered_at", expect.anything());
+      expect(offersQuery.limit).toHaveBeenCalledWith(50);
+
+      expect(client.from).toHaveBeenCalledTimes(3);
+      expect(client.from).toHaveBeenNthCalledWith(2, "posts");
+      expect(client.from).toHaveBeenNthCalledWith(3, "posts");
+      expect(postsChunk1.in).toHaveBeenCalledWith("offer_id", fakeOffersData.slice(0, 150).map((o) => o.id));
+      expect(postsChunk2.in).toHaveBeenCalledWith("offer_id", fakeOffersData.slice(150, 200).map((o) => o.id));
+
+      expect(pending).toHaveLength(197);
+      expect(pending.map((p) => p.id)).not.toContain("offer-0");
+      expect(pending.map((p) => p.id)).not.toContain("offer-1");
+      expect(pending.map((p) => p.id)).not.toContain("offer-160");
     });
 
-    it("4. tenant isolation preservado - rejeita tenantId diferente do adapter e filtra queries por user_id", async () => {
-      const client = { from: vi.fn() };
-      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
-      const result = await adapter.findPendingWithoutDrafts("tenant-2");
-      expect(result).toEqual([]);
-      expect(client.from).not.toHaveBeenCalled();
+    it("findPendingWithoutDrafts respeita OFFICIAL_AI_BATCH_SIZE do ambiente", async () => {
+      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "25");
+      try {
+        const offersQuery = chain({ data: [], error: null });
+        const client = { from: vi.fn().mockReturnValue(offersQuery) };
+        const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+        await adapter.findPendingWithoutDrafts("tenant-1");
+        expect(offersQuery.limit).toHaveBeenCalledWith(25);
+      } finally {
+        vi.unstubAllEnvs();
+      }
     });
 
-    it("7. erro Supabase preserva code/message/details/hint encapsulados e acessíveis programaticamente", async () => {
-      const offersBuilder = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        then: vi.fn((resolve) => resolve({
-          data: [{ id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" }],
-          error: null
-        }))
+    it("findPendingWithoutDrafts preserva code, message, details e hint de erros PostgREST e respeita tenant isolation", async () => {
+      const postgrestError = {
+        code: "42703",
+        message: "column offers.discovered_at does not exist",
+        details: "An error occurred executing query",
+        hint: "Perhaps you meant created_at"
       };
-      const postsError = { code: "PGRST100", message: "Bad Request", details: "URI Too Long", hint: "Reduce array size" };
-      const postsBuilder = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn(async () => ({ data: null, error: postsError }))
-      };
-      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
+      const offersQuery = chain({ data: null, error: postgrestError });
+      const client = { from: vi.fn().mockReturnValue(offersQuery) };
       const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+      await expect(adapter.findPendingWithoutDrafts("tenant-2")).resolves.toEqual([]);
 
       try {
         await adapter.findPendingWithoutDrafts("tenant-1");
-        expect.unreachable("deveria ter lançado erro");
+        expect.unreachable("Deveria ter lançado erro");
       } catch (err: any) {
-        expect(err.message).toContain("Official AI existing drafts check failed: Bad Request | code=PGRST100 | details=URI Too Long | hint=Reduce array size");
-        expect(err.code).toBe("PGRST100");
-        expect(err.details).toBe("URI Too Long");
-        expect(err.hint).toBe("Reduce array size");
+        expect(err.message).toContain("Official AI pending offers read failed: column offers.discovered_at does not exist");
+        expect(err.code).toBe("42703");
+        expect(err.details).toBe("An error occurred executing query");
+        expect(err.hint).toBe("Perhaps you meant created_at");
       }
     });
   });
@@ -271,41 +278,6 @@ describe("SupabaseOfficialAIAdapter", () => {
     it("6. OFFICIAL_AI_BATCH_SIZE=2000 -> usa 1000 via getOfficialAIBatchSize()", () => {
       vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "2000");
       expect(getOfficialAIBatchSize()).toBe(1000);
-      vi.unstubAllEnvs();
-    });
-
-    it("7 & 8. ORDER BY discovered_at ASC permanece preservado e limit e exclusão de offers com drafts são aplicados", async () => {
-      vi.stubEnv("OFFICIAL_AI_BATCH_SIZE", "10");
-      const offersBuilder = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        order: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        then: vi.fn((resolve) => resolve({
-          data: [
-            { id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" },
-            { id: "offer-2", user_id: "tenant-1", status: "pending_manual_review", platform: "Shopee", product_name: "P2", current_price: 20, category: "C2" }
-          ],
-          error: null
-        }))
-      };
-      const postsBuilder = {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        in: vi.fn(async () => ({
-          data: [{ offer_id: "offer-1" }],
-          error: null
-        }))
-      };
-      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
-      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
-
-      const result = await adapter.findPendingWithoutDrafts("tenant-1");
-
-      expect(offersBuilder.order).toHaveBeenCalledWith("discovered_at", { ascending: true });
-      expect(offersBuilder.limit).toHaveBeenCalledWith(10);
-      expect(result).toHaveLength(1);
-      expect(result[0].id).toBe("offer-2");
       vi.unstubAllEnvs();
     });
   });
