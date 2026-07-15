@@ -125,6 +125,109 @@ describe("SupabaseOfficialAIAdapter", () => {
     expect(reserve.insert).toHaveBeenCalledWith(expect.objectContaining({ key: `pmav5.ai.idempotency.${command.idempotencyKey}` }));
     expect(complete.update).toHaveBeenCalledWith(expect.objectContaining({ value: expect.objectContaining({ status: "completed" }) }));
   });
+
+  describe("findPendingWithoutDrafts (ADR-014 / V5 Bugfix)", () => {
+    function mockChain(result: unknown) {
+      const builder: any = {
+        select: vi.fn(), eq: vi.fn(), in: vi.fn(async () => result)
+      };
+      for (const method of ["select", "eq"] as const) {
+        builder[method].mockReturnValue(builder);
+      }
+      return builder;
+    }
+
+    it("1. consulta encontra offers sem drafts e 2. exclui offers com draft ativo", async () => {
+      const offersBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        then: vi.fn((resolve) => resolve({
+          data: [
+            { id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" },
+            { id: "offer-2", user_id: "tenant-1", status: "pending_manual_review", platform: "Shopee", product_name: "P2", current_price: 20, category: "C2" }
+          ],
+          error: null
+        }))
+      };
+      const postsBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn(async () => ({
+          data: [{ offer_id: "offer-1" }],
+          error: null
+        }))
+      };
+      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+      const result = await adapter.findPendingWithoutDrafts("tenant-1");
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe("offer-2");
+      expect(postsBuilder.in).toHaveBeenCalledWith("offer_id", ["offer-1", "offer-2"]);
+    });
+
+    it("3. não falha com 400 ao processar muitos IDs realizando chunking de 150 em 150", async () => {
+      const manyOffers = Array.from({ length: 350 }, (_, idx) => ({
+        id: `offer-${idx}`, user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: `P${idx}`, current_price: 10, category: "C1"
+      }));
+      const offersBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        then: vi.fn((resolve) => resolve({ data: manyOffers, error: null }))
+      };
+      const postsBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn(async (col, ids) => ({ data: [], error: null }))
+      };
+      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+      const result = await adapter.findPendingWithoutDrafts("tenant-1");
+      expect(result).toHaveLength(350);
+      expect(postsBuilder.in).toHaveBeenCalledTimes(3);
+      expect(postsBuilder.in.mock.calls[0][1]).toHaveLength(150);
+      expect(postsBuilder.in.mock.calls[1][1]).toHaveLength(150);
+      expect(postsBuilder.in.mock.calls[2][1]).toHaveLength(50);
+    });
+
+    it("4. tenant isolation preservado - rejeita tenantId diferente do adapter e filtra queries por user_id", async () => {
+      const client = { from: vi.fn() };
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+      const result = await adapter.findPendingWithoutDrafts("tenant-2");
+      expect(result).toEqual([]);
+      expect(client.from).not.toHaveBeenCalled();
+    });
+
+    it("7. erro Supabase preserva code/message/details/hint encapsulados e acessíveis programaticamente", async () => {
+      const offersBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        then: vi.fn((resolve) => resolve({
+          data: [{ id: "offer-1", user_id: "tenant-1", status: "pending_manual_review", platform: "Amazon", product_name: "P1", current_price: 10, category: "C1" }],
+          error: null
+        }))
+      };
+      const postsError = { code: "PGRST100", message: "Bad Request", details: "URI Too Long", hint: "Reduce array size" };
+      const postsBuilder = {
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        in: vi.fn(async () => ({ data: null, error: postsError }))
+      };
+      const client = { from: vi.fn((table: string) => table === "offers" ? offersBuilder : postsBuilder) };
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+      try {
+        await adapter.findPendingWithoutDrafts("tenant-1");
+        expect.unreachable("deveria ter lançado erro");
+      } catch (err: any) {
+        expect(err.message).toContain("Official AI existing drafts check failed: Bad Request | code=PGRST100 | details=URI Too Long | hint=Reduce array size");
+        expect(err.code).toBe("PGRST100");
+        expect(err.details).toBe("URI Too Long");
+        expect(err.hint).toBe("Reduce array size");
+      }
+    });
+  });
 });
 
 it("OfficialAIApprovalAdapter usa o State Service com CAS selected para approved", async () => {

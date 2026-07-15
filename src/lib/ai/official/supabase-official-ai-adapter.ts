@@ -78,18 +78,40 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability")
       .eq("user_id", tenantId)
       .eq("status", "pending_manual_review");
-    if (offersError) throw new Error(`Official AI pending offers read failed: ${offersError.message}`);
+    if (offersError) {
+      const parts = [offersError.message];
+      if (offersError.code) parts.push(`code=${offersError.code}`);
+      if (offersError.details) parts.push(`details=${offersError.details}`);
+      if (offersError.hint) parts.push(`hint=${offersError.hint}`);
+      const err = new Error(`Official AI pending offers read failed: ${parts.join(" | ")}`);
+      Object.assign(err, { code: offersError.code, details: offersError.details, hint: offersError.hint });
+      throw err;
+    }
     if (!offersData || offersData.length === 0) return [];
 
     const offerIds = offersData.map((o) => o.id);
-    const { data: postsData, error: postsError } = await this.client
-      .from("posts")
-      .select("offer_id")
-      .eq("user_id", tenantId)
-      .in("offer_id", offerIds);
-    if (postsError) throw new Error(`Official AI existing drafts check failed: ${postsError.message}`);
+    const postsData: Array<{ offer_id: string }> = [];
+    const CHUNK_SIZE = 150;
+    for (let i = 0; i < offerIds.length; i += CHUNK_SIZE) {
+      const chunk = offerIds.slice(i, i + CHUNK_SIZE);
+      const { data: chunkData, error: postsError } = await this.client
+        .from("posts")
+        .select("offer_id")
+        .eq("user_id", tenantId)
+        .in("offer_id", chunk);
+      if (postsError) {
+        const parts = [postsError.message];
+        if (postsError.code) parts.push(`code=${postsError.code}`);
+        if (postsError.details) parts.push(`details=${postsError.details}`);
+        if (postsError.hint) parts.push(`hint=${postsError.hint}`);
+        const err = new Error(`Official AI existing drafts check failed: ${parts.join(" | ")}`);
+        Object.assign(err, { code: postsError.code, details: postsError.details, hint: postsError.hint });
+        throw err;
+      }
+      if (chunkData) postsData.push(...chunkData);
+    }
 
-    const offersWithDrafts = new Set((postsData ?? []).map((p) => p.offer_id));
+    const offersWithDrafts = new Set(postsData.map((p) => p.offer_id));
     const pendingWithoutDrafts = offersData.filter((o) => !offersWithDrafts.has(o.id));
 
     return pendingWithoutDrafts.map((data) => ({
