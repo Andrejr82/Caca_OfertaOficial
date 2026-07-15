@@ -388,9 +388,23 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace) {
     }
     return row;
   });
-  const { error } = await getSupabase().from('offers').insert(rows);
+  const { data, error } = await getSupabase().rpc(
+    'upsert_discovery_offers_v1',
+    {
+      p_marketplace: marketplace,
+      p_rows: rows,
+    }
+  );
   if (error) throw new Error('Ingestion V1 ' + marketplace + ': ' + error.message);
-  return { accepted: rows.length, state: FINAL_STATE };
+  
+  return { 
+    accepted: data.inserted + data.updated,
+    inserted: data.inserted,
+    updated: data.updated,
+    ignored: data.ignored,
+    failed: data.failed,
+    state: FINAL_STATE 
+  };
 }
 
 async function runScrapingCycle() {
