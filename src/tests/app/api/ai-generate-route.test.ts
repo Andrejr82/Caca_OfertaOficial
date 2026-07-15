@@ -48,8 +48,6 @@ describe("POST /api/ai/generate", () => {
       idempotencyKey: "ai:offer-1:v1",
       offerId: "offer-1",
       tenantId: "tenant-1",
-      expectedState: "selected",
-      expectedVersion: 1,
       providerPreference: "cerebras",
       channels: ["telegram", "instagram", "whatsapp"]
     }), { dependency: true });

@@ -38,6 +38,7 @@ export interface AIProviderRegistryPort {
 
 export interface OfficialAIOfferPort {
   findById(offerId: string, tenantId: string): Promise<OfficialAIOffer | null>;
+  findPendingWithoutDrafts?(tenantId: string): Promise<readonly OfficialAIOffer[]>;
 }
 
 export interface OfficialAIContentPort {

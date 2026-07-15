@@ -407,6 +407,36 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace) {
   };
 }
 
+async function notifyWorkPendingToOfficialAI(cycleResult) {
+  const endpoint = process.env.OFFICIAL_AI_TRIGGER_URL || 'http://127.0.0.1:3000/api/ai/generate';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  try {
+    const response = await axios.post(
+      endpoint,
+      {
+        offerId: 'ALL_PENDING',
+        correlationId: cycleResult.correlationId,
+        commandId: `ai:batch:${cycleResult.correlationId}:v1`,
+        tenantId: ADMIN_USER_ID,
+        requestedAt: new Date().toISOString(),
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'x-correlation-id': cycleResult.correlationId,
+          ...(serviceKey ? { Authorization: `Bearer ${serviceKey}` } : {}),
+        },
+        timeout: 120_000,
+      }
+    );
+    console.log(`[Disparo Oficial da Official AI] Sucesso para ciclo=${cycleResult.correlationId}: status=${response.status}`);
+    return response.data;
+  } catch (error) {
+    const msg = error.response?.data?.message || error.message;
+    console.warn(`[Disparo Oficial da Official AI] Aviso para ciclo=${cycleResult.correlationId}: ${msg}`);
+  }
+}
+
 async function runScrapingCycle() {
   const startedAt = Date.now();
   const result = await runDiscoveryOnlyCycle({
@@ -415,6 +445,7 @@ async function runScrapingCycle() {
     requestedAt: new Date().toISOString(),
     discover: scrapeStore,
     persist: persistDiscoveryIngestionV1,
+    notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);

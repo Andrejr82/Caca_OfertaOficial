@@ -25,8 +25,6 @@ const command: OfficialAICommand = {
   causationId: "curation-1",
   offerId: "offer-1",
   tenantId: "tenant-1",
-  expectedState: "selected",
-  expectedVersion: 1,
   channels: ["telegram"],
   requestedAt: "2026-07-13T20:00:00.000Z",
   actor: { type: "user", id: "user-1", service: "nextjs-ai-route" },

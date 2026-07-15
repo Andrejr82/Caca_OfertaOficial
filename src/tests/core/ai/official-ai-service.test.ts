@@ -15,8 +15,6 @@ const command: OfficialAICommand = {
   causationId: "curation-command",
   offerId: "offer-1",
   tenantId: "tenant-1",
-  expectedState: "selected",
-  expectedVersion: 1,
   providerPreference: "groq",
   channels: ["telegram", "instagram", "whatsapp"],
   requestedAt: "2026-07-13T20:00:00.000Z",
@@ -154,11 +152,13 @@ describe("generateOfficialAI", () => {
     }));
   });
 
-  it.each(["pending_manual_review", "approved", "posted", "rejected"] as const)(
+  // ADR-014: pending_manual_review aciona Draft Generation (não rejeita).
+  // approved, posted, rejected são estados terminais que a IA recusa.
+  it.each(["approved", "posted", "rejected"] as const)(
     "rejeita estado %s antes do provider",
     async (state) => {
       const dependencies = createDependencies({
-        offers: { findById: vi.fn().mockResolvedValue({ ...offer, state }) }
+        offers: { findById: vi.fn().mockResolvedValue({ ...offer, state, version: state === "approved" ? 2 : 3 }) }
       });
 
       const result = await generateOfficialAI(command, dependencies);
@@ -240,7 +240,10 @@ describe("generateOfficialAI", () => {
       const result = await generateOfficialAI(command, dependencies);
 
       expect(result.status).toBe("rejected");
-      expect(result).toMatchObject({ offerState: "selected" });
+      // offerState para oferta em "selected" é "selected"
+      if (result.status === "rejected") {
+        expect(result.offerState).toBe("selected");
+      }
     }
   });
 
@@ -294,5 +297,27 @@ describe("generateOfficialAI", () => {
     expect(result).toEqual(await original);
     expect(dependencies.providers.resolve).not.toHaveBeenCalled();
     expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+  });
+
+  it("processamento em lote ALL_PENDING localiza ofertas pendentes sem drafts e gera drafts mantendo pending_manual_review", async () => {
+    const offer1 = { ...offer, id: "offer-1", state: "pending_manual_review" as const };
+    const offer2 = { ...offer, id: "offer-2", state: "pending_manual_review" as const };
+    const batchCommand = { ...command, offerId: "ALL_PENDING", idempotencyKey: "ai:ALL_PENDING:batch:v1" };
+    const dependencies = createDependencies({
+      offers: {
+        findById: vi.fn().mockImplementation(async (id: string) => id === "offer-1" ? offer1 : offer2),
+        findPendingWithoutDrafts: vi.fn().mockResolvedValue([offer1, offer2])
+      }
+    });
+
+    const result = await generateOfficialAI(batchCommand, dependencies);
+
+    expect(result).toMatchObject({
+      status: "drafted",
+      offerId: "ALL_PENDING",
+      offerState: "pending_manual_review"
+    });
+    expect(dependencies.offers.findPendingWithoutDrafts).toHaveBeenCalledWith("tenant-1");
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(2);
   });
 });

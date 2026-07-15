@@ -284,4 +284,34 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     expect(execution.status).toBe(0);
     expect(execution.stdout).toContain("imported");
   }, 25_000);
+
+  it("notifica oficialmente trabalho pendente (notifyWorkPending) quando ofertas são persistidas em pending_manual_review", async () => {
+    const { runDiscoveryOnlyCycle, FINAL_STATE } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const notifyWorkPending = vi.fn().mockResolvedValue({ ok: true });
+    const valid = {
+      sourceItemId: "item-notify-1",
+      sourceUrl: "https://example.com/item-notify-1",
+      title: "Oferta para Notificação",
+      imageUrl: "https://example.com/item-notify-1.jpg",
+      currentPrice: 50.0,
+      originalPrice: 80.0,
+      category: { id: "cat-1", name: "Categoria Oficial", source: "official" },
+      marketplaceMetrics: { sourcePosition: 1 },
+      deterministicScore: 9.0,
+      discoveredAt: "2026-07-13T12:00:00.000Z",
+    };
+
+    const result = await runDiscoveryOnlyCycle({
+      tenantId: "00000000-0000-4000-8000-000000000001",
+      correlationId: "cycle-pmav5-notify",
+      requestedAt: "2026-07-13T12:00:00.000Z",
+      discover: async (marketplace: string) => marketplace === "Shopee" ? [valid] : [],
+      persist: async (ingestions: unknown[]) => ({ accepted: ingestions.length, persisted: ingestions.length, state: "pending_manual_review" }),
+      notifyWorkPending,
+    });
+
+    expect(result.finalState).toBe(FINAL_STATE);
+    expect(notifyWorkPending).toHaveBeenCalledTimes(1);
+    expect(notifyWorkPending).toHaveBeenCalledWith(result);
+  });
 });

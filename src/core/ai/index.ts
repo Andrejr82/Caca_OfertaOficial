@@ -19,6 +19,7 @@ export type {
   OfficialAIChannel,
   OfficialAICommand,
   OfficialAIContent,
+  OfficialAIDraftedResult,
   OfficialAIOffer,
   OfficialAIResult,
   OfficialDraftPost

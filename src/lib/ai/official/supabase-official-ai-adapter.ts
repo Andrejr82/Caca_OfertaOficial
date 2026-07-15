@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   OfficialAIAuditRecord,
   OfficialAIContentPort,
+  OfficialAIDraftedResult,
   OfficialAIIdempotencyPort,
   OfficialAIOffer,
   OfficialAIOfferPort,
@@ -19,7 +20,7 @@ const POLL_INTERVAL_MS = 100;
 interface StoredAIIdempotency {
   fingerprint: string;
   status: "pending" | "completed";
-  result?: OfficialAIResult;
+  result?: OfficialAIResult | OfficialAIDraftedResult;
 }
 
 interface PendingAICommand {
@@ -68,6 +69,43 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       category: data.category,
       explainability: (data.explainability ?? {}) as Record<string, unknown>
     };
+  }
+
+  async findPendingWithoutDrafts(tenantId: string): Promise<readonly OfficialAIOffer[]> {
+    if (tenantId !== this.tenantId) return [];
+    const { data: offersData, error: offersError } = await this.client
+      .from("offers")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability")
+      .eq("user_id", tenantId)
+      .eq("status", "pending_manual_review");
+    if (offersError) throw new Error(`Official AI pending offers read failed: ${offersError.message}`);
+    if (!offersData || offersData.length === 0) return [];
+
+    const offerIds = offersData.map((o) => o.id);
+    const { data: postsData, error: postsError } = await this.client
+      .from("posts")
+      .select("offer_id")
+      .eq("user_id", tenantId)
+      .in("offer_id", offerIds);
+    if (postsError) throw new Error(`Official AI existing drafts check failed: ${postsError.message}`);
+
+    const offersWithDrafts = new Set((postsData ?? []).map((p) => p.offer_id));
+    const pendingWithoutDrafts = offersData.filter((o) => !offersWithDrafts.has(o.id));
+
+    return pendingWithoutDrafts.map((data) => ({
+      id: data.id,
+      tenantId: data.user_id,
+      state: data.status,
+      version: offerStateVersion(data.status),
+      marketplace: data.platform,
+      productName: data.product_name,
+      originalUrl: data.original_url,
+      imageUrl: data.image_url ?? "",
+      currentPrice: Number(data.current_price),
+      originalPrice: data.old_price == null ? null : Number(data.old_price),
+      category: data.category,
+      explainability: (data.explainability ?? {}) as Record<string, unknown>
+    }));
   }
 
   async persistDrafts(input: Parameters<OfficialAIContentPort["persistDrafts"]>[0]) {
@@ -131,7 +169,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       user_id: this.tenantId,
       integration: "official-ai-service",
       action: "ai_generation",
-      status: record.result === "approved" ? "success" : record.result === "rejected" ? "error" : "skipped",
+      // drafted = Modo 1 Draft Generation (ADR-014): oferta permanece pending_manual_review
+      status: record.result === "approved" || record.result === "drafted" ? "success" : record.result === "rejected" ? "error" : "skipped",
       message: `${record.offerId}:${record.result}${record.failureStage ? `:${record.failureStage}` : ""}`,
       metadata: record
     });

@@ -39,6 +39,41 @@ export async function getOfferPosts(offerId: string) {
   return data || [];
 }
 
+/**
+ * Lista ofertas com contagem de drafts já gerados pela Official AI.
+ * Permite ao painel exibir imediatamente o material preparado para revisão (ADR-014).
+ * Ofertas em pending_manual_review com draft_count > 0 possuem conteúdo pronto para revisão.
+ */
+export async function listOffersWithDraftStatus() {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [] as Array<Offer & { draft_count: number }>;
+
+  const { data: offers } = await supabase
+    .from("offers")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  if (!offers || offers.length === 0) return [] as Array<Offer & { draft_count: number }>;
+
+  const offerIds = (offers as Offer[]).map((o) => o.id);
+  const { data: drafts } = await supabase
+    .from("posts")
+    .select("offer_id")
+    .in("offer_id", offerIds)
+    .eq("status", "draft");
+
+  const draftCountByOffer: Record<string, number> = {};
+  for (const d of (drafts || []) as Array<{ offer_id: string }>) {
+    draftCountByOffer[d.offer_id] = (draftCountByOffer[d.offer_id] || 0) + 1;
+  }
+
+  return (offers as Offer[]).map((offer) => ({
+    ...offer,
+    draft_count: draftCountByOffer[offer.id] || 0
+  }));
+}
+
 export async function listAffiliateLinks() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as AffiliateLink[];
@@ -198,7 +233,7 @@ export async function getTrackingReports() {
       .reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0);
 
     const clicks = link.clicks || 0;
-    const cost = clicks > 0 ? clicks * 0.15 : 0; 
+    const cost = clicks > 0 ? clicks * 0.15 : 0;
     const roi = cost > 0 ? ((revenue - cost) / cost) * 100 : 100;
 
     return {

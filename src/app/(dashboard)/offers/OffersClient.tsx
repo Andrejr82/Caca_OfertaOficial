@@ -6,8 +6,11 @@ import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
 import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
 import { rejectAmazonOfferAction, selectAmazonOfferAction } from "@/lib/offers/actions";
+import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
 
-export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
+type OfferWithDraftCount = Offer & { draft_count?: number };
+
+export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftCount[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
   const [filterDecision, setFilterDecision] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
@@ -111,6 +114,8 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
           const nativeShopee = offer.platform === "Shopee" && Boolean(offer.shopee_product_cat_id);
           const metrics = offer.marketplace_metrics || {};
           const transitionRequestedAt = offer.updated_at || offer.created_at;
+          const draftCount = (offer as OfferWithDraftCount).draft_count || 0;
+          const hasDraftsReady = offer.status === "pending_manual_review" && draftCount > 0;
 
           const tierColor = 
             tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
@@ -129,6 +134,11 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${tierColor}`}>Tier {tier}</span>
                     <Badge label={offer.platform} />
+                    {hasDraftsReady && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded border text-violet-300 bg-violet-500/10 border-violet-500/20">
+                        ✦ {draftCount} draft{draftCount !== 1 ? "s" : ""} prontos
+                      </span>
+                    )}
                     {badges.map((b: string) => <Badge key={b} label={b.replace(/_/g, " ")} tone="neutral" />)}
                   </div>
                   <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
@@ -173,7 +183,7 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
               </div>
 
               {nativeShopee && offer.status === "pending_manual_review" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectShopeeCandidateAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
                     <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
@@ -186,21 +196,27 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                     <input type="hidden" name="requested_at" value={transitionRequestedAt} />
                     <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
                   </form>
+                  {/* ADR-014: Official AI Modo 1 — gera drafts sem alterar estado da offer */}
+                  <GenerateAIMessagesButton offerId={offer.id} />
                   <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
                 </div>
               )}
 
               {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                  {/* ADR-014: Official AI Modo 1 */}
+                  <GenerateAIMessagesButton offerId={offer.id} />
                 </div>
               )}
 
               {offer.platform === "Amazon" && offer.status === "pending_manual_review" && (
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                  {/* ADR-014: Official AI Modo 1 */}
+                  <GenerateAIMessagesButton offerId={offer.id} />
                 </div>
               )}
 

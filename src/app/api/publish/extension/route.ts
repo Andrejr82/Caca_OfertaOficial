@@ -44,8 +44,6 @@ export async function POST(request: Request) {
       causationId: null,
       offerId: body.offerId,
       tenantId: user.id,
-      expectedState: "selected",
-      expectedVersion: 1,
       providerPreference: body.providerPreference,
       channels: body.channels || ["telegram", "instagram", "whatsapp"],
       requestedAt: request.headers.get("x-requested-at") || "2000-01-01T00:00:00.000Z",

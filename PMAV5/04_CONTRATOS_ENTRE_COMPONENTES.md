@@ -20,6 +20,21 @@ Todos os contratos são versionados, autenticados, observáveis, idempotentes e 
 
 ## C-003 — IA
 
+A Official AI é a única autoridade de geração de conteúdo. Não existe segunda IA, segundo Worker ou segundo endpoint. O modo de operação é selecionado internamente pelo serviço a partir do campo `mode` do comando.
+
+### C-003 Modo 1 — Draft Generation (ADR-014)
+
+- **Entrada:** oferta em `pending_manual_review`, identidade do solicitante/serviço, versão de prompt/modelo e idempotency key com prefixo `ai:draft:`.
+- **Saída:** posts `draft` vinculados à oferta via `offer_id`.
+- **Estado da offer:** permanece `pending_manual_review` durante e após a operação. Nenhuma transição de estado é executada.
+- **Nunca aceita:** `selected`, `approved`, `posted`, `rejected`.
+- **Nunca produz:** transição de estado, `approved`, publicação.
+- **Idempotência:** chave por `offer_id`+`channel` impede geração de dois drafts ativos para a mesma oferta e canal.
+- **Erro:** mantém `pending_manual_review`; conteúdo parcial não é visível nem publicável.
+- **Auditoria:** entrada referenciada, provider/modelo, versão, resultado e erro sem segredo.
+
+### C-003 Modo 2 — Approval (comportamento anterior, inalterado)
+
 - **Entrada obrigatória:** oferta em `selected`, identidade do solicitante/serviço, versão de prompt/modelo e idempotency key.
 - **Saída atômica de negócio:** oferta `approved` e posts `draft`, após validações oficiais.
 - **Nunca aceita:** `draft`, `pending_manual_review`, `posted` ou `rejected`.

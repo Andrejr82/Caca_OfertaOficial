@@ -116,3 +116,56 @@ Checkpoints passam a registrar progresso, sem bloquear execução por si só. A 
 **Motivo:** correção documental e alinhamento com o Plano Oficial já certificado.
 
 **Risco e compensações:** a renumeração documental pode divergir de registros históricos preservados. A compensação é manter os textos históricos versionados, classificá-los nominalmente como obsoletos neste ADR e centralizar a sequência vigente nos documentos `07`, `08`, `12` e `13`.
+
+## ADR-014 — Official AI Draft Generation
+
+**Status:** APPROVED — 15/07/2026
+
+**Contexto:** Durante a operação real da Arquitetura Oficial V5, constatou-se que o Oracle Worker Discovery-Only executa corretamente (Discovery → `pending_manual_review`), mas o painel operacional consome exclusivamente registros da tabela `posts` (drafts). Como consequência, as ofertas descobertas permanecem invisíveis ao operador, que não consegue revisar o material preparado para publicação, perdendo produtividade operacional em relação ao fluxo anterior.
+
+**Problema arquitetural:** O Artigo 2, Princípio 6 da Constituição PMAV5 estabelecia que "IA somente poderá consumir: `selected`". Isso criava um paradoxo: drafts só existem após `selected → approved` (via IA), mas a aprovação humana exigia ver o conteúdo antes — tornando o fluxo circular e inoperável.
+
+**Decisão:** A Official AI — que permanece como autoridade única e exclusiva de geração de conteúdo — passa a possuir dois modos internos de operação:
+
+- **Modo 1 — Draft Generation:** consome ofertas em `pending_manual_review`, gera drafts (legenda, texto, imagem, metadados, posts), e retorna sem alterar o estado da oferta.
+- **Modo 2 — Approval:** consome ofertas em `selected`, gera conteúdo, persiste posts draft e promove a oferta para `approved`. Comportamento anterior, inalterado.
+
+**Mandatos constitucionais desta ADR:**
+
+1. A Official AI continua sendo a única autoridade responsável pela geração de conteúdo. Não será criada uma segunda IA. Não existirão dois Workers de IA.
+2. A Official AI permanece com uma única interface pública (`generateOfficialAI`). Não será criado um segundo endpoint oficial.
+3. A geração de drafts (Modo 1) NÃO constitui aprovação da oferta. Gerar um draft não altera o estado da offer.
+4. Durante o Modo 1, o estado da offer permanece `pending_manual_review`.
+5. Nenhuma publicação poderá ocorrer a partir do Modo 1.
+6. Nenhuma offer será promovida automaticamente para `approved` pelo Modo 1.
+7. A única autoridade para alterar a offer para `approved` continua sendo a aprovação humana realizada no painel.
+8. A Official Publication permanece inalterada. Ela continuará consumindo exclusivamente ofertas `approved`.
+9. O adapter Supabase oficial é estendido com novos métodos, não substituído. Autoridade única da camada de persistência preservada.
+
+**Nova máquina de estados (completa):**
+
+```
+Discovery → pending_manual_review
+                │
+                ▼
+         Official AI (Modo 1: Draft Generation)
+                │
+                ├── gera drafts (posts status=draft)
+                └── offer permanece pending_manual_review
+                                │
+                                ▼
+                          Painel (aprovação humana)
+                                │
+                                ▼
+                            approved
+                                │
+                                ▼
+                    Official Publication
+                                │
+                                ▼
+                           published
+```
+
+**Trade-off/consequência:** A Official AI assume responsabilidade adicional de pré-geração de conteúdo, aumentando sua criticidade. Em contrapartida, o operador passa a visualizar imediatamente o conteúdo preparado no painel, restaurando a produtividade operacional. O Modo 2 (Approval) permanece inalterado e compatível com todos os contratos existentes. A Constituição PMAV5 não é violada — ADRs são o mecanismo constitucional oficial para evolução arquitetural (Artigo 10).
+
+**Evidência de preservação da autoridade única:** Uma única função `generateOfficialAI`, uma única rota `/api/ai/generate`, um único adapter `SupabaseOfficialAIAdapter`, um único serviço `OfficialAIApprovalAdapter`. O modo é selecionado via campo `mode` no comando, internamente ao serviço.
