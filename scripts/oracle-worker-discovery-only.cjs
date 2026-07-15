@@ -73,7 +73,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, notifyWorkPending }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -110,38 +110,38 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const marketplaceStartedAt = Date.now();
       await safeObserve('discovery.marketplace.started', { marketplace });
       const products = await discover(marketplace);
-    if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
-    const uniqueProducts = [];
-    const seenSourceItems = new Set();
-    let duplicatesRejected = 0;
-    for (const product of products) {
-      const sourceItemId = String(product?.sourceItemId || '');
-      if (sourceItemId && seenSourceItems.has(sourceItemId)) {
-        duplicatesRejected += 1;
-        continue;
+      if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
+      const uniqueProducts = [];
+      const seenSourceItems = new Set();
+      let duplicatesRejected = 0;
+      for (const product of products) {
+        const sourceItemId = String(product?.sourceItemId || '');
+        if (sourceItemId && seenSourceItems.has(sourceItemId)) {
+          duplicatesRejected += 1;
+          continue;
+        }
+        if (sourceItemId) seenSourceItems.add(sourceItemId);
+        uniqueProducts.push(product);
       }
-      if (sourceItemId) seenSourceItems.add(sourceItemId);
-      uniqueProducts.push(product);
-    }
-    const ingestions = [];
-    let rejected = 0;
-    for (const product of uniqueProducts) {
-      try {
-        ingestions.push(createIngestionV1(createCandidateV1({
-          marketplace,
-          product,
-          tenantId,
-          correlationId,
-        }), requestedAt));
-      } catch (error) {
-        rejected += 1;
-        console.warn(`[Oracle Discovery-Only] Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
+      const ingestions = [];
+      let rejected = 0;
+      for (const product of uniqueProducts) {
+        try {
+          ingestions.push(createIngestionV1(createCandidateV1({
+            marketplace,
+            product,
+            tenantId,
+            correlationId,
+          }), requestedAt));
+        } catch (error) {
+          rejected += 1;
+          console.warn(`[Oracle Discovery-Only] Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
+        }
       }
-    }
-    const persisted = await persist(ingestions, marketplace);
-    if (persisted?.state !== FINAL_STATE) {
-      throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
-    }
+      const persisted = await persist(ingestions, marketplace);
+      if (persisted?.state !== FINAL_STATE) {
+        throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
+      }
       const summary = Object.freeze({
         marketplace,
         discovered: products.length,
@@ -179,6 +179,17 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     finalState: FINAL_STATE,
     durationMs: Date.now() - startedAt,
   });
+
+  if (typeof notifyWorkPending === 'function' && summaries.some((s) => s.persisted > 0)) {
+    try {
+      await notifyWorkPending(result);
+    } catch (error) {
+      await safeObserve('discovery.notification.failed', {
+        error: error.message || String(error),
+      });
+    }
+  }
+
   return result;
 }
 

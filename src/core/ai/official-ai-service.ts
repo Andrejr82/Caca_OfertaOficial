@@ -175,6 +175,61 @@ export async function generateOfficialAI(
     return result;
   }
 
+  // 2.5. Processamento em lote (Disparo Oficial após Discovery - ADR-014)
+  if (command.offerId === "ALL_PENDING") {
+    if (!dependencies.offers.findPendingWithoutDrafts) {
+      return rejectAndRecord(command, dependencies, fingerprint, "DEPENDENCY_UNAVAILABLE", "findPendingWithoutDrafts is not available", "preconditions");
+    }
+    const pendingOffers = await dependencies.offers.findPendingWithoutDrafts(command.tenantId);
+    const draftsCreated: unknown[] = [];
+    let processed = 0;
+    for (const offer of pendingOffers) {
+      processed++;
+      const subCommand: OfficialAICommand = {
+        ...command,
+        commandId: `${command.commandId}:${offer.id}`,
+        idempotencyKey: `ai:${offer.id}:v1`,
+        offerId: offer.id
+      };
+      const subResult = await generateOfficialAI(subCommand, dependencies);
+      if (subResult.status === "drafted" || subResult.status === "approved") {
+        if (subResult.drafts) draftsCreated.push(...subResult.drafts);
+      }
+    }
+    const result: OfficialAIDraftedResult = {
+      status: "drafted",
+      commandId: command.commandId,
+      offerId: "ALL_PENDING",
+      offerState: "pending_manual_review",
+      content: {
+        title: "Processamento em lote (ALL_PENDING)",
+        description: `Processadas ${processed} ofertas em pending_manual_review. Foram gerados ${draftsCreated.length} drafts no total.`,
+        shortCopy: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`,
+        longCopy: `Processamento em lote concluído para ${processed} ofertas no locatário. Total de ${draftsCreated.length} drafts criados.`,
+        hashtags: ["#OfficialAI", "#BatchDrafts"],
+        callToAction: "Verifique o painel operacional para curadoria manual.",
+        highlights: [`${processed} ofertas analisadas`, `${draftsCreated.length} drafts gerados`],
+        explanation: "Geração em lote das ofertas pendentes sem drafts.",
+        channelCopies: {
+          telegram: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`,
+          instagram: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`,
+          whatsapp: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`
+        }
+      },
+      drafts: draftsCreated as any,
+      providerEvidence: { provider: "official-ai-batch", model: "batch-orchestrator", latencyMs: 0 },
+      completedAt: dependencies.clock.now()
+    };
+    await dependencies.audit.register({
+      ...auditBase(command, dependencies), provider: "official-ai-batch", model: "batch-orchestrator",
+      latencyMs: 0, result: "drafted", replay: false, failureStage: null, errorCode: null,
+      postsPrepared: processed * command.channels.length, postsPersisted: draftsCreated.length,
+      transitionRequested: false, transitionCompleted: false
+    });
+    await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
+    return result;
+  }
+
   // 3. Leitura da oferta — estado real é a única autoridade para selecionar o modo (ADR-014).
   const offer = await dependencies.offers.findById(command.offerId, command.tenantId);
 

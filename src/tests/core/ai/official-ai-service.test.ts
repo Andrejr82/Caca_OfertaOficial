@@ -298,4 +298,26 @@ describe("generateOfficialAI", () => {
     expect(dependencies.providers.resolve).not.toHaveBeenCalled();
     expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
   });
+
+  it("processamento em lote ALL_PENDING localiza ofertas pendentes sem drafts e gera drafts mantendo pending_manual_review", async () => {
+    const offer1 = { ...offer, id: "offer-1", state: "pending_manual_review" as const };
+    const offer2 = { ...offer, id: "offer-2", state: "pending_manual_review" as const };
+    const batchCommand = { ...command, offerId: "ALL_PENDING", idempotencyKey: "ai:ALL_PENDING:batch:v1" };
+    const dependencies = createDependencies({
+      offers: {
+        findById: vi.fn().mockImplementation(async (id: string) => id === "offer-1" ? offer1 : offer2),
+        findPendingWithoutDrafts: vi.fn().mockResolvedValue([offer1, offer2])
+      }
+    });
+
+    const result = await generateOfficialAI(batchCommand, dependencies);
+
+    expect(result).toMatchObject({
+      status: "drafted",
+      offerId: "ALL_PENDING",
+      offerState: "pending_manual_review"
+    });
+    expect(dependencies.offers.findPendingWithoutDrafts).toHaveBeenCalledWith("tenant-1");
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(2);
+  });
 });
