@@ -3,6 +3,12 @@ import type { StateActor, StateReason } from "@/core/state";
 export const OFFICIAL_AI_CHANNELS = ["telegram", "instagram", "whatsapp"] as const;
 export type OfficialAIChannel = (typeof OFFICIAL_AI_CHANNELS)[number];
 
+/**
+ * Comando enviado à Official AI.
+ * O modo de operação (Draft Generation ou Approval) é determinado internamente pela IA
+ * com base no estado oficial da oferta lido do State Service (ADR-014).
+ * Nenhum parâmetro externo controla o modo.
+ */
 export interface OfficialAICommand {
   contractVersion: "pmav5.ai/v1";
   commandId: string;
@@ -11,8 +17,6 @@ export interface OfficialAICommand {
   causationId: string | null;
   offerId: string;
   tenantId: string;
-  expectedState: "selected";
-  expectedVersion: 1;
   providerPreference?: "groq" | "cerebras";
   channels: readonly OfficialAIChannel[];
   requestedAt: string;
@@ -68,6 +72,26 @@ export interface OfficialAIProviderEvidence {
   finishReason?: string;
 }
 
+/**
+ * Resultado do Modo 1 — Draft Generation (ADR-014).
+ * A oferta permanece em pending_manual_review.
+ * Nenhuma transição de estado ocorreu.
+ */
+export interface OfficialAIDraftedResult {
+  status: "drafted";
+  commandId: string;
+  offerId: string;
+  offerState: "pending_manual_review";
+  content?: OfficialAIContent;
+  drafts?: readonly OfficialDraftPost[];
+  providerEvidence?: OfficialAIProviderEvidence;
+  completedAt?: string;
+}
+
+/**
+ * Resultado do Modo 2 — Approval (comportamento anterior, inalterado).
+ * A oferta é promovida para approved.
+ */
 export interface OfficialAIApprovedResult {
   status: "approved";
   commandId: string;
@@ -86,12 +110,12 @@ export interface OfficialAIRejectedResult {
   message: string;
   commandId: string;
   offerId: string;
-  offerState: "selected" | "unknown";
+  offerState: "pending_manual_review" | "selected" | "unknown";
   failureStage: string;
   rejectedAt: string;
 }
 
-export type OfficialAIResult = OfficialAIApprovedResult | OfficialAIRejectedResult;
+export type OfficialAIResult = OfficialAIApprovedResult | OfficialAIDraftedResult | OfficialAIRejectedResult;
 
 export interface OfficialAIAuditRecord {
   timestamp: string;
@@ -107,7 +131,7 @@ export interface OfficialAIAuditRecord {
   provider: string | null;
   model: string | null;
   latencyMs: number | null;
-  result: "approved" | "rejected" | "idempotent_replay";
+  result: "approved" | "drafted" | "rejected" | "idempotent_replay";
   replay: boolean;
   failureStage: string | null;
   errorCode: string | null;

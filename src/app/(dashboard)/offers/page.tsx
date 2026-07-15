@@ -1,11 +1,11 @@
 import { Badge } from "@/components/ui/badge";
 import { OfferForm } from "@/components/offers/offer-form";
-import { listOffers } from "@/lib/offers/queries";
+import { listOffersWithDraftStatus } from "@/lib/offers/queries";
 import { ShoppingBag } from "lucide-react";
 import { OffersClient } from "./OffersClient";
 
 export default async function OffersPage() {
-  const offers = await listOffers();
+  const offers = await listOffersWithDraftStatus();
 
   return (
     <div className="grid gap-6 animate-fadeIn">

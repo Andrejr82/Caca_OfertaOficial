@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   OfficialAIAuditRecord,
   OfficialAIContentPort,
+  OfficialAIDraftedResult,
   OfficialAIIdempotencyPort,
   OfficialAIOffer,
   OfficialAIOfferPort,
@@ -19,7 +20,7 @@ const POLL_INTERVAL_MS = 100;
 interface StoredAIIdempotency {
   fingerprint: string;
   status: "pending" | "completed";
-  result?: OfficialAIResult;
+  result?: OfficialAIResult | OfficialAIDraftedResult;
 }
 
 interface PendingAICommand {
@@ -131,7 +132,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       user_id: this.tenantId,
       integration: "official-ai-service",
       action: "ai_generation",
-      status: record.result === "approved" ? "success" : record.result === "rejected" ? "error" : "skipped",
+      // drafted = Modo 1 Draft Generation (ADR-014): oferta permanece pending_manual_review
+      status: record.result === "approved" || record.result === "drafted" ? "success" : record.result === "rejected" ? "error" : "skipped",
       message: `${record.offerId}:${record.result}${record.failureStage ? `:${record.failureStage}` : ""}`,
       metadata: record
     });

@@ -7,7 +7,9 @@ import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/
 import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
 import { rejectAmazonOfferAction, selectAmazonOfferAction } from "@/lib/offers/actions";
 
-export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
+type OfferWithDraftCount = Offer & { draft_count?: number };
+
+export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftCount[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
   const [filterDecision, setFilterDecision] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
@@ -111,6 +113,8 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
           const nativeShopee = offer.platform === "Shopee" && Boolean(offer.shopee_product_cat_id);
           const metrics = offer.marketplace_metrics || {};
           const transitionRequestedAt = offer.updated_at || offer.created_at;
+          const draftCount = (offer as OfferWithDraftCount).draft_count || 0;
+          const hasDraftsReady = offer.status === "pending_manual_review" && draftCount > 0;
 
           const tierColor = 
             tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
@@ -129,6 +133,11 @@ export function OffersClient({ initialOffers }: { initialOffers: Offer[] }) {
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${tierColor}`}>Tier {tier}</span>
                     <Badge label={offer.platform} />
+                    {hasDraftsReady && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded border text-violet-300 bg-violet-500/10 border-violet-500/20">
+                        ✦ {draftCount} draft{draftCount !== 1 ? "s" : ""} prontos
+                      </span>
+                    )}
                     {badges.map((b: string) => <Badge key={b} label={b.replace(/_/g, " ")} tone="neutral" />)}
                   </div>
                   <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>

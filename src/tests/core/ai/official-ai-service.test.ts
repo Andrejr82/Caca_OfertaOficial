@@ -15,8 +15,6 @@ const command: OfficialAICommand = {
   causationId: "curation-command",
   offerId: "offer-1",
   tenantId: "tenant-1",
-  expectedState: "selected",
-  expectedVersion: 1,
   providerPreference: "groq",
   channels: ["telegram", "instagram", "whatsapp"],
   requestedAt: "2026-07-13T20:00:00.000Z",
@@ -154,11 +152,13 @@ describe("generateOfficialAI", () => {
     }));
   });
 
-  it.each(["pending_manual_review", "approved", "posted", "rejected"] as const)(
+  // ADR-014: pending_manual_review aciona Draft Generation (não rejeita).
+  // approved, posted, rejected são estados terminais que a IA recusa.
+  it.each(["approved", "posted", "rejected"] as const)(
     "rejeita estado %s antes do provider",
     async (state) => {
       const dependencies = createDependencies({
-        offers: { findById: vi.fn().mockResolvedValue({ ...offer, state }) }
+        offers: { findById: vi.fn().mockResolvedValue({ ...offer, state, version: state === "approved" ? 2 : 3 }) }
       });
 
       const result = await generateOfficialAI(command, dependencies);
@@ -240,7 +240,10 @@ describe("generateOfficialAI", () => {
       const result = await generateOfficialAI(command, dependencies);
 
       expect(result.status).toBe("rejected");
-      expect(result).toMatchObject({ offerState: "selected" });
+      // offerState para oferta em "selected" é "selected"
+      if (result.status === "rejected") {
+        expect(result.offerState).toBe("selected");
+      }
     }
   });
 

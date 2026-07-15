@@ -14,6 +14,13 @@ interface GenerateAIRequest {
 
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
 
+/**
+ * POST /api/ai/generate
+ *
+ * Única rota oficial da Official AI (ADR-014).
+ * O modo de operação (Draft Generation ou Approval) é determinado internamente
+ * pela IA com base no estado oficial da oferta. Nenhum parâmetro externo seleciona o modo.
+ */
 export async function POST(request: Request) {
   try {
     const body = await request.json() as GenerateAIRequest;
@@ -31,6 +38,8 @@ export async function POST(request: Request) {
     }
 
     const commandId = body.commandId || request.headers.get("x-command-id") || `ai:${body.offerId}:v1`;
+
+    // O comando não inclui expectedState nem mode — a IA determina internamente (ADR-014).
     const command: OfficialAICommand = {
       contractVersion: "pmav5.ai/v1",
       commandId,
@@ -39,8 +48,6 @@ export async function POST(request: Request) {
       causationId: body.causationId ?? request.headers.get("x-causation-id"),
       offerId: body.offerId,
       tenantId: user.id,
-      expectedState: "selected",
-      expectedVersion: 1,
       providerPreference: body.providerPreference,
       channels: ["telegram", "instagram", "whatsapp"],
       requestedAt: body.requestedAt || request.headers.get("x-requested-at") || DEFAULT_REQUESTED_AT,
@@ -53,9 +60,13 @@ export async function POST(request: Request) {
       command,
       createOfficialAIServiceDependencies(supabase, user.id)
     );
+
+    // drafted = Modo 1 (Draft Generation): sucesso sem mudança de estado
+    // approved = Modo 2 (Approval): sucesso com promoção de estado
+    const ok = result.status === "approved" || result.status === "drafted";
     return NextResponse.json(
-      { ok: result.status === "approved", ...result },
-      { status: result.status === "approved" ? 200 : 409 }
+      { ok, ...result },
+      { status: ok ? 200 : 409 }
     );
   } catch (error) {
     return NextResponse.json({

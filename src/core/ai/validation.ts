@@ -9,11 +9,9 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   if (![command.commandId, command.idempotencyKey, command.correlationId, command.offerId, command.tenantId, command.requestedAt, command.origin].every(nonEmpty)) {
     return "Required command identity is missing";
   }
-  if (command.expectedState !== "selected" || command.expectedVersion !== 1) {
-    return "AI command must expect selected version 1";
-  }
-  if (command.idempotencyKey !== `ai:${command.offerId}:v${command.expectedVersion}`) {
-    return "AI idempotency key must be stable by offer and version";
+  // Idempotency key deve ser estável por offer (ADR-014: a IA detecta o modo internamente).
+  if (command.idempotencyKey !== `ai:${command.offerId}:v1`) {
+    return "AI idempotency key must be stable by offer (ai:{offerId}:v1)";
   }
   if (!command.actor || !nonEmpty(command.actor.id) || !command.reason || !nonEmpty(command.reason.code)) {
     return "Actor and reason are required";
