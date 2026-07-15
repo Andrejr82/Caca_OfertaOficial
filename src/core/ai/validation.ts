@@ -10,8 +10,14 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
     return "Required command identity is missing";
   }
   // Idempotency key deve ser estável por offer (ADR-014: a IA detecta o modo internamente).
-  if (command.offerId !== "ALL_PENDING" && command.idempotencyKey !== `ai:${command.offerId}:v1`) {
-    return "AI idempotency key must be stable by offer (ai:{offerId}:v1)";
+  // Formato v1 (approval e legado): ai:{offerId}:v1
+  // Formato v2 (draft batch): ai:draft:{offerId}:v2
+  if (command.offerId !== "ALL_PENDING") {
+    const isV1 = command.idempotencyKey === `ai:${command.offerId}:v1`;
+    const isV2Draft = command.idempotencyKey === `ai:draft:${command.offerId}:v2`;
+    if (!isV1 && !isV2Draft) {
+      return "AI idempotency key must be ai:{offerId}:v1 or ai:draft:{offerId}:v2";
+    }
   }
   if (command.offerId === "ALL_PENDING" && !command.idempotencyKey.startsWith("ai:ALL_PENDING:") && !command.idempotencyKey.startsWith("ai:batch:")) {
     return "AI batch command must have idempotency key starting with ai:ALL_PENDING: or ai:batch:";

@@ -306,7 +306,10 @@ describe("generateOfficialAI", () => {
     const dependencies = createDependencies({
       offers: {
         findById: vi.fn().mockImplementation(async (id: string) => id === "offer-1" ? offer1 : offer2),
-        findPendingWithoutDrafts: vi.fn().mockResolvedValue([offer1, offer2])
+        // Paginacao: primeira chamada retorna as 2 ofertas, segunda retorna [] encerrando o loop
+        findPendingWithoutDrafts: vi.fn()
+          .mockResolvedValueOnce([offer1, offer2])
+          .mockResolvedValue([])
       }
     });
 
@@ -317,7 +320,7 @@ describe("generateOfficialAI", () => {
       offerId: "ALL_PENDING",
       offerState: "pending_manual_review"
     });
-    expect(dependencies.offers.findPendingWithoutDrafts).toHaveBeenCalledWith("tenant-1");
+    expect(dependencies.offers.findPendingWithoutDrafts).toHaveBeenCalledWith("tenant-1", undefined);
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(2);
   });
 });

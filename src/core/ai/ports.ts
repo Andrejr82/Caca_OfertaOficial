@@ -8,6 +8,12 @@ import type {
   OfficialDraftPost
 } from "./types";
 
+/** Cursor composto para paginação determinística de lotes (created_at ASC, id ASC). */
+export interface BatchCursor {
+  afterCreatedAt: string;
+  afterId: string;
+}
+
 export interface AIProviderRequest {
   prompt: { system: string; user: string };
   correlationId: string;
@@ -38,7 +44,7 @@ export interface AIProviderRegistryPort {
 
 export interface OfficialAIOfferPort {
   findById(offerId: string, tenantId: string): Promise<OfficialAIOffer | null>;
-  findPendingWithoutDrafts?(tenantId: string): Promise<readonly OfficialAIOffer[]>;
+  findPendingWithoutDrafts?(tenantId: string, cursor?: BatchCursor): Promise<readonly OfficialAIOffer[]>;
 }
 
 export interface OfficialAIContentPort {

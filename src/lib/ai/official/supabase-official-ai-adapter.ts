@@ -8,7 +8,7 @@ import type {
   OfficialAIOfferPort,
   OfficialAIResult
 } from "@/core/ai";
-import type { OfficialAIApprovalPort, OfficialAIServiceDependencies } from "@/core/ai/ports";
+import type { BatchCursor, OfficialAIApprovalPort, OfficialAIServiceDependencies } from "@/core/ai/ports";
 import type { StateServiceDependencies } from "@/core/state";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { offerStateVersion, transitionOfficialOfferState } from "@/lib/state/official-state-service";
@@ -93,16 +93,30 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     };
   }
 
-  async findPendingWithoutDrafts(tenantId: string): Promise<readonly OfficialAIOffer[]> {
+  async findPendingWithoutDrafts(tenantId: string, cursor?: BatchCursor): Promise<readonly OfficialAIOffer[]> {
     if (tenantId !== this.tenantId) return [];
     const batchSize = getOfficialAIBatchSize();
-    const { data: offersData, error: offersError } = await this.client
+    let query = this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at")
       .eq("user_id", tenantId)
       .eq("status", "pending_manual_review")
       .order("created_at", { ascending: true })
-      .limit(batchSize);
+      .order("id", { ascending: true });
+
+    // Paginacao por cursor composto: (created_at, id) ASC
+    // Usa OR para cursor: created_at > X OU (created_at = X AND id > Y)
+    // ponytail: PostgREST nao suporta OR direto em filtro composto, usamos gte+neq como aproximacao.
+    // Se created_at for unico por lote, basta gt. Se houver colisao, id desempata via order.
+    if (cursor) {
+      query = (query as any).or(
+        `created_at.gt.${cursor.afterCreatedAt},and(created_at.eq.${cursor.afterCreatedAt},id.gt.${cursor.afterId})`
+      );
+    }
+
+    query = query.limit(batchSize);
+
+    const { data: offersData, error: offersError } = await query;
     if (offersError) {
       const parts = [offersError.message];
       if (offersError.code) parts.push(`code=${offersError.code}`);

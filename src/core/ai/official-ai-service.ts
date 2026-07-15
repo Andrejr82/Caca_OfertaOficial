@@ -1,4 +1,5 @@
 import type { OfficialAIServiceDependencies } from "./ports";
+import type { BatchCursor } from "./ports";
 import { validateOfficialAIContent } from "./content-schema";
 import { buildOfficialPrompt } from "./prompt";
 import type {
@@ -29,6 +30,26 @@ function stableSerialize(value: unknown): string {
     return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableSerialize(record[key])}`).join(",")}}`;
   }
   return JSON.stringify(value);
+}
+
+/**
+ * Fingerprint canônico da operação de IA.
+ * Exclui campos voláteis de identidade do ciclo (commandId, correlationId, causationId, requestedAt).
+ * Garante que a mesma operação funcional produza o mesmo fingerprint em qualquer ciclo.
+ */
+function buildOfficialAIFingerprint(command: OfficialAICommand): string {
+  const stable = {
+    contractVersion: command.contractVersion,
+    idempotencyKey: command.idempotencyKey,
+    offerId: command.offerId,
+    tenantId: command.tenantId,
+    channels: [...command.channels].sort(),
+    providerPreference: command.providerPreference ?? null,
+    actor: command.actor,
+    origin: command.origin,
+    reason: command.reason
+  };
+  return stableSerialize(stable);
 }
 
 function rejected(
@@ -158,9 +179,9 @@ export async function generateOfficialAI(
     return rejectAndRecord(command, dependencies, null, "INVALID_AI_COMMAND", commandError, "command");
   }
 
-  // 2. Idempotência (antes de qualquer I/O de negócio — preserva comportamento original).
-  //    A chave é única por offer. O resultado armazenado reflete o modo que foi executado.
-  const fingerprint = stableSerialize(command);
+  // 2. Idempotência (antes de qualquer I/O de negócio).
+  //    Fingerprint canônico: exclui campos voláteis (commandId, correlationId, causationId, requestedAt).
+  const fingerprint = buildOfficialAIFingerprint(command);
   const reservation = await dependencies.idempotency.begin(command.idempotencyKey, fingerprint);
   if (reservation.status === "conflict") {
     return rejectAndRecord(command, dependencies, null, "IDEMPOTENCY_CONFLICT", "Idempotency key was used with a different payload", "idempotency");
@@ -175,53 +196,122 @@ export async function generateOfficialAI(
     return result;
   }
 
-  // 2.5. Processamento em lote (Disparo Oficial após Discovery - ADR-014)
+  // 2.5. Processamento completo ALL_PENDING — percorre toda a fila em páginas de até 50 (ADR-014).
   if (command.offerId === "ALL_PENDING") {
     if (!dependencies.offers.findPendingWithoutDrafts) {
       return rejectAndRecord(command, dependencies, fingerprint, "DEPENDENCY_UNAVAILABLE", "findPendingWithoutDrafts is not available", "preconditions");
     }
-    const pendingOffers = await dependencies.offers.findPendingWithoutDrafts(command.tenantId);
-    const draftsCreated: unknown[] = [];
-    let processed = 0;
-    let successCount = 0;
-    let failureCount = 0;
-    let ignoredCount = 0;
 
-    for (const offer of pendingOffers) {
-      processed++;
-      const subCommand: OfficialAICommand = {
-        ...command,
-        commandId: `${command.commandId}:${offer.id}`,
-        idempotencyKey: `ai:${offer.id}:v1`,
-        offerId: offer.id
-      };
-      
-      try {
-        const subResult = await generateOfficialAI(subCommand, dependencies);
-        if (subResult.status === "drafted" || subResult.status === "approved") {
-          successCount++;
-          if (subResult.drafts) draftsCreated.push(...subResult.drafts);
-        } else if (subResult.status === "rejected") {
-          if (subResult.code === "IDEMPOTENCY_CONFLICT") {
-            ignoredCount++;
-          } else {
-            failureCount++;
-          }
-        }
-      } catch (error) {
-        failureCount++;
-        // Registrar erro imprevisto sem interromper o lote
+    // Limite de segurança: protege contra defeito de cursor infinito. Não é o batch size por página.
+    const SAFETY_LIMIT = 10_000;
+    const PAGE_SIZE = 50; // ponytail: fixo; usar env se precisar flexibilizar
+
+    const metrics = {
+      pagesProcessed: 0,
+      offersVisited: 0,
+      draftedOffers: 0,
+      draftsPersisted: 0,
+      rejectedOffers: 0,
+      invalidCandidateContracts: 0,
+      idempotentReplays: 0,
+      idempotencyConflicts: 0,
+      unexpectedErrors: 0,
+      duplicatedOffersPrevented: 0,
+      cursorStalls: 0,
+      safetyLimitReached: false
+    };
+
+    const draftsCreated: unknown[] = [];
+    const visitedOfferIds = new Set<string>();
+    let cursor: BatchCursor | undefined = undefined;
+    let lastCursorKey = "";
+
+    outerLoop:
+    while (metrics.offersVisited < SAFETY_LIMIT) {
+      const page = await dependencies.offers.findPendingWithoutDrafts!(command.tenantId, cursor);
+      if (page.length === 0) break;
+
+      metrics.pagesProcessed++;
+
+      // Proteção: cursor deve avançar a cada página.
+      const newCursorKey = page.map((o) => o.id).join(",");
+      if (newCursorKey === lastCursorKey) {
+        metrics.cursorStalls++;
         await dependencies.audit.register({
-          ...auditBase(subCommand, dependencies),
-          provider: null, model: null, latencyMs: null,
-          result: "rejected",
-          replay: false,
-          failureStage: "batch_loop",
-          errorCode: "BATCH_ITEM_ERROR",
+          ...auditBase(command, dependencies), provider: null, model: null, latencyMs: null,
+          result: "rejected", replay: false, failureStage: "batch_cursor", errorCode: "BATCH_CURSOR_STALLED",
           postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
         }).catch(() => {});
+        break;
+      }
+      lastCursorKey = newCursorKey;
+
+      for (const offer of page) {
+        if (visitedOfferIds.has(offer.id)) {
+          metrics.duplicatedOffersPrevented++;
+          continue;
+        }
+        visitedOfferIds.add(offer.id);
+        metrics.offersVisited++;
+
+        if (metrics.offersVisited >= SAFETY_LIMIT) {
+          metrics.safetyLimitReached = true;
+          break outerLoop;
+        }
+
+        // Sub-command usa namespace v2 para drafts: evita colisão com registros v1 existentes.
+        const subCommand: OfficialAICommand = {
+          ...command,
+          commandId: `${command.commandId}:${offer.id}`,
+          idempotencyKey: `ai:draft:${offer.id}:v2`,
+          offerId: offer.id
+        };
+
+        try {
+          const subResult = await generateOfficialAI(subCommand, dependencies);
+          if (subResult.status === "drafted") {
+            metrics.draftedOffers++;
+            if (subResult.drafts) {
+              metrics.draftsPersisted += subResult.drafts.length;
+              draftsCreated.push(...subResult.drafts);
+            }
+          } else if (subResult.status === "approved") {
+            metrics.draftedOffers++;
+            if (subResult.drafts) {
+              metrics.draftsPersisted += subResult.drafts.length;
+              draftsCreated.push(...subResult.drafts);
+            }
+          } else if (subResult.status === "rejected") {
+            if (subResult.code === "IDEMPOTENCY_CONFLICT") {
+              metrics.idempotencyConflicts++;
+            } else if (subResult.code === "INVALID_CANDIDATE_CONTRACT") {
+              metrics.invalidCandidateContracts++;
+              metrics.rejectedOffers++;
+            } else {
+              metrics.rejectedOffers++;
+            }
+          } else {
+            // idempotent_replay
+            metrics.idempotentReplays++;
+          }
+        } catch (error) {
+          metrics.unexpectedErrors++;
+          await dependencies.audit.register({
+            ...auditBase(subCommand, dependencies),
+            provider: null, model: null, latencyMs: null,
+            result: "rejected", replay: false,
+            failureStage: "batch_loop", errorCode: "BATCH_ITEM_ERROR",
+            postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
+          }).catch(() => {});
+        }
+
+        // Avança cursor para a última oferta visitada (independente do resultado).
+        // ponytail: cast necessário — OfficialAIOffer não expõe created_at, usamos id como tiebreak suficiente
+        cursor = { afterCreatedAt: (offer as any).createdAt ?? offer.id, afterId: offer.id };
       }
     }
+
+    const safetyNote = metrics.safetyLimitReached ? " [BATCH_SAFETY_LIMIT_REACHED]" : "";
     const result: OfficialAIDraftedResult = {
       status: "drafted",
       commandId: command.commandId,
@@ -229,17 +319,21 @@ export async function generateOfficialAI(
       offerState: "pending_manual_review",
       content: {
         title: "Processamento em lote (ALL_PENDING)",
-        description: `Processadas ${processed} ofertas em pending_manual_review. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`,
-        shortCopy: `Lote: ${processed} | Sucesso: ${successCount} | Falhas: ${failureCount} | Ignoradas: ${ignoredCount}`,
-        longCopy: `Processamento em lote concluído para ${processed} ofertas no locatário. Total de ${draftsCreated.length} drafts criados.`,
+        description: `Visitadas: ${metrics.offersVisited} | Páginas: ${metrics.pagesProcessed} | Drafts: ${metrics.draftedOffers} | Rejeitadas: ${metrics.rejectedOffers} | InvalidContract: ${metrics.invalidCandidateContracts}${safetyNote}`,
+        shortCopy: `Lote: ${metrics.offersVisited} | OK: ${metrics.draftedOffers} | Fail: ${metrics.rejectedOffers}`,
+        longCopy: `Processamento completo em ${metrics.pagesProcessed} páginas. ${metrics.draftsPersisted} drafts persistidos em ${metrics.draftedOffers} ofertas.`,
         hashtags: ["#OfficialAI", "#BatchDrafts"],
         callToAction: "Verifique o painel operacional para curadoria manual.",
-        highlights: [`${processed} ofertas analisadas`, `${successCount} geradas com sucesso`, `${failureCount} falhas registradas`],
-        explanation: "Geração em lote das ofertas pendentes sem drafts.",
+        highlights: [
+          `${metrics.offersVisited} ofertas visitadas`,
+          `${metrics.draftedOffers} com drafts gerados`,
+          `${metrics.rejectedOffers} rejeitadas`
+        ],
+        explanation: "Geração paginada de todas as ofertas pendentes sem drafts.",
         channelCopies: {
-          telegram: `Processadas ${processed} ofertas. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`,
-          instagram: `Processadas ${processed} ofertas. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`,
-          whatsapp: `Processadas ${processed} ofertas. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`
+          telegram: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`,
+          instagram: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`,
+          whatsapp: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`
         }
       },
       drafts: draftsCreated as any,
@@ -248,8 +342,10 @@ export async function generateOfficialAI(
     };
     await dependencies.audit.register({
       ...auditBase(command, dependencies), provider: "official-ai-batch", model: "batch-orchestrator",
-      latencyMs: 0, result: "drafted", replay: false, failureStage: null, errorCode: null,
-      postsPrepared: processed * command.channels.length, postsPersisted: draftsCreated.length,
+      latencyMs: 0, result: "drafted", replay: false, failureStage: null,
+      errorCode: metrics.safetyLimitReached ? "BATCH_SAFETY_LIMIT_REACHED" : null,
+      postsPrepared: metrics.draftedOffers * command.channels.length,
+      postsPersisted: metrics.draftsPersisted,
       transitionRequested: false, transitionCompleted: false
     });
     await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
