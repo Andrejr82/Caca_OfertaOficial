@@ -183,6 +183,10 @@ export async function generateOfficialAI(
     const pendingOffers = await dependencies.offers.findPendingWithoutDrafts(command.tenantId);
     const draftsCreated: unknown[] = [];
     let processed = 0;
+    let successCount = 0;
+    let failureCount = 0;
+    let ignoredCount = 0;
+
     for (const offer of pendingOffers) {
       processed++;
       const subCommand: OfficialAICommand = {
@@ -191,9 +195,31 @@ export async function generateOfficialAI(
         idempotencyKey: `ai:${offer.id}:v1`,
         offerId: offer.id
       };
-      const subResult = await generateOfficialAI(subCommand, dependencies);
-      if (subResult.status === "drafted" || subResult.status === "approved") {
-        if (subResult.drafts) draftsCreated.push(...subResult.drafts);
+      
+      try {
+        const subResult = await generateOfficialAI(subCommand, dependencies);
+        if (subResult.status === "drafted" || subResult.status === "approved") {
+          successCount++;
+          if (subResult.drafts) draftsCreated.push(...subResult.drafts);
+        } else if (subResult.status === "rejected") {
+          if (subResult.code === "IDEMPOTENCY_CONFLICT") {
+            ignoredCount++;
+          } else {
+            failureCount++;
+          }
+        }
+      } catch (error) {
+        failureCount++;
+        // Registrar erro imprevisto sem interromper o lote
+        await dependencies.audit.register({
+          ...auditBase(subCommand, dependencies),
+          provider: null, model: null, latencyMs: null,
+          result: "rejected",
+          replay: false,
+          failureStage: "batch_loop",
+          errorCode: "BATCH_ITEM_ERROR",
+          postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
+        }).catch(() => {});
       }
     }
     const result: OfficialAIDraftedResult = {
@@ -203,17 +229,17 @@ export async function generateOfficialAI(
       offerState: "pending_manual_review",
       content: {
         title: "Processamento em lote (ALL_PENDING)",
-        description: `Processadas ${processed} ofertas em pending_manual_review. Foram gerados ${draftsCreated.length} drafts no total.`,
-        shortCopy: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`,
+        description: `Processadas ${processed} ofertas em pending_manual_review. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`,
+        shortCopy: `Lote: ${processed} | Sucesso: ${successCount} | Falhas: ${failureCount} | Ignoradas: ${ignoredCount}`,
         longCopy: `Processamento em lote concluído para ${processed} ofertas no locatário. Total de ${draftsCreated.length} drafts criados.`,
         hashtags: ["#OfficialAI", "#BatchDrafts"],
         callToAction: "Verifique o painel operacional para curadoria manual.",
-        highlights: [`${processed} ofertas analisadas`, `${draftsCreated.length} drafts gerados`],
+        highlights: [`${processed} ofertas analisadas`, `${successCount} geradas com sucesso`, `${failureCount} falhas registradas`],
         explanation: "Geração em lote das ofertas pendentes sem drafts.",
         channelCopies: {
-          telegram: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`,
-          instagram: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`,
-          whatsapp: `Processadas ${processed} ofertas. Drafts gerados: ${draftsCreated.length}`
+          telegram: `Processadas ${processed} ofertas. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`,
+          instagram: `Processadas ${processed} ofertas. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`,
+          whatsapp: `Processadas ${processed} ofertas. Sucesso: ${successCount}, Falhas: ${failureCount}, Ignoradas: ${ignoredCount}.`
         }
       },
       drafts: draftsCreated as any,
