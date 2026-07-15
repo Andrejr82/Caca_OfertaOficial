@@ -1,4 +1,4 @@
-﻿import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   generateOfficialAI,
   type OfficialAICommand,
@@ -45,7 +45,8 @@ function makeOffer(id: string, valid = true): OfficialAIOffer {
     currentPrice: 99.9,
     originalPrice: 149.9,
     category: "Eletronicos",
-    explainability: valid ? VALID_EXPLAINABILITY : { contract_version: "legacy" }
+    explainability: valid ? VALID_EXPLAINABILITY : { contract_version: "legacy" },
+    createdAt: "2026-07-15T14:00:00.000Z"
   };
 }
 
@@ -309,7 +310,7 @@ describe("Cursor stall (F9.13)", () => {
       }
     });
     const result = await generateOfficialAI(BASE_COMMAND, deps);
-    expect(result.status).toBe("drafted");
+    expect(result.status).toBe("rejected");
     const auditCalls = vi.mocked(deps.audit.register).mock.calls;
     const stallCall = auditCalls.find((args) => args[0].errorCode === "BATCH_CURSOR_STALLED");
     expect(stallCall).toBeDefined();
@@ -352,6 +353,36 @@ describe("Batch size e execucao multipaginas (F9.15)", () => {
     expect((result as any).content.description).toContain("Drafts: 60");
     const pagesMatch = (result as any).content.description.match(/P.ginas: (\d+)/);
     expect(Number(pagesMatch?.[1])).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe("Cursor Errors", () => {
+  it("BATCH_CURSOR_INVALID: createdAt invalido interrompe com erro", async () => {
+    const offer = makeOffer("invalid-cursor");
+    offer.createdAt = offer.id; // UUID as timestamp
+    const deps = createDeps({
+      offers: {
+        findById: vi.fn().mockResolvedValue(offer),
+        findPendingWithoutDrafts: vi.fn().mockResolvedValue([offer])
+      }
+    });
+    const result = await generateOfficialAI(BASE_COMMAND, deps);
+    expect(result.status).toBe("rejected");
+    expect((result as any).code).toBe("BATCH_CURSOR_INVALID");
+    expect(deps.idempotency.complete).toHaveBeenCalled();
+  });
+
+  it("BATCH_PAGE_READ_FAILED: erro no adapter retorna rejected", async () => {
+    const deps = createDeps({
+      offers: {
+        findById: vi.fn(),
+        findPendingWithoutDrafts: vi.fn().mockRejectedValue(new Error("Supabase timeout"))
+      }
+    });
+    const result = await generateOfficialAI(BASE_COMMAND, deps);
+    expect(result.status).toBe("rejected");
+    expect((result as any).code).toBe("BATCH_PAGE_READ_FAILED");
+    expect(deps.idempotency.complete).toHaveBeenCalled();
   });
 });
 

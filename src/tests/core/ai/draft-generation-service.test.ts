@@ -62,8 +62,9 @@ const pendingOffer: OfficialAIOffer = {
     ingestion_id: "ingestion-pending-1",
     correlation_id: "discovery-pending-1",
     discovery_evidence: { provider: "Shopee Native V5" },
-    marketplace_metrics: { sourceItemId: "source-pending-1" }
-  }
+    marketplace_metrics: { sourceItemId: "source-1" }
+  },
+  createdAt: "2026-07-15T14:00:00.000Z"
 };
 
 /** Oferta em selected — aciona Approval automaticamente (comportamento anterior) */

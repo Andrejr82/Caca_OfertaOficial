@@ -105,13 +105,19 @@ async function rejectAndRecord(
   postsPersisted = 0,
   transitionRequested = false
 ): Promise<OfficialAIRejectedResult> {
+  const isBatch = command.offerId === "ALL_PENDING";
   const result = rejected(command, dependencies, code, message, stage, offerState);
   await dependencies.audit.register({
     ...auditBase(command, dependencies), provider, model, latencyMs, result: "rejected", replay: false,
-    failureStage: stage, errorCode: code, postsPrepared, postsPersisted, transitionRequested, transitionCompleted: false
+    failureStage: stage, errorCode: code, postsPrepared, postsPersisted, transitionRequested, transitionCompleted: false,
+    batchCompleted: isBatch ? false : undefined
   });
   if (fingerprint) await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
   return result;
+}
+
+function isValidCursorTimestamp(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && !Number.isNaN(Date.parse(value));
 }
 
 // ---------------------------------------------------------------------------
@@ -226,130 +232,138 @@ export async function generateOfficialAI(
     let cursor: BatchCursor | undefined = undefined;
     let lastCursorKey = "";
 
-    outerLoop:
-    while (metrics.offersVisited < SAFETY_LIMIT) {
-      const page = await dependencies.offers.findPendingWithoutDrafts!(command.tenantId, cursor);
-      if (page.length === 0) break;
-
-      metrics.pagesProcessed++;
-
-      // Proteção: cursor deve avançar a cada página.
-      const newCursorKey = page.map((o) => o.id).join(",");
-      if (newCursorKey === lastCursorKey) {
-        metrics.cursorStalls++;
-        await dependencies.audit.register({
-          ...auditBase(command, dependencies), provider: null, model: null, latencyMs: null,
-          result: "rejected", replay: false, failureStage: "batch_cursor", errorCode: "BATCH_CURSOR_STALLED",
-          postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
-        }).catch(() => {});
-        break;
-      }
-      lastCursorKey = newCursorKey;
-
-      for (const offer of page) {
-        if (visitedOfferIds.has(offer.id)) {
-          metrics.duplicatedOffersPrevented++;
-          continue;
-        }
-        visitedOfferIds.add(offer.id);
-        metrics.offersVisited++;
-
-        if (metrics.offersVisited >= SAFETY_LIMIT) {
-          metrics.safetyLimitReached = true;
-          break outerLoop;
-        }
-
-        // Sub-command usa namespace v2 para drafts: evita colisão com registros v1 existentes.
-        const subCommand: OfficialAICommand = {
-          ...command,
-          commandId: `${command.commandId}:${offer.id}`,
-          idempotencyKey: `ai:draft:${offer.id}:v2`,
-          offerId: offer.id
-        };
-
+    try {
+      outerLoop:
+      while (metrics.offersVisited < SAFETY_LIMIT) {
+        let page;
         try {
-          const subResult = await generateOfficialAI(subCommand, dependencies);
-          if (subResult.status === "drafted") {
-            metrics.draftedOffers++;
-            if (subResult.drafts) {
-              metrics.draftsPersisted += subResult.drafts.length;
-              draftsCreated.push(...subResult.drafts);
-            }
-          } else if (subResult.status === "approved") {
-            metrics.draftedOffers++;
-            if (subResult.drafts) {
-              metrics.draftsPersisted += subResult.drafts.length;
-              draftsCreated.push(...subResult.drafts);
-            }
-          } else if (subResult.status === "rejected") {
-            if (subResult.code === "IDEMPOTENCY_CONFLICT") {
-              metrics.idempotencyConflicts++;
-            } else if (subResult.code === "INVALID_CANDIDATE_CONTRACT") {
-              metrics.invalidCandidateContracts++;
-              metrics.rejectedOffers++;
-            } else {
-              metrics.rejectedOffers++;
-            }
-          } else {
-            // idempotent_replay
-            metrics.idempotentReplays++;
-          }
+          page = await dependencies.offers.findPendingWithoutDrafts!(command.tenantId, cursor);
         } catch (error) {
-          metrics.unexpectedErrors++;
-          await dependencies.audit.register({
-            ...auditBase(subCommand, dependencies),
-            provider: null, model: null, latencyMs: null,
-            result: "rejected", replay: false,
-            failureStage: "batch_loop", errorCode: "BATCH_ITEM_ERROR",
-            postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
-          }).catch(() => {});
+          const code = "BATCH_PAGE_READ_FAILED";
+          const message = error instanceof Error ? error.message : String(error);
+          return await rejectAndRecord(command, dependencies, fingerprint, code, message, "batch_page_read", "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length, metrics.draftsPersisted);
         }
 
-        // Avança cursor para a última oferta visitada (independente do resultado).
-        // ponytail: cast necessário — OfficialAIOffer não expõe created_at, usamos id como tiebreak suficiente
-        cursor = { afterCreatedAt: (offer as any).createdAt ?? offer.id, afterId: offer.id };
+        if (page.length === 0) break;
+
+        metrics.pagesProcessed++;
+
+        // Proteção: cursor deve avançar a cada página.
+        const newCursorKey = page.map((o) => o.id).join(",");
+        if (newCursorKey === lastCursorKey) {
+          metrics.cursorStalls++;
+          return await rejectAndRecord(command, dependencies, fingerprint, "BATCH_CURSOR_STALLED", "Cursor stall detected", "batch_cursor", "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length, metrics.draftsPersisted);
+        }
+        lastCursorKey = newCursorKey;
+
+        for (const offer of page) {
+          if (visitedOfferIds.has(offer.id)) {
+            metrics.duplicatedOffersPrevented++;
+            continue;
+          }
+          visitedOfferIds.add(offer.id);
+          metrics.offersVisited++;
+
+          if (metrics.offersVisited >= SAFETY_LIMIT) {
+            metrics.safetyLimitReached = true;
+            break outerLoop;
+          }
+
+          // Sub-command usa namespace v2 para drafts: evita colisão com registros v1 existentes.
+          const subCommand: OfficialAICommand = {
+            ...command,
+            commandId: `${command.commandId}:${offer.id}`,
+            idempotencyKey: `ai:draft:${offer.id}:v2`,
+            offerId: offer.id
+          };
+
+          try {
+            const subResult = await generateOfficialAI(subCommand, dependencies);
+            if (subResult.status === "drafted" || subResult.status === "approved") {
+              metrics.draftedOffers++;
+              if (subResult.drafts) {
+                metrics.draftsPersisted += subResult.drafts.length;
+                draftsCreated.push(...subResult.drafts);
+              }
+            } else if (subResult.status === "rejected") {
+              if (subResult.code === "IDEMPOTENCY_CONFLICT") {
+                metrics.idempotencyConflicts++;
+              } else if (subResult.code === "INVALID_CANDIDATE_CONTRACT") {
+                metrics.invalidCandidateContracts++;
+                metrics.rejectedOffers++;
+              } else {
+                metrics.rejectedOffers++;
+              }
+            } else {
+              // idempotent_replay
+              metrics.idempotentReplays++;
+            }
+          } catch (error) {
+            metrics.unexpectedErrors++;
+            await dependencies.audit.register({
+              ...auditBase(subCommand, dependencies),
+              provider: null, model: null, latencyMs: null,
+              result: "rejected", replay: false,
+              failureStage: "batch_loop", errorCode: "BATCH_ITEM_ERROR",
+              postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
+            }).catch(() => {});
+          }
+
+          if (!isValidCursorTimestamp(offer.createdAt)) {
+            metrics.cursorStalls++;
+            return await rejectAndRecord(command, dependencies, fingerprint, "BATCH_CURSOR_INVALID", "Invalid createdAt timestamp", "batch_cursor", "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length, metrics.draftsPersisted);
+          }
+          cursor = { afterCreatedAt: offer.createdAt, afterId: offer.id };
+        }
       }
-    }
 
-    const safetyNote = metrics.safetyLimitReached ? " [BATCH_SAFETY_LIMIT_REACHED]" : "";
-    const result: OfficialAIDraftedResult = {
-      status: "drafted",
-      commandId: command.commandId,
-      offerId: "ALL_PENDING",
-      offerState: "pending_manual_review",
-      content: {
-        title: "Processamento em lote (ALL_PENDING)",
-        description: `Visitadas: ${metrics.offersVisited} | Páginas: ${metrics.pagesProcessed} | Drafts: ${metrics.draftedOffers} | Rejeitadas: ${metrics.rejectedOffers} | InvalidContract: ${metrics.invalidCandidateContracts}${safetyNote}`,
-        shortCopy: `Lote: ${metrics.offersVisited} | OK: ${metrics.draftedOffers} | Fail: ${metrics.rejectedOffers}`,
-        longCopy: `Processamento completo em ${metrics.pagesProcessed} páginas. ${metrics.draftsPersisted} drafts persistidos em ${metrics.draftedOffers} ofertas.`,
-        hashtags: ["#OfficialAI", "#BatchDrafts"],
-        callToAction: "Verifique o painel operacional para curadoria manual.",
-        highlights: [
-          `${metrics.offersVisited} ofertas visitadas`,
-          `${metrics.draftedOffers} com drafts gerados`,
-          `${metrics.rejectedOffers} rejeitadas`
-        ],
-        explanation: "Geração paginada de todas as ofertas pendentes sem drafts.",
-        channelCopies: {
-          telegram: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`,
-          instagram: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`,
-          whatsapp: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`
-        }
-      },
-      drafts: draftsCreated as any,
-      providerEvidence: { provider: "official-ai-batch", model: "batch-orchestrator", latencyMs: 0 },
-      completedAt: dependencies.clock.now()
-    };
-    await dependencies.audit.register({
-      ...auditBase(command, dependencies), provider: "official-ai-batch", model: "batch-orchestrator",
-      latencyMs: 0, result: "drafted", replay: false, failureStage: null,
-      errorCode: metrics.safetyLimitReached ? "BATCH_SAFETY_LIMIT_REACHED" : null,
-      postsPrepared: metrics.draftedOffers * command.channels.length,
-      postsPersisted: metrics.draftsPersisted,
-      transitionRequested: false, transitionCompleted: false
-    });
-    await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
-    return result;
+      const safetyNote = metrics.safetyLimitReached ? " [BATCH_SAFETY_LIMIT_REACHED]" : "";
+      const isComplete = !metrics.safetyLimitReached;
+      const result: OfficialAIDraftedResult = {
+        status: "drafted",
+        commandId: command.commandId,
+        offerId: "ALL_PENDING",
+        offerState: "pending_manual_review",
+        content: {
+          title: "Processamento em lote (ALL_PENDING)",
+          description: `Visitadas: ${metrics.offersVisited} | Páginas: ${metrics.pagesProcessed} | Drafts: ${metrics.draftedOffers} | Rejeitadas: ${metrics.rejectedOffers} | InvalidContract: ${metrics.invalidCandidateContracts}${safetyNote}`,
+          shortCopy: `Lote: ${metrics.offersVisited} | OK: ${metrics.draftedOffers} | Fail: ${metrics.rejectedOffers}`,
+          longCopy: `Processamento completo em ${metrics.pagesProcessed} páginas. ${metrics.draftsPersisted} drafts persistidos em ${metrics.draftedOffers} ofertas.`,
+          hashtags: ["#OfficialAI", "#BatchDrafts"],
+          callToAction: "Verifique o painel operacional para curadoria manual.",
+          highlights: [
+            `${metrics.offersVisited} ofertas visitadas`,
+            `${metrics.draftedOffers} com drafts gerados`,
+            `${metrics.rejectedOffers} rejeitadas`
+          ],
+          explanation: "Geração paginada de todas as ofertas pendentes sem drafts.",
+          channelCopies: {
+            telegram: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`,
+            instagram: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`,
+            whatsapp: `Lote ALL_PENDING: ${metrics.offersVisited} ofertas, ${metrics.draftedOffers} com drafts.`
+          }
+        },
+        drafts: draftsCreated as any,
+        providerEvidence: { provider: "official-ai-batch", model: "batch-orchestrator", latencyMs: 0 },
+        completedAt: dependencies.clock.now(),
+        batchCompleted: isComplete
+      };
+      await dependencies.audit.register({
+        ...auditBase(command, dependencies), provider: "official-ai-batch", model: "batch-orchestrator",
+        latencyMs: 0, result: "drafted", replay: false, failureStage: null,
+        errorCode: metrics.safetyLimitReached ? "BATCH_SAFETY_LIMIT_REACHED" : null,
+        postsPrepared: metrics.draftedOffers * command.channels.length,
+        postsPersisted: metrics.draftsPersisted,
+        transitionRequested: false, transitionCompleted: false,
+        batchCompleted: isComplete
+      });
+      await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
+      return result;
+    } catch (error) {
+      const code = "BATCH_UNEXPECTED_ERROR";
+      const message = error instanceof Error ? error.message : String(error);
+      return await rejectAndRecord(command, dependencies, fingerprint, code, message, "batch_loop", "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length, metrics.draftsPersisted);
+    }
   }
 
   // 3. Leitura da oferta — estado real é a única autoridade para selecionar o modo (ADR-014).

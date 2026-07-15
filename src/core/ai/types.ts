@@ -39,6 +39,7 @@ export interface OfficialAIOffer {
   originalPrice: number | null;
   category: string | null;
   explainability: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface OfficialAIContent {
@@ -86,6 +87,7 @@ export interface OfficialAIDraftedResult {
   drafts?: readonly OfficialDraftPost[];
   providerEvidence?: OfficialAIProviderEvidence;
   completedAt?: string;
+  batchCompleted?: boolean;
 }
 
 /**
@@ -139,4 +141,5 @@ export interface OfficialAIAuditRecord {
   postsPersisted: number;
   transitionRequested: boolean;
   transitionCompleted: boolean;
+  batchCompleted?: boolean;
 }

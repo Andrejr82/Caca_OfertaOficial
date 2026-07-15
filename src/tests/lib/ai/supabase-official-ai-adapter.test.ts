@@ -47,7 +47,8 @@ const offer: OfficialAIOffer = {
   currentPrice: 100,
   originalPrice: 120,
   category: "Casa",
-  explainability: { contract_version: "pmav5.candidate/v1" }
+  explainability: { contract_version: "pmav5.candidate/v1" },
+  createdAt: "2026-07-15T14:00:00.000Z"
 };
 
 const content: OfficialAIContent = {

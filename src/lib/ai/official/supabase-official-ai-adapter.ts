@@ -71,7 +71,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at")
       .eq("id", offerId)
       .eq("user_id", tenantId)
       .maybeSingle();
@@ -89,7 +89,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       currentPrice: Number(data.current_price),
       originalPrice: data.old_price == null ? null : Number(data.old_price),
       category: data.category,
-      explainability: (data.explainability ?? {}) as Record<string, unknown>
+      explainability: (data.explainability ?? {}) as Record<string, unknown>,
+      createdAt: data.created_at
     };
   }
 
@@ -165,7 +166,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       currentPrice: Number(data.current_price),
       originalPrice: data.old_price == null ? null : Number(data.old_price),
       category: data.category,
-      explainability: (data.explainability ?? {}) as Record<string, unknown>
+      explainability: (data.explainability ?? {}) as Record<string, unknown>,
+      createdAt: data.created_at
     }));
   }
 
