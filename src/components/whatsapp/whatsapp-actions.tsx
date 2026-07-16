@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Send, CheckCircle2, AlertTriangle, Image as ImageIcon, Trash2, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { approveAndPublishOfficialPost } from "@/lib/publication/official/approve-and-publish-client";
 import {
   cleanCouponTitle,
   getCouponCardImageSources,
@@ -21,7 +20,6 @@ interface PostWithOffer {
   } | null;
   offers: {
     id: string;
-    status: string;
     product_name: string;
     platform: string;
     current_price: number;
@@ -53,18 +51,35 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
     setStatus(null);
 
     try {
-      await approveAndPublishOfficialPost({
-        postId: post.id,
-        offerId: post.offers.id,
-        channel: "whatsapp",
-        requestSource: "whatsapp-dashboard"
+      const response = await fetch("/api/whatsapp/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          postId: post.id,
+          offerId: post.offers.id,
+          requestSource: "whatsapp-dashboard"
+        })
       });
-      setStatus({ success: true, message: "Mensagem enviada com sucesso no WhatsApp!" });
-      setTimeout(() => window.location.reload(), 1500);
-    } catch (error) {
+      const data = await response.json();
+
+      if (response.ok && data.ok) {
+        setStatus({
+          success: true,
+          message: "Mensagem enviada com sucesso no WhatsApp!"
+        });
+        setTimeout(() => {
+          window.location.reload();
+        }, 1500);
+      } else {
+        setStatus({
+          success: false,
+          message: data.message || "Erro desconhecido ao tentar enviar."
+        });
+      }
+    } catch {
       setStatus({
         success: false,
-        message: error instanceof Error ? error.message : "Ocorreu um erro de conexão."
+        message: "Ocorreu um erro de conexão."
       });
     } finally {
       setLoading(false);
@@ -175,7 +190,7 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
             )}
           </div>
           <span className="text-xs rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 font-semibold uppercase">
-            Oferta: {post.offers.status}
+            Aguardando Envio
           </span>
         </header>
 

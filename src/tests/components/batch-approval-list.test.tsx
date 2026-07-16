@@ -22,7 +22,6 @@ const posts = ["post-1", "post-2", "post-3"].map((id) => ({
   created_at: "2026-07-15T12:00:00.000Z",
   offers: {
     id: `offer-${id}`,
-    status: "pending_manual_review",
     product_name: id,
     platform: "Amazon",
     current_price: 10,
