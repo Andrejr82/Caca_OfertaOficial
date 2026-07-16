@@ -222,6 +222,27 @@ describe("publishOfficialPost", () => {
     expect(test.counts()).toEqual({ transportCalls: 0, postTransitions: 0, offerTransitions: 0 });
   });
 
+  it("accepts a new publication intention after a pre-transport rejection and valid approval", async () => {
+    const currentOffer = offer({ state: "pending_manual_review", version: 0 });
+    const approvedIntent = command({
+      commandId: "command-approved-intent",
+      idempotencyKey: "publication:post-1:telegram:intent:approved",
+      correlationId: "correlation-approved-intent",
+      requestedAt: "2026-07-14T12:05:00.000Z"
+    });
+    const test = fixture({ offer: currentOffer, transportReceipt: receipt(approvedIntent) });
+
+    await expect(publishOfficialPost(command(), test.dependencies)).resolves.toMatchObject({
+      status: "rejected",
+      code: "OFFER_STATE_MISMATCH"
+    });
+    currentOffer.state = "approved";
+    currentOffer.version = 2;
+
+    await expect(publishOfficialPost(approvedIntent, test.dependencies)).resolves.toMatchObject({ status: "published" });
+    expect(test.counts()).toEqual({ transportCalls: 1, postTransitions: 1, offerTransitions: 1 });
+  });
+
   it("rejects a published post before transport", async () => {
     const test = fixture({ post: post({ state: "published", version: 1 }) });
     const result = await publishOfficialPost(command(), test.dependencies);

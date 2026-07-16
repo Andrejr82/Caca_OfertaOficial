@@ -1,5 +1,11 @@
 export { publishOfficialPost } from "./official-publication-service";
+export { approveOfficialOfferForPublication } from "./official-publication-approval-service";
 export { validateFinalReceipt, validatePublicationCommand } from "./validation";
+export type {
+  OfficialPublicationApprovalCommand,
+  OfficialPublicationApprovalDependencies,
+  OfficialPublicationApprovalResult
+} from "./official-publication-approval-service";
 export type {
   ClockPort,
   OfficialPublicationServiceDependencies,

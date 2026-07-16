@@ -21,6 +21,7 @@ interface PostWithOffer {
   } | null;
   offers: {
     id: string;
+    status: string;
     product_name: string;
     platform: string;
     current_price: number;
