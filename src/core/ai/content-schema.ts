@@ -6,7 +6,7 @@ const contentSchema = z.object({
   description: z.string().trim().min(1),
   shortCopy: z.string().trim().min(1),
   longCopy: z.string().trim().min(1),
-  hashtags: z.array(z.string().trim().min(1)).min(1),
+  hashtags: z.array(z.string().trim().min(1)),
   callToAction: z.string().trim().min(1),
   highlights: z.array(z.string().trim().min(1)).min(1),
   explanation: z.string().trim().min(1),
@@ -28,6 +28,7 @@ export function validateOfficialAIContent(value: unknown, channels: readonly Off
   const parsed = contentSchema.safeParse(value);
   if (!parsed.success) return null;
   if (channels.some((channel) => !parsed.data.channelCopies[channel])) return null;
+  if (channels.includes("instagram") && parsed.data.hashtags.length === 0) return null;
   if (channels.some((channel) => {
     const copy = parsed.data.channelCopies[channel] ?? "";
     return !isCopyV2TextSafe(copy);

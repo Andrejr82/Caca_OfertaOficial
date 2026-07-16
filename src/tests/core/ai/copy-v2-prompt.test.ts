@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { buildCopyV2ChannelCopy, buildOfficialPrompt, buildOfficialRegenerationPrompt } from "@/core/ai";
+import {
+  buildCopyV2ChannelCopy,
+  buildOfficialPrompt,
+  buildOfficialRegenerationPrompt
+} from "@/core/ai";
 import type { OfficialAIDraftForRegeneration, OfficialAIOffer } from "@/core/ai";
 
 const offer: OfficialAIOffer = {
@@ -10,62 +14,112 @@ const offer: OfficialAIOffer = {
   createdAt: "2026-07-15T10:00:00.000Z"
 };
 
-describe("Official AI Copy V2 prompts", () => {
-  it("define copywriter de ofertas, estilo distinto por canal e proíbe invenções", () => {
-    const prompt = buildOfficialPrompt(offer, ["whatsapp", "telegram", "instagram"]);
-    const text = `${prompt.system}\n${prompt.user}`;
+const draft: OfficialAIDraftForRegeneration = {
+  postId: "post-1", offerId: "offer-1", affiliateLinkId: "link-1",
+  channel: "telegram", status: "draft", createdAt: offer.createdAt,
+  currentContent: "copy antiga\n\nhttps://cacaoferta.com.br/go/tg_offer1",
+  trackedUrl: "https://cacaoferta.com.br/go/tg_offer1",
+  marketplace: offer.marketplace, productName: offer.productName,
+  currentPrice: offer.currentPrice, originalPrice: offer.originalPrice,
+  category: offer.category, shippingFree: null, rating: null, coupon: null, evidence: {}
+};
 
-    expect(text).toContain("copywriter especializado em ofertas");
-    expect(text).toContain("WhatsApp");
-    expect(text).toContain("Telegram");
-    expect(text).toContain("Instagram");
-    expect(text).toContain("Nunca invente");
-    expect(text).toContain("Você não conversa");
-    expect(text).toContain("Olá");
-    expect(text).toContain("urgência natural");
-    expect(text).toContain("outputContract");
-    expect(text).toContain("copy final sem URL e sem placeholder");
+describe("Official AI O.P.A.C.", () => {
+  it("renderiza título, preço e um atributo objetivo extraído do título", () => {
+    const copy = buildCopyV2ChannelCopy({
+      ...offer,
+      productName: "SSD NVMe 1 TB PCIe 4.0",
+      originalPrice: null
+    }, "telegram");
+
+    expect(copy).toBe([
+      "🔥 OFERTA SHOPEE",
+      "SSD NVMe 1 TB PCIe 4.0",
+      "💰 R$ 79,90",
+      "💾 1 TB PCIe 4.0",
+      "👉 Ver oferta"
+    ].join("\n\n"));
   });
 
-  it("prompt de regeneração usa fatos do draft, não reutiliza copy antiga e manda omitir link", () => {
-    const draft = {
-      postId: "post-1", offerId: "offer-1", affiliateLinkId: "link-1",
-      channel: "telegram", status: "draft", createdAt: offer.createdAt,
-      currentContent: "copy antiga\n\nhttps://cacaoferta.com.br/go/tg_offer1", trackedUrl: "https://cacaoferta.com.br/go/tg_offer1",
-      marketplace: offer.marketplace, productName: offer.productName,
-      currentPrice: offer.currentPrice, originalPrice: offer.originalPrice,
-      category: offer.category, shippingFree: null, rating: null, coupon: null, evidence: {}
-    } satisfies OfficialAIDraftForRegeneration;
+  it("destaca preço sem inventar desconto quando preço anterior não é válido", () => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: 79.9 }, "whatsapp");
+    expect(copy).toContain("💰 R$ 79,90");
+    expect(copy).not.toMatch(/📉|% OFF/iu);
+  });
 
+  it("calcula desconto somente quando preço anterior é maior", () => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, currentPrice: 55.98, originalPrice: 79.9 }, "telegram");
+    expect(copy).toContain("💰 R$ 55,98\n📉 De R$ 79,90 — 30% OFF");
+  });
+
+  it("omite atributo quando título e metadados não contêm fato objetivo confiável", () => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, "whatsapp");
+    expect(copy.split("\n\n")).toEqual([
+      "🔥 OFERTA SHOPEE",
+      "Tênis Casual Feminino",
+      "💰 R$ 79,90",
+      "👉 Ver oferta"
+    ]);
+    expect(copy).not.toMatch(/excelente|incrível|alta performance|ideal para você|durabilidade|premium/iu);
+  });
+
+  it("aceita atributo somente quando consta em metadado persistido", () => {
+    const copy = buildCopyV2ChannelCopy({
+      ...offer,
+      originalPrice: null,
+      evidence: { attributes: [{ name: "Voltagem", value: "Bivolt 110V/220V" }] }
+    }, "telegram");
+    expect(copy).toContain("🔌 Bivolt 110V/220V");
+  });
+
+  it("não transforma categoria, marca ou contexto em benefício inferido", () => {
+    const copy = buildCopyV2ChannelCopy({
+      ...offer,
+      category: "Eletrônicos premium",
+      evidence: { brand: "Marca Persistida", seller: "Loja excelente" },
+      originalPrice: null
+    }, "telegram");
+    expect(copy).not.toMatch(/premium|excelente|qualidade|performance|ideal|marca persistida/iu);
+  });
+
+  it.each(["whatsapp", "telegram", "instagram"] as const)("usa O.P.A.C. em %s", (channel) => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, channel);
+    expect(copy).toMatch(/^🔥 OFERTA SHOPEE/u);
+    expect(copy).toContain("Fone Bluetooth 5.3");
+    expect(copy).toContain("💰 R$ 79,90");
+    expect(copy).toContain("Bluetooth 5.3");
+    expect(copy).toMatch(/👉 (?:Ver oferta|Comprar|Aproveitar oferta|Garanta o seu)$/mu);
+    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(4);
+    expect(copy).not.toMatch(/Olá|\[link\]|https?:\/\//iu);
+    if (channel === "instagram") expect(copy).toMatch(/#oferta\s+#shopee/iu);
+    else expect(copy).not.toContain("#");
+  });
+
+  it("mantém máximo de quatro emojis mesmo com desconto e atributo", () => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, "instagram");
+    expect(copy).toContain("Bluetooth 5.3");
+    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(4);
+  });
+
+  it("prompt oficial exige O.P.A.C., proíbe invenções e nunca pede URL", () => {
+    const prompt = buildOfficialPrompt(offer, ["whatsapp", "telegram", "instagram"]);
+    const text = `${prompt.system}\n${prompt.user}`;
+    expect(text).toContain("O.P.A.C.");
+    expect(text).toContain("Oferta");
+    expect(text).toContain("Produto");
+    expect(text).toContain("Atributo");
+    expect(text).toContain("Conversão");
+    expect(text).toContain("Nunca invente");
+    expect(text).toContain("copy final sem URL e sem placeholder");
+    expect(text).not.toContain("urgência natural");
+  });
+
+  it("prompt de regeneração usa fatos persistidos, ignora copy antiga e omite link", () => {
     const prompt = buildOfficialRegenerationPrompt(draft);
     expect(prompt.user).toContain('"channel":"telegram"');
     expect(prompt.user).toContain("NÃO inclua URL");
     expect(prompt.user).not.toContain(draft.trackedUrl);
     expect(prompt.user).not.toContain("copy antiga");
-    expect(prompt.system).toBe(buildOfficialPrompt(offer, ["telegram"]).system);
-  });
-
-  it("omite desconto inexistente e não pede placeholder de link", () => {
-    const prompt = buildOfficialPrompt({ ...offer, originalPrice: null }, ["whatsapp"]);
-    expect(prompt.user).toContain('"discountPercentage":null');
-    expect(prompt.user).not.toContain("[link]");
-  });
-
-  it("renderiza formatos factuais distintos para WhatsApp, Telegram e Instagram", () => {
-    const whatsapp = buildCopyV2ChannelCopy(offer, "whatsapp");
-    const telegram = buildCopyV2ChannelCopy(offer, "telegram");
-    const instagram = buildCopyV2ChannelCopy(offer, "instagram");
-    expect(whatsapp).toContain("*Tênis Casual Feminino*");
-    expect(whatsapp).toContain("🔥 ACHADINHO SHOPEE");
-    expect(whatsapp).toContain("🛒 Garanta o seu:");
-    expect(telegram).toContain("🔥 OFERTA SHOPEE");
-    expect(telegram).toContain("• Marketplace: Shopee");
-    expect(instagram).toContain("#oferta #Shopee");
-    for (const copy of [whatsapp, telegram, instagram]) {
-      expect(copy).not.toMatch(/Olá|\[link\]|https?:\/\//iu);
-      expect(copy).toContain("R$ 79,90");
-      expect(copy).toContain("20%");
-    }
   });
 
   it("omite código interno de categoria da copy pública", () => {

@@ -105,6 +105,32 @@ function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = 
 }
 
 describe("generateOfficialAI", () => {
+  it("usa o construtor O.P.A.C. único e metadado persistido na geração nova", async () => {
+    const offerWithAttribute = {
+      ...offer,
+      originalPrice: null,
+      explainability: {
+        ...offer.explainability,
+        attributes: [{ name: "Voltagem", value: "Bivolt 110V/220V" }]
+      }
+    };
+    const dependencies = createDependencies({
+      offers: { findById: vi.fn().mockResolvedValue(offerWithAttribute) }
+    });
+
+    await generateOfficialAI(command, dependencies);
+
+    const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
+    for (const channel of command.channels) {
+      expect(persisted.channelCopies[channel]).toMatch(/^🔥 OFERTA SHOPEE/u);
+      expect(persisted.channelCopies[channel]).toMatch(/👉 Ver oferta$/u);
+      expect(persisted.channelCopies[channel]).toContain("Bivolt 110V/220V");
+      expect(persisted.channelCopies[channel]).not.toMatch(/https?:\/\//iu);
+      if (channel === "instagram") expect(persisted.channelCopies[channel]).toContain("#oferta #shopee");
+      else expect(persisted.channelCopies[channel]).not.toContain("#");
+    }
+  });
+
   it("gera uma vez, persiste três drafts e aprova somente depois dos posts", async () => {
     const order: string[] = [];
     const dependencies = createDependencies();

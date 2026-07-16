@@ -534,7 +534,10 @@ export async function generateOfficialAI(
   }
   const content = {
     ...providerContent,
-    channelCopies: Object.fromEntries(command.channels.map((channel) => [channel, buildCopyV2ChannelCopy(offer!, channel)]))
+    channelCopies: Object.fromEntries(command.channels.map((channel) => [channel, buildCopyV2ChannelCopy({
+      ...offer!,
+      evidence: offer!.explainability
+    }, channel)]))
   };
   if (command.channels.some((channel) => !isCopyV2TextSafe(content.channelCopies[channel]))) {
     return rejectAndRecord(
