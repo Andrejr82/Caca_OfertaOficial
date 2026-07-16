@@ -120,6 +120,8 @@ export function publicationPayloadReference(postId: string) {
   return `post:${postId}:v0`;
 }
 
-export function publicationIdempotencyKey(postId: string, channel: OfficialPublicationChannel) {
-  return `publication:${postId}:${channel}`;
+export function publicationIdempotencyKey(postId: string, channel: OfficialPublicationChannel, intentId?: string) {
+  return intentId
+    ? `publication:${postId}:${channel}:intent:${intentId}`
+    : `publication:${postId}:${channel}`;
 }

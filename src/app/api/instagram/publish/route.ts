@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { publishOfficialPost, type OfficialPublicationCommand } from "@/core/publication";
+import { approveOfficialOfferForPublication, type OfficialPublicationApprovalCommand } from "@/core/publication";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   createOfficialPublicationServiceDependencies,
   publicationIdempotencyKey,
   publicationPayloadReference
 } from "@/lib/publication/official/create-official-publication-service";
+import { createOfficialPublicationApprovalDependencies } from "@/lib/publication/official/create-official-publication-approval";
 
 type PublicationBody = {
   postId?: string; offerId?: string; commandId?: string; idempotencyKey?: string;
@@ -28,8 +30,25 @@ export async function POST(request: Request) {
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "instagram");
     const commandId = body.commandId ?? crypto.randomUUID();
+    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "instagram", commandId);
+    const approvalCommand: OfficialPublicationApprovalCommand = {
+      commandId,
+      correlationId: body.correlationId ?? commandId,
+      causationId: body.causationId ?? null,
+      tenantId: user.id,
+      offerId: body.offerId,
+      postId: body.postId,
+      channel: "instagram",
+      requestedAt: body.requestedAt ?? new Date().toISOString()
+    };
+    const approval = await approveOfficialOfferForPublication(
+      approvalCommand,
+      createOfficialPublicationApprovalDependencies(client, user.id)
+    );
+    if (approval.status !== "approved") {
+      return NextResponse.json({ ok: false, code: approval.code, message: approval.message, result: approval }, { status: rejectionStatus(approval.code) });
+    }
     const command: OfficialPublicationCommand = {
       contractVersion: "pmav5.publication/v1", commandId, idempotencyKey,
       correlationId: body.correlationId ?? commandId, causationId: body.causationId ?? null,

@@ -1,4 +1,5 @@
 export { publishOfficialPost } from "./official-publication-service";
+export { approveOfficialOfferForPublication } from "./official-publication-approval-service";
 export { validateFinalReceipt, validatePublicationCommand } from "./validation";
 export type {
   ClockPort,
@@ -13,6 +14,11 @@ export type {
   PublicationTransportRequest,
   UUIDPort
 } from "./ports";
+export type {
+  OfficialPublicationApprovalCommand,
+  OfficialPublicationApprovalDependencies,
+  OfficialPublicationApprovalResult
+} from "./official-publication-approval-service";
 export type {
   OfficialPublicationChannel,
   OfficialPublicationCommand,
