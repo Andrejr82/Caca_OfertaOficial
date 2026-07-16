@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-// @ts-ignore
 import sharp from "sharp";
 
 export const maxDuration = 60; // Limite padrão da Vercel Hobby
