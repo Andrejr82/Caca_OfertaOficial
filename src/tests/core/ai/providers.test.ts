@@ -68,10 +68,22 @@ describe.each([
   });
 
   it("retorna erro tipado sem fallback ou segunda chamada", async () => {
-    const fetcher = vi.fn().mockResolvedValue(new Response("rate limited", { status: 429 }));
+    const fetcher = vi.fn().mockResolvedValue(new Response("rate limited", {
+      status: 429,
+      headers: { "Retry-After": "7" }
+    }));
     const provider = new Provider({ apiKey: "test-key", model: "model", fetcher });
 
-    await expect(provider.generate(request)).rejects.toThrow(`${name.toUpperCase()}_PROVIDER_ERROR:429`);
+    const promise = provider.generate(request);
+    await expect(promise).rejects.toThrow(`${name.toUpperCase()}_PROVIDER_ERROR:429`);
+    await promise.catch((error) => expect(error).toMatchObject({
+      provider: name,
+      status: 429,
+      code: "HTTP_429",
+      retryAfterMs: 7_000,
+      timeout: false,
+      network: false
+    }));
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });
