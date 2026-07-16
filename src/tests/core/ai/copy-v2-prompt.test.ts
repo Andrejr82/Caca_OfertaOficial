@@ -49,7 +49,19 @@ describe("Official AI O.P.A.C.", () => {
 
   it("calcula desconto somente quando preço anterior é maior", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, currentPrice: 55.98, originalPrice: 79.9 }, "telegram");
-    expect(copy).toContain("💰 R$ 55,98\n📉 De R$ 79,90 — 30% OFF");
+    expect(copy).toContain("📉 De R$ 79,90\n💰 Por R$ 55,98 — 30% OFF");
+  });
+
+  it("limpa repetições adjacentes e limita somente o título sem cortar palavras", () => {
+    const copy = buildCopyV2ChannelCopy({
+      ...offer,
+      productName: "Oferta: Fone Bluetooth 5.3 Fone Bluetooth 5.3 com cancelamento de ruído ativo e bateria de longa duração para viagens | Shopee"
+    }, "telegram");
+    const title = copy.split("\n\n")[1];
+
+    expect(title).toBe("Fone Bluetooth 5.3 com cancelamento de ruído ativo e bateria de longa duração");
+    expect(title.length).toBeLessThanOrEqual(80);
+    expect(copy).toContain("👉 Ver oferta");
   });
 
   it("omite atributo quando título e metadados não contêm fato objetivo confiável", () => {
@@ -86,7 +98,7 @@ describe("Official AI O.P.A.C.", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, channel);
     expect(copy).toMatch(/^🔥 OFERTA SHOPEE/u);
     expect(copy).toContain("Fone Bluetooth 5.3");
-    expect(copy).toContain("💰 R$ 79,90");
+    expect(copy).toContain("💰 Por R$ 79,90 — 20% OFF");
     expect(copy).toContain("Bluetooth 5.3");
     expect(copy).toMatch(/👉 (?:Ver oferta|Comprar|Aproveitar oferta|Garanta o seu)$/mu);
     expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(4);

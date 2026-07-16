@@ -86,20 +86,35 @@ function objectiveAttribute(facts: CopyV2Facts) {
 }
 
 function cleanProductName(value: string) {
-  return value
+  const normalized = value
     .replace(/^\s*(?:oferta|promoção|achadinho)\s*[:\-–—]\s*/iu, "")
     .replace(/\s*[|•]\s*(?:shopee|amazon|mercado livre)\s*$/iu, "")
     .replace(/\s+/gu, " ")
     .trim();
+  const words = normalized.split(" ");
+  const key = (word: string) => word.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").toLocaleLowerCase("pt-BR");
+  for (let start = 0; start < words.length; start += 1) {
+    for (let length = Math.floor((words.length - start) / 2); length > 0; length -= 1) {
+      const left = words.slice(start, start + length).map(key).join("\0");
+      const right = words.slice(start + length, start + length * 2).map(key).join("\0");
+      if (left !== right) continue;
+      words.splice(start + length, length);
+      start = Math.max(-1, start - 1);
+      break;
+    }
+  }
+  const cleaned = words.join(" ");
+  if (cleaned.length <= 80) return cleaned;
+  const cut = cleaned.lastIndexOf(" ", 80);
+  return cut > 0 ? cleaned.slice(0, cut) : words[0];
 }
 
 export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel) {
   const marketplace = facts.marketplace.replace(/\s+/gu, " ").trim().toLocaleUpperCase("pt-BR");
-  const priceBlock = [`💰 ${formatBRL(facts.currentPrice)}`];
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
-  if (discount !== null && facts.originalPrice !== null) {
-    priceBlock.push(`📉 De ${formatBRL(facts.originalPrice)} — ${discount}% OFF`);
-  }
+  const priceBlock = discount !== null && facts.originalPrice !== null
+    ? [`📉 De ${formatBRL(facts.originalPrice)}`, `💰 Por ${formatBRL(facts.currentPrice)} — ${discount}% OFF`]
+    : [`💰 ${formatBRL(facts.currentPrice)}`];
 
   const attribute = objectiveAttribute(facts);
   const blocks = [
