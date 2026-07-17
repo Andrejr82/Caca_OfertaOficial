@@ -9,6 +9,7 @@ const {
   applyNovelty,
   calculateDeterministicScore,
   deduplicate,
+  parseBrazilPrice,
   parseCategoryTree,
   parseRankingPage,
   parseRootCategories,
@@ -36,6 +37,48 @@ function categoryPage(slug, parentNode, children) {
 function rankingPage(count = 20) {
   return Array.from({ length: count }, (_, index) => productCard(index + 1, `B${String(index + 1).padStart(9, '0')}`)).join('');
 }
+
+function rankingCardWithPrice(priceMarkup, extraMarkup = '') {
+  return `<div data-asin="B000000001"><span class="zg-bdg-text">#1</span><a href="/Produto/dp/B000000001"><img alt="Produto" src="https://images.example.com/product.jpg"></a>${priceMarkup}${extraMarkup}</div>`;
+}
+
+const SOURCE = {
+  category: 'Categoria Alpha', subcategory: 'Subcategoria Um', node_id: '22222222',
+  parent_node_id: '11111111', source_url: `${BEST_SELLERS_ROOT}/alpha/22222222`
+};
+
+test('normaliza preços brasileiros completos e sem centavos', () => {
+  assert.equal(parseBrazilPrice('R$ 1.299,90'), 1299.9);
+  assert.equal(parseBrazilPrice('R$ 89,99'), 89.99);
+  assert.equal(parseBrazilPrice('1.299,90'), 1299.9);
+  assert.equal(parseBrazilPrice('89'), 89);
+  assert.equal(parseBrazilPrice('12x R$ 7,99'), null);
+});
+
+test('parser usa preço acessível atual antes de legado e parcela', () => {
+  const products = parseRankingPage(
+    rankingCardWithPrice('<span class="a-price"><span class="a-offscreen">R$ 89,99</span></span><span class="p13n-sc-price">R$ 9,99</span>', '<span class="installment">12x R$ 7,99</span>'),
+    SOURCE,
+  );
+  assert.equal(products[0].price, 89.99);
+});
+
+test('parser suporta seletor legado e classe dinâmica comprovada', () => {
+  const legacy = parseRankingPage(rankingCardWithPrice('<span class="p13n-sc-price">R$ 1.299,90</span>'), SOURCE);
+  const dynamic = parseRankingPage(rankingCardWithPrice('<span class="_cDEzb_p13n-sc-price_3mJ9Z">R$\u00a09,30</span>'), SOURCE);
+  assert.equal(legacy[0].price, 1299.9);
+  assert.equal(dynamic[0].price, 9.3);
+});
+
+test('parser suporta preço composto por inteiro e fração', () => {
+  const products = parseRankingPage(rankingCardWithPrice('<span class="a-price"><span class="a-price-whole">1.299</span><span class="a-price-fraction">90</span></span>'), SOURCE);
+  assert.equal(products[0].price, 1299.9);
+});
+
+test('preço vazio rejeitado explicitamente pelo validator', () => {
+  const product = parseRankingPage(rankingCardWithPrice('<span class="a-price"><span class="a-price-whole"></span></span>'), SOURCE)[0];
+  assert.deepEqual(sanitizeProducts([product]), { products: [], discarded: [{ node_id: '22222222', asin: 'B000000001', rank: 1, reasons: ['PRECO_INVALIDO'] }] });
+});
 
 function response(html, status = 200) {
   return { ok: status === 200, status, text: async () => html };

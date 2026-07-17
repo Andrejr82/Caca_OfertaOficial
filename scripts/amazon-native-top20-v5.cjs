@@ -36,10 +36,23 @@ function escapePattern(value) {
 }
 
 function parseBrazilPrice(value) {
-  const match = cleanText(value).match(/R\$\s*([\d.]+(?:,\d{2})?)/i);
+  const text = cleanText(value).replace(/\u00a0/g, ' ');
+  if (/\d+\s*x\s*R\$/i.test(text)) return null;
+  const match = text.match(/(?:R\$\s*)?([\d.]+(?:,\d{2})?|\d+(?:,\d{2})?)/i);
   if (!match) return null;
   const parsed = Number(match[1].replaceAll('.', '').replace(',', '.'));
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function extractProductPrice(root) {
+  for (const selector of ['.a-price .a-offscreen', '.p13n-sc-price', '[class*="p13n-sc-price"]']) {
+    const price = parseBrazilPrice(root.find(selector).first().text());
+    if (price != null) return price;
+  }
+  const whole = cleanText(root.find('.a-price-whole').first().text());
+  const fraction = cleanText(root.find('.a-price-fraction').first().text());
+  if (whole) return parseBrazilPrice(fraction ? `${whole},${fraction}` : whole);
+  return null;
 }
 
 function parseRootCategories(html) {
@@ -130,7 +143,7 @@ function parseRankingPage(html, source) {
       title,
       image: cleanText(picture.attr('src')) || null,
       canonical_url: /^[A-Z0-9]{10}$/.test(asin) ? `https://www.amazon.com.br/dp/${asin}` : null,
-      price: parseBrazilPrice(root.find('.p13n-sc-price, .a-price .a-offscreen').first().text()),
+      price: extractProductPrice(root),
       original_price: null,
       seller: null,
       discount: null,
@@ -152,6 +165,7 @@ function validateProduct(product) {
   if (!/^[A-Z0-9]{10}$/.test(String(product.asin ?? ''))) reasons.push('asin');
   if (!cleanText(product.title)) reasons.push('title');
   if (!/^https?:\/\//i.test(String(product.image ?? ''))) reasons.push('image');
+  if (!Number.isFinite(Number(product.price)) || Number(product.price) <= 0) reasons.push('PRECO_INVALIDO');
   if (!/^https:\/\/www\.amazon\.com\.br\/dp\/[A-Z0-9]{10}$/i.test(String(product.canonical_url ?? ''))) reasons.push('canonical_url');
   if (!/^https:\/\/www\.amazon\.com\.br\/gp\/bestsellers\//i.test(String(product.source_url ?? ''))) reasons.push('source_url');
   if (Object.keys(product).length !== PRODUCT_KEYS.length || PRODUCT_KEYS.some((key) => !(key in product))) reasons.push('contract');
@@ -270,7 +284,21 @@ async function runAmazonNativeTop20({
         discarded: sanitized.discarded.length,
         http_status: 200
       });
-      if (sanitized.products.length !== 20) throw new Error(`Top 20 incompleto em ${subcategory.subcategory}: ${sanitized.products.length}/20`);
+      if (sanitized.products.length === 0) {
+        throw new Error(`Top 20 sem produtos válidos em ${subcategory.subcategory}: ${sanitized.products.length}/${parsed.length}`);
+      }
+      if (sanitized.products.length < 20) {
+        const reasons = [...new Set(sanitized.discarded.flatMap((entry) => entry.reasons))];
+        const asins = sanitized.discarded.map((entry) => entry.asin).filter(Boolean);
+        console.warn('[Amazon Top20 incompleto] ' + JSON.stringify({
+          categoria: subcategory.subcategory,
+          cardsEncontrados: parsed.length,
+          produtosValidos: sanitized.products.length,
+          produtosRejeitados: sanitized.discarded.length,
+          motivos: reasons,
+          asinsRejeitados: asins,
+        }));
+      }
       collected.push(...sanitized.products);
     }
   }
@@ -340,7 +368,9 @@ module.exports = {
   applyNovelty,
   calculateDeterministicScore,
   deduplicate,
+  extractProductPrice,
   parseCategoryTree,
+  parseBrazilPrice,
   parseRankingPage,
   parseRootCategories,
   runAmazonNativeTop20,
