@@ -90,9 +90,11 @@ function fixture(input: {
   receiptSaveErrorBefore?: Error;
   postStateResults?: Array<Awaited<ReturnType<OfficialPublicationServiceDependencies["state"]["publishPost"]>>>;
   offerStateResults?: Array<Awaited<ReturnType<OfficialPublicationServiceDependencies["state"]["concludeOffer"]>>>;
+  activePosts?: OfficialPublicationPost[];
 } = {}) {
   const currentOffer = input.offer === undefined ? offer() : input.offer;
   const currentPost = input.post === undefined ? post() : input.post;
+  const activePosts = input.activePosts ?? [currentPost!];
   const audits: PublicationAuditRecord[] = [];
   const savedReceipts: OfficialPublicationReceipt[] = input.existingReceipt ? [input.existingReceipt] : [];
   const completed = new Map<string, { fingerprint: string; result: OfficialPublicationResult }>();
@@ -110,7 +112,8 @@ function fixture(input: {
   const dependencies: OfficialPublicationServiceDependencies = {
     repository: {
       findOffer: async () => currentOffer,
-      findPost: async () => currentPost
+      findPost: async () => currentPost,
+      findPostsByOffer: async () => activePosts
     },
     transports: {
       resolve: () => ({
@@ -165,13 +168,20 @@ function fixture(input: {
       publishPost: async () => {
         postTransitions += 1;
         events.push("post-state");
-        return input.postStateResults?.shift() ?? { status: "applied", auditId: "audit-post", newState: "published" };
+        const result = input.postStateResults?.shift() ?? { status: "applied", auditId: "audit-post", newState: "published" };
+        if (result.status !== "rejected") {
+          const published = activePosts.find((item) => item.id === currentPost?.id);
+          if (published) published.state = "published";
+          if (currentPost) currentPost.state = "published";
+        }
+        return result;
       },
       concludeOffer: async () => {
         offerTransitions += 1;
         events.push("offer-state");
         return input.offerStateResults?.shift() ?? { status: "applied", auditId: "audit-offer", newState: "posted" };
-      }
+      },
+      reconcileOffer: async () => ({ status: "applied", auditId: "audit-reconcile", newState: "approved" })
     },
     audit: { register: async (record) => { audits.push(record); } },
     clock: { now: () => now },
@@ -210,16 +220,49 @@ describe("publishOfficialPost", () => {
     expect(test.audits.at(-1)).toMatchObject({ result: "published", receiptRecorded: true });
   });
 
+  it("keeps the offer approved while another active post is still draft", async () => {
+    const test = fixture({
+      activePosts: [
+        post(),
+        post({ id: "post-2", channel: "whatsapp" })
+      ]
+    });
+
+    const result = await publishOfficialPost(command(), test.dependencies);
+
+    expect(result).toMatchObject({ status: "published", postState: "published", offerState: "approved" });
+    expect(test.counts()).toEqual({ transportCalls: 1, postTransitions: 1, offerTransitions: 0 });
+  });
+
+  it.each([
+    ["published", "published"],
+    ["deleted", "deleted"],
+    ["rejected", "rejected"]
+  ] as const)("ignores a related %s post when deciding offer completion", async (_state, ignoredState) => {
+    const test = fixture({ activePosts: [post(), post({ id: "post-2", channel: "whatsapp", state: ignoredState })] });
+
+    const result = await publishOfficialPost(command(), test.dependencies);
+
+    expect(result).toMatchObject({ status: "published", offerState: "posted" });
+    expect(test.counts().offerTransitions).toBe(1);
+  });
+
   it.each([
     ["pending_manual_review"],
     ["selected"],
-    ["posted"],
     ["rejected"]
   ])("rejects offer state %s before transport", async (state) => {
     const test = fixture({ offer: offer({ state }) });
     const result = await publishOfficialPost(command(), test.dependencies);
     expect(result).toMatchObject({ status: "rejected", code: "OFFER_STATE_MISMATCH" });
     expect(test.counts()).toEqual({ transportCalls: 0, postTransitions: 0, offerTransitions: 0 });
+  });
+
+  it("rejects a prematurely posted offer when no active draft proves a pending channel", async () => {
+    const test = fixture({ offer: offer({ state: "posted" }), activePosts: [post({ state: "published" })] });
+    const result = await publishOfficialPost(command(), test.dependencies);
+    expect(result).toMatchObject({ status: "rejected", code: "OFFER_STATE_MISMATCH" });
+    expect(test.counts().transportCalls).toBe(0);
   });
 
   it("rejects a published post before transport", async () => {

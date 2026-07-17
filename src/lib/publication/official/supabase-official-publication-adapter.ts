@@ -100,6 +100,31 @@ export class SupabaseOfficialPublicationAdapter implements
     };
   }
 
+  async findPostsByOffer(offerId: string, tenantId: string): Promise<readonly OfficialPublicationPost[]> {
+    if (tenantId !== this.tenantId) return [];
+    const { data, error } = await this.client.from("posts")
+      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes)")
+      .eq("offer_id", offerId)
+      .eq("user_id", tenantId);
+    if (error) throw new Error(`Official publication related posts read failed: ${error.message}`);
+    return (data ?? []).map((item) => {
+      const related = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+      const channel = item.channel as OfficialPublicationChannel;
+      return {
+        id: item.id,
+        tenantId: item.user_id,
+        offerId: item.offer_id,
+        channel,
+        state: item.status,
+        version: postStateVersion(item.status),
+        content: item.content,
+        mediaUrl: related?.image_url ?? null,
+        destination: this.destinations[channel] ?? "",
+        metadata: (channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}) as Readonly<Record<string, string | number | boolean>>
+      };
+    });
+  }
+
   async findFinal(command: OfficialPublicationCommand): Promise<OfficialPublicationReceipt | null> {
     const { data, error } = await this.client.from("app_settings")
       .select("value")
@@ -303,6 +328,27 @@ export class OfficialPublicationStateAdapter implements PublicationStatePort {
     }, this.dependencies);
     return result.status === "applied"
       ? { status: "applied" as const, auditId: result.auditId, newState: "posted" as const }
+      : { status: "rejected" as const, code: result.code, message: result.message };
+  }
+
+  async reconcileOffer({ command }: { command: OfficialPublicationCommand }) {
+    const result = await transitionOfficialOfferState({
+      commandId: `${command.commandId}:offer-reconcile`,
+      idempotencyKey: `${command.idempotencyKey}:offer-reconcile`,
+      correlationId: command.correlationId,
+      causationId: command.commandId,
+      tenantId: command.tenantId,
+      actor: { type: "service", id: "official-publication-service", service: "official-publication-service" },
+      requestedAt: command.requestedAt,
+      entityId: command.offerId,
+      fromState: "posted",
+      toState: "approved",
+      origin: "official-publication-service.premature-post-reconciliation",
+      reason: { code: "PUBLICATION_RECONCILIATION", detail: command.channel },
+      evidenceRefs: [`offer:${command.offerId}:active-draft`, `post:${command.postId}:draft`]
+    }, this.dependencies);
+    return result.status === "applied"
+      ? { status: "applied" as const, auditId: result.auditId, newState: "approved" as const }
       : { status: "rejected" as const, code: result.code, message: result.message };
   }
 }

@@ -69,7 +69,7 @@ describe("SupabaseOfficialPublicationAdapter", () => {
         }
       }, error: null
     });
-    const client = { from: vi.fn().mockReturnValueOnce(offerBuilder).mockReturnValueOnce(postBuilder) };
+    const client = { from: vi.fn().mockReturnValueOnce(offerBuilder).mockReturnValueOnce(postBuilder).mockReturnValueOnce(postBuilder) };
     const adapter = new SupabaseOfficialPublicationAdapter(client as never, "tenant-1", {
       telegram: "@ofertas", whatsapp: "group@g.us", instagram: "instagram-account", facebook: "facebook-page"
     });

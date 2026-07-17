@@ -36,6 +36,7 @@ export interface PublicationTransportRegistryPort {
 export interface PublicationRepositoryPort {
   findOffer(offerId: string, tenantId: string): Promise<OfficialPublicationOffer | null>;
   findPost(postId: string, tenantId: string): Promise<OfficialPublicationPost | null>;
+  findPostsByOffer(offerId: string, tenantId: string): Promise<readonly OfficialPublicationPost[]>;
 }
 
 export interface PublicationReceiptPort {
@@ -63,12 +64,13 @@ export interface PublicationReservationPort {
 }
 
 export type PublicationStateResult =
-  | { status: "applied" | "replay"; auditId: string; newState: "published" | "posted" }
+  | { status: "applied" | "replay"; auditId: string; newState: "published" | "posted" | "approved" }
   | { status: "rejected"; code: string; message: string };
 
 export interface PublicationStatePort {
   publishPost(input: { command: OfficialPublicationCommand; receipt: OfficialPublicationReceipt }): Promise<PublicationStateResult>;
   concludeOffer(input: { command: OfficialPublicationCommand; receipt: OfficialPublicationReceipt }): Promise<PublicationStateResult>;
+  reconcileOffer(input: { command: OfficialPublicationCommand }): Promise<PublicationStateResult>;
 }
 
 export interface PublicationAuditPort {

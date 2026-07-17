@@ -76,9 +76,9 @@ export interface OfficialPublicationPublishedResult {
   externalId: string;
   receiptId: string;
   postState: "published";
-  offerState: "posted";
+  offerState: "approved" | "posted";
   postAuditId: string;
-  offerAuditId: string;
+  offerAuditId: string | null;
   completedAt: string;
   replay: boolean;
 }
@@ -118,7 +118,7 @@ export interface PublicationAuditRecord {
   receiptId: string | null;
   receiptRecorded: boolean;
   postTransition: "not_requested" | "applied" | "replay" | "rejected";
-  offerCondition: "not_evaluated" | "first_confirmed_receipt";
+  offerCondition: "not_evaluated" | "first_confirmed_receipt" | "pending_posts";
   offerTransition: "not_requested" | "applied" | "replay" | "rejected";
   result: "published" | "rejected" | "idempotent_replay" | "reconciliation_required";
   replay: boolean;

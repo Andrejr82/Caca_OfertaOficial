@@ -28,13 +28,17 @@ function dependencies(offerState: string): OfficialPublicationApprovalDependenci
       findPost: vi.fn(async () => ({
         id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "telegram",
         state: "draft", version: 0, content: "content", mediaUrl: null, destination: "@offers"
-      }))
+      })),
+      findPostsByOffer: vi.fn(async () => [])
     },
     selection: {
       select: vi.fn(async () => { selectedCalls += 1; return { status: "selected" as const, auditId: "selection-audit" }; })
     },
     approval: {
       approve: vi.fn(async () => { approvedCalls += 1; return { status: "approved" as const, auditId: "approval-audit" }; })
+    },
+    reconciliation: {
+      reconcile: vi.fn(async () => ({ status: "approved" as const, auditId: "reconciliation-audit" }))
     },
     get selectedCalls() { return selectedCalls; },
     get approvedCalls() { return approvedCalls; }
@@ -93,5 +97,18 @@ describe("approveOfficialOfferForPublication", () => {
     const result = await approveOfficialOfferForPublication(command, deps);
 
     expect(result).toMatchObject({ status: "rejected", code: "STATE_CONFLICT", failureStage: "approval" });
+  });
+
+  it("reconciles a prematurely posted offer when another active post is draft", async () => {
+    const deps = dependencies("posted");
+    deps.repository.findPostsByOffer = vi.fn(async () => [
+      { id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "telegram", state: "draft", version: 0, content: "content", mediaUrl: null, destination: "@offers" },
+      { id: "post-2", tenantId: "tenant-1", offerId: "offer-1", channel: "whatsapp", state: "published", version: 1, content: "content", mediaUrl: null, destination: "group" }
+    ]);
+
+    const result = await approveOfficialOfferForPublication(command, deps);
+
+    expect(result).toMatchObject({ status: "approved", offerState: "approved" });
+    expect(deps.reconciliation.reconcile).toHaveBeenCalledTimes(1);
   });
 });

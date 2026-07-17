@@ -88,7 +88,7 @@ async function auditRejection(
   return result;
 }
 
-function preconditionError(command: OfficialPublicationCommand, offer: Awaited<ReturnType<OfficialPublicationServiceDependencies["repository"]["findOffer"]>>, post: Awaited<ReturnType<OfficialPublicationServiceDependencies["repository"]["findPost"]>>) {
+function preconditionError(command: OfficialPublicationCommand, offer: Awaited<ReturnType<OfficialPublicationServiceDependencies["repository"]["findOffer"]>>, post: Awaited<ReturnType<OfficialPublicationServiceDependencies["repository"]["findPost"]>>, allowPublishedPost: boolean) {
   if (!offer) return ["OFFER_NOT_FOUND", "Offer was not found", "offer"] as const;
   if (!post) return ["POST_NOT_FOUND", "Post was not found", "post"] as const;
   if (offer.tenantId !== command.tenantId || post.tenantId !== command.tenantId) return ["TENANT_MISMATCH", "Offer or post belongs to another tenant", "tenant"] as const;
@@ -97,9 +97,9 @@ function preconditionError(command: OfficialPublicationCommand, offer: Awaited<R
   if (!post.destination.trim()) return ["DESTINATION_UNAVAILABLE", "Publication destination is not configured", "destination"] as const;
   if (offer.state !== "approved") return ["OFFER_STATE_MISMATCH", "Official publication requires approved offer", "offer_state"] as const;
   if (offer.version !== command.expectedOfferVersion) return ["OFFER_VERSION_CONFLICT", "Offer version differs from the expected version", "offer_version"] as const;
-  if (post.state !== "draft") return ["POST_STATE_MISMATCH", "Official publication requires draft post", "post_state"] as const;
-  if (post.version !== command.expectedPostVersion) return ["POST_VERSION_CONFLICT", "Post version differs from the expected version", "post_version"] as const;
-  if (!post.content.trim() || command.payloadReference !== `post:${post.id}:v${post.version}`) return ["PAYLOAD_REFERENCE_MISMATCH", "Persisted publication payload is invalid", "payload"] as const;
+  if (post.state !== "draft" && !(allowPublishedPost && post.state === "published")) return ["POST_STATE_MISMATCH", "Official publication requires draft post", "post_state"] as const;
+  if (post.state === "draft" && post.version !== command.expectedPostVersion) return ["POST_VERSION_CONFLICT", "Post version differs from the expected version", "post_version"] as const;
+  if (!post.content.trim() || (post.state === "draft" && command.payloadReference !== `post:${post.id}:v${post.version}`)) return ["PAYLOAD_REFERENCE_MISMATCH", "Persisted publication payload is invalid", "payload"] as const;
   return null;
 }
 
@@ -128,12 +128,25 @@ export async function publishOfficialPost(
   }
 
   let finalReceipt: OfficialPublicationReceipt | null = await dependencies.receipts.findFinal(command);
-  const [offer, post] = await Promise.all([
+  let [offer, post] = await Promise.all([
     dependencies.repository.findOffer(command.offerId, command.tenantId),
     dependencies.repository.findPost(command.postId, command.tenantId)
   ]);
 
-  const precondition = preconditionError(command, offer, post);
+  if (offer?.state === "posted") {
+    const relatedPosts = await dependencies.repository.findPostsByOffer(command.offerId, command.tenantId);
+    if (relatedPosts.some((relatedPost) => relatedPost.state === "draft")) {
+      const reconciliation = await dependencies.state.reconcileOffer({ command });
+      if (reconciliation.status === "rejected") {
+        const result = rejected(command, "RECONCILIATION_REQUIRED", reconciliation.message, "offer_reconciliation", startedAt);
+        await dependencies.reservations.markReconciliationRequired(command.idempotencyKey, commandFingerprint, result);
+        return auditRejection(command, dependencies, result, audit);
+      }
+      offer = { ...offer, state: "approved", version: offer.version - 1 };
+    }
+  }
+
+  const precondition = preconditionError(command, offer, post, Boolean(finalReceipt));
   if (precondition) {
     const result = rejected(command, precondition[0], precondition[1], precondition[2], startedAt);
     await dependencies.reservations.complete(command.idempotencyKey, commandFingerprint, result);
@@ -208,8 +221,12 @@ export async function publishOfficialPost(
     return auditRejection(command, dependencies, result, audit);
   }
 
-  audit.offerCondition = "first_confirmed_receipt";
-  const offerState = await dependencies.state.concludeOffer({ command, receipt: finalReceipt });
+  const relatedPosts = await dependencies.repository.findPostsByOffer(command.offerId, command.tenantId);
+  const shouldConcludeOffer = !relatedPosts.some((relatedPost) => relatedPost.state === "draft");
+  audit.offerCondition = shouldConcludeOffer ? "first_confirmed_receipt" : "pending_posts";
+  const offerState = shouldConcludeOffer
+    ? await dependencies.state.concludeOffer({ command, receipt: finalReceipt })
+    : { status: "applied" as const, auditId: "offer-not-concluded", newState: "approved" as const };
   audit.offerTransition = offerState.status;
   if (offerState.status === "rejected") {
     const result = rejected(command, "RECONCILIATION_REQUIRED", offerState.message, "offer_transition", startedAt);
@@ -226,9 +243,9 @@ export async function publishOfficialPost(
     externalId: finalReceipt.externalId!,
     receiptId: finalReceipt.receiptId,
     postState: "published" as const,
-    offerState: "posted" as const,
+    offerState: shouldConcludeOffer ? "posted" as const : "approved" as const,
     postAuditId: postState.auditId,
-    offerAuditId: offerState.auditId,
+    offerAuditId: shouldConcludeOffer ? offerState.auditId : null,
     completedAt: dependencies.clock.now(),
     replay: false
   };
