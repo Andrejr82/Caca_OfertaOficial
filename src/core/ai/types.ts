@@ -43,6 +43,7 @@ export interface OfficialAIBatchMetrics {
   idempotentReplays: number;
   stalePending: number;
   batchCompleted: boolean;
+  observability?: import("./ports").OfficialAICycleTelemetrySummary;
 }
 
 export interface OfficialAIOffer {

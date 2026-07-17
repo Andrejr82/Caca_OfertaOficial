@@ -25,6 +25,43 @@ export interface AIProviderRequest {
   metadata: Readonly<Record<string, string | number | boolean>>;
 }
 
+export interface OfficialAITelemetryEvent {
+  eventType: string;
+  correlationId: string;
+  offerId?: string;
+  marketplace?: string;
+  provider?: string | null;
+  model?: string | null;
+  attempt?: number;
+  fallback?: boolean;
+  stage: string;
+  durationMs?: number;
+  details?: Record<string, unknown>;
+}
+
+export interface OfficialAICycleTelemetrySummary {
+  providerModels: Record<string, number>;
+  fallbacks: number;
+  invalidProviderOutputByRule: Record<string, number>;
+  providerFailureByCause: Record<string, number>;
+}
+
+export interface OfficialAITelemetryPort {
+  emit(event: OfficialAITelemetryEvent): void | Promise<void>;
+  snapshot?(correlationId: string): OfficialAICycleTelemetrySummary;
+}
+
+export async function emitOfficialAITelemetrySafely(
+  telemetry: OfficialAITelemetryPort | undefined,
+  event: OfficialAITelemetryEvent
+): Promise<void> {
+  try {
+    await telemetry?.emit(event);
+  } catch {
+    // Telemetry failure is intentionally invisible to business processing.
+  }
+}
+
 export interface AIProviderResponse {
   content: unknown;
   provider: string;
@@ -113,4 +150,5 @@ export interface OfficialAIServiceDependencies {
   idempotency: OfficialAIIdempotencyPort;
   audit: OfficialAIAuditPort;
   clock: OfficialAIClockPort;
+  telemetry?: OfficialAITelemetryPort;
 }

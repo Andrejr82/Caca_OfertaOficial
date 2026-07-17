@@ -24,17 +24,43 @@ export function isCopyV2TextSafe(copy: string) {
   return !forbiddenOpening.test(copy) && !forbiddenLink.test(copy);
 }
 
-export function validateOfficialAIHook(value: unknown): string | null {
-  const hook = typeof value === "string"
+export type OfficialAIHookRule =
+  | "HOOK_VALID"
+  | "HOOK_MISSING"
+  | "HOOK_NOT_STRING"
+  | "HOOK_TOO_SHORT"
+  | "HOOK_TOO_LONG"
+  | "HOOK_CONTAINS_NEWLINE"
+  | "HOOK_CONTAINS_URL"
+  | "HOOK_INVALID_GREETING";
+
+export interface OfficialAIHookInspection {
+  hook: string | null;
+  rule: OfficialAIHookRule;
+  receivedLength: number;
+}
+
+export function inspectOfficialAIHook(value: unknown): OfficialAIHookInspection {
+  const received = typeof value === "string"
     ? value
     : value && typeof value === "object" && typeof (value as { hook?: unknown }).hook === "string"
       ? (value as { hook: string }).hook
       : null;
-  if (!hook) return null;
-  const normalized = hook.replace(/\s+/gu, " ").trim();
-  if (normalized.length < 3 || normalized.length > 40 || /[\n\r]|https?:\/\/|www\./iu.test(normalized)) return null;
-  if (/\b(?:Olá|Confira|Conheça|Não perca)\b/iu.test(normalized)) return null;
-  return normalized;
+  if (received === null) return { hook: null, rule: value == null ? "HOOK_MISSING" : "HOOK_NOT_STRING", receivedLength: 0 };
+  const normalized = received.replace(/\s+/gu, " ").trim();
+  if (!normalized) return { hook: null, rule: "HOOK_MISSING", receivedLength: received.length };
+  if (normalized.length < 3) return { hook: null, rule: "HOOK_TOO_SHORT", receivedLength: received.length };
+  if (normalized.length > 40) return { hook: null, rule: "HOOK_TOO_LONG", receivedLength: received.length };
+  // Preserve existing behavior: validation evaluates newlines after whitespace
+  // normalization, so this inspection cannot introduce a new rejection rule.
+  if (/[\n\r]/u.test(normalized)) return { hook: null, rule: "HOOK_CONTAINS_NEWLINE", receivedLength: received.length };
+  if (/https?:\/\/|www\./iu.test(normalized)) return { hook: null, rule: "HOOK_CONTAINS_URL", receivedLength: received.length };
+  if (/\b(?:Olá|Confira|Conheça|Não perca)\b/iu.test(normalized)) return { hook: null, rule: "HOOK_INVALID_GREETING", receivedLength: received.length };
+  return { hook: normalized, rule: "HOOK_VALID", receivedLength: received.length };
+}
+
+export function validateOfficialAIHook(value: unknown): string | null {
+  return inspectOfficialAIHook(value).hook;
 }
 
 export function validateOfficialAIContent(value: unknown, channels: readonly OfficialAIChannel[]): OfficialAIContent | null {

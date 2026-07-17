@@ -1,6 +1,6 @@
-import type { OfficialAIServiceDependencies } from "./ports";
+import { emitOfficialAITelemetrySafely, type OfficialAIServiceDependencies } from "./ports";
 import type { BatchCursor } from "./ports";
-import { isCopyV2TextSafe, validateOfficialAIHook } from "./content-schema";
+import { inspectOfficialAIHook, isCopyV2TextSafe } from "./content-schema";
 import { buildCopyV2ChannelCopy, buildOfficialPrompt } from "./prompt";
 import type {
   OfficialAIAuditRecord,
@@ -19,6 +19,15 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // ---------------------------------------------------------------------------
 type InternalMode = "draft_generation" | "approval";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
+
+async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
+  await emitOfficialAITelemetrySafely(dependencies.telemetry, event);
+}
+
+function exceptionDetails(error: unknown) {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return { exceptionType: value.name, exceptionMessageChars: value.message.length, exceptionStackChars: (value.stack ?? "").length };
+}
 
 // ---------------------------------------------------------------------------
 // Utilitários internos
@@ -282,7 +291,8 @@ export async function generateOfficialAI(
       const result: OfficialAIDraftedResult = {
         status: "drafted", commandId: command.commandId, offerId: command.offerId,
         offerState: "pending_manual_review", drafts: draftsCreated,
-        completedAt: dependencies.clock.now(), batchCompleted: metrics.batchCompleted, batch: metrics
+        completedAt: dependencies.clock.now(), batchCompleted: metrics.batchCompleted,
+        batch: { ...metrics, observability: dependencies.telemetry?.snapshot?.(command.correlationId) }
       };
       await dependencies.audit.register({
         ...auditBase(command, dependencies), provider: "official-ai-cycle", model: "deterministic-page",
@@ -505,13 +515,25 @@ export async function generateOfficialAI(
 
   // 7. Inferência (comum a ambos os modos).
   let inference;
+  const inferenceStartedAt = Date.now();
+  const prompt = buildOfficialPrompt(offer!, command.channels);
+  await emitTelemetry(dependencies, {
+    eventType: "official_ai.inference.started", correlationId: command.correlationId, offerId: command.offerId,
+    marketplace: offer!.marketplace, provider: provider.name, model: provider.model, stage: "inference",
+    details: { temperature: 0.4, maxTokens: 2_000, timeoutMs: 30_000 }
+  });
   try {
     inference = await provider.generate({
-      prompt: buildOfficialPrompt(offer!, command.channels), correlationId: command.correlationId,
+      prompt, correlationId: command.correlationId,
       timeoutMs: 30_000, temperature: 0.4, maxTokens: 2_000,
-      metadata: { commandId: command.commandId, offerId: command.offerId }
+      metadata: { commandId: command.commandId, offerId: command.offerId, marketplace: offer!.marketplace }
     });
   } catch (error) {
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.inference.failed", correlationId: command.correlationId, offerId: command.offerId,
+      marketplace: offer!.marketplace, provider: provider.name, model: provider.model, stage: "inference",
+      durationMs: Date.now() - inferenceStartedAt, details: exceptionDetails(error)
+    });
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
@@ -520,16 +542,38 @@ export async function generateOfficialAI(
       provider.name, provider.model
     );
   }
+  await emitTelemetry(dependencies, {
+    eventType: "official_ai.inference.completed", correlationId: command.correlationId, offerId: command.offerId,
+    marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
+    durationMs: inference.latencyMs, details: { finishReason: inference.finishReason ?? null, usage: inference.usage ?? null }
+  });
 
   // 8. Validação do conteúdo gerado (comum a ambos os modos).
   const providerData = inference.content && typeof inference.content === "object"
     ? inference.content as { hook?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> }
     : {};
-  const hooks = Object.fromEntries(command.channels.map((channel) => {
-    const candidate = providerData.hooks?.[channel] ?? providerData.hook ?? providerData.channelCopies?.[channel];
-    return [channel, validateOfficialAIHook(typeof candidate === "string" ? candidate.split(/[\r\n]/u, 1)[0] : candidate)];
+  const inspections = Object.fromEntries(command.channels.map((channel) => {
+    const rawCandidate = providerData.hooks?.[channel] ?? providerData.hook ?? providerData.channelCopies?.[channel];
+    const candidate = typeof rawCandidate === "string" ? rawCandidate.split(/[\r\n]/u, 1)[0] : rawCandidate;
+    return [channel, inspectOfficialAIHook(candidate)];
   }));
+  for (const channel of command.channels) {
+    const inspection = inspections[channel];
+    await emitTelemetry(dependencies, {
+      eventType: inspection.hook ? "official_ai.validation.channel.accepted" : "official_ai.validation.channel.rejected",
+      correlationId: command.correlationId, offerId: command.offerId, marketplace: offer!.marketplace,
+      provider: inference.provider, model: inference.model, stage: "hook_validation",
+      details: { channel, rule: inspection.rule, hookFound: Boolean(inspection.hook), length: inspection.receivedLength }
+    });
+  }
+  const hooks = Object.fromEntries(command.channels.map((channel) => [channel, inspections[channel].hook]));
   if (Object.values(hooks).some((hook) => !hook)) {
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.validation.failed", correlationId: command.correlationId, offerId: command.offerId,
+      marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "hook_validation",
+      durationMs: Date.now() - inferenceStartedAt,
+      details: { errorCode: "INVALID_PROVIDER_OUTPUT", failedChannels: command.channels.filter((channel) => !hooks[channel]).map((channel) => ({ channel, rule: inspections[channel].rule })) }
+    });
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
@@ -563,9 +607,20 @@ export async function generateOfficialAI(
 
   // 9. Persistência dos drafts (comum a ambos os modos).
   let drafts;
+  const persistenceStartedAt = Date.now();
+  await emitTelemetry(dependencies, {
+    eventType: "official_ai.drafts.persistence.started", correlationId: command.correlationId, offerId: command.offerId,
+    marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "draft_persistence",
+    details: { channels: command.channels }
+  });
   try {
     drafts = await dependencies.content.persistDrafts({ command, offer: offer!, content, channels: command.channels });
   } catch (error) {
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.drafts.persistence.failed", correlationId: command.correlationId, offerId: command.offerId,
+      marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "draft_persistence",
+      durationMs: Date.now() - persistenceStartedAt, details: exceptionDetails(error)
+    });
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "DRAFT_PERSISTENCE_FAILURE", error instanceof Error ? error.message : "Draft persistence failed",
@@ -574,6 +629,12 @@ export async function generateOfficialAI(
       inference.provider, inference.model, inference.latencyMs, command.channels.length
     );
   }
+  await emitTelemetry(dependencies, {
+    eventType: "official_ai.drafts.persistence.completed", correlationId: command.correlationId, offerId: command.offerId,
+    marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "draft_persistence",
+    durationMs: Date.now() - persistenceStartedAt,
+    details: { drafts: drafts.map((draft) => ({ postId: draft.postId, affiliateLinkId: draft.affiliateLinkId, channel: draft.channel, state: draft.state })) }
+  });
   if (drafts.length !== command.channels.length || drafts.some((draft) => draft.state !== "draft")) {
     return rejectAndRecord(
       command, dependencies, fingerprint,

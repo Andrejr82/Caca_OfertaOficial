@@ -1,4 +1,4 @@
-import type { OfficialAIResult } from "@/core/ai";
+import type { OfficialAICycleTelemetrySummary, OfficialAIResult } from "@/core/ai";
 
 const CHECKPOINT_PREFIX = "pmav5.ai.cycle.checkpoint.";
 
@@ -10,6 +10,7 @@ export interface OfficialAICycleMetrics {
   rejectedOffers: number;
   idempotentReplays: number;
   stalePending: number;
+  observability: OfficialAICycleTelemetrySummary;
 }
 
 export interface OfficialAICycleCheckpoint {
@@ -25,8 +26,32 @@ export interface OfficialAICycleCheckpoint {
 
 const emptyMetrics = (): OfficialAICycleMetrics => ({
   pagesProcessed: 0, offersVisited: 0, draftedOffers: 0, draftsPersisted: 0,
-  rejectedOffers: 0, idempotentReplays: 0, stalePending: 0
+  rejectedOffers: 0, idempotentReplays: 0, stalePending: 0,
+  observability: emptyObservability()
 });
+
+const emptyObservability = (): OfficialAICycleTelemetrySummary => ({
+  providerModels: {}, fallbacks: 0, invalidProviderOutputByRule: {}, providerFailureByCause: {}
+});
+
+function sumCounters(left: Record<string, number>, right: Record<string, number>) {
+  return Object.fromEntries([...Object.entries(left), ...Object.entries(right)]
+    .reduce((acc, [key, value]) => acc.set(key, (acc.get(key) ?? 0) + value), new Map<string, number>()));
+}
+
+function sumObservability(
+  left: OfficialAICycleTelemetrySummary | undefined,
+  right: OfficialAICycleTelemetrySummary | undefined
+): OfficialAICycleTelemetrySummary {
+  const before = left ?? emptyObservability();
+  const after = right ?? emptyObservability();
+  return {
+    providerModels: sumCounters(before.providerModels, after.providerModels),
+    fallbacks: before.fallbacks + after.fallbacks,
+    invalidProviderOutputByRule: sumCounters(before.invalidProviderOutputByRule, after.invalidProviderOutputByRule),
+    providerFailureByCause: sumCounters(before.providerFailureByCause, after.providerFailureByCause)
+  };
+}
 
 function key(correlationId: string) {
   return `${CHECKPOINT_PREFIX}${correlationId}`;
@@ -86,7 +111,8 @@ export async function advanceCycleCheckpoint(
       draftsPersisted: checkpoint.metrics.draftsPersisted + (batch?.draftsPersisted ?? 0),
       rejectedOffers: checkpoint.metrics.rejectedOffers + (batch?.rejectedOffers ?? 0),
       idempotentReplays: checkpoint.metrics.idempotentReplays + (batch?.idempotentReplays ?? 0),
-      stalePending: checkpoint.metrics.stalePending + (batch?.stalePending ?? 0)
+      stalePending: checkpoint.metrics.stalePending + (batch?.stalePending ?? 0),
+      observability: sumObservability(checkpoint.metrics.observability, batch?.observability)
     },
     pageStatuses: [...checkpoint.pageStatuses, { pageNumber, status: pageStatus }],
     updatedAt: new Date().toISOString()

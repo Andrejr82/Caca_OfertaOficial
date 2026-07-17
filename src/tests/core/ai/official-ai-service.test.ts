@@ -247,6 +247,32 @@ describe("generateOfficialAI", () => {
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
 
+  it("registra regra e canal para hook rejeitado", async () => {
+    const events: any[] = [];
+    const dependencies = createDependencies({ telemetry: { emit: (event) => events.push(event) } });
+    vi.mocked(dependencies.providers.resolve("groq").generate).mockResolvedValue({
+      content: { hook: "x" }, provider: "groq", model: "llama-3.3-70b-versatile", latencyMs: 10
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toMatchObject({ status: "rejected", code: "INVALID_PROVIDER_OUTPUT" });
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: "official_ai.validation.channel.rejected", details: expect.objectContaining({ channel: "telegram", rule: "HOOK_TOO_SHORT" }) }),
+      expect.objectContaining({ eventType: "official_ai.validation.failed", details: expect.objectContaining({ errorCode: "INVALID_PROVIDER_OUTPUT" }) })
+    ]));
+  });
+
+  it("continua gerando draft quando telemetry.emit rejeita", async () => {
+    const dependencies = createDependencies({
+      offers: { findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) },
+      telemetry: { emit: async () => { throw new Error("telemetry offline"); } }
+    });
+    const result = await generateOfficialAI(command, dependencies);
+    expect(result).toMatchObject({ status: "drafted", offerState: "pending_manual_review" });
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
+  });
+
   it("mantém selected quando provider, posts ou aprovação falham", async () => {
     for (const stage of ["provider", "posts", "approval"] as const) {
       const dependencies = createDependencies();

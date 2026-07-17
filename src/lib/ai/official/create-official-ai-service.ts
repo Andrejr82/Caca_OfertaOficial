@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AIProviderPort, AIProviderRegistryPort } from "@/core/ai";
+import { emitOfficialAITelemetrySafely } from "@/core/ai/ports";
 import { CerebrasOfficialAIProvider } from "@/core/ai/providers/cerebras-provider";
 import { GroqOfficialAIProvider } from "@/core/ai/providers/groq-provider";
 import { OfficialAIProviderRequestError } from "@/core/ai/providers/http-provider";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { SupabaseOfficialAIRegenerationAdapter, withSupabaseOfficialAIAdapters } from "./supabase-official-ai-adapter";
 import { AIObservabilityAuditAdapter, createServerObservabilityDependencies } from "@/lib/observability";
+import { promptTelemetry, StructuredOfficialAITelemetry } from "./official-ai-telemetry";
 
 type ProviderName = "groq" | "cerebras";
 type CredentialLabel = `${ProviderName}:${"primary" | "secondary"}`;
@@ -35,6 +37,7 @@ export interface OfficialAIProviderRegistryOptions {
   fetcher?: typeof fetch;
   now?: () => number;
   cooldowns?: Map<string, number>;
+  telemetry?: import("@/core/ai").OfficialAITelemetryPort;
 }
 
 export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
@@ -60,13 +63,15 @@ export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
             model: env.CEREBRAS_MODEL || "gpt-oss-120b",
             baseUrl: `${(env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1").replace(/\/$/, "")}/chat/completions`,
             fetcher: options.fetcher,
-            now
+            now,
+            telemetry: options.telemetry
           })
         : new GroqOfficialAIProvider({
             apiKey,
             model: env.GROQ_MODEL || "llama-3.3-70b-versatile",
             fetcher: options.fetcher,
-            now
+            now,
+            telemetry: options.telemetry
           });
       return [{ label: `${name}:${slot}` as CredentialLabel, provider }];
     }));
@@ -83,12 +88,49 @@ export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
       model: first.model,
       generate: async (request) => {
         const attempts: AttemptSummary[] = [];
+        let attempt = 0;
         for (const credential of chain) {
           if ((cooldowns.get(credential.label) ?? 0) > now()) continue;
+          attempt += 1;
           cooldowns.delete(credential.label);
+          const fallback = attempt > 1;
+          await emitOfficialAITelemetrySafely(options.telemetry, {
+            eventType: fallback ? "official_ai.provider.fallback.started" : "official_ai.provider.selected",
+            correlationId: request.correlationId,
+            offerId: typeof request.metadata.offerId === "string" ? request.metadata.offerId : undefined,
+            marketplace: typeof request.metadata.marketplace === "string" ? request.metadata.marketplace : undefined,
+            provider: credential.provider.name, model: credential.provider.model, attempt, fallback, stage: "provider_registry",
+            details: { credential: credential.label, temperature: request.temperature, maxTokens: request.maxTokens, timeoutMs: request.timeoutMs, ...promptTelemetry(request.prompt) }
+          });
+          const attemptStartedAt = Date.now();
           try {
-            return await credential.provider.generate(request);
+            const result = await credential.provider.generate({ ...request, metadata: { ...request.metadata, attempt, fallback } });
+            await emitOfficialAITelemetrySafely(options.telemetry, {
+              eventType: "official_ai.provider.attempt.completed", correlationId: request.correlationId,
+              offerId: typeof request.metadata.offerId === "string" ? request.metadata.offerId : undefined,
+              marketplace: typeof request.metadata.marketplace === "string" ? request.metadata.marketplace : undefined,
+              provider: result.provider, model: result.model, attempt, fallback, stage: "provider_registry", durationMs: result.latencyMs,
+              details: { credential: credential.label, finishReason: result.finishReason ?? null }
+            });
+            return result;
           } catch (error) {
+            const source = error instanceof Error ? error : new Error(String(error));
+            const providerError = error instanceof OfficialAIProviderRequestError ? error : null;
+            await emitOfficialAITelemetrySafely(options.telemetry, {
+              eventType: "official_ai.provider.attempt.failed", correlationId: request.correlationId,
+              offerId: typeof request.metadata.offerId === "string" ? request.metadata.offerId : undefined,
+              marketplace: typeof request.metadata.marketplace === "string" ? request.metadata.marketplace : undefined,
+              provider: credential.provider.name, model: credential.provider.model, attempt, fallback, stage: "provider_registry",
+              durationMs: Date.now() - attemptStartedAt,
+              details: {
+                credential: credential.label, exceptionType: source.name, exceptionMessageChars: source.message.length, exceptionStackChars: (source.stack ?? "").length,
+                failureCode: providerError?.code ?? null, httpStatus: providerError?.status ?? null,
+                timeout: providerError?.timeout ?? false, network: providerError?.network ?? false,
+                retryAfterMs: providerError?.retryAfterMs ?? null, retryEligible: providerError
+                  ? providerError.timeout || providerError.network || RETRYABLE_STATUSES.has(providerError.status ?? 0)
+                  : false
+              }
+            });
             if (!(error instanceof OfficialAIProviderRequestError)) throw error;
             if (!error.timeout && !error.network && !RETRYABLE_STATUSES.has(error.status ?? 0)) throw error;
             attempts.push({
@@ -120,17 +162,20 @@ export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
 }
 
 export function createOfficialAIServiceDependencies(client: SupabaseClient, tenantId: string) {
+  const telemetry = new StructuredOfficialAITelemetry();
   const dependencies = withSupabaseOfficialAIAdapters(
     client,
     tenantId,
     createSupabaseStateDependencies(client, tenantId),
     {
-      providers: new OfficialAIProviderRegistry(),
-      clock: { now: () => new Date().toISOString() }
+      providers: new OfficialAIProviderRegistry({ telemetry }),
+      clock: { now: () => new Date().toISOString() },
+      telemetry
     }
   );
   return {
     ...dependencies,
+    telemetry,
     audit: new AIObservabilityAuditAdapter(
       dependencies.audit,
       createServerObservabilityDependencies()
@@ -139,8 +184,9 @@ export function createOfficialAIServiceDependencies(client: SupabaseClient, tena
 }
 
 export function createOfficialAIRegenerationDependencies(client: SupabaseClient, tenantId: string) {
+  const telemetry = new StructuredOfficialAITelemetry();
   return {
     drafts: new SupabaseOfficialAIRegenerationAdapter(client, tenantId),
-    providers: new OfficialAIProviderRegistry()
+    providers: new OfficialAIProviderRegistry({ telemetry })
   };
 }

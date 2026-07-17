@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { OfficialAIProviderRegistry } from "@/lib/ai/official/create-official-ai-service";
+import { StructuredOfficialAITelemetry } from "@/lib/ai/official/official-ai-telemetry";
 import type { AIProviderRequest, OfficialAIContent } from "@/core/ai";
 
 const content: OfficialAIContent = {
@@ -48,6 +49,7 @@ const canonicalEnv = (overrides: Record<string, string | undefined> = {}): Recor
 function registry(env = canonicalEnv(), fetcher = vi.fn().mockResolvedValue(success()), options: {
   now?: () => number;
   cooldowns?: Map<string, number>;
+  telemetry?: { emit(event: any): void };
 } = {}) {
   return {
     registry: new OfficialAIProviderRegistry({ env, fetcher, cooldowns: new Map(), ...options }),
@@ -130,6 +132,18 @@ describe("OfficialAIProviderRegistry", () => {
     const fetcher = vi.fn().mockResolvedValueOnce(httpError(429)).mockResolvedValueOnce(httpError(429)).mockResolvedValueOnce(success());
     await registry(canonicalEnv(), fetcher).registry.resolve().generate(request);
     expect(calledKeys(fetcher)).toEqual(["cerebras-primary-secret", "cerebras-secondary-secret", "groq-primary-secret"]);
+  });
+
+  it("registra troca para fallback com correlação e tentativa", async () => {
+    const events: any[] = [];
+    const fetcher = vi.fn().mockResolvedValueOnce(httpError(503)).mockResolvedValue(success());
+    await registry(canonicalEnv({ CEREBRAS_API_KEY_2: "" }), fetcher, {
+      telemetry: { emit: (event) => events.push(event) }
+    }).registry.resolve().generate(request);
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: "official_ai.provider.selected", provider: "cerebras", attempt: 1, fallback: false, correlationId: request.correlationId }),
+      expect.objectContaining({ eventType: "official_ai.provider.fallback.started", provider: "groq", attempt: 2, fallback: true, correlationId: request.correlationId })
+    ]));
   });
 
   it.each([408, 500, 502, 503, 504])("avança em HTTP %s", async (status) => {
@@ -258,10 +272,65 @@ describe("OfficialAIProviderRegistry", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("registra status HTTP, falha do parser e causa da tentativa", async () => {
+    const events: Array<{ eventType: string; details: Record<string, unknown> }> = [];
+    const invalid = new Response(JSON.stringify({ choices: [{ message: { content: "{" } }] }), { status: 200 });
+    const { registry: target } = registry(canonicalEnv(), vi.fn().mockResolvedValue(invalid), {
+      telemetry: { emit: (event) => { events.push(event); } }
+    });
+
+    await expect(target.resolve().generate(request)).rejects.toThrow("INVALID_JSON");
+
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventType: "official_ai.provider.response.received", details: expect.objectContaining({ httpStatus: 200 }) }),
+      expect.objectContaining({ eventType: "official_ai.provider.parser.failed", details: expect.objectContaining({ responseChars: 1 }) }),
+      expect.objectContaining({ eventType: "official_ai.provider.attempt.failed", details: expect.objectContaining({ failureCode: null, retryEligible: false }) })
+    ]));
+  });
+
+  it("agrega o resumo do ciclo pelo correlationId", () => {
+    const telemetry = new StructuredOfficialAITelemetry();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    telemetry.emit({ eventType: "official_ai.provider.attempt.completed", correlationId: "cycle-1", provider: "cerebras", model: "gpt-oss-120b", stage: "provider_registry" });
+    telemetry.emit({ eventType: "official_ai.provider.fallback.started", correlationId: "cycle-1", provider: "groq", model: "llama", fallback: true, stage: "provider_registry" });
+    telemetry.emit({ eventType: "official_ai.validation.channel.rejected", correlationId: "cycle-1", stage: "hook_validation", details: { rule: "HOOK_TOO_SHORT" } });
+    telemetry.emit({ eventType: "official_ai.provider.attempt.failed", correlationId: "cycle-1", stage: "provider_registry", details: { failureCode: "HTTP_503" } });
+    expect(telemetry.snapshot("cycle-1")).toEqual({
+      providerModels: { "cerebras:gpt-oss-120b": 1 }, fallbacks: 1,
+      invalidProviderOutputByRule: { HOOK_TOO_SHORT: 1 }, providerFailureByCause: { HTTP_503: 1 }
+    });
+    log.mockRestore();
+  });
+
+  it("redige segredos, payloads e dados pessoais antes da serialização", () => {
+    const telemetry = new StructuredOfficialAITelemetry();
+    const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    telemetry.emit({
+      eventType: "test", correlationId: "cycle-sensitive", stage: "test",
+      details: {
+        authorization: "Bearer auth-secret",
+        apiKey: "api-secret",
+        token: "token-secret",
+        cookie: "cookie-secret",
+        prompt: "prompt completo",
+        payload: "payload completo",
+        email: "person@example.com",
+        phone: "+55 11 99999-9999",
+        cpf: "123.456.789-09"
+      }
+    });
+    const output = String(log.mock.calls[0]?.[0]);
+    expect(output).toContain("[REDACTED]");
+    for (const value of ["Authorization", "Bearer", "auth-secret", "api-secret", "token-secret", "cookie-secret", "prompt completo", "payload completo", "person@example.com", "99999-9999", "123.456.789-09"]) {
+      expect(output).not.toContain(value);
+    }
+    log.mockRestore();
+  });
+
   it("geração inicial e regeneração instanciam a mesma política compartilhada", async () => {
     const source = await import("node:fs").then(({ readFileSync }) => readFileSync(
       "src/lib/ai/official/create-official-ai-service.ts", "utf8"
     ));
-    expect(source.match(/providers:\s*new OfficialAIProviderRegistry\(\)/gu)).toHaveLength(2);
+    expect(source.match(/providers:\s*new OfficialAIProviderRegistry\(/gu)).toHaveLength(2);
   });
 });

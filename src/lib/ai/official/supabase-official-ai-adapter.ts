@@ -8,9 +8,11 @@ import type {
   OfficialAIOfferPort,
   OfficialAIRegenerationFilters,
   OfficialAIRegenerationPort,
-  OfficialAIResult
+  OfficialAIResult,
+  OfficialAITelemetryPort
 } from "@/core/ai";
 import { getOfficialAIRegenerationBatchLimit, isOfficialAIRegenerationCursor } from "@/core/ai/official-ai-regeneration-service";
+import { emitOfficialAITelemetrySafely } from "@/core/ai/ports";
 import type { BatchCursor, OfficialAIApprovalPort, OfficialAIServiceDependencies } from "@/core/ai/ports";
 import type { StateServiceDependencies } from "@/core/state";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
@@ -74,8 +76,13 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
 
   constructor(
     private readonly client: SupabaseClient,
-    private readonly tenantId: string
+    private readonly tenantId: string,
+    private readonly telemetry?: OfficialAITelemetryPort
   ) {}
+
+  private async emit(event: Parameters<OfficialAITelemetryPort["emit"]>[0]) {
+    await emitOfficialAITelemetrySafely(this.telemetry, event);
+  }
 
   async findById(offerId: string, tenantId: string): Promise<OfficialAIOffer | null> {
     if (tenantId !== this.tenantId) return null;
@@ -184,6 +191,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
   async persistDrafts(input: Parameters<OfficialAIContentPort["persistDrafts"]>[0]) {
     const drafts = [];
     for (const channel of input.channels) {
+      const startedAt = Date.now();
       const subId = createSubId(channel, input.offer.productName, input.offer.id);
       const trackedUrl = createTrackedUrl(input.offer.originalUrl, subId);
       const { data: link, error: linkError } = await this.client
@@ -199,6 +207,11 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
         .select("id")
         .single();
       if (linkError || !link) throw new Error(`Official AI affiliate link failed for ${channel}: ${linkError?.message ?? "missing row"}`);
+      await this.emit({
+        eventType: "official_ai.persistence.affiliate_link.upserted", correlationId: input.command.correlationId,
+        offerId: input.offer.id, marketplace: input.offer.marketplace, stage: "draft_persistence",
+        details: { channel, affiliateLinkId: link.id, operation: "upsert" }
+      });
 
       const { data: existing, error: existingError } = await this.client
         .from("posts")
@@ -226,6 +239,17 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
           .single();
         if (insertError || !inserted) throw new Error(`Official AI draft insert failed for ${channel}: ${insertError?.message ?? "missing row"}`);
         post = inserted;
+        await this.emit({
+          eventType: "official_ai.persistence.post.inserted", correlationId: input.command.correlationId,
+          offerId: input.offer.id, marketplace: input.offer.marketplace, stage: "draft_persistence", durationMs: Date.now() - startedAt,
+          details: { channel, postId: post.id, affiliateLinkId: post.affiliate_link_id ?? link.id, operation: "insert" }
+        });
+      } else {
+        await this.emit({
+          eventType: "official_ai.persistence.post.idempotent", correlationId: input.command.correlationId,
+          offerId: input.offer.id, marketplace: input.offer.marketplace, stage: "draft_persistence", durationMs: Date.now() - startedAt,
+          details: { channel, postId: post.id, affiliateLinkId: post.affiliate_link_id ?? link.id, operation: "replay" }
+        });
       }
       drafts.push({
         postId: post.id,
@@ -429,9 +453,9 @@ export function withSupabaseOfficialAIAdapters(
   client: SupabaseClient,
   tenantId: string,
   stateDependencies: StateServiceDependencies,
-  remaining: Pick<OfficialAIServiceDependencies, "providers" | "clock">
+  remaining: Pick<OfficialAIServiceDependencies, "providers" | "clock" | "telemetry">
 ): OfficialAIServiceDependencies {
-  const adapter = new SupabaseOfficialAIAdapter(client, tenantId);
+  const adapter = new SupabaseOfficialAIAdapter(client, tenantId, remaining.telemetry);
   return {
     ...remaining,
     offers: adapter,

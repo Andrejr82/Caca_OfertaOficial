@@ -1,4 +1,4 @@
-import type { AIProviderRequest, AIProviderResponse } from "../ports";
+import { emitOfficialAITelemetrySafely, type AIProviderRequest, type AIProviderResponse, type OfficialAITelemetryPort } from "../ports";
 import type { OfficialAIContent } from "../types";
 
 export interface HTTPProviderConfig {
@@ -7,6 +7,16 @@ export interface HTTPProviderConfig {
   baseUrl?: string;
   fetcher?: typeof fetch;
   now?: () => number;
+  telemetry?: OfficialAITelemetryPort;
+}
+
+async function telemetry(config: HTTPProviderConfig, event: Parameters<OfficialAITelemetryPort["emit"]>[0]) {
+  await emitOfficialAITelemetrySafely(config.telemetry, event);
+}
+
+function exceptionDetails(error: unknown) {
+  const value = error instanceof Error ? error : new Error(String(error));
+  return { exceptionType: value.name, exceptionMessageChars: value.message.length, exceptionStackChars: (value.stack ?? "").length };
 }
 
 interface ProviderPayload {
@@ -52,6 +62,18 @@ export async function generateOpenAICompatible(
 ): Promise<AIProviderResponse> {
   const fetcher = config.fetcher ?? fetch;
   const startedAt = Date.now();
+  const attempt = Number(request.metadata.attempt ?? 1);
+  const fallback = request.metadata.fallback === true;
+  const common = {
+    correlationId: request.correlationId,
+    offerId: typeof request.metadata.offerId === "string" ? request.metadata.offerId : undefined,
+    marketplace: typeof request.metadata.marketplace === "string" ? request.metadata.marketplace : undefined,
+    provider, model: config.model, attempt, fallback
+  };
+  await telemetry(config, {
+    eventType: "official_ai.provider.request.started", ...common, stage: "provider_request",
+    details: { temperature: request.temperature, maxTokens: request.maxTokens, timeoutMs: request.timeoutMs }
+  });
   let response: Response;
   try {
     response = await fetcher(config.baseUrl ?? defaultUrl, {
@@ -74,6 +96,10 @@ export async function generateOpenAICompatible(
       signal: AbortSignal.timeout(request.timeoutMs)
     });
   } catch (error) {
+    await telemetry(config, {
+      eventType: "official_ai.provider.request.exception", ...common, stage: "provider_request",
+      durationMs: Date.now() - startedAt, details: exceptionDetails(error)
+    });
     const name = error && typeof error === "object" && "name" in error ? String(error.name) : "";
     if (name === "AbortError" || name === "TimeoutError") {
       throw new OfficialAIProviderRequestError(provider, "TIMEOUT", undefined, undefined, true);
@@ -84,6 +110,11 @@ export async function generateOpenAICompatible(
     throw error;
   }
   const latencyMs = Date.now() - startedAt;
+  await telemetry(config, {
+    eventType: "official_ai.provider.response.received", ...common, stage: "provider_response",
+    durationMs: latencyMs,
+    details: { httpStatus: response.status, responseChars: Number(response.headers.get("content-length") ?? 0) || null }
+  });
   if (!response.ok) {
     throw new OfficialAIProviderRequestError(
       provider,
@@ -92,15 +123,36 @@ export async function generateOpenAICompatible(
       parseRetryAfterMs(response.headers.get("Retry-After"), config.now?.() ?? Date.now())
     );
   }
-  const payload = await response.json() as ProviderPayload;
+  const parserStartedAt = Date.now();
+  await telemetry(config, { eventType: "official_ai.provider.parser.started", ...common, stage: "provider_parser" });
+  let payload: ProviderPayload;
+  try {
+    payload = await response.json() as ProviderPayload;
+  } catch (error) {
+    await telemetry(config, {
+      eventType: "official_ai.provider.parser.failed", ...common, stage: "provider_parser",
+      durationMs: Date.now() - parserStartedAt, details: exceptionDetails(error)
+    });
+    throw error;
+  }
   const choice = payload.choices?.[0];
   if (!choice?.message?.content) throw new Error(`${provider.toUpperCase()}_PROVIDER_ERROR:EMPTY_RESPONSE`);
   let content: OfficialAIContent;
   try {
     content = JSON.parse(choice.message.content) as OfficialAIContent;
-  } catch {
+  } catch (error) {
+    const position = error instanceof SyntaxError ? error.message.match(/position\s+(\d+)/iu)?.[1] ?? null : null;
+    await telemetry(config, {
+      eventType: "official_ai.provider.parser.failed", ...common, stage: "provider_parser",
+      durationMs: Date.now() - parserStartedAt,
+      details: { ...exceptionDetails(error), jsonPosition: position, responseChars: choice.message.content.length }
+    });
     throw new Error(`${provider.toUpperCase()}_PROVIDER_ERROR:INVALID_JSON`);
   }
+  await telemetry(config, {
+    eventType: "official_ai.provider.parser.completed", ...common, stage: "provider_parser",
+    durationMs: Date.now() - parserStartedAt, details: { responseContentChars: choice.message.content.length }
+  });
   const usage = payload.usage
     ? {
         promptTokens: Number(payload.usage.prompt_tokens ?? 0),

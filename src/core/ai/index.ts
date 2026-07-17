@@ -20,7 +20,10 @@ export type {
   OfficialAIRegenerationPort,
   OfficialAIIdempotencyPort,
   OfficialAIOfferPort,
-  OfficialAIServiceDependencies
+  OfficialAIServiceDependencies,
+  OfficialAICycleTelemetrySummary,
+  OfficialAITelemetryEvent,
+  OfficialAITelemetryPort
 } from "./ports";
 export type {
   OfficialAIAuditRecord,

@@ -88,7 +88,8 @@ export async function POST(request: Request) {
         reason: { code: "GENERATE_OFFICIAL_CONTENT" },
         batch: { operation: "PROCESS_OFFERS", offerIds: page.offerIds, pageNumber: page.pageNumber, totalPages: page.totalPages }
       };
-      const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(supabase, userId));
+      const dependencies = createOfficialAIServiceDependencies(supabase, userId);
+      const result = await generateOfficialAI(command, dependencies);
       const advanced = await advanceCycleCheckpoint(supabase, userId, checkpoint, result);
       const batchCompleted = advanced.status === "completed";
       if (batchCompleted) {
@@ -99,6 +100,12 @@ export async function POST(request: Request) {
             pageStatuses: advanced.pageStatuses, batchCompleted: true }
         });
         if (auditError) throw new Error(`Official AI cycle completion audit failed: ${auditError.message}`);
+        try {
+          await dependencies.telemetry?.emit({
+            eventType: "official_ai.cycle.completed", correlationId, stage: "cycle_summary",
+            details: { offerIdsReceived: offerIds.length, ...advanced.metrics, batchCompleted: true }
+          });
+        } catch { /* telemetry cannot alter the completed cycle */ }
       }
       return NextResponse.json({
         ok: result.status !== "rejected", status: advanced.status, correlationId,
