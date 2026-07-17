@@ -119,6 +119,51 @@ export interface OfficialAIRejectedResult {
 
 export type OfficialAIResult = OfficialAIApprovedResult | OfficialAIDraftedResult | OfficialAIRejectedResult;
 
+export type ProviderErrorCategory =
+  | "HTTP_ERROR"
+  | "NETWORK_ERROR"
+  | "TIMEOUT"
+  | "EMPTY_RESPONSE"
+  | "INVALID_JSON"
+  | "RESPONSE_PARSE_ERROR"
+  | "UNKNOWN_PROVIDER_EXCEPTION";
+
+export type ProviderValidationRule =
+  | "MISSING_TITLE"
+  | "MISSING_DESCRIPTION"
+  | "MISSING_SHORT_COPY"
+  | "MISSING_LONG_COPY"
+  | "MISSING_CALL_TO_ACTION"
+  | "MISSING_EXPLANATION"
+  | "INVALID_HASHTAGS"
+  | "EMPTY_HASHTAGS"
+  | "INVALID_HIGHLIGHTS"
+  | "EMPTY_HIGHLIGHTS"
+  | "INVALID_CHANNEL_COPIES"
+  | "REQUESTED_CHANNEL_COPY_MISSING"
+  | "REQUESTED_CHANNEL_COPY_EMPTY"
+  | "INVALID_FIELD_TYPE"
+  | "UNRECOGNIZED_CHANNEL_FIELD"
+  | "UNKNOWN_SCHEMA_ERROR";
+
+export interface ProviderDiagnostic {
+  errorCategory: ProviderErrorCategory;
+  provider: string;
+  model: string;
+  durationMs: number;
+  attempt: 1;
+  httpStatus?: number;
+  responseSize?: number;
+  responseHash?: string;
+}
+
+export class ProviderDiagnosticError extends Error {
+  constructor(message: string, readonly diagnostic: ProviderDiagnostic) {
+    super(message);
+    this.name = "ProviderDiagnosticError";
+  }
+}
+
 export interface OfficialAIAuditRecord {
   timestamp: string;
   commandId: string;
@@ -142,4 +187,12 @@ export interface OfficialAIAuditRecord {
   transitionRequested: boolean;
   transitionCompleted: boolean;
   batchCompleted?: boolean;
+  errorCategory?: ProviderErrorCategory;
+  validationRule?: ProviderValidationRule;
+  httpStatus?: number;
+  durationMs?: number;
+  attempt?: 1;
+  channels?: readonly OfficialAIChannel[];
+  responseSize?: number;
+  responseHash?: string;
 }

@@ -1,14 +1,16 @@
 import type { OfficialAIServiceDependencies } from "./ports";
 import type { BatchCursor } from "./ports";
-import { validateOfficialAIContent } from "./content-schema";
+import { validateOfficialAIContentWithDiagnostics } from "./content-schema";
 import { buildOfficialPrompt } from "./prompt";
-import type {
-  OfficialAIAuditRecord,
-  OfficialAICommand,
-  OfficialAIDraftedResult,
-  OfficialAIOffer,
-  OfficialAIRejectedResult,
-  OfficialAIResult
+import {
+  ProviderDiagnosticError,
+  type OfficialAIAuditRecord,
+  type OfficialAICommand,
+  type OfficialAIDraftedResult,
+  type OfficialAIOffer,
+  type OfficialAIRejectedResult,
+  type OfficialAIResult,
+  type ProviderDiagnostic
 } from "./types";
 import { validateCandidateOffer, validateOfficialAICommand } from "./validation";
 
@@ -103,17 +105,25 @@ async function rejectAndRecord(
   latencyMs: number | null = null,
   postsPrepared = 0,
   postsPersisted = 0,
-  transitionRequested = false
+  transitionRequested = false,
+  diagnostics: Partial<Pick<OfficialAIAuditRecord, "errorCategory" | "validationRule" | "httpStatus" | "durationMs" | "attempt" | "channels" | "responseSize" | "responseHash">> = {}
 ): Promise<OfficialAIRejectedResult> {
   const isBatch = command.offerId === "ALL_PENDING";
   const result = rejected(command, dependencies, code, message, stage, offerState);
   await dependencies.audit.register({
     ...auditBase(command, dependencies), provider, model, latencyMs, result: "rejected", replay: false,
     failureStage: stage, errorCode: code, postsPrepared, postsPersisted, transitionRequested, transitionCompleted: false,
-    batchCompleted: isBatch ? false : undefined
+    batchCompleted: isBatch ? false : undefined, ...diagnostics
   });
   if (fingerprint) await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
   return result;
+}
+
+function unknownProviderDiagnostic(provider: { name: string; model: string }, startedAt: number): ProviderDiagnostic {
+  return {
+    errorCategory: "UNKNOWN_PROVIDER_EXCEPTION", provider: provider.name, model: provider.model,
+    durationMs: Date.now() - startedAt, attempt: 1
+  };
 }
 
 function isValidCursorTimestamp(value: unknown): value is string {
@@ -404,6 +414,7 @@ export async function generateOfficialAI(
 
   // 7. Inferência (comum a ambos os modos).
   let inference;
+  const inferenceStartedAt = Date.now();
   try {
     inference = await provider.generate({
       prompt: buildOfficialPrompt(offer!, command.channels), correlationId: command.correlationId,
@@ -411,26 +422,33 @@ export async function generateOfficialAI(
       metadata: { commandId: command.commandId, offerId: command.offerId }
     });
   } catch (error) {
+    const diagnostic = error instanceof ProviderDiagnosticError
+      ? error.diagnostic
+      : unknownProviderDiagnostic(provider, inferenceStartedAt);
+    const safeMessage = error instanceof ProviderDiagnosticError ? error.message : "Provider failed";
     return rejectAndRecord(
       command, dependencies, fingerprint,
-      "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
+      "PROVIDER_FAILURE", safeMessage,
       "provider",
       mode === "draft_generation" ? "pending_manual_review" : "selected",
-      provider.name, provider.model
+      diagnostic.provider, diagnostic.model, diagnostic.durationMs, 0, 0, false,
+      { ...diagnostic, channels: command.channels }
     );
   }
 
   // 8. Validação do conteúdo gerado (comum a ambos os modos).
-  const content = validateOfficialAIContent(inference.content, command.channels);
-  if (!content) {
+  const validation = validateOfficialAIContentWithDiagnostics(inference.content, command.channels);
+  if (!validation.content) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
       "provider_output",
       mode === "draft_generation" ? "pending_manual_review" : "selected",
-      inference.provider, inference.model, inference.latencyMs
+      inference.provider, inference.model, inference.latencyMs, 0, 0, false,
+      { validationRule: validation.validationRule, durationMs: inference.latencyMs, attempt: 1, channels: command.channels }
     );
   }
+  const content = validation.content;
 
   // 9. Persistência dos drafts (comum a ambos os modos).
   let drafts;

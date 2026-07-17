@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import type { AIProviderRequest, AIProviderResponse } from "../ports";
-import type { OfficialAIContent } from "../types";
+import { ProviderDiagnosticError, type OfficialAIContent, type ProviderDiagnostic, type ProviderErrorCategory } from "../types";
 
 export interface HTTPProviderConfig {
   apiKey: string;
@@ -20,6 +21,38 @@ interface ProviderPayload {
   };
 }
 
+function responseMetadata(body: string): Pick<ProviderDiagnostic, "responseSize" | "responseHash"> {
+  return {
+    responseSize: new TextEncoder().encode(body).byteLength,
+    responseHash: createHash("sha256").update(body).digest("hex")
+  };
+}
+
+async function capturedResponseMetadata(response: Response): Promise<Pick<ProviderDiagnostic, "responseSize" | "responseHash"> | undefined> {
+  try {
+    return responseMetadata(await response.clone().text());
+  } catch {
+    return undefined;
+  }
+}
+
+function providerError(
+  message: string,
+  errorCategory: ProviderErrorCategory,
+  provider: "groq" | "cerebras",
+  config: HTTPProviderConfig,
+  startedAt: number,
+  extra: Partial<Pick<ProviderDiagnostic, "httpStatus" | "responseSize" | "responseHash">> = {}
+): ProviderDiagnosticError {
+  return new ProviderDiagnosticError(message, {
+    errorCategory, provider, model: config.model, durationMs: Date.now() - startedAt, attempt: 1, ...extra
+  });
+}
+
+function timeoutError(error: unknown): boolean {
+  return error instanceof DOMException && (error.name === "TimeoutError" || error.name === "AbortError");
+}
+
 export async function generateOpenAICompatible(
   provider: "groq" | "cerebras",
   defaultUrl: string,
@@ -28,37 +61,65 @@ export async function generateOpenAICompatible(
 ): Promise<AIProviderResponse> {
   const fetcher = config.fetcher ?? fetch;
   const startedAt = Date.now();
-  const response = await fetcher(config.baseUrl ?? defaultUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${config.apiKey}`,
-      "X-Correlation-Id": request.correlationId
-    },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: "system", content: request.prompt.system },
-        { role: "user", content: request.prompt.user }
-      ],
-      temperature: request.temperature,
-      max_tokens: request.maxTokens,
-      response_format: { type: "json_object" }
-    }),
-    signal: AbortSignal.timeout(request.timeoutMs)
-  });
-  const latencyMs = Date.now() - startedAt;
-  if (!response.ok) {
-    throw new Error(`${provider.toUpperCase()}_PROVIDER_ERROR:${response.status}`);
+  let response: Response;
+  try {
+    response = await fetcher(config.baseUrl ?? defaultUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${config.apiKey}`,
+        "X-Correlation-Id": request.correlationId
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          { role: "system", content: request.prompt.system },
+          { role: "user", content: request.prompt.user }
+        ],
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+        response_format: { type: "json_object" }
+      }),
+      signal: AbortSignal.timeout(request.timeoutMs)
+    });
+  } catch (error) {
+    throw providerError(
+      `${provider.toUpperCase()}_PROVIDER_ERROR:${timeoutError(error) ? "TIMEOUT" : "NETWORK_ERROR"}`,
+      timeoutError(error) ? "TIMEOUT" : "NETWORK_ERROR", provider, config, startedAt
+    );
   }
-  const payload = await response.json() as ProviderPayload;
+  const latencyMs = Date.now() - startedAt;
+  const metadata = capturedResponseMetadata(response);
+  if (!response.ok) {
+    throw providerError(
+      `${provider.toUpperCase()}_PROVIDER_ERROR:${response.status}`, "HTTP_ERROR", provider, config, startedAt,
+      { httpStatus: response.status, ...await metadata }
+    );
+  }
+  let payload: ProviderPayload;
+  try {
+    payload = await response.json() as ProviderPayload;
+  } catch {
+    throw providerError(
+      `${provider.toUpperCase()}_PROVIDER_ERROR:RESPONSE_PARSE_ERROR`, "RESPONSE_PARSE_ERROR", provider, config, startedAt,
+      await metadata
+    );
+  }
   const choice = payload.choices?.[0];
-  if (!choice?.message?.content) throw new Error(`${provider.toUpperCase()}_PROVIDER_ERROR:EMPTY_RESPONSE`);
+  if (!choice?.message?.content) {
+    throw providerError(
+      `${provider.toUpperCase()}_PROVIDER_ERROR:EMPTY_RESPONSE`, "EMPTY_RESPONSE", provider, config, startedAt,
+      await metadata
+    );
+  }
   let content: OfficialAIContent;
   try {
     content = JSON.parse(choice.message.content) as OfficialAIContent;
   } catch {
-    throw new Error(`${provider.toUpperCase()}_PROVIDER_ERROR:INVALID_JSON`);
+    throw providerError(
+      `${provider.toUpperCase()}_PROVIDER_ERROR:INVALID_JSON`, "INVALID_JSON", provider, config, startedAt,
+      responseMetadata(choice.message.content)
+    );
   }
   const usage = payload.usage
     ? {
