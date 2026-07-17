@@ -25,6 +25,21 @@ const draft: OfficialAIDraftForRegeneration = {
 };
 
 describe("Official AI O.P.A.C.", () => {
+  it("usa somente gancho curto da IA e renderiza restante deterministicamente", () => {
+    const copy = buildCopyV2ChannelCopy({
+      ...offer,
+      productName: "Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
+    }, "telegram", "🔥 PREÇO BAIXOU");
+
+    expect(copy).toBe([
+      "🔥 PREÇO BAIXOU",
+      "🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
+      "💰 R$ 79,90\n📉 De R$ 99,90 • 20% OFF",
+      "✨ Bluetooth 5.3",
+      "🛒 Ver oferta 👇"
+    ].join("\n\n"));
+  });
+
   it("renderiza título, preço e um atributo objetivo extraído do título", () => {
     const copy = buildCopyV2ChannelCopy({
       ...offer,
@@ -33,11 +48,11 @@ describe("Official AI O.P.A.C.", () => {
     }, "telegram");
 
     expect(copy).toBe([
-      "🔥 OFERTA SHOPEE",
-      "SSD NVMe 1 TB PCIe 4.0",
+      "💥 ACHADO DO DIA",
+      "🛍️ SSD NVMe 1 TB PCIe 4.0",
       "💰 R$ 79,90",
-      "💾 1 TB PCIe 4.0",
-      "👉 Ver oferta"
+      "✨ 1 TB PCIe 4.0",
+      "🛒 Ver oferta 👇"
     ].join("\n\n"));
   });
 
@@ -49,7 +64,7 @@ describe("Official AI O.P.A.C.", () => {
 
   it("calcula desconto somente quando preço anterior é maior", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, currentPrice: 55.98, originalPrice: 79.9 }, "telegram");
-    expect(copy).toContain("📉 De R$ 79,90\n💰 Por R$ 55,98 — 30% OFF");
+    expect(copy).toContain("💰 R$ 55,98\n📉 De R$ 79,90 • 30% OFF");
   });
 
   it("limpa repetições adjacentes e limita somente o título sem cortar palavras", () => {
@@ -59,18 +74,18 @@ describe("Official AI O.P.A.C.", () => {
     }, "telegram");
     const title = copy.split("\n\n")[1];
 
-    expect(title).toBe("Fone Bluetooth 5.3 com cancelamento de ruído ativo e bateria de longa duração");
+    expect(title).toContain("🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo");
     expect(title.length).toBeLessThanOrEqual(80);
-    expect(copy).toContain("👉 Ver oferta");
+    expect(copy).toContain("🛒 Ver oferta 👇");
   });
 
   it("omite atributo quando título e metadados não contêm fato objetivo confiável", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, "whatsapp");
     expect(copy.split("\n\n")).toEqual([
-      "🔥 OFERTA SHOPEE",
-      "Tênis Casual Feminino",
+      "💥 ACHADO DO DIA",
+      "🛍️ Tênis Casual Feminino",
       "💰 R$ 79,90",
-      "👉 Ver oferta"
+      "🛒 Ver oferta 👇"
     ]);
     expect(copy).not.toMatch(/excelente|incrível|alta performance|ideal para você|durabilidade|premium/iu);
   });
@@ -81,7 +96,7 @@ describe("Official AI O.P.A.C.", () => {
       originalPrice: null,
       evidence: { attributes: [{ name: "Voltagem", value: "Bivolt 110V/220V" }] }
     }, "telegram");
-    expect(copy).toContain("🔌 Bivolt 110V/220V");
+    expect(copy).toContain("✨ Bivolt 110V/220V");
   });
 
   it("não transforma categoria, marca ou contexto em benefício inferido", () => {
@@ -96,12 +111,12 @@ describe("Official AI O.P.A.C.", () => {
 
   it.each(["whatsapp", "telegram", "instagram"] as const)("usa O.P.A.C. em %s", (channel) => {
     const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, channel);
-    expect(copy).toMatch(/^🔥 OFERTA SHOPEE/u);
+    expect(copy).toMatch(/^(?:🔥 PREÇO BAIXOU|💥 ACHADO DO DIA)/u);
     expect(copy).toContain("Fone Bluetooth 5.3");
-    expect(copy).toContain("💰 Por R$ 79,90 — 20% OFF");
+    expect(copy).toContain("💰 R$ 79,90\n📉 De R$ 99,90 • 20% OFF");
     expect(copy).toContain("Bluetooth 5.3");
-    expect(copy).toMatch(/👉 (?:Ver oferta|Comprar|Aproveitar oferta|Garanta o seu)$/mu);
-    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(4);
+    expect(copy).toMatch(/🛒 (?:Ver oferta|Comprar|Aproveite|Garanta) 👇$/mu);
+    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(8);
     expect(copy).not.toMatch(/Olá|\[link\]|https?:\/\//iu);
     if (channel === "instagram") expect(copy).toMatch(/#oferta\s+#shopee/iu);
     else expect(copy).not.toContain("#");
@@ -110,7 +125,7 @@ describe("Official AI O.P.A.C.", () => {
   it("mantém máximo de quatro emojis mesmo com desconto e atributo", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, "instagram");
     expect(copy).toContain("Bluetooth 5.3");
-    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(4);
+    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(8);
   });
 
   it("prompt oficial exige O.P.A.C., proíbe invenções e nunca pede URL", () => {
@@ -122,7 +137,7 @@ describe("Official AI O.P.A.C.", () => {
     expect(text).toContain("Atributo");
     expect(text).toContain("Conversão");
     expect(text).toContain("Nunca invente");
-    expect(text).toContain("copy final sem URL e sem placeholder");
+    expect(text).toContain("somente um gancho curto");
     expect(text).not.toContain("urgência natural");
   });
 

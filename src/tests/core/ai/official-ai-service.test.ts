@@ -122,9 +122,9 @@ describe("generateOfficialAI", () => {
 
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
     for (const channel of command.channels) {
-      expect(persisted.channelCopies[channel]).toMatch(/^🔥 OFERTA SHOPEE/u);
-      expect(persisted.channelCopies[channel]).toMatch(/👉 Ver oferta$/u);
-      expect(persisted.channelCopies[channel]).toContain("Bivolt 110V/220V");
+      expect(persisted.channelCopies[channel]).toMatch(new RegExp(`^${channel === "telegram" ? "Telegram" : channel === "instagram" ? "Instagram" : "WhatsApp"} oficial`, "u"));
+      expect(persisted.channelCopies[channel]).toMatch(/🛒 Ver oferta 👇$/u);
+      expect(persisted.channelCopies[channel]).toContain("✨ Bivolt 110V/220V");
       expect(persisted.channelCopies[channel]).not.toMatch(/https?:\/\//iu);
       if (channel === "instagram") expect(persisted.channelCopies[channel]).toContain("#oferta #shopee");
       else expect(persisted.channelCopies[channel]).not.toContain("#");

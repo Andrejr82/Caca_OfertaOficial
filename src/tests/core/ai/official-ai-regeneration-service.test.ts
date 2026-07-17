@@ -44,9 +44,7 @@ const generatedContent = {
   callToAction: "Aproveite",
   highlights: ["Preço atual"],
   explanation: "Somente fatos fornecidos.",
-  channelCopies: {
-    whatsapp: "👟 *Tênis Casual Feminino*\n\n💰 R$ 79,90\n\n🛒 Aproveite:"
-  }
+    channelCopies: { whatsapp: "🔥 PREÇO BAIXOU" }
 };
 
 function dependencies(content = generatedContent): OfficialAIRegenerationDependencies {
@@ -126,10 +124,8 @@ describe("regenerateOfficialDrafts", () => {
       ...generatedContent,
       channelCopies: { whatsapp: "Frete grátis, 10x sem juros e estoque acabando por R$ 1,99." }
     });
-    await expect(regenerateOfficialDrafts(command, deps)).resolves.toMatchObject({ updated: 1, failed: 0 });
-    expect(deps.drafts.updateContent).toHaveBeenCalledWith(expect.objectContaining({
-      content: expect.not.stringMatching(/frete grátis|10x|estoque|R\$ 1,99/iu)
-    }));
+    await expect(regenerateOfficialDrafts(command, deps)).resolves.toMatchObject({ updated: 0, failed: 1 });
+    expect(deps.drafts.updateContent).not.toHaveBeenCalled();
   });
 
   it("retorna cursor somente para lote completo e totalmente atualizado", async () => {
@@ -158,5 +154,26 @@ describe("regenerateOfficialDrafts", () => {
     const result = await regenerateOfficialDrafts({ ...command, filters: { limit: 5 } }, deps);
 
     expect(result).toMatchObject({ matched: 5, updated: 4, failed: 1, nextCursor: null });
+  });
+
+  it("preserva checkpoint e não consome próximo draft durante cooldown total", async () => {
+    const deps = dependencies();
+    const drafts = [draft, { ...draft, postId: "post-2" }];
+    const cooldown = Object.assign(new Error("providers cooling down"), {
+      code: "OFFICIAL_AI_PROVIDERS_COOLING_DOWN",
+      retryAfterMs: 1_000
+    });
+    vi.mocked(deps.drafts.findDrafts).mockResolvedValue(drafts);
+    const provider = deps.providers.resolve();
+    vi.mocked(provider.generate).mockRejectedValue(cooldown);
+
+    const result = await regenerateOfficialDrafts({ ...command, filters: { limit: 2 } }, deps);
+
+    expect(result).toMatchObject({
+      matched: 2, updated: 0, failed: 0, nextCursor: null,
+      paused: { postId: draft.postId, reason: "PROVIDERS_COOLDOWN", retryAfterMs: 1_000 }
+    });
+    expect(provider.generate).toHaveBeenCalledTimes(1);
+    expect(deps.drafts.updateContent).not.toHaveBeenCalled();
   });
 });

@@ -1,6 +1,6 @@
 import type { OfficialAIServiceDependencies } from "./ports";
 import type { BatchCursor } from "./ports";
-import { isCopyV2TextSafe, validateOfficialAIContent } from "./content-schema";
+import { isCopyV2TextSafe, validateOfficialAIHook } from "./content-schema";
 import { buildCopyV2ChannelCopy, buildOfficialPrompt } from "./prompt";
 import type {
   OfficialAIAuditRecord,
@@ -522,8 +522,14 @@ export async function generateOfficialAI(
   }
 
   // 8. Validação do conteúdo gerado (comum a ambos os modos).
-  const providerContent = validateOfficialAIContent(inference.content, command.channels);
-  if (!providerContent) {
+  const providerData = inference.content && typeof inference.content === "object"
+    ? inference.content as { hook?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> }
+    : {};
+  const hooks = Object.fromEntries(command.channels.map((channel) => {
+    const candidate = providerData.hooks?.[channel] ?? providerData.hook ?? providerData.channelCopies?.[channel];
+    return [channel, validateOfficialAIHook(typeof candidate === "string" ? candidate.split(/[\r\n]/u, 1)[0] : candidate)];
+  }));
+  if (Object.values(hooks).some((hook) => !hook)) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
@@ -533,11 +539,18 @@ export async function generateOfficialAI(
     );
   }
   const content = {
-    ...providerContent,
+    title: offer!.productName,
+    description: `Oferta ${offer!.marketplace}`,
+    shortCopy: `Oferta por ${offer!.currentPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
+    longCopy: `Oferta de ${offer!.productName}.`,
+    hashtags: [],
+    callToAction: "Ver oferta",
+    highlights: ["Preço atual"],
+    explanation: "Copy determinística baseada nos dados persistidos.",
     channelCopies: Object.fromEntries(command.channels.map((channel) => [channel, buildCopyV2ChannelCopy({
       ...offer!,
       evidence: offer!.explainability
-    }, channel)]))
+    }, channel, hooks[channel] ?? undefined)]))
   };
   if (command.channels.some((channel) => !isCopyV2TextSafe(content.channelCopies[channel]))) {
     return rejectAndRecord(

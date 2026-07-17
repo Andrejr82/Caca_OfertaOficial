@@ -4,7 +4,7 @@ export { buildOfficialPrompt } from "./prompt";
 export { buildOfficialRegenerationPrompt } from "./prompt";
 export { buildCopyV2ChannelCopy } from "./prompt";
 export { isOfficialAIRegenerationCursor, regenerateOfficialDrafts } from "./official-ai-regeneration-service";
-export { validateOfficialAIContent } from "./content-schema";
+export { validateOfficialAIContent, validateOfficialAIHook } from "./content-schema";
 export { createOfficialAICyclePages, processOfficialAICyclePages, OFFICIAL_AI_CYCLE_PAGE_SIZE } from "./official-ai-cycle";
 export type { OfficialAICyclePage, OfficialAICyclePageOutcome } from "./official-ai-cycle";
 export type {

@@ -4,6 +4,7 @@ const SYSTEM_PROMPT = `Você é o copywriter de ofertas da Official AI do Caça 
 Você não conversa, não introduz a mensagem e não escreve parágrafos. Produza somente copy comercial curta no framework O.P.A.C.: Oferta, Produto, Atributo e Conversão.
 
 Regras obrigatórias:
+- Gere somente um gancho curto no campo hook (ou hooks por canal). Nunca gere produto, preço, desconto, atributo, CTA, hashtags ou URL.
 - Use somente fatos presentes nos dados de entrada. Nunca invente preço, desconto, frete, cupom, estoque, parcelamento, marca, especificação, atributo ou benefício.
 - O atributo deve existir literalmente no título, nos atributos estruturados persistidos ou nos metadados persistidos. Nunca infira ou deduza atributo. Se não existir, omita a linha.
 - Use 4 a 7 blocos curtos e no máximo 4 emojis.
@@ -24,15 +25,7 @@ function buildCopyV2Prompt(input: Record<string, unknown>) {
     user: JSON.stringify({
       ...input,
       outputContract: {
-        title: "string não vazia",
-        description: "string não vazia",
-        shortCopy: "string não vazia",
-        longCopy: "string não vazia",
-        hashtags: ["hashtags relevantes somente para Instagram"],
-        callToAction: "CTA com no máximo três palavras",
-        highlights: ["somente fatos da entrada"],
-        explanation: "string curta explicando os fatos usados",
-        channelCopies: Object.fromEntries(channels.map((channel) => [channel, "copy final sem URL e sem placeholder no padrão O.P.A.C."]))
+        hook: "string curta, um único gancho"
       },
       formatting: "Retorne exatamente esse objeto JSON, sem markdown. Formate valores em reais com duas casas decimais."
     })
@@ -104,30 +97,42 @@ function cleanProductName(value: string) {
     }
   }
   const cleaned = words.join(" ");
-  if (cleaned.length <= 80) return cleaned;
-  const cut = cleaned.lastIndexOf(" ", 80);
+  if (cleaned.length <= 76) return cleaned;
+  const cut = cleaned.lastIndexOf(" ", 76);
   return cut > 0 ? cleaned.slice(0, cut) : words[0];
 }
 
-export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel) {
-  const marketplace = facts.marketplace.replace(/\s+/gu, " ").trim().toLocaleUpperCase("pt-BR");
+const DEFAULT_HOOKS = {
+  discount: "🔥 PREÇO BAIXOU",
+  standard: "💥 ACHADO DO DIA"
+} as const;
+
+function hookFor(facts: CopyV2Facts, hook?: string) {
+  const value = hook?.replace(/\s+/gu, " ").trim();
+  if (value && value.length <= 40 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
+  return discountPercentage(facts.currentPrice, facts.originalPrice) === null
+    ? DEFAULT_HOOKS.standard
+    : DEFAULT_HOOKS.discount;
+}
+
+export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel, hook?: string) {
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const priceBlock = discount !== null && facts.originalPrice !== null
-    ? [`📉 De ${formatBRL(facts.originalPrice)}`, `💰 Por ${formatBRL(facts.currentPrice)} — ${discount}% OFF`]
+    ? [`💰 ${formatBRL(facts.currentPrice)}`, `📉 De ${formatBRL(facts.originalPrice)} • ${discount}% OFF`]
     : [`💰 ${formatBRL(facts.currentPrice)}`];
 
   const attribute = objectiveAttribute(facts);
   const blocks = [
-    `🔥 OFERTA ${marketplace}`,
-    cleanProductName(facts.productName),
+    hookFor(facts, hook),
+    `🛍️ ${cleanProductName(facts.productName)}`,
     priceBlock.join("\n")
   ];
-  if (attribute) blocks.push(`${discount === null ? `${attribute.emoji} ` : ""}${attribute.text}`);
+  if (attribute) blocks.push(`✨ ${attribute.text}`);
   if (channel === "instagram") {
     const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
     blocks.push(`#oferta #${marketplaceTag}`);
   }
-  blocks.push("👉 Ver oferta");
+  blocks.push("🛒 Ver oferta 👇");
   return blocks.join("\n\n");
 }
 
@@ -150,15 +155,14 @@ export function buildOfficialPrompt(offer: OfficialAIOffer, channels: readonly O
       instagram: "Impacto visual, poucas hashtags relevantes e nenhuma URL."
     },
     required: [
-      "title", "description", "shortCopy", "longCopy", "hashtags", "callToAction",
-      "highlights", "explanation", "channelCopies"
+      "hook"
     ]
   });
 }
 
 export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegeneration) {
   return buildCopyV2Prompt({
-    task: "Reescreva completamente este draft no padrão O.P.A.C.",
+    task: "Gere somente um gancho curto para este draft.",
     channel: draft.channel,
     product: {
       title: draft.productName,
@@ -171,8 +175,7 @@ export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegener
     },
     linkRule: "NÃO inclua URL ou link na resposta; o sistema anexará o link rastreado existente.",
     required: [
-      "title", "description", "shortCopy", "longCopy", "hashtags", "callToAction",
-      "highlights", "explanation", "channelCopies"
+      "hook"
     ]
   });
 }

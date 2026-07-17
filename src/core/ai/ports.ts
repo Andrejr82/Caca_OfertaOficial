@@ -26,7 +26,7 @@ export interface AIProviderRequest {
 }
 
 export interface AIProviderResponse {
-  content: OfficialAIContent;
+  content: unknown;
   provider: string;
   model: string;
   latencyMs: number;

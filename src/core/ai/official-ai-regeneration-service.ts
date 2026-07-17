@@ -1,4 +1,4 @@
-import { isCopyV2TextSafe, validateOfficialAIContent } from "./content-schema";
+import { isCopyV2TextSafe, validateOfficialAIHook } from "./content-schema";
 import type { OfficialAIRegenerationDependencies } from "./ports";
 import { buildCopyV2ChannelCopy, buildOfficialRegenerationPrompt } from "./prompt";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIDraftForRegeneration, type OfficialAIRegenerationCommand, type OfficialAIRegenerationItem, type OfficialAIRegenerationResult } from "./types";
@@ -9,6 +9,14 @@ const INSTALLMENTS = /\b\d+\s*x\b|parcelad[oa]|sem juros/iu;
 const STOCK = /\bestoque\b|últimas unidades|últimas peças/iu;
 export const OFFICIAL_AI_REGENERATION_BATCH_LIMIT = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
+
+function providerHook(value: unknown, channel: OfficialAIDraftForRegeneration["channel"]) {
+  if (!value || typeof value !== "object") return null;
+  const data = value as { hook?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> };
+  const candidate = data.hooks?.[channel] ?? data.hook ?? data.channelCopies?.[channel];
+  const hook = validateOfficialAIHook(typeof candidate === "string" ? candidate.split(/[\r\n]/u, 1)[0] : candidate);
+  return hook;
+}
 
 export function getOfficialAIRegenerationBatchLimit(value?: number) {
   if (!Number.isFinite(value) || !value || value < 1) return OFFICIAL_AI_REGENERATION_BATCH_LIMIT;
@@ -78,6 +86,11 @@ export async function regenerateOfficialDrafts(
   const drafts = await dependencies.drafts.findDrafts(command.tenantId, command.filters);
   if (drafts.length === 0) return { commandId: command.commandId, matched: 0, updated: 0, failed: 0, nextCursor: null, items: [] };
   const provider = dependencies.providers.resolve(command.providerPreference);
+  const cooldownCheckpoint = (error: unknown) => {
+    if (!error || typeof error !== "object" || !("code" in error) || error.code !== "OFFICIAL_AI_PROVIDERS_COOLING_DOWN") return null;
+    const retryAfterMs = "retryAfterMs" in error ? Number(error.retryAfterMs) : NaN;
+    return Number.isFinite(retryAfterMs) && retryAfterMs >= 0 ? retryAfterMs : 0;
+  };
   const regenerate = async (draft: OfficialAIDraftForRegeneration): Promise<OfficialAIRegenerationItem> => {
     const identity = {
       postId: draft.postId,
@@ -97,10 +110,10 @@ export async function regenerateOfficialDrafts(
         maxTokens: 1_200,
         metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft" }
       });
-      const content = validateOfficialAIContent(inference.content, [draft.channel]);
-      if (!content?.channelCopies[draft.channel]) throw new Error("INVALID_PROVIDER_OUTPUT");
-      const copy = buildCopyV2ChannelCopy(draft, draft.channel);
-      validateCopy(copy, draft);
+      const hook = providerHook(inference.content, draft.channel);
+      if (!hook) throw new Error("INVALID_PROVIDER_OUTPUT");
+      validateCopy(hook, draft);
+      const copy = buildCopyV2ChannelCopy(draft, draft.channel, hook);
       const afterContent = `${copy}\n\n${draft.trackedUrl}`;
       const updated = await dependencies.drafts.updateContent({
         tenantId: command.tenantId,
@@ -111,14 +124,25 @@ export async function regenerateOfficialDrafts(
       if (!updated) throw new Error("DRAFT_CHANGED_OR_NOT_FOUND");
       return { ...identity, afterContent };
     } catch (error) {
+      if (cooldownCheckpoint(error) !== null) throw error;
       return { ...identity, error: error instanceof Error ? error.message : "UNKNOWN_REGENERATION_ERROR" };
     }
   };
 
   const items: OfficialAIRegenerationItem[] = [];
-  const concurrency = 1;
-  for (let index = 0; index < drafts.length; index += concurrency) {
-    items.push(...await Promise.all(drafts.slice(index, index + concurrency).map(regenerate)));
+  for (const draft of drafts) {
+    try {
+      items.push(await regenerate(draft));
+    } catch (error) {
+      const retryAfterMs = cooldownCheckpoint(error);
+      if (retryAfterMs === null) throw error;
+      const updated = items.filter((item) => item.afterContent !== undefined).length;
+      const failed = items.filter((item) => item.error !== undefined).length;
+      return {
+        commandId: command.commandId, matched: drafts.length, updated, failed, nextCursor: null, items,
+        paused: { postId: draft.postId, reason: "PROVIDERS_COOLDOWN", retryAfterMs }
+      };
+    }
   }
 
   const updated = items.filter((item) => item.afterContent !== undefined).length;

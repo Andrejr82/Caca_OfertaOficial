@@ -24,6 +24,19 @@ export function isCopyV2TextSafe(copy: string) {
   return !forbiddenOpening.test(copy) && !forbiddenLink.test(copy);
 }
 
+export function validateOfficialAIHook(value: unknown): string | null {
+  const hook = typeof value === "string"
+    ? value
+    : value && typeof value === "object" && typeof (value as { hook?: unknown }).hook === "string"
+      ? (value as { hook: string }).hook
+      : null;
+  if (!hook) return null;
+  const normalized = hook.replace(/\s+/gu, " ").trim();
+  if (normalized.length < 3 || normalized.length > 40 || /[\n\r]|https?:\/\/|www\./iu.test(normalized)) return null;
+  if (/\b(?:Olá|Confira|Conheça|Não perca)\b/iu.test(normalized)) return null;
+  return normalized;
+}
+
 export function validateOfficialAIContent(value: unknown, channels: readonly OfficialAIChannel[]): OfficialAIContent | null {
   const parsed = contentSchema.safeParse(value);
   if (!parsed.success) return null;
