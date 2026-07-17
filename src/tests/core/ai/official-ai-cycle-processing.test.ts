@@ -16,7 +16,7 @@ import { OFFICIAL_AI_PAGE_CONCURRENCY } from "@/core/ai/official-ai-service";
 const content: OfficialAIContent = {
   title: "Oferta", description: "Descrição", shortCopy: "Curta", longCopy: "Longa",
   hashtags: ["#oferta"], callToAction: "Comprar", highlights: ["Destaque"],
-  explanation: "Explicação", channelCopies: { telegram: "TG", instagram: "IG", whatsapp: "WA" }
+  explanation: "Explicação", channelCopies: { telegram: "💥 ACHADO DO DIA", instagram: "✨ OFERTA EM DESTAQUE", whatsapp: "🔥 PREÇO BAIXOU" }
 };
 
 function offer(id: string, tenantId = "tenant-1", valid = true): OfficialAIOffer {

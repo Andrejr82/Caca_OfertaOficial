@@ -59,7 +59,7 @@ const DRAFT_CONTENT: OfficialAIContent = {
   callToAction: "Comprar",
   highlights: ["Destaque"],
   explanation: "Explicacao.",
-  channelCopies: { telegram: "TG", instagram: "IG", whatsapp: "WA" }
+  channelCopies: { telegram: "💥 ACHADO DO DIA", instagram: "✨ OFERTA EM DESTAQUE", whatsapp: "🔥 PREÇO BAIXOU" }
 };
 
 function createDeps(overrides: Partial<OfficialAIServiceDependencies> = {}): OfficialAIServiceDependencies {

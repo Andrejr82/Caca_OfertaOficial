@@ -129,6 +129,7 @@ export interface OfficialAIRegenerationResult {
   failed: number;
   nextCursor: { createdAt: string; postId: string } | null;
   items: readonly OfficialAIRegenerationItem[];
+  paused?: { postId: string; reason: "PROVIDERS_COOLDOWN"; retryAfterMs: number };
 }
 
 export interface OfficialDraftPost {
