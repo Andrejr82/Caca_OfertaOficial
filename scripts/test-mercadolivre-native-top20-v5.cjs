@@ -1,8 +1,12 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
 const test = require('node:test');
 const { runMercadoLivreNativeTop20, writeMercadoLivreNativeTop20Reports, parseOffersSsrData, fetchOffersHtmlViaCertifiedTransport } = require('./mercadolivre-native-top20-v5.cjs');
+
+const MERCADO_LIVRE_SOURCE = fs.readFileSync(require.resolve('./mercadolivre-native-top20-v5.cjs'), 'utf8');
 
 function response(html) {
   return { ok: true, status: 200, headers: new Headers(), text: async () => html };
@@ -29,6 +33,40 @@ function card(position, id, categoryId) {
     }
   };
 }
+
+test('preserva global.fetch como transporte nativo do Node', () => {
+  assert.doesNotMatch(MERCADO_LIVRE_SOURCE, /fetchImpl\s*===\s*global\.fetch\s*\?\s*null\s*:\s*fetchImpl/);
+});
+
+test('global.fetch não chama o transporte certificado', () => {
+  const modulePath = require.resolve('./mercadolivre-native-top20-v5.cjs');
+  const source = `
+    const childProcess = require('node:child_process');
+    childProcess.execFileSync = () => { throw new Error('execFileSync não deveria ser chamado'); };
+    global.fetch = async () => ({ ok: true, status: 200, text: async () => '<script id="__NORDIC_RENDERING_CTX__">_n.ctx.r=' + JSON.stringify({ appProps: { pageProps: { data: { availableFilters: [], items: [] } } } }) + ';</script>' });
+    const { runMercadoLivreNativeTop20 } = require(${JSON.stringify(modulePath)});
+    runMercadoLivreNativeTop20({ fetchImpl: global.fetch }).then((result) => {
+      if (result.calls !== 1 || result.products.length !== 0) process.exit(1);
+    }).catch(() => process.exit(1));
+  `;
+  const execution = spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(execution.status, 0, execution.stderr);
+});
+
+test('fetchImpl inválido mantém o fallback certificado', () => {
+  const modulePath = require.resolve('./mercadolivre-native-top20-v5.cjs');
+  const source = `
+    const childProcess = require('node:child_process');
+    let command;
+    childProcess.execFileSync = (file) => { command = file; return Buffer.from('<script id="__NORDIC_RENDERING_CTX__">_n.ctx.r=' + JSON.stringify({ appProps: { pageProps: { data: { availableFilters: [], items: [] } } } }) + ';</script>').toString('base64'); };
+    const { runMercadoLivreNativeTop20 } = require(${JSON.stringify(modulePath)});
+    runMercadoLivreNativeTop20({ fetchImpl: 'invalid' }).then((result) => {
+      if (command !== 'powershell.exe' || result.calls !== 1) process.exit(1);
+    }).catch(() => process.exit(1));
+  `;
+  const execution = spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(execution.status, 0, execution.stderr);
+});
 
 test('V5 carrega categorias da landing, usa somente URLs de ofertas e limita cada categoria a vinte cards', async () => {
   const landing = page({

@@ -207,7 +207,7 @@ async function fetchPage(fetchImpl, url) {
 
 async function runMercadoLivreNativeTop20({ fetchImpl = null, now = () => new Date().toISOString() } = {}) {
   const startedAt = Date.now();
-  const transport = fetchImpl === global.fetch ? null : fetchImpl;
+  const transport = typeof fetchImpl === 'function' ? fetchImpl : null;
   const landingHtml = await fetchPage(transport, OFFERS_URL);
   const landing = parseOffersSsrData(landingHtml);
   const categoryFilter = (landing.availableFilters ?? []).find((entry) => entry?.id === 'category');
