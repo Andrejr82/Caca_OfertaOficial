@@ -522,7 +522,6 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
 
 module.exports = {
   calculateScoreV1,
-  executeMercadoLivreNativeTop20,
   executeShopeeNativeDiscoveryV5,
   fetchAmazonHtmlViaScrapedo,
   fetchMercadoLivreViaScrapedo: fetchAmazonHtmlViaScrapedo,
