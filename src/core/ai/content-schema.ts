@@ -50,7 +50,7 @@ export function inspectOfficialAIHook(value: unknown): OfficialAIHookInspection 
   const normalized = received.replace(/\s+/gu, " ").trim();
   if (!normalized) return { hook: null, rule: "HOOK_MISSING", receivedLength: received.length };
   if (normalized.length < 3) return { hook: null, rule: "HOOK_TOO_SHORT", receivedLength: received.length };
-  if (normalized.length > 40) return { hook: null, rule: "HOOK_TOO_LONG", receivedLength: received.length };
+  if (normalized.length > 90) return { hook: null, rule: "HOOK_TOO_LONG", receivedLength: received.length };
   // Preserve existing behavior: validation evaluates newlines after whitespace
   // normalization, so this inspection cannot introduce a new rejection rule.
   if (/[\n\r]/u.test(normalized)) return { hook: null, rule: "HOOK_CONTAINS_NEWLINE", receivedLength: received.length };
