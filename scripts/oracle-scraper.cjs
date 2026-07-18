@@ -101,57 +101,12 @@ async function callShopeeAffiliateApi(payload) {
   });
 }
 
-async function fetchShopeeNativeCategoriesFromApi() {
-  const query = 'query ShopeeNativeCategories($page: Int!, $limit: Int!) { shopeeOfferV2(page: $page, limit: $limit) { nodes { offerName categoryId collectionId commissionRate periodStartTime periodEndTime } pageInfo { page limit hasNextPage } } }';
-  const payload = JSON.stringify({
-    operationName: 'ShopeeNativeCategories',
-    query,
-    variables: { page: 1, limit: 50 },
-  });
-  const response = await callShopeeAffiliateApi(payload);
-  if (!response || response.status !== 200 || response.data?.errors) return null;
-  const nodes = response.data?.data?.shopeeOfferV2?.nodes;
-  if (!Array.isArray(nodes)) return null;
-  const seen = new Set();
-  const categories = [];
-  for (const node of nodes) {
-    const productCatId = node.categoryId == null ? '' : String(node.categoryId);
-    const name = String(node.offerName || '').trim();
-    if (!productCatId || !name || seen.has(productCatId)) continue;
-    seen.add(productCatId);
-    categories.push({
-      productCatId,
-      name,
-      order: categories.length + 1,
-      active: true,
-      metadata: {
-        collectionId: node.collectionId ?? null,
-        commissionRate: node.commissionRate ?? null,
-        periodStartTime: node.periodStartTime ?? null,
-        periodEndTime: node.periodEndTime ?? null,
-      },
-    });
-  }
-  return categories.length === 30 ? categories : null;
-}
-
-async function resolveShopeeNativeCategories() {
-  const dynamic = await fetchShopeeNativeCategoriesFromApi();
-  if (dynamic) return { categories: dynamic, source: 'shopeeOfferV2' };
-  const catalog = shopeeNativeV5.loadCertifiedCatalog();
-  return { categories: catalog.categories, source: 'certified_catalog' };
-}
+// Legacy native category functions removed. (fetchShopeeNativeCategoriesFromApi, resolveShopeeNativeCategories)
 
 async function refreshShopeeNativeCatalog() {
-  const categories = await fetchShopeeNativeCategoriesFromApi();
-  if (!categories) throw new Error('shopeeOfferV2 não retornou exatamente 30 categorias; catálogo preservado');
-  const catalog = {
-    certifiedAt: new Date().toISOString(),
-    source: 'Shopee Affiliate Open API shopeeOfferV2',
-    categories,
-  };
-  require('node:fs').writeFileSync(shopeeNativeV5.CATALOG_PATH, JSON.stringify(catalog, null, 2) + '\n', 'utf8');
-  return catalog;
+  // Legacy function.
+  console.log('Refresh native catalog is disabled as we now use time-based scenario config.');
+  return null;
 }
 
 async function fetchShopeeNativeCategoryProducts(category, payloadObject) {
@@ -193,10 +148,8 @@ async function loadShopeeNoveltyKeys() {
 
 async function executeShopeeNativeDiscoveryV5(options = {}) {
   const dryRun = options.dryRun === true;
-  const resolved = await resolveShopeeNativeCategories();
   const noveltyKeys = dryRun ? new Set() : await loadShopeeNoveltyKeys();
   const result = await shopeeNativeV5.runNativeDiscovery({
-    categories: resolved.categories,
     fetchProducts: fetchShopeeNativeCategoryProducts,
     isNovel: (product) => ![
       'item:' + product.itemId,
@@ -208,7 +161,7 @@ async function executeShopeeNativeDiscoveryV5(options = {}) {
   return {
     ...result,
     executedAt: new Date().toISOString(),
-    categorySource: resolved.source,
+    categorySource: 'scenario_config',
     aiCalled: false,
     databaseChanged: false,
     postsCreated: 0,

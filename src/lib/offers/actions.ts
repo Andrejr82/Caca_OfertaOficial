@@ -23,7 +23,8 @@ async function transitionManualStatus(
   const userId = await getCurrentUserId();
   if (!supabase || !userId || !offerId) throw new Error("Usuário não autenticado ou oferta inválida.");
 
-  const requestedAt = String(formData.get("requested_at") || new Date().toISOString());
+  const rawRequestedAt = String(formData.get("requested_at") || new Date().toISOString());
+  const requestedAt = new Date(rawRequestedAt).toISOString();
   const commandId = String(formData.get("command_id") || `${offerId}:${action}:${requestedAt}`);
   const toState = action === "select" ? "selected" : "rejected";
   const result = await transitionOfficialOfferState({

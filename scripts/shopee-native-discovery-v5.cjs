@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const scenarioConfig = require('./shopee-scenario-config.cjs');
 
 const CATALOG_PATH = path.join(__dirname, 'shopee-native-categories.json');
 const SCORE_RULES = {
@@ -13,22 +14,24 @@ const SCORE_RULES = {
 };
 
 function loadCertifiedCatalog(catalogPath = CATALOG_PATH) {
-  const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-  if (!catalog.certifiedAt || !Array.isArray(catalog.categories) || catalog.categories.length !== 30) {
-    throw new Error('Catálogo Shopee certificado inválido: esperado exatamente 30 categorias');
+  // Legacy method. No longer used for real discovery, kept for backward compatibility in scraper initialization.
+  try {
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+    return catalog;
+  } catch {
+    return { categories: [] };
   }
-  return catalog;
 }
 
 function productFields() {
   return 'itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds';
 }
 
-function buildProductOfferPayload(productCatId) {
+function buildProductOfferPayload(keyword) {
   return {
-    operationName: 'ShopeeNativeCategoryProducts',
-    query: `query ShopeeNativeCategoryProducts($productCatId: Int!, $sortType: Int!, $page: Int!, $limit: Int!) { productOfferV2(productCatId: $productCatId, sortType: $sortType, page: $page, limit: $limit) { nodes { ${productFields()} } pageInfo { page limit hasNextPage } } }`,
-    variables: { productCatId: Number(productCatId), sortType: 2, page: 1, limit: 50 }
+    operationName: 'ShopeePromotionOffers',
+    query: `query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { ${productFields()} } pageInfo { page limit hasNextPage } } }`,
+    variables: { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true }
   };
 }
 
@@ -151,28 +154,49 @@ function rankTop20ByCategory(products, categories) {
   }));
 }
 
-async function runNativeDiscovery({ categories = loadCertifiedCatalog().categories, fetchProducts, isNovel = () => true, persistFinalists, dryRun = false }) {
-  const categoryResults = [];
+async function runNativeDiscovery({ fetchProducts, isNovel = () => true, persistFinalists, dryRun = false }) {
+  const currentHour = new Date().getHours();
+  const activeScenario = scenarioConfig.getActiveScenario(currentHour);
+  const keywords = activeScenario.keywords; // Puxa 100% da lista do cenário, sem sorteio.
+
+  console.log(`[Shopee V5] Cenário ativo para ${currentHour}h: ${activeScenario.name}`);
+  console.log(`[Shopee V5] Keywords utilizadas (Lista Completa): ${keywords.join(' | ')}`);
+
+  const categoryMock = {
+    productCatId: activeScenario.productCatId,
+    name: activeScenario.name,
+    order: 1,
+    active: true
+  };
+
+  const categoryResults = [{ ...categoryMock, products: [], error: null }];
   const raw = [];
   let calls = 0;
-  for (const category of categories.filter((entry) => entry.active)) {
-    const payload = buildProductOfferPayload(category.productCatId);
+
+  for (const keyword of keywords) {
+    const payload = buildProductOfferPayload(keyword);
     calls++;
-    const response = await fetchProducts(category, payload);
+    const response = await fetchProducts(categoryMock, payload);
     if (response.http === 429) {
-      categoryResults.push({ ...category, products: [], error: { http: 429, retryAfter: response.retryAfter || null } });
-      continue;
+      categoryResults[0].error = { http: 429, retryAfter: response.retryAfter || null };
+      break;
     }
-    const nodes = Array.isArray(response.nodes) ? response.nodes.slice(0, 50) : [];
-    nodes.forEach((node) => raw.push({ node, category }));
-    categoryResults.push({ ...category, products: [], error: response.http === 200 ? null : { http: response.http } });
+    const nodes = Array.isArray(response.nodes) ? response.nodes : [];
+    nodes.forEach((node) => raw.push({ node, category: categoryMock }));
   }
+
   const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category)).filter(Boolean);
   const deduplicated = dedupeGlobally(sanitized);
   const novel = applyNovelty(deduplicated, isNovel).map((product) => ({ ...product, score: calculateObjectiveScore(product) }));
+  
+  // Opcional: penalizar levemente itens muito repetidos se houver, mas a API já retornou o top de cada keyword.
   const ranked = rankTop20ByCategory(novel, categoryResults);
   const finalists = ranked.flatMap((category) => category.products);
-  if (!dryRun && typeof persistFinalists === 'function') await persistFinalists(finalists);
+  
+  if (!dryRun && typeof persistFinalists === 'function') {
+    await persistFinalists(finalists);
+  }
+
   return {
     categories: ranked,
     calls,

@@ -5,15 +5,10 @@ Você não conversa, não introduz a mensagem e não escreve parágrafos. Produz
 
 Regras obrigatórias:
 - Gere somente um gancho curto no campo hook (ou hooks por canal). Nunca gere produto, preço, desconto, atributo, CTA, hashtags ou URL.
+- O gancho (hook) deve ser provocativo e focar na dor do cliente, no benefício prático do produto ou na urgência (ex: "Seu cachorro destrói a casa?", "Chega de pelos no sofá! 😱").
+- O gancho não pode passar de 90 caracteres.
 - Use somente fatos presentes nos dados de entrada. Nunca invente preço, desconto, frete, cupom, estoque, parcelamento, marca, especificação, atributo ou benefício.
 - O atributo deve existir literalmente no título, nos atributos estruturados persistidos ou nos metadados persistidos. Nunca infira ou deduza atributo. Se não existir, omita a linha.
-- Use 4 a 7 blocos curtos e no máximo 4 emojis.
-- Comece com uma oferta factual. Sem evidência específica, use "🔥 OFERTA <MARKETPLACE>".
-- Mostre produto e preço imediatamente. Mostre preço anterior e desconto somente quando os valores válidos permitirem o cálculo.
-- Termine com CTA de no máximo três palavras: "Ver oferta", "Comprar", "Aproveitar oferta" ou "Garanta o seu".
-- WhatsApp: mais curto, sem hashtags e CTA direto.
-- Telegram: blocos curtos, preço anterior permitido e sem hashtags desnecessárias.
-- Instagram: impacto visual e poucas hashtags relevantes; nunca posicione link no meio da copy.
 - Nunca escreva: Olá, Nova chegada, Temos um novo, Você vai amar, Confira, Não perca, Imperdível, Produto incrível, Compre agora, Aproveite enquanto durar ou Essa oportunidade é única.
 - Nunca inclua URL, [link] ou qualquer placeholder. A persistência anexará exatamente um link rastreado.
 - Responda somente JSON válido com todos os campos solicitados. Não retorne estados, aprovação, publicação nem instruções operacionais.`;
@@ -109,7 +104,7 @@ const DEFAULT_HOOKS = {
 
 function hookFor(facts: CopyV2Facts, hook?: string) {
   const value = hook?.replace(/\s+/gu, " ").trim();
-  if (value && value.length <= 40 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
+  if (value && value.length <= 90 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
   return discountPercentage(facts.currentPrice, facts.originalPrice) === null
     ? DEFAULT_HOOKS.standard
     : DEFAULT_HOOKS.discount;
@@ -117,21 +112,64 @@ function hookFor(facts: CopyV2Facts, hook?: string) {
 
 export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel, hook?: string) {
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
+  const attribute = objectiveAttribute(facts);
+  const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
+
+  if (channel === "whatsapp") {
+    const blocks = [
+      `🚨 *ACHADINHO LIBERADO! (Baixou Muito)* 🚨`,
+      hookFor(facts, hook),
+      `🛍️ ${cleanProductName(facts.productName)}`,
+      ...(attribute ? [`✨ ${attribute.text}`] : []),
+      `❌ *Nas prateleiras: ${facts.originalPrice ? formatBRL(facts.originalPrice) : 'Preço Normal'}*`,
+      `✅ *Só agora: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
+      `🏃‍♀️ *Corre que nesse preço o estoque costuma esgotar em minutos:*`,
+      `👉 `
+    ];
+    return blocks.join("\n\n");
+  }
+
+  if (channel === "telegram") {
+    const blocks = [
+      `⚡ *OFERTA RELÂMPAGO!*`,
+      hookFor(facts, hook),
+      `🛍️ ${cleanProductName(facts.productName)}`,
+      ...(attribute ? [`✨ ${attribute.text}`] : []),
+      discount && facts.originalPrice
+        ? `💰 *${formatBRL(facts.currentPrice)}*\n📉 De ${formatBRL(facts.originalPrice)} • ${discount}% OFF`
+        : `💰 *${formatBRL(facts.currentPrice)}*`,
+      `🔥 *Garante o seu antes que o preço suba de novo:*`,
+      `👉 `
+    ];
+    return blocks.join("\n\n");
+  }
+
+  if (channel === "instagram") {
+    const blocks = [
+      hookFor(facts, hook),
+      `Resolva isso agora com o **${cleanProductName(facts.productName)}**!`,
+      ...(attribute ? [`✨ ${attribute.text}`] : []),
+      `📉 Levando agora você garante **${discount ?? 'um super'} desconto**!`,
+      discount && facts.originalPrice
+        ? `💰 **De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}**`
+        : `💰 **Apenas ${formatBRL(facts.currentPrice)}**`,
+      `🏃‍♀️ **Corre no Link da minha Bio (ou nos Stories) para garantir o seu antes que o estoque acabe!** 👇`,
+      `#oferta #${marketplaceTag}`
+    ];
+    return blocks.join("\n\n");
+  }
+
+  // Fallback
   const priceBlock = discount !== null && facts.originalPrice !== null
     ? [`💰 ${formatBRL(facts.currentPrice)}`, `📉 De ${formatBRL(facts.originalPrice)} • ${discount}% OFF`]
     : [`💰 ${formatBRL(facts.currentPrice)}`];
 
-  const attribute = objectiveAttribute(facts);
   const blocks = [
     hookFor(facts, hook),
     `🛍️ ${cleanProductName(facts.productName)}`,
     priceBlock.join("\n")
   ];
   if (attribute) blocks.push(`✨ ${attribute.text}`);
-  if (channel === "instagram") {
-    const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
-    blocks.push(`#oferta #${marketplaceTag}`);
-  }
   blocks.push("🛒 Ver oferta 👇");
   return blocks.join("\n\n");
 }
