@@ -13,10 +13,13 @@ export function GenerateAIMessagesButton({ offerId }: { offerId: string }) {
     setError("");
 
     try {
+      const requestedAt = new Date().toISOString();
+      const commandId = `ui_generate_${offerId}_${Date.now()}`;
+      
       const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId })
+        body: JSON.stringify({ offerId, requestedAt, commandId })
       });
       const data = await response.json();
 
