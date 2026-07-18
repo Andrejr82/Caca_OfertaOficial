@@ -270,7 +270,6 @@ async function scrapeStore(store) {
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
     const result = await runMercadoLivreNativeTop20({ 
-      fetchImpl: global.fetch,
       urls: [
         'https://www.mercadolivre.com.br/ofertas',
         'https://www.mercadolivre.com.br/mais-vendidos',
