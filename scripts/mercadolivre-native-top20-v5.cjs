@@ -194,7 +194,7 @@ function deduplicate(products) {
 function fetchOffersHtmlViaCertifiedTransport(url, { execFileSync: run = execFileSync } = {}) {
   const encodedUrl = Buffer.from(url, 'utf8').toString('base64');
   const command = `$url=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedUrl}'));$html=(Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 30).Content;[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($html))`;
-  const output = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8', timeout: 45000, windowsHide: true });
+  const output = run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { encoding: 'utf8', timeout: 45000, windowsHide: true, maxBuffer: 10 * 1024 * 1024 });
   return Buffer.from(String(output).trim(), 'base64').toString('utf8');
 }
 
@@ -205,20 +205,40 @@ async function fetchPage(fetchImpl, url) {
   return response.text();
 }
 
-async function runMercadoLivreNativeTop20({ fetchImpl = null, now = () => new Date().toISOString() } = {}) {
+async function runMercadoLivreNativeTop20({ fetchImpl = null, urls = [OFFERS_URL], now = () => new Date().toISOString() } = {}) {
   const startedAt = Date.now();
   const transport = typeof fetchImpl === 'function' ? fetchImpl : null;
-  const landingHtml = await fetchPage(transport, OFFERS_URL);
-  const landing = parseOffersSsrData(landingHtml);
-  const categoryFilter = (landing.availableFilters ?? []).find((entry) => entry?.id === 'category');
-  const categories = (categoryFilter?.values ?? []).map((entry, index) => ({ id: clean(entry.id), name: clean(entry.name), landing_position: index + 1, available_count: Number(entry.results) || null })).filter((entry) => entry.id && entry.name);
+  const categories = [];
+  let calls = 0;
+  
+  for (const url of urls) {
+    try {
+      const landingHtml = await fetchPage(transport, url);
+      calls += 1;
+      const landing = parseOffersSsrData(landingHtml);
+      const categoryFilter = (landing.availableFilters ?? []).find((entry) => entry?.id === 'category');
+      const cats = (categoryFilter?.values ?? []).map((entry, index) => ({ 
+        id: clean(entry.id), 
+        name: clean(entry.name), 
+        landing_position: index + 1, 
+        available_count: Number(entry.results) || null,
+        source_url: url
+      })).filter((entry) => entry.id && entry.name);
+      categories.push(...cats);
+    } catch (e) {
+      console.warn(`[ML Native] Falha ao ler categorias de ${url}: ${e.message}`);
+    }
+  }
+
   const byCategory = {};
   const valid = [];
   const discarded = [];
   const errors = [];
-  let calls = 1;
+  
   for (const category of categories) {
-    const sourceUrl = `${OFFERS_URL}?category=${encodeURIComponent(category.id)}`;
+    // If the source_url already has a query string, append with &, otherwise ?
+    const separator = category.source_url.includes('?') ? '&' : '?';
+    const sourceUrl = `${category.source_url}${separator}category=${encodeURIComponent(category.id)}`;
     try {
       const html = await fetchPage(transport, sourceUrl);
       calls += 1;

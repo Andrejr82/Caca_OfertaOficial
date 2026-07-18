@@ -168,9 +168,6 @@ async function executeShopeeNativeDiscoveryV5(options = {}) {
   };
 }
 
-async function executeMercadoLivreNativeTop20() {
-  return runMercadoLivreNativeTop20({ fetchImpl: global.fetch });
-}
 
 async function loadActiveDiscoveryHistory(marketplace) {
   const { data, error } = await getSupabase()
@@ -272,7 +269,16 @@ async function scrapeStore(store) {
   if (store === 'Mercado Livre') {
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
-    const result = await executeMercadoLivreNativeTop20();
+    const result = await runMercadoLivreNativeTop20({ 
+      fetchImpl: global.fetch,
+      urls: [
+        'https://www.mercadolivre.com.br/ofertas',
+        'https://www.mercadolivre.com.br/mais-vendidos',
+        'https://www.mercadolivre.com.br/mais-vendidos/eletronicos',
+        'https://www.mercadolivre.com.br/mais-vendidos/ferramentas',
+        'https://www.mercadolivre.com.br/mais-vendidos/casa-moveis-decoracao'
+      ]
+    });
     return result.products
       .filter((product) => ![product.item_id, product.product_id, product.product_url]
         .filter(Boolean)
@@ -282,7 +288,12 @@ async function scrapeStore(store) {
   if (store === 'Amazon') {
     const history = await loadActiveDiscoveryHistory(store);
     const knownAsins = new Set(history.flatMap((row) => [row.product_id, row.item_id].filter(Boolean).map(String)));
-    const result = await runAmazonNativeTop20({ fetchImpl: global.fetch, knownAsins });
+    const result = await runAmazonNativeTop20({ 
+      fetchImpl: global.fetch, 
+      knownAsins,
+      maxCategories: 10,
+      maxSubcategoriesPerCategory: 5
+    });
     return result.products
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
       .map((product) => normalizeAmazonCandidate(product, discoveredAt));
