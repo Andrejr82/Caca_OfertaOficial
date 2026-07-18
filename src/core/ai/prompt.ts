@@ -136,7 +136,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       `🛍️ ${cleanProductName(facts.productName)}`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice
-        ? `💰 *${formatBRL(facts.currentPrice)}*\n📉 De ${formatBRL(facts.originalPrice)} • ${discount}% OFF`
+        ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : `💰 *${formatBRL(facts.currentPrice)}*`,
       `🔥 *Garante o seu antes que o preço suba de novo:*`,
       `👉 `
@@ -161,7 +161,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
 
   // Fallback
   const priceBlock = discount !== null && facts.originalPrice !== null
-    ? [`💰 ${formatBRL(facts.currentPrice)}`, `📉 De ${formatBRL(facts.originalPrice)} • ${discount}% OFF`]
+    ? [`📉 De ${formatBRL(facts.originalPrice)}`, `💰 Por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`]
     : [`💰 ${formatBRL(facts.currentPrice)}`];
 
   const blocks = [
