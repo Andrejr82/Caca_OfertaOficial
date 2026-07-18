@@ -20,6 +20,22 @@ interface GenerateAIRequest {
 
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
 
+type NotifyEvent = "Notify.request.received" | "Notify.processing.started" | "Notify.processing.finished" | "Notify.response.sent" | "Notify.failed";
+
+function notifyLog(event: NotifyEvent, context: { correlationId: string; requestId: string; startedAt: number; status: number | string }) {
+  console.log(JSON.stringify({
+    event,
+    timestamp: new Date().toISOString(),
+    correlationId: context.correlationId,
+    requestId: context.requestId,
+    durationMs: Date.now() - context.startedAt,
+    status: context.status,
+    environment: process.env.VERCEL_ENV || process.env.NODE_ENV || "unknown",
+    deploymentId: process.env.VERCEL_DEPLOYMENT_ID || null,
+    commitSha: process.env.VERCEL_GIT_COMMIT_SHA || null
+  }));
+}
+
 /**
  * POST /api/ai/generate
  *
@@ -28,11 +44,21 @@ const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
  * pela IA com base no estado oficial da oferta. Nenhum parâmetro externo seleciona o modo.
  */
 export async function POST(request: Request) {
+  const startedAt = Date.now();
+  const requestId = request.headers.get("x-request-id") || crypto.randomUUID();
+  let correlationId = request.headers.get("x-correlation-id") || requestId;
+  const respond = (response: NextResponse) => {
+    notifyLog("Notify.response.sent", { correlationId, requestId, startedAt, status: response.status });
+    return response;
+  };
+  notifyLog("Notify.request.received", { correlationId, requestId, startedAt, status: "received" });
   try {
     const body = await request.json() as GenerateAIRequest;
+    correlationId = body.correlationId || correlationId;
+    notifyLog("Notify.processing.started", { correlationId, requestId, startedAt, status: "started" });
     const isCycleCommand = body.command === "PROCESS_OFFERS";
     if (!body.offerId && !isCycleCommand) {
-      return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "offerId é obrigatório para chamada individual." }, { status: 400 });
+      return respond(NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "offerId é obrigatório para chamada individual." }, { status: 400 }));
     }
 
     const authHeader = request.headers.get("authorization")?.replace("Bearer ", "").trim();
@@ -53,29 +79,29 @@ export async function POST(request: Request) {
     }
 
     if (!supabase) {
-      return NextResponse.json({ ok: false, code: "DEPENDENCY_UNAVAILABLE", message: "Supabase não configurado." }, { status: 503 });
+      return respond(NextResponse.json({ ok: false, code: "DEPENDENCY_UNAVAILABLE", message: "Supabase não configurado." }, { status: 503 }));
     }
     if (!userId) {
-      return NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "Não autenticado." }, { status: 401 });
+      return respond(NextResponse.json({ ok: false, code: "UNAUTHENTICATED", message: "Não autenticado." }, { status: 401 }));
     }
 
     if (isCycleCommand) {
       if (!isServiceWorker) {
-        return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "PROCESS_OFFERS é exclusivo do Oracle Worker." }, { status: 403 });
+        return respond(NextResponse.json({ ok: false, code: "FORBIDDEN", message: "PROCESS_OFFERS é exclusivo do Oracle Worker." }, { status: 403 }));
       }
       const correlationId = body.correlationId || request.headers.get("x-correlation-id");
       const offerIds = [...new Set((body.offerIds || []).filter((id) => typeof id === "string" && id.trim().length > 0))];
       if (!correlationId || offerIds.length === 0) {
-        return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "correlationId e offerIds são obrigatórios." }, { status: 400 });
+        return respond(NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "correlationId e offerIds são obrigatórios." }, { status: 400 }));
       }
       const pages = createOfficialAICyclePages(correlationId, offerIds);
       const checkpoint = await loadCycleCheckpoint(supabase, userId, correlationId, offerIds, pages.length);
       if (checkpoint.status === "completed") {
-        return NextResponse.json({
+        return respond(NextResponse.json({
           ok: true, status: "completed", correlationId, offerIdsReceived: offerIds.length,
           pageNumber: null, totalPages: pages.length, nextPage: null,
           batchCompleted: true, metrics: checkpoint.metrics, pageStatuses: checkpoint.pageStatuses
-        });
+        }));
       }
       const page = pages[checkpoint.nextPage - 1];
       if (!page) throw new Error(`Official AI cycle checkpoint points to invalid page ${checkpoint.nextPage}`);
@@ -107,12 +133,13 @@ export async function POST(request: Request) {
           });
         } catch { /* telemetry cannot alter the completed cycle */ }
       }
-      return NextResponse.json({
+      notifyLog("Notify.processing.finished", { correlationId, requestId, startedAt, status: result.status });
+      return respond(NextResponse.json({
         ok: result.status !== "rejected", status: advanced.status, correlationId,
         offerIdsReceived: offerIds.length, pageNumber: page.pageNumber, totalPages: pages.length,
         nextPage: batchCompleted ? null : advanced.nextPage, batchCompleted,
         metrics: advanced.metrics, pageStatuses: advanced.pageStatuses, result
-      });
+      }));
     }
 
     const offerId = body.offerId!;
@@ -145,15 +172,17 @@ export async function POST(request: Request) {
     // drafted = Modo 1 (Draft Generation): sucesso sem mudança de estado
     // approved = Modo 2 (Approval): sucesso com promoção de estado
     const ok = result.status === "approved" || result.status === "drafted";
-    return NextResponse.json(
+    notifyLog("Notify.processing.finished", { correlationId, requestId, startedAt, status: ok ? 200 : 409 });
+    return respond(NextResponse.json(
       { ok, ...result },
       { status: ok ? 200 : 409 }
-    );
+    ));
   } catch (error) {
-    return NextResponse.json({
+    notifyLog("Notify.failed", { correlationId, requestId, startedAt, status: 500 });
+    return respond(NextResponse.json({
       ok: false,
       code: "OFFICIAL_AI_FAILURE",
       message: error instanceof Error ? error.message : "Erro desconhecido"
-    }, { status: 500 });
+    }, { status: 500 }));
   }
 }

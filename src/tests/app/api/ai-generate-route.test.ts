@@ -24,6 +24,8 @@ vi.mock("@/lib/ai/official/official-ai-cycle-checkpoint", () => ({ loadCycleChec
 import { POST } from "@/app/api/ai/generate/route";
 
 describe("POST /api/ai/generate", () => {
+  const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
+
   beforeEach(() => {
     vi.clearAllMocks();
     getUser.mockResolvedValue({ data: { user: { id: "tenant-1" } } });
@@ -37,6 +39,45 @@ describe("POST /api/ai/generate", () => {
       status: checkpoint.nextPage === 3 ? "completed" : "pending",
       metrics: { pagesProcessed: checkpoint.nextPage, offersVisited: result.batch?.offersVisited ?? 0 }
     }));
+  });
+
+  it("emits complete Notify lifecycle for successful response", async () => {
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-request-id": "request-1", "x-correlation-id": "correlation-1" },
+      body: JSON.stringify({ offerId: "offer-1" })
+    }));
+
+    expect(response.status).toBe(200);
+    const events = logSpy.mock.calls.map(([line]) => JSON.parse(String(line)));
+    expect(events.map((event) => event.event)).toEqual([
+      "Notify.request.received", "Notify.processing.started", "Notify.processing.finished", "Notify.response.sent"
+    ]);
+    expect(events.every((event) => event.requestId === "request-1" && event.correlationId === "correlation-1" && typeof event.timestamp === "string" && typeof event.durationMs === "number" && "status" in event)).toBe(true);
+  });
+
+  it("emits response event for early validation failure", async () => {
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST", headers: { "x-request-id": "request-invalid" }, body: JSON.stringify({})
+    }));
+
+    expect(response.status).toBe(400);
+    expect(logSpy.mock.calls.map(([line]) => JSON.parse(String(line)).event)).toEqual([
+      "Notify.request.received", "Notify.processing.started", "Notify.response.sent"
+    ]);
+  });
+
+  it("emits failed and response events when service throws", async () => {
+    generateOfficialAI.mockRejectedValueOnce(new Error("provider failure"));
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST", headers: { "x-request-id": "request-error" }, body: JSON.stringify({ offerId: "offer-1" })
+    }));
+
+    expect(response.status).toBe(500);
+    expect(logSpy.mock.calls.map(([line]) => JSON.parse(String(line)).event)).toEqual([
+      "Notify.request.received", "Notify.processing.started", "Notify.failed", "Notify.response.sent"
+    ]);
+    expect(logSpy.mock.calls.join(" ")).not.toContain("SUPABASE_SERVICE_ROLE_KEY");
   });
 
   it("rejeita entrada sem offerId antes de compor o serviço", async () => {

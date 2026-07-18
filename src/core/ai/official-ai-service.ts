@@ -20,6 +20,24 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 type InternalMode = "draft_generation" | "approval";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
+export async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T) => Promise<R>
+): Promise<R[]> {
+  if (limit < 1) throw new Error("Concurrency limit must be at least 1");
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const runWorker = async () => {
+    while (nextIndex < items.length) {
+      const index = nextIndex++;
+      results[index] = await worker(items[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runWorker));
+  return results;
+}
+
 async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
   await emitOfficialAITelemetrySafely(dependencies.telemetry, event);
 }
@@ -256,7 +274,7 @@ export async function generateOfficialAI(
     try {
       for (let offset = 0; offset < command.batch.offerIds.length; offset += OFFICIAL_AI_PAGE_CONCURRENCY) {
         const group = command.batch.offerIds.slice(offset, offset + OFFICIAL_AI_PAGE_CONCURRENCY);
-        await Promise.all(group.map(async (offerId) => {
+        await mapWithConcurrency(group, OFFICIAL_AI_PAGE_CONCURRENCY, async (offerId) => {
           metrics.offersVisited += 1;
           const subCommand: OfficialAICommand = {
             ...command,
@@ -285,7 +303,7 @@ export async function generateOfficialAI(
               postsPrepared: 0, postsPersisted: 0, transitionRequested: false, transitionCompleted: false
             }).catch(() => undefined);
           }
-        }));
+        });
       }
 
       const result: OfficialAIDraftedResult = {
