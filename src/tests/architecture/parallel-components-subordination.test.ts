@@ -33,9 +33,10 @@ describe("PMAV5-009 parallel component subordination", () => {
     expect(source(path)).toContain("PARALLEL_COMPONENT_DISABLED");
   });
 
-  it("coupon route remains read-only and delegates to the coupon adapter", () => {
+  it("coupon route delegates search and draft persistence without owning transport", () => {
     const component = source("src/app/api/scraper/coupons/route.ts");
     expect(component).toContain("fetchMarketplaceCoupons");
+    expect(component).toContain("persistCouponDrafts");
     expect(component).not.toContain("PARALLEL_COMPONENT_DISABLED");
   });
 
