@@ -15,7 +15,7 @@ const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';      // Usuário
 const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '~/Caca_OfertaOficial';
 const PM2_APP_NAME = process.env.ORACLE_PM2_NAME || 'oracle-api'; // ou o nome do processo que você utiliza (ex: index)
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
-const SSH_KEY_PATH = path.join(__dirname, '../ssh-key-2026-06-25.key'); // Chave de acesso
+const SSH_KEY_PATH = path.join(__dirname, '../keys/ssh-key-2026-06-25.key'); // Chave de acesso
 
 console.log(`🚀 Iniciando rotina de atualização da Oracle API (${SERVER_IP})...`);
 

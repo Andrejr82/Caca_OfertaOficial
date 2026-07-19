@@ -85,3 +85,6 @@ dumps/
 reports/
 smoke-remote.js
 
+
+# SSH Keys
+keys/
