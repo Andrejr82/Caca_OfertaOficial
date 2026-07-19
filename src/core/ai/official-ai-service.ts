@@ -48,6 +48,10 @@ function stableSerialize(value: unknown): string {
  * Garante que a mesma operação funcional produza o mesmo fingerprint em qualquer ciclo.
  */
 function buildOfficialAIFingerprint(command: OfficialAICommand): string {
+  // Fingerprint canônico: identifica o CONTEÚDO a ser gerado, não o chamador.
+  // actor e origin são metadados do chamador e NÃO devem integrar o fingerprint,
+  // pois uma mesma oferta pode ser acionada pelo Oracle Worker (service) e depois
+  // manualmente pelo usuário no painel — ambas são a mesma operação semântica.
   const stable = {
     contractVersion: command.contractVersion,
     idempotencyKey: command.idempotencyKey,
@@ -55,8 +59,6 @@ function buildOfficialAIFingerprint(command: OfficialAICommand): string {
     tenantId: command.tenantId,
     channels: [...command.channels].sort(),
     providerPreference: command.providerPreference ?? null,
-    actor: command.actor,
-    origin: command.origin,
     reason: command.reason,
     batch: command.batch ? {
       operation: command.batch.operation,
