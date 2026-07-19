@@ -16,12 +16,12 @@ const blockedComponents = [
   "src/lib/publish/actions.ts",
   "src/app/api/scraper/cron/route.ts",
   "src/app/api/scraper/trends/route.ts",
-  "src/app/api/scraper/coupons/route.ts",
   "src/app/api/scraper/import/route.ts",
   "src/app/api/instagram/poll-comments/route.ts"
 ] as const;
 
-const parallelComponents = [...Object.keys(officialClients), ...blockedComponents];
+const readOnlyComponents = ["src/app/api/scraper/coupons/route.ts"] as const;
+const parallelComponents = [...Object.keys(officialClients), ...blockedComponents, ...readOnlyComponents];
 
 describe("PMAV5-009 parallel component subordination", () => {
   it.each(Object.entries(officialClients))("%s consumes only its official command boundary", (path, boundaries) => {
@@ -31,6 +31,12 @@ describe("PMAV5-009 parallel component subordination", () => {
 
   it.each(blockedComponents)("%s fails closed before legacy authority", (path) => {
     expect(source(path)).toContain("PARALLEL_COMPONENT_DISABLED");
+  });
+
+  it("coupon route remains read-only and delegates to the coupon adapter", () => {
+    const component = source("src/app/api/scraper/coupons/route.ts");
+    expect(component).toContain("fetchMarketplaceCoupons");
+    expect(component).not.toContain("PARALLEL_COMPONENT_DISABLED");
   });
 
   it.each(parallelComponents)("%s cannot write offer or post state or create posts", (path) => {

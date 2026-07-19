@@ -25,16 +25,16 @@ const defaultProductSources = {
 };
 
 const defaultCouponSources = {
-  mercadolivre: false,
-  magalu: true,
-  shopee: false,
-  shein: true,
+  mercadolivre: true,
+  magalu: false,
+  shopee: true,
+  shein: false,
   amazon: true,
   netshoes: false
 };
 
 const couponAvailability = {
-  mercadolivre: "temporarily_unavailable",
+  mercadolivre: "supported",
   magalu: "supported",
   shopee: "supported",
   shein: "supported",
@@ -215,9 +215,7 @@ export function TrendsAction() {
               const helperText =
                 mode === "coupons" && couponState === "unsupported"
                   ? "Não suportado"
-                  : mode === "coupons" && couponState === "temporarily_unavailable"
-                    ? "Cupons oficiais indisponíveis"
-                    : null;
+                  : null;
 
               return (
                 <label
@@ -336,13 +334,22 @@ export function TrendsAction() {
                     {offer.title || offer.productName}
                   </h4>
                   <div className="flex items-center gap-3 mt-1.5">
-                    <span className="text-sm font-bold text-emerald-400">
-                      R$ {Number(offer.price || offer.currentPrice || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                    </span>
-                    {(offer.score || offer.selectionScore) && (
-                      <span className="text-xs text-white/50">
-                        Score: {Math.round(offer.score || offer.selectionScore || 0)}
-                      </span>
+                    {mode === "coupons" ? (
+                      <>
+                        <span className="text-sm font-bold text-blue-300">{offer.discount || "Benefício oficial"}</span>
+                        <span className="text-xs font-semibold text-white/70">{offer.code || "RESGATE DIRETO"}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold text-emerald-400">
+                          R$ {Number(offer.price || offer.currentPrice || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                        </span>
+                        {(offer.score || offer.selectionScore) && (
+                          <span className="text-xs text-white/50">
+                            Score: {Math.round(offer.score || offer.selectionScore || 0)}
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                   <div className="flex items-center gap-2 mt-2 flex-wrap">
