@@ -16,6 +16,10 @@ type MarketplaceCouponConfig = {
 };
 
 const MARKETPLACE_COUPON_CONFIGS: Record<string, MarketplaceCouponConfig> = {
+  "mercado livre": {
+    targetUrl: "https://www.mercadolivre.com.br/ofertas/cupons",
+    promptHint: "Extraia somente cupons ativos exibidos pelo Mercado Livre. Ignore a seção de cupons expirados e itens sem benefício aplicável. Se o benefício não tiver código literal, use RESGATE DIRETO.",
+  },
   "amazon": {
     targetUrl: "https://www.amazon.com.br/coupons",
     promptHint: "Extraia cupons e promocoes com selo de cupom ativos da Amazon Brasil. Quando nao houver codigo literal, use RESGATE DIRETO.",
@@ -93,6 +97,27 @@ function buildShopeeRedeemCode(link: string) {
   return `SHOPEE-${digest}`;
 }
 
+export function classifyCouponCode(value: unknown) {
+  const code = normalizeText(value);
+  if (!code || /^SHOPEE-[0-9A-F]{8}$/i.test(code)) {
+    return "RESGATE DIRETO";
+  }
+  return code;
+}
+
+export function addAmazonAffiliateTag(rawUrl: string, partnerTag = process.env.AMAZON_PARTNER_TAG || "") {
+  if (!rawUrl || !partnerTag) return rawUrl;
+
+  try {
+    const url = new URL(rawUrl);
+    if (!/(^|\.)amazon\.com\.br$/i.test(url.hostname)) return rawUrl;
+    url.searchParams.set("tag", partnerTag);
+    return url.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
 function formatShopeeRules(node: ShopeeProductOfferNode) {
   const fragments = [
     node.shopName ? `Loja: ${node.shopName}` : null,
@@ -168,7 +193,7 @@ export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
             .join(" | ");
 
           return {
-            code: buildShopeeRedeemCode(productLink),
+            code: classifyCouponCode(buildShopeeRedeemCode(productLink)),
             discount,
             rules,
             link: productLink,
@@ -186,8 +211,7 @@ export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
 }
 
 export async function fetchMercadoLivreCoupons(): Promise<ScrapedCoupon[]> {
-  console.warn("[COUPON-SCRAPER][MERCADO LIVRE] Nenhuma fonte oficial adequada de cupons/promocoes foi encontrada na API pública/oficial validada para este fluxo. Provider mantido desativado.");
-  return [];
+  return fetchExternalCoupons("Mercado Livre", MARKETPLACE_COUPON_CONFIGS["mercado livre"], 5);
 }
 
 function buildPrompt(marketplace: string, limit: number, promptHint: string) {
@@ -215,13 +239,17 @@ function cleanupDiscount(value: string) {
 
 function sanitizeCoupon(rawCoupon: any, marketplace: string, targetUrl: string): ScrapedCoupon | null {
   const discount = cleanupDiscount(normalizeText(rawCoupon?.discount));
-  const code = cleanupDiscount(normalizeText(rawCoupon?.code)) || "RESGATE DIRETO";
+  const code = classifyCouponCode(rawCoupon?.code);
   const rules = cleanupDiscount(normalizeText(rawCoupon?.rules)) || "Verifique no site";
-  const link = normalizeText(rawCoupon?.link).startsWith("http") ? normalizeText(rawCoupon?.link) : targetUrl;
+  const rawLink = normalizeText(rawCoupon?.link);
+  if (/exemplo|example|placeholder|sample/i.test(rawLink)) {
+    return null;
+  }
+  const link = rawLink.startsWith("http") ? rawLink : targetUrl;
   const imageUrlCandidate = normalizeText(rawCoupon?.image_url) || normalizeText(rawCoupon?.image);
   const imageUrl = imageUrlCandidate.startsWith("http") ? imageUrlCandidate : null;
 
-  if (!discount) {
+  if (!discount || /expirad|esgotad|já utilizado|ja utilizado/i.test(`${rawCoupon?.status || ""} ${rules}`)) {
     return null;
   }
 
@@ -233,6 +261,10 @@ function sanitizeCoupon(rawCoupon: any, marketplace: string, targetUrl: string):
     marketplace,
     image_url: imageUrl
   };
+}
+
+export function sanitizeCouponForTest(rawCoupon: any, marketplace: string, targetUrl: string) {
+  return sanitizeCoupon(rawCoupon, marketplace, targetUrl);
 }
 
 function dedupeCoupons(coupons: ScrapedCoupon[]) {
@@ -306,25 +338,8 @@ function hasBlockedContent(fcData: FirecrawlCouponResponse, blockedMarkers: stri
   });
 }
 
-export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): Promise<ScrapedCoupon[]> {
-  const normalizedMarketplace = marketplace.toLowerCase().trim();
-
-  if (normalizedMarketplace === "shopee") {
-    return fetchShopeeCoupons(limit);
-  }
-
-  if (normalizedMarketplace === "mercado livre") {
-    return fetchMercadoLivreCoupons();
-  }
-
-  const config = MARKETPLACE_COUPON_CONFIGS[normalizedMarketplace];
-
-  if (!config) {
-    console.warn(`[COUPON-SCRAPER] Marketplace desconhecido ou sem suporte: ${marketplace}`);
-    return [];
-  }
-
-  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: ${normalizedMarketplace} (${config.targetUrl})`);
+async function fetchExternalCoupons(marketplace: string, config: MarketplaceCouponConfig, limit: number) {
+  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: ${marketplace.toLowerCase()} (${config.targetUrl})`);
 
   const firecrawlKey = process.env.FIRECRAWL_API_KEY;
   if (!firecrawlKey) {
@@ -409,16 +424,32 @@ export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): P
     return [];
   }
 
-  const extractedFromJson = extractCouponsFromResponse(fcData, marketplace, config.targetUrl);
+  const extractedFromJson = extractCouponsFromResponse(fcData, marketplace, config.targetUrl)
+    .map((coupon) => ({ ...coupon, link: marketplace === "Amazon" ? addAmazonAffiliateTag(coupon.link) : coupon.link }));
   if (extractedFromJson.length > 0) {
     return extractedFromJson.slice(0, limit);
   }
 
-  const extractedFromMarkdown = extractCouponsFromMarkdown(fcData.data?.markdown || "", marketplace, config.targetUrl);
+  const extractedFromMarkdown = extractCouponsFromMarkdown(fcData.data?.markdown || "", marketplace, config.targetUrl)
+    .map((coupon) => ({ ...coupon, link: marketplace === "Amazon" ? addAmazonAffiliateTag(coupon.link) : coupon.link }));
   if (extractedFromMarkdown.length > 0) {
     return extractedFromMarkdown.slice(0, limit);
   }
 
   console.warn(`[COUPON-SCRAPER] Nenhum cupom extraído para ${marketplace}.`);
   return [];
+}
+
+export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): Promise<ScrapedCoupon[]> {
+  const normalizedMarketplace = marketplace.toLowerCase().trim();
+
+  if (normalizedMarketplace === "shopee") return fetchShopeeCoupons(limit);
+  if (normalizedMarketplace === "mercado livre") return fetchExternalCoupons("Mercado Livre", MARKETPLACE_COUPON_CONFIGS["mercado livre"], limit);
+
+  const config = MARKETPLACE_COUPON_CONFIGS[normalizedMarketplace];
+  if (!config) {
+    console.warn(`[COUPON-SCRAPER] Marketplace desconhecido ou sem suporte: ${marketplace}`);
+    return [];
+  }
+  return fetchExternalCoupons(marketplace, config, limit);
 }
