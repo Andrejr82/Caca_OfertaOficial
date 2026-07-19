@@ -290,8 +290,13 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (error.code !== "23505") throw new Error(`Official AI idempotency reservation failed: ${error.message}`);
     const row = await this.readIdempotency(key);
     const stored = row.value;
-    if (stored.fingerprint !== fingerprint) return { status: "conflict" as const };
+    // Se o registro já está completo com resultado, sempre é replay — independente do fingerprint.
+    // Isso cobre migrações de schema do fingerprint (ex: remoção de actor/origin) sem bloquear
+    // operações legítimas com "Idempotency key was used with a different payload".
     if (stored.status === "completed" && stored.result) return { status: "replay" as const, result: stored.result };
+    // Só aplica conflito se o registro ainda está pendente com fingerprint diferente.
+    if (stored.fingerprint !== fingerprint) return { status: "conflict" as const };
+
     const pendingSince = stored.startedAt ?? row.created_at;
     if (Date.now() - Date.parse(pendingSince) > STALE_PENDING_AFTER_MS) {
       if (idempotencyKey.startsWith("ai:cycle:")) {
