@@ -48,7 +48,9 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
       return (tiers[(explB.tier || "C") as keyof typeof tiers] || 0) - (tiers[(explA.tier || "C") as keyof typeof tiers] || 0);
     }
     // date (default)
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    const timeA = new Date(a.updated_at || a.created_at).getTime();
+    const timeB = new Date(b.updated_at || b.created_at).getTime();
+    return timeB - timeA;
   });
 
   return (

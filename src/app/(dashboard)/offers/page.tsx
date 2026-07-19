@@ -4,6 +4,8 @@ import { listOffersWithDraftStatus } from "@/lib/offers/queries";
 import { ShoppingBag } from "lucide-react";
 import { OffersClient } from "./OffersClient";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 export default async function OffersPage() {
   const offers = await listOffersWithDraftStatus();
 
