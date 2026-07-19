@@ -75,7 +75,6 @@ export function TrendsAction() {
           setCouponSources((prev) => ({
             ...prev,
             ...parsed,
-            mercadolivre: false,
             netshoes: false
           }));
         }
