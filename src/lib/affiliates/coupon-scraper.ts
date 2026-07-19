@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import * as cheerio from "cheerio";
 
 export interface ScrapedCoupon {
   code: string;
@@ -8,45 +9,6 @@ export interface ScrapedCoupon {
   marketplace: string;
   image_url?: string | null;
 }
-
-type MarketplaceCouponConfig = {
-  targetUrl: string;
-  promptHint: string;
-  blockedMarkers?: string[];
-};
-
-const MARKETPLACE_COUPON_CONFIGS: Record<string, MarketplaceCouponConfig> = {
-  "mercado livre": {
-    targetUrl: "https://www.mercadolivre.com.br/ofertas/cupons",
-    promptHint: "Extraia somente cupons ativos exibidos pelo Mercado Livre. Ignore a seção de cupons expirados e itens sem benefício aplicável. Se o benefício não tiver código literal, use RESGATE DIRETO.",
-  },
-  "amazon": {
-    targetUrl: "https://www.amazon.com.br/coupons",
-    promptHint: "Extraia cupons e promocoes com selo de cupom ativos da Amazon Brasil. Quando nao houver codigo literal, use RESGATE DIRETO.",
-    blockedMarkers: ["nao conseguimos encontrar esta pagina"]
-  },
-  "magalu": {
-    targetUrl: "https://www.magazineluiza.com.br/selecao/cuponsgenericos/",
-    promptHint: "Extraia cupons ativos do Magalu. O campo code pode repetir o texto do beneficio quando a pagina mostrar apenas o selo de desconto.",
-    blockedMarkers: ["oops! achei que essa pagina tambem estava por aqui"]
-  },
-  "shein": {
-    targetUrl: "https://br.shein.com/campaigns/coupon_center",
-    promptHint: "Extraia cupons ativos da Shein. Quando houver resgate sem codigo textual, use RESGATE DIRETO.",
-    blockedMarkers: ["please log in", "sign in"]
-  }
-};
-
-type FirecrawlCouponResponse = {
-  success?: boolean;
-  data?: {
-    extract?: { coupons?: unknown[] };
-    llm_extraction?: { coupons?: unknown[] };
-    json?: { coupons?: unknown[] };
-    markdown?: string;
-    html?: string;
-  };
-};
 
 type ShopeeGraphQLResponse<TNode> = {
   data?: {
@@ -126,6 +88,25 @@ function formatShopeeRules(node: ShopeeProductOfferNode) {
   return fragments.length > 0 ? fragments.join(" | ") : "Promoção oficial Shopee.";
 }
 
+function normalizeText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function dedupeCoupons(coupons: ScrapedCoupon[]) {
+  const seen = new Set<string>();
+  return coupons.filter((coupon) => {
+    const key = `${coupon.code.toLowerCase()}|${coupon.discount.toLowerCase()}|${coupon.link.toLowerCase()}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+// =======================
+// SHOPEE (NATIVE GRAPHQL)
+// =======================
 export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
   const appId = process.env.SHOPEE_APP_ID || "";
   const appSecret = process.env.SHOPEE_APP_SECRET || "";
@@ -210,246 +191,128 @@ export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
   }
 }
 
-export async function fetchMercadoLivreCoupons(): Promise<ScrapedCoupon[]> {
-  return fetchExternalCoupons("Mercado Livre", MARKETPLACE_COUPON_CONFIGS["mercado livre"], 5);
-}
-
-function buildPrompt(marketplace: string, limit: number, promptHint: string) {
-  return [
-    `Voce e um assistente cacador de cupons da ${marketplace}.`,
-    `Extraia no maximo ${limit} cupons ativos reais visiveis na pagina.`,
-    promptHint,
-    "Para cada cupom retorne:",
-    "- code: codigo promocional. Se nao houver codigo textual, use RESGATE DIRETO.",
-    "- discount: beneficio textual como R$20 OFF, 10% OFF, frete gratis.",
-    "- rules: regra principal resumida.",
-    "- link: link direto da oferta/cupom/produto promocional.",
-    "- image_url: imagem principal se existir.",
-    "Ignore login, captcha, navegacao, campanhas expiradas e blocos sem beneficio."
-  ].join(" ");
-}
-
-function normalizeText(value: unknown) {
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function cleanupDiscount(value: string) {
-  return value.replace(/\s+/g, " ").trim();
-}
-
-function sanitizeCoupon(rawCoupon: any, marketplace: string, targetUrl: string): ScrapedCoupon | null {
-  const discount = cleanupDiscount(normalizeText(rawCoupon?.discount));
-  const code = classifyCouponCode(rawCoupon?.code);
-  const rules = cleanupDiscount(normalizeText(rawCoupon?.rules)) || "Verifique no site";
-  const rawLink = normalizeText(rawCoupon?.link);
-  if (/exemplo|example|placeholder|sample/i.test(rawLink)) {
-    return null;
-  }
-  const link = rawLink.startsWith("http") ? rawLink : targetUrl;
-  const imageUrlCandidate = normalizeText(rawCoupon?.image_url) || normalizeText(rawCoupon?.image);
-  const imageUrl = imageUrlCandidate.startsWith("http") ? imageUrlCandidate : null;
-
-  if (!discount || /expirad|esgotad|já utilizado|ja utilizado/i.test(`${rawCoupon?.status || ""} ${rules}`)) {
-    return null;
-  }
-
-  return {
-    code,
-    discount,
-    rules,
-    link,
-    marketplace,
-    image_url: imageUrl
-  };
-}
-
-export function sanitizeCouponForTest(rawCoupon: any, marketplace: string, targetUrl: string) {
-  return sanitizeCoupon(rawCoupon, marketplace, targetUrl);
-}
-
-function dedupeCoupons(coupons: ScrapedCoupon[]) {
-  const seen = new Set<string>();
-  return coupons.filter((coupon) => {
-    const key = `${coupon.code.toLowerCase()}|${coupon.discount.toLowerCase()}|${coupon.link.toLowerCase()}`;
-    if (seen.has(key)) {
-      return false;
-    }
-    seen.add(key);
-    return true;
-  });
-}
-
-function extractCouponsFromResponse(fcData: FirecrawlCouponResponse, marketplace: string, targetUrl: string) {
-  const extractedCoupons =
-    fcData?.data?.extract?.coupons ||
-    fcData?.data?.llm_extraction?.coupons ||
-    fcData?.data?.json?.coupons ||
-    [];
-
-  if (!Array.isArray(extractedCoupons)) {
-    return [];
-  }
-
-  return dedupeCoupons(
-    extractedCoupons
-      .map((coupon) => sanitizeCoupon(coupon, marketplace, targetUrl))
-      .filter(Boolean) as ScrapedCoupon[]
-  );
-}
-
-function extractCouponsFromMarkdown(markdown: string, marketplace: string, targetUrl: string) {
-  if (!markdown) {
-    return [];
-  }
-
-  const coupons: ScrapedCoupon[] = [];
-  const lines = markdown
-    .split(/\n+/)
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-
-  for (const line of lines) {
-    const linkMatch = line.match(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/i);
-    const discountMatch = line.match(/((?:R\$\s?\d+[.,]?\d*\s*(?:OFF|off))|(?:\d{1,2}%\s*(?:OFF|off))|(?:frete gr[aá]tis))/i);
-    if (!linkMatch || !discountMatch) {
-      continue;
-    }
-
-    const discount = cleanupDiscount(discountMatch[1]);
-    coupons.push({
-      code: discount.toUpperCase().includes("OFF") ? discount : "RESGATE DIRETO",
-      discount,
-      rules: line,
-      link: linkMatch[2] || targetUrl,
-      marketplace,
-      image_url: null
+// =======================
+// MERCADO LIVRE (NATIVE)
+// =======================
+export async function fetchMercadoLivreCoupons(limit = 5): Promise<ScrapedCoupon[]> {
+  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: mercado livre`);
+  try {
+    const url = "https://www.mercadolivre.com.br/ofertas/cupons";
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
+      }
     });
-  }
 
-  return dedupeCoupons(coupons);
-}
-
-function hasBlockedContent(fcData: FirecrawlCouponResponse, blockedMarkers: string[] = []) {
-  const markdown = (fcData?.data?.markdown || "").toLowerCase();
-  const html = (fcData?.data?.html || "").toLowerCase();
-  return blockedMarkers.some((marker) => {
-    const normalizedMarker = marker.toLowerCase();
-    return markdown.includes(normalizedMarker) || html.includes(normalizedMarker);
-  });
-}
-
-async function fetchExternalCoupons(marketplace: string, config: MarketplaceCouponConfig, limit: number) {
-  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: ${marketplace.toLowerCase()} (${config.targetUrl})`);
-
-  const firecrawlKey = process.env.FIRECRAWL_API_KEY;
-  if (!firecrawlKey) {
-    console.warn("[COUPON-SCRAPER] FIRECRAWL_API_KEY não configurada.");
-    return [];
-  }
-
-  let retries = 3;
-  let delay = 1500;
-  let fcData: FirecrawlCouponResponse | null = null;
-
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      console.log(`[COUPON-SCRAPER] Tentativa ${attempt} via Firecrawl para ${marketplace}...`);
-      const fcResponse = await fetch("https://api.firecrawl.dev/v1/scrape", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${firecrawlKey}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          url: config.targetUrl,
-          formats: ["json", "markdown", "html"],
-          waitFor: 5000,
-          timeout: 60000,
-          onlyMainContent: false,
-          jsonOptions: {
-            prompt: buildPrompt(marketplace, limit, config.promptHint),
-            schema: {
-              type: "object",
-              properties: {
-                coupons: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      code: { type: "string" },
-                      discount: { type: "string" },
-                      rules: { type: "string" },
-                      link: { type: "string" },
-                      image_url: { type: "string" }
-                    },
-                    required: ["discount", "link"]
-                  }
-                }
-              },
-              required: ["coupons"]
-            }
-          }
-        }),
-        signal: AbortSignal.timeout(65000)
-      });
-
-      if (!fcResponse.ok) {
-        if (fcResponse.status === 408 || fcResponse.status === 429 || fcResponse.status >= 500) {
-          throw new Error(`HTTP Status ${fcResponse.status}`);
-        }
-        console.warn(`[COUPON-SCRAPER] Firecrawl retornou status ${fcResponse.status} para ${marketplace}`);
-        break;
-      }
-
-      fcData = (await fcResponse.json()) as FirecrawlCouponResponse;
-      break;
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      console.warn(`[COUPON-SCRAPER] Erro na tentativa ${attempt} para ${marketplace}: ${msg}`);
-      if (attempt === retries) {
-        break;
-      }
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      delay *= 2;
+    if (!response.ok) {
+      console.warn(`[COUPON-SCRAPER][ML] HTTP ${response.status}`);
+      return [];
     }
-  }
+    const html = await response.text();
+    const $ = cheerio.load(html);
+    const coupons: ScrapedCoupon[] = [];
 
-  if (!fcData || !fcData.success) {
-    console.warn(`[COUPON-SCRAPER] Firecrawl sem sucesso para ${marketplace}.`);
+    $('.poly-card').each((_, el) => {
+      if (coupons.length >= limit) return;
+      const title = $(el).find('h2, .poly-component__title').text().trim();
+      const link = $(el).find('a').attr('href') || url;
+      const discountNode = $(el).find('.andes-money-amount__discount, .promotion-item__discount-text').first();
+      const discountText = discountNode.text().trim();
+
+      // Enforcing that it looks like a discount or offer since ML coupons page lists products
+      if (title && (discountText.toUpperCase().includes('OFF') || discountText)) {
+        coupons.push({
+          code: "RESGATE DIRETO",
+          discount: discountText || "Oferta Especial",
+          rules: title,
+          link: link,
+          marketplace: "Mercado Livre",
+          image_url: null
+        });
+      }
+    });
+
+    return dedupeCoupons(coupons).slice(0, limit);
+  } catch (error) {
+    console.warn(`[COUPON-SCRAPER][ML] Erro nativo:`, error);
     return [];
   }
-
-  if (hasBlockedContent(fcData, config.blockedMarkers)) {
-    console.warn(`[COUPON-SCRAPER] Página bloqueada/expirada para ${marketplace}.`);
-    return [];
-  }
-
-  const extractedFromJson = extractCouponsFromResponse(fcData, marketplace, config.targetUrl)
-    .map((coupon) => ({ ...coupon, link: marketplace === "Amazon" ? addAmazonAffiliateTag(coupon.link) : coupon.link }));
-  if (extractedFromJson.length > 0) {
-    return extractedFromJson.slice(0, limit);
-  }
-
-  const extractedFromMarkdown = extractCouponsFromMarkdown(fcData.data?.markdown || "", marketplace, config.targetUrl)
-    .map((coupon) => ({ ...coupon, link: marketplace === "Amazon" ? addAmazonAffiliateTag(coupon.link) : coupon.link }));
-  if (extractedFromMarkdown.length > 0) {
-    return extractedFromMarkdown.slice(0, limit);
-  }
-
-  console.warn(`[COUPON-SCRAPER] Nenhum cupom extraído para ${marketplace}.`);
-  return [];
 }
 
+// =======================
+// AMAZON (NATIVE)
+// =======================
+export async function fetchAmazonCoupons(limit = 5): Promise<ScrapedCoupon[]> {
+  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: amazon`);
+  try {
+    const url = "https://www.amazon.com.br/coupons";
+    let html = "";
+    
+    // Tenta fetch direto
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'text/html',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
+      }
+    });
+    
+    if (response.ok) {
+      html = await response.text();
+    }
+    
+    if (!html) {
+      console.warn(`[COUPON-SCRAPER][AMAZON] Fallback: Scraping falhou ou vazio`);
+      return [];
+    }
+
+    const $ = cheerio.load(html);
+    const coupons: ScrapedCoupon[] = [];
+
+    // Amazon geralmente usa .sg-col, .s-result-item ou cards similares na página de coupons.
+    // Como os cupons Amazon dependem de JS, se não renderizar os blocos, capturamos destaques
+    $('[class*="coupon"], [class*="deal"], .a-section').each((_, el) => {
+      if (coupons.length >= limit) return;
+      const text = $(el).text().trim();
+      // Heurística básica caso JS não renderize os cards
+      if (text.includes('OFF') || text.includes('Cupom') || text.includes('Desconto')) {
+         const titleNode = $(el).find('[class*="title"], h2, h3').first();
+         const title = titleNode.text().trim() || "Oferta Amazon";
+         const discountNode = $(el).find(':contains("OFF"), :contains("Cupom")').first();
+         const discountText = discountNode.text().trim().substring(0, 30) || "Resgate Direto";
+         const link = $(el).find('a').attr('href');
+         
+         if (link) {
+           const fullLink = link.startsWith('http') ? link : `https://www.amazon.com.br${link}`;
+           coupons.push({
+             code: "RESGATE DIRETO",
+             discount: discountText,
+             rules: title,
+             link: addAmazonAffiliateTag(fullLink),
+             marketplace: "Amazon",
+             image_url: null
+           });
+         }
+      }
+    });
+
+    return dedupeCoupons(coupons).slice(0, limit);
+  } catch (error) {
+    console.warn(`[COUPON-SCRAPER][AMAZON] Erro nativo:`, error);
+    return [];
+  }
+}
+
+// =======================
+// ENTRYPOINT
+// =======================
 export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): Promise<ScrapedCoupon[]> {
   const normalizedMarketplace = marketplace.toLowerCase().trim();
 
   if (normalizedMarketplace === "shopee") return fetchShopeeCoupons(limit);
-  if (normalizedMarketplace === "mercado livre") return fetchExternalCoupons("Mercado Livre", MARKETPLACE_COUPON_CONFIGS["mercado livre"], limit);
+  if (normalizedMarketplace === "mercado livre") return fetchMercadoLivreCoupons(limit);
+  if (normalizedMarketplace === "amazon") return fetchAmazonCoupons(limit);
 
-  const config = MARKETPLACE_COUPON_CONFIGS[normalizedMarketplace];
-  if (!config) {
-    console.warn(`[COUPON-SCRAPER] Marketplace desconhecido ou sem suporte: ${marketplace}`);
-    return [];
-  }
-  return fetchExternalCoupons(marketplace, config, limit);
+  console.warn(`[COUPON-SCRAPER] Marketplace desconhecido ou sem suporte: ${marketplace}`);
+  return [];
 }

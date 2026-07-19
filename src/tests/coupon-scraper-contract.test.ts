@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addAmazonAffiliateTag, classifyCouponCode, sanitizeCouponForTest } from "@/lib/affiliates/coupon-scraper";
+import { addAmazonAffiliateTag, classifyCouponCode } from "@/lib/affiliates/coupon-scraper";
 
 describe("Coupon scraper contract", () => {
   it("never treats a generated Shopee digest as an official coupon code", () => {
@@ -15,13 +15,5 @@ describe("Coupon scraper contract", () => {
       .toBe("https://www.amazon.com.br/dp/B001?psc=1&tag=caca-20");
   });
 
-  it("rejects expired coupons from public marketplace pages", () => {
-    expect(sanitizeCouponForTest({ discount: "R$ 35 OFF", rules: "Cupom expirado" }, "Mercado Livre", "https://www.mercadolivre.com.br/ofertas/cupons"))
-      .toBeNull();
-  });
 
-  it("rejects placeholder links returned by an extractor", () => {
-    expect(sanitizeCouponForTest({ discount: "R$ 20 OFF", link: "https://www.amazon.com.br/ExemploDeCupom1" }, "Amazon", "https://www.amazon.com.br/coupons"))
-      .toBeNull();
-  });
 });
