@@ -118,7 +118,11 @@ async function fetchShopeeNativeCategoryProducts(category, payloadObject) {
   if (response.status !== 200 || errors.length) {
     return { http: response.status, nodes: [], error: errors.map((error) => error.message).filter(Boolean).join(' | ') };
   }
-  return { http: 200, nodes: response.data?.data?.productOfferV2?.nodes || [] };
+  return {
+    http: 200,
+    nodes: response.data?.data?.productOfferV2?.nodes || [],
+    pageInfo: response.data?.data?.productOfferV2?.pageInfo || null,
+  };
 }
 
 async function loadShopeeNoveltyKeys() {

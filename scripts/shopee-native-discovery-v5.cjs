@@ -5,6 +5,8 @@ const path = require('node:path');
 const scenarioConfig = require('./shopee-scenario-config.cjs');
 
 const CATALOG_PATH = path.join(__dirname, 'shopee-native-categories.json');
+const DEFAULT_PAGE_SIZE = 20;
+const DEFAULT_MAX_PAGES_PER_KEYWORD = 3;
 const SCORE_RULES = {
   sales: [[10000, 30], [5000, 22], [1000, 15]],
   discount: [[50, 25], [40, 20], [25, 15]],
@@ -27,11 +29,11 @@ function productFields() {
   return 'itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds';
 }
 
-function buildProductOfferPayload(keyword) {
+function buildProductOfferPayload(keyword, page = 1, limit = DEFAULT_PAGE_SIZE) {
   return {
     operationName: 'ShopeePromotionOffers',
     query: `query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { ${productFields()} } pageInfo { page limit hasNextPage } } }`,
-    variables: { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true }
+    variables: { keyword, page, limit, sortType: 2, isAMSOffer: true }
   };
 }
 
@@ -154,9 +156,17 @@ function rankTop20ByCategory(products, categories) {
   }));
 }
 
-async function runNativeDiscovery({ fetchProducts, isNovel = () => true, persistFinalists, dryRun = false }) {
+async function runNativeDiscovery({
+  fetchProducts,
+  isNovel = () => true,
+  persistFinalists,
+  dryRun = false,
+  scenario,
+  pageSize = DEFAULT_PAGE_SIZE,
+  maxPagesPerKeyword = DEFAULT_MAX_PAGES_PER_KEYWORD,
+}) {
   const currentHour = new Date().getHours();
-  const activeScenario = scenarioConfig.getActiveScenario(currentHour);
+  const activeScenario = scenario || scenarioConfig.getActiveScenario(currentHour);
   const keywords = activeScenario.keywords; // Puxa 100% da lista do cenário, sem sorteio.
 
   console.log(`[Shopee V5] Cenário ativo para ${currentHour}h: ${activeScenario.name}`);
@@ -172,17 +182,30 @@ async function runNativeDiscovery({ fetchProducts, isNovel = () => true, persist
   const categoryResults = [{ ...categoryMock, products: [], error: null }];
   const raw = [];
   let calls = 0;
+  let pagesFetched = 0;
+  let emptyResponses = 0;
+  let apiErrors = 0;
+  let rateLimited = false;
 
   for (const keyword of keywords) {
-    const payload = buildProductOfferPayload(keyword);
-    calls++;
-    const response = await fetchProducts(categoryMock, payload);
-    if (response.http === 429) {
-      categoryResults[0].error = { http: 429, retryAfter: response.retryAfter || null };
-      break;
+    for (let page = 1; page <= maxPagesPerKeyword; page += 1) {
+      const payload = buildProductOfferPayload(keyword, page, pageSize);
+      calls++;
+      pagesFetched++;
+      const response = await fetchProducts(categoryMock, payload);
+      if (response.http === 429) {
+        categoryResults[0].error = { http: 429, retryAfter: response.retryAfter || null };
+        rateLimited = true;
+        break;
+      }
+      if (response.http !== 200 || response.error) apiErrors++;
+      const nodes = Array.isArray(response.nodes) ? response.nodes : [];
+      if (!nodes.length) emptyResponses++;
+      nodes.forEach((node) => raw.push({ node, category: categoryMock }));
+      const hasNextPage = response.pageInfo?.hasNextPage === true;
+      if (!hasNextPage) break;
     }
-    const nodes = Array.isArray(response.nodes) ? response.nodes : [];
-    nodes.forEach((node) => raw.push({ node, category: categoryMock }));
+    if (rateLimited) break;
   }
 
   const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category)).filter(Boolean);
@@ -204,7 +227,14 @@ async function runNativeDiscovery({ fetchProducts, isNovel = () => true, persist
       raw: raw.length,
       sanitized: sanitized.length,
       deduplicated: deduplicated.length,
-      final: finalists.length
+      invalid: raw.length - sanitized.length,
+      duplicates: sanitized.length - deduplicated.length,
+      novel: novel.length,
+      final: finalists.length,
+      pagesFetched,
+      emptyResponses,
+      apiErrors,
+      rateLimited
     },
     aiCalled: false,
     postsCreated: 0
@@ -213,6 +243,8 @@ async function runNativeDiscovery({ fetchProducts, isNovel = () => true, persist
 
 module.exports = {
   CATALOG_PATH,
+  DEFAULT_PAGE_SIZE,
+  DEFAULT_MAX_PAGES_PER_KEYWORD,
   loadCertifiedCatalog,
   buildProductOfferPayload,
   sanitizeProduct,
