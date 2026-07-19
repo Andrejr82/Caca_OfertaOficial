@@ -7,9 +7,13 @@
     "start": "node src/index.js --run",
     "test": "node --test test",
     "test:telegram": "node src/index.js --test",
-    "test:daily": "node src/index.js --daily-test"
+    "test:daily": "node src/index.js --daily-test",
+    "hunter": "node src/hunter/hunter.js"
   },
   "dependencies": {
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.5",
+    "oci-common": "^2.93.0",
+    "oci-core": "^2.93.0",
+    "oci-identity": "^2.137.0"
   }
 }

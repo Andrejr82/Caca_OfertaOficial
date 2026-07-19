@@ -6,3 +6,6 @@ reports/*
 !reports/.gitkeep
 data/*
 !data/.gitkeep
+*.pem
+*.key
+oci_config
