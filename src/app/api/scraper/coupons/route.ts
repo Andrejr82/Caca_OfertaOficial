@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { fetchMarketplaceCoupons, type ScrapedCoupon } from "@/lib/affiliates/coupon-scraper";
+import { persistCouponDrafts } from "@/lib/coupons/persist-coupon-drafts";
 
 const SUPPORTED_MARKETPLACES = new Set(["shopee", "mercado livre", "amazon"]);
 
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
       url: offer.link,
       marketplace: offer.marketplace
     })));
+    const persistence = await persistCouponDrafts(offers);
 
     const marketplaceResults = groups.map((group) => ({
       marketplace: group.marketplace,
@@ -42,8 +44,12 @@ export async function POST(request: Request) {
     return NextResponse.json({
       ok: true,
       offers,
+      persistence,
       marketplaceResults,
-      message: marketplaceResults.map((item) => `${item.marketplace}: ${item.message}`).join(" • ")
+      message: [
+        marketplaceResults.map((item) => `${item.marketplace}: ${item.message}`).join(" • "),
+        persistence.message
+      ].filter(Boolean).join(" • ")
     });
   } catch (error) {
     console.error("[COUPON-API] Falha na busca somente leitura:", error);
