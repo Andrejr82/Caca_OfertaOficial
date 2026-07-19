@@ -15,7 +15,7 @@ export async function listOffers() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as Offer[];
 
-  const { data } = await supabase.from("offers").select("*").order("created_at", { ascending: false }).limit(100);
+  const { data } = await supabase.from("offers").select("*").order("updated_at", { ascending: false }).limit(100);
   return (data || []) as Offer[];
 }
 
@@ -65,7 +65,7 @@ export async function listOffersWithDraftStatus() {
   const { data: recentOffers } = await supabase
     .from("offers")
     .select("*")
-    .order("created_at", { ascending: false })
+    .order("updated_at", { ascending: false })
     .limit(100);
 
   const draftOfferById = new Map(((draftOffers || []) as Offer[]).map((offer) => [offer.id, offer]));
