@@ -1,4 +1,5 @@
 const { execSync } = require('child_process');
+const path = require('path');
 require('dotenv').config({ path: '.env.local' });
 
 /**
@@ -14,7 +15,7 @@ const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';      // Usuário
 const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '~/Caca_OfertaOficial';
 const PM2_APP_NAME = process.env.ORACLE_PM2_NAME || 'oracle-api'; // ou o nome do processo que você utiliza (ex: index)
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
-const SSH_KEY_PATH = 'C:\\Projetos_GitHub\\Caca_OfertaOficial\\ssh-key-2026-06-25.key'; // Chave de acesso
+const SSH_KEY_PATH = path.join(__dirname, '../ssh-key-2026-06-25.key'); // Chave de acesso
 
 console.log(`🚀 Iniciando rotina de atualização da Oracle API (${SERVER_IP})...`);
 
@@ -32,10 +33,10 @@ const sshCommandGit = `ssh -i ${SSH_KEY_PATH} ${SERVER_USER}@${SERVER_IP} "cd ${
 try {
   console.log(`📡 Conectando ao servidor Oracle e executando atualização...`);
   console.log(`> ${sshCommandGit}`); // Se for usar SCP, mude para sshCommandScp
-  
+
   // Executa o comando e exibe o output no terminal (permite inserir senha se necessário)
   execSync(sshCommandGit, { stdio: 'inherit' }); // Mude para sshCommandScp caso use a abordagem 2
-  
+
   console.log('✅ Atualização concluída com sucesso no servidor Oracle!');
   console.log('🌐 A API Oracle já deve estar rodando com a versão mais recente.');
 } catch (error) {

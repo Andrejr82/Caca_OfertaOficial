@@ -481,12 +481,17 @@ async function runScrapingCycle() {
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+  if (result.marketplaces) {
+    for (const summary of result.marketplaces) {
+      console.log(`[Oracle Discovery-Only V5] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos`);
+    }
+  }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
   return result;
 }
 
 async function runMercadoLivreOfficialDryRun() {
-  const result = await executeMercadoLivreNativeTop20();
+  const result = await runMercadoLivreNativeTop20();
   writeMercadoLivreNativeTop20Reports(result);
   return result;
 }
