@@ -64,9 +64,17 @@ export async function POST(request: Request) {
       original_url: body.finalUrl,
       image_url: body.imageUrl,
       platform,
-      status: "selected",
+      status: "pending_manual_review", // Must be pending_manual_review for draft generation
       user_id: adminId,
-      score: 0
+      score: 0,
+      explainability: {
+        contract_version: "pmav5.candidate/v1",
+        candidate_id: "ext-" + Date.now(),
+        ingestion_id: "ext-ingestion",
+        correlation_id: request.headers.get("x-correlation-id") || "ext-correlation",
+        discovery_evidence: { source: "chrome-extension" },
+        marketplace_metrics: { extracted_at: new Date().toISOString() }
+      }
     }).select("id").single();
 
     if (insertError || !newOffer) {
@@ -79,7 +87,7 @@ export async function POST(request: Request) {
       const command: OfficialAICommand = {
         contractVersion: "pmav5.ai/v1",
         commandId,
-        idempotencyKey: `ai:${newOffer.id}:v1`,
+        idempotencyKey: `ai:draft:${newOffer.id}:v2`,
         correlationId: request.headers.get("x-correlation-id") || commandId,
         causationId: null,
         offerId: newOffer.id,
@@ -95,6 +103,14 @@ export async function POST(request: Request) {
       // Chama o caso de uso oficial, repassando o cliente admin
       const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(adminClient, adminId));
       
+      if (result.status === "rejected") {
+        return NextResponse.json({
+          ok: false,
+          code: "AI_REJECTED",
+          message: `Falha ao gerar rascunhos: ${'message' in result ? result.message : 'Erro desconhecido'}`
+        }, { status: 500, headers: corsHeaders });
+      }
+
       return NextResponse.json({ 
         ok: true, 
         offerId: newOffer.id, 
