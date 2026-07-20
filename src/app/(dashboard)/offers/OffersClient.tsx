@@ -13,6 +13,7 @@ type OfferWithDraftCount = Offer & { draft_count?: number };
 export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftCount[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
   const [filterDecision, setFilterDecision] = useState<string>("");
+  const [filterPlatform, setFilterPlatform] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
 
   // Ponytail: simplificando ordenação e filtro em memória, sem query params complexos.
@@ -23,6 +24,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     
     if (filterTier && tier !== filterTier) return false;
     if (filterDecision && decision !== filterDecision) return false;
+    if (filterPlatform && offer.platform !== filterPlatform) return false;
     return true;
   });
 
@@ -56,6 +58,17 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   return (
     <section className="glass-card p-5 w-full flex flex-col gap-4">
       <div className="flex flex-wrap gap-4 border-b border-white/[0.04] pb-4">
+        <select 
+          className="bg-black/20 text-white text-sm rounded p-2"
+          value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
+        >
+          <option value="">Todos Marketplaces</option>
+          <option value="Shopee">Shopee</option>
+          <option value="Amazon">Amazon</option>
+          <option value="Mercado Livre">Mercado Livre</option>
+          <option value="Magalu">Magalu</option>
+        </select>
+
         <select 
           className="bg-black/20 text-white text-sm rounded p-2"
           value={filterTier} onChange={e => setFilterTier(e.target.value)}
