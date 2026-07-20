@@ -37,6 +37,7 @@ MUSETALK_UNET = Path(os.environ["VIDEO_MUSETALK_UNET"]) if os.environ.get("VIDEO
 MUSETALK_UNET_CONFIG = Path(os.environ["VIDEO_MUSETALK_UNET_CONFIG"]) if os.environ.get("VIDEO_MUSETALK_UNET_CONFIG") else None
 MUSETALK_VERSION = os.environ.get("VIDEO_MUSETALK_VERSION", "v15")
 REFERENCE_CLEANUP = os.environ.get("VIDEO_REFERENCE_CLEANUP", "1") != "0"
+REFERENCE_SOURCE = os.environ.get("VIDEO_REFERENCE_SOURCE", "video").lower()
 
 
 def headers(content_type: str | None = None) -> dict[str, str]:
@@ -159,10 +160,37 @@ def reference_cleanup_filter() -> str:
     return f",{cleanup}" if REFERENCE_CLEANUP else ""
 
 
-def render_base_for_lipsync(base_video: Path, audio: Path, output: Path) -> None:
+def make_avatar_motion_video(avatar: Path, audio: Path, output: Path) -> None:
+    """Create a clean, gently moving presenter clip from the avatar PNG."""
+    if not avatar.exists():
+        raise RuntimeError(f"Avatar não encontrado: {avatar}")
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
-    filters = f"[0:v]scale=720:1280{reference_cleanup_filter()}[v]"
+    filters = (
+        "[0:v]scale=720:1080:force_original_aspect_ratio=decrease,"
+        "pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=black,"
+        "zoompan=z='min(zoom+0.00035,1.035)':"
+        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+        "d=1:s=720x1280:fps=25,format=yuv420p[v]"
+    )
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(avatar),
+            "-i", str(audio), "-filter_complex", filters, "-map", "[v]", "-map", "1:a:0",
+            "-shortest", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+            str(output),
+        ],
+        check=True,
+        timeout=900,
+    )
+
+
+def render_base_for_lipsync(base_video: Path, audio: Path, output: Path, cleanup: bool = True) -> None:
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg não está instalado.")
+    cleanup_filter = reference_cleanup_filter() if cleanup else ""
+    filters = f"[0:v]scale=720:1280{cleanup_filter}[v]"
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
@@ -264,14 +292,17 @@ def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -
     )
 
 
-def render_from_base_video(base_video: Path, card: Path, badges: Path, audio: Path, output: Path) -> None:
+def render_from_base_video(
+    base_video: Path, card: Path, badges: Path, audio: Path, output: Path, cleanup: bool = True
+) -> None:
     """Preserve proven avatar motion and replace the source audio."""
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
     if not base_video.exists():
         raise RuntimeError(f"Vídeo-base não encontrado: {base_video}")
+    cleanup_filter = reference_cleanup_filter() if cleanup else ""
     filters = (
-        f"[0:v]scale=720:1280{reference_cleanup_filter()}[bg];"
+        f"[0:v]scale=720:1280{cleanup_filter}[bg];"
         "[bg][1:v]overlay="
         "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
         "y=390:enable='gte(t,1.0)'[scene];"
@@ -326,14 +357,21 @@ def process(job: dict) -> None:
         make_reference_badges(badges)
         speak(script, audio)
         if RENDER_ENGINE == "reference":
+            use_avatar_source = REFERENCE_SOURCE == "avatar"
+            source_video = BASE_VIDEO_PATH
+            source_cleanup = REFERENCE_CLEANUP
+            if use_avatar_source:
+                source_video = root / "avatar-motion.mp4"
+                make_avatar_motion_video(AVATAR_PATH, audio, source_video)
+                source_cleanup = False
             if LIP_SYNC_ENGINE == "musetalk":
                 base_for_lipsync = root / "base-for-lipsync.mp4"
                 lipsynced = root / "lipsynced.mp4"
-                render_base_for_lipsync(BASE_VIDEO_PATH, audio, base_for_lipsync)
+                render_base_for_lipsync(source_video, audio, base_for_lipsync, cleanup=source_cleanup)
                 run_musetalk(base_for_lipsync, audio, lipsynced, root)
                 overlay_card_on_video(lipsynced, card, badges, audio, video)
             else:
-                render_from_base_video(BASE_VIDEO_PATH, card, badges, audio, video)
+                render_from_base_video(source_video, card, badges, audio, video, cleanup=source_cleanup)
         else:
             make_caption(script, caption)
             download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
