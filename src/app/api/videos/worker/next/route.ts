@@ -11,6 +11,14 @@ export async function GET(request: Request) {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return NextResponse.json({ error: "Supabase admin não configurado." }, { status: 503 });
 
+  const staleMinutes = Math.max(10, Number(process.env.VIDEO_JOB_STALE_MINUTES || 30));
+  const staleBefore = new Date(Date.now() - staleMinutes * 60_000).toISOString();
+  await supabase
+    .from("video_jobs")
+    .update({ status: "queued", started_at: null, error_message: "Job recolocado na fila após expirar o worker." })
+    .eq("status", "processing")
+    .lt("started_at", staleBefore);
+
   const { data: queued, error: readError } = await supabase
     .from("video_jobs")
     .select("*, offers(id, product_name, image_url, current_price, old_price, original_url, platform)")

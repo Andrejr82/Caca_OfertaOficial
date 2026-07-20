@@ -42,6 +42,20 @@ export async function POST(request: Request) {
 
   if (offerError || !offer) return NextResponse.json({ error: "Oferta não encontrada." }, { status: 404 });
 
+  const dailyLimit = Math.min(3, Math.max(1, Number(process.env.VIDEO_DAILY_LIMIT || 3)));
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const { count, error: countError } = await supabase
+    .from("video_jobs")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", userData.user.id)
+    .gte("created_at", since)
+    .not("status", "eq", "cancelled");
+
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
+  if ((count ?? 0) >= dailyLimit) {
+    return NextResponse.json({ error: `Limite de ${dailyLimit} vídeos a cada 24 horas atingido.` }, { status: 429 });
+  }
+
   const { data, error } = await supabase
     .from("video_jobs")
     .insert({ user_id: userData.user.id, offer_id: parsed.data.offerId, script: parsed.data.script, status: "queued" })
