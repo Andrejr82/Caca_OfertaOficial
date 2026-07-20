@@ -8,6 +8,7 @@ Este worker processa no máximo três jobs por execução. Ele busca uma oferta 
 - `VIDEO_WORKER_TOKEN` configurado na Vercel e no Studio;
 - migrações `20260720000000_video_jobs.sql` e `20260720010000_video_storage.sql` aplicadas no Supabase;
 - arquivo `Avatar_Anuncio.png` copiado para o Studio, por exemplo em `~/caca-video-assets/Avatar_Anuncio.png`.
+- vídeo-base `Video_Avatar_Ofeerta.mp4` copiado para o Studio, por exemplo em `~/caca-video-assets/Video_Avatar_Ofeerta.mp4`.
 
 O worker não usa a `SUPABASE_SERVICE_ROLE_KEY`. Essa chave permanece somente na Vercel.
 
@@ -46,6 +47,8 @@ Configure as variáveis no mesmo terminal:
 export VIDEO_PANEL_URL="https://caca-oferta-oficial.vercel.app"
 export VIDEO_WORKER_TOKEN="TOKEN_DA_VERCEL"
 export VIDEO_AVATAR_PATH="$HOME/caca-video-assets/Avatar_Anuncio.png"
+export VIDEO_BASE_VIDEO_PATH="$HOME/caca-video-assets/Video_Avatar_Ofeerta.mp4"
+export VIDEO_RENDER_ENGINE="reference"
 export VIDEO_MAX_JOBS="3"
 export VIDEO_POLL_SECONDS="15"
 export VIDEO_TTS_VOICE="pt-BR-AntonioNeural"

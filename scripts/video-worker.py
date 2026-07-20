@@ -25,6 +25,8 @@ from PIL import Image, ImageDraw, ImageFont
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
 WORKER_TOKEN = os.environ["VIDEO_WORKER_TOKEN"]
 AVATAR_PATH = Path(os.environ.get("VIDEO_AVATAR_PATH", "avatar.png"))
+BASE_VIDEO_PATH = Path(os.environ.get("VIDEO_BASE_VIDEO_PATH", ""))
+RENDER_ENGINE = os.environ.get("VIDEO_RENDER_ENGINE", "reference" if BASE_VIDEO_PATH else "avatar")
 POLL_SECONDS = max(10, int(os.environ.get("VIDEO_POLL_SECONDS", "15")))
 MAX_JOBS = min(3, max(1, int(os.environ.get("VIDEO_MAX_JOBS", "3"))))
 VOICE = os.environ.get("VIDEO_TTS_VOICE", "pt-BR-AntonioNeural")
@@ -140,6 +142,34 @@ def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -
     )
 
 
+def render_from_base_video(base_video: Path, card: Path, caption: Path, audio: Path, output: Path) -> None:
+    """Preserve proven avatar motion and replace the source audio."""
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg não está instalado.")
+    if not base_video.exists():
+        raise RuntimeError(f"Vídeo-base não encontrado: {base_video}")
+    filters = (
+        "[0:v]scale=1280:1920,crop=1080:1920[bg];"
+        "[1:v]format=rgba[card];[2:v]format=rgba[caption];"
+        "[bg][card]overlay=x='if(lt(t,0.8),1080-540*t/0.8,540)':y=430:enable='gte(t,0.3)'[scene];"
+        "[scene][caption]overlay=40:1550:enable='gte(t,0.5)'[v]"
+    )
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-stream_loop", "-1", "-i", str(base_video),
+            "-loop", "1", "-i", str(card),
+            "-loop", "1", "-i", str(caption),
+            "-i", str(audio), "-filter_complex", filters,
+            "-map", "[v]", "-map", "3:a:0", "-shortest", "-r", "30",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", str(output),
+        ],
+        check=True,
+        timeout=900,
+    )
+
+
 def signed_upload(job_id: str, kind: str, file_path: Path) -> str:
     signed = api("POST", "/api/videos/worker/upload-url", {"jobId": job_id, "kind": kind})
     request = urllib.request.Request(
@@ -176,7 +206,10 @@ def process(job: dict) -> None:
         make_card(offer, product, card)
         make_caption(script, caption)
         speak(script, audio)
-        render(avatar, card, caption, audio, video)
+        if RENDER_ENGINE == "reference":
+            render_from_base_video(BASE_VIDEO_PATH, card, caption, audio, video)
+        else:
+            render(avatar, card, caption, audio, video)
         video_url = signed_upload(job_id, "video", video)
         audio_url = signed_upload(job_id, "audio", audio)
         api("POST", f"/api/videos/worker/{job_id}/complete", {"videoUrl": video_url, "audioUrl": audio_url})
