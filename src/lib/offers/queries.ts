@@ -15,7 +15,7 @@ export async function listOffers() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as Offer[];
 
-  const { data } = await supabase.from("offers").select("*").order("updated_at", { ascending: false }).limit(100);
+  const { data } = await supabase.from("offers").select("*").order("updated_at", { ascending: false }).limit(5000);
   return (data || []) as Offer[];
 }
 
@@ -96,7 +96,7 @@ export async function listAffiliateLinks() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as AffiliateLink[];
 
-  const { data } = await supabase.from("affiliate_links").select("*").order("created_at", { ascending: false }).limit(100);
+  const { data } = await supabase.from("affiliate_links").select("*").order("created_at", { ascending: false }).limit(5000);
   return (data || []) as AffiliateLink[];
 }
 
@@ -104,7 +104,7 @@ export async function listSales() {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [] as Sale[];
 
-  const { data } = await supabase.from("sales").select("*").order("sold_at", { ascending: false }).limit(100);
+  const { data } = await supabase.from("sales").select("*").order("sold_at", { ascending: false }).limit(5000);
   return (data || []) as Sale[];
 }
 
