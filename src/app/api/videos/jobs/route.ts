@@ -49,7 +49,9 @@ export async function POST(request: Request) {
     .select("id", { count: "exact", head: true })
     .eq("user_id", userData.user.id)
     .gte("created_at", since)
-    .not("status", "eq", "cancelled");
+    // Jobs que falharam durante testes não devem consumir a cota diária.
+    // Mantemos na conta apenas jobs ativos ou concluídos.
+    .in("status", ["queued", "processing", "ready", "approved"]);
 
   if (countError) return NextResponse.json({ error: countError.message }, { status: 500 });
   if ((count ?? 0) >= dailyLimit) {
