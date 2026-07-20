@@ -14,7 +14,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .update({ status: "queued", video_url: null, audio_url: null, error_message: null, started_at: null, completed_at: null })
     .eq("id", id)
     .eq("user_id", userData.user.id)
-    .eq("status", "failed")
+    .in("status", ["failed", "ready"])
     .select("*")
     .maybeSingle();
 

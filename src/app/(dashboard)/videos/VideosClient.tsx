@@ -59,7 +59,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     const response = await fetch(`/api/videos/jobs/${id}/retry`, { method: "POST" });
     const payload = await response.json();
     if (!response.ok) return setMessage(payload.error ?? "Não foi possível recolocar o vídeo na fila.");
-    setJobs((current) => current.map((job) => job.id === id ? { ...job, status: "queued", error_message: null } : job));
+    setJobs((current) => current.map((job) => job.id === id ? { ...job, status: "queued", video_url: null, audio_url: null, error_message: null } : job));
     setMessage("Vídeo recolocado na fila.");
   }
 

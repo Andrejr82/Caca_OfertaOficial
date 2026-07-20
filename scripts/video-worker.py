@@ -70,38 +70,44 @@ def font(size: int, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.Im
 
 
 def make_card(offer: dict, product_path: Path, destination: Path) -> None:
-    card = Image.new("RGBA", (440, 610), (10, 12, 18, 245))
+    # Keep the same compact composition validated in the local reference test.
+    # The card stays on the right side, preserving the avatar's face and scenery.
+    card = Image.new("RGBA", (250, 370), (0, 0, 0, 0))
     draw = ImageDraw.Draw(card)
-    draw.rounded_rectangle((2, 2, 438, 608), radius=28, fill=(18, 22, 30, 248), outline=(255, 190, 0, 230), width=3)
-    draw.rounded_rectangle((26, 26, 414, 320), radius=18, fill=(248, 248, 248, 255))
+    draw.rounded_rectangle((2, 2, 248, 368), radius=20, fill=(35, 35, 40, 248), outline=(225, 225, 225, 235), width=2)
+    draw.rounded_rectangle((20, 20, 230, 198), radius=12, fill=(245, 245, 245, 255))
 
     product = Image.open(product_path).convert("RGB")
-    product.thumbnail((340, 250), Image.Resampling.LANCZOS)
-    card.paste(product, (220 - product.width // 2, 175 - product.height // 2))
+    product.thumbnail((190, 160), Image.Resampling.LANCZOS)
+    card.paste(product, (30 + (190 - product.width) // 2, 28 + (160 - product.height) // 2))
 
     name = str(offer.get("product_name") or "Oferta especial")
+    old_price = offer.get("old_price")
     price = offer.get("current_price")
-    name_lines = wrap(name, width=28)[:3]
-    y = 350
+    name_lines = wrap(name, width=23)[:3]
+    y = 215
     for line in name_lines:
-        draw.text((28, y), line, font=font(24, bold=True), fill="white")
-        y += 31
+        draw.text((20, y), line, font=font(16, bold=True), fill="white")
+        y += 18
+    if old_price is not None:
+        old_text = f"R$ {float(old_price):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        draw.text((20, 250), old_text, font=font(14), fill=(210, 210, 210))
     if price is not None:
         price_text = f"R$ {float(price):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-        draw.text((28, 475), price_text, font=font(38, bold=True), fill=(255, 194, 0))
-    draw.text((28, 555), "OFERTA VERIFICADA", font=font(17, bold=True), fill=(240, 240, 240))
+        draw.text((20, 278), price_text, font=font(23, bold=True), fill=(255, 190, 0))
+    draw.text((20, 330), "OFERTA VERIFICADA", font=font(13, bold=True), fill="white")
     card.save(destination, "PNG")
 
 
 def make_caption(script: str, destination: Path) -> None:
-    caption = Image.new("RGBA", (1000, 300), (4, 7, 12, 220))
+    caption = Image.new("RGBA", (1000, 180), (4, 7, 12, 180))
     draw = ImageDraw.Draw(caption)
-    draw.rounded_rectangle((2, 2, 998, 298), radius=24, outline=(255, 190, 0, 220), width=3)
-    lines = wrap(script, width=48)[:5]
-    y = 28
+    draw.rounded_rectangle((2, 2, 998, 178), radius=18, outline=(255, 190, 0, 190), width=2)
+    lines = wrap(script, width=64)[:3]
+    y = 18
     for line in lines:
-        draw.text((28, y), line, font=font(27, bold=True), fill="white")
-        y += 48
+        draw.text((24, y), line, font=font(22, bold=True), fill="white")
+        y += 42
     caption.save(destination, "PNG")
 
 
@@ -120,9 +126,9 @@ def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -
         raise RuntimeError("ffmpeg não está instalado.")
     filters = (
         "[0:v]scale=1280:1920,crop=1080:1920[bg];"
-        "[1:v]format=rgba[card];[2:v]format=rgba[caption];"
-        "[bg][card]overlay=x='if(lt(t,0.8),1080-540*t/0.8,540)':y=430:enable='gte(t,0.3)'[scene];"
-        "[scene][caption]overlay=40:1550:enable='gte(t,0.5)'[v]"
+        "[1:v]format=rgba,scale=320:-1[card];[2:v]format=rgba,scale=900:-1[caption];"
+        "[bg][card]overlay=x='if(lt(t,0.8),1080-340*t/0.8,740)':y=410:enable='gte(t,0.3)'[scene];"
+        "[scene][caption]overlay=60:1710:enable='gte(t,0.5)'[v]"
     )
     subprocess.run(
         [
@@ -142,27 +148,26 @@ def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -
     )
 
 
-def render_from_base_video(base_video: Path, card: Path, caption: Path, audio: Path, output: Path) -> None:
+def render_from_base_video(base_video: Path, card: Path, audio: Path, output: Path) -> None:
     """Preserve proven avatar motion and replace the source audio."""
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
     if not base_video.exists():
         raise RuntimeError(f"Vídeo-base não encontrado: {base_video}")
     filters = (
-        "[0:v]scale=1280:1920,crop=1080:1920[bg];"
-        "[1:v]format=rgba[card];[2:v]format=rgba[caption];"
-        "[bg][card]overlay=x='if(lt(t,0.8),1080-540*t/0.8,540)':y=430:enable='gte(t,0.3)'[scene];"
-        "[scene][caption]overlay=40:1550:enable='gte(t,0.5)'[v]"
+        "[0:v]scale=720:1280[bg];"
+        "[bg][1:v]overlay="
+        "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
+        "y=390:enable='gte(t,1.0)'[v]"
     )
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
             "-stream_loop", "-1", "-i", str(base_video),
             "-loop", "1", "-i", str(card),
-            "-loop", "1", "-i", str(caption),
             "-i", str(audio), "-filter_complex", filters,
-            "-map", "[v]", "-map", "3:a:0", "-shortest", "-r", "30",
-            "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-map", "[v]", "-map", "2:a:0", "-shortest", "-r", "24",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", str(output),
         ],
         check=True,
@@ -200,11 +205,11 @@ def process(job: dict) -> None:
             raise RuntimeError("A oferta não possui image_url.")
         download(product_url, product)
         make_card(offer, product, card)
-        make_caption(script, caption)
         speak(script, audio)
         if RENDER_ENGINE == "reference":
-            render_from_base_video(BASE_VIDEO_PATH, card, caption, audio, video)
+            render_from_base_video(BASE_VIDEO_PATH, card, audio, video)
         else:
+            make_caption(script, caption)
             download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
             avatar = root / "avatar.png" if (root / "avatar.png").exists() else AVATAR_PATH
             if not avatar.exists():
