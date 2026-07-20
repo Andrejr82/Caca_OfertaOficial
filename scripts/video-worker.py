@@ -12,6 +12,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import urllib.error
@@ -36,6 +37,7 @@ MUSETALK_CONFIG = Path(os.environ["VIDEO_MUSETALK_CONFIG"]) if os.environ.get("V
 MUSETALK_UNET = Path(os.environ["VIDEO_MUSETALK_UNET"]) if os.environ.get("VIDEO_MUSETALK_UNET") else None
 MUSETALK_UNET_CONFIG = Path(os.environ["VIDEO_MUSETALK_UNET_CONFIG"]) if os.environ.get("VIDEO_MUSETALK_UNET_CONFIG") else None
 MUSETALK_VERSION = os.environ.get("VIDEO_MUSETALK_VERSION", "v15")
+MUSETALK_PYTHON = Path(os.environ["VIDEO_MUSETALK_PYTHON"]) if os.environ.get("VIDEO_MUSETALK_PYTHON") else None
 REFERENCE_CLEANUP = os.environ.get("VIDEO_REFERENCE_CLEANUP", "1") != "0"
 REFERENCE_SOURCE = os.environ.get("VIDEO_REFERENCE_SOURCE", "video").lower()
 
@@ -205,6 +207,32 @@ def render_base_for_lipsync(base_video: Path, audio: Path, output: Path, cleanup
     )
 
 
+def resolve_musetalk_python() -> Path:
+    candidates = [
+        MUSETALK_PYTHON,
+        Path.home() / "miniforge3/envs/musetalk/bin/python",
+        Path(shutil.which("python") or sys.executable),
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+    raise RuntimeError("Interpretador Python do MuseTalk não foi encontrado.")
+
+
+def validate_musetalk_runtime() -> Path:
+    python = resolve_musetalk_python()
+    probe = subprocess.run(
+        [str(python), "-c", "import cv2, torch; assert torch.cuda.is_available(), 'CUDA indisponível'"],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if probe.returncode != 0:
+        detail = (probe.stderr or probe.stdout or "falha desconhecida").strip().splitlines()[-1]
+        raise SystemExit(f"Preflight MuseTalk falhou com {python}: {detail}")
+    return python
+
+
 def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
     required = {
         "VIDEO_MUSETALK_DIR": MUSETALK_DIR,
@@ -227,7 +255,7 @@ def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
     result_dir = workdir / "musetalk-results"
     result_dir.mkdir()
     command = [
-        "python", "-m", "scripts.inference",
+        str(resolve_musetalk_python()), "-m", "scripts.inference",
         "--inference_config", str(config),
         "--result_dir", str(result_dir),
         "--unet_model_path", str(MUSETALK_UNET),
@@ -395,6 +423,8 @@ def main() -> None:
         for path in (MUSETALK_DIR, MUSETALK_CONFIG, MUSETALK_UNET, MUSETALK_UNET_CONFIG)
     ):
         raise SystemExit("MuseTalk requer VIDEO_MUSETALK_DIR, VIDEO_MUSETALK_CONFIG, VIDEO_MUSETALK_UNET e VIDEO_MUSETALK_UNET_CONFIG.")
+    if LIP_SYNC_ENGINE == "musetalk":
+        validate_musetalk_runtime()
     processed = 0
     print(f"Worker iniciado; limite desta execução: {MAX_JOBS} jobs.", flush=True)
     while processed < MAX_JOBS:
