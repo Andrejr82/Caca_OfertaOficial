@@ -135,7 +135,8 @@ def reference_cleanup_filter() -> str:
     intentionally applied before the new offer card is composited, so the
     original product cannot leak through the generated card.
     """
-    cleanup = "delogo=x=380:y=380:w=310:h=520:band=24"
+    # The Lightning FFmpeg build supports delogo coordinates but not `band`.
+    cleanup = "delogo=x=380:y=380:w=310:h=520"
     return f",{cleanup}" if REFERENCE_CLEANUP else ""
 
 
