@@ -19,6 +19,9 @@ if (require.main === module && retiredWorkerFlag) {
   process.exit(1);
 }
 
+const scenarioArgIndex = process.argv.indexOf('--scenario');
+const CLI_SCENARIO_ID = scenarioArgIndex !== -1 ? process.argv[scenarioArgIndex + 1] : null;
+
 global.WebSocket = require('ws');
 
 const crypto = require('node:crypto');
@@ -153,6 +156,16 @@ async function loadShopeeNoveltyKeys() {
 async function executeShopeeNativeDiscoveryV5(options = {}) {
   const dryRun = options.dryRun === true;
   const noveltyKeys = dryRun ? new Set() : await loadShopeeNoveltyKeys();
+  
+  let forcedScenario = null;
+  if (options.scenario) {
+    const scenarioConfig = require('./shopee-scenario-config.cjs');
+    forcedScenario = scenarioConfig.SCENARIOS[options.scenario];
+    if (!forcedScenario) {
+      throw new Error(`Cenário Shopee '--scenario ${options.scenario}' não encontrado.`);
+    }
+  }
+
   const result = await shopeeNativeV5.runNativeDiscovery({
     fetchProducts: fetchShopeeNativeCategoryProducts,
     isNovel: (product) => ![
@@ -161,6 +174,7 @@ async function executeShopeeNativeDiscoveryV5(options = {}) {
       product.normalizedUrl && 'url:' + product.normalizedUrl,
     ].filter(Boolean).some((key) => noveltyKeys.has(key)),
     dryRun,
+    scenario: forcedScenario,
   });
   return {
     ...result,
@@ -265,7 +279,7 @@ function normalizeAmazonCandidate(product, discoveredAt) {
 async function scrapeStore(store) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
-    const result = await executeShopeeNativeDiscoveryV5({ persist: false });
+    const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario: CLI_SCENARIO_ID });
     return result.categories
       .flatMap((category) => category.products)
       .map((product) => normalizeShopeeCandidate(product, discoveredAt));
@@ -502,7 +516,7 @@ async function runMercadoLivreOfficialDryRun() {
 
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
   if (process.argv.includes('--shopee-native-top20-dry-run')) {
-    executeShopeeNativeDiscoveryV5({ dryRun: true }).catch((error) => {
+    executeShopeeNativeDiscoveryV5({ dryRun: true, scenario: CLI_SCENARIO_ID }).catch((error) => {
       console.error('[Shopee V5 Dry-Run] ' + error.message);
       process.exitCode = 1;
     });
