@@ -31,6 +31,8 @@ RENDER_ENGINE = os.environ.get("VIDEO_RENDER_ENGINE", "reference" if BASE_VIDEO_
 POLL_SECONDS = max(10, int(os.environ.get("VIDEO_POLL_SECONDS", "15")))
 MAX_JOBS = min(3, max(1, int(os.environ.get("VIDEO_MAX_JOBS", "3"))))
 VOICE = os.environ.get("VIDEO_TTS_VOICE", "pt-BR-AntonioNeural")
+TTS_RATE = os.environ.get("VIDEO_TTS_RATE", "-8%")
+TTS_PITCH = os.environ.get("VIDEO_TTS_PITCH", "+0Hz")
 LIP_SYNC_ENGINE = os.environ.get("VIDEO_LIP_SYNC_ENGINE", "off").lower()
 MUSETALK_DIR = Path(os.environ["VIDEO_MUSETALK_DIR"]) if os.environ.get("VIDEO_MUSETALK_DIR") else None
 MUSETALK_CONFIG = Path(os.environ["VIDEO_MUSETALK_CONFIG"]) if os.environ.get("VIDEO_MUSETALK_CONFIG") else None
@@ -140,13 +142,16 @@ def speak(script: str, destination: Path) -> None:
     if not shutil.which("edge-tts"):
         raise RuntimeError("edge-tts não está instalado. Execute: pip install edge-tts")
     subprocess.run(
-        ["edge-tts", "--voice", VOICE, "--text", script, "--write-media", str(destination)],
+        [
+            "edge-tts", "--voice", VOICE, "--rate", TTS_RATE, "--pitch", TTS_PITCH,
+            "--text", script, "--write-media", str(destination),
+        ],
         check=True,
         timeout=180,
     )
 
 
-def reference_cleanup_filter() -> str:
+def reference_cleanup_filter(include_card: bool = False) -> str:
     """Remove text baked into the supplied reference video.
 
     The old product card is intentionally not delogged: the generated card
@@ -159,6 +164,8 @@ def reference_cleanup_filter() -> str:
         "drawbox=x=80:y=975:w=560:h=110:color=black@0.78:t=fill,"
         "drawbox=x=150:y=1165:w=450:h=70:color=black@0.78:t=fill"
     )
+    if include_card:
+        cleanup = "drawbox=x=390:y=405:w=280:h=470:color=black@0.92:t=fill," + cleanup
     return f",{cleanup}" if REFERENCE_CLEANUP else ""
 
 
@@ -188,10 +195,12 @@ def make_avatar_motion_video(avatar: Path, audio: Path, output: Path) -> None:
     )
 
 
-def render_base_for_lipsync(base_video: Path, audio: Path, output: Path, cleanup: bool = True) -> None:
+def render_base_for_lipsync(
+    base_video: Path, audio: Path, output: Path, cleanup: bool = True, cleanup_card: bool = False
+) -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
-    cleanup_filter = reference_cleanup_filter() if cleanup else ""
+    cleanup_filter = reference_cleanup_filter(cleanup_card) if cleanup else ""
     filters = f"[0:v]scale=720:1280{cleanup_filter}[v]"
     subprocess.run(
         [
@@ -269,14 +278,20 @@ def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
     shutil.copyfile(generated[0], output)
 
 
-def overlay_card_on_video(source: Path, card: Path, badges: Path, audio: Path, output: Path) -> None:
+def overlay_card_on_video(
+    source: Path, card: Path, badges: Path, audio: Path, output: Path, animate_card: bool = True
+) -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
+    card_x = (
+        "if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))"
+        if animate_card else "430"
+    )
     filters = (
         "[0:v]scale=720:1280[bg];"
-        "[bg][1:v]overlay="
-        "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
-        "y=390:enable='gte(t,1.0)'[scene];"
+        "[1:v]format=rgba,scale=280:470[card];"
+        "[bg][card]overlay="
+        f"x='{card_x}':y=390:enable='gte(t,0)'[scene];"
         "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
@@ -321,19 +336,24 @@ def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -
 
 
 def render_from_base_video(
-    base_video: Path, card: Path, badges: Path, audio: Path, output: Path, cleanup: bool = True
+    base_video: Path,
+    card: Path,
+    badges: Path,
+    audio: Path,
+    output: Path,
+    cleanup: bool = True,
+    cleanup_card: bool = False,
 ) -> None:
     """Preserve proven avatar motion and replace the source audio."""
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
     if not base_video.exists():
         raise RuntimeError(f"Vídeo-base não encontrado: {base_video}")
-    cleanup_filter = reference_cleanup_filter() if cleanup else ""
+    cleanup_filter = reference_cleanup_filter(cleanup_card) if cleanup else ""
     filters = (
         f"[0:v]scale=720:1280{cleanup_filter}[bg];"
-        "[bg][1:v]overlay="
-        "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
-        "y=390:enable='gte(t,1.0)'[scene];"
+        "[1:v]format=rgba,scale=280:470[card];"
+        "[bg][card]overlay=x=390:y=405:enable='gte(t,0)'[scene];"
         "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
@@ -386,20 +406,31 @@ def process(job: dict) -> None:
         speak(script, audio)
         if RENDER_ENGINE == "reference":
             use_avatar_source = REFERENCE_SOURCE == "avatar"
+            use_motion_source = REFERENCE_SOURCE in {"motion", "video"}
             source_video = BASE_VIDEO_PATH
             source_cleanup = REFERENCE_CLEANUP
+            source_cleanup_card = use_motion_source
             if use_avatar_source:
                 source_video = root / "avatar-motion.mp4"
                 make_avatar_motion_video(AVATAR_PATH, audio, source_video)
                 source_cleanup = False
+                source_cleanup_card = False
             if LIP_SYNC_ENGINE == "musetalk":
                 base_for_lipsync = root / "base-for-lipsync.mp4"
                 lipsynced = root / "lipsynced.mp4"
-                render_base_for_lipsync(source_video, audio, base_for_lipsync, cleanup=source_cleanup)
+                render_base_for_lipsync(
+                    source_video, audio, base_for_lipsync,
+                    cleanup=source_cleanup, cleanup_card=source_cleanup_card,
+                )
                 run_musetalk(base_for_lipsync, audio, lipsynced, root)
-                overlay_card_on_video(lipsynced, card, badges, audio, video)
+                overlay_card_on_video(
+                    lipsynced, card, badges, audio, video, animate_card=use_avatar_source,
+                )
             else:
-                render_from_base_video(source_video, card, badges, audio, video, cleanup=source_cleanup)
+                render_from_base_video(
+                    source_video, card, badges, audio, video,
+                    cleanup=source_cleanup, cleanup_card=source_cleanup_card,
+                )
         else:
             make_caption(script, caption)
             download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
