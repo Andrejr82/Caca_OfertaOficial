@@ -192,101 +192,130 @@ export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
 }
 
 // =======================
-// MERCADO LIVRE (NATIVE)
+// MERCADO LIVRE (SCRAPFLY)
 // =======================
 export async function fetchMercadoLivreCoupons(limit = 5): Promise<ScrapedCoupon[]> {
-  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: mercado livre`);
+  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons reais em: mercado livre (via Scrapfly)`);
   try {
     const url = "https://www.mercadolivre.com.br/ofertas/cupons";
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'text/html',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
-      }
-    });
-
+    const apiKey = process.env.SCRAPFLY_API_KEYS || process.env.SCRAPFLY_API_KEY || "scp-live-6d78763105ab4020a5c14af54387b027";
+    const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${apiKey}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
+    
+    const response = await fetch(scrapflyUrl);
     if (!response.ok) {
-      console.warn(`[COUPON-SCRAPER][ML] HTTP ${response.status}`);
+      console.warn(`[COUPON-SCRAPER][ML] Scrapfly HTTP ${response.status}`);
       return [];
     }
-    const html = await response.text();
+    const json = await response.json();
+    const html = json.result?.content || "";
+    if (!html) return [];
+
     const $ = cheerio.load(html);
     const coupons: ScrapedCoupon[] = [];
 
-    $('.poly-card').each((_, el) => {
-      if (coupons.length >= limit) return;
-      const title = $(el).find('h2, .poly-component__title').text().trim();
-      const link = $(el).find('a').attr('href') || url;
-      const discountNode = $(el).find('.andes-money-amount__discount, .promotion-item__discount-text').first();
-      const discountText = discountNode.text().trim();
-
-      // Enforcing that it looks like a discount or offer since ML coupons page lists products
-      if (title && (discountText.toUpperCase().includes('OFF') || discountText)) {
-        coupons.push({
-          code: "RESGATE DIRETO",
-          discount: discountText || "Oferta Especial",
-          rules: title,
-          link: link,
-          marketplace: "Mercado Livre",
-          image_url: null
-        });
-      }
+    // Extrair cupons REAIS do estado do React (__PRELOADED_STATE__ ou __NAVIGATION_PRELOADED_STATE__)
+    $('script').each((_, el) => {
+       const content = $(el).html() || '';
+       if (content.includes('window.__PRELOADED_STATE__') || content.includes('window.__NAVIGATION_PRELOADED_STATE__')) {
+           const matchJSONParse = content.match(/window\.__[A-Z_]*PRELOADED_STATE__\s*=\s*JSON\.parse\(\s*"([^"]*)"\s*\)/);
+           const matchRaw = content.match(/window\.__[A-Z_]*PRELOADED_STATE__\s*=\s*(\{.*?\});/);
+           
+           let state: any = null;
+           
+           try {
+               if (matchJSONParse && matchJSONParse[1]) {
+                   const unescaped = matchJSONParse[1].replace(/\\"/g, '"').replace(/\\\\/g, '\\');
+                   state = JSON.parse(unescaped);
+               } else if (matchRaw && matchRaw[1]) {
+                   state = JSON.parse(matchRaw[1]);
+               }
+           } catch(e) {
+               console.warn('[COUPON-SCRAPER][ML] Erro ao fazer parse do estado json:', e);
+           }
+           
+           if (state) {
+               const mlCoupons: any[] = [];
+               
+               if (state.initialState?.coupons && Array.isArray(state.initialState.coupons)) {
+                   mlCoupons.push(...state.initialState.coupons);
+               }
+               
+               const components = state.initialState?.components || {};
+               Object.keys(components).forEach(k => {
+                   if (components[k].coupons && Array.isArray(components[k].coupons)) {
+                       mlCoupons.push(...components[k].coupons);
+                   }
+               });
+               
+               mlCoupons.forEach((c: any) => {
+                   if (coupons.length >= limit) return;
+                   const titleText = c.title?.text || c.title || "";
+                   const actionLink = c.action?.value || c.link || "";
+                   const amountText = c.amount?.min_amount || c.amount || c.title?.sr_label || "";
+                   
+                   if (titleText && actionLink) {
+                       coupons.push({
+                           code: "RESGATE DIRETO",
+                           discount: titleText || "Cupom ML",
+                           rules: amountText,
+                           link: actionLink,
+                           marketplace: "Mercado Livre",
+                           image_url: c.icon || null
+                       });
+                   }
+               });
+           }
+       }
     });
 
     return dedupeCoupons(coupons).slice(0, limit);
   } catch (error) {
-    console.warn(`[COUPON-SCRAPER][ML] Erro nativo:`, error);
+    console.warn(`[COUPON-SCRAPER][ML] Erro Scrapfly:`, error);
     return [];
   }
 }
 
 // =======================
-// AMAZON (NATIVE)
+// AMAZON (SCRAPFLY)
 // =======================
 export async function fetchAmazonCoupons(limit = 5): Promise<ScrapedCoupon[]> {
-  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: amazon`);
+  console.log(`[COUPON-SCRAPER] Iniciando busca de cupons em: amazon (via Scrapfly)`);
   try {
     const url = "https://www.amazon.com.br/coupons";
-    let html = "";
+    const apiKey = process.env.SCRAPFLY_API_KEYS || process.env.SCRAPFLY_API_KEY || "scp-live-6d78763105ab4020a5c14af54387b027";
+    const scrapflyUrl = `https://api.scrapfly.io/scrape?key=${apiKey}&url=${encodeURIComponent(url)}&asp=true&render_js=true&country=br`;
     
-    // Tenta fetch direto
-    const response = await fetch(url, {
-      headers: {
-        Accept: 'text/html',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36'
-      }
-    });
-    
-    if (response.ok) {
-      html = await response.text();
-    }
-    
-    if (!html) {
-      console.warn(`[COUPON-SCRAPER][AMAZON] Fallback: Scraping falhou ou vazio`);
+    const response = await fetch(scrapflyUrl);
+    if (!response.ok) {
+      console.warn(`[COUPON-SCRAPER][AMAZON] Scrapfly HTTP ${response.status}`);
       return [];
     }
+    const json = await response.json();
+    const html = json.result?.content || "";
+    if (!html) return [];
 
     const $ = cheerio.load(html);
     const coupons: ScrapedCoupon[] = [];
 
-    // Amazon geralmente usa .sg-col, .s-result-item ou cards similares na página de coupons.
-    // Como os cupons Amazon dependem de JS, se não renderizar os blocos, capturamos destaques
-    $('[class*="coupon"], [class*="deal"], .a-section').each((_, el) => {
+    $('.a-section').each((_, el) => {
       if (coupons.length >= limit) return;
-      const text = $(el).text().trim();
-      // Heurística básica caso JS não renderize os cards
-      if (text.includes('OFF') || text.includes('Cupom') || text.includes('Desconto')) {
-         const titleNode = $(el).find('[class*="title"], h2, h3').first();
-         const title = titleNode.text().trim() || "Oferta Amazon";
-         const discountNode = $(el).find(':contains("OFF"), :contains("Cupom")').first();
-         const discountText = discountNode.text().trim().substring(0, 30) || "Resgate Direto";
+      const text = $(el).text().replace(/\s+/g, ' ').trim();
+      
+      if (text.includes('%') || text.toLowerCase().includes('off') || text.toLowerCase().includes('cupom')) {
+         const titleNode = $(el).find('[class*="title"], h2, h3, img').first();
+         const title = titleNode.attr('alt') || titleNode.text().trim() || "Oferta Amazon";
+         
+         const discountText = text.includes('Você paga') 
+            ? text.substring(text.indexOf('Você paga'), text.indexOf('com o cupom') + 11) 
+            : "Cupom Especial";
+            
          const link = $(el).find('a').attr('href');
          
-         if (link) {
+         if (link && !link.includes('javascript:')) {
            const fullLink = link.startsWith('http') ? link : `https://www.amazon.com.br${link}`;
            coupons.push({
              code: "RESGATE DIRETO",
-             discount: discountText,
+             discount: discountText.substring(0, 40),
              rules: title,
              link: addAmazonAffiliateTag(fullLink),
              marketplace: "Amazon",
@@ -298,7 +327,7 @@ export async function fetchAmazonCoupons(limit = 5): Promise<ScrapedCoupon[]> {
 
     return dedupeCoupons(coupons).slice(0, limit);
   } catch (error) {
-    console.warn(`[COUPON-SCRAPER][AMAZON] Erro nativo:`, error);
+    console.warn(`[COUPON-SCRAPER][AMAZON] Erro Scrapfly:`, error);
     return [];
   }
 }

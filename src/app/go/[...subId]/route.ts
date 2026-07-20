@@ -164,6 +164,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <link rel="canonical" href="${escapedCanonicalUrl}">
     <link rel="icon" href="${escapeHtml(favicon)}" type="image/svg+xml">
     
+    <!-- Prevents Mercado Livre WAF from triggering login/CAPTCHA blocks on redirect -->
+    <meta name="referrer" content="no-referrer">
+    
     <!-- Open Graph / WhatsApp / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="${escapedCanonicalUrl}">
