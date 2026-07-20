@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
   Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
-  PanelLeftOpen, LogOut, Sparkles, Zap, Menu, Activity, TerminalSquare
+  PanelLeftOpen, LogOut, Sparkles, Zap, Menu, Activity, TerminalSquare, Film
 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { officialBrand } from "@/lib/env";
@@ -33,6 +33,7 @@ const navSections = [
     items: [
       { href: "/publish", label: "Publicação Expressa", icon: Zap },
       { href: "/offers", label: "Ofertas", icon: ShoppingBag },
+      { href: "/videos", label: "Vídeos de Ofertas", icon: Film },
       { href: "/tracking", label: "Tracking", icon: Link2 },
       { href: "/sales", label: "Vendas", icon: Wallet }
     ]
