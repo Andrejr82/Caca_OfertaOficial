@@ -30,6 +30,13 @@ RENDER_ENGINE = os.environ.get("VIDEO_RENDER_ENGINE", "reference" if BASE_VIDEO_
 POLL_SECONDS = max(10, int(os.environ.get("VIDEO_POLL_SECONDS", "15")))
 MAX_JOBS = min(3, max(1, int(os.environ.get("VIDEO_MAX_JOBS", "3"))))
 VOICE = os.environ.get("VIDEO_TTS_VOICE", "pt-BR-AntonioNeural")
+LIP_SYNC_ENGINE = os.environ.get("VIDEO_LIP_SYNC_ENGINE", "off").lower()
+MUSETALK_DIR = Path(os.environ["VIDEO_MUSETALK_DIR"]) if os.environ.get("VIDEO_MUSETALK_DIR") else None
+MUSETALK_CONFIG = Path(os.environ["VIDEO_MUSETALK_CONFIG"]) if os.environ.get("VIDEO_MUSETALK_CONFIG") else None
+MUSETALK_UNET = Path(os.environ["VIDEO_MUSETALK_UNET"]) if os.environ.get("VIDEO_MUSETALK_UNET") else None
+MUSETALK_UNET_CONFIG = Path(os.environ["VIDEO_MUSETALK_UNET_CONFIG"]) if os.environ.get("VIDEO_MUSETALK_UNET_CONFIG") else None
+MUSETALK_VERSION = os.environ.get("VIDEO_MUSETALK_VERSION", "v15")
+REFERENCE_CLEANUP = os.environ.get("VIDEO_REFERENCE_CLEANUP", "1") != "0"
 
 
 def headers(content_type: str | None = None) -> dict[str, str]:
@@ -121,6 +128,94 @@ def speak(script: str, destination: Path) -> None:
     )
 
 
+def reference_cleanup_filter() -> str:
+    """Remove the product card baked into the supplied reference video.
+
+    The source clip already contains a JBL card. The delogo rectangle is
+    intentionally applied before the new offer card is composited, so the
+    original product cannot leak through the generated card.
+    """
+    cleanup = "delogo=x=380:y=380:w=310:h=520:band=24"
+    return f",{cleanup}" if REFERENCE_CLEANUP else ""
+
+
+def render_base_for_lipsync(base_video: Path, audio: Path, output: Path) -> None:
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg não está instalado.")
+    filters = f"[0:v]scale=720:1280{reference_cleanup_filter()}[v]"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-stream_loop", "-1", "-i", str(base_video), "-i", str(audio),
+            "-filter_complex", filters, "-map", "[v]", "-map", "1:a:0",
+            "-shortest", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+            str(output),
+        ],
+        check=True,
+        timeout=900,
+    )
+
+
+def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
+    required = {
+        "VIDEO_MUSETALK_DIR": MUSETALK_DIR,
+        "VIDEO_MUSETALK_CONFIG": MUSETALK_CONFIG,
+        "VIDEO_MUSETALK_UNET": MUSETALK_UNET,
+        "VIDEO_MUSETALK_UNET_CONFIG": MUSETALK_UNET_CONFIG,
+    }
+    missing = [name for name, path in required.items() if path is None or not path.exists()]
+    if missing:
+        raise RuntimeError(f"MuseTalk não configurado: {', '.join(missing)}")
+
+    config = workdir / "musetalk.yaml"
+    config.write_text(
+        "task_0:\n"
+        f"  video_path: {json.dumps(str(video))}\n"
+        f"  audio_path: {json.dumps(str(audio))}\n"
+        "  bbox_shift: 0\n",
+        encoding="utf-8",
+    )
+    result_dir = workdir / "musetalk-results"
+    result_dir.mkdir()
+    command = [
+        "python", "-m", "scripts.inference",
+        "--inference_config", str(config),
+        "--result_dir", str(result_dir),
+        "--unet_model_path", str(MUSETALK_UNET),
+        "--unet_config", str(MUSETALK_UNET_CONFIG),
+        "--version", MUSETALK_VERSION,
+    ]
+    subprocess.run(command, cwd=MUSETALK_DIR, check=True, timeout=1800)
+    generated = sorted(result_dir.rglob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
+    if not generated:
+        raise RuntimeError("MuseTalk terminou sem produzir um MP4.")
+    shutil.copyfile(generated[0], output)
+
+
+def overlay_card_on_video(source: Path, card: Path, audio: Path, output: Path) -> None:
+    if not shutil.which("ffmpeg"):
+        raise RuntimeError("ffmpeg não está instalado.")
+    filters = (
+        "[0:v]scale=720:1280[bg];"
+        "[bg][1:v]overlay="
+        "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
+        "y=390:enable='gte(t,1.0)'[v]"
+    )
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
+            "-loop", "1", "-i", str(card), "-i", str(audio),
+            "-filter_complex", filters, "-map", "[v]", "-map", "2:a:0",
+            "-shortest", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
+            "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
+            str(output),
+        ],
+        check=True,
+        timeout=900,
+    )
+
+
 def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
@@ -155,7 +250,7 @@ def render_from_base_video(base_video: Path, card: Path, audio: Path, output: Pa
     if not base_video.exists():
         raise RuntimeError(f"Vídeo-base não encontrado: {base_video}")
     filters = (
-        "[0:v]scale=720:1280[bg];"
+        f"[0:v]scale=720:1280{reference_cleanup_filter()}[bg];"
         "[bg][1:v]overlay="
         "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
         "y=390:enable='gte(t,1.0)'[v]"
@@ -207,7 +302,14 @@ def process(job: dict) -> None:
         make_card(offer, product, card)
         speak(script, audio)
         if RENDER_ENGINE == "reference":
-            render_from_base_video(BASE_VIDEO_PATH, card, audio, video)
+            if LIP_SYNC_ENGINE == "musetalk":
+                base_for_lipsync = root / "base-for-lipsync.mp4"
+                lipsynced = root / "lipsynced.mp4"
+                render_base_for_lipsync(BASE_VIDEO_PATH, audio, base_for_lipsync)
+                run_musetalk(base_for_lipsync, audio, lipsynced, root)
+                overlay_card_on_video(lipsynced, card, audio, video)
+            else:
+                render_from_base_video(BASE_VIDEO_PATH, card, audio, video)
         else:
             make_caption(script, caption)
             download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
@@ -224,6 +326,13 @@ def process(job: dict) -> None:
 def main() -> None:
     if not PANEL_URL or not WORKER_TOKEN:
         raise SystemExit("Configure VIDEO_PANEL_URL e VIDEO_WORKER_TOKEN.")
+    if LIP_SYNC_ENGINE not in {"off", "musetalk"}:
+        raise SystemExit("VIDEO_LIP_SYNC_ENGINE deve ser 'off' ou 'musetalk'.")
+    if LIP_SYNC_ENGINE == "musetalk" and any(
+        path is None or not path.exists()
+        for path in (MUSETALK_DIR, MUSETALK_CONFIG, MUSETALK_UNET, MUSETALK_UNET_CONFIG)
+    ):
+        raise SystemExit("MuseTalk requer VIDEO_MUSETALK_DIR, VIDEO_MUSETALK_CONFIG, VIDEO_MUSETALK_UNET e VIDEO_MUSETALK_UNET_CONFIG.")
     processed = 0
     print(f"Worker iniciado; limite desta execução: {MAX_JOBS} jobs.", flush=True)
     while processed < MAX_JOBS:

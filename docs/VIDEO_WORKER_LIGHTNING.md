@@ -49,6 +49,9 @@ export VIDEO_WORKER_TOKEN="TOKEN_DA_VERCEL"
 export VIDEO_AVATAR_PATH="$HOME/caca-video-assets/Avatar_Anuncio.png"
 export VIDEO_BASE_VIDEO_PATH="$HOME/caca-video-assets/Video_Avatar_Ofeerta.mp4"
 export VIDEO_RENDER_ENGINE="reference"
+export VIDEO_REFERENCE_CLEANUP="1"
+# Ative somente depois de instalar e validar o MuseTalk 1.5:
+export VIDEO_LIP_SYNC_ENGINE="off"
 export VIDEO_MAX_JOBS="3"
 export VIDEO_POLL_SECONDS="15"
 export VIDEO_TTS_VOICE="pt-BR-AntonioNeural"
@@ -68,6 +71,37 @@ Execute uma rodada controlada:
 ```bash
 python scripts/video-worker.py
 ```
+
+### Sincronização labial
+
+O vídeo-base contém movimentos e artes promocionais gravadas no MP4. O worker
+remove o card JBL embutido antes de inserir a oferta atual. Para sincronizar a
+boca com o novo áudio TTS, use o MuseTalk 1.5 localmente na GPU. O código é
+MIT e os pesos do modelo têm permissão comercial conforme o repositório oficial.
+
+Antes de ativar, valide a instalação sem colocar nenhum job na fila:
+
+```bash
+cd ~/MuseTalk
+python -m scripts.inference --help
+test -f models/musetalkV15/unet.pth
+test -f models/musetalkV15/musetalk.json
+```
+
+Depois configure os caminhos e faça apenas uma execução controlada:
+
+```bash
+export VIDEO_LIP_SYNC_ENGINE="musetalk"
+export VIDEO_MUSETALK_DIR="$HOME/MuseTalk"
+export VIDEO_MUSETALK_CONFIG="$HOME/MuseTalk/configs/inference/test.yaml"
+export VIDEO_MUSETALK_UNET="$HOME/MuseTalk/models/musetalkV15/unet.pth"
+export VIDEO_MUSETALK_UNET_CONFIG="$HOME/MuseTalk/models/musetalkV15/musetalk.json"
+export VIDEO_MUSETALK_VERSION="v15"
+VIDEO_MAX_JOBS=1 python scripts/video-worker.py
+```
+
+Com `VIDEO_LIP_SYNC_ENGINE=off`, o worker continua funcional, mas apenas
+substitui o áudio; isso não pode produzir lip-sync real para uma fala nova.
 
 A rodada termina depois de processar até três jobs. Para uma execução manual diária, ligue o Studio, execute o comando e desligue-o depois que o painel mostrar **Pronto para aprovar**.
 
