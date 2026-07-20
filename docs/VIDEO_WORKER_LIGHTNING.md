@@ -17,7 +17,13 @@ No SQL Editor do Supabase, execute a migração `supabase/migrations/20260720010
 
 ## Instalação na Lightning
 
-No terminal do Studio:
+No terminal do Studio, a instalação pode ser feita com um único comando:
+
+```bash
+bash scripts/setup-lightning.sh
+```
+
+Se preferir executar manualmente:
 
 ```bash
 sudo apt-get update
