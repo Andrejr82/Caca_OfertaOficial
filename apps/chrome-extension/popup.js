@@ -84,10 +84,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (res.ok) {
               const result = await res.json();
-              showStatus('Publicação enviada com sucesso para o Telegram!', 'success');
+              showStatus(result.message || 'Oferta capturada! Rascunhos gerados no painel.', 'success');
             } else {
               const err = await res.json();
-              showStatus(`Erro do Servidor: ${err.error || 'Falha ao publicar'}`, 'error');
+              showStatus(`Erro do Servidor: ${err.message || err.error || 'Falha ao salvar a oferta'}`, 'error');
             }
           } catch (err) {
             showStatus(`Erro de Conexão: ${err.message}`, 'error');
