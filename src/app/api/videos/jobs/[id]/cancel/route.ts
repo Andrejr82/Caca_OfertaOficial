@@ -4,22 +4,18 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
-
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   const { id } = await params;
-
   const { data, error } = await supabase
     .from("video_jobs")
-    .update({ status: "queued", stage: "queued", video_url: null, audio_url: null, error_message: null, worker_id: null, started_at: null, heartbeat_at: null, completed_at: null })
+    .update({ status: "cancelled", stage: "cancelled", error_message: "Cancelado pelo usuário." })
     .eq("id", id)
     .eq("user_id", userData.user.id)
-    .eq("status", "failed")
-    .lt("attempt_count", 2)
+    .eq("status", "queued")
     .select("*")
     .maybeSingle();
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  if (!data) return NextResponse.json({ error: "Job não encontrado, não está com erro ou atingiu o limite de duas tentativas." }, { status: 409 });
+  if (!data) return NextResponse.json({ error: "Apenas jobs ainda na fila podem ser cancelados." }, { status: 409 });
   return NextResponse.json({ job: data });
 }

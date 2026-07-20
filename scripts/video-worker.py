@@ -15,12 +15,15 @@ import subprocess
 import sys
 import tempfile
 import time
+import socket
+import uuid
 import urllib.error
 import urllib.request
 from pathlib import Path
 from textwrap import wrap
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
+from video_worker_runtime import build_edge_tts_command, validate_video_template
 
 
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
@@ -40,12 +43,31 @@ MUSETALK_UNET = Path(os.environ["VIDEO_MUSETALK_UNET"]) if os.environ.get("VIDEO
 MUSETALK_UNET_CONFIG = Path(os.environ["VIDEO_MUSETALK_UNET_CONFIG"]) if os.environ.get("VIDEO_MUSETALK_UNET_CONFIG") else None
 MUSETALK_VERSION = os.environ.get("VIDEO_MUSETALK_VERSION", "v15")
 MUSETALK_PYTHON = Path(os.environ["VIDEO_MUSETALK_PYTHON"]) if os.environ.get("VIDEO_MUSETALK_PYTHON") else None
+EDGE_TTS_PYTHON = Path(os.environ["VIDEO_EDGE_TTS_PYTHON"]) if os.environ.get("VIDEO_EDGE_TTS_PYTHON") else None
 REFERENCE_CLEANUP = os.environ.get("VIDEO_REFERENCE_CLEANUP", "1") != "0"
 REFERENCE_SOURCE = os.environ.get("VIDEO_REFERENCE_SOURCE", "video").lower()
+TEMPLATE_PATH = Path(os.environ.get("VIDEO_TEMPLATE_PATH", Path(__file__).with_name("video-templates.json")))
+WORKER_ID = os.environ.get("VIDEO_WORKER_ID", f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}")
+
+
+def load_templates() -> dict[str, dict]:
+    try:
+        templates = json.loads(TEMPLATE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"Templates de vídeo inválidos: {error}") from error
+    for name, template in templates.items():
+        try:
+            validate_video_template(name, template)
+        except ValueError as error:
+            raise SystemExit(str(error)) from error
+    return templates
+
+
+TEMPLATES = load_templates()
 
 
 def headers(content_type: str | None = None) -> dict[str, str]:
-    result = {"Authorization": f"Bearer {WORKER_TOKEN}"}
+    result = {"Authorization": f"Bearer {WORKER_TOKEN}", "X-Video-Worker-Id": WORKER_ID}
     if content_type:
         result["Content-Type"] = content_type
     return result
@@ -62,6 +84,10 @@ def api(method: str, path: str, payload: dict | None = None) -> dict:
     except urllib.error.HTTPError as error:
         detail = error.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"API {method} {path} retornou HTTP {error.code}: {detail[:500]}") from error
+
+
+def heartbeat(job_id: str, stage: str) -> None:
+    api("POST", f"/api/videos/worker/{job_id}/heartbeat", {"workerId": WORKER_ID, "stage": stage})
 
 
 def download(url: str, destination: Path) -> None:
@@ -138,20 +164,24 @@ def make_reference_badges(destination: Path) -> None:
     badges.save(destination, "PNG")
 
 
+def resolve_edge_tts_python() -> Path:
+    candidates = [EDGE_TTS_PYTHON, MUSETALK_PYTHON, Path.home() / "miniforge3/envs/musetalk/bin/python", Path(sys.executable)]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            probe = subprocess.run([str(candidate), "-c", "import edge_tts"], capture_output=True, text=True, timeout=30)
+            if probe.returncode == 0:
+                return candidate
+    raise RuntimeError("edge-tts não está disponível no Python configurado do worker.")
+
+
 def speak(script: str, destination: Path) -> None:
-    if not shutil.which("edge-tts"):
-        raise RuntimeError("edge-tts não está instalado. Execute: pip install edge-tts")
     subprocess.run(
-        [
-            "edge-tts", "--voice", VOICE, f"--rate={TTS_RATE}", f"--pitch={TTS_PITCH}",
-            "--text", script, "--write-media", str(destination),
-        ],
-        check=True,
-        timeout=180,
+        build_edge_tts_command(resolve_edge_tts_python(), VOICE, TTS_RATE, TTS_PITCH, script, destination),
+        check=True, timeout=180,
     )
 
 
-def reference_cleanup_filter(include_card: bool = False) -> str:
+def reference_cleanup_filter(template: dict, include_card: bool = False) -> str:
     """Remove text baked into the supplied reference video.
 
     The old product card is intentionally not delogged: the generated card
@@ -160,13 +190,16 @@ def reference_cleanup_filter(include_card: bool = False) -> str:
     lower-third text areas are cleaned here.
     """
     # Solid, subtle masks avoid delogo's horizontal smearing on moving bodies.
-    cleanup = (
-        "drawbox=x=80:y=975:w=560:h=110:color=black@0.78:t=fill,"
-        "drawbox=x=150:y=1165:w=450:h=70:color=black@0.78:t=fill"
+    cleanup_config = template["cleanup"]
+    cleanup = ",".join(
+        f"drawbox=x={box['x']}:y={box['y']}:w={box['width']}:h={box['height']}:color=black@{cleanup_config['opacity']}:t=fill"
+        for box in cleanup_config.get("lowerThirds", [])
     )
     if include_card:
-        cleanup = "drawbox=x=390:y=405:w=280:h=470:color=black@0.92:t=fill," + cleanup
-    return f",{cleanup}" if REFERENCE_CLEANUP else ""
+        card = template["card"]
+        card_mask = f"drawbox=x={card['x']}:y={card['y']}:w={card['width']}:h={card['height']}:color=black@{cleanup_config['cardOpacity']}:t=fill"
+        cleanup = f"{card_mask},{cleanup}" if cleanup else card_mask
+    return f",{cleanup}" if REFERENCE_CLEANUP and cleanup else ""
 
 
 def make_avatar_motion_video(avatar: Path, audio: Path, output: Path) -> None:
@@ -196,11 +229,11 @@ def make_avatar_motion_video(avatar: Path, audio: Path, output: Path) -> None:
 
 
 def render_base_for_lipsync(
-    base_video: Path, audio: Path, output: Path, cleanup: bool = True, cleanup_card: bool = False
+    base_video: Path, audio: Path, output: Path, template: dict, cleanup: bool = True, cleanup_card: bool = False
 ) -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
-    cleanup_filter = reference_cleanup_filter(cleanup_card) if cleanup else ""
+    cleanup_filter = reference_cleanup_filter(template, cleanup_card) if cleanup else ""
     filters = f"[0:v]scale=720:1280{cleanup_filter}[v]"
     subprocess.run(
         [
@@ -242,6 +275,22 @@ def validate_musetalk_runtime() -> Path:
     return python
 
 
+def validate_worker_runtime() -> None:
+    if not shutil.which("ffmpeg"):
+        raise SystemExit("Preflight falhou: ffmpeg não está instalado.")
+    filters = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True, timeout=60)
+    missing_filters = [name for name in ("drawbox", "overlay") if name not in filters.stdout]
+    if missing_filters or filters.returncode != 0:
+        raise SystemExit(f"Preflight falhou: filtros FFmpeg ausentes: {', '.join(missing_filters)}.")
+    resolve_edge_tts_python()
+    if RENDER_ENGINE == "reference" and REFERENCE_SOURCE in {"motion", "video"} and not BASE_VIDEO_PATH.exists():
+        raise SystemExit(f"Preflight falhou: vídeo-base não encontrado: {BASE_VIDEO_PATH}")
+    if RENDER_ENGINE == "reference" and REFERENCE_SOURCE == "avatar" and not AVATAR_PATH.exists():
+        raise SystemExit(f"Preflight falhou: avatar não encontrado: {AVATAR_PATH}")
+    if LIP_SYNC_ENGINE == "musetalk":
+        validate_musetalk_runtime()
+
+
 def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
     required = {
         "VIDEO_MUSETALK_DIR": MUSETALK_DIR,
@@ -279,19 +328,21 @@ def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
 
 
 def overlay_card_on_video(
-    source: Path, card: Path, badges: Path, audio: Path, output: Path, animate_card: bool = True
+    source: Path, card: Path, badges: Path, audio: Path, output: Path, template: dict, animate_card: bool = True
 ) -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
+    card_config = template["card"]
+    canvas_width = template["canvas"]["width"]
     card_x = (
-        "if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))"
-        if animate_card else "430"
+        f"if(lt(t,1.0),{canvas_width},if(lt(t,1.5),{canvas_width}-(t-1.0)*{canvas_width-card_config['x']}/0.5,{card_config['x']}))"
+        if animate_card else str(card_config["x"])
     )
     filters = (
         "[0:v]scale=720:1280[bg];"
-        "[1:v]format=rgba,scale=280:470[card];"
+        f"[1:v]format=rgba,scale={card_config['width']}:{card_config['height']}[card];"
         "[bg][card]overlay="
-        f"x='{card_x}':y=390:enable='gte(t,0)'[scene];"
+        f"x='{card_x}':y={card_config['y']}:enable='gte(t,0)'[scene];"
         "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
@@ -341,6 +392,7 @@ def render_from_base_video(
     badges: Path,
     audio: Path,
     output: Path,
+    template: dict,
     cleanup: bool = True,
     cleanup_card: bool = False,
 ) -> None:
@@ -349,11 +401,12 @@ def render_from_base_video(
         raise RuntimeError("ffmpeg não está instalado.")
     if not base_video.exists():
         raise RuntimeError(f"Vídeo-base não encontrado: {base_video}")
-    cleanup_filter = reference_cleanup_filter(cleanup_card) if cleanup else ""
+    cleanup_filter = reference_cleanup_filter(template, cleanup_card) if cleanup else ""
+    card_config = template["card"]
     filters = (
         f"[0:v]scale=720:1280{cleanup_filter}[bg];"
-        "[1:v]format=rgba,scale=280:470[card];"
-        "[bg][card]overlay=x=390:y=405:enable='gte(t,0)'[scene];"
+        f"[1:v]format=rgba,scale={card_config['width']}:{card_config['height']}[card];"
+        f"[bg][card]overlay=x={card_config['x']}:y={card_config['y']}:enable='gte(t,0)'[scene];"
         "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
@@ -372,7 +425,7 @@ def render_from_base_video(
 
 
 def signed_upload(job_id: str, kind: str, file_path: Path) -> str:
-    signed = api("POST", "/api/videos/worker/upload-url", {"jobId": job_id, "kind": kind})
+    signed = api("POST", "/api/videos/worker/upload-url", {"jobId": job_id, "kind": kind, "workerId": WORKER_ID})
     request = urllib.request.Request(
         signed["signedUrl"],
         data=file_path.read_bytes(),
@@ -387,6 +440,10 @@ def signed_upload(job_id: str, kind: str, file_path: Path) -> str:
 
 def process(job: dict) -> None:
     job_id = job["id"]
+    template_id = str(job.get("template_id") or "motion-v1")
+    if template_id not in TEMPLATES:
+        raise RuntimeError(f"Template de vídeo não encontrado: {template_id}")
+    template = TEMPLATES[template_id]
     offer = job.get("offers") or {}
     script = job.get("script") or "Confira esta oferta especial agora!"
     with tempfile.TemporaryDirectory(prefix=f"caca-video-{job_id[:8]}-") as folder:
@@ -400,9 +457,12 @@ def process(job: dict) -> None:
         product_url = offer.get("image_url")
         if not product_url:
             raise RuntimeError("A oferta não possui image_url.")
+        heartbeat(job_id, "downloading_product")
         download(product_url, product)
+        heartbeat(job_id, "building_card")
         make_card(offer, product, card)
         make_reference_badges(badges)
+        heartbeat(job_id, "generating_audio")
         speak(script, audio)
         if RENDER_ENGINE == "reference":
             use_avatar_source = REFERENCE_SOURCE == "avatar"
@@ -411,25 +471,31 @@ def process(job: dict) -> None:
             source_cleanup = REFERENCE_CLEANUP
             source_cleanup_card = use_motion_source
             if use_avatar_source:
+                template = TEMPLATES["avatar-v1"]
                 source_video = root / "avatar-motion.mp4"
+                heartbeat(job_id, "building_avatar_source")
                 make_avatar_motion_video(AVATAR_PATH, audio, source_video)
                 source_cleanup = False
                 source_cleanup_card = False
             if LIP_SYNC_ENGINE == "musetalk":
                 base_for_lipsync = root / "base-for-lipsync.mp4"
                 lipsynced = root / "lipsynced.mp4"
+                heartbeat(job_id, "preparing_lipsync")
                 render_base_for_lipsync(
                     source_video, audio, base_for_lipsync,
-                    cleanup=source_cleanup, cleanup_card=source_cleanup_card,
+                    template=template, cleanup=source_cleanup, cleanup_card=source_cleanup_card,
                 )
+                heartbeat(job_id, "lip_sync")
                 run_musetalk(base_for_lipsync, audio, lipsynced, root)
+                heartbeat(job_id, "composing_video")
                 overlay_card_on_video(
-                    lipsynced, card, badges, audio, video, animate_card=use_avatar_source,
+                    lipsynced, card, badges, audio, video, template=template, animate_card=use_avatar_source,
                 )
             else:
+                heartbeat(job_id, "composing_video")
                 render_from_base_video(
                     source_video, card, badges, audio, video,
-                    cleanup=source_cleanup, cleanup_card=source_cleanup_card,
+                    template=template, cleanup=source_cleanup, cleanup_card=source_cleanup_card,
                 )
         else:
             make_caption(script, caption)
@@ -437,10 +503,12 @@ def process(job: dict) -> None:
             avatar = root / "avatar.png" if (root / "avatar.png").exists() else AVATAR_PATH
             if not avatar.exists():
                 raise RuntimeError("Avatar não encontrado. Configure VIDEO_AVATAR_PATH ou VIDEO_AVATAR_URL.")
+            heartbeat(job_id, "composing_video")
             render(avatar, card, caption, audio, video)
+        heartbeat(job_id, "uploading_media")
         video_url = signed_upload(job_id, "video", video)
         audio_url = signed_upload(job_id, "audio", audio)
-        api("POST", f"/api/videos/worker/{job_id}/complete", {"videoUrl": video_url, "audioUrl": audio_url})
+        api("POST", f"/api/videos/worker/{job_id}/complete", {"videoUrl": video_url, "audioUrl": audio_url, "workerId": WORKER_ID})
         print(f"Job {job_id} pronto: {video_url}", flush=True)
 
 
@@ -454,8 +522,10 @@ def main() -> None:
         for path in (MUSETALK_DIR, MUSETALK_CONFIG, MUSETALK_UNET, MUSETALK_UNET_CONFIG)
     ):
         raise SystemExit("MuseTalk requer VIDEO_MUSETALK_DIR, VIDEO_MUSETALK_CONFIG, VIDEO_MUSETALK_UNET e VIDEO_MUSETALK_UNET_CONFIG.")
-    if LIP_SYNC_ENGINE == "musetalk":
-        validate_musetalk_runtime()
+    validate_worker_runtime()
+    if "--preflight" in sys.argv:
+        print("Preflight concluído: TTS, FFmpeg, template e runtime de vídeo estão prontos.", flush=True)
+        return
     processed = 0
     print(f"Worker iniciado; limite desta execução: {MAX_JOBS} jobs.", flush=True)
     while processed < MAX_JOBS:
@@ -473,7 +543,7 @@ def main() -> None:
             message = str(error)[:900]
             print(f"Job {job['id']} falhou: {message}", flush=True)
             try:
-                api("POST", f"/api/videos/worker/{job['id']}/fail", {"error": message})
+                api("POST", f"/api/videos/worker/{job['id']}/fail", {"error": message, "workerId": WORKER_ID})
             except Exception as fail_error:
                 print(f"Não foi possível marcar falha: {fail_error}", flush=True)
         processed += 1

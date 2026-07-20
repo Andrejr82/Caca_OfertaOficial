@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-const completionSchema = z.object({ videoUrl: z.string().url(), audioUrl: z.string().url().optional() });
+const completionSchema = z.object({ videoUrl: z.string().url(), audioUrl: z.string().url().optional(), workerId: z.string().trim().min(1).max(120) });
 
 function authorized(request: Request) {
   const token = process.env.VIDEO_WORKER_TOKEN;
@@ -16,12 +16,19 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const parsed = completionSchema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ error: "Informe uma URL de vídeo válida." }, { status: 400 });
   const { id } = await params;
+  const bucket = process.env.VIDEO_STORAGE_BUCKET || "videos";
+  const expectedVideoPath = `/storage/v1/object/public/${bucket}/jobs/${id}/video.mp4`;
+  const expectedAudioPath = `/storage/v1/object/public/${bucket}/jobs/${id}/audio.mp3`;
+  if (!parsed.data.videoUrl.includes(expectedVideoPath) || (parsed.data.audioUrl && !parsed.data.audioUrl.includes(expectedAudioPath))) {
+    return NextResponse.json({ error: "As URLs enviadas não pertencem ao storage deste job." }, { status: 400 });
+  }
 
   const { data, error } = await supabase
     .from("video_jobs")
-    .update({ status: "ready", video_url: parsed.data.videoUrl, audio_url: parsed.data.audioUrl ?? null, completed_at: new Date().toISOString(), error_message: null })
+    .update({ status: "ready", stage: "ready_for_review", video_url: parsed.data.videoUrl, audio_url: parsed.data.audioUrl ?? null, completed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), error_message: null })
     .eq("id", id)
     .eq("status", "processing")
+    .eq("worker_id", parsed.data.workerId)
     .select("*")
     .maybeSingle();
 

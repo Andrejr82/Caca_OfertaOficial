@@ -5,7 +5,7 @@ import { CheckCircle2, Clock3, Download, Film, Loader2, Play, RefreshCw, Sparkle
 import { useRouter } from "next/navigation";
 
 type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string };
-type Job = { id: string; status: string; script: string; video_url: string | null; created_at: string; error_message: string | null; offers?: Offer };
+type Job = { id: string; status: string; stage?: string; attempt_count?: number; script: string; video_url: string | null; audio_url?: string | null; created_at: string; error_message: string | null; offers?: Offer };
 
 const statusCopy: Record<string, { label: string; tone: string }> = {
   queued: { label: "Na fila", tone: "text-amber-300 bg-amber-400/10" },
@@ -13,6 +13,13 @@ const statusCopy: Record<string, { label: string; tone: string }> = {
   ready: { label: "Pronto para aprovar", tone: "text-emerald-300 bg-emerald-400/10" },
   approved: { label: "Aprovado", tone: "text-violet-300 bg-violet-400/10" },
   failed: { label: "Erro", tone: "text-red-300 bg-red-400/10" }
+};
+
+const stageCopy: Record<string, string> = {
+  queued: "Aguardando worker", claimed: "Worker reservado", downloading_product: "Baixando produto",
+  building_card: "Montando card", generating_audio: "Gerando narração", building_avatar_source: "Preparando avatar",
+  preparing_lipsync: "Preparando sincronização", lip_sync: "Sincronizando lábios", composing_video: "Compondo vídeo",
+  uploading_media: "Enviando mídia", ready_for_review: "Pronto para revisão", failed: "Falhou", cancelled: "Cancelado"
 };
 
 function defaultScript(offer?: Offer) {
@@ -26,7 +33,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   const [script, setScript] = useState(defaultScript(offers[0]));
   const [jobs, setJobs] = useState(initialJobs);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const selectedOffer = useMemo(() => offers.find((offer) => offer.id === selectedOfferId), [offers, selectedOfferId]);
 
   useEffect(() => {
@@ -42,15 +49,15 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     setBusy(true); setMessage(null);
     const response = await fetch("/api/videos/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offerId: selectedOfferId, script }) });
     const payload = await response.json();
-    if (!response.ok) setMessage(payload.error ?? "Não foi possível criar o vídeo.");
-    else { setMessage("Vídeo colocado na fila. O worker GPU poderá processá-lo."); setJobs((current) => [payload.job, ...current]); }
+    if (!response.ok) setMessage({ text: payload.error ?? "Não foi possível criar o vídeo.", error: true });
+    else { setMessage({ text: "Vídeo colocado na fila. O worker GPU poderá processá-lo." }); setJobs((current) => [payload.job, ...current]); }
     setBusy(false);
   }
 
   async function approve(id: string) {
     const response = await fetch(`/api/videos/jobs/${id}/approve`, { method: "POST" });
     const payload = await response.json();
-    if (!response.ok) return setMessage(payload.error ?? "Não foi possível aprovar o vídeo.");
+    if (!response.ok) return setMessage({ text: payload.error ?? "Não foi possível aprovar o vídeo.", error: true });
     setJobs((current) => current.map((job) => job.id === id ? { ...job, status: "approved" } : job));
     router.refresh();
   }
@@ -58,9 +65,27 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   async function retry(id: string) {
     const response = await fetch(`/api/videos/jobs/${id}/retry`, { method: "POST" });
     const payload = await response.json();
-    if (!response.ok) return setMessage(payload.error ?? "Não foi possível recolocar o vídeo na fila.");
+    if (!response.ok) return setMessage({ text: payload.error ?? "Não foi possível recolocar o vídeo na fila.", error: true });
     setJobs((current) => current.map((job) => job.id === id ? { ...job, status: "queued", video_url: null, audio_url: null, error_message: null } : job));
-    setMessage("Vídeo recolocado na fila.");
+    setMessage({ text: "Vídeo recolocado na fila." });
+  }
+
+  async function cancel(id: string) {
+    if (!window.confirm("Cancelar este vídeo antes de ele usar a GPU?")) return;
+    const response = await fetch(`/api/videos/jobs/${id}/cancel`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) return setMessage({ text: payload.error ?? "Não foi possível cancelar o vídeo.", error: true });
+    setJobs((current) => current.map((job) => job.id === id ? { ...job, status: "cancelled", stage: "cancelled" } : job));
+    setMessage({ text: "Vídeo cancelado antes do processamento." });
+  }
+
+  async function regenerate(id: string) {
+    if (!window.confirm("Gerar outra versão consome uma vaga do limite diário. Deseja continuar?")) return;
+    const response = await fetch(`/api/videos/jobs/${id}/regenerate`, { method: "POST" });
+    const payload = await response.json();
+    if (!response.ok) return setMessage({ text: payload.error ?? "Não foi possível criar a nova versão.", error: true });
+    setJobs((current) => [payload.job, ...current]);
+    setMessage({ text: "Nova versão colocada na fila." });
   }
 
   function selectOffer(id: string) {
@@ -86,11 +111,11 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/35">Roteiro da fala</label>
           <textarea value={script} onChange={(event) => setScript(event.target.value)} rows={6} className="w-full resize-none rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-emerald-400/60" />
           <div className="mt-4 flex items-center justify-between gap-4"><span className="text-xs text-white/30">{script.length}/500 caracteres</span><button onClick={createJob} disabled={busy || !selectedOfferId || script.length < 20} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />} Colocar na fila</button></div>
-          {message && <p className="mt-4 rounded-lg border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-200">{message}</p>}
+          {message && <p className={`mt-4 rounded-lg border px-3 py-2 text-xs ${message.error ? "border-red-400/20 bg-red-400/10 text-red-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>{message.text}</p>}
         </section>
 
         <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5"><div className="mb-5 flex items-center justify-between"><div><h2 className="font-bold text-white">Fila e prévias</h2><p className="mt-1 text-xs text-white/35">Os jobs ficam prontos para o worker GPU.</p></div><button onClick={() => router.refresh()} className="rounded-lg p-2 text-white/40 hover:bg-white/5 hover:text-white"><RefreshCw size={16} /></button></div>
-          {jobs.length === 0 ? <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-white/10 text-center text-sm text-white/35"><div><Clock3 className="mx-auto mb-3 text-white/20" size={28} /><p>Nenhum vídeo na fila.</p><p className="mt-1 text-xs">Crie o primeiro a partir de uma oferta.</p></div></div> : <div className="space-y-3">{jobs.map((job) => { const status = statusCopy[job.status] ?? statusCopy.queued; return <article key={job.id} className="rounded-xl border border-white/[0.06] bg-black/20 p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold text-white">{job.offers?.product_name ?? "Oferta"}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-white/40">{job.script}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${status.tone}`}>{status.label}</span></div>{job.video_url && <><div className="mt-4 overflow-hidden rounded-xl bg-black"><video controls playsInline src={job.video_url} className="max-h-[420px] w-full" /></div><a href={job.video_url} download target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-400"><Download size={15} /> Baixar MP4</a></>}{job.error_message && <p className="mt-3 text-xs text-red-300">{job.error_message}</p>}{job.status === "ready" && <button onClick={() => approve(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/25"><CheckCircle2 size={15} /> Aprovar vídeo</button>}{job.status === "approved" && <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-emerald-300"><CheckCircle2 size={15} /> Aprovado para publicação</p>}{job.status === "failed" && <button onClick={() => retry(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-500/25"><RefreshCw size={15} /> Tentar novamente</button>}{job.status === "processing" && <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-sky-300"><Loader2 size={15} className="animate-spin" /> Renderizando</p>}{job.status === "ready" && !job.video_url && <p className="mt-3 inline-flex items-center gap-2 text-xs text-amber-200"><Play size={14} /> Aguardando URL da prévia do worker</p>}</article> })}</div>}
+          {jobs.length === 0 ? <div className="grid min-h-64 place-items-center rounded-xl border border-dashed border-white/10 text-center text-sm text-white/35"><div><Clock3 className="mx-auto mb-3 text-white/20" size={28} /><p>Nenhum vídeo na fila.</p><p className="mt-1 text-xs">Crie o primeiro a partir de uma oferta.</p></div></div> : <div className="space-y-3">{jobs.map((job) => { const status = statusCopy[job.status] ?? statusCopy.queued; return <article key={job.id} className="rounded-xl border border-white/[0.06] bg-black/20 p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold text-white">{job.offers?.product_name ?? "Oferta"}</p><p className="mt-1 line-clamp-2 text-xs leading-5 text-white/40">{job.script}</p></div><span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${status.tone}`}>{status.label}</span></div>{job.stage && <p className="mt-3 text-xs text-white/55">Etapa: <span className="font-semibold text-sky-200">{stageCopy[job.stage] ?? job.stage}</span>{job.attempt_count ? ` · tentativa ${job.attempt_count}/2` : ""}</p>}{job.video_url && <><div className="mt-4 overflow-hidden rounded-xl bg-black"><video controls playsInline src={job.video_url} className="max-h-[420px] w-full" /></div><a href={job.video_url} download target="_blank" rel="noreferrer" className="mt-3 inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950 transition hover:bg-emerald-400"><Download size={15} /> Baixar MP4</a></>}{job.error_message && <p className="mt-3 text-xs text-red-300">{job.error_message}</p>}{job.status === "ready" && <><button onClick={() => approve(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200 hover:bg-violet-500/25"><CheckCircle2 size={15} /> Aprovar vídeo</button><button onClick={() => regenerate(job.id)} className="ml-2 mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-500/25"><RefreshCw size={15} /> Gerar outra versão</button></>}{job.status === "approved" && <><p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-emerald-300"><CheckCircle2 size={15} /> Aprovado para publicação</p><button onClick={() => regenerate(job.id)} className="ml-2 inline-flex items-center gap-2 text-xs font-bold text-amber-200 hover:text-amber-100"><RefreshCw size={15} /> Nova versão</button></>}{job.status === "failed" && <><button onClick={() => retry(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-500/25"><RefreshCw size={15} /> Tentar novamente</button><button onClick={() => regenerate(job.id)} className="ml-2 mt-4 inline-flex items-center gap-2 text-xs font-bold text-white/55 hover:text-white"><RefreshCw size={15} /> Nova versão</button></>}{job.status === "queued" && <button onClick={() => cancel(job.id)} className="mt-4 inline-flex items-center gap-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-500/20"><XCircle size={15} /> Cancelar antes da GPU</button>}{job.status === "processing" && <p className="mt-4 inline-flex items-center gap-2 text-xs font-semibold text-sky-300"><Loader2 size={15} className="animate-spin" /> {stageCopy[job.stage ?? ""] ?? "Renderizando"}</p>}{job.status === "ready" && !job.video_url && <p className="mt-3 inline-flex items-center gap-2 text-xs text-amber-200"><Play size={14} /> Aguardando URL da prévia do worker</p>}</article> })}</div>}
         </section>
       </div>
     </div>

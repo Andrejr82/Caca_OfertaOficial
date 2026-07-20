@@ -1,0 +1,19 @@
+{
+  "motion-v1": {
+    "canvas": { "width": 720, "height": 1280, "fps": 24 },
+    "card": { "x": 390, "y": 405, "width": 280, "height": 470 },
+    "cleanup": {
+      "opacity": 0.78,
+      "cardOpacity": 0.92,
+      "lowerThirds": [
+        { "x": 80, "y": 975, "width": 560, "height": 110 },
+        { "x": 150, "y": 1165, "width": 450, "height": 70 }
+      ]
+    }
+  },
+  "avatar-v1": {
+    "canvas": { "width": 720, "height": 1280, "fps": 25 },
+    "card": { "x": 430, "y": 390, "width": 280, "height": 470 },
+    "cleanup": { "opacity": 0, "cardOpacity": 0, "lowerThirds": [] }
+  }
+}

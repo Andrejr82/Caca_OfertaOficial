@@ -4,7 +4,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 const requestSchema = z.object({
   jobId: z.string().uuid(),
-  kind: z.enum(["video", "audio"])
+  kind: z.enum(["video", "audio"]),
+  workerId: z.string().trim().min(1).max(120)
 });
 
 function authorized(request: Request) {
@@ -26,12 +27,12 @@ export async function POST(request: Request) {
 
   const { data: job, error: jobError } = await supabase
     .from("video_jobs")
-    .select("id, status")
+    .select("id, status, worker_id")
     .eq("id", parsed.data.jobId)
     .maybeSingle();
 
   if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 });
-  if (!job || job.status !== "processing") return NextResponse.json({ error: "Job não está em processamento." }, { status: 409 });
+  if (!job || job.status !== "processing" || job.worker_id !== parsed.data.workerId) return NextResponse.json({ error: "Job não pertence a este worker." }, { status: 409 });
 
   const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: true });
   if (error || !data) return NextResponse.json({ error: error?.message ?? "Não foi possível criar URL de upload." }, { status: 503 });

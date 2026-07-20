@@ -6,7 +6,7 @@ Este worker processa no máximo três jobs por execução. Ele busca uma oferta 
 
 - Studio Lightning com GPU T4;
 - `VIDEO_WORKER_TOKEN` configurado na Vercel e no Studio;
-- migrações `20260720000000_video_jobs.sql` e `20260720010000_video_storage.sql` aplicadas no Supabase;
+- migrações `20260720000000_video_jobs.sql`, `20260720010000_video_storage.sql` e `20260720120000_harden_video_jobs.sql` aplicadas no Supabase;
 - arquivo `Avatar_Anuncio.png` copiado para o Studio, por exemplo em `~/caca-video-assets/Avatar_Anuncio.png`.
 - vídeo-base `Video_Avatar_Ofeerta.mp4` copiado para o Studio, por exemplo em `~/caca-video-assets/Video_Avatar_Ofeerta.mp4`.
 
@@ -14,7 +14,7 @@ O worker não usa a `SUPABASE_SERVICE_ROLE_KEY`. Essa chave permanece somente na
 
 ## Configuração do Supabase
 
-No SQL Editor do Supabase, execute a migração `supabase/migrations/20260720010000_video_storage.sql`. Ela cria o bucket público `videos` com limite de 100 MB por arquivo. O bucket público é necessário para que o MP4 possa ser baixado no painel; o upload continua protegido por URL assinada.
+No SQL Editor do Supabase, execute as três migrações de vídeo na ordem do nome. A última torna a criação de jobs transacional: impõe no banco o máximo de três vídeos por usuário/dia, no máximo três jobs ativos, claim atômico do worker, tentativas limitadas e heartbeat.
 
 ## Instalação na Lightning
 
@@ -50,9 +50,16 @@ export VIDEO_AVATAR_PATH="$HOME/caca-video-assets/Avatar_Anuncio.png"
 export VIDEO_BASE_VIDEO_PATH="$HOME/caca-video-assets/Video_Avatar_Ofeerta.mp4"
 export VIDEO_RENDER_ENGINE="reference"
 export VIDEO_REFERENCE_CLEANUP="1"
-# Ative somente depois de instalar e validar o MuseTalk 1.5:
-export VIDEO_LIP_SYNC_ENGINE="off"
-export VIDEO_MAX_JOBS="3"
+export VIDEO_REFERENCE_SOURCE="motion"
+export VIDEO_LIP_SYNC_ENGINE="musetalk"
+export VIDEO_MUSETALK_DIR="$HOME/MuseTalk"
+export VIDEO_MUSETALK_CONFIG="$HOME/MuseTalk/configs/inference/test.yaml"
+export VIDEO_MUSETALK_UNET="$HOME/MuseTalk/models/musetalkV15/unet.pth"
+export VIDEO_MUSETALK_UNET_CONFIG="$HOME/MuseTalk/models/musetalkV15/musetalk.json"
+export VIDEO_MUSETALK_PYTHON="$HOME/miniforge3/envs/musetalk/bin/python"
+export VIDEO_EDGE_TTS_PYTHON="$HOME/miniforge3/envs/musetalk/bin/python"
+export VIDEO_TEMPLATE_PATH="$HOME/caca-oferta-worker/scripts/video-templates.json"
+export VIDEO_MAX_JOBS="1"
 export VIDEO_POLL_SECONDS="15"
 export VIDEO_TTS_VOICE="pt-BR-AntonioNeural"
 ```
@@ -62,22 +69,24 @@ Teste a GPU e as ferramentas:
 ```bash
 nvidia-smi
 ffmpeg -version
-edge-tts --version
-python -c "from PIL import Image; print('Pillow OK')"
+"$VIDEO_MUSETALK_PYTHON" -c "import cv2, torch, edge_tts; assert torch.cuda.is_available(); print('runtime OK')"
 ```
 
-Execute uma rodada controlada:
+Valide sem solicitar nenhum job:
+
+```bash
+python scripts/video-worker.py --preflight
+```
+
+O worker também executa esse preflight antes de solicitar qualquer job. Depois, execute uma rodada controlada:
 
 ```bash
 python scripts/video-worker.py
 ```
 
-### Sincronização labial
+### Sincronização labial e template
 
-O vídeo-base contém movimentos e artes promocionais gravadas no MP4. O worker
-remove o card JBL embutido antes de inserir a oferta atual. Para sincronizar a
-boca com o novo áudio TTS, use o MuseTalk 1.5 localmente na GPU. O código é
-MIT e os pesos do modelo têm permissão comercial conforme o repositório oficial.
+O vídeo-base contém movimentos e artes promocionais gravadas no MP4. O worker remove as áreas previstas pelo template `scripts/video-templates.json` antes de inserir a oferta atual. Não altere o vídeo-base sem criar e validar outro template: as áreas a limpar, card e canvas ficam versionados no JSON.
 
 Antes de ativar, valide a instalação sem colocar nenhum job na fila:
 
@@ -91,12 +100,6 @@ test -f models/musetalkV15/musetalk.json
 Depois configure os caminhos e faça apenas uma execução controlada:
 
 ```bash
-export VIDEO_LIP_SYNC_ENGINE="musetalk"
-export VIDEO_MUSETALK_DIR="$HOME/MuseTalk"
-export VIDEO_MUSETALK_CONFIG="$HOME/MuseTalk/configs/inference/test.yaml"
-export VIDEO_MUSETALK_UNET="$HOME/MuseTalk/models/musetalkV15/unet.pth"
-export VIDEO_MUSETALK_UNET_CONFIG="$HOME/MuseTalk/models/musetalkV15/musetalk.json"
-export VIDEO_MUSETALK_VERSION="v15"
 VIDEO_MAX_JOBS=1 python scripts/video-worker.py
 ```
 
@@ -113,7 +116,7 @@ Quando o worker concluir, o painel em `/videos` exibirá o player e o botão **B
 
 - Nunca coloque `SUPABASE_SERVICE_ROLE_KEY` na Lightning.
 - Não commite tokens ou variáveis reais.
-- O limite do painel é de três jobs em 24 horas.
-- O limite do worker é de três jobs por execução.
+- O limite diário e de fila é aplicado pelo banco; a interface só solicita jobs, não decide o limite.
+- O worker faz uma execução controlada de um job por padrão. Aumentar o valor não permite ultrapassar o teto diário do banco.
 - O MP4 é enviado ao Supabase diretamente, sem atravessar o payload da função Vercel.
 - O Studio gratuito pode reiniciar; não trate a Lightning gratuita como serviço 24/7.
