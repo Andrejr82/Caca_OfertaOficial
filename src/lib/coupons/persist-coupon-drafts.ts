@@ -24,7 +24,7 @@ export function buildCouponDraftContent(coupon: CouponDraftInput, trackedUrl: st
   const benefit = coupon.discount || "Benefício oficial";
   const code = coupon.code && coupon.code !== "RESGATE DIRETO" ? `Código: ${coupon.code}` : "Resgate direto no marketplace";
   const rules = coupon.rules || "Verifique as condições no marketplace.";
-  return `🎫 ${benefit}\n${code}\n${rules}\n\n${trackedUrl}`;
+  return `🚨 *CUPOM LIBERADO*\n\n🏷 *MARKETPLACE*\n${coupon.marketplace}\n\n🎟 *CUPOM*\n${code}\n\n💰 *BENEFÍCIO*\n${benefit}\n\n📌 ${rules}\n\n🔗 *LINK DA OFERTA*\n${trackedUrl}\n\n👇 *CTA*\nAbra o link e resgate antes que acabe.`;
 }
 
 function couponTitle(coupon: CouponDraftInput) {

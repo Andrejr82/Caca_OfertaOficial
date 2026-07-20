@@ -7,7 +7,8 @@ import {
   cleanCouponTitle,
   getCouponCardImageSources,
   isCouponOffer,
-  parseCouponDetails
+  parseCouponDetails,
+  buildCouponWhatsappMessage
 } from "@/lib/coupons/presentation";
 
 interface PostWithOffer {
@@ -41,6 +42,10 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
   const couponImage = couponOffer ? getCouponCardImageSources(post.offers) : null;
   const [couponImageSrc, setCouponImageSrc] = useState(couponImage?.initialSrc || "");
   const couponLink = post.affiliate_links?.tracked_url || post.offers.original_url;
+
+  useEffect(() => {
+    if (couponOffer) setCaption(buildCouponWhatsappMessage(post.offers, couponLink));
+  }, [couponOffer, couponLink, post.offers]);
 
   useEffect(() => {
     setCouponImageSrc(couponImage?.initialSrc || "");

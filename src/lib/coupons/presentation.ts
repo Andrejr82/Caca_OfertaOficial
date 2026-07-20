@@ -74,6 +74,7 @@ export function getAbsoluteCouponFallbackUrl(
   const baseUrl =
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.NEXT_PUBLIC_SITE_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
     (request ? new URL(request.url).origin : "http://localhost:3000");
 
   return new URL(getCouponFallbackAsset(platform), baseUrl).toString();
@@ -96,32 +97,9 @@ export async function resolveCouponPublishImageUrl(
   offer: Partial<CouponOfferLike> | null | undefined,
   request?: Request
 ) {
-  const fallbackUrl = getAbsoluteCouponFallbackUrl(offer?.platform, request);
-  const remoteUrl = normalizeText(offer?.image_url);
-
-  if (!isValidCouponImageUrl(remoteUrl)) {
-    return fallbackUrl;
-  }
-
-  try {
-    const response = await fetch(remoteUrl, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "image/webp,image/apng,image/*,*/*;q=0.8"
-      }
-    });
-
-    const contentType = response.headers.get("content-type") || "";
-    if (!response.ok || !contentType.startsWith("image/") || contentType.includes("svg")) {
-      return fallbackUrl;
-    }
-
-    return remoteUrl;
-  } catch {
-    return fallbackUrl;
-  }
+  // Coupon publication uses the official marketplace artwork. This prevents
+  // broken remote coupon thumbnails from becoming the red generic alert card.
+  return getAbsoluteCouponFallbackUrl(offer?.platform, request);
 }
 
 export function getCouponCardImageSources(offer: Partial<CouponOfferLike> | null | undefined) {
@@ -138,6 +116,35 @@ export function getCouponCardImageSources(offer: Partial<CouponOfferLike> | null
 
 export function cleanCouponTitle(title: string | null | undefined) {
   return normalizeText(title).replace(/^\[CUPOM\]\s*/i, "") || "Cupom disponível";
+}
+
+export function buildCouponWhatsappMessage(
+  offer: Partial<CouponOfferLike> | null | undefined,
+  affiliateLink: string
+) {
+  const marketplace = normalizeText(offer?.platform) || "Marketplace parceiro";
+  const coupon = normalizeText(offer?.coupon) || "Resgate direto no marketplace";
+  const benefit = cleanCouponTitle(offer?.product_name);
+  const details = parseCouponDetails(offer?.notes).description;
+
+  return `🚨 *CUPOM LIBERADO*
+
+🏷 *MARKETPLACE*
+${marketplace}
+
+🎟 *CUPOM*
+${coupon}
+
+💰 *BENEFÍCIO*
+${benefit}
+
+📌 ${details}
+
+🔗 *LINK DA OFERTA*
+${affiliateLink}
+
+👇 *CTA*
+Abra o link e resgate antes que acabe.`;
 }
 
 export function parseCouponDetails(notes: string | null | undefined) {

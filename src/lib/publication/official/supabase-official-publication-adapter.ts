@@ -15,6 +15,7 @@ import type {
 } from "@/core/publication";
 import type { StateServiceDependencies } from "@/core/state";
 import { offerStateVersion, postStateVersion, transitionOfficialOfferState, transitionOfficialPostState } from "@/lib/state/official-state-service";
+import { buildCouponWhatsappMessage, isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 
 const IDEMPOTENCY_PREFIX = "pmav5.publication.idempotency.";
 const RESERVATION_PREFIX = "pmav5.publication.reservation.";
@@ -78,14 +79,16 @@ export class SupabaseOfficialPublicationAdapter implements
   async findPost(postId: string, tenantId: string): Promise<OfficialPublicationPost | null> {
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client.from("posts")
-      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes)")
+      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes,platform,coupon,original_url),affiliate_links(tracked_url)")
       .eq("id", postId)
       .eq("user_id", tenantId)
       .maybeSingle();
     if (error) throw new Error(`Official publication post read failed: ${error.message}`);
     if (!data) return null;
     const related = Array.isArray(data.offers) ? data.offers[0] : data.offers;
+    const link = Array.isArray(data.affiliate_links) ? data.affiliate_links[0] : data.affiliate_links;
     const channel = data.channel as OfficialPublicationChannel;
+    const coupon = isCouponOffer(related);
     return {
       id: data.id,
       tenantId: data.user_id,
@@ -93,8 +96,12 @@ export class SupabaseOfficialPublicationAdapter implements
       channel,
       state: data.status,
       version: postStateVersion(data.status),
-      content: data.content,
-      mediaUrl: related?.image_url ?? null,
+      content: coupon && channel === "whatsapp"
+        ? buildCouponWhatsappMessage(related, link?.tracked_url || related?.original_url || "")
+        : data.content,
+      mediaUrl: coupon
+        ? await resolveCouponPublishImageUrl(related)
+        : related?.image_url ?? null,
       destination: this.destinations[channel] ?? "",
       metadata: channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}
     };
@@ -103,13 +110,15 @@ export class SupabaseOfficialPublicationAdapter implements
   async findPostsByOffer(offerId: string, tenantId: string): Promise<readonly OfficialPublicationPost[]> {
     if (tenantId !== this.tenantId) return [];
     const { data, error } = await this.client.from("posts")
-      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes)")
+      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes,platform,coupon,original_url),affiliate_links(tracked_url)")
       .eq("offer_id", offerId)
       .eq("user_id", tenantId);
     if (error) throw new Error(`Official publication related posts read failed: ${error.message}`);
-    return (data ?? []).map((item) => {
+    return Promise.all((data ?? []).map(async (item) => {
       const related = Array.isArray(item.offers) ? item.offers[0] : item.offers;
+      const link = Array.isArray(item.affiliate_links) ? item.affiliate_links[0] : item.affiliate_links;
       const channel = item.channel as OfficialPublicationChannel;
+      const coupon = isCouponOffer(related);
       return {
         id: item.id,
         tenantId: item.user_id,
@@ -117,12 +126,16 @@ export class SupabaseOfficialPublicationAdapter implements
         channel,
         state: item.status,
         version: postStateVersion(item.status),
-        content: item.content,
-        mediaUrl: related?.image_url ?? null,
+        content: coupon && channel === "whatsapp"
+          ? buildCouponWhatsappMessage(related, link?.tracked_url || related?.original_url || "")
+          : item.content,
+        mediaUrl: coupon
+          ? await resolveCouponPublishImageUrl(related)
+          : related?.image_url ?? null,
         destination: this.destinations[channel] ?? "",
         metadata: (channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}) as Readonly<Record<string, string | number | boolean>>
       };
-    });
+    }));
   }
 
   async findFinal(command: OfficialPublicationCommand): Promise<OfficialPublicationReceipt | null> {
