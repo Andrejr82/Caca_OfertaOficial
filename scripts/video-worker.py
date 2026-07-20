@@ -143,7 +143,7 @@ def speak(script: str, destination: Path) -> None:
         raise RuntimeError("edge-tts não está instalado. Execute: pip install edge-tts")
     subprocess.run(
         [
-            "edge-tts", "--voice", VOICE, "--rate", TTS_RATE, "--pitch", TTS_PITCH,
+            "edge-tts", "--voice", VOICE, f"--rate={TTS_RATE}", f"--pitch={TTS_PITCH}",
             "--text", script, "--write-media", str(destination),
         ],
         check=True,
