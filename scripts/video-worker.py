@@ -221,7 +221,7 @@ def overlay_card_on_video(source: Path, card: Path, badges: Path, audio: Path, o
         "[bg][1:v]overlay="
         "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
         "y=390:enable='gte(t,1.0)'[scene];"
-        "[scene][2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
+        "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
         [
@@ -275,7 +275,7 @@ def render_from_base_video(base_video: Path, card: Path, badges: Path, audio: Pa
         "[bg][1:v]overlay="
         "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
         "y=390:enable='gte(t,1.0)'[scene];"
-        "[scene][2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
+        "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
         [
