@@ -71,7 +71,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Fábrica de conteúdo</p><h1 className="mt-2 text-3xl font-black tracking-tight text-white">Vídeos de ofertas</h1><p className="mt-2 max-w-2xl text-sm text-white/45">Crie até três vídeos por dia, revise a prévia e aprove antes de publicar.</p></div>
+        <div><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Fábrica de conteúdo</p><h1 className="mt-2 text-3xl font-black tracking-tight text-white">Vídeos de ofertas</h1><p className="mt-2 max-w-2xl text-sm text-white/45">Crie vídeos, revise a prévia e aprove antes de publicar.</p></div>
         <div className="flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-4 py-3 text-xs text-white/55"><Film size={16} className="text-emerald-400" /> Fluxo manual de aprovação</div>
       </div>
 
