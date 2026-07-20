@@ -19,7 +19,7 @@ import urllib.request
 from pathlib import Path
 from textwrap import wrap
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 
 
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
@@ -85,6 +85,10 @@ def make_card(offer: dict, product_path: Path, destination: Path) -> None:
     draw.rounded_rectangle((20, 20, 230, 198), radius=12, fill=(245, 245, 245, 255))
 
     product = Image.open(product_path).convert("RGB")
+    # Marketplace images can be very dark; lift them slightly without
+    # changing the product colors or the white card background.
+    product = ImageEnhance.Brightness(product).enhance(1.10)
+    product = ImageEnhance.Contrast(product).enhance(1.05)
     product.thumbnail((190, 160), Image.Resampling.LANCZOS)
     card.paste(product, (30 + (190 - product.width) // 2, 28 + (160 - product.height) // 2))
 
@@ -118,6 +122,17 @@ def make_caption(script: str, destination: Path) -> None:
     caption.save(destination, "PNG")
 
 
+def make_reference_badges(destination: Path) -> None:
+    """Replace baked reference lower-thirds with our own neutral badges."""
+    badges = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(badges)
+    draw.rounded_rectangle((80, 975, 640, 1085), radius=22, fill=(245, 245, 245, 245), outline=(255, 190, 0, 240), width=3)
+    draw.text((125, 1008), "OFERTA VERIFICADA HOJE", font=font(24, bold=True), fill=(20, 24, 30, 255))
+    draw.rounded_rectangle((150, 1165, 600, 1235), radius=16, fill=(4, 7, 12, 210), outline=(255, 190, 0, 150), width=2)
+    draw.text((205, 1188), "PREÇO SUJEITO A ALTERAÇÃO", font=font(15, bold=True), fill="white")
+    badges.save(destination, "PNG")
+
+
 def speak(script: str, destination: Path) -> None:
     if not shutil.which("edge-tts"):
         raise RuntimeError("edge-tts não está instalado. Execute: pip install edge-tts")
@@ -129,14 +144,18 @@ def speak(script: str, destination: Path) -> None:
 
 
 def reference_cleanup_filter() -> str:
-    """Remove the product card baked into the supplied reference video.
+    """Remove text baked into the supplied reference video.
 
-    The source clip already contains a JBL card. The delogo rectangle is
-    intentionally applied before the new offer card is composited, so the
-    original product cannot leak through the generated card.
+    The old product card is intentionally not delogged: the generated card
+    covers that region from its entrance onward, while delogo caused visible
+    horizontal smearing on the Lightning FFmpeg build. Only the two baked
+    lower-third text areas are cleaned here.
     """
-    # The Lightning FFmpeg build supports delogo coordinates but not `band`.
-    cleanup = "delogo=x=380:y=380:w=310:h=520"
+    # Solid, subtle masks avoid delogo's horizontal smearing on moving bodies.
+    cleanup = (
+        "drawbox=x=80:y=975:w=560:h=110:color=black@0.78:t=fill,"
+        "drawbox=x=150:y=1165:w=450:h=70:color=black@0.78:t=fill"
+    )
     return f",{cleanup}" if REFERENCE_CLEANUP else ""
 
 
@@ -194,20 +213,21 @@ def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
     shutil.copyfile(generated[0], output)
 
 
-def overlay_card_on_video(source: Path, card: Path, audio: Path, output: Path) -> None:
+def overlay_card_on_video(source: Path, card: Path, badges: Path, audio: Path, output: Path) -> None:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
     filters = (
         "[0:v]scale=720:1280[bg];"
         "[bg][1:v]overlay="
         "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
-        "y=390:enable='gte(t,1.0)'[v]"
+        "y=390:enable='gte(t,1.0)'[scene];"
+        "[scene][2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error", "-i", str(source),
-            "-loop", "1", "-i", str(card), "-i", str(audio),
-            "-filter_complex", filters, "-map", "[v]", "-map", "2:a:0",
+            "-loop", "1", "-i", str(card), "-loop", "1", "-i", str(badges), "-i", str(audio),
+            "-filter_complex", filters, "-map", "[v]", "-map", "3:a:0",
             "-shortest", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
             "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
             str(output),
@@ -244,7 +264,7 @@ def render(avatar: Path, card: Path, caption: Path, audio: Path, output: Path) -
     )
 
 
-def render_from_base_video(base_video: Path, card: Path, audio: Path, output: Path) -> None:
+def render_from_base_video(base_video: Path, card: Path, badges: Path, audio: Path, output: Path) -> None:
     """Preserve proven avatar motion and replace the source audio."""
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
@@ -254,15 +274,16 @@ def render_from_base_video(base_video: Path, card: Path, audio: Path, output: Pa
         f"[0:v]scale=720:1280{reference_cleanup_filter()}[bg];"
         "[bg][1:v]overlay="
         "x='if(lt(t,1.0),720,if(lt(t,1.5),720-(t-1.0)*580,430))':"
-        "y=390:enable='gte(t,1.0)'[v]"
+        "y=390:enable='gte(t,1.0)'[scene];"
+        "[scene][2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
     )
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
             "-stream_loop", "-1", "-i", str(base_video),
-            "-loop", "1", "-i", str(card),
+            "-loop", "1", "-i", str(card), "-loop", "1", "-i", str(badges),
             "-i", str(audio), "-filter_complex", filters,
-            "-map", "[v]", "-map", "2:a:0", "-shortest", "-r", "24",
+            "-map", "[v]", "-map", "3:a:0", "-shortest", "-r", "24",
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", str(output),
         ],
@@ -293,6 +314,7 @@ def process(job: dict) -> None:
         root = Path(folder)
         product = root / "product.jpg"
         card = root / "card.png"
+        badges = root / "reference-badges.png"
         caption = root / "caption.png"
         audio = root / "audio.mp3"
         video = root / "video.mp4"
@@ -301,6 +323,7 @@ def process(job: dict) -> None:
             raise RuntimeError("A oferta não possui image_url.")
         download(product_url, product)
         make_card(offer, product, card)
+        make_reference_badges(badges)
         speak(script, audio)
         if RENDER_ENGINE == "reference":
             if LIP_SYNC_ENGINE == "musetalk":
@@ -308,9 +331,9 @@ def process(job: dict) -> None:
                 lipsynced = root / "lipsynced.mp4"
                 render_base_for_lipsync(BASE_VIDEO_PATH, audio, base_for_lipsync)
                 run_musetalk(base_for_lipsync, audio, lipsynced, root)
-                overlay_card_on_video(lipsynced, card, audio, video)
+                overlay_card_on_video(lipsynced, card, badges, audio, video)
             else:
-                render_from_base_video(BASE_VIDEO_PATH, card, audio, video)
+                render_from_base_video(BASE_VIDEO_PATH, card, badges, audio, video)
         else:
             make_caption(script, caption)
             download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
