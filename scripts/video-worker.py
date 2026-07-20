@@ -199,16 +199,16 @@ def process(job: dict) -> None:
         if not product_url:
             raise RuntimeError("A oferta não possui image_url.")
         download(product_url, product)
-        download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
-        avatar = root / "avatar.png" if (root / "avatar.png").exists() else AVATAR_PATH
-        if not avatar.exists():
-            raise RuntimeError("Avatar não encontrado. Configure VIDEO_AVATAR_PATH ou VIDEO_AVATAR_URL.")
         make_card(offer, product, card)
         make_caption(script, caption)
         speak(script, audio)
         if RENDER_ENGINE == "reference":
             render_from_base_video(BASE_VIDEO_PATH, card, caption, audio, video)
         else:
+            download(os.environ["VIDEO_AVATAR_URL"], root / "avatar.png") if os.environ.get("VIDEO_AVATAR_URL") else None
+            avatar = root / "avatar.png" if (root / "avatar.png").exists() else AVATAR_PATH
+            if not avatar.exists():
+                raise RuntimeError("Avatar não encontrado. Configure VIDEO_AVATAR_PATH ou VIDEO_AVATAR_URL.")
             render(avatar, card, caption, audio, video)
         video_url = signed_upload(job_id, "video", video)
         audio_url = signed_upload(job_id, "audio", audio)
