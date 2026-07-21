@@ -7,6 +7,7 @@ import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/
 import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
 import { rejectAmazonOfferAction, selectAmazonOfferAction, bulkRejectOffersAction } from "@/lib/offers/actions";
 import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
+import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
 
@@ -14,9 +15,19 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const [filterTier, setFilterTier] = useState<string>("");
   const [filterDecision, setFilterDecision] = useState<string>("");
   const [filterPlatform, setFilterPlatform] = useState<string>("");
+  const [filterCategory, setFilterCategory] = useState<string>("");
+  const [filterSubcategory, setFilterSubcategory] = useState<string>("");
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [minPrice, setMinPrice] = useState<string>("");
+  const [maxPrice, setMaxPrice] = useState<string>("");
+  const [minDiscount, setMinDiscount] = useState<string>("");
+  const [filterDate, setFilterDate] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
   const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
   const [isDiscarding, startDiscarding] = useTransition();
+
+  const selectedCategory = getCategoryOptions().find((category) => category.value === filterCategory);
+  const availableSubcategories = selectedCategory?.subcategories || [];
 
   // Ponytail: simplificando ordenação e filtro em memória, sem query params complexos.
   const filtered = initialOffers.filter(offer => {
@@ -27,6 +38,21 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     if (filterTier && tier !== filterTier) return false;
     if (filterDecision && decision !== filterDecision) return false;
     if (filterPlatform && offer.platform !== filterPlatform) return false;
+    const offerCategory = offer.category || offer.category_name;
+    if (filterCategory && offerCategory !== filterCategory) return false;
+    if (filterSubcategory && offer.subcategory !== filterSubcategory) return false;
+    if (filterStatus && offer.status !== filterStatus) return false;
+
+    if (minPrice && offer.current_price < Number(minPrice)) return false;
+    if (maxPrice && offer.current_price > Number(maxPrice)) return false;
+    const discount = offer.old_price && offer.old_price > offer.current_price
+      ? ((offer.old_price - offer.current_price) / offer.old_price) * 100
+      : 0;
+    if (minDiscount && discount < Number(minDiscount)) return false;
+    if (filterDate) {
+      const offerDate = new Date(offer.updated_at || offer.created_at).toISOString().slice(0, 10);
+      if (offerDate !== filterDate) return false;
+    }
     return true;
   });
 
@@ -90,7 +116,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
 
   return (
     <section className="glass-card p-5 w-full flex flex-col gap-4">
-      <div className="flex flex-wrap gap-4 border-b border-white/[0.04] pb-4">
+      <div className="grid gap-3 border-b border-white/[0.04] pb-4 md:grid-cols-2 xl:grid-cols-4">
         <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80">
           <input type="checkbox" checked={allSelectableSelected} onChange={toggleAllOffers} disabled={selectableOffers.length === 0 || isDiscarding} />
           Selecionar todos
@@ -98,7 +124,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
         <button type="button" onClick={discardSelectedOffers} disabled={selectedOfferIds.size === 0 || isDiscarding} className="rounded border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 disabled:cursor-not-allowed disabled:opacity-40">
           {isDiscarding ? "Descartando..." : `Descartar selecionados${selectedOfferIds.size ? ` (${selectedOfferIds.size})` : ""}`}
         </button>
-        <select 
+        <select
           className="bg-black/20 text-white text-sm rounded p-2"
           value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
         >
@@ -107,6 +133,25 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <option value="Amazon">Amazon</option>
           <option value="Mercado Livre">Mercado Livre</option>
           <option value="Magalu">Magalu</option>
+        </select>
+
+        <select
+          className="rounded bg-black/20 p-2 text-sm text-white"
+          value={filterCategory}
+          onChange={(event) => { setFilterCategory(event.target.value); setFilterSubcategory(""); }}
+        >
+          <option value="">Todas as categorias</option>
+          {getCategoryOptions().map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+        </select>
+
+        <select
+          className="rounded bg-black/20 p-2 text-sm text-white disabled:opacity-40"
+          value={filterSubcategory}
+          onChange={(event) => setFilterSubcategory(event.target.value)}
+          disabled={!filterCategory}
+        >
+          <option value="">Todas as subcategorias</option>
+          {availableSubcategories.map((subcategory) => <option key={subcategory} value={subcategory}>{subcategory}</option>)}
         </select>
 
         <select 
@@ -120,6 +165,27 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <option value="C">Tier C</option>
           <option value="LIXO">Tier LIXO</option>
         </select>
+
+        <select
+          className="rounded bg-black/20 p-2 text-sm text-white"
+          value={filterStatus}
+          onChange={(event) => setFilterStatus(event.target.value)}
+        >
+          <option value="">Todos os status</option>
+          <option value="pending_manual_review">Em revisão</option>
+          <option value="selected">Selecionadas</option>
+          <option value="approved">Aprovadas</option>
+          <option value="posted">Publicadas</option>
+          <option value="rejected">Descartadas</option>
+        </select>
+
+        <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" step="0.01" placeholder="Preço mínimo" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
+        <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" step="0.01" placeholder="Preço máximo" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
+        <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" max="100" placeholder="Desconto mínimo (%)" value={minDiscount} onChange={(event) => setMinDiscount(event.target.value)} />
+        <label className="flex items-center gap-2 rounded bg-black/20 px-2 text-xs text-white/50">
+          Data exata
+          <input className="min-w-0 flex-1 bg-transparent p-2 text-sm text-white" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} />
+        </label>
 
         <select 
           className="bg-black/20 text-white text-sm rounded p-2"
@@ -206,7 +272,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                   </div>
                   <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
                   <p className="text-[11px] text-white/40">
-                    {offer.category || "Sem categoria"}
+                    {offer.category || "Sem categoria"}{offer.subcategory ? ` / ${offer.subcategory}` : ""}
                     {nativeShopee ? ` • Top ${offer.native_category_position} • productCatId ${offer.shopee_product_cat_id}` : ""}
                     {` • R$ ${offer.current_price}`}
                     {offer.old_price ? ` (de R$ ${offer.old_price})` : ""}

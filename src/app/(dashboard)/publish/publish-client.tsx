@@ -435,8 +435,8 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                   <div className="bg-[#0b141a] border border-white/[0.05] rounded-xl p-4 max-w-md mx-auto space-y-2 shadow-2xl relative mt-4">
                     {/* Badges */}
                     <div className="absolute -top-3 left-4 flex gap-2">
-                      {post.platform && <Badge className="bg-purple-500/20 text-purple-300 border-purple-500/30 text-[10px] px-2">{post.platform}</Badge>}
-                      <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-[10px] px-2">Premium Template</Badge>
+                      {post.platform && <Badge label={post.platform} tone="neutral" />}
+                      <Badge label="Premium Template" tone="good" />
                     </div>
 
                     {/* Fake WhatsApp Bubble */}

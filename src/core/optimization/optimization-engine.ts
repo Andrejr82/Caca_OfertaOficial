@@ -4,6 +4,11 @@ export type Priority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type Impact = "Baixo" | "Médio" | "Alto" | "Muito Alto";
 
 export interface OptimizationRecommendation {
+  title: string;
+  description: string;
+  targetEngine: string;
+  analyticsUsed: string;
+  learningUsed: string;
   recommendation: string;
   expectedGain: string;
   confidence: string;
@@ -49,6 +54,11 @@ export class MarketplaceOptimizationEngine {
       }
 
       opts.push({
+        title: rec.title,
+        description: rec.description,
+        targetEngine,
+        analyticsUsed: rec.metric,
+        learningUsed: rec.source,
         recommendation: `Ativar recomendação originada de: ${rec.title}`,
         expectedGain: `Otimização na fase de ${targetEngine} baseada no padrão '${rec.title}'.`,
         confidence: rec.confidence,
@@ -62,6 +72,11 @@ export class MarketplaceOptimizationEngine {
     const decliningTrends = learning.trends.filter(t => t.status === "Queda");
     if (decliningTrends.length > 0) {
       opts.push({
+        title: "Revisão Crítica de Extração e Qualidade",
+        description: "Uma tendência de queda foi detectada nas métricas vitais.",
+        targetEngine: "Quality Engine / Oracle Scraper",
+        analyticsUsed: decliningTrends.map((trend) => trend.metric).join(", "),
+        learningUsed: "Marketplace Learning Engine",
         recommendation: "Revisão Crítica de Extração e Qualidade",
         expectedGain: "Prevenção de degradação massiva da base de ofertas.",
         confidence: "HIGH",
@@ -75,6 +90,11 @@ export class MarketplaceOptimizationEngine {
     const aiTrend = learning.trends.find(t => t.metric === "AI Savings");
     if (aiTrend && aiTrend.status === "Crescimento") {
       opts.push({
+        title: "Escalar AI Decision Engine",
+        description: "A economia de tokens está em crescimento.",
+        targetEngine: "AI Decision Engine",
+        analyticsUsed: "AI Savings",
+        learningUsed: "Marketplace Learning Engine",
         recommendation: "Escalar AI Decision Engine",
         expectedGain: "Maximizar qualidade de copy e conversão com risco financeiro mínimo.",
         confidence: "HIGH",

@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { Search, ArrowUpDown, ExternalLink, Calendar, Eye, ShoppingCart, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
 
 interface PostItem {
   id: string;
@@ -36,6 +37,7 @@ export function PostHistoryTable({
   const [searchTerm, setSearchTerm] = useState("");
   const [platformFilter, setPlatformFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
   const [sortField, setSortField] = useState<"date" | "clicks" | "conversions" | "revenue">("date");
   const [sortAsc, setSortAsc] = useState(false);
 
@@ -147,7 +149,8 @@ export function PostHistoryTable({
           item.platform.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesPlatform = !showPlatformFilter || platformFilter === "all" || item.platform === platformFilter;
         const matchesStatus = statusFilter === "all" || item.status === statusFilter;
-        return matchesSearch && matchesPlatform && matchesStatus;
+        const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
+        return matchesSearch && matchesPlatform && matchesStatus && matchesCategory;
       })
       .sort((a, b) => {
         let valA: any = a[sortField];
@@ -168,7 +171,7 @@ export function PostHistoryTable({
         if (valA > valB) return sortAsc ? 1 : -1;
         return 0;
       });
-  }, [displayData, searchTerm, platformFilter, showPlatformFilter, statusFilter, sortField, sortAsc]);
+  }, [displayData, searchTerm, platformFilter, showPlatformFilter, statusFilter, categoryFilter, sortField, sortAsc]);
 
   return (
     <div className="glass-card p-5">
@@ -213,6 +216,16 @@ export function PostHistoryTable({
             <option value="published">Publicado</option>
             <option value="draft">Rascunho</option>
             <option value="failed">Falhou</option>
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className="focus-ring rounded-md border border-moss/10 bg-paper py-2 px-3 text-sm text-ink font-semibold focus:border-moss"
+          >
+            <option value="all">Todas as Categorias</option>
+            {getCategoryOptions().map((category) => (
+              <option key={category.value} value={category.value}>{category.label}</option>
+            ))}
           </select>
         </div>
       </div>

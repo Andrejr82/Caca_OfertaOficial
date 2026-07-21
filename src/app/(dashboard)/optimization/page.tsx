@@ -49,27 +49,25 @@ export default async function OptimizationPage() {
               <div className="flex flex-col md:flex-row md:justify-between md:items-start gap-4 mb-3">
                 <div className="flex-1">
                   <h3 className="text-base font-bold text-amber-400 flex items-center gap-2">
-                    <ArrowUpRight size={18} /> {opt.title}
+                    <ArrowUpRight size={18} /> {opt.recommendation}
                   </h3>
-                  <p className="text-sm text-white/80 mt-1">{opt.description}</p>
+                  <p className="text-sm text-white/80 mt-1">{opt.expectedGain}</p>
                 </div>
                 <div className="flex flex-col gap-2 min-w-[140px]">
-                  <Badge label={`Prioridade: ${opt.priority}`} tone={opt.priority === "CRITICAL" ? "warn" : opt.priority === "HIGH" ? "warn" : opt.priority === "MEDIUM" ? "neutral" : "good"} />
                   <Badge label={`Impacto: ${opt.expectedImpact}`} tone={opt.expectedImpact === "Muito Alto" ? "warn" : opt.expectedImpact === "Alto" ? "warn" : "neutral"} />
                   <Badge label={`Confiança: ${opt.confidence}`} tone={opt.confidence === "HIGH" ? "good" : "neutral"} />
+                  <Badge label={`Rollback: ${opt.rollbackAvailable ? "Disponível" : "Indisponível"}`} tone={opt.rollbackAvailable ? "good" : "warn"} />
                 </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/[0.05]">
                 <div className="text-[11px] text-white/60 space-y-2">
-                  <div><span className="text-white/40 uppercase">Motivação:</span> {opt.motivation}</div>
-                  <div><span className="text-white/40 uppercase">Origem:</span> {opt.origin}</div>
-                  <div><span className="text-white/40 uppercase">Justificativa Técnica:</span> {opt.technicalJustification}</div>
+                  <div><span className="text-white/40 uppercase">Recomendação:</span> {opt.recommendation}</div>
+                  <div><span className="text-white/40 uppercase">Justificativa:</span> {opt.justification}</div>
                 </div>
                 <div className="text-[11px] text-white/60 space-y-2">
-                  <div><span className="text-white/40 uppercase">Engine Impactada:</span> <span className="text-blue-300 font-bold">{opt.targetEngine}</span></div>
-                  <div><span className="text-white/40 uppercase">Analytics Base:</span> {opt.analyticsUsed}</div>
-                  <div><span className="text-white/40 uppercase">Learning Base:</span> {opt.learningUsed}</div>
+                  <div><span className="text-white/40 uppercase">Ganho esperado:</span> {opt.expectedGain}</div>
+                  <div><span className="text-white/40 uppercase">Execução automática:</span> Não — requer etapa de automação aprovada.</div>
                 </div>
               </div>
             </div>

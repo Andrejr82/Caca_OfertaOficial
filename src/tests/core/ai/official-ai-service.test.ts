@@ -249,7 +249,7 @@ describe("generateOfficialAI", () => {
 
   it("registra regra e canal para hook rejeitado", async () => {
     const events: any[] = [];
-    const dependencies = createDependencies({ telemetry: { emit: (event) => events.push(event) } });
+    const dependencies = createDependencies({ telemetry: { emit: (event) => { events.push(event); } } });
     vi.mocked(dependencies.providers.resolve("groq").generate).mockResolvedValue({
       content: { hook: "x" }, provider: "groq", model: "llama-3.3-70b-versatile", latencyMs: 10
     });

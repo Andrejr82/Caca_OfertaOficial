@@ -47,14 +47,14 @@ export default async function LearningPage() {
           {learning.insights.length > 0 ? learning.insights.map((ins, idx) => (
             <div key={idx} className="border border-white/[0.05] rounded-lg p-4 bg-white/[0.01]">
               <div className="flex justify-between items-start mb-2">
-                <h3 className="text-sm font-bold text-emerald-400">{ins.title}</h3>
+                <h3 className="text-sm font-bold text-emerald-400">{ins.pattern}</h3>
                 <Badge label={`Confiança: ${ins.confidence}`} tone={ins.confidence === "HIGH" ? "good" : ins.confidence === "MEDIUM" ? "neutral" : "warn"} />
               </div>
-              <p className="text-sm text-white/80 mb-3">{ins.description}</p>
+              <p className="text-sm text-white/80 mb-3">{ins.expectedImpact}</p>
               <div className="text-[10px] text-white/40 uppercase space-y-1">
-                <div>Fonte: {ins.source}</div>
-                <div>Métrica: {ins.metric}</div>
-                <div>Período: {ins.period}</div>
+                <div>Marketplace: {ins.marketplace}</div>
+                <div>Categoria: {ins.category}</div>
+                <div>Ocorrências: {ins.occurrences}</div>
               </div>
             </div>
           )) : (

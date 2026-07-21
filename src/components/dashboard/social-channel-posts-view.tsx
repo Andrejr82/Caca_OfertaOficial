@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
+import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
 
 type MarketplaceFilterKey =
   | "all"
@@ -17,6 +18,7 @@ interface PostOfferMetadata {
   platform?: string | null;
   marketplace?: string | null;
   category?: string | null;
+  subcategory?: string | null;
 }
 
 interface DraftPostItem {
@@ -99,6 +101,9 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
   historyData: HistoryPostItem[];
 }) {
   const [activeFilter, setActiveFilter] = useState<MarketplaceFilterKey>("all");
+  const [categoryFilter, setCategoryFilter] = useState("");
+  const [subcategoryFilter, setSubcategoryFilter] = useState("");
+  const selectedCategory = getCategoryOptions().find((category) => category.value === categoryFilter);
 
   const filterCounts = useMemo(() => {
     const uniquePosts = new Map<
@@ -139,17 +144,20 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
   const filteredDraftPosts = useMemo(
     () =>
       draftPosts.filter((post) =>
-        matchesMarketplaceFilter(activeFilter, post.offers, post.offers?.platform, post.offers?.category),
+        matchesMarketplaceFilter(activeFilter, post.offers, post.offers?.platform, post.offers?.category)
+        && (!categoryFilter || post.offers?.category === categoryFilter)
+        && (!subcategoryFilter || post.offers?.subcategory === subcategoryFilter),
       ),
-    [activeFilter, draftPosts],
+    [activeFilter, categoryFilter, draftPosts, subcategoryFilter],
   );
 
   const filteredHistoryData = useMemo(
     () =>
       historyData.filter((post) =>
-        matchesMarketplaceFilter(activeFilter, post.marketplace, post.platform, post.category),
+        matchesMarketplaceFilter(activeFilter, post.marketplace, post.platform, post.category)
+        && (!categoryFilter || post.category === categoryFilter),
       ),
-    [activeFilter, historyData],
+    [activeFilter, categoryFilter, historyData],
   );
 
   const hasFilteredPosts = filteredDraftPosts.length > 0 || filteredHistoryData.length > 0;
@@ -180,6 +188,23 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
               </button>
             );
           })}
+          <select
+            value={categoryFilter}
+            onChange={(event) => { setCategoryFilter(event.target.value); setSubcategoryFilter(""); }}
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/75"
+          >
+            <option value="">Todas as categorias</option>
+            {getCategoryOptions().map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
+          </select>
+          <select
+            value={subcategoryFilter}
+            onChange={(event) => setSubcategoryFilter(event.target.value)}
+            disabled={!categoryFilter}
+            className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/75 disabled:opacity-40"
+          >
+            <option value="">Todas as subcategorias</option>
+            {(selectedCategory?.subcategories || []).map((subcategory) => <option key={subcategory} value={subcategory}>{subcategory}</option>)}
+          </select>
         </div>
       </section>
 

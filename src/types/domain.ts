@@ -14,6 +14,7 @@ export interface Offer {
   platform: Platform;
   product_name: string;
   category: string | null;
+  subcategory?: string | null;
   category_id?: string | null;
   category_name?: string | null;
   source_position?: number | null;
