@@ -199,15 +199,22 @@ function fetchOffersHtmlViaCertifiedTransport(url, { execFileSync: run = execFil
 }
 
 async function fetchPage(fetchImpl, url) {
-  if (!fetchImpl) return fetchOffersHtmlViaCertifiedTransport(url);
-  const response = await fetchImpl(url, { headers: { Accept: 'text/html', 'User-Agent': 'CacaOfertaOficial/5.0' } });
+  // A VPS Linux não possui powershell.exe. O Node 20 já oferece fetch nativo;
+  // deixe o transporte certificado apenas como fallback para ambientes antigos.
+  const transport = typeof fetchImpl === 'function'
+    ? fetchImpl
+    : (fetchImpl === null || fetchImpl === undefined) && typeof global.fetch === 'function'
+      ? global.fetch
+      : null;
+  if (!transport) return fetchOffersHtmlViaCertifiedTransport(url);
+  const response = await transport(url, { headers: { Accept: 'text/html', 'User-Agent': 'CacaOfertaOficial/5.0' } });
   if (!response.ok) throw new Error(`HTTP ${response.status} ${url}`);
   return response.text();
 }
 
 async function runMercadoLivreNativeTop20({ fetchImpl = null, urls = [OFFERS_URL], now = () => new Date().toISOString() } = {}) {
   const startedAt = Date.now();
-  const transport = typeof fetchImpl === 'function' ? fetchImpl : null;
+  const transport = fetchImpl === null || fetchImpl === undefined ? null : fetchImpl;
   const categories = [];
   let calls = 0;
   

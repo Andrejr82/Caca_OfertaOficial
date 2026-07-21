@@ -40,7 +40,9 @@ const { runAmazonNativeTop20 } = require('./amazon-native-top20-v5.cjs');
 const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-const CRON_SCHEDULE = '0 */4 * * *';
+// Executa no início de cada janela dos cenários Shopee, evitando perder cenários
+// de 2 horas (7h, 9h, 12h, 14h, 16h, 18h, 20h e 22h).
+const CRON_SCHEDULE = '0 0,4,7,9,12,14,16,18,20,22 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';

@@ -4,8 +4,8 @@
 const SCENARIOS = {
   mae_de_primeira_viagem: {
     id: 'mae_de_primeira_viagem',
-    productCatId: 100001,
     name: 'Mãe de Primeira Viagem',
+    apiCategories: [100632, 100633], // Mom & Baby, Baby & Kids Fashion
     keywords: [
       'fralda descartável atacado', 'lenço umedecido atacado', 'pomada assadura', 'mamadeira anti cólica', 
       'babá eletrônica', 'bolsa maternidade', 'ninho redutor de berço', 'kit higiene bebê', 
@@ -20,8 +20,8 @@ const SCENARIOS = {
   },
   dono_de_pet: {
     id: 'dono_de_pet',
-    productCatId: 100002,
     name: 'Dono de Pet',
+    apiCategories: [100631], // Pets
     keywords: [
       'tapete higiênico cachorro', 'ração premium', 'tira pelos pet', 'bebedouro fonte gato', 
       'brinquedo pet interativo', 'caminha para cachorro', 'areia higiênica gato', 'arranhador gato', 
@@ -34,8 +34,8 @@ const SCENARIOS = {
   },
   morando_sozinho: {
     id: 'morando_sozinho',
-    productCatId: 100003,
     name: 'Morando Sozinho',
+    apiCategories: [100010, 100636], // Home Appliances, Home & Construction
     keywords: [
       'air fryer', 'mop giratório', 'sanduicheira elétrica', 'chaleira elétrica', 'forro de papel airfryer', 
       'esfregão de limpeza', 'varal de chão', 'tábua de passar', 'ferro de passar', 'kit ferramentas básico', 
@@ -49,8 +49,8 @@ const SCENARIOS = {
   },
   enxoval_casamento: {
     id: 'enxoval_casamento',
-    productCatId: 100004,
     name: 'Enxoval de Casamento',
+    apiCategories: [100010, 100636], // Home Appliances, Home & Construction
     keywords: [
       'jogo de panelas antiaderente', 'jogo de lençol algodão', 'faqueiro aço inox', 'aparelho de jantar porcelana', 
       'jogo de taças', 'toalha de banho fio penteado', 'liquidificador turbo', 'escorredor de louça inox', 
@@ -63,48 +63,118 @@ const SCENARIOS = {
       'capa protetora colchão', 'cortina blackout sala', 'tapete felpudo sala', 'cobre leito matelassê', 
       'conjunto mantimentos', 'boleira vidro', 'cafeteira elétrica', 'ferro a vapor'
     ]
+  },
+  moda_masculina: {
+    id: 'moda_masculina',
+    name: 'Moda Masculina',
+    apiCategories: [100011, 100012, 100009], // Men Clothes, Men Shoes, Fashion Accessories
+    keywords: [
+      'sapatos masculinos', 'tênis casual masculino', 'relógio masculino de pulso', 
+      'jaqueta de couro masculina', 'cinto de couro social', 'carteira masculina couro', 
+      'mochila executiva masculina', 'óculos de sol masculino', 'camisa polo masculina', 'calça jeans masculina'
+    ]
+  },
+  gamer_tecnologia: {
+    id: 'gamer_tecnologia',
+    name: 'Gamer e Tecnologia',
+    apiCategories: [100644, 100013, 100634], // Computers, Mobile & Gadgets, Gaming
+    keywords: [
+      'mouse gamer rgb', 'teclado mecânico switch', 'fone bluetooth sem fio', 
+      'cadeira gamer ergonômica', 'smartwatch relógio inteligente', 'suporte notebook alumínio', 
+      'carregador turbo', 'cabo iphone', 'ring light', 'tripé celular'
+    ]
+  },
+  beleza_autocuidado: {
+    id: 'beleza_autocuidado',
+    name: 'Beleza e Autocuidado',
+    apiCategories: [100630, 100001], // Beauty, Health
+    keywords: [
+      'skincare rosto', 'protetor solar facial', 'secador de cabelo profissional', 
+      'chapinha alisadora', 'perfume importado', 'kit pincéis maquiagem',
+      'escova secadora', 'sérum vitamina c', 'creme hidratante corporal', 'kit maquiagem completo'
+    ]
+  },
+  treino_academia: {
+    id: 'treino_academia',
+    name: 'Treino e Academia',
+    apiCategories: [100637, 100001], // Sports & Outdoors, Health
+    keywords: [
+      'whey protein', 'creatina pura', 'garrafa térmica inox', 
+      'roupa de academia fitness', 'tapete yoga pilates', 'tênis de corrida',
+      'corda de pular', 'faixa elástica mini band', 'halter emborrachado', 'suplemento pré treino'
+    ]
+  },
+  acessorios_relogios: {
+    id: 'acessorios_relogios',
+    name: 'Acessórios e Relógios',
+    apiCategories: [100009, 100534], // Fashion Accessories, Watches
+    keywords: [
+      'relógio smartwatch', 'óculos de sol polarizado', 'colar prata 925', 
+      'pulseira magnética', 'anel de compromisso', 'boné aba curva', 
+      'mochila transversal', 'carteira couro fina', 'brinco argola',
+      'relógio g-shock', 'corrente masculina', 'tiara de cabelo'
+    ]
+  },
+  viagem_aventura: {
+    id: 'viagem_aventura',
+    name: 'Viagem e Aventura',
+    apiCategories: [100015, 100637], // Travel & Luggage, Sports & Outdoors
+    keywords: [
+      'mala de bordo 10kg', 'kit organizador mala', 'travesseiro de pescoço', 
+      'barraca camping 4 pessoas', 'garrafa térmica inox', 'lanterna tática recarregável', 
+      'mochila trilha', 'capa chuva impermeável', 'cadeira de praia dobrável',
+      'saco de dormir', 'canivete suíço', 'balança digital bagagem'
+    ]
   }
 };
 
 // 2. Roteamento Inteligente por Horário
 function getActiveScenario(currentHour) {
-  // A cron do Oracle roda nos horários: 00h, 04h, 08h, 12h, 16h, 20h.
-  // Mapeamos a hora (0 a 23) para o cenário mais aderente.
+  // O cron do Oracle inicia cada uma das janelas configuradas abaixo.
   
-  if (currentHour >= 6 && currentHour < 11) {
-    return SCENARIOS.mae_de_primeira_viagem;
+  if (currentHour >= 0 && currentHour < 4) {
+    return SCENARIOS.gamer_tecnologia; // Madrugada Tech
+  }
+  if (currentHour >= 4 && currentHour < 7) {
+    return SCENARIOS.treino_academia; // Manhã Treino
+  }
+  if (currentHour >= 7 && currentHour < 9) {
+    return SCENARIOS.mae_de_primeira_viagem; // Manhã Bebê
+  }
+  if (currentHour >= 9 && currentHour < 12) {
+    return SCENARIOS.viagem_aventura; // Manhã Viagem
+  }
+  if (currentHour >= 12 && currentHour < 14) {
+    return SCENARIOS.beleza_autocuidado; // Tarde Beleza
+  }
+  if (currentHour >= 14 && currentHour < 16) {
+    return SCENARIOS.dono_de_pet; // Tarde Pet
+  }
+  if (currentHour >= 16 && currentHour < 18) {
+    return SCENARIOS.acessorios_relogios; // Tarde Acessórios
+  }
+  if (currentHour >= 18 && currentHour < 20) {
+    return SCENARIOS.morando_sozinho; // Noite Casa
+  }
+  if (currentHour >= 20 && currentHour < 22) {
+    return SCENARIOS.moda_masculina; // Noite Moda
+  }
+  if (currentHour >= 22) {
+    return SCENARIOS.enxoval_casamento; // Noite Enxoval
   }
   
-  if (currentHour >= 11 && currentHour < 15) {
-    return SCENARIOS.dono_de_pet;
-  }
-  
-  if (currentHour >= 15 && currentHour < 19) {
-    return SCENARIOS.morando_sozinho;
-  }
-  
-  if (currentHour >= 19 && currentHour <= 23) {
-    return SCENARIOS.enxoval_casamento;
-  }
-  
-  // Madrugada (00h, 04h) - Cenário Mistura (Achadinhos Virais)
-  const allKeywords = Object.values(SCENARIOS).flatMap(s => s.keywords);
-  return {
-    id: 'achadinhos_virais',
-    productCatId: 100005,
-    name: 'Achadinhos Virais',
-    keywords: allKeywords
-  };
+  return SCENARIOS.dono_de_pet;
 }
 
 // 3. Função Auxiliar de Sorteio
-function getRandomKeywords(scenario, count = 5) {
-  const shuffled = [...scenario.keywords].sort(() => 0.5 - Math.random());
+function getRandomItems(array, count = 5) {
+  if (!array || array.length === 0) return [];
+  const shuffled = [...array].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, count);
 }
 
 module.exports = {
   SCENARIOS,
   getActiveScenario,
-  getRandomKeywords
+  getRandomItems
 };
