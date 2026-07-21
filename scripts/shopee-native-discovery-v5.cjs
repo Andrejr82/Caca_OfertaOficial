@@ -145,15 +145,20 @@ function compareProducts(a, b) {
     || a.itemId.localeCompare(b.itemId);
 }
 
-function rankTop20ByCategory(products, categories) {
+function rankTop20ByCategory(products, categories, limit = 20) {
   return categories.map((category) => ({
     ...category,
     products: products
       .filter((product) => product.productCatId === category.productCatId)
       .sort(compareProducts)
-      .slice(0, 20)
+      .slice(0, limit)
       .map((product, index) => ({ ...product, position: index + 1 }))
   }));
+}
+
+function getShopeeMaxOffersPerCycle() {
+  const configured = Number(process.env.SHOPEE_MAX_OFFERS_PER_CYCLE || 100);
+  return Number.isFinite(configured) && configured > 0 ? Math.min(Math.floor(configured), 1000) : 100;
 }
 
 async function runNativeDiscovery({
@@ -162,8 +167,10 @@ async function runNativeDiscovery({
   persistFinalists,
   dryRun = false,
   scenario,
+  categories = null,
   pageSize = DEFAULT_PAGE_SIZE,
   maxPagesPerKeyword = DEFAULT_MAX_PAGES_PER_KEYWORD,
+  maxFinalists = 20,
 }) {
   const currentHour = scenarioConfig.getSaoPauloHour();
   const activeScenario = scenario || scenarioConfig.getActiveScenario(currentHour);
@@ -172,10 +179,12 @@ async function runNativeDiscovery({
   const apiCategories = activeScenario.apiCategories || [];
   const keywords = activeScenario.keywords || [];
   
+  const explicitCategories = Array.isArray(categories) && categories.length > 0 ? categories : null;
+  const categoryIds = explicitCategories ? explicitCategories.map((category) => category.productCatId) : apiCategories;
   const queries = [];
-  apiCategories.forEach(catId => queries.push({ type: 'category', value: catId }));
+  categoryIds.forEach(catId => queries.push({ type: 'category', value: catId }));
   // Para não explodir o tempo, a gente sorteia 10 keywords caso seja uma execução agendada (se o array for muito grande)
-  const keywordsToFetch = scenarioConfig.getRandomItems(keywords, 10);
+  const keywordsToFetch = explicitCategories ? [] : scenarioConfig.getRandomItems(keywords, 10);
   keywordsToFetch.forEach(kw => queries.push({ type: 'keyword', value: kw }));
 
   console.log(`[Shopee V5] Cenário ativo para ${currentHour}h: ${activeScenario.name}`);
@@ -189,7 +198,16 @@ async function runNativeDiscovery({
     active: true
   };
 
-  const categoryResults = [{ ...categoryMock, products: [], error: null }];
+  const categoryResults = explicitCategories
+    ? explicitCategories.map((category) => ({ ...category, products: [], error: null }))
+    : (categoryIds.length ? categoryIds : [categoryMock.productCatId]).map((productCatId, index) => ({
+        productCatId,
+        name: activeScenario.name,
+        order: index + 1,
+        active: true,
+        products: [],
+        error: null
+      }));
   const raw = [];
   let calls = 0;
   let pagesFetched = 0;
@@ -249,8 +267,12 @@ async function runNativeDiscovery({
   const novel = applyNovelty(deduplicated, isNovel).map((product) => ({ ...product, score: calculateObjectiveScore(product) }));
   
   // Opcional: penalizar levemente itens muito repetidos se houver, mas a API já retornou o top de cada keyword.
-  const ranked = rankTop20ByCategory(novel, categoryResults);
-  const finalists = ranked.flatMap((category) => category.products);
+  const ranked = rankTop20ByCategory(novel, categoryResults, maxFinalists);
+  const finalists = ranked
+    .flatMap((category) => category.products)
+    .sort(compareProducts)
+    .slice(0, maxFinalists)
+    .map((product, index) => ({ ...product, position: index + 1 }));
   
   if (!dryRun && typeof persistFinalists === 'function') {
     await persistFinalists(finalists);
@@ -289,5 +311,6 @@ module.exports = {
   dedupeGlobally,
   applyNovelty,
   rankTop20ByCategory,
+  getShopeeMaxOffersPerCycle,
   runNativeDiscovery
 };

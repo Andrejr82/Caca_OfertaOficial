@@ -188,6 +188,7 @@ async function executeShopeeNativeDiscoveryV5(options = {}) {
       product.normalizedUrl && 'url:' + product.normalizedUrl,
     ].filter(Boolean).some((key) => noveltyKeys.has(key)),
     dryRun,
+    maxFinalists: shopeeNativeV5.getShopeeMaxOffersPerCycle(),
     scenario: forcedScenario,
   });
   return {
