@@ -89,19 +89,31 @@ async function fetchAmazonHtmlViaScrapedo(url) {
 
 async function callShopeeAffiliateApi(payload) {
   if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) return null;
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = crypto
-    .createHash('sha256')
-    .update(SHOPEE_APP_ID + timestamp + payload + SHOPEE_APP_SECRET)
-    .digest('hex');
-  return axios.post(SHOPEE_API_URL, payload, {
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'SHA256 Credential=' + SHOPEE_APP_ID + ', Timestamp=' + timestamp + ', Signature=' + signature,
-    },
-    timeout: 60000,
-    validateStatus: () => true,
-  });
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = crypto
+      .createHash('sha256')
+      .update(SHOPEE_APP_ID + timestamp + payload + SHOPEE_APP_SECRET)
+      .digest('hex');
+    try {
+      const response = await axios.post(SHOPEE_API_URL, payload, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: 'SHA256 Credential=' + SHOPEE_APP_ID + ', Timestamp=' + timestamp + ', Signature=' + signature,
+        },
+        timeout: 60000,
+        validateStatus: () => true,
+      });
+      if (response.status !== 429 || attempt === 2) return response;
+      const retryAfter = Number(response.headers?.['retry-after'] ?? 0);
+      await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1)));
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+    }
+  }
+  throw lastError;
 }
 
 // Legacy native category functions removed. (fetchShopeeNativeCategoriesFromApi, resolveShopeeNativeCategories)

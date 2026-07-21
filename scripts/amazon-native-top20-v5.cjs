@@ -285,7 +285,14 @@ async function runAmazonNativeTop20({
         http_status: 200
       });
       if (sanitized.products.length === 0) {
-        throw new Error(`Top 20 sem produtos válidos em ${subcategory.subcategory}: ${sanitized.products.length}/${parsed.length}`);
+        console.warn('[Amazon Top20 vazio] ' + JSON.stringify({
+          categoria: subcategory.subcategory,
+          cardsEncontrados: parsed.length,
+          produtosValidos: sanitized.products.length,
+          produtosRejeitados: sanitized.discarded.length,
+          motivos: [...new Set(sanitized.discarded.flatMap((entry) => entry.reasons))],
+        }));
+        continue;
       }
       if (sanitized.products.length < 20) {
         const reasons = [...new Set(sanitized.discarded.flatMap((entry) => entry.reasons))];
