@@ -20,7 +20,7 @@ function buildCopyV2Prompt(input: Record<string, unknown>) {
     user: JSON.stringify({
       ...input,
       outputContract: {
-        hook: "string curta, um único gancho"
+        hook: "Gancho curto (MÁXIMO 80 caracteres). NENHUMA quebra de linha. NENHUMA palavra proibida (Olá, Confira, etc)."
       },
       formatting: "Retorne exatamente esse objeto JSON, sem markdown. Formate valores em reais com duas casas decimais."
     })
