@@ -131,6 +131,34 @@ describe("SupabaseOfficialAIAdapter", () => {
     expect(complete.update).toHaveBeenCalledWith(expect.objectContaining({ value: expect.objectContaining({ status: "completed" }) }));
   });
 
+  it("permite retry quando a execução anterior terminou rejeitada", async () => {
+    const duplicate = chain({ data: null, error: null });
+    duplicate.insert.mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate" } });
+    const stored = chain({
+      data: {
+        value: {
+          fingerprint: "old-fingerprint",
+          status: "completed",
+          result: {
+            status: "rejected", code: "PROVIDER_FAILURE", message: "provider down",
+            commandId: "old-command", offerId: "offer-1", offerState: "pending_manual_review",
+            failureStage: "provider", rejectedAt: "2026-07-15T14:00:00.000Z"
+          }
+        },
+        created_at: "2026-07-15T14:00:00.000Z"
+      },
+      error: null
+    });
+    const retry = chain({ data: null, error: null });
+    const client = { from: vi.fn().mockReturnValueOnce(duplicate).mockReturnValueOnce(stored).mockReturnValueOnce(retry) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await expect(adapter.begin("ai:draft:offer-1:v2", "new-fingerprint")).resolves.toEqual({ status: "started" });
+    expect(retry.update).toHaveBeenCalledWith(expect.objectContaining({
+      value: expect.objectContaining({ fingerprint: "new-fingerprint", status: "pending", startedAt: expect.any(String) })
+    }));
+  });
+
   it("classifica pending antigo como stale sem aguardar nem apagar a chave", async () => {
     const duplicate = chain({ data: null, error: null });
     duplicate.insert.mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate" } });

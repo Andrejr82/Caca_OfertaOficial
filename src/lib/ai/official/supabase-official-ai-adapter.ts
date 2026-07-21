@@ -290,10 +290,20 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (error.code !== "23505") throw new Error(`Official AI idempotency reservation failed: ${error.message}`);
     const row = await this.readIdempotency(key);
     const stored = row.value;
-    // Se o registro já está completo com resultado, sempre é replay — independente do fingerprint.
-    // Isso cobre migrações de schema do fingerprint (ex: remoção de actor/origin) sem bloquear
-    // operações legítimas com "Idempotency key was used with a different payload".
-    if (stored.status === "completed" && stored.result) return { status: "replay" as const, result: stored.result };
+    // Sucesso é replay permanente: nunca devemos duplicar posts ou repetir aprovação.
+    // Rejeições são recuperáveis. Antes desta distinção, uma falha transitória de provider
+    // ficava gravada na chave v2 e cada novo clique apenas devolvia o erro antigo.
+    if (stored.status === "completed" && stored.result) {
+      if (stored.result.status !== "rejected") return { status: "replay" as const, result: stored.result };
+
+      const restartedAt = new Date().toISOString();
+      const { error: retryError } = await this.client.from("app_settings")
+        .update({ value: { fingerprint, status: "pending", startedAt: restartedAt } satisfies StoredAIIdempotency })
+        .eq("user_id", this.tenantId)
+        .eq("key", key);
+      if (retryError) throw new Error(`Official AI rejected-result retry failed: ${retryError.message}`);
+      return { status: "started" as const };
+    }
     // Só aplica conflito se o registro ainda está pendente com fingerprint diferente.
     if (stored.fingerprint !== fingerprint) return { status: "conflict" as const };
 
