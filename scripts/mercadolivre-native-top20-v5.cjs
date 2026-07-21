@@ -207,7 +207,13 @@ async function fetchPage(fetchImpl, url) {
       ? global.fetch
       : null;
   if (!transport) return fetchOffersHtmlViaCertifiedTransport(url);
-  const response = await transport(url, { headers: { Accept: 'text/html', 'User-Agent': 'CacaOfertaOficial/5.0' } });
+  const signal = typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+    ? AbortSignal.timeout(30_000)
+    : undefined;
+  const response = await transport(url, {
+    headers: { Accept: 'text/html', 'User-Agent': 'CacaOfertaOficial/5.0' },
+    ...(signal ? { signal } : {})
+  });
   if (!response.ok) throw new Error(`HTTP ${response.status} ${url}`);
   return response.text();
 }
