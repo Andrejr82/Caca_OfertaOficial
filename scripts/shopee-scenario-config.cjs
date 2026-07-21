@@ -129,6 +129,14 @@ const SCENARIOS = {
 };
 
 // 2. Roteamento Inteligente por Horário
+function getSaoPauloHour(date = new Date()) {
+  return Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  }).format(date));
+}
+
 function getActiveScenario(currentHour) {
   // O cron do Oracle inicia cada uma das janelas configuradas abaixo.
   
@@ -175,6 +183,7 @@ function getRandomItems(array, count = 5) {
 
 module.exports = {
   SCENARIOS,
+  getSaoPauloHour,
   getActiveScenario,
   getRandomItems
 };

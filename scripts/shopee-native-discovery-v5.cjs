@@ -29,11 +29,11 @@ function productFields() {
   return 'itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds';
 }
 
-function buildProductOfferPayload(keyword, page = 1, limit = DEFAULT_PAGE_SIZE) {
+function buildProductOfferPayload(keyword = null, productCatId = null, page = 1, limit = DEFAULT_PAGE_SIZE) {
   return {
     operationName: 'ShopeePromotionOffers',
-    query: `query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { ${productFields()} } pageInfo { page limit hasNextPage } } }`,
-    variables: { keyword, page, limit, sortType: 2, isAMSOffer: true }
+    query: `query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { ${productFields()} } pageInfo { page limit hasNextPage } } }`,
+    variables: { keyword, productCatId, page, limit, sortType: 2, isAMSOffer: true }
   };
 }
 
@@ -165,15 +165,25 @@ async function runNativeDiscovery({
   pageSize = DEFAULT_PAGE_SIZE,
   maxPagesPerKeyword = DEFAULT_MAX_PAGES_PER_KEYWORD,
 }) {
-  const currentHour = new Date().getHours();
+  const currentHour = scenarioConfig.getSaoPauloHour();
   const activeScenario = scenario || scenarioConfig.getActiveScenario(currentHour);
-  const keywords = activeScenario.keywords; // Puxa 100% da lista do cenário, sem sorteio.
+  
+  // Combina as chamadas de categoria e chamadas de keyword
+  const apiCategories = activeScenario.apiCategories || [];
+  const keywords = activeScenario.keywords || [];
+  
+  const queries = [];
+  apiCategories.forEach(catId => queries.push({ type: 'category', value: catId }));
+  // Para não explodir o tempo, a gente sorteia 10 keywords caso seja uma execução agendada (se o array for muito grande)
+  const keywordsToFetch = scenarioConfig.getRandomItems(keywords, 10);
+  keywordsToFetch.forEach(kw => queries.push({ type: 'keyword', value: kw }));
 
   console.log(`[Shopee V5] Cenário ativo para ${currentHour}h: ${activeScenario.name}`);
-  console.log(`[Shopee V5] Keywords utilizadas (Lista Completa): ${keywords.join(' | ')}`);
+  console.log(`[Shopee V5] Categorias API: ${apiCategories.join(', ') || 'Nenhuma'}`);
+  console.log(`[Shopee V5] Keywords sorteadas: ${keywordsToFetch.join(' | ')}`);
 
   const categoryMock = {
-    productCatId: activeScenario.productCatId,
+    productCatId: activeScenario.productCatId || apiCategories[0] || 0,
     name: activeScenario.name,
     order: 1,
     active: true
@@ -187,12 +197,36 @@ async function runNativeDiscovery({
   let apiErrors = 0;
   let rateLimited = false;
 
-  for (const keyword of keywords) {
+  for (const q of queries) {
     for (let page = 1; page <= maxPagesPerKeyword; page += 1) {
-      const payload = buildProductOfferPayload(keyword, page, pageSize);
+      const keywordArg = q.type === 'keyword' ? q.value : null;
+      const catArg = q.type === 'category' ? q.value : null;
+      let payload;
+      let currentCatId = activeScenario.productCatId || apiCategories[0] || 0;
+      
+      if (q.type === 'category') {
+        currentCatId = q.value;
+        payload = buildProductOfferPayload(null, q.value, page, 20);
+      } else {
+        payload = buildProductOfferPayload(q.value, null, page, 20);
+      }
+      
+      const dynamicCategoryMock = {
+        productCatId: currentCatId,
+        name: activeScenario.name,
+        order: 1,
+        active: true
+      };
+      
+      console.log(`[Shopee V5] Buscando... type=${q.type}, value=${q.value}, page=${page}`);
       calls++;
       pagesFetched++;
-      const response = await fetchProducts(categoryMock, payload);
+      
+      const startTime = Date.now();
+      const response = await fetchProducts(dynamicCategoryMock, payload);
+      const elapsed = Date.now() - startTime;
+      console.log(`[Shopee V5] Retornou em ${elapsed}ms com HTTP ${response.http} | itens: ${Array.isArray(response.nodes) ? response.nodes.length : 0}`);
+      
       if (response.http === 429) {
         categoryResults[0].error = { http: 429, retryAfter: response.retryAfter || null };
         rateLimited = true;
@@ -201,11 +235,13 @@ async function runNativeDiscovery({
       if (response.http !== 200 || response.error) apiErrors++;
       const nodes = Array.isArray(response.nodes) ? response.nodes : [];
       if (!nodes.length) emptyResponses++;
-      nodes.forEach((node) => raw.push({ node, category: categoryMock }));
+      nodes.forEach((node) => raw.push({ node, category: dynamicCategoryMock }));
       const hasNextPage = response.pageInfo?.hasNextPage === true;
       if (!hasNextPage) break;
     }
     if (rateLimited) break;
+    // Evitar Rate Limit da API Oficial
+    await new Promise(r => setTimeout(r, 1500));
   }
 
   const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category)).filter(Boolean);
