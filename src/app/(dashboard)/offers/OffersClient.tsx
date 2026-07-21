@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
@@ -11,6 +11,7 @@ import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
 import { classifyOfferForPanel, classifyPanelEditorial, PANEL_AUDIENCES, PANEL_OFFER_TYPES, PANEL_POSTING_PROFILES, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
+const OFFER_FILTER_STORAGE_KEY = "caca-oferta:panel-filters:offers:v1";
 
 export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftCount[] }) {
   const [filterTier, setFilterTier] = useState<string>("");
@@ -26,12 +27,47 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const [filterOfferType, setFilterOfferType] = useState<string>("");
   const [filterAudience, setFilterAudience] = useState<string>("");
   const [filterPostingProfile, setFilterPostingProfile] = useState<string>("");
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [sortBy, setSortBy] = useState<string>("date");
   const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
   const [isDiscarding, startDiscarding] = useTransition();
 
   const selectedCategory = getCategoryOptions().find((category) => category.value === filterCategory);
   const availableSubcategories = selectedCategory?.subcategories || [];
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(OFFER_FILTER_STORAGE_KEY) || "null");
+      if (saved && typeof saved === "object") {
+        setFilterTier(typeof saved.filterTier === "string" ? saved.filterTier : "");
+        setFilterDecision(typeof saved.filterDecision === "string" ? saved.filterDecision : "");
+        setFilterPlatform(typeof saved.filterPlatform === "string" ? saved.filterPlatform : "");
+        setFilterCategory(typeof saved.filterCategory === "string" ? saved.filterCategory : "");
+        setFilterSubcategory(typeof saved.filterSubcategory === "string" ? saved.filterSubcategory : "");
+        setFilterStatus(typeof saved.filterStatus === "string" ? saved.filterStatus : "");
+        setMinPrice(typeof saved.minPrice === "string" ? saved.minPrice : "");
+        setMaxPrice(typeof saved.maxPrice === "string" ? saved.maxPrice : "");
+        setMinDiscount(typeof saved.minDiscount === "string" ? saved.minDiscount : "");
+        setFilterDate(typeof saved.filterDate === "string" ? saved.filterDate : "");
+        setFilterOfferType(typeof saved.filterOfferType === "string" ? saved.filterOfferType : "");
+        setFilterAudience(typeof saved.filterAudience === "string" ? saved.filterAudience : "");
+        setFilterPostingProfile(typeof saved.filterPostingProfile === "string" ? saved.filterPostingProfile : "");
+      }
+    } catch {
+      // Preferir filtros vazios se o armazenamento local estiver inválido.
+    } finally {
+      setFiltersHydrated(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    localStorage.setItem(OFFER_FILTER_STORAGE_KEY, JSON.stringify({
+      filterTier, filterDecision, filterPlatform, filterCategory, filterSubcategory,
+      filterStatus, minPrice, maxPrice, minDiscount, filterDate,
+      filterOfferType, filterAudience, filterPostingProfile,
+    }));
+  }, [filtersHydrated, filterTier, filterDecision, filterPlatform, filterCategory, filterSubcategory, filterStatus, minPrice, maxPrice, minDiscount, filterDate, filterOfferType, filterAudience, filterPostingProfile]);
 
   // Ponytail: simplificando ordenação e filtro em memória, sem query params complexos.
   const filtered = initialOffers.filter(offer => {

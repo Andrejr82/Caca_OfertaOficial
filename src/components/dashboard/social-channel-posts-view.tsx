@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
@@ -106,7 +106,29 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
   const [activeFilter, setActiveFilter] = useState<MarketplaceFilterKey>("all");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [subcategoryFilter, setSubcategoryFilter] = useState("");
+  const [filtersHydrated, setFiltersHydrated] = useState(false);
+  const storageKey = `caca-oferta:panel-filters:social:${channel}:v1`;
   const selectedCategory = getCategoryOptions().find((category) => category.value === categoryFilter);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+      if (saved && typeof saved === "object") {
+        if (typeof saved.activeFilter === "string") setActiveFilter(saved.activeFilter as MarketplaceFilterKey);
+        if (typeof saved.categoryFilter === "string") setCategoryFilter(saved.categoryFilter);
+        if (typeof saved.subcategoryFilter === "string") setSubcategoryFilter(saved.subcategoryFilter);
+      }
+    } catch {
+      // Preferir filtros padrão se o armazenamento local estiver inválido.
+    } finally {
+      setFiltersHydrated(true);
+    }
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!filtersHydrated) return;
+    localStorage.setItem(storageKey, JSON.stringify({ activeFilter, categoryFilter, subcategoryFilter }));
+  }, [filtersHydrated, storageKey, activeFilter, categoryFilter, subcategoryFilter]);
 
   const filterCounts = useMemo(() => {
     const uniquePosts = new Map<
