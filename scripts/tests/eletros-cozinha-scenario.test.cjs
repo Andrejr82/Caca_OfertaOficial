@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { SCENARIOS, matchesScenarioProduct } = require('../shopee-scenario-config.cjs');
+const { SCENARIOS, getActiveScenario, matchesScenarioProduct } = require('../shopee-scenario-config.cjs');
 const { dedupeGlobally } = require('../shopee-native-discovery-v5.cjs');
 
 const scenario = SCENARIOS.eletros_cozinha;
@@ -9,6 +9,9 @@ const scenario = SCENARIOS.eletros_cozinha;
 assert.equal(scenario.keywordSelection, 'all');
 assert.equal(scenario.keywords.length, 16);
 assert.equal(scenario.maxPagesPerKeyword, 1);
+assert.equal(getActiveScenario(12).id, 'beleza_autocuidado');
+assert.equal(getActiveScenario(13).id, 'eletros_cozinha');
+assert.equal(getActiveScenario(14).id, 'dono_de_pet');
 
 for (const title of [
   'Cafeteira Elétrica 15 Cafés',

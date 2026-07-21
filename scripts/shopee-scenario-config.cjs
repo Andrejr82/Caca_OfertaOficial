@@ -178,8 +178,11 @@ function getActiveScenario(currentHour) {
   if (currentHour >= 9 && currentHour < 12) {
     return SCENARIOS.viagem_aventura; // Manhã Viagem
   }
-  if (currentHour >= 12 && currentHour < 14) {
+  if (currentHour >= 12 && currentHour < 13) {
     return SCENARIOS.beleza_autocuidado; // Tarde Beleza
+  }
+  if (currentHour >= 13 && currentHour < 14) {
+    return SCENARIOS.eletros_cozinha; // Tarde Eletros de Cozinha
   }
   if (currentHour >= 14 && currentHour < 16) {
     return SCENARIOS.dono_de_pet; // Tarde Pet
