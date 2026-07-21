@@ -90,7 +90,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
       setProcessProgress({ current: i + 1, total: links.length });
 
       try {
-        const res = await generateQuickPostAction(links[i], channel === "omnichannel" ? "telegram" : channel);
+        const res = await generateQuickPostAction(links[i], channel);
         if (res.ok && res.copy && res.offer) {
           newPosts.push({
             id: `post-${Date.now()}-${i}`,

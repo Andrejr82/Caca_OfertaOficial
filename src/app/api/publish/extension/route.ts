@@ -53,9 +53,10 @@ export async function POST(request: Request) {
     // Criar a oferta
     let platform = "Outro";
     const lowerUrl = body.finalUrl.toLowerCase();
-    if (lowerUrl.includes("magalu") || lowerUrl.includes("magazine")) platform = "Magalu";
+    if (lowerUrl.includes("magalu") || lowerUrl.includes("magazine") || lowerUrl.includes("magazineluiza") || lowerUrl.includes("magazinevoce")) platform = "Magalu";
     else if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon")) platform = "Amazon";
     else if (lowerUrl.includes("shopee")) platform = "Shopee";
+    else if (lowerUrl.includes("shein")) platform = "Shein";
     else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml")) platform = "Mercado Livre";
 
     const { data: newOffer, error: insertError } = await adminClient.from("offers").insert({

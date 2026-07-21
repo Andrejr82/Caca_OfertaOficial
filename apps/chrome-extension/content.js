@@ -70,7 +70,10 @@ function extractTitle() {
   return document.title.split(' | ')[0].trim();
 }
 
-// Quando o popup solicitar os dados, retornamos a extração
+// O popup pode injetar este arquivo novamente a cada clique. Registre apenas
+// um listener para evitar respostas duplicadas e erros intermitentes.
+if (!window.__cacaOfertaContentListener) {
+window.__cacaOfertaContentListener = true;
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'extract') {
     const data = {
@@ -82,3 +85,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     sendResponse(data);
   }
 });
+}

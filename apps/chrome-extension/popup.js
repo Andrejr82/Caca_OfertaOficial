@@ -35,8 +35,18 @@ document.addEventListener('DOMContentLoaded', () => {
         target: { tabId: activeTab.id },
         files: ['content.js']
       }, () => {
+        if (chrome.runtime.lastError) {
+          showStatus(`Erro ao acessar a página: ${chrome.runtime.lastError.message}`, 'error');
+          setLoading(false);
+          return;
+        }
         // Enviar mensagem para extrair
         chrome.tabs.sendMessage(activeTab.id, { action: 'extract' }, async (response) => {
+          if (chrome.runtime.lastError) {
+            showStatus(`Erro na extração: ${chrome.runtime.lastError.message}`, 'error');
+            setLoading(false);
+            return;
+          }
           if (!response) {
             showStatus('Erro: Não foi possível extrair os dados. Recarregue a página e tente novamente.', 'error');
             setLoading(false);
