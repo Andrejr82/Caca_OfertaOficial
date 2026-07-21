@@ -8,6 +8,7 @@ import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/
 import { rejectAmazonOfferAction, selectAmazonOfferAction, bulkRejectOffersAction } from "@/lib/offers/actions";
 import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
+import { classifyOfferForPanel, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
 
@@ -38,9 +39,9 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     if (filterTier && tier !== filterTier) return false;
     if (filterDecision && decision !== filterDecision) return false;
     if (filterPlatform && offer.platform !== filterPlatform) return false;
-    const offerCategory = offer.category || offer.category_name;
-    if (filterCategory && offerCategory !== filterCategory) return false;
-    if (filterSubcategory && offer.subcategory !== filterSubcategory) return false;
+    const panelCategory = classifyOfferForPanel(offer);
+    if (filterCategory && panelCategory.category !== filterCategory) return false;
+    if (filterSubcategory && panelCategory.subcategory !== filterSubcategory) return false;
     if (filterStatus && offer.status !== filterStatus) return false;
 
     if (minPrice && offer.current_price < Number(minPrice)) return false;
@@ -141,6 +142,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           onChange={(event) => { setFilterCategory(event.target.value); setFilterSubcategory(""); }}
         >
           <option value="">Todas as categorias</option>
+          <option value={UNCLASSIFIED_PANEL_CATEGORY}>Sem classificação</option>
           {getCategoryOptions().map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
         </select>
 

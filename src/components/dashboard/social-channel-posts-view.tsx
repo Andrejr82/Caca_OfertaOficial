@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { BatchApprovalList } from "@/components/dashboard/batch-approval-list";
 import { PostHistoryTable } from "@/components/dashboard/post-history-table";
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
+import { classifyOfferForPanel, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 
 type MarketplaceFilterKey =
   | "all"
@@ -19,6 +20,8 @@ interface PostOfferMetadata {
   marketplace?: string | null;
   category?: string | null;
   subcategory?: string | null;
+  product_name?: string | null;
+  source_categories?: unknown;
 }
 
 interface DraftPostItem {
@@ -145,8 +148,8 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
     () =>
       draftPosts.filter((post) =>
         matchesMarketplaceFilter(activeFilter, post.offers, post.offers?.platform, post.offers?.category)
-        && (!categoryFilter || post.offers?.category === categoryFilter)
-        && (!subcategoryFilter || post.offers?.subcategory === subcategoryFilter),
+        && (!categoryFilter || classifyOfferForPanel(post.offers || {}).category === categoryFilter)
+        && (!subcategoryFilter || classifyOfferForPanel(post.offers || {}).subcategory === subcategoryFilter),
       ),
     [activeFilter, categoryFilter, draftPosts, subcategoryFilter],
   );
@@ -155,7 +158,7 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
     () =>
       historyData.filter((post) =>
         matchesMarketplaceFilter(activeFilter, post.marketplace, post.platform, post.category)
-        && (!categoryFilter || post.category === categoryFilter),
+        && (!categoryFilter || classifyOfferForPanel({ product: post.product, category: post.category }).category === categoryFilter),
       ),
     [activeFilter, categoryFilter, historyData],
   );
@@ -194,6 +197,7 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
             className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/75"
           >
             <option value="">Todas as categorias</option>
+            <option value={UNCLASSIFIED_PANEL_CATEGORY}>Sem classificação</option>
             {getCategoryOptions().map((category) => <option key={category.value} value={category.value}>{category.label}</option>)}
           </select>
           <select

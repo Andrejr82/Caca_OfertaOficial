@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { Search, ArrowUpDown, ExternalLink, Calendar, Eye, ShoppingCart, DollarSign } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
+import { classifyOfferForPanel, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 
 interface PostItem {
   id: string;
@@ -149,7 +150,8 @@ export function PostHistoryTable({
           item.platform.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesPlatform = !showPlatformFilter || platformFilter === "all" || item.platform === platformFilter;
         const matchesStatus = statusFilter === "all" || item.status === statusFilter;
-        const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
+        const matchesCategory = categoryFilter === "all"
+          || classifyOfferForPanel({ product: item.product, category: item.category }).category === categoryFilter;
         return matchesSearch && matchesPlatform && matchesStatus && matchesCategory;
       })
       .sort((a, b) => {
@@ -223,6 +225,7 @@ export function PostHistoryTable({
             className="focus-ring rounded-md border border-moss/10 bg-paper py-2 px-3 text-sm text-ink font-semibold focus:border-moss"
           >
             <option value="all">Todas as Categorias</option>
+            <option value={UNCLASSIFIED_PANEL_CATEGORY}>Sem classificação</option>
             {getCategoryOptions().map((category) => (
               <option key={category.value} value={category.value}>{category.label}</option>
             ))}
