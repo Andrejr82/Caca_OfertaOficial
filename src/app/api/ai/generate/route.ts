@@ -124,7 +124,7 @@ export async function POST(request: Request) {
       commandId,
       idempotencyKey: offerId === "ALL_PENDING"
         ? `ai:batch:${body.correlationId || commandId}:v1`
-        : `ai:draft:${offerId}:v2`,
+        : `ai:draft:${offerId}:v3`,
       correlationId: body.correlationId || request.headers.get("x-correlation-id") || commandId,
       causationId: body.causationId ?? request.headers.get("x-causation-id"),
       offerId,
