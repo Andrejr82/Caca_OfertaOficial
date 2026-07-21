@@ -1,4 +1,4 @@
-import { emitOfficialAITelemetrySafely, type OfficialAIServiceDependencies } from "./ports";
+import { emitOfficialAITelemetrySafely, type AIProviderPort, type AIProviderRequest, type AIProviderResponse, type OfficialAIServiceDependencies } from "./ports";
 import type { BatchCursor } from "./ports";
 import { inspectOfficialAIHook, isCopyV2TextSafe } from "./content-schema";
 import { buildCopyV2ChannelCopy, buildOfficialPrompt } from "./prompt";
@@ -27,6 +27,24 @@ async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event:
 function exceptionDetails(error: unknown) {
   const value = error instanceof Error ? error : new Error(String(error));
   return { exceptionType: value.name, exceptionMessageChars: value.message.length, exceptionStackChars: (value.stack ?? "").length };
+}
+
+async function generateWithRetry(
+  provider: AIProviderPort,
+  request: AIProviderRequest
+): Promise<AIProviderResponse> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await provider.generate({
+        ...request,
+        temperature: attempt === 0 ? request.temperature : 0.2,
+      });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 // ---------------------------------------------------------------------------
@@ -503,29 +521,30 @@ export async function generateOfficialAI(
   }
 
   // 6. Resolução do provider (comum a ambos os modos).
-  let provider;
+  let provider: AIProviderPort | null = null;
   try {
     provider = dependencies.providers.resolve(command.providerPreference);
   } catch (error) {
-    return rejectAndRecord(
-      command, dependencies, fingerprint,
-      "PROVIDER_UNAVAILABLE", error instanceof Error ? error.message : "Provider is unavailable",
-      "provider_resolution",
-      mode === "draft_generation" ? "pending_manual_review" : "selected"
-    );
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.provider.fallback.started", correlationId: command.correlationId, offerId: command.offerId,
+      marketplace: offer!.marketplace, provider: null, model: null, stage: "provider_resolution",
+      details: { reason: error instanceof Error ? error.message : "Provider is unavailable" }
+    });
   }
 
   // 7. Inferência (comum a ambos os modos).
-  let inference;
+  let inference: AIProviderResponse;
+  let deterministicFallback = false;
   const inferenceStartedAt = Date.now();
   const prompt = buildOfficialPrompt(offer!, command.channels);
   await emitTelemetry(dependencies, {
     eventType: "official_ai.inference.started", correlationId: command.correlationId, offerId: command.offerId,
-    marketplace: offer!.marketplace, provider: provider.name, model: provider.model, stage: "inference",
+    marketplace: offer!.marketplace, provider: provider?.name ?? null, model: provider?.model ?? null, stage: "inference",
     details: { temperature: 0.4, maxTokens: 2_000, timeoutMs: 30_000 }
   });
   try {
-    inference = await provider.generate({
+    if (!provider) throw new Error("Provider unavailable");
+    inference = await generateWithRetry(provider, {
       prompt, correlationId: command.correlationId,
       timeoutMs: 30_000, temperature: 0.4, maxTokens: 2_000,
       metadata: { commandId: command.commandId, offerId: command.offerId, marketplace: offer!.marketplace }
@@ -533,16 +552,21 @@ export async function generateOfficialAI(
   } catch (error) {
     await emitTelemetry(dependencies, {
       eventType: "official_ai.inference.failed", correlationId: command.correlationId, offerId: command.offerId,
-      marketplace: offer!.marketplace, provider: provider.name, model: provider.model, stage: "inference",
+      marketplace: offer!.marketplace, provider: provider?.name ?? null, model: provider?.model ?? null, stage: "inference",
       durationMs: Date.now() - inferenceStartedAt, details: exceptionDetails(error)
     });
-    return rejectAndRecord(
-      command, dependencies, fingerprint,
-      "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
-      "provider",
-      mode === "draft_generation" ? "pending_manual_review" : "selected",
-      provider.name, provider.model
-    );
+    if (mode !== "draft_generation") {
+      return rejectAndRecord(
+        command, dependencies, fingerprint,
+        "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
+        "provider", "selected", provider?.name ?? null, provider?.model ?? null
+      );
+    }
+    deterministicFallback = true;
+    inference = {
+      content: {}, provider: "deterministic-fallback", model: "template-v1", latencyMs: 0,
+      finishReason: "provider-fallback"
+    };
   }
   await emitTelemetry(dependencies, {
     eventType: "official_ai.inference.completed", correlationId: command.correlationId, offerId: command.offerId,
@@ -587,14 +611,18 @@ export async function generateOfficialAI(
         rawProviderData: providerData
       }
     });
-    return rejectAndRecord(
-      command, dependencies, fingerprint,
-      "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
-      "provider_output",
-      mode === "draft_generation" ? "pending_manual_review" : "selected",
-      inference.provider, inference.model, inference.latencyMs
-    );
+    if (mode !== "draft_generation") {
+      return rejectAndRecord(
+        command, dependencies, fingerprint,
+        "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
+        "provider_output", "selected", inference.provider, inference.model, inference.latencyMs
+      );
+    }
+    deterministicFallback = true;
   }
+  const effectiveHooks = deterministicFallback
+    ? Object.fromEntries(command.channels.map((channel) => [channel, undefined]))
+    : hooks;
   const content = {
     title: offer!.productName,
     description: `Oferta ${offer!.marketplace}`,
@@ -603,11 +631,13 @@ export async function generateOfficialAI(
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: ["Preço atual"],
-    explanation: "Copy determinística baseada nos dados persistidos.",
+    explanation: deterministicFallback
+      ? "Copy determinística baseada nos dados persistidos; provider de IA indisponível ou resposta inválida."
+      : "Copy baseada no gancho validado pelo provider.",
     channelCopies: Object.fromEntries(command.channels.map((channel) => [channel, buildCopyV2ChannelCopy({
       ...offer!,
       evidence: offer!.explainability
-    }, channel, hooks[channel] ?? undefined)]))
+    }, channel, effectiveHooks[channel] ?? undefined)]))
   };
   if (command.channels.some((channel) => !isCopyV2TextSafe(content.channelCopies[channel]))) {
     return rejectAndRecord(

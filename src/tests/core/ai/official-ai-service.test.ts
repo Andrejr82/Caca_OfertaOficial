@@ -263,6 +263,21 @@ describe("generateOfficialAI", () => {
     ]));
   });
 
+  it("gera fallback determinístico quando a oferta pendente não consegue acessar o provider", async () => {
+    const dependencies = createDependencies({
+      offers: { findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) }
+    });
+    vi.mocked(dependencies.providers.resolve("groq").generate).mockRejectedValue(new Error("provider down"));
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toMatchObject({ status: "drafted", offerState: "pending_manual_review" });
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
+    const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
+    expect(persisted.explanation).toContain("provider de IA indisponível");
+    expect(persisted.channelCopies.telegram).toContain("Produto oficial");
+  });
+
   it("continua gerando draft quando telemetry.emit rejeita", async () => {
     const dependencies = createDependencies({
       offers: { findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) },

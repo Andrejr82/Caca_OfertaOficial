@@ -4,9 +4,16 @@ import { useState } from "react";
 import { Sparkles, Loader2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-export function GenerateAIMessagesButton({ offerId }: { offerId: string }) {
+export function GenerateAIMessagesButton({
+  offerId,
+  hasDrafts = false,
+}: {
+  offerId: string;
+  hasDrafts?: boolean;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [generated, setGenerated] = useState(false);
 
   async function handleGenerate() {
     setLoading(true);
@@ -24,7 +31,7 @@ export function GenerateAIMessagesButton({ offerId }: { offerId: string }) {
       const data = await response.json();
 
       if (response.ok && data.ok) {
-        window.location.reload();
+        setGenerated(true);
       } else {
         setError(data.message || "Falha ao gerar textos por IA.");
       }
@@ -38,7 +45,7 @@ export function GenerateAIMessagesButton({ offerId }: { offerId: string }) {
   return (
     <div className="flex flex-col gap-1.5 shrink-0">
       <Button 
-        disabled={loading} 
+        disabled={loading || hasDrafts || generated}
         onClick={handleGenerate} 
         type="button"
         className="bg-moss hover:bg-ink text-white font-bold text-xs px-3 py-1.5 min-h-8"
@@ -51,7 +58,7 @@ export function GenerateAIMessagesButton({ offerId }: { offerId: string }) {
         ) : (
           <>
             <Sparkles size={12} />
-            Gerar Copys com Groq AI
+            {hasDrafts || generated ? "Copys prontas" : "Gerar Copys com Groq AI"}
           </>
         )}
       </Button>
