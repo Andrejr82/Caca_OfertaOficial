@@ -235,3 +235,10 @@ Todos os comportamentos novos são TDD: cada teste deve falhar antes do código 
 6. Usuário aprova reativação gradual da automação.
 7. Automação entra primeiro em um marketplace/cenário/limite controlado; rollback é parar o processo e manter a V2 sem novos runs.
 
+## Gate da fundação — 21/07/2026
+
+- Suíte específica: 4 arquivos, 10 testes aprovados.
+- TypeScript: `npx tsc --noEmit` concluído com código 0.
+- Arquivos operacionais bloqueados (`scripts/oracle-scraper.cjs` e `src/app/api/ai/generate/route.ts`): sem diferenças nesta branch.
+- Migration criada apenas no repositório; nenhuma migration foi aplicada ao Supabase remoto.
+- Oracle permanece parada até aprovação posterior para cenários manuais controlados.
