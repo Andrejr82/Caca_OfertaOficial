@@ -17,7 +17,7 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // A Official AI determina internamente o fluxo consultando o estado real da oferta.
 // Nenhum parâmetro externo seleciona o modo. A máquina de estados é a autoridade.
 // ---------------------------------------------------------------------------
-type InternalMode = "draft_generation" | "copy_v2" | "approval";
+type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "approval";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
 async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
@@ -164,6 +164,7 @@ function resolveMode(
   offer: OfficialAIOffer | null,
   tenantId: string,
   copyV2 = false
+  , commandIsAuto = false
 ):
   | { ok: true; mode: InternalMode }
   | { ok: false; code: string; message: string; offerState: "pending_manual_review" | "selected" | "unknown" } {
@@ -177,6 +178,9 @@ function resolveMode(
 
   // A máquina de estados é a única autoridade para determinar o modo.
   if (offer.state === "pending_manual_review") {
+    if (copyV2 && commandIsAuto) {
+      return { ok: true, mode: "copy_v2_auto" };
+    }
     if (copyV2) {
       return { ok: false, code: "SELECTION_REQUIRED", message: "Copy V2 só pode ser gerada após a seleção manual da oferta", offerState: "pending_manual_review" };
     }
@@ -505,7 +509,7 @@ export async function generateOfficialAI(
   const offer = await dependencies.offers.findById(command.offerId, command.tenantId);
 
   // 4. Resolução do modo via máquina de estados.
-  const modeResult = resolveMode(offer, command.tenantId, command.metadata?.copyV2 === true);
+  const modeResult = resolveMode(offer, command.tenantId, command.metadata?.copyV2 === true, command.metadata?.copyV2Auto === true && command.actor.type === "service");
   if (!modeResult.ok) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
@@ -520,7 +524,7 @@ export async function generateOfficialAI(
     return rejectAndRecord(
       command, dependencies, fingerprint,
       offerError.code, offerError.message, "preconditions",
-      mode === "draft_generation" ? "pending_manual_review" : "selected"
+      mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected"
     );
   }
 
@@ -559,7 +563,7 @@ export async function generateOfficialAI(
       marketplace: offer!.marketplace, provider: provider?.name ?? null, model: provider?.model ?? null, stage: "inference",
       durationMs: Date.now() - inferenceStartedAt, details: exceptionDetails(error)
     });
-    if (mode !== "draft_generation" && mode !== "copy_v2") {
+    if (mode !== "draft_generation" && mode !== "copy_v2" && mode !== "copy_v2_auto") {
       return rejectAndRecord(
         command, dependencies, fingerprint,
         "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
@@ -615,7 +619,7 @@ export async function generateOfficialAI(
         rawProviderData: providerData
       }
     });
-    if (mode !== "draft_generation" && mode !== "copy_v2") {
+    if (mode !== "draft_generation" && mode !== "copy_v2" && mode !== "copy_v2_auto") {
       return rejectAndRecord(
         command, dependencies, fingerprint,
         "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
@@ -647,7 +651,7 @@ export async function generateOfficialAI(
     return rejectAndRecord(
       command, dependencies, fingerprint,
       "INVALID_FINAL_COPY", "Rendered Copy V2 contains forbidden content",
-      "provider_output", mode === "draft_generation" ? "pending_manual_review" : "selected",
+      "provider_output", mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs
     );
   }
@@ -672,7 +676,7 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "DRAFT_PERSISTENCE_FAILURE", error instanceof Error ? error.message : "Draft persistence failed",
       "drafts",
-      mode === "draft_generation" ? "pending_manual_review" : "selected",
+      mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length
     );
   }
@@ -687,7 +691,7 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "INCOMPLETE_DRAFT_SET", "All requested draft posts must be persisted",
       "drafts",
-      mode === "draft_generation" ? "pending_manual_review" : "selected",
+      mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length
     );
   }
@@ -698,7 +702,7 @@ export async function generateOfficialAI(
   //     Modo 2 — Approval: transição selected → approved (comportamento anterior inalterado).
   // ---------------------------------------------------------------------------
 
-  if (mode === "draft_generation" || mode === "copy_v2") {
+  if (mode === "draft_generation" || mode === "copy_v2" || mode === "copy_v2_auto") {
     const result: OfficialAIDraftedResult = {
       status: "drafted",
       commandId: command.commandId,

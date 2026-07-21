@@ -9,6 +9,7 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   if (![command.commandId, command.idempotencyKey, command.correlationId, command.offerId, command.tenantId, command.requestedAt, command.origin].every(nonEmpty)) {
     return "Required command identity is missing";
   }
+  if (command.metadata?.copyV2Auto === true && command.metadata.copyV2 !== true) return "Automated Copy V2 requires copyV2 metadata";
   // Idempotency key deve ser estável por offer (ADR-014: a IA detecta o modo internamente).
   // Formato v1 (approval e legado): ai:{offerId}:v1
   // Formato v2 (draft batch): ai:draft:{offerId}:v2

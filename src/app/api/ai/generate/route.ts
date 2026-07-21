@@ -17,6 +17,7 @@ interface GenerateAIRequest {
   requestedAt?: string;
   tenantId?: string;
   copyV2?: boolean;
+  autoCurated?: boolean;
 }
 
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
@@ -117,6 +118,9 @@ export async function POST(request: Request) {
     }
 
     const offerId = body.offerId!;
+    if (body.autoCurated && !isServiceWorker) {
+      return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "Automated Copy V2 é exclusivo do worker de curadoria." }, { status: 403 });
+    }
     const commandId = body.commandId || request.headers.get("x-command-id") || `ai:${offerId}:v1`;
 
     // O comando não inclui expectedState nem mode — a IA determina internamente (ADR-014).
@@ -136,7 +140,7 @@ export async function POST(request: Request) {
       actor: { type: isServiceWorker ? "service" : "user", id: userId, service: "nextjs-ai-route" },
       origin: "api.ai.generate",
       reason: { code: "GENERATE_OFFICIAL_CONTENT" },
-      metadata: body.copyV2 ? { copyV2: true } : undefined
+      metadata: body.copyV2 ? { copyV2: true, ...(body.autoCurated ? { copyV2Auto: true } : {}) } : undefined
     };
 
     const result = await generateOfficialAI(

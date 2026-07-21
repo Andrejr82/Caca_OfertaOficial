@@ -56,7 +56,7 @@ export function curateOffers(inputs: CurationOfferInput[]): CuratedOffer[] {
     if (classification.status !== 'classified' || !marketplaceScore.eligible) return { id: input.id, title: input.title, productType: classification.productType, decision: 'review', curationScore, groupKeys, classificationStatus: classification.status, marketplaceScore, reasons }
     const primaryGroup = groupKeys[0]
     const members = primaryGroup ? groupMembers.get(primaryGroup) || [] : []
-    const isWinner = members[0]?.input.id === input.id
+    const isWinner = primaryGroup ? members[0]?.input.id === input.id : true
     return { id: input.id, title: input.title, productType: classification.productType, decision: isWinner ? 'recommend' : 'alternative', curationScore, groupKeys, classificationStatus: classification.status, marketplaceScore, reasons }
   })
 }

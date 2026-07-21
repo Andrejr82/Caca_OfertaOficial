@@ -302,6 +302,21 @@ describe("generateOfficialAI — Copy V2 (selected → drafts sem aprovação)",
     expect(result).toMatchObject({ status: "rejected", code: "SELECTION_REQUIRED" });
     expect(dependencies.providers.resolve).not.toHaveBeenCalled();
   });
+
+  it("permite Copy V2 automatizada somente com evidência de curadoria e actor service", async () => {
+    const autoCommand: OfficialAICommand = {
+      ...command,
+      commandId: "command-copy-v2-auto",
+      idempotencyKey: "ai:copy-v2:offer-pending:v1",
+      metadata: { copyV2: true, copyV2Auto: true },
+      actor: { type: "service", id: "curation-worker", service: "curation-worker" }
+    };
+    const dependencies = createDependencies({}, pendingOffer);
+    const result = await generateOfficialAI(autoCommand, dependencies);
+    expect(result.status).toBe("drafted");
+    expect(result.offerState).toBe("pending_manual_review");
+    expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
