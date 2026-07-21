@@ -5,11 +5,11 @@ Você não conversa, não introduz a mensagem e não escreve parágrafos. Produz
 
 Regras obrigatórias:
 - Gere somente um gancho curto no campo hook (ou hooks por canal). Nunca gere produto, preço, desconto, atributo, CTA, hashtags ou URL.
-- O gancho (hook) deve ser provocativo e focar na dor do cliente, no benefício prático do produto ou na urgência (ex: "Seu cachorro destrói a casa?", "Chega de pelos no sofá! 😱").
+- O gancho (hook) deve focar no produto ou em um benefício explicitamente comprovado nos dados. Só mencione urgência, prazo ou escassez quando houver evidência persistida para isso.
 - O gancho não pode passar de 90 caracteres.
 - Use somente fatos presentes nos dados de entrada. Nunca invente preço, desconto, frete, cupom, estoque, parcelamento, marca, especificação, atributo ou benefício.
 - O atributo deve existir literalmente no título, nos atributos estruturados persistidos ou nos metadados persistidos. Nunca infira ou deduza atributo. Se não existir, omita a linha.
-- Nunca escreva: Olá, Nova chegada, Temos um novo, Você vai amar, Confira, Não perca, Imperdível, Produto incrível, Compre agora, Aproveite enquanto durar ou Essa oportunidade é única.
+- Nunca escreva: Olá, Nova chegada, Temos um novo, Você vai amar, Confira, Não perca, Imperdível, Produto incrível, Compre agora, Aproveite enquanto durar, Essa oportunidade é única, Só agora, Corre que, estoque acaba ou antes que o preço suba.
 - Nunca inclua URL, [link] ou qualquer placeholder. A persistência anexará exatamente um link rastreado.
 - Responda somente JSON válido com todos os campos solicitados. Não retorne estados, aprovação, publicação nem instruções operacionais.`;
 
@@ -117,13 +117,13 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
 
   if (channel === "whatsapp") {
     const blocks = [
-      `🚨 *ACHADINHO LIBERADO! (Baixou Muito)* 🚨`,
+      `📌 *OFERTA EM DESTAQUE*`,
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
-      `❌ *Nas prateleiras: ${facts.originalPrice ? formatBRL(facts.originalPrice) : 'Preço Normal'}*`,
-      `✅ *Só agora: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
-      `🏃‍♀️ *Corre que nesse preço o estoque costuma esgotar em minutos:*`,
+      ...(facts.originalPrice ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
+      `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
+      `ℹ️ Consulte disponibilidade e condições no anúncio:`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -131,14 +131,14 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
 
   if (channel === "telegram") {
     const blocks = [
-      `⚡ *OFERTA RELÂMPAGO!*`,
+      `📌 *OFERTA EM DESTAQUE*`,
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : `💰 *${formatBRL(facts.currentPrice)}*`,
-      `🔥 *Garante o seu antes que o preço suba de novo:*`,
+      `ℹ️ Consulte disponibilidade e condições no anúncio:`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -147,13 +147,13 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
   if (channel === "instagram") {
     const blocks = [
       hookFor(facts, hook),
-      `Resolva isso agora com o **${cleanProductName(facts.productName)}**!`,
+      `Uma opção para sua rotina: **${cleanProductName(facts.productName)}**.`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
-      `📉 Levando agora você garante **${discount ?? 'um super'} desconto**!`,
+      discount ? `📉 Economia verificada de **${discount}%** sobre o preço anterior.` : `💰 Consulte o preço atual no anúncio.`,
       discount && facts.originalPrice
         ? `💰 **De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}**`
         : `💰 **Apenas ${formatBRL(facts.currentPrice)}**`,
-      `🏃‍♀️ **Corre no Link da minha Bio (ou nos Stories) para garantir o seu antes que o estoque acabe!** 👇`,
+      `🔎 **Link na bio ou nos Stories para consultar a oferta.** 👇`,
       `#oferta #${marketplaceTag}`
     ];
     return blocks.join("\n\n");

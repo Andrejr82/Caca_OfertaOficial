@@ -320,7 +320,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           const metrics = offer.marketplace_metrics || {};
           const transitionRequestedAt = offer.updated_at || offer.created_at;
           const draftCount = (offer as OfferWithDraftCount).draft_count || 0;
-          const hasDraftsReady = offer.status === "pending_manual_review" && draftCount > 0;
+          const hasDraftsReady = (offer.status === "pending_manual_review" || offer.status === "selected") && draftCount > 0;
           const curation = curationById.get(offer.id);
 
           const tierColor = 
@@ -407,7 +407,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 <span className="font-semibold">Reason:</span> {reason}
               </div>
 
-              {nativeShopee && offer.status === "pending_manual_review" && (
+              {nativeShopee && offer.status === "selected" && (
                 <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectShopeeCandidateAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
@@ -427,7 +427,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 </div>
               )}
 
-              {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
+              {offer.platform === "Mercado Livre" && offer.status === "selected" && (
                 <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
@@ -436,7 +436,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 </div>
               )}
 
-              {offer.platform === "Amazon" && offer.status === "pending_manual_review" && (
+              {offer.platform === "Amazon" && offer.status === "selected" && (
                 <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>

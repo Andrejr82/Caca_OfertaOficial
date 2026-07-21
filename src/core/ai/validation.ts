@@ -30,8 +30,9 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   } else if (command.offerId !== "ALL_PENDING") {
     const isV1 = command.idempotencyKey === `ai:${command.offerId}:v1`;
     const isV2Draft = command.idempotencyKey === `ai:draft:${command.offerId}:v2`;
-    if (!isV1 && !isV2Draft) {
-      return "AI idempotency key must be ai:{offerId}:v1 or ai:draft:{offerId}:v2";
+    const isCopyV2 = command.idempotencyKey === `ai:copy-v2:${command.offerId}:v1` && command.metadata?.copyV2 === true;
+    if (!isV1 && !isV2Draft && !isCopyV2) {
+      return "AI idempotency key must be ai:{offerId}:v1, ai:draft:{offerId}:v2 or ai:copy-v2:{offerId}:v1";
     }
   }
   if (command.offerId === "ALL_PENDING" && !command.idempotencyKey.startsWith("ai:ALL_PENDING:") && !command.idempotencyKey.startsWith("ai:batch:")) {

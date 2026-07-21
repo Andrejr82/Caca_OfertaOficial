@@ -17,7 +17,7 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // A Official AI determina internamente o fluxo consultando o estado real da oferta.
 // Nenhum parâmetro externo seleciona o modo. A máquina de estados é a autoridade.
 // ---------------------------------------------------------------------------
-type InternalMode = "draft_generation" | "approval";
+type InternalMode = "draft_generation" | "copy_v2" | "approval";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
 async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
@@ -162,7 +162,8 @@ function isValidCursorTimestamp(value: unknown): value is string {
 
 function resolveMode(
   offer: OfficialAIOffer | null,
-  tenantId: string
+  tenantId: string,
+  copyV2 = false
 ):
   | { ok: true; mode: InternalMode }
   | { ok: false; code: string; message: string; offerState: "pending_manual_review" | "selected" | "unknown" } {
@@ -176,10 +177,13 @@ function resolveMode(
 
   // A máquina de estados é a única autoridade para determinar o modo.
   if (offer.state === "pending_manual_review") {
+    if (copyV2) {
+      return { ok: false, code: "SELECTION_REQUIRED", message: "Copy V2 só pode ser gerada após a seleção manual da oferta", offerState: "pending_manual_review" };
+    }
     return { ok: true, mode: "draft_generation" };
   }
   if (offer.state === "selected") {
-    return { ok: true, mode: "approval" };
+    return { ok: true, mode: copyV2 ? "copy_v2" : "approval" };
   }
 
   // approved, posted, rejected, deleted — estados que a Official AI não processa.
@@ -501,7 +505,7 @@ export async function generateOfficialAI(
   const offer = await dependencies.offers.findById(command.offerId, command.tenantId);
 
   // 4. Resolução do modo via máquina de estados.
-  const modeResult = resolveMode(offer, command.tenantId);
+  const modeResult = resolveMode(offer, command.tenantId, command.metadata?.copyV2 === true);
   if (!modeResult.ok) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
@@ -555,7 +559,7 @@ export async function generateOfficialAI(
       marketplace: offer!.marketplace, provider: provider?.name ?? null, model: provider?.model ?? null, stage: "inference",
       durationMs: Date.now() - inferenceStartedAt, details: exceptionDetails(error)
     });
-    if (mode !== "draft_generation") {
+    if (mode !== "draft_generation" && mode !== "copy_v2") {
       return rejectAndRecord(
         command, dependencies, fingerprint,
         "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
@@ -611,7 +615,7 @@ export async function generateOfficialAI(
         rawProviderData: providerData
       }
     });
-    if (mode !== "draft_generation") {
+    if (mode !== "draft_generation" && mode !== "copy_v2") {
       return rejectAndRecord(
         command, dependencies, fingerprint,
         "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
@@ -694,12 +698,12 @@ export async function generateOfficialAI(
   //     Modo 2 — Approval: transição selected → approved (comportamento anterior inalterado).
   // ---------------------------------------------------------------------------
 
-  if (mode === "draft_generation") {
+  if (mode === "draft_generation" || mode === "copy_v2") {
     const result: OfficialAIDraftedResult = {
       status: "drafted",
       commandId: command.commandId,
       offerId: command.offerId,
-      offerState: "pending_manual_review",
+      offerState: mode === "copy_v2" ? "selected" : "pending_manual_review",
       content,
       drafts,
       providerEvidence: {

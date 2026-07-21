@@ -161,7 +161,7 @@ export interface OfficialAIDraftedResult {
   status: "drafted";
   commandId: string;
   offerId: string;
-  offerState: "pending_manual_review";
+  offerState: "pending_manual_review" | "selected";
   content?: OfficialAIContent;
   drafts?: readonly OfficialDraftPost[];
   providerEvidence?: OfficialAIProviderEvidence;

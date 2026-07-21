@@ -16,6 +16,7 @@ interface GenerateAIRequest {
   providerPreference?: "groq" | "cerebras";
   requestedAt?: string;
   tenantId?: string;
+  copyV2?: boolean;
 }
 
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
@@ -124,7 +125,7 @@ export async function POST(request: Request) {
       commandId,
       idempotencyKey: offerId === "ALL_PENDING"
         ? `ai:batch:${body.correlationId || commandId}:v1`
-        : `ai:draft:${offerId}:v2`,
+        : body.copyV2 ? `ai:copy-v2:${offerId}:v1` : `ai:draft:${offerId}:v2`,
       correlationId: body.correlationId || request.headers.get("x-correlation-id") || commandId,
       causationId: body.causationId ?? request.headers.get("x-causation-id"),
       offerId,
@@ -134,7 +135,8 @@ export async function POST(request: Request) {
       requestedAt: body.requestedAt || request.headers.get("x-requested-at") || DEFAULT_REQUESTED_AT,
       actor: { type: isServiceWorker ? "service" : "user", id: userId, service: "nextjs-ai-route" },
       origin: "api.ai.generate",
-      reason: { code: "GENERATE_OFFICIAL_CONTENT" }
+      reason: { code: "GENERATE_OFFICIAL_CONTENT" },
+      metadata: body.copyV2 ? { copyV2: true } : undefined
     };
 
     const result = await generateOfficialAI(
