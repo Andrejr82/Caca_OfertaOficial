@@ -22,4 +22,34 @@ describe('deterministic product classifier', () => {
     expect(classifyProduct({ title: 'Suporte de celular para carro' })).toMatchObject({ productType: 'smartphone', productRole: 'accessory', status: 'excluded' })
     expect(classifyProduct({ title: 'Cadarço para tênis de corrida' })).toMatchObject({ productType: 'running_shoe', productRole: 'accessory', status: 'excluded' })
   })
+
+  it.each([
+    ['Cafeteira Elétrica Oster 1,2L', 'coffee_maker'],
+    ['Batedeira Planetária Arno 700W', 'stand_mixer'],
+    ['Liquidificador Mondial 3L', 'blender'],
+    ['Mixer 3 em 1 Britânia', 'hand_blender'],
+    ['Sanduicheira Elétrica Philco', 'sandwich_maker'],
+    ['Notebook Lenovo Ideapad 15', 'notebook'],
+    ['Smart TV LG 50 polegadas', 'television'],
+    ['Fone Bluetooth JBL', 'headphones'],
+    ['Tênis Adidas Casual', 'casual_shoe'],
+    ['Vestido Feminino Midi', 'dress'],
+    ['Secador de Cabelo Taiff', 'hair_dryer'],
+    ['Bicicleta Caloi Aro 29', 'bicycle'],
+    ['PlayStation 5 Slim', 'game_console'],
+  ])('classifies %s as %s', (title, productType) => {
+    expect(classifyProduct({ title })).toMatchObject({ productType, productRole: 'main_product', status: 'classified' })
+  })
+
+  it.each([
+    ['Capa para celular Samsung', 'smartphone', 'accessory'],
+    ['Kit cafeteira + moedor', 'coffee_maker', 'bundle'],
+    ['Cupom para liquidificador', 'blender', 'coupon'],
+  ])('does not promote %s', (title, productType, productRole) => {
+    expect(classifyProduct({ title })).toMatchObject({ productType, productRole, status: 'excluded' })
+  })
+
+  it('sends an unsupported title to review', () => {
+    expect(classifyProduct({ title: 'Produto especial em promoção' })).toMatchObject({ productRole: 'main_product', status: 'review_required' })
+  })
 })
