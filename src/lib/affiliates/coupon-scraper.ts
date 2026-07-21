@@ -36,6 +36,11 @@ type ShopeeProductOfferNode = {
   shopName?: string;
 };
 
+export type ShopeeCouponSearchOptions = {
+  page?: number;
+  excludeLinks?: readonly string[];
+};
+
 function parseShopeeMoney(value: unknown) {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -104,10 +109,20 @@ function dedupeCoupons(coupons: ScrapedCoupon[]) {
   });
 }
 
+export function buildShopeeCouponVariables(page: number, limit: number) {
+  return {
+    keyword: "",
+    page,
+    limit,
+    sortType: 2,
+    isAMSOffer: true
+  };
+}
+
 // =======================
 // SHOPEE (NATIVE GRAPHQL)
 // =======================
-export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
+export async function fetchShopeeCoupons(limit = 5, options: ShopeeCouponSearchOptions = {}): Promise<ScrapedCoupon[]> {
   const appId = process.env.SHOPEE_APP_ID || "";
   const appSecret = process.env.SHOPEE_APP_SECRET || "";
 
@@ -116,44 +131,42 @@ export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
     return [];
   }
 
-  const requestBody = JSON.stringify({
-    query: "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { productName productLink offerLink imageUrl priceMin priceMax priceDiscountRate sales shopName } pageInfo { page limit hasNextPage } } }",
-    variables: {
-      keyword: "",
-      page: 1,
-      limit,
-      sortType: 2,
-      isAMSOffer: true
-    }
-  });
-
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = createHash("sha256")
-    .update(`${appId}${timestamp}${requestBody}${appSecret}`)
-    .digest("hex");
-
   try {
-    const response = await fetch("https://open-api.affiliate.shopee.com.br/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`
-      },
-      body: requestBody
-    });
+    const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { productName productLink offerLink imageUrl priceMin priceMax priceDiscountRate sales shopName } pageInfo { page limit hasNextPage } } }";
+    const pageSize = Math.min(Math.max(limit * 2, 10), 20);
+    const excluded = new Set((options.excludeLinks || []).map((link) => link.toLowerCase()));
+    const firstPage = Math.max(1, Math.floor(Number(options.page) || 1));
+    const coupons: ScrapedCoupon[] = [];
+    let page = firstPage;
+    let hasNextPage = true;
+    let pagesRead = 0;
 
-    const data = (await response.json()) as ShopeeGraphQLResponse<ShopeeProductOfferNode>;
-    const errors = Array.isArray(data.errors) ? data.errors.map((item) => item?.message).filter(Boolean) : [];
+    while (coupons.length < limit && hasNextPage && pagesRead < 5) {
+      const variables = buildShopeeCouponVariables(page, pageSize);
+      const requestBody = JSON.stringify({ query, variables });
+      const timestamp = Math.floor(Date.now() / 1000);
+      const signature = createHash("sha256")
+        .update(`${appId}${timestamp}${requestBody}${appSecret}`)
+        .digest("hex");
+      const response = await fetch("https://open-api.affiliate.shopee.com.br/graphql", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`
+        },
+        body: requestBody
+      });
 
-    if (!response.ok || errors.length > 0) {
-      console.warn(`[COUPON-SCRAPER][SHOPEE] Falha na API oficial: HTTP ${response.status} ${errors.join(" | ")}`);
-      return [];
-    }
+      const data = (await response.json()) as ShopeeGraphQLResponse<ShopeeProductOfferNode>;
+      const errors = Array.isArray(data.errors) ? data.errors.map((item) => item?.message).filter(Boolean) : [];
+      if (!response.ok || errors.length > 0) {
+        console.warn(`[COUPON-SCRAPER][SHOPEE] Falha na API oficial: HTTP ${response.status} ${errors.join(" | ")}`);
+        break;
+      }
 
-    const nodes = Array.isArray(data.data?.productOfferV2?.nodes) ? data.data?.productOfferV2?.nodes : [];
-
-    return dedupeCoupons(
-      nodes
+      const nodes = Array.isArray(data.data?.productOfferV2?.nodes) ? data.data?.productOfferV2?.nodes : [];
+      const pageCoupons = nodes
         .map((node) => {
           const productName = normalizeText(node.productName);
           const productLink = normalizeText(node.offerLink) || normalizeText(node.productLink);
@@ -182,8 +195,15 @@ export async function fetchShopeeCoupons(limit = 5): Promise<ScrapedCoupon[]> {
             image_url: normalizeText(node.imageUrl) || null
           } satisfies ScrapedCoupon;
         })
-        .filter(Boolean) as ScrapedCoupon[]
-    ).slice(0, limit);
+        .filter(Boolean) as ScrapedCoupon[];
+
+      coupons.push(...pageCoupons.filter((coupon) => !excluded.has(coupon.link.toLowerCase())));
+      hasNextPage = data.data?.productOfferV2?.pageInfo?.hasNextPage === true;
+      page += 1;
+      pagesRead += 1;
+    }
+
+    return dedupeCoupons(coupons).slice(0, limit);
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     console.warn(`[COUPON-SCRAPER][SHOPEE] Erro ao consultar API oficial: ${msg}`);
@@ -335,10 +355,14 @@ export async function fetchAmazonCoupons(limit = 5): Promise<ScrapedCoupon[]> {
 // =======================
 // ENTRYPOINT
 // =======================
-export async function fetchMarketplaceCoupons(marketplace: string, limit = 5): Promise<ScrapedCoupon[]> {
+export async function fetchMarketplaceCoupons(
+  marketplace: string,
+  limit = 5,
+  options: ShopeeCouponSearchOptions = {}
+): Promise<ScrapedCoupon[]> {
   const normalizedMarketplace = marketplace.toLowerCase().trim();
 
-  if (normalizedMarketplace === "shopee") return fetchShopeeCoupons(limit);
+  if (normalizedMarketplace === "shopee") return fetchShopeeCoupons(limit, options);
   if (normalizedMarketplace === "mercado livre") return fetchMercadoLivreCoupons(limit);
   if (normalizedMarketplace === "amazon") return fetchAmazonCoupons(limit);
 
