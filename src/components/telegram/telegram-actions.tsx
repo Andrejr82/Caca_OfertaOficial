@@ -7,7 +7,8 @@ import {
   cleanCouponTitle,
   getCouponCardImageSources,
   isCouponOffer,
-  parseCouponDetails
+  parseCouponDetails,
+  buildCouponSocialMessage
 } from "@/lib/coupons/presentation";
 
 export function TelegramTestButton({ disabled }: { disabled: boolean }) {
@@ -62,6 +63,10 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
   const couponImage = couponOffer ? getCouponCardImageSources(post.offers) : null;
   const [couponImageSrc, setCouponImageSrc] = useState(couponImage?.initialSrc || "");
   const couponLink = post.affiliate_links?.tracked_url || post.offers.original_url;
+
+  useEffect(() => {
+    if (couponOffer) setCaption(buildCouponSocialMessage(post.offers, couponLink));
+  }, [couponOffer, couponLink, post.offers]);
 
   useEffect(() => {
     setCouponImageSrc(couponImage?.initialSrc || "");
@@ -157,7 +162,7 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
           <img
             src={couponImageSrc}
             alt={cleanCouponTitle(post.offers.product_name)}
-            className="object-cover w-full h-full"
+            className="object-contain w-full h-full p-2"
             onError={() => setCouponImageSrc(couponImage?.fallbackSrc || "/coupon-assets/default-coupon.png")}
           />
         ) : post.offers.image_url ? (

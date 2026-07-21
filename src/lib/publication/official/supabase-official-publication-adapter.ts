@@ -15,7 +15,7 @@ import type {
 } from "@/core/publication";
 import type { StateServiceDependencies } from "@/core/state";
 import { offerStateVersion, postStateVersion, transitionOfficialOfferState, transitionOfficialPostState } from "@/lib/state/official-state-service";
-import { buildCouponWhatsappMessage, isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+import { buildCouponSocialMessage, isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 
 const IDEMPOTENCY_PREFIX = "pmav5.publication.idempotency.";
 const RESERVATION_PREFIX = "pmav5.publication.reservation.";
@@ -96,8 +96,8 @@ export class SupabaseOfficialPublicationAdapter implements
       channel,
       state: data.status,
       version: postStateVersion(data.status),
-      content: coupon && channel === "whatsapp"
-        ? buildCouponWhatsappMessage(related, link?.tracked_url || related?.original_url || "")
+      content: coupon
+        ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
         : data.content,
       mediaUrl: coupon
         ? await resolveCouponPublishImageUrl(related)
@@ -126,8 +126,8 @@ export class SupabaseOfficialPublicationAdapter implements
         channel,
         state: item.status,
         version: postStateVersion(item.status),
-        content: coupon && channel === "whatsapp"
-          ? buildCouponWhatsappMessage(related, link?.tracked_url || related?.original_url || "")
+        content: coupon
+          ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
           : item.content,
         mediaUrl: coupon
           ? await resolveCouponPublishImageUrl(related)

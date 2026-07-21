@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
+import { buildCouponSocialMessage } from "@/lib/coupons/presentation";
 
 const DRAFT_CHANNELS = ["instagram", "telegram", "whatsapp"] as const;
 
@@ -21,20 +22,22 @@ export type CouponDraftPersistenceResult = {
 };
 
 export function buildCouponDraftContent(coupon: CouponDraftInput, trackedUrl: string) {
-  const benefit = coupon.discount || "Benefício oficial";
-  const code = coupon.code && coupon.code !== "RESGATE DIRETO" ? `Código: ${coupon.code}` : "Resgate direto no marketplace";
-  const rules = coupon.rules || "Verifique as condições no marketplace.";
-  return `🚨 *CUPOM LIBERADO*\n\n🏷 *MARKETPLACE*\n${coupon.marketplace}\n\n🎟 *CUPOM*\n${code}\n\n💰 *BENEFÍCIO*\n${benefit}\n\n📌 ${rules}\n\n🔗 *LINK DA OFERTA*\n${trackedUrl}\n\n👇 *CTA*\nAbra o link e resgate antes que acabe.`;
+  return buildCouponSocialMessage({
+    platform: coupon.marketplace,
+    product_name: `[CUPOM] ${coupon.discount || "Cupom disponível"}`,
+    coupon: coupon.code && coupon.code !== "RESGATE DIRETO" ? coupon.code : null,
+    notes: coupon.rules
+  }, trackedUrl);
 }
 
 function couponTitle(coupon: CouponDraftInput) {
   const benefit = coupon.discount || "Cupom disponível";
-  const rules = coupon.rules || "Benefício oficial disponível no marketplace.";
-  return `[CUPOM] ${benefit} - ${rules}`.slice(0, 240);
+  const product = coupon.rules?.match(/Produto:\s*(.+?)(?:\s*\|\s*|$)/i)?.[1]?.trim();
+  return `[CUPOM] ${benefit}${product ? ` - ${product}` : ""}`.slice(0, 240);
 }
 
 function couponNotes(coupon: CouponDraftInput) {
-  return `Importado automaticamente via Robô de Cupons (${coupon.marketplace}). Regras: ${coupon.rules || "Verifique as condições no marketplace."}`.slice(0, 1000);
+  return `Importado automaticamente via Robô de Cupons (${coupon.marketplace}). Benefício: ${coupon.discount || "Cupom disponível"}. Regras: ${coupon.rules || "Verifique as condições no marketplace."}`.slice(0, 1000);
 }
 
 export async function persistCouponDrafts(coupons: CouponDraftInput[]): Promise<CouponDraftPersistenceResult> {
@@ -61,7 +64,7 @@ export async function persistCouponDrafts(coupons: CouponDraftInput[]): Promise<
     try {
       const { data: existingOffer, error: existingError } = await supabase
         .from("offers")
-        .select("id")
+        .select("id,image_url")
         .eq("user_id", userId)
         .eq("original_url", coupon.link)
         .limit(1)
@@ -69,6 +72,14 @@ export async function persistCouponDrafts(coupons: CouponDraftInput[]): Promise<
       if (existingError) throw existingError;
 
       let offerId = existingOffer?.id as string | undefined;
+      if (offerId && !existingOffer?.image_url && coupon.image_url) {
+        const { error: imageError } = await supabase
+          .from("offers")
+          .update({ image_url: coupon.image_url })
+          .eq("id", offerId)
+          .eq("user_id", userId);
+        if (imageError) throw imageError;
+      }
       if (!offerId) {
         const { data: insertedOffer, error: offerError } = await supabase
           .from("offers")
