@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
 import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/lib/offers/actions";
-import { rejectAmazonOfferAction, selectAmazonOfferAction } from "@/lib/offers/actions";
+import { rejectAmazonOfferAction, selectAmazonOfferAction, bulkRejectOffersAction } from "@/lib/offers/actions";
 import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
@@ -15,6 +15,8 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const [filterDecision, setFilterDecision] = useState<string>("");
   const [filterPlatform, setFilterPlatform] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
+  const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
+  const [isDiscarding, startDiscarding] = useTransition();
 
   // Ponytail: simplificando ordenação e filtro em memória, sem query params complexos.
   const filtered = initialOffers.filter(offer => {
@@ -55,9 +57,47 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     return timeB - timeA;
   });
 
+  const selectableOffers = sorted.filter((offer) => offer.status === "pending_manual_review");
+  const allSelectableSelected = selectableOffers.length > 0 && selectableOffers.every((offer) => selectedOfferIds.has(offer.id));
+
+  function toggleOffer(offerId: string) {
+    setSelectedOfferIds((current) => {
+      const next = new Set(current);
+      if (next.has(offerId)) next.delete(offerId); else next.add(offerId);
+      return next;
+    });
+  }
+
+  function toggleAllOffers() {
+    setSelectedOfferIds((current) => {
+      const next = new Set(current);
+      if (allSelectableSelected) selectableOffers.forEach((offer) => next.delete(offer.id));
+      else selectableOffers.forEach((offer) => next.add(offer.id));
+      return next;
+    });
+  }
+
+  function discardSelectedOffers() {
+    if (selectedOfferIds.size === 0) return;
+    if (!window.confirm(`Descartar ${selectedOfferIds.size} oferta(s) selecionada(s)?`)) return;
+    const formData = new FormData();
+    formData.set("offer_ids", JSON.stringify([...selectedOfferIds]));
+    startDiscarding(async () => {
+      await bulkRejectOffersAction(formData);
+      setSelectedOfferIds(new Set());
+    });
+  }
+
   return (
     <section className="glass-card p-5 w-full flex flex-col gap-4">
       <div className="flex flex-wrap gap-4 border-b border-white/[0.04] pb-4">
+        <label className="inline-flex items-center gap-2 rounded border border-white/10 bg-black/20 px-3 py-2 text-sm text-white/80">
+          <input type="checkbox" checked={allSelectableSelected} onChange={toggleAllOffers} disabled={selectableOffers.length === 0 || isDiscarding} />
+          Selecionar todos
+        </label>
+        <button type="button" onClick={discardSelectedOffers} disabled={selectedOfferIds.size === 0 || isDiscarding} className="rounded border border-red-400/40 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300 disabled:cursor-not-allowed disabled:opacity-40">
+          {isDiscarding ? "Descartando..." : `Descartar selecionados${selectedOfferIds.size ? ` (${selectedOfferIds.size})` : ""}`}
+        </button>
         <select 
           className="bg-black/20 text-white text-sm rounded p-2"
           value={filterPlatform} onChange={e => setFilterPlatform(e.target.value)}
@@ -142,6 +182,14 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           return (
             <div key={offer.id} className="border border-white/[0.05] rounded-lg p-4 bg-white/[0.01] flex flex-col gap-3">
               <div className="flex justify-between items-start gap-4">
+                <input
+                  type="checkbox"
+                  aria-label={`Selecionar oferta ${offer.product_name}`}
+                  checked={selectedOfferIds.has(offer.id)}
+                  onChange={() => toggleOffer(offer.id)}
+                  disabled={offer.status !== "pending_manual_review" || isDiscarding}
+                  className="mt-1 h-4 w-4 shrink-0 accent-red-500 disabled:opacity-30"
+                />
                 {offer.image_url && (
                   <img src={offer.image_url} alt="" className="h-20 w-20 rounded-md object-cover" />
                 )}

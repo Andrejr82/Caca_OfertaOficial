@@ -121,6 +121,67 @@ export async function rejectAmazonOfferAction(formData: FormData) {
   await transitionManualStatus(formData, "Amazon", "reject");
 }
 
+export async function bulkRejectOffersAction(formData: FormData) {
+  const rawOfferIds = String(formData.get("offer_ids") || "[]");
+  let offerIds: string[];
+  try {
+    const parsed = JSON.parse(rawOfferIds);
+    offerIds = Array.isArray(parsed)
+      ? [...new Set(parsed.filter((id): id is string => typeof id === "string" && id.trim().length > 0))]
+      : [];
+  } catch {
+    throw new Error("Seleção de ofertas inválida.");
+  }
+  if (offerIds.length === 0) throw new Error("Selecione ao menos uma oferta.");
+
+  const supabase = await createServerSupabaseClient();
+  const userId = await getCurrentUserId();
+  if (!supabase || !userId) throw new Error("Usuário não autenticado.");
+
+  const { data: offers, error } = await supabase
+    .from("offers")
+    .select("id,platform,status,updated_at,created_at")
+    .eq("user_id", userId)
+    .in("id", offerIds);
+  if (error) throw new Error(error.message);
+
+  const results = await Promise.all((offers || []).map(async (offer) => {
+    if (offer.status !== "pending_manual_review") return { id: offer.id, ok: false, message: "Oferta não está aguardando revisão." };
+    if (!["Shopee", "Mercado Livre", "Amazon"].includes(offer.platform)) {
+      return { id: offer.id, ok: false, message: "Marketplace sem ação de descarte configurada." };
+    }
+    const requestedAt = offer.updated_at || offer.created_at || new Date().toISOString();
+    const commandId = `curation:${offer.id}:bulk-reject:${requestedAt}`;
+    const result = await transitionOfficialOfferState({
+      commandId,
+      idempotencyKey: commandId,
+      correlationId: commandId,
+      causationId: null,
+      tenantId: userId,
+      actor: { type: "user", id: userId, service: "nextjs-curation" },
+      requestedAt: new Date(requestedAt).toISOString(),
+      entityId: offer.id,
+      fromState: "pending_manual_review",
+      toState: "rejected",
+      origin: "offers.action.bulk-reject",
+      reason: { code: "MANUAL_REJECTION", detail: offer.platform },
+      evidenceRefs: [`marketplace:${offer.platform}`, `offer:${offer.id}`]
+    }, createSupabaseStateDependencies(supabase, userId));
+    return result.status === "rejected"
+      ? { id: offer.id, ok: false, message: result.message }
+      : { id: offer.id, ok: true };
+  }));
+
+  revalidatePath("/offers");
+  revalidatePath("/dashboard");
+  return {
+    ok: results.every((result) => result.ok) && results.length === offerIds.length,
+    successCount: results.filter((result) => result.ok).length,
+    failureCount: offerIds.length - results.filter((result) => result.ok).length,
+    message: `${results.filter((result) => result.ok).length} oferta(s) descartada(s).`,
+  };
+}
+
 export async function generateAffiliateLinkAction(
   prevState: { ok: boolean; message: string; timestamp: number } | null,
   formData: FormData
