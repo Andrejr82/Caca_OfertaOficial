@@ -581,7 +581,11 @@ export async function generateOfficialAI(
       eventType: "official_ai.validation.failed", correlationId: command.correlationId, offerId: command.offerId,
       marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "hook_validation",
       durationMs: Date.now() - inferenceStartedAt,
-      details: { errorCode: "INVALID_PROVIDER_OUTPUT", failedChannels: command.channels.filter((channel) => !hooks[channel]).map((channel) => ({ channel, rule: inspections[channel].rule })) }
+      details: { 
+        errorCode: "INVALID_PROVIDER_OUTPUT", 
+        failedChannels: command.channels.filter((channel) => !hooks[channel]).map((channel) => ({ channel, rule: inspections[channel].rule })),
+        rawProviderData: providerData
+      }
     });
     return rejectAndRecord(
       command, dependencies, fingerprint,
