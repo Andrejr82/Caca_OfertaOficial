@@ -61,6 +61,8 @@ function normalizeForMatch(value: string) {
 }
 
 const PANEL_RULES = [
+  { category: "Crianças e Bebês", subcategory: "Roupas Infantis", keywords: ["macacão", "pijama de bebê", "roupa de bebê", "roupa infantil", "body bebê"] },
+  { category: "Crianças e Bebês", subcategory: "Cadeirinha e carrinho", keywords: ["cadeirinha de carro", "bebê conforto", "assento infantil", "burigotto"] },
   { category: "Telefonia", subcategory: "iPhone", keywords: ["iphone"] },
   { category: "Telefonia", subcategory: "Samsung", keywords: ["samsung galaxy", "galaxy"] },
   { category: "Telefonia", subcategory: "Motorola", keywords: ["motorola", "moto g", "moto edge"] },
@@ -97,6 +99,9 @@ export function classifyOfferForPanel(input: PanelCategoryInput) {
   const productText = normalizeForMatch([input.product_name, input.product, input.subcategory].filter(Boolean).join(" | "));
   const panelRule = PANEL_RULES.find((rule) => rule.keywords.some((keyword) => productText.includes(normalizeForMatch(keyword))));
   if (panelRule) return { category: panelRule.category, subcategory: panelRule.subcategory };
+
+  const productClassification = normalizeCategory(productText);
+  if (productClassification.category !== "Geral") return productClassification;
 
   const directCategory = CATEGORY_TAXONOMY.find((node) =>
     [input.category, input.category_name].some((value) => normalizeForMatch(String(value || "")) === normalizeForMatch(node.name)),

@@ -39,4 +39,12 @@ describe("classificação de categorias exclusiva do painel", () => {
     expect(editorial.audience).toBe("Tecnologia");
     expect(editorial.profiles).toContain("Oferta agressiva");
   });
+
+  it("não força Telefonia quando o título indica outra categoria", () => {
+    expect(classifyOfferForPanel({
+      product_name: "Macacão de dormir para bebês Pijama de algodão",
+      category: "Telefonia",
+      platform: "Amazon",
+    }).category).not.toBe("Telefonia");
+  });
 });
