@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { addAmazonAffiliateTag, classifyCouponCode } from "@/lib/affiliates/coupon-scraper";
+import { addAmazonAffiliateTag, buildShopeeCouponVariables, classifyCouponCode } from "@/lib/affiliates/coupon-scraper";
 
 describe("Coupon scraper contract", () => {
+  it("rotates Shopee official pagination instead of always requesting page one", () => {
+    expect(buildShopeeCouponVariables(3, 20)).toMatchObject({
+      keyword: "",
+      page: 3,
+      limit: 20,
+      sortType: 2,
+      isAMSOffer: true
+    });
+  });
+
   it("never treats a generated Shopee digest as an official coupon code", () => {
     expect(classifyCouponCode("SHOPEE-8CCBE181")).toBe("RESGATE DIRETO");
   });

@@ -138,7 +138,20 @@ export function TrendsAction() {
       const endpoint = mode === "products" ? "/api/scraper/trends" : "/api/scraper/coupons";
       const bodyPayload = mode === "products" 
         ? { sources: selectedSources, limit, category } 
-        : { sources: selectedSources, limit };
+        : {
+            sources: selectedSources,
+            limit,
+            rotationSeed: Date.now(),
+            excludeLinks: (() => {
+              try {
+                const saved = JSON.parse(localStorage.getItem("caca_oferta_recent_coupon_links") || "[]");
+                const current = offers.map((offer) => offer.link || offer.url).filter(Boolean);
+                return Array.from(new Set([...(Array.isArray(saved) ? saved : []), ...current])).slice(-100);
+              } catch {
+                return offers.map((offer) => offer.link || offer.url).filter(Boolean);
+              }
+            })()
+          };
 
       const response = await fetch(endpoint, {
         method: "POST",
@@ -154,6 +167,18 @@ export function TrendsAction() {
         });
         if (data.offers && data.offers.length > 0) {
           setOffers(data.offers);
+          if (mode === "coupons") {
+            try {
+              const previous = JSON.parse(localStorage.getItem("caca_oferta_recent_coupon_links") || "[]");
+              const next = Array.from(new Set([
+                ...(Array.isArray(previous) ? previous : []),
+                ...data.offers.map((offer: any) => offer.link || offer.url).filter(Boolean)
+              ])).slice(-100);
+              localStorage.setItem("caca_oferta_recent_coupon_links", JSON.stringify(next));
+            } catch (error) {
+              console.error("[localStorage] Erro ao salvar histórico de cupons:", error);
+            }
+          }
         } else {
           setOffers([]);
           router.refresh();

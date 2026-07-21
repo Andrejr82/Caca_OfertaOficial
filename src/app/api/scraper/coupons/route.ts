@@ -9,6 +9,10 @@ export async function POST(request: Request) {
     const payload = await request.json().catch(() => ({}));
     const sources = Array.isArray(payload?.sources) ? payload.sources : [];
     const limit = Math.min(Math.max(Number(payload?.limit) || 5, 1), 50);
+    const rotationSeed = Number(payload?.rotationSeed) || Date.now();
+    const excludeLinks = Array.isArray(payload?.excludeLinks)
+      ? payload.excludeLinks.filter((link: unknown): link is string => typeof link === "string")
+      : [];
     const marketplaces = sources
       .map((source: unknown) => String(source).trim())
       .filter((source: string) => SUPPORTED_MARKETPLACES.has(source.toLowerCase()));
@@ -19,7 +23,13 @@ export async function POST(request: Request) {
 
     const groups = await Promise.all(marketplaces.map(async (marketplace: string) => {
       try {
-        return { marketplace, offers: await fetchMarketplaceCoupons(marketplace, limit), error: null };
+        const options = marketplace.toLowerCase() === "shopee"
+          ? {
+              page: 1 + (Math.abs(rotationSeed) % 5),
+              excludeLinks
+            }
+          : undefined;
+        return { marketplace, offers: await fetchMarketplaceCoupons(marketplace, limit, options), error: null };
       } catch (error) {
         console.error(`[COUPON-API] Falha em ${marketplace}:`, error);
         return { marketplace, offers: [], error: "Fonte indisponível" };
