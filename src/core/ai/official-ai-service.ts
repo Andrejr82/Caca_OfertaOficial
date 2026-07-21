@@ -552,10 +552,17 @@ export async function generateOfficialAI(
 
   // 8. Validação do conteúdo gerado (comum a ambos os modos).
   const providerData = inference.content && typeof inference.content === "object"
-    ? inference.content as { hook?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> }
+    ? inference.content as Record<string, any>
     : {};
   const inspections = Object.fromEntries(command.channels.map((channel) => {
-    const rawCandidate = providerData.hooks?.[channel] ?? providerData.hook ?? providerData.channelCopies?.[channel];
+    // Tenta extrair o hook de várias estruturas possíveis geradas pelos LLMs
+    const rawCandidate = 
+      providerData.hooks?.[channel] ?? 
+      providerData[channel]?.hook ?? 
+      providerData.hook ?? 
+      providerData.channelCopies?.[channel]?.hook ??
+      providerData.channelCopies?.[channel];
+      
     const candidate = typeof rawCandidate === "string" ? rawCandidate.split(/[\r\n]/u, 1)[0] : rawCandidate;
     return [channel, inspectOfficialAIHook(candidate)];
   }));
