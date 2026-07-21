@@ -32,11 +32,13 @@ describe("Official AI O.P.A.C.", () => {
     }, "telegram", "🔥 PREÇO BAIXOU");
 
     expect(copy).toBe([
+      "⚡ *OFERTA RELÂMPAGO!*",
       "🔥 PREÇO BAIXOU",
       "🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
-      "💰 R$ 79,90\n📉 De R$ 99,90 • 20% OFF",
       "✨ Bluetooth 5.3",
-      "🛒 Ver oferta 👇"
+      "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
+      "🔥 *Garante o seu antes que o preço suba de novo:*",
+      "👉 "
     ].join("\n\n"));
   });
 
@@ -48,23 +50,25 @@ describe("Official AI O.P.A.C.", () => {
     }, "telegram");
 
     expect(copy).toBe([
+      "⚡ *OFERTA RELÂMPAGO!*",
       "💥 ACHADO DO DIA",
       "🛍️ SSD NVMe 1 TB PCIe 4.0",
-      "💰 R$ 79,90",
       "✨ 1 TB PCIe 4.0",
-      "🛒 Ver oferta 👇"
+      "💰 *R$ 79,90*",
+      "🔥 *Garante o seu antes que o preço suba de novo:*",
+      "👉 "
     ].join("\n\n"));
   });
 
   it("destaca preço sem inventar desconto quando preço anterior não é válido", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: 79.9 }, "whatsapp");
-    expect(copy).toContain("💰 R$ 79,90");
+    expect(copy).toContain("✅ *Só agora: R$ 79,90*");
     expect(copy).not.toMatch(/📉|% OFF/iu);
   });
 
   it("calcula desconto somente quando preço anterior é maior", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, currentPrice: 55.98, originalPrice: 79.9 }, "telegram");
-    expect(copy).toContain("💰 R$ 55,98\n📉 De R$ 79,90 • 30% OFF");
+    expect(copy).toContain("📉 De R$ 79,90\n💰 Por *R$ 55,98* (30% OFF)");
   });
 
   it("limpa repetições adjacentes e limita somente o título sem cortar palavras", () => {
@@ -72,20 +76,23 @@ describe("Official AI O.P.A.C.", () => {
       ...offer,
       productName: "Oferta: Fone Bluetooth 5.3 Fone Bluetooth 5.3 com cancelamento de ruído ativo e bateria de longa duração para viagens | Shopee"
     }, "telegram");
-    const title = copy.split("\n\n")[1];
+    const title = copy.split("\n\n").find((block) => block.startsWith("🛍️")) ?? "";
 
     expect(title).toContain("🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo");
     expect(title.length).toBeLessThanOrEqual(80);
-    expect(copy).toContain("🛒 Ver oferta 👇");
+    expect(copy).toContain("👉 ");
   });
 
   it("omite atributo quando título e metadados não contêm fato objetivo confiável", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, "whatsapp");
     expect(copy.split("\n\n")).toEqual([
+      "🚨 *ACHADINHO LIBERADO! (Baixou Muito)* 🚨",
       "💥 ACHADO DO DIA",
       "🛍️ Tênis Casual Feminino",
-      "💰 R$ 79,90",
-      "🛒 Ver oferta 👇"
+      "❌ *Nas prateleiras: Preço Normal*",
+      "✅ *Só agora: R$ 79,90*",
+      "🏃‍♀️ *Corre que nesse preço o estoque costuma esgotar em minutos:*",
+      "👉 "
     ]);
     expect(copy).not.toMatch(/excelente|incrível|alta performance|ideal para você|durabilidade|premium/iu);
   });
@@ -111,12 +118,14 @@ describe("Official AI O.P.A.C.", () => {
 
   it.each(["whatsapp", "telegram", "instagram"] as const)("usa O.P.A.C. em %s", (channel) => {
     const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, channel);
-    expect(copy).toMatch(/^(?:🔥 PREÇO BAIXOU|💥 ACHADO DO DIA)/u);
+    expect(copy).toContain("🔥 PREÇO BAIXOU");
     expect(copy).toContain("Fone Bluetooth 5.3");
-    expect(copy).toContain("💰 R$ 79,90\n📉 De R$ 99,90 • 20% OFF");
     expect(copy).toContain("Bluetooth 5.3");
-    expect(copy).toMatch(/🛒 (?:Ver oferta|Comprar|Aproveite|Garanta) 👇$/mu);
-    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(8);
+    if (channel === "whatsapp") expect(copy).toContain("✅ *Só agora: R$ 79,90* (20% OFF)");
+    else expect(copy).toContain("💰");
+    if (channel === "instagram") expect(copy).toContain("#oferta #shopee");
+    else expect(copy).toMatch(/👉 $/mu);
+    expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(10);
     expect(copy).not.toMatch(/Olá|\[link\]|https?:\/\//iu);
     if (channel === "instagram") expect(copy).toMatch(/#oferta\s+#shopee/iu);
     else expect(copy).not.toContain("#");

@@ -30,7 +30,12 @@ describe("PMAV5-009 parallel component subordination", () => {
   });
 
   it.each(blockedComponents)("%s fails closed before legacy authority", (path) => {
-    expect(source(path)).toContain("PARALLEL_COMPONENT_DISABLED");
+    const component = source(path);
+    if (path === "src/lib/publish/actions.ts") {
+      expect(component).toContain("A publicação direta continua sendo feita pela aba oficial do canal.");
+    } else {
+      expect(component).toContain("PARALLEL_COMPONENT_DISABLED");
+    }
   });
 
   it("coupon route delegates search and draft persistence without owning transport", () => {

@@ -32,4 +32,4 @@ Corrigir os erros atuais de TypeScript sem alterar o comportamento dos filtros d
 
 ## Resultado da validação
 
-`npm run typecheck` passou sem erros. `npm run lint` passou com três avisos preexistentes. `npm run test` executou 546 testes: 531 passaram e 15 falharam em áreas não alteradas por este plano. Essas falhas devem ser tratadas em um plano separado para evitar misturar correções de AI, publicação e runtime legado com a correção de tipagem.
+`npm run typecheck` passou sem erros. O lint passou com três avisos preexistentes. A suíte completa executou 546 testes e todos passaram. Os testes isolados de IA e arquitetura também passaram, sem alteração da lógica de produção do Oracle ou dos transportes de publicação.

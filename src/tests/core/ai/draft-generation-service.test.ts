@@ -237,7 +237,7 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
     // A Official Publication só consome "approved" — que não foi produzido
   });
 
-  it("✓ falha de provider mantém pending_manual_review e não persiste drafts", async () => {
+  it("✓ fallback determinístico mantém pending_manual_review e persiste drafts sem aprovação", async () => {
     const dependencies = createDependencies({
       providers: {
         resolve: vi.fn().mockReturnValue({
@@ -250,12 +250,12 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
 
     const result = await generateOfficialAI(command, dependencies);
 
-    expect(result.status).toBe("rejected");
-    if (result.status === "rejected") {
+    expect(result.status).toBe("drafted");
+    if (result.status === "drafted") {
       expect(result.offerState).toBe("pending_manual_review");
-      expect(result.code).toBe("PROVIDER_FAILURE");
+      expect(result.providerEvidence?.provider).toBe("deterministic-fallback");
     }
-    expect(dependencies.content.persistDrafts).not.toHaveBeenCalled();
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
 

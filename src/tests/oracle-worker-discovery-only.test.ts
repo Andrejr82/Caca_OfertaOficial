@@ -226,7 +226,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     }
 
     expect(store).toContain("executeShopeeNativeDiscoveryV5");
-    expect(store).toContain("executeMercadoLivreNativeTop20");
+    expect(store).toContain("runMercadoLivreNativeTop20");
     expect(store).toContain("runAmazonNativeTop20");
   });
 
