@@ -110,6 +110,22 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
   const storageKey = `caca-oferta:panel-filters:social:${channel}:v1`;
   const selectedCategory = getCategoryOptions().find((category) => category.value === categoryFilter);
 
+  function persistSocialFilters(next: {
+    activeFilter?: MarketplaceFilterKey;
+    categoryFilter?: string;
+    subcategoryFilter?: string;
+  }) {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify({
+        activeFilter: next.activeFilter ?? activeFilter,
+        categoryFilter: next.categoryFilter ?? categoryFilter,
+        subcategoryFilter: next.subcategoryFilter ?? subcategoryFilter,
+      }));
+    } catch {
+      // A filtragem continua funcionando mesmo se o armazenamento local estiver indisponível.
+    }
+  }
+
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -199,7 +215,10 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
               <button
                 key={filter.key}
                 type="button"
-                onClick={() => setActiveFilter(filter.key)}
+                onClick={() => {
+                  setActiveFilter(filter.key);
+                  persistSocialFilters({ activeFilter: filter.key });
+                }}
                 className={`focus-ring inline-flex items-center gap-2 rounded-full border px-3 py-2 text-sm font-semibold transition-all ${
                   active
                     ? `${accentClassName} border-transparent text-white shadow-lg`
@@ -215,7 +234,11 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
           })}
           <select
             value={categoryFilter}
-            onChange={(event) => { setCategoryFilter(event.target.value); setSubcategoryFilter(""); }}
+            onChange={(event) => {
+              setCategoryFilter(event.target.value);
+              setSubcategoryFilter("");
+              persistSocialFilters({ categoryFilter: event.target.value, subcategoryFilter: "" });
+            }}
             className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/75"
           >
             <option value="">Todas as categorias</option>
@@ -224,7 +247,10 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
           </select>
           <select
             value={subcategoryFilter}
-            onChange={(event) => setSubcategoryFilter(event.target.value)}
+            onChange={(event) => {
+              setSubcategoryFilter(event.target.value);
+              persistSocialFilters({ subcategoryFilter: event.target.value });
+            }}
             disabled={!categoryFilter}
             className="rounded-full border border-white/10 bg-white/[0.04] px-3 py-2 text-sm font-semibold text-white/75 disabled:opacity-40"
           >
