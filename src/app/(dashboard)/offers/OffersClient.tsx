@@ -8,7 +8,7 @@ import { rejectMercadoLivreOfferAction, selectMercadoLivreOfferAction } from "@/
 import { rejectAmazonOfferAction, selectAmazonOfferAction, bulkRejectOffersAction } from "@/lib/offers/actions";
 import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
-import { classifyOfferForPanel, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
+import { classifyOfferForPanel, classifyPanelEditorial, PANEL_AUDIENCES, PANEL_OFFER_TYPES, PANEL_POSTING_PROFILES, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
 
@@ -23,6 +23,9 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const [maxPrice, setMaxPrice] = useState<string>("");
   const [minDiscount, setMinDiscount] = useState<string>("");
   const [filterDate, setFilterDate] = useState<string>("");
+  const [filterOfferType, setFilterOfferType] = useState<string>("");
+  const [filterAudience, setFilterAudience] = useState<string>("");
+  const [filterPostingProfile, setFilterPostingProfile] = useState<string>("");
   const [sortBy, setSortBy] = useState<string>("date");
   const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
   const [isDiscarding, startDiscarding] = useTransition();
@@ -40,8 +43,12 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     if (filterDecision && decision !== filterDecision) return false;
     if (filterPlatform && offer.platform !== filterPlatform) return false;
     const panelCategory = classifyOfferForPanel(offer);
+    const editorial = classifyPanelEditorial(offer);
     if (filterCategory && panelCategory.category !== filterCategory) return false;
     if (filterSubcategory && panelCategory.subcategory !== filterSubcategory) return false;
+    if (filterOfferType && !editorial.types.includes(filterOfferType)) return false;
+    if (filterAudience && editorial.audience !== filterAudience) return false;
+    if (filterPostingProfile && !editorial.profiles.includes(filterPostingProfile)) return false;
     if (filterStatus && offer.status !== filterStatus) return false;
 
     if (minPrice && offer.current_price < Number(minPrice)) return false;
@@ -184,6 +191,18 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
         <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" step="0.01" placeholder="Preço mínimo" value={minPrice} onChange={(event) => setMinPrice(event.target.value)} />
         <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" step="0.01" placeholder="Preço máximo" value={maxPrice} onChange={(event) => setMaxPrice(event.target.value)} />
         <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" max="100" placeholder="Desconto mínimo (%)" value={minDiscount} onChange={(event) => setMinDiscount(event.target.value)} />
+        <select className="rounded bg-black/20 p-2 text-sm text-white" value={filterOfferType} onChange={(event) => setFilterOfferType(event.target.value)}>
+          <option value="">Todos os tipos de oferta</option>
+          {PANEL_OFFER_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+        </select>
+        <select className="rounded bg-black/20 p-2 text-sm text-white" value={filterAudience} onChange={(event) => setFilterAudience(event.target.value)}>
+          <option value="">Todos os públicos</option>
+          {PANEL_AUDIENCES.map((audience) => <option key={audience} value={audience}>{audience}</option>)}
+        </select>
+        <select className="rounded bg-black/20 p-2 text-sm text-white" value={filterPostingProfile} onChange={(event) => setFilterPostingProfile(event.target.value)}>
+          <option value="">Todos os perfis de postagem</option>
+          {PANEL_POSTING_PROFILES.map((profile) => <option key={profile} value={profile}>{profile}</option>)}
+        </select>
         <label className="flex items-center gap-2 rounded bg-black/20 px-2 text-xs text-white/50">
           Data exata
           <input className="min-w-0 flex-1 bg-transparent p-2 text-sm text-white" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} />
@@ -231,6 +250,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           const qualityConf = qualityObj.confidence || "N/A";
           
           const decision = changed ? "CHANGED" : "UNCHANGED";
+          const editorial = classifyPanelEditorial(offer);
           
           const badges = expl.signals || [];
           const reason = comp?.reasons?.join(" | ") || expl.aiDecision?.reason || expl.quality?.reason || "N/A";
@@ -271,6 +291,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                       </span>
                     )}
                     {badges.map((b: string) => <Badge key={b} label={b.replace(/_/g, " ")} tone="neutral" />)}
+                    {editorial.types.slice(0, 3).map((type) => <Badge key={type} label={type} tone="future" />)}
                   </div>
                   <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
                   <p className="text-[11px] text-white/40">

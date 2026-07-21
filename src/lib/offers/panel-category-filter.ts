@@ -11,7 +11,43 @@ export interface PanelCategoryInput {
   source_categories?: unknown;
   marketplace?: string | null;
   platform?: string | null;
+  source_position?: number | null;
+  current_price?: number | null;
+  old_price?: number | null;
+  coupon?: string | null;
+  rating?: number | null;
+  commission_rate?: number | null;
+  shipping_free?: boolean | null;
+  score?: number | null;
+  marketplace_metrics?: Record<string, unknown> | null;
 }
+
+export const PANEL_OFFER_TYPES = [
+  "Alto desconto",
+  "Baixo preço",
+  "Com cupom",
+  "Frete grátis",
+  "Mais vendido",
+  "Avaliação alta",
+  "Oferta premium",
+] as const;
+
+export const PANEL_AUDIENCES = [
+  "Tecnologia",
+  "Casa e família",
+  "Moda e beleza",
+  "Esporte e lazer",
+  "Pet",
+  "Geral",
+] as const;
+
+export const PANEL_POSTING_PROFILES = [
+  "Oferta agressiva",
+  "Oferta de impulso",
+  "Oferta premium",
+  "Conteúdo visual",
+  "Oferta geral",
+] as const;
 
 function collectStrings(value: unknown): string[] {
   if (typeof value === "string") return [value];
@@ -72,4 +108,46 @@ export function classifyOfferForPanel(input: PanelCategoryInput) {
     category: result.category === "Geral" ? UNCLASSIFIED_PANEL_CATEGORY : result.category,
     subcategory: result.subcategory,
   };
+}
+
+export function classifyPanelEditorial(input: PanelCategoryInput) {
+  const category = classifyOfferForPanel(input);
+  const metrics = input.marketplace_metrics || {};
+  const currentPrice = Number(input.current_price || 0);
+  const oldPrice = Number(input.old_price || 0);
+  const discountFromPrice = oldPrice > currentPrice && currentPrice > 0
+    ? ((oldPrice - currentPrice) / oldPrice) * 100
+    : 0;
+  const discount = Math.max(discountFromPrice, Number(metrics.discount || metrics.discountPercent || 0));
+  const rating = Number(input.rating ?? metrics.rating ?? 0);
+  const sales = Number(metrics.sales || 0);
+  const sourcePosition = Number(input.source_position || metrics.sourcePosition || 0);
+  const types: string[] = [];
+
+  if (discount >= 30) types.push("Alto desconto");
+  if (currentPrice > 0 && currentPrice <= 100) types.push("Baixo preço");
+  if (String(input.coupon || "").trim()) types.push("Com cupom");
+  if (input.shipping_free === true || metrics.shippingFree === true) types.push("Frete grátis");
+  if (sales >= 100 || (sourcePosition > 0 && sourcePosition <= 20)) types.push("Mais vendido");
+  if (rating >= 4.5) types.push("Avaliação alta");
+  if (currentPrice >= 1000) types.push("Oferta premium");
+
+  const audience = category.category === "Telefonia" || category.category === "Eletrônicos"
+    || category.category === "Informática" || category.category === "Televisão" || category.category === "Games"
+    ? "Tecnologia"
+    : category.category === "Moda, Beleza e Perfumaria" ? "Moda e beleza"
+    : category.category === "Esporte e Lazer" ? "Esporte e lazer"
+    : category.category === "Petshop" ? "Pet"
+    : ["Eletrodomésticos", "Eletroportáteis", "Ferramentas e Casa", "Móveis e Decoração", "Utilidades Domésticas", "Cama, Mesa e Banho"].includes(category.category)
+      ? "Casa e família"
+      : "Geral";
+
+  const profiles: string[] = [];
+  if (types.includes("Alto desconto") || types.includes("Com cupom")) profiles.push("Oferta agressiva");
+  if (types.includes("Baixo preço")) profiles.push("Oferta de impulso");
+  if (types.includes("Oferta premium")) profiles.push("Oferta premium");
+  if (["Moda e beleza", "Casa e família"].includes(audience)) profiles.push("Conteúdo visual");
+  if (profiles.length === 0) profiles.push("Oferta geral");
+
+  return { ...category, types, audience, profiles };
 }

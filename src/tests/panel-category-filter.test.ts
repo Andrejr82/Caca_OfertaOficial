@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyOfferForPanel, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
+import { classifyOfferForPanel, classifyPanelEditorial, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 
 describe("classificação de categorias exclusiva do painel", () => {
   it("classifica produtos de telefonia pelo título nativo", () => {
@@ -22,5 +22,21 @@ describe("classificação de categorias exclusiva do painel", () => {
   it("mantém itens sem correspondência em Sem classificação", () => {
     expect(classifyOfferForPanel({ product_name: "Produto sem descrição", category: "Categoria desconhecida" }))
       .toEqual({ category: UNCLASSIFIED_PANEL_CATEGORY, subcategory: null });
+  });
+
+  it("classifica a oferta para estratégias editoriais sem persistir etiquetas", () => {
+    const editorial = classifyPanelEditorial({
+      product_name: "Fone JBL Bluetooth",
+      category: "Eletrônicos",
+      current_price: 79.9,
+      old_price: 129.9,
+      coupon: "JBL10",
+      shipping_free: true,
+      rating: 4.8,
+    });
+
+    expect(editorial.types).toEqual(expect.arrayContaining(["Alto desconto", "Baixo preço", "Com cupom", "Frete grátis", "Avaliação alta"]));
+    expect(editorial.audience).toBe("Tecnologia");
+    expect(editorial.profiles).toContain("Oferta agressiva");
   });
 });
