@@ -124,7 +124,9 @@ function dedupeGlobally(products) {
     const keys = [
       product.itemId && `item:${product.itemId}`,
       product.itemId && product.shopId && `shopItem:${product.shopId}:${product.itemId}`,
-      product.normalizedUrl && `url:${product.normalizedUrl}`
+      product.normalizedUrl && `url:${product.normalizedUrl}`,
+      product.productName && `title:${scenarioConfig.normalizeProductTitle(product.productName)}`,
+      scenarioConfig.extractProductModelKey(product.productName)
     ].filter(Boolean);
     if (keys.some((key) => seen.has(key))) return false;
     keys.forEach((key) => seen.add(key));
@@ -169,11 +171,12 @@ async function runNativeDiscovery({
   scenario,
   categories = null,
   pageSize = DEFAULT_PAGE_SIZE,
-  maxPagesPerKeyword = DEFAULT_MAX_PAGES_PER_KEYWORD,
+  maxPagesPerKeyword,
   maxFinalists = 20,
 }) {
   const currentHour = scenarioConfig.getSaoPauloHour();
   const activeScenario = scenario || scenarioConfig.getActiveScenario(currentHour);
+  const pagesPerKeyword = maxPagesPerKeyword ?? activeScenario.maxPagesPerKeyword ?? DEFAULT_MAX_PAGES_PER_KEYWORD;
   
   // Combina as chamadas de categoria e chamadas de keyword
   const apiCategories = activeScenario.apiCategories || [];
@@ -183,13 +186,16 @@ async function runNativeDiscovery({
   const categoryIds = explicitCategories ? explicitCategories.map((category) => category.productCatId) : apiCategories;
   const queries = [];
   categoryIds.forEach(catId => queries.push({ type: 'category', value: catId }));
-  // Para não explodir o tempo, a gente sorteia 10 keywords caso seja uma execução agendada (se o array for muito grande)
-  const keywordsToFetch = explicitCategories ? [] : scenarioConfig.getRandomItems(keywords, 10);
+  const keywordsToFetch = explicitCategories
+    ? []
+    : activeScenario.keywordSelection === 'all'
+      ? [...keywords]
+      : scenarioConfig.getRandomItems(keywords, 10);
   keywordsToFetch.forEach(kw => queries.push({ type: 'keyword', value: kw }));
 
   console.log(`[Shopee V5] Cenário ativo para ${currentHour}h: ${activeScenario.name}`);
   console.log(`[Shopee V5] Categorias API: ${apiCategories.join(', ') || 'Nenhuma'}`);
-  console.log(`[Shopee V5] Keywords sorteadas: ${keywordsToFetch.join(' | ')}`);
+  console.log(`[Shopee V5] Keywords selecionadas: ${keywordsToFetch.join(' | ')}`);
 
   const categoryMock = {
     productCatId: activeScenario.productCatId || apiCategories[0] || 0,
@@ -216,7 +222,7 @@ async function runNativeDiscovery({
   let rateLimited = false;
 
   for (const q of queries) {
-    for (let page = 1; page <= maxPagesPerKeyword; page += 1) {
+    for (let page = 1; page <= pagesPerKeyword; page += 1) {
       const keywordArg = q.type === 'keyword' ? q.value : null;
       const catArg = q.type === 'category' ? q.value : null;
       let payload;
@@ -264,7 +270,8 @@ async function runNativeDiscovery({
 
   const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category)).filter(Boolean);
   const deduplicated = dedupeGlobally(sanitized);
-  const novel = applyNovelty(deduplicated, isNovel).map((product) => ({ ...product, score: calculateObjectiveScore(product) }));
+  const scoped = deduplicated.filter((product) => scenarioConfig.matchesScenarioProduct(activeScenario, product.productName));
+  const novel = applyNovelty(scoped, isNovel).map((product) => ({ ...product, score: calculateObjectiveScore(product) }));
   
   // Opcional: penalizar levemente itens muito repetidos se houver, mas a API já retornou o top de cada keyword.
   const ranked = rankTop20ByCategory(novel, categoryResults, maxFinalists);
@@ -287,6 +294,7 @@ async function runNativeDiscovery({
       deduplicated: deduplicated.length,
       invalid: raw.length - sanitized.length,
       duplicates: sanitized.length - deduplicated.length,
+      filteredOut: deduplicated.length - scoped.length,
       novel: novel.length,
       final: finalists.length,
       pagesFetched,

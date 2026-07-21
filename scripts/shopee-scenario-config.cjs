@@ -2,6 +2,32 @@
 
 // 1. Definição dos Mega Bancos (Scenarios)
 const SCENARIOS = {
+  eletros_cozinha: {
+    id: 'eletros_cozinha',
+    name: 'Eletros de Cozinha',
+    // Busca somente por termos: a varredura ampla de categoria retornava itens não relacionados.
+    productCatId: 100010,
+    apiCategories: [],
+    keywordSelection: 'all',
+    maxPagesPerKeyword: 1,
+    keywords: [
+      'cafeteira elétrica', 'cafeteira expresso', 'batedeira planetária', 'batedeira elétrica',
+      'liquidificador', 'air fryer', 'mixer 3 em 1', 'sanduicheira elétrica',
+      'chaleira elétrica', 'panela elétrica', 'processador de alimentos', 'forno elétrico',
+      'pipoqueira elétrica', 'cozedor de ovos', 'espremedor elétrico', 'mini processador elétrico'
+    ],
+    allowedProductTerms: [
+      'cafeteira', 'batedeira', 'liquidificador', 'air fryer', 'airfryer', 'mixer 3 em 1',
+      'sanduicheira', 'chaleira elétrica', 'panela elétrica', 'panela de pressão elétrica', 'processador', 'forno elétrico',
+      'pipoqueira elétrica', 'cozedor de ovos', 'espremedor elétrico', 'mini processador'
+    ],
+    blockedProductTerms: [
+      'utensílio', 'utensilio', 'manual', 'veicular', 'filtro de linha', 'torneira',
+      'pigment', 'henna', 'sobrancelha', 'beleza', 'acessório', 'acessorio', 'suporte', 'refil',
+      'borrifador', 'spray', 'limpa ', 'limpeza', 'desengordurante', 'descalcificante', 'espuma ',
+      'forma de silicone', 'formas de silicone', 'assadeira', 'cafeteira italiana', 'moka', 'fogão'
+    ]
+  },
   mae_de_primeira_viagem: {
     id: 'mae_de_primeira_viagem',
     name: 'Mãe de Primeira Viagem',
@@ -181,9 +207,35 @@ function getRandomItems(array, count = 5) {
   return shuffled.slice(0, count);
 }
 
+function normalizeProductTitle(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function matchesScenarioProduct(scenario, title) {
+  const normalizedTitle = normalizeProductTitle(title);
+  const blocked = (scenario?.blockedProductTerms || []).some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
+  if (blocked) return false;
+  const allowedTerms = scenario?.allowedProductTerms || [];
+  return allowedTerms.length === 0 || allowedTerms.some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
+}
+
+function extractProductModelKey(title) {
+  const normalized = normalizeProductTitle(title);
+  const model = normalized.match(/\b(?:[a-z]{2,}[a-z0-9-]*\d[a-z0-9-]*|[a-z]-\d{2,})\b/u)?.[0];
+  return model ? `model:${model}` : null;
+}
+
 module.exports = {
   SCENARIOS,
   getSaoPauloHour,
   getActiveScenario,
-  getRandomItems
+  getRandomItems,
+  normalizeProductTitle,
+  matchesScenarioProduct,
+  extractProductModelKey
 };
