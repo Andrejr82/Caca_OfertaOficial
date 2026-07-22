@@ -32,11 +32,11 @@ function queueScore(product) {
   return Number(product.deterministicScore || 0) * 10 + Math.min(30, discount * 30) + Math.min(20, Number(metrics.sales || 0) > 0 ? 10 : 0) + Math.min(10, Number(metrics.rating || 0) >= 4.5 ? 10 : 0);
 }
 
-function selectCopyQueue(products, options = {}) {
+function selectCopyQueue(products, options = {}, cycleState = null) {
   const limits = { ...COPY_QUEUE_DEFAULTS, ...options };
-  const marketplaceCounts = new Map();
-  const categoryCounts = new Map();
-  const groups = new Set();
+  const marketplaceCounts = cycleState?.marketplaceCounts || new Map();
+  const categoryCounts = cycleState?.categoryCounts || new Map();
+  const groups = cycleState?.groups || new Set();
   const selected = [];
   const skipped = [];
   const ranked = [...products].sort((a, b) => queueScore(b) - queueScore(a));
@@ -46,18 +46,20 @@ function selectCopyQueue(products, options = {}) {
       skipped.push({ sourceItemId: product.sourceItemId, reason: titleQuality.reason });
       continue;
     }
-    const marketplace = String(product.marketplace || '').toLowerCase();
+    const marketplace = String(product.marketplace || limits.marketplace || '').toLowerCase();
     const category = queueCategory(product);
     const group = queueGroupKey(product);
     if (groups.has(group)) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'grupo_ja_representado' }); continue; }
     if ((marketplaceCounts.get(marketplace) || 0) >= limits.maxPerMarketplace) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_marketplace' }); continue; }
     if ((categoryCounts.get(category) || 0) >= limits.maxPerCategory) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_categoria' }); continue; }
-    if (selected.length >= limits.maxTotal) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_total' }); continue; }
+    const selectedCount = Number(cycleState?.selectedCount || 0) + selected.length;
+    if (selectedCount >= limits.maxTotal) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_total' }); continue; }
     selected.push(product);
     groups.add(group);
     marketplaceCounts.set(marketplace, (marketplaceCounts.get(marketplace) || 0) + 1);
     categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
   }
+  if (cycleState) cycleState.selectedCount = Number(cycleState.selectedCount || 0) + selected.length;
   return { selected, skipped, limits };
 }
 
@@ -162,6 +164,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
   await safeObserve('worker.heartbeat');
   const summaries = [];
   const materializedOfferIds = new Set();
+  const cycleQueueState = {
+    selectedCount: 0,
+    marketplaceCounts: new Map(),
+    categoryCounts: new Map(),
+    groups: new Set(),
+  };
   try {
     for (const marketplace of MARKETPLACES) {
       const marketplaceStartedAt = Date.now();
@@ -180,7 +188,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         if (sourceItemId) seenSourceItems.add(sourceItemId);
         uniqueProducts.push(product);
       }
-      const queue = copyQueueOptions ? selectCopyQueue(uniqueProducts, copyQueueOptions) : { selected: uniqueProducts, skipped: [], limits: null };
+      const queue = copyQueueOptions
+        ? selectCopyQueue(uniqueProducts, { ...copyQueueOptions, marketplace }, cycleQueueState)
+        : { selected: uniqueProducts, skipped: [], limits: null };
       if (typeof persistV2Metadata === 'function') {
         await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: uniqueProducts, queue });
       }
