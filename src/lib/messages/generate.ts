@@ -90,8 +90,8 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
   const stories = [
     `🔥 Olha esse ACHADO!`,
     `${offer.product_name} — pra quem busca qualidade sem pagar caro!`,
-    hasPrice ? `${formatCurrency(offer.current_price)} ${discount > 0 ? `(${discount}% OFF!)` : ""}` : "Preço especial por tempo limitado!",
-    offer.coupon ? `🎫 Use o cupom: ${offer.coupon}` : "Corre que o estoque é limitado!",
+    hasPrice ? `${formatCurrency(offer.current_price)} ${discount > 0 ? `(${discount}% OFF!)` : ""}` : "Consulte o preço no anúncio.",
+    offer.coupon ? `🎫 Use o cupom: ${offer.coupon}` : "ℹ️ Consulte disponibilidade e condições.",
     `👆 Arrasta pra cima pra garantir o seu!`,
   ].filter(Boolean);
 
@@ -99,7 +99,7 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
     `GANCHO (0-3s): "Você NÃO vai acreditar nesse preço!" — mostrar produto na tela.`,
     `CONTEÚDO (4-20s): Apresentar ${offer.product_name}, falar dos benefícios principais e qualidade.`,
     `OFERTA (21-25s): Revelar o preço ${hasPrice ? formatCurrency(offer.current_price) : ""} com reação de surpresa.${discount > 0 ? ` ${discount}% de desconto!` : ""}`,
-    `CTA (26-30s): "Corre pro link na bio antes que acabe! Salva esse reel pra não perder!"`,
+    `CTA (26-30s): "Acesse o link na bio para consultar a oferta e salve este Reel."`,
   ];
 
   const carousel = [
@@ -107,8 +107,8 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
     `🤔 Pra quem é? Ideal pra quem busca qualidade e bom preço.`,
     `✅ Diferenciais: produto de qualidade da ${offer.platform || "loja"}.`,
     `💡 Dica: aproveite enquanto está disponível nesse preço.`,
-    hasPrice ? `💰 Por apenas ${formatCurrency(offer.current_price)}${discount > 0 ? ` (${discount}% OFF)` : ""}` : "💰 Preço especial por tempo limitado",
-    offer.coupon ? `🎫 Use o cupom ${offer.coupon} e economize ainda mais!` : "⚡ Garanta antes que acabe!",
+    hasPrice ? `💰 Por apenas ${formatCurrency(offer.current_price)}${discount > 0 ? ` (${discount}% OFF)` : ""}` : "💰 Consulte o preço no anúncio",
+    offer.coupon ? `🎫 Use o cupom ${offer.coupon} e economize ainda mais!` : "ℹ️ Consulte disponibilidade e condições.",
     `👉 Link na bio do @${officialBrand.instagram}`,
   ];
 

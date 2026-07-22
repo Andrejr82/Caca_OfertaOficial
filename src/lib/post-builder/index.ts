@@ -128,7 +128,7 @@ ${SOCIALS.telegram}`;
 🎫 Cupom: *${offer.coupon}*
 💰 Benefício: ${discountText}
 
-🏃‍♀️ Corre que esgota rápido:
+ℹ️ Consulte disponibilidade e condições no anúncio:
 🔗 ${affiliateLink}
 
 🚨 CHAMA seus amigos para receber promoções
@@ -153,7 +153,7 @@ ${discountText}
 ${affiliateLink}
 
 👇 *CTA*
-Abra o link e resgate antes que acabe.`;
+Abra o link para consultar as condições.`;
   }
 
   static buildCouponInstagramPost({ offer, affiliateLink }: Omit<BuildPostParams, "copy" | "copyContext">): string {
