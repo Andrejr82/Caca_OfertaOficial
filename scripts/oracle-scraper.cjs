@@ -36,7 +36,7 @@ const {
   runMercadoLivreNativeTop20,
   writeMercadoLivreNativeTop20Reports,
 } = require('./mercadolivre-native-top20-v5.cjs');
-const { runAmazonNativeTop20 } = require('./amazon-native-top20-v5.cjs');
+const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 
@@ -240,9 +240,11 @@ function normalizeShopeeCandidate(product, discoveredAt) {
 }
 
 function normalizeMercadoLivreCandidate(product) {
+  const currentPrice = Number(product.current_price);
+  const originalPrice = Number(product.old_price) > currentPrice ? Number(product.old_price) : null;
   const score = calculateScoreV1({
-    current_price: product.current_price,
-    old_price: product.old_price,
+    current_price: currentPrice,
+    old_price: originalPrice,
     rating: null,
   });
   return {
@@ -250,8 +252,8 @@ function normalizeMercadoLivreCandidate(product) {
     sourceUrl: product.product_url,
     title: product.title,
     imageUrl: product.image_url,
-    currentPrice: product.current_price,
-    originalPrice: product.old_price,
+    currentPrice,
+    originalPrice,
     category: { id: product.category_id, name: product.category_name, source: product.source || 'Mercado Livre Ofertas SSR' },
     marketplaceMetrics: {
       sourcePosition: product.source_position,
@@ -563,6 +565,33 @@ async function runShopeeScenarioRecording(scenario) {
   return result;
 }
 
+async function runMultiMarketplaceScenarioRecording(scenarioId) {
+  const scenarioConfig = require('./amazon-scenario-config.cjs').SCENARIOS;
+  const scenario = scenarioConfig[scenarioId];
+  if (!scenario) throw new Error(`Cenário não encontrado: ${scenarioId}`);
+  const correlationId = crypto.randomUUID();
+  const requestedAt = new Date().toISOString();
+  const mlToken = await refreshMercadoLivreAccessToken({ persist: true });
+  return runDiscoveryOnlyCycle({
+    tenantId: ADMIN_USER_ID,
+    correlationId,
+    requestedAt,
+    discover: async (marketplace) => {
+      if (marketplace === 'Shopee') {
+        const result = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId });
+        return result.categories.flatMap((category) => category.products).map((product) => normalizeShopeeCandidate(product, requestedAt));
+      }
+      if (marketplace === 'Amazon') {
+        const result = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
+        return result.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+      }
+      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: 5, delayMs: 300 });
+      return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+    },
+    persist: persistDiscoveryIngestionV1,
+  });
+}
+
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
   if (process.argv.includes('--shopee-native-top20-dry-run')) {
     executeShopeeNativeDiscoveryV5({ dryRun: true, scenario: CLI_SCENARIO_ID }).catch((error) => {
@@ -572,6 +601,14 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
   } else if (process.argv.includes('--shopee-native-top20-record')) {
     runShopeeScenarioRecording(CLI_SCENARIO_ID).catch((error) => {
       console.error('[Shopee V5 Recording] ' + error.message);
+      process.exitCode = 1;
+    });
+  } else if (process.argv.includes('--multi-marketplace-scenario-record')) {
+    runMultiMarketplaceScenarioRecording(CLI_SCENARIO_ID).then((result) => {
+      for (const summary of result.marketplaces || []) console.log(`[Multi V5] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos, duplicados=${summary.duplicatesRejected}, rejeitados=${summary.rejected}`);
+      console.log(`[Multi V5] ciclo=${result.correlationId} estado=${result.finalState} ofertas=${result.offerIds.length}`);
+    }).catch((error) => {
+      console.error('[Multi V5 Recording] ' + error.message);
       process.exitCode = 1;
     });
   } else if (process.argv.includes('--refresh-shopee-native-catalog')) {
@@ -607,6 +644,7 @@ module.exports = {
   refreshShopeeNativeCatalog,
   runMercadoLivreOfficialDryRun,
   runShopeeScenarioRecording,
+  runMultiMarketplaceScenarioRecording,
   runScrapingCycle,
   scrapeStore,
 };
