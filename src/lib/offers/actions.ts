@@ -145,32 +145,58 @@ export async function bulkRejectOffersAction(formData: FormData) {
     .in("id", offerIds);
   if (error) throw new Error(error.message);
 
-  const results = await Promise.all((offers || []).map(async (offer) => {
-    if (offer.status !== "pending_manual_review") return { id: offer.id, ok: false, message: "Oferta não está aguardando revisão." };
-    if (!["Shopee", "Mercado Livre", "Amazon"].includes(offer.platform)) {
-      return { id: offer.id, ok: false, message: "Marketplace sem ação de descarte configurada." };
+  const foundOfferIds = new Set((offers || []).map((offer) => offer.id));
+  const results: Array<{ id: string; ok: boolean; message?: string }> = [];
+  for (const offerId of offerIds) {
+    if (!foundOfferIds.has(offerId)) {
+      results.push({ id: offerId, ok: false, message: "Oferta não encontrada." });
     }
-    const requestedAt = offer.updated_at || offer.created_at || new Date().toISOString();
-    const commandId = `curation:${offer.id}:bulk-reject:${requestedAt}`;
-    const result = await transitionOfficialOfferState({
-      commandId,
-      idempotencyKey: commandId,
-      correlationId: commandId,
-      causationId: null,
-      tenantId: userId,
-      actor: { type: "user", id: userId, service: "nextjs-curation" },
-      requestedAt: new Date(requestedAt).toISOString(),
-      entityId: offer.id,
-      fromState: "pending_manual_review",
-      toState: "rejected",
-      origin: "offers.action.bulk-reject",
-      reason: { code: "MANUAL_REJECTION", detail: offer.platform },
-      evidenceRefs: [`marketplace:${offer.platform}`, `offer:${offer.id}`]
-    }, createSupabaseStateDependencies(supabase, userId));
-    return result.status === "rejected"
-      ? { id: offer.id, ok: false, message: result.message }
-      : { id: offer.id, ok: true };
-  }));
+  }
+
+  // Processa sequencialmente e isola falhas por oferta. Assim, uma oferta
+  // inconsistente não derruba a página nem impede o restante do lote.
+  for (const offer of offers || []) {
+    try {
+      if (offer.status !== "pending_manual_review") {
+        results.push({ id: offer.id, ok: false, message: "Oferta não está aguardando revisão." });
+        continue;
+      }
+      if (!["Shopee", "Mercado Livre", "Amazon"].includes(offer.platform)) {
+        results.push({ id: offer.id, ok: false, message: "Marketplace sem ação de descarte configurada." });
+        continue;
+      }
+      const rawRequestedAt = offer.updated_at || offer.created_at || new Date().toISOString();
+      const parsedRequestedAt = new Date(rawRequestedAt);
+      const requestedAt = Number.isNaN(parsedRequestedAt.getTime())
+        ? new Date().toISOString()
+        : parsedRequestedAt.toISOString();
+      const commandId = `curation:${offer.id}:bulk-reject:${requestedAt}`;
+      const result = await transitionOfficialOfferState({
+        commandId,
+        idempotencyKey: commandId,
+        correlationId: commandId,
+        causationId: null,
+        tenantId: userId,
+        actor: { type: "user", id: userId, service: "nextjs-curation" },
+        requestedAt,
+        entityId: offer.id,
+        fromState: "pending_manual_review",
+        toState: "rejected",
+        origin: "offers.action.bulk-reject",
+        reason: { code: "MANUAL_REJECTION", detail: offer.platform },
+        evidenceRefs: [`marketplace:${offer.platform}`, `offer:${offer.id}`]
+      }, createSupabaseStateDependencies(supabase, userId));
+      results.push(result.status === "rejected"
+        ? { id: offer.id, ok: false, message: result.message }
+        : { id: offer.id, ok: true });
+    } catch (error) {
+      results.push({
+        id: offer.id,
+        ok: false,
+        message: error instanceof Error ? error.message : "Falha ao descartar oferta."
+      });
+    }
+  }
 
   revalidatePath("/offers");
   revalidatePath("/dashboard");
