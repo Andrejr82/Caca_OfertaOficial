@@ -134,10 +134,10 @@ export async function bulkRejectOffersAction(formData: FormData) {
   }
   if (offerIds.length === 0) throw new Error("Selecione ao menos uma oferta.");
 
-  // Limita o trabalho por invocação serverless. O cliente continua com os IDs
-  // restantes em novas invocações, evitando timeout ao limpar lotes grandes.
-  const batchOfferIds = offerIds.slice(0, 20);
-  const remainingOfferIds = offerIds.slice(20);
+  // A limpeza é uma operação de lote restrita aos IDs selecionados. Isso evita
+  // centenas de invocações serverless e mantém a transição atômica.
+  const batchOfferIds = offerIds;
+  const remainingOfferIds: string[] = [];
 
   const supabase = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
@@ -150,68 +150,42 @@ export async function bulkRejectOffersAction(formData: FormData) {
     .in("id", batchOfferIds);
   if (error) throw new Error(error.message);
 
-  const foundOfferIds = new Set((offers || []).map((offer) => offer.id));
-  const results: Array<{ id: string; ok: boolean; message?: string }> = [];
-  for (const offerId of batchOfferIds) {
-    if (!foundOfferIds.has(offerId)) {
-      results.push({ id: offerId, ok: false, message: "Oferta não encontrada." });
-    }
-  }
-
-  // Processa sequencialmente e isola falhas por oferta. Assim, uma oferta
-  // inconsistente não derruba a página nem impede o restante do lote.
-  for (const offer of offers || []) {
-    try {
-      if (offer.status !== "pending_manual_review") {
-        results.push({ id: offer.id, ok: false, message: "Oferta não está aguardando revisão." });
-        continue;
-      }
-      if (!["Shopee", "Mercado Livre", "Amazon"].includes(offer.platform)) {
-        results.push({ id: offer.id, ok: false, message: "Marketplace sem ação de descarte configurada." });
-        continue;
-      }
-      const rawRequestedAt = offer.updated_at || offer.created_at || new Date().toISOString();
-      const parsedRequestedAt = new Date(rawRequestedAt);
-      const requestedAt = Number.isNaN(parsedRequestedAt.getTime())
-        ? new Date().toISOString()
-        : parsedRequestedAt.toISOString();
-      const commandId = `curation:${offer.id}:bulk-reject:${requestedAt}`;
-      const result = await transitionOfficialOfferState({
-        commandId,
-        idempotencyKey: commandId,
-        correlationId: commandId,
-        causationId: null,
-        tenantId: userId,
-        actor: { type: "user", id: userId, service: "nextjs-curation" },
-        requestedAt,
-        entityId: offer.id,
-        fromState: "pending_manual_review",
-        toState: "rejected",
-        origin: "offers.action.bulk-reject",
-        reason: { code: "MANUAL_REJECTION", detail: offer.platform },
-        evidenceRefs: [`marketplace:${offer.platform}`, `offer:${offer.id}`]
-      }, createSupabaseStateDependencies(supabase, userId));
-      results.push(result.status === "rejected"
-        ? { id: offer.id, ok: false, message: result.message }
-        : { id: offer.id, ok: true });
-    } catch (error) {
-      results.push({
-        id: offer.id,
-        ok: false,
-        message: error instanceof Error ? error.message : "Falha ao descartar oferta."
-      });
-    }
+  const eligibleIds = (offers || [])
+    .filter((offer) => offer.status === "pending_manual_review")
+    .filter((offer) => ["Shopee", "Mercado Livre", "Amazon"].includes(offer.platform))
+    .map((offer) => offer.id);
+  const { data: rejectedOffers, error: rejectError } = eligibleIds.length > 0
+    ? await supabase
+      .from("offers")
+      .update({ status: "rejected", updated_at: new Date().toISOString() })
+      .eq("user_id", userId)
+      .eq("status", "pending_manual_review")
+      .in("id", eligibleIds)
+      .select("id")
+    : { data: [], error: null };
+  if (rejectError) throw new Error(rejectError.message);
+  const successCount = rejectedOffers?.length || 0;
+  if (successCount > 0) {
+    const auditId = `curation:bulk-reject:${new Date().toISOString()}`;
+    await supabase.from("integration_logs").insert({
+      user_id: userId,
+      integration: "official-state-service",
+      action: "bulk_offer_rejection",
+      status: "success",
+      message: `offers:${successCount}:pending_manual_review->rejected`,
+      metadata: { auditId, offerIds: rejectedOffers.map((offer) => offer.id), origin: "offers.action.bulk-reject" }
+    });
   }
 
   revalidatePath("/offers");
   revalidatePath("/dashboard");
   return {
-    ok: results.every((result) => result.ok) && results.length === batchOfferIds.length && remainingOfferIds.length === 0,
-    successCount: results.filter((result) => result.ok).length,
-    failureCount: batchOfferIds.length - results.filter((result) => result.ok).length,
+    ok: successCount === batchOfferIds.length,
+    successCount,
+    failureCount: batchOfferIds.length - successCount,
     processedIds: batchOfferIds,
     remainingOfferIds,
-    message: `${results.filter((result) => result.ok).length} oferta(s) descartada(s).`,
+    message: `${successCount} oferta(s) descartada(s).`,
   };
 }
 
