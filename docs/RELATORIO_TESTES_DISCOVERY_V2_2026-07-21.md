@@ -81,6 +81,26 @@ Resultado:
 
 Conclusão: Mercado Livre não está aprovado para operação; o resultado é inconclusivo e exige diagnóstico da fonte/API antes de entrar na fila V2.
 
+## Ajuste Amazon por cenário direcionado
+
+Foi criado o cenário Amazon `eletros_cozinha`, usando busca por 16 termos equivalentes aos da Shopee, em vez de bestsellers departamentais genéricos.
+
+Comando:
+
+```powershell
+node scripts/amazon-native-top20-v5.cjs --dry-run --scenario eletros_cozinha
+```
+
+Resultado real:
+
+- 16 consultas HTTP.
+- 316 produtos retornados.
+- 0 duplicidades por ASIN no lote.
+- Após classificação V2: 249 produtos principais classificados, 63 para revisão e 4 acessórios excluídos.
+- Famílias detectadas: cafeteira (39), batedeira (39), liquidificador (20), mixer (20), air fryer (14), sanduicheira (19), chaleira (17), panela (10), processador (31), forno (18), pipoqueira (9), cozedor de ovos (14) e espremedor (1).
+
+Esse resultado é comparável ao dry-run Shopee de 320 itens brutos, mas agora a Amazon entrega a família de eletros solicitada.
+
 ## Conclusão
 
 A implementação está pronta para o próximo gate: executar um cenário manual controlado com persistência autorizada, inspecionar os produtos classificados no painel e diagnosticar o Mercado Livre antes de decidir sobre a reativação gradual da Oracle.
