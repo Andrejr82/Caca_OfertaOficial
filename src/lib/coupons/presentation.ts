@@ -10,9 +10,8 @@ type CouponOfferLike = {
 };
 
 const COUPON_FALLBACKS: Record<string, string> = {
-  // The old marketplace icons were 16–48px and became visibly pixelated
-  // when rendered in the social approval cards. Use the 144px neutral card
-  // until a real product image is available.
+  // Marketplace icons antigos tinham 16–48px e ficavam pixelados nos cards.
+  // Use o card neutro de maior resolução até existir imagem real válida.
   amazon: "/coupon-assets/default-coupon.png",
   shopee: "/coupon-assets/default-coupon.png",
   magalu: "/coupon-assets/default-coupon.png",
@@ -153,7 +152,7 @@ export function buildCouponSocialMessage(
     `🏪 ${marketplace}`,
     codeLine,
     `🔗 ${affiliateLink}`,
-    "⚡ Resgate enquanto estiver disponível."
+    "ℹ️ Consulte condições e validade no marketplace."
   ].filter(Boolean).join("\n");
 }
 
