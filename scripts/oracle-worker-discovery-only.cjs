@@ -123,7 +123,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, notifyWorkPending, copyQueueOptions = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -175,6 +175,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         uniqueProducts.push(product);
       }
       const queue = copyQueueOptions ? selectCopyQueue(uniqueProducts, copyQueueOptions) : { selected: uniqueProducts, skipped: [], limits: null };
+      if (typeof persistV2Metadata === 'function') {
+        await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: uniqueProducts, queue });
+      }
       const ingestions = [];
       let rejected = 0;
       for (const product of queue.selected) {

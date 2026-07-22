@@ -236,6 +236,7 @@ function normalizeShopeeCandidate(product, discoveredAt) {
     },
     deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
     discoveredAt,
+    rawPayload: product,
   };
 }
 
@@ -268,6 +269,7 @@ function normalizeMercadoLivreCandidate(product) {
     },
     deterministicScore: Math.max(0, Math.min(10, Number(score || 0))),
     discoveredAt: product.discovered_at,
+    rawPayload: product,
   };
 }
 
@@ -293,7 +295,49 @@ function normalizeAmazonCandidate(product, discoveredAt) {
     },
     deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0))),
     discoveredAt,
+    rawPayload: product,
   };
+}
+
+function classifyDiscoveryTitle(title) {
+  const normalized = String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const rules = [
+    ['air_fryer', /air fryer|fritadeira sem oleo/], ['cafeteira', /cafeteira/], ['batedeira', /batedeira/],
+    ['liquidificador', /liquidificador/], ['mixer', /mixer/], ['sanduicheira', /sanduicheira|waffle maker/],
+    ['chaleira', /chaleira/], ['panela_eletrica', /panela eletrica|panela de pressao eletrica/],
+    ['processador_alimentos', /processador|multiprocessador/], ['forno_eletrico', /forno eletrico/],
+  ];
+  return rules.find(([, pattern]) => pattern.test(normalized))?.[0] || 'unknown';
+}
+
+function discoveryGroupKey(product, productType) {
+  const title = String(product.title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const model = title.match(/\b(?:[a-z]{1,5}\s*)?\d{2,5}[a-z0-9-]*\b/i)?.[0] || '';
+  const capacity = title.match(/\b\d+(?:[.,]\d+)?\s*(?:l|ml|kg|g|w|xicaras?)\b/i)?.[0] || '';
+  return `${productType}|${model.trim()}|${capacity.trim()}`.replace(/\s+/g, ' ').trim();
+}
+
+async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue }) {
+  const supabase = getSupabase();
+  const { data: run, error: runError } = await supabase.from('discovery_runs').insert({
+    user_id: tenantId, marketplace, scenario: queue?.limits ? 'oracle-worker-v2' : 'oracle-worker', started_at: requestedAt, finished_at: new Date().toISOString()
+  }).select('id').single();
+  if (runError || !run) throw new Error(`Discovery V2 run failed: ${runError?.message || 'run not created'}`);
+  const itemRows = products.map((product) => ({ user_id: tenantId, discovery_run_id: run.id, marketplace, external_id: String(product.sourceItemId), source_url: product.sourceUrl, raw_payload: product.rawPayload || product, title_raw: String(product.title) }));
+  const { data: items, error: itemError } = itemRows.length ? await supabase.from('discovery_items').insert(itemRows).select('id,external_id') : { data: [], error: null };
+  if (itemError) throw new Error(`Discovery V2 items failed: ${itemError.message}`);
+  const itemByExternal = new Map((items || []).map((item) => [String(item.external_id), item.id]));
+  for (const product of products) {
+    const discoveryItemId = itemByExternal.get(String(product.sourceItemId));
+    if (!discoveryItemId) continue;
+    const productType = classifyDiscoveryTitle(product.title);
+    const groupKey = discoveryGroupKey(product, productType);
+    const groupKind = groupKey.includes('||') ? 'family' : 'exact';
+    const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
+    await supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v2', classification_status: productType === 'unknown' ? 'review_required' : 'classified', product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`] }, { onConflict: 'discovery_item_id' });
+    const { data: group } = await supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
+    if (group?.id) await supabase.from('product_group_members').upsert({ product_group_id: group.id, discovery_item_id: discoveryItemId }, { onConflict: 'product_group_id,discovery_item_id' });
+  }
 }
 
 async function scrapeStore(store) {
@@ -525,6 +569,7 @@ async function runScrapingCycle() {
     requestedAt: new Date().toISOString(),
     discover: scrapeStore,
     persist: persistDiscoveryIngestionV1,
+    persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
@@ -558,6 +603,7 @@ async function runShopeeScenarioRecording(scenario) {
         .map((product) => normalizeShopeeCandidate(product, requestedAt));
     },
     persist: persistDiscoveryIngestionV1,
+    persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
   });
   for (const summary of result.marketplaces || []) {
@@ -591,6 +637,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     persist: persistDiscoveryIngestionV1,
+    persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
   });
 }
