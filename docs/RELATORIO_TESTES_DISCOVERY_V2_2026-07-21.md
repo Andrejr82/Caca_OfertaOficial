@@ -46,6 +46,23 @@ Resultado:
 
 Observação: o dry-run consultou bestsellers gerais; ainda não é um cenário restrito a eletros/cozinha.
 
+## Experimento Amazon com maior cobertura
+
+Comando executado:
+
+```powershell
+node scripts/amazon-native-top20-v5.cjs --dry-run --max-categories=2 --max-subcategories=5
+```
+
+Resultado:
+
+- 10 subcategorias percorridas.
+- 198 produtos válidos.
+- 14 chamadas HTTP.
+- Aplicando o classificador V2 para a família `eletros_cozinha`: 0 produtos relevantes.
+
+Comparativo: a Shopee retornou 320 itens brutos em 16 buscas explicitamente orientadas a eletros; a Amazon retornou 198 itens de departamentos gerais e nenhum item da família-alvo. Portanto, aumentar limites sem trocar a origem das categorias não resolve a cobertura.
+
 ## Dry-run real do Mercado Livre
 
 Comando executado:
