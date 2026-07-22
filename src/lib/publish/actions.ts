@@ -50,6 +50,10 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   if (!/^https?:\/\/\S+$/i.test(url)) return { ok: false, status: "INVALID_URL", message: "Cole uma URL válida, começando com http:// ou https://." };
 
   const metadata = await readLinkMetadata(url);
+  const operationId = crypto.randomUUID();
+  const candidateId = `manual-${operationId}`;
+  const ingestionId = `quick-publication-${operationId}`;
+  const correlationId = `quick-publication:${operationId}`;
   const lowerUrl = url.toLowerCase();
   let platform: Platform = "Outro";
   if (lowerUrl.includes("shein")) platform = "Shein";
@@ -67,7 +71,14 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     current_price: metadata.price,
     status: "pending_manual_review",
     score: 0,
-    explainability: { contract_version: "pmav5.manual-link/v1", discovery_evidence: { source: "quick-publication", resolved_url: metadata.finalUrl } }
+    explainability: {
+      contract_version: "pmav5.candidate/v1",
+      candidate_id: candidateId,
+      ingestion_id: ingestionId,
+      correlation_id: correlationId,
+      discovery_evidence: { source: "quick-publication", resolved_url: metadata.finalUrl },
+      marketplace_metrics: { extracted_at: new Date().toISOString() }
+    }
   }).select("*").single<Offer>();
   if (offerError || !offer) return { ok: false, status: "OFFER_CREATE_FAILED", message: `Não foi possível salvar o link: ${offerError?.message || "oferta ausente"}` };
 
@@ -81,7 +92,7 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
     contractVersion: "pmav5.ai/v1",
     commandId,
     idempotencyKey: `ai:draft:${offer.id}:v2`,
-    correlationId: commandId,
+    correlationId,
     causationId: null,
     offerId: offer.id,
     tenantId: userId,

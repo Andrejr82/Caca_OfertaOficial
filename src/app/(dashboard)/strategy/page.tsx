@@ -1,19 +1,19 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Compass, MessageCircle, ShieldCheck, Target } from "lucide-react";
 
 const schedule = [
-  { time: "07h–09h", channels: "Stories · Telegram · Status", focus: "Reposição, casa, beleza, utilidades e cupom simples", marketplaces: "Shopee · Amazon · Mercado Livre" },
-  { time: "11h–13h", channels: "Telegram · Stories · Carrossel", focus: "Fones, smartwatch, air fryer, escritório e eletrônicos acessíveis", marketplaces: "Amazon · Mercado Livre · Shopee" },
-  { time: "14h–16h", channels: "Reel ou carrossel", focus: "Produto demonstrável: organização, casa, beleza, esporte e gadgets", marketplaces: "Shopee · Amazon" },
-  { time: "17h–19h", channels: "Telegram · WhatsApp · Stories", focus: "Oferta principal do dia, cupom e queda real de preço", marketplaces: "Mercado Livre · Shopee" },
-  { time: "20h–22h", channels: "Reel · Feed · Facebook · Telegram", focus: "Comparativos e ticket médio/alto: TV, notebook, celular, console e eletro", marketplaces: "Amazon · Mercado Livre" },
-  { time: "22h–00h", channels: "Telegram · Stories", focus: "Ofertas rápidas, cupons e achadinhos selecionados", marketplaces: "Shopee · Mercado Livre" }
+  { time: "07h–09h", channels: "WhatsApp · Status · Stories", focus: "Cupom simples, casa, utilidades e reposição", marketplaces: "Shopee · Amazon · Mercado Livre" },
+  { time: "11h–13h", channels: "WhatsApp · Stories", focus: "Eletrônicos acessíveis, air fryer, fones e escritório", marketplaces: "Amazon · Mercado Livre · Shopee" },
+  { time: "14h–16h", channels: "Instagram Reel · Stories", focus: "Produto demonstrável: organização, casa, beleza e gadgets", marketplaces: "Shopee · Amazon" },
+  { time: "17h–19h", channels: "WhatsApp · Status · Telegram", focus: "Melhor oferta do dia, cupom e queda real de preço", marketplaces: "Mercado Livre · Shopee" },
+  { time: "20h–22h", channels: "Instagram Reel · Feed · WhatsApp", focus: "Comparativos e ticket médio/alto: TV, notebook, celular e eletro", marketplaces: "Amazon · Mercado Livre" },
+  { time: "22h–00h", channels: "WhatsApp · Stories", focus: "Seleção curta de cupons e achadinhos", marketplaces: "Shopee · Mercado Livre" }
 ];
 
 const channelPlan = [
-  ["Instagram", "1 Reel/dia; 3–4 carrosséis/semana; 1–2 blocos de Stories/dia", "Descoberta e confiança"],
-  ["Facebook", "1 publicação original/dia", "Alcance complementar; adaptar criativo e legenda"],
-  ["Telegram", "3–6 ofertas/dia; intervalo mínimo de 90 min", "Conversão imediata e cupons"],
-  ["WhatsApp", "Escala: 5–8/dia até 15–20/dia, condicionada à saúde da audiência", "Alta intenção, opt-in e relevância"],
+  ["WhatsApp", "3–5 ofertas/dia no início; intervalo mínimo de 2 h", "Canal principal: conversão e cupons"],
+  ["Instagram", "1 Reel/dia; 1–2 blocos de Stories/dia; carrossel opcional", "Descoberta visual e preparação para vídeos"],
+  ["Telegram", "1–2 melhores ofertas/dia; intervalo mínimo de 4 h", "Audiência pequena: presença sem desperdiçar inventário"],
+  ["Facebook", "Somente reaproveitar os melhores criativos", "Alcance complementar, sem prioridade operacional"],
 ];
 
 export default function StrategyPage() {
@@ -25,7 +25,7 @@ export default function StrategyPage() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Estratégia de Publicação</h1>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-white/45">Grade inicial para São Paulo. Valide-a por clique, venda, comissão líquida e fadiga da audiência antes de transformá-la em regra permanente.</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-white/45">Grade adaptada à audiência atual: WhatsApp é o canal principal; Instagram concentra descoberta em Reels; Telegram recebe apenas uma seleção curta.</p>
         </div>
       </header>
 
@@ -81,10 +81,10 @@ export default function StrategyPage() {
         <article className="glass-card border border-emerald-500/15 p-5">
           <div className="flex items-center gap-2"><MessageCircle size={18} className="text-emerald-300" /><h2 className="font-bold text-white">Plano de escala do WhatsApp</h2></div>
           <ol className="mt-4 space-y-4 text-sm leading-6 text-white/55">
-            <li><strong className="text-white">1. Semana 1–2:</strong> 5–8 ofertas/dia, espaçadas em pelo menos 90 minutos. Selecionar cupom, queda real de preço e maior confiança.</li>
-            <li><strong className="text-white">2. Semana 3–4:</strong> 8–12/dia se cliques por envio não caírem mais de 15% e não houver aumento de bloqueios, respostas negativas ou descadastros.</li>
-            <li><strong className="text-white">3. Semana 5–6:</strong> 12–15/dia para segmentos de maior intenção, com alternância de categorias e sem repetir SKU/variante.</li>
-            <li><strong className="text-white">4. Escala avançada:</strong> 15–20/dia somente em canal/audiência segmentada e saudável. Agrupar ofertas medianas em um resumo temático; reservar alertas individuais para oportunidades fortes.</li>
+            <li><strong className="text-white">1. Semana 1–2:</strong> 3–5 ofertas/dia, espaçadas em pelo menos 2 horas. Priorizar cupom, queda real de preço e confiança.</li>
+            <li><strong className="text-white">2. Semana 3–4:</strong> subir para 5–8/dia somente se cliques por envio e descadastros permanecerem saudáveis.</li>
+            <li><strong className="text-white">3. Semana 5–6:</strong> testar horários e categorias vencedoras antes de aumentar volume.</li>
+            <li><strong className="text-white">Escala futura:</strong> acima de 8/dia apenas com crescimento comprovado da audiência e segmentação.</li>
           </ol>
           <div className="mt-5 rounded-xl border border-amber-400/15 bg-amber-400/[0.06] p-4 text-sm leading-6 text-amber-100/80">
             WhatsApp exige audiência com consentimento e relevância. A meta é aumentar receita por destinatário sem provocar fadiga, bloqueios ou perda de confiança.

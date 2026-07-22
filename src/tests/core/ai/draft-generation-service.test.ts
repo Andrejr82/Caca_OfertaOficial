@@ -279,6 +279,46 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
   });
 });
 
+describe("generateOfficialAI — Copy V2 (selected → drafts sem aprovação)", () => {
+  it("gera copy somente para oferta selected e não promove approved", async () => {
+    const copyCommand: OfficialAICommand = {
+      ...command,
+      commandId: "command-copy-v2",
+      idempotencyKey: "ai:copy-v2:offer-selected:v1",
+      offerId: "offer-selected",
+      metadata: { copyV2: true }
+    };
+    const dependencies = createDependencies({}, selectedOffer);
+    const result = await generateOfficialAI(copyCommand, dependencies);
+    expect(result.status).toBe("drafted");
+    expect(result.offerState).toBe("selected");
+    expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+  });
+
+  it("rejeita Copy V2 para oferta ainda não selecionada", async () => {
+    const copyCommand: OfficialAICommand = { ...command, commandId: "command-copy-v2-pending", metadata: { copyV2: true } };
+    const dependencies = createDependencies({}, pendingOffer);
+    const result = await generateOfficialAI(copyCommand, dependencies);
+    expect(result).toMatchObject({ status: "rejected", code: "SELECTION_REQUIRED" });
+    expect(dependencies.providers.resolve).not.toHaveBeenCalled();
+  });
+
+  it("permite Copy V2 automatizada somente com evidência de curadoria e actor service", async () => {
+    const autoCommand: OfficialAICommand = {
+      ...command,
+      commandId: "command-copy-v2-auto",
+      idempotencyKey: "ai:copy-v2:offer-pending:v1",
+      metadata: { copyV2: true, copyV2Auto: true },
+      actor: { type: "service", id: "curation-worker", service: "curation-worker" }
+    };
+    const dependencies = createDependencies({}, pendingOffer);
+    const result = await generateOfficialAI(autoCommand, dependencies);
+    expect(result.status).toBe("drafted");
+    expect(result.offerState).toBe("pending_manual_review");
+    expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+  });
+});
+
 // ---------------------------------------------------------------------------
 // Testes de Modo 2: Approval (comportamento anterior preservado)
 // ---------------------------------------------------------------------------

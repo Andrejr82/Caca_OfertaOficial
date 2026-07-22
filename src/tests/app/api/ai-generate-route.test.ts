@@ -90,6 +90,29 @@ describe("POST /api/ai/generate", () => {
     vi.unstubAllEnvs();
   });
 
+  it("envia Copy V2 explicitamente e sem selecionar modo legado", async () => {
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-command-id": "copy-v2-command" },
+      body: JSON.stringify({ offerId: "offer-selected", copyV2: true })
+    }));
+    expect(response.status).toBe(200);
+    expect(generateOfficialAI).toHaveBeenCalledWith(expect.objectContaining({
+      idempotencyKey: "ai:copy-v2:offer-selected:v1",
+      metadata: { copyV2: true }
+    }), { dependency: true });
+  });
+
+  it("bloqueia Copy V2 automática quando chamada por usuário", async () => {
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ offerId: "offer-1", copyV2: true, autoCurated: true })
+    }));
+    expect(response.status).toBe(403);
+    expect(generateOfficialAI).not.toHaveBeenCalled();
+  });
+
   it("não reprocessa ciclo cujo checkpoint já está completed", async () => {
     vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-key");
     loadCycleCheckpoint.mockResolvedValue({

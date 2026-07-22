@@ -14,11 +14,14 @@ const SCENARIOS = {
       'cafeteira elétrica', 'cafeteira expresso', 'batedeira planetária', 'batedeira elétrica',
       'liquidificador', 'air fryer', 'mixer 3 em 1', 'sanduicheira elétrica',
       'chaleira elétrica', 'panela elétrica', 'processador de alimentos', 'forno elétrico',
-      'pipoqueira elétrica', 'cozedor de ovos', 'espremedor elétrico', 'mini processador elétrico'
+      'pipoqueira elétrica', 'cozedor de ovos', 'espremedor elétrico', 'mini processador elétrico',
+      'panela de pressão elétrica', 'multiprocessador', 'processador triturador', 'fritadeira sem óleo',
+      'sanduicheira waffles', 'sanduicheira grill', 'waffle maker', 'batedeira de mão'
     ],
     allowedProductTerms: [
       'cafeteira', 'batedeira', 'liquidificador', 'air fryer', 'airfryer', 'mixer 3 em 1',
-      'sanduicheira', 'chaleira elétrica', 'panela elétrica', 'panela de pressão elétrica', 'processador', 'forno elétrico',
+      'sanduicheira', 'sanduicheira waffles', 'sanduicheira grill', 'waffle maker', 'chaleira elétrica', 'panela elétrica', 'panela de pressão elétrica', 'processador', 'processador triturador', 'multiprocessador', 'forno elétrico',
+      'fritadeira sem óleo', 'batedeira de mão',
       'pipoqueira elétrica', 'cozedor de ovos', 'espremedor elétrico', 'mini processador'
     ],
     blockedProductTerms: [
@@ -55,7 +58,8 @@ const SCENARIOS = {
       'comedouro lento cachorro', 'pazinha areia gato', 'caixa de areia fechada gato', 
       'casinha cachorro plástico', 'roupinha pet inverno', 'cinto segurança cachorro carro', 
       'capa banco carro pet', 'petisco cachorro natural', 'sachê gato atacado', 'cortador unha pet', 
-      'toalha banho pet super absorvente', 'brinquedo corda cachorro', 'erva de gato catnip'
+      'toalha banho pet super absorvente', 'brinquedo corda cachorro', 'erva de gato catnip',
+      'fonte água gato', 'cama pet', 'tapete cachorro', 'brinquedo mordedor cachorro'
     ]
   },
   morando_sozinho: {
@@ -70,7 +74,8 @@ const SCENARIOS = {
       'cabides veludo kit', 'balança digital cozinha', 'extensão elétrica', 'lâmpada led inteligente', 
       'cesto roupa suja flexível', 'pregadores roupa madeira', 'pano microfibra limpeza', 'rodo mágico abs', 
       'limpa vidros magnético', 'dispenser creme dental', 'organizador cabos', 'miniprocessador manual alho', 
-      'ventilador mesa', 'aquecedor portátil', 'jogo lençol microfibra', 'toalha banho avulsa', 'vasilha plástico kit'
+      'ventilador mesa', 'aquecedor portátil', 'jogo lençol microfibra', 'toalha banho avulsa', 'vasilha plástico kit',
+      'aspirador vertical', 'cafeteira compacta', 'organizador cozinha', 'luminária mesa'
     ]
   },
   enxoval_casamento: {
@@ -87,7 +92,8 @@ const SCENARIOS = {
       'jogo de copos vidro', 'dispenser detergente', 'lixeira inox pedal', 'suporte papel toalha', 
       'toalha de mesa impermeável', 'jogo americano bambu', 'bandeja espelhada lavabo', 'kit organizador gavetas', 
       'capa protetora colchão', 'cortina blackout sala', 'tapete felpudo sala', 'cobre leito matelassê', 
-      'conjunto mantimentos', 'boleira vidro', 'cafeteira elétrica', 'ferro a vapor'
+      'conjunto mantimentos', 'boleira vidro', 'cafeteira elétrica', 'ferro a vapor',
+      'jogo de cama casal', 'kit cozinha', 'pote organizador cozinha', 'panela elétrica arroz'
     ]
   },
   moda_masculina: {
@@ -97,8 +103,10 @@ const SCENARIOS = {
     keywords: [
       'sapatos masculinos', 'tênis casual masculino', 'relógio masculino de pulso', 
       'jaqueta de couro masculina', 'cinto de couro social', 'carteira masculina couro', 
-      'mochila executiva masculina', 'óculos de sol masculino', 'camisa polo masculina', 'calça jeans masculina'
-    ]
+      'mochila executiva masculina', 'óculos de sol masculino', 'camisa polo masculina', 'calça jeans masculina',
+      'camiseta masculina', 'bermuda masculina', 'tênis esportivo masculino', 'moletom masculino'
+    ],
+    blockedProductTerms: ['infantil', 'criança', 'crianca', 'juvenil', 'bebê', 'bebe']
   },
   gamer_tecnologia: {
     id: 'gamer_tecnologia',
@@ -107,7 +115,8 @@ const SCENARIOS = {
     keywords: [
       'mouse gamer rgb', 'teclado mecânico switch', 'fone bluetooth sem fio', 
       'cadeira gamer ergonômica', 'smartwatch relógio inteligente', 'suporte notebook alumínio', 
-      'carregador turbo', 'cabo iphone', 'ring light', 'tripé celular'
+      'carregador turbo', 'cabo iphone', 'ring light', 'tripé celular',
+      'headset gamer', 'mouse sem fio', 'teclado gamer', 'suporte celular mesa', 'webcam gamer'
     ]
   },
   beleza_autocuidado: {
@@ -117,7 +126,8 @@ const SCENARIOS = {
     keywords: [
       'skincare rosto', 'protetor solar facial', 'secador de cabelo profissional', 
       'chapinha alisadora', 'perfume importado', 'kit pincéis maquiagem',
-      'escova secadora', 'sérum vitamina c', 'creme hidratante corporal', 'kit maquiagem completo'
+      'escova secadora', 'sérum vitamina c', 'creme hidratante corporal', 'kit maquiagem completo',
+      'hidratante facial', 'modelador de cachos', 'óleo capilar', 'base maquiagem'
     ]
   },
   treino_academia: {
@@ -127,7 +137,8 @@ const SCENARIOS = {
     keywords: [
       'whey protein', 'creatina pura', 'garrafa térmica inox', 
       'roupa de academia fitness', 'tapete yoga pilates', 'tênis de corrida',
-      'corda de pular', 'faixa elástica mini band', 'halter emborrachado', 'suplemento pré treino'
+      'corda de pular', 'faixa elástica mini band', 'halter emborrachado', 'suplemento pré treino',
+      'legging fitness', 'camiseta dry fit', 'barra musculação', 'luva academia'
     ]
   },
   acessorios_relogios: {
@@ -138,7 +149,8 @@ const SCENARIOS = {
       'relógio smartwatch', 'óculos de sol polarizado', 'colar prata 925', 
       'pulseira magnética', 'anel de compromisso', 'boné aba curva', 
       'mochila transversal', 'carteira couro fina', 'brinco argola',
-      'relógio g-shock', 'corrente masculina', 'tiara de cabelo'
+      'relógio g-shock', 'corrente masculina', 'tiara de cabelo',
+      'relógio digital', 'pulseira smartwatch', 'necessaire feminina', 'porta-cartão'
     ]
   },
   viagem_aventura: {
@@ -149,7 +161,8 @@ const SCENARIOS = {
       'mala de bordo 10kg', 'kit organizador mala', 'travesseiro de pescoço', 
       'barraca camping 4 pessoas', 'garrafa térmica inox', 'lanterna tática recarregável', 
       'mochila trilha', 'capa chuva impermeável', 'cadeira de praia dobrável',
-      'saco de dormir', 'canivete suíço', 'balança digital bagagem'
+      'saco de dormir', 'canivete suíço', 'balança digital bagagem',
+      'mala média viagem', 'mochila viagem', 'organizador compressão mala', 'capa mala'
     ]
   }
 };
@@ -224,7 +237,22 @@ function matchesScenarioProduct(scenario, title) {
   const blocked = (scenario?.blockedProductTerms || []).some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
   if (blocked) return false;
   const allowedTerms = scenario?.allowedProductTerms || [];
-  return allowedTerms.length === 0 || allowedTerms.some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
+  if (allowedTerms.length > 0) return allowedTerms.some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
+
+  // Cenários amplos usam categorias API como descoberta, mas o título ainda
+  // precisa confirmar a intenção. Exigimos a frase inteira ou pelo menos dois
+  // tokens relevantes da intenção (um token quando a intenção é unitária).
+  const stopwords = new Set(['para', 'com', 'sem', 'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'kit', 'tipo', 'mais']);
+  const keywords = Array.isArray(scenario?.keywords) ? scenario.keywords : [];
+  return keywords.some((keyword) => {
+    const normalizedKeyword = normalizeProductTitle(keyword);
+    if (!normalizedKeyword) return false;
+    if (normalizedTitle.includes(normalizedKeyword)) return true;
+    const tokens = normalizedKeyword.split(' ').filter((token) => token.length >= 4 && !stopwords.has(token));
+    if (!tokens.length) return false;
+    const matches = tokens.filter((token) => normalizedTitle.includes(token)).length;
+    return matches >= Math.min(2, tokens.length);
+  });
 }
 
 function extractProductModelKey(title) {

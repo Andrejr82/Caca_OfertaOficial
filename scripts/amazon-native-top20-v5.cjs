@@ -7,6 +7,7 @@ const BEST_SELLERS_ROOT = 'https://www.amazon.com.br/gp/bestsellers';
 const REPORT_PATH = 'reports/amazon-native-top20-v5-dry-run.json';
 const DEFAULT_CATEGORY_LIMIT = 2;
 const DEFAULT_SUBCATEGORY_LIMIT = 1;
+const SEARCH_ROOT = 'https://www.amazon.com.br/s';
 const PRODUCT_KEYS = [
   'marketplace',
   'category',
@@ -155,6 +156,29 @@ function parseRankingPage(html, source) {
   return [...byRank.values()].sort((left, right) => left.rank - right.rank);
 }
 
+function parseSearchPage(html, source) {
+  const $ = cheerio.load(String(html ?? ''));
+  const products = [];
+  $('div[data-component-type="s-search-result"][data-asin]').each((index, element) => {
+    if (products.length >= 20) return;
+    const root = $(element);
+    const asin = String(root.attr('data-asin') ?? '').trim().toUpperCase();
+    if (!/^[A-Z0-9]{10}$/.test(asin) || /Patrocinado|Sponsored/i.test(cleanText(root.text()))) return;
+    const link = root.find(`a[href*="/dp/${asin}"]`).first().attr('href') ?? '';
+    if (/\/sspa\//i.test(link)) return;
+    const image = root.find('img[src]').first();
+    const title = cleanText(root.find('h2').first().text() || image.attr('alt'));
+    products.push({
+      marketplace: 'Amazon', category: 'Cenário Amazon', subcategory: source.keyword,
+      node_id: source.node_id, parent_node_id: source.parent_node_id, source_url: source.source_url,
+      rank: products.length + 1, asin, title, image: cleanText(image.attr('src')) || null,
+      canonical_url: `https://www.amazon.com.br/dp/${asin}`, price: extractProductPrice(root),
+      original_price: null, seller: null, discount: null, score: null, novelty: null
+    });
+  });
+  return products;
+}
+
 function validateProduct(product) {
   const reasons = [];
   if (!cleanText(product.category)) reasons.push('category');
@@ -167,9 +191,73 @@ function validateProduct(product) {
   if (!/^https?:\/\//i.test(String(product.image ?? ''))) reasons.push('image');
   if (!Number.isFinite(Number(product.price)) || Number(product.price) <= 0) reasons.push('PRECO_INVALIDO');
   if (!/^https:\/\/www\.amazon\.com\.br\/dp\/[A-Z0-9]{10}$/i.test(String(product.canonical_url ?? ''))) reasons.push('canonical_url');
-  if (!/^https:\/\/www\.amazon\.com\.br\/gp\/bestsellers\//i.test(String(product.source_url ?? ''))) reasons.push('source_url');
+  if (!/^https:\/\/www\.amazon\.com\.br\/(?:gp\/bestsellers\/|s\?k=)/i.test(String(product.source_url ?? ''))) reasons.push('source_url');
   if (Object.keys(product).length !== PRODUCT_KEYS.length || PRODUCT_KEYS.some((key) => !(key in product))) reasons.push('contract');
   return reasons;
+}
+
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function runAmazonScenarioDryRun({
+  scenario,
+  fetchImpl = global.fetch,
+  maxPerKeyword = 20,
+  minDelayMs = 2000,
+  retryDelayMs = 10000,
+  maxRetries = 1
+} = {}) {
+  if (!scenario || !Array.isArray(scenario.keywords) || scenario.keywords.length === 0) throw new Error('Cenário Amazon sem palavras-chave');
+  const collected = [];
+  const queries = [];
+  let httpCalls = 0;
+  for (let index = 0; index < scenario.keywords.length; index += 1) {
+    const keyword = scenario.keywords[index];
+    const url = `${SEARCH_ROOT}?k=${encodeURIComponent(keyword)}`;
+    const source = { keyword, source_url: url, node_id: String(900000 + index), parent_node_id: '999999' };
+    if (index > 0 && minDelayMs > 0) await sleep(minDelayMs);
+    let queryResult = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const html = await fetchHtml(url, fetchImpl);
+        httpCalls += 1;
+        const parsed = parseSearchPage(html, source).slice(0, maxPerKeyword);
+        const sanitized = sanitizeProducts(parsed);
+        queryResult = {
+          keyword,
+          collected: parsed.length,
+          valid: sanitized.products.length,
+          discarded: sanitized.discarded.length,
+          http_status: 200,
+          retry_count: attempt,
+          status: sanitized.products.length > 0 ? 'ok' : 'empty_response'
+        };
+        if (sanitized.products.length > 0 || attempt >= maxRetries) {
+          collected.push(...sanitized.products);
+          break;
+        }
+      } catch (error) {
+        queryResult = {
+          keyword,
+          collected: 0,
+          valid: 0,
+          discarded: 0,
+          http_status: null,
+          retry_count: attempt,
+          status: 'blocked_or_error',
+          error: error instanceof Error ? error.message : String(error)
+        };
+        if (attempt >= maxRetries) break;
+      }
+      if (retryDelayMs > 0) await sleep(retryDelayMs);
+    }
+    queries.push(queryResult ?? { keyword, collected: 0, valid: 0, discarded: 0, http_status: null, retry_count: maxRetries, status: 'blocked_or_error' });
+  }
+  const unique = deduplicate(collected);
+  const novelty = applyNovelty(unique.products);
+  const products = novelty.products.map((product) => ({ ...product, score: calculateDeterministicScore(product) }));
+  const contractErrors = products.flatMap((product) => validateFinalContract(product));
+  if (contractErrors.length) throw new Error(`Contrato V5 inválido: ${[...new Set(contractErrors)].join(',')}`);
+  return { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario.label, keywords: scenario.keywords, queries, products, raw_products: collected.length, duplicates: unique.duplicates, http_calls: httpCalls };
 }
 
 function validateFinalContract(product) {
@@ -347,6 +435,21 @@ function readPositiveLimit(args, name, fallback) {
 async function main() {
   if (!process.argv.includes('--dry-run')) throw new Error('Execução permitida somente com --dry-run');
   const args = process.argv.slice(2);
+  const scenarioId = args.find((arg) => arg.startsWith('--scenario='))?.split('=')[1] || (args.includes('--scenario') ? args[args.indexOf('--scenario') + 1] : null);
+  if (scenarioId) {
+    const { SCENARIOS } = require('./amazon-scenario-config.cjs');
+    const scenario = SCENARIOS[scenarioId];
+    if (!scenario) throw new Error(`Cenário Amazon não encontrado: ${scenarioId}`);
+    const result = await runAmazonScenarioDryRun({
+      scenario,
+      minDelayMs: readPositiveLimit(args, 'delay-ms', 2000),
+      retryDelayMs: readPositiveLimit(args, 'retry-delay-ms', 10000),
+      maxRetries: Math.max(0, readPositiveLimit(args, 'max-retries', 2) - 1)
+    });
+    writeDryRunJson(result);
+    process.stdout.write(`${JSON.stringify({ file: REPORT_PATH, scenario: scenarioId, keywords: result.keywords.length, products: result.products.length, raw_products: result.raw_products, duplicates: result.duplicates, http_calls: result.http_calls, blocked_or_empty: result.queries.filter((query) => query.status !== 'ok').length })}\n`);
+    return;
+  }
   const result = await runAmazonNativeTop20({
     maxCategories: readPositiveLimit(args, 'max-categories', DEFAULT_CATEGORY_LIMIT),
     maxSubcategoriesPerCategory: readPositiveLimit(args, 'max-subcategories', DEFAULT_SUBCATEGORY_LIMIT)
@@ -379,8 +482,10 @@ module.exports = {
   parseCategoryTree,
   parseBrazilPrice,
   parseRankingPage,
+  parseSearchPage,
   parseRootCategories,
   runAmazonNativeTop20,
+  runAmazonScenarioDryRun,
   sanitizeProducts,
   validateFinalContract,
   writeDryRunJson

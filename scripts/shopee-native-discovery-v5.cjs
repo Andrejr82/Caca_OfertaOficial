@@ -220,9 +220,16 @@ async function runNativeDiscovery({
   let emptyResponses = 0;
   let apiErrors = 0;
   let rateLimited = false;
+  const minRequestDelayMs = Math.max(1500, Number(process.env.SHOPEE_MIN_REQUEST_DELAY_MS || 2200));
+  const jitterMs = Math.max(0, Math.min(1500, Number(process.env.SHOPEE_REQUEST_JITTER_MS || 700)));
+  let requestCount = 0;
 
   for (const q of queries) {
     for (let page = 1; page <= pagesPerKeyword; page += 1) {
+      if (requestCount > 0) {
+        const jitter = jitterMs > 0 ? Math.floor(Math.random() * jitterMs) : 0;
+        await new Promise((resolve) => setTimeout(resolve, minRequestDelayMs + jitter));
+      }
       const keywordArg = q.type === 'keyword' ? q.value : null;
       const catArg = q.type === 'category' ? q.value : null;
       let payload;
@@ -244,6 +251,7 @@ async function runNativeDiscovery({
       
       console.log(`[Shopee V5] Buscando... type=${q.type}, value=${q.value}, page=${page}`);
       calls++;
+      requestCount++;
       pagesFetched++;
       
       const startTime = Date.now();
@@ -264,8 +272,8 @@ async function runNativeDiscovery({
       if (!hasNextPage) break;
     }
     if (rateLimited) break;
-    // Evitar Rate Limit da API Oficial
-    await new Promise(r => setTimeout(r, 1500));
+    // Pausa adicional entre consultas de keyword/categoria.
+    await new Promise(r => setTimeout(r, minRequestDelayMs));
   }
 
   const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category)).filter(Boolean);

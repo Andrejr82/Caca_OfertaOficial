@@ -9,6 +9,7 @@ import { rejectAmazonOfferAction, selectAmazonOfferAction, bulkRejectOffersActio
 import { GenerateAIMessagesButton } from "@/components/messages/message-actions";
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
 import { classifyOfferForPanel, classifyPanelEditorial, PANEL_AUDIENCES, PANEL_OFFER_TYPES, PANEL_POSTING_PROFILES, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
+import { curateOffers } from "@/core/intelligence/curation-engine";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
 const OFFER_FILTER_STORAGE_KEY = "caca-oferta:panel-filters:offers:v1";
@@ -100,6 +101,25 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     return true;
   });
 
+  const curationById = new Map(curateOffers(initialOffers.map((offer) => {
+    const metrics = offer.marketplace_metrics || {};
+    const signals = offer.explainability?.signals || [];
+    return {
+      id: offer.id,
+      title: offer.product_name,
+      marketplace: offer.platform,
+      price: offer.current_price,
+      oldPrice: offer.old_price || undefined,
+      sellerRating: offer.rating ?? metrics.rating,
+      sellerSales: metrics.sales,
+      isOfficialStore: signals.includes("LOJA_OFICIAL"),
+      isMall: signals.includes("LOJA_MALL"),
+      hasVerifiedCoupon: Boolean(offer.coupon),
+      hasExtraCommission: signals.includes("COMISSAO_EXTRA"),
+      hasFreeShipping: Boolean(offer.shipping_free),
+    };
+  })).map((result) => [result.id, result] as const));
+
   const sorted = [...filtered].sort((a, b) => {
     const explA = a.explainability || {};
     const explB = b.explainability || {};
@@ -120,6 +140,11 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     if (sortBy === "tier") {
       const tiers = { "S": 5, "A": 4, "B": 3, "C": 2, "LIXO": 1, "N/A": 0 };
       return (tiers[(explB.tier || "C") as keyof typeof tiers] || 0) - (tiers[(explA.tier || "C") as keyof typeof tiers] || 0);
+    }
+    if (sortBy === "curation") {
+      const scoreA = curationById.get(a.id)?.curationScore || 0;
+      const scoreB = curationById.get(b.id)?.curationScore || 0;
+      return scoreB - scoreA;
     }
     // date (default)
     const timeA = new Date(a.updated_at || a.created_at).getTime();
@@ -261,6 +286,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <option value="date">Ordernar: Data</option>
           <option value="priority">Ordernar: Priority Score</option>
           <option value="commercial">Ordernar: Commercial Score</option>
+          <option value="curation">Ordenar: Curadoria V2</option>
           <option value="price">Ordernar: Preço</option>
           <option value="tier">Ordernar: Tier</option>
         </select>
@@ -294,7 +320,8 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           const metrics = offer.marketplace_metrics || {};
           const transitionRequestedAt = offer.updated_at || offer.created_at;
           const draftCount = (offer as OfferWithDraftCount).draft_count || 0;
-          const hasDraftsReady = offer.status === "pending_manual_review" && draftCount > 0;
+          const hasDraftsReady = (offer.status === "pending_manual_review" || offer.status === "selected") && draftCount > 0;
+          const curation = curationById.get(offer.id);
 
           const tierColor = 
             tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
@@ -321,6 +348,11 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                   <div className="flex items-center gap-2 mb-1">
                     <span className={`text-xs font-bold px-2 py-0.5 rounded border ${tierColor}`}>Tier {tier}</span>
                     <Badge label={offer.platform} />
+                    {curation && (
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${curation.decision === "recommend" ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" : curation.decision === "exclude" ? "text-red-300 bg-red-500/10 border-red-500/20" : "text-amber-300 bg-amber-500/10 border-amber-500/20"}`}>
+                        Curadoria {curation.curationScore} · {curation.decision}
+                      </span>
+                    )}
                     {hasDraftsReady && (
                       <span className="text-xs font-bold px-2 py-0.5 rounded border text-violet-300 bg-violet-500/10 border-violet-500/20">
                         ✦ {draftCount} draft{draftCount !== 1 ? "s" : ""} prontos
@@ -342,6 +374,11 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                     </p>
                   )}
                   {offer.platform === "Mercado Livre" && <p className="text-[11px] text-white/40">Posição {offer.source_position ?? "—"} • {offer.seller_name || "Seller não informado"} • {offer.shipping_free ? "Frete grátis" : "Frete não informado"}</p>}
+                  {curation && (
+                    <p className="text-[11px] text-white/45">
+                      Grupo: {curation.groupKeys[0] || "sem grupo seguro"} • Confiança: {curation.marketplaceScore.trustScore}/50 • Oferta: {curation.marketplaceScore.offerScore}/40
+                    </p>
+                  )}
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
@@ -370,7 +407,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 <span className="font-semibold">Reason:</span> {reason}
               </div>
 
-              {nativeShopee && offer.status === "pending_manual_review" && (
+              {nativeShopee && offer.status === "selected" && (
                 <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectShopeeCandidateAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
@@ -390,7 +427,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 </div>
               )}
 
-              {offer.platform === "Mercado Livre" && offer.status === "pending_manual_review" && (
+              {offer.platform === "Mercado Livre" && offer.status === "selected" && (
                 <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
@@ -399,7 +436,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 </div>
               )}
 
-              {offer.platform === "Amazon" && offer.status === "pending_manual_review" && (
+              {offer.platform === "Amazon" && offer.status === "selected" && (
                 <div className="flex gap-2 flex-wrap items-center">
                   <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
                   <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>

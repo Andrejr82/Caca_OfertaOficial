@@ -10,12 +10,15 @@ type CouponOfferLike = {
 };
 
 const COUPON_FALLBACKS: Record<string, string> = {
-  amazon: "/coupon-assets/amazon-coupon.png",
-  shopee: "/coupon-assets/shopee-coupon.png",
-  magalu: "/coupon-assets/magalu-coupon.png",
+  // The old marketplace icons were 16–48px and became visibly pixelated
+  // when rendered in the social approval cards. Use the 144px neutral card
+  // until a real product image is available.
+  amazon: "/coupon-assets/default-coupon.png",
+  shopee: "/coupon-assets/default-coupon.png",
+  magalu: "/coupon-assets/default-coupon.png",
   "mercado livre": "/coupon-assets/mercadolivre-coupon.png",
   mercadolivre: "/coupon-assets/mercadolivre-coupon.png",
-  shein: "/coupon-assets/shein-coupon.png"
+  shein: "/coupon-assets/default-coupon.png"
 };
 
 const INVALID_IMAGE_HINTS = [
@@ -97,9 +100,11 @@ export async function resolveCouponPublishImageUrl(
   offer: Partial<CouponOfferLike> | null | undefined,
   request?: Request
 ) {
-  // Coupon publication uses the official marketplace artwork. This prevents
-  // broken remote coupon thumbnails from becoming the red generic alert card.
-  return getAbsoluteCouponFallbackUrl(offer?.platform, request);
+  // Prefer the product image supplied by the marketplace. The branded asset
+  // remains the safe fallback when the source is absent or invalid.
+  return isValidCouponImageUrl(offer?.image_url)
+    ? normalizeText(offer?.image_url)
+    : getAbsoluteCouponFallbackUrl(offer?.platform, request);
 }
 
 export function getCouponCardImageSources(offer: Partial<CouponOfferLike> | null | undefined) {
@@ -118,33 +123,45 @@ export function cleanCouponTitle(title: string | null | undefined) {
   return normalizeText(title).replace(/^\[CUPOM\]\s*/i, "") || "Cupom disponível";
 }
 
-export function buildCouponWhatsappMessage(
+function extractCouponProduct(text: string | null | undefined) {
+  const value = normalizeText(text);
+  const product = value.match(/Produto:\s*(.+?)(?:\s*\|\s*|$)/i)?.[1];
+  return normalizeText(product || "").replace(/[|.]$/, "");
+}
+
+function getCouponBenefit(offer: Partial<CouponOfferLike> | null | undefined) {
+  const title = cleanCouponTitle(offer?.product_name);
+  return normalizeText(title.split(/\s+-\s+/, 1)[0]) || "Cupom disponível";
+}
+
+export function buildCouponSocialMessage(
   offer: Partial<CouponOfferLike> | null | undefined,
   affiliateLink: string
 ) {
   const marketplace = normalizeText(offer?.platform) || "Marketplace parceiro";
-  const coupon = normalizeText(offer?.coupon) || "Resgate direto no marketplace";
-  const benefit = cleanCouponTitle(offer?.product_name);
-  const details = parseCouponDetails(offer?.notes).description;
+  const benefit = getCouponBenefit(offer);
+  const product = extractCouponProduct(offer?.notes) || extractCouponProduct(offer?.product_name);
+  const coupon = normalizeText(offer?.coupon);
+  const codeLine = coupon
+    ? `🎟️ *Código:* ${coupon}`
+    : "🎟️ Resgate direto no marketplace";
+  const productLine = product ? `🛍️ *${product}*\n` : "";
 
-  return `🚨 *CUPOM LIBERADO*
+  return [
+    `🎫 *${benefit}*`,
+    productLine.trimEnd(),
+    `🏪 ${marketplace}`,
+    codeLine,
+    `🔗 ${affiliateLink}`,
+    "⚡ Resgate enquanto estiver disponível."
+  ].filter(Boolean).join("\n");
+}
 
-🏷 *MARKETPLACE*
-${marketplace}
-
-🎟 *CUPOM*
-${coupon}
-
-💰 *BENEFÍCIO*
-${benefit}
-
-📌 ${details}
-
-🔗 *LINK DA OFERTA*
-${affiliateLink}
-
-👇 *CTA*
-Abra o link e resgate antes que acabe.`;
+export function buildCouponWhatsappMessage(
+  offer: Partial<CouponOfferLike> | null | undefined,
+  affiliateLink: string
+) {
+  return buildCouponSocialMessage(offer, affiliateLink);
 }
 
 export function parseCouponDetails(notes: string | null | undefined) {

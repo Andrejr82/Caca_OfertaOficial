@@ -141,7 +141,7 @@ export function WhatsappPostApprovalCard({ post }: { post: PostWithOffer }) {
           <img
             src={couponImageSrc}
             alt={cleanCouponTitle(post.offers.product_name)}
-            className="object-cover w-full h-full"
+            className="object-contain w-full h-full p-2"
             onError={() => setCouponImageSrc(couponImage?.fallbackSrc || "/coupon-assets/default-coupon.png")}
           />
         ) : post.offers.image_url ? (

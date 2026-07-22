@@ -219,6 +219,6 @@ test('módulo não contém allowlist de categorias nem tecnologias proibidas', (
   const source = fs.readFileSync(require.resolve('./amazon-native-top20-v5.cjs'), 'utf8');
   for (const forbidden of [
     'CATEGORY_PRIORITY', 'electronics', 'computers', 'automotive', 'playwright', 'crawlee',
-    'puppeteer', 'supabase', 'oracle', '/s?', 'keywords', 'groq', 'openai'
+    'puppeteer', 'supabase', 'oracle', 'groq', 'openai'
   ]) assert.doesNotMatch(source, new RegExp(forbidden.replace(/[?]/g, '\\?'), 'i'));
 });

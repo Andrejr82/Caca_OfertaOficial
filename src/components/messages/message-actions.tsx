@@ -26,7 +26,7 @@ export function GenerateAIMessagesButton({
       const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId, requestedAt, commandId })
+        body: JSON.stringify({ offerId, requestedAt, commandId, copyV2: true })
       });
       const data = await response.json();
 

@@ -37,6 +37,7 @@ const {
   writeMercadoLivreNativeTop20Reports,
 } = require('./mercadolivre-native-top20-v5.cjs');
 const { runAmazonNativeTop20 } = require('./amazon-native-top20-v5.cjs');
+const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
@@ -251,13 +252,14 @@ function normalizeMercadoLivreCandidate(product) {
     imageUrl: product.image_url,
     currentPrice: product.current_price,
     originalPrice: product.old_price,
-    category: { id: product.category_id, name: product.category_name, source: 'Mercado Livre Ofertas SSR' },
+    category: { id: product.category_id, name: product.category_name, source: product.source || 'Mercado Livre Ofertas SSR' },
     marketplaceMetrics: {
       sourcePosition: product.source_position,
       itemId: product.item_id,
       productId: product.product_id,
       sellerId: product.seller_id,
       sellerName: product.seller_name,
+      officialStoreId: product.official_store_id,
       shippingFree: product.shipping_free,
       discountPercent: product.discount_percent,
       sourceCategories: product.source_categories,
@@ -301,6 +303,15 @@ async function scrapeStore(store) {
       .map((product) => normalizeShopeeCandidate(product, discoveredAt));
   }
   if (store === 'Mercado Livre') {
+    if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
+      const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
+      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken });
+      return result.products.map((product) => normalizeMercadoLivreCandidate({
+        ...product,
+        discovered_at: result.generated_at,
+        source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
+      }));
+    }
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
     const result = await runMercadoLivreNativeTop20({ 
