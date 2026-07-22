@@ -232,7 +232,12 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
             offer_id: input.offer.id,
             affiliate_link_id: link.id,
             channel,
-            content: `${input.content.channelCopies[channel]}\n\n${trackedUrl}`,
+          // Mantém o CTA e o link na mesma linha quando o template termina
+          // com o indicador de ação (evita o dedo apontar para o vazio).
+          content: (() => {
+            const copy = (input.content.channelCopies[channel] || "").trimEnd();
+            return copy.endsWith("👉") ? `${copy} ${trackedUrl}` : `${copy}\n\n👉 ${trackedUrl}`;
+          })(),
             status: "draft"
           })
           .select("id,affiliate_link_id,channel,status")

@@ -92,7 +92,7 @@ describe("SupabaseOfficialAIAdapter", () => {
     }), { onConflict: "offer_id,channel" });
     expect(insertedPost.insert).toHaveBeenCalledWith(expect.objectContaining({
       status: "draft",
-      content: "Telegram oficial\n\nhttps://cacaoferta.com.br/go/tg_offer1",
+      content: "Telegram oficial\n\n👉 https://cacaoferta.com.br/go/tg_offer1",
       affiliate_link_id: "link-1"
     }));
   });
