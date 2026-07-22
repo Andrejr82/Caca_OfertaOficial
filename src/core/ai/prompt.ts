@@ -102,8 +102,20 @@ const DEFAULT_HOOKS = {
   standard: "💥 ACHADO DO DIA"
 } as const;
 
+/**
+ * Normaliza hooks legados ou promocionais sem evidência persistida.
+ * A copy continua aproveitável; apenas remove urgência/escassez não comprovada.
+ */
+export function sanitizeOfficialAIHook(value: string) {
+  return value
+    .replace(/\b(?:baixou muito|só agora|so agora|últimas unidades|ultimas unidades|estoque(?: costuma)? esgotar(?: em minutos)?|corre que[^\n.!?]*)\b/giu, "")
+    .replace(/\s{2,}/gu, " ")
+    .replace(/\s+([!?.,])/gu, "$1")
+    .trim();
+}
+
 function hookFor(facts: CopyV2Facts, hook?: string) {
-  const value = hook?.replace(/\s+/gu, " ").trim();
+  const value = hook ? sanitizeOfficialAIHook(hook.replace(/\s+/gu, " ")) : "";
   if (value && value.length <= 90 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
   return discountPercentage(facts.currentPrice, facts.originalPrice) === null
     ? DEFAULT_HOOKS.standard

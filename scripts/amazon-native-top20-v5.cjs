@@ -196,7 +196,16 @@ function validateProduct(product) {
   return reasons;
 }
 
-async function runAmazonScenarioDryRun({ scenario, fetchImpl = global.fetch, maxPerKeyword = 20 } = {}) {
+const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds));
+
+async function runAmazonScenarioDryRun({
+  scenario,
+  fetchImpl = global.fetch,
+  maxPerKeyword = 20,
+  minDelayMs = 2000,
+  retryDelayMs = 10000,
+  maxRetries = 1
+} = {}) {
   if (!scenario || !Array.isArray(scenario.keywords) || scenario.keywords.length === 0) throw new Error('Cenário Amazon sem palavras-chave');
   const collected = [];
   const queries = [];
@@ -204,13 +213,44 @@ async function runAmazonScenarioDryRun({ scenario, fetchImpl = global.fetch, max
   for (let index = 0; index < scenario.keywords.length; index += 1) {
     const keyword = scenario.keywords[index];
     const url = `${SEARCH_ROOT}?k=${encodeURIComponent(keyword)}`;
-    const html = await fetchHtml(url, fetchImpl);
-    httpCalls += 1;
     const source = { keyword, source_url: url, node_id: String(900000 + index), parent_node_id: '999999' };
-    const parsed = parseSearchPage(html, source).slice(0, maxPerKeyword);
-    const sanitized = sanitizeProducts(parsed);
-    queries.push({ keyword, collected: parsed.length, valid: sanitized.products.length, discarded: sanitized.discarded.length, http_status: 200 });
-    collected.push(...sanitized.products);
+    if (index > 0 && minDelayMs > 0) await sleep(minDelayMs);
+    let queryResult = null;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        const html = await fetchHtml(url, fetchImpl);
+        httpCalls += 1;
+        const parsed = parseSearchPage(html, source).slice(0, maxPerKeyword);
+        const sanitized = sanitizeProducts(parsed);
+        queryResult = {
+          keyword,
+          collected: parsed.length,
+          valid: sanitized.products.length,
+          discarded: sanitized.discarded.length,
+          http_status: 200,
+          retry_count: attempt,
+          status: sanitized.products.length > 0 ? 'ok' : 'empty_response'
+        };
+        if (sanitized.products.length > 0 || attempt >= maxRetries) {
+          collected.push(...sanitized.products);
+          break;
+        }
+      } catch (error) {
+        queryResult = {
+          keyword,
+          collected: 0,
+          valid: 0,
+          discarded: 0,
+          http_status: null,
+          retry_count: attempt,
+          status: 'blocked_or_error',
+          error: error instanceof Error ? error.message : String(error)
+        };
+        if (attempt >= maxRetries) break;
+      }
+      if (retryDelayMs > 0) await sleep(retryDelayMs);
+    }
+    queries.push(queryResult ?? { keyword, collected: 0, valid: 0, discarded: 0, http_status: null, retry_count: maxRetries, status: 'blocked_or_error' });
   }
   const unique = deduplicate(collected);
   const novelty = applyNovelty(unique.products);
@@ -400,9 +440,14 @@ async function main() {
     const { SCENARIOS } = require('./amazon-scenario-config.cjs');
     const scenario = SCENARIOS[scenarioId];
     if (!scenario) throw new Error(`Cenário Amazon não encontrado: ${scenarioId}`);
-    const result = await runAmazonScenarioDryRun({ scenario });
+    const result = await runAmazonScenarioDryRun({
+      scenario,
+      minDelayMs: readPositiveLimit(args, 'delay-ms', 2000),
+      retryDelayMs: readPositiveLimit(args, 'retry-delay-ms', 10000),
+      maxRetries: Math.max(0, readPositiveLimit(args, 'max-retries', 2) - 1)
+    });
     writeDryRunJson(result);
-    process.stdout.write(`${JSON.stringify({ file: REPORT_PATH, scenario: scenarioId, keywords: result.keywords.length, products: result.products.length, raw_products: result.raw_products, duplicates: result.duplicates, http_calls: result.http_calls })}\n`);
+    process.stdout.write(`${JSON.stringify({ file: REPORT_PATH, scenario: scenarioId, keywords: result.keywords.length, products: result.products.length, raw_products: result.raw_products, duplicates: result.duplicates, http_calls: result.http_calls, blocked_or_empty: result.queries.filter((query) => query.status !== 'ok').length })}\n`);
     return;
   }
   const result = await runAmazonNativeTop20({

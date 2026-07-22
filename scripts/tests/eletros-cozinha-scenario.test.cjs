@@ -7,7 +7,7 @@ const { dedupeGlobally } = require('../shopee-native-discovery-v5.cjs');
 const scenario = SCENARIOS.eletros_cozinha;
 
 assert.equal(scenario.keywordSelection, 'all');
-assert.equal(scenario.keywords.length, 16);
+assert.equal(scenario.keywords.length, 24);
 assert.equal(scenario.maxPagesPerKeyword, 1);
 assert.equal(getActiveScenario(12).id, 'beleza_autocuidado');
 assert.equal(getActiveScenario(13).id, 'eletros_cozinha');
@@ -44,5 +44,10 @@ const deduplicated = dedupeGlobally([
   { itemId: '5', shopId: 'e', normalizedUrl: 'https://example.com/e', productName: 'Cafeteira Elétrica 15 Cafés' }
 ]);
 assert.equal(deduplicated.length, 3);
+
+assert.equal(matchesScenarioProduct(SCENARIOS.mae_de_primeira_viagem, 'Livro Infantil Interativo'), false);
+assert.equal(matchesScenarioProduct(SCENARIOS.mae_de_primeira_viagem, 'Toalha de Banho Bebê com Capuz'), true);
+assert.equal(matchesScenarioProduct(SCENARIOS.dono_de_pet, 'Brinquedo Interativo para Cachorro'), true);
+assert.equal(matchesScenarioProduct(SCENARIOS.dono_de_pet, 'Livro de Receitas'), false);
 
 console.log('PASS eletros_cozinha scenario: termos, filtros e deduplicação por título validados');

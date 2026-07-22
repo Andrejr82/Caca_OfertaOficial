@@ -13,11 +13,25 @@ const html = `
 
 assert.equal(parseSearchPage(html, { keyword: 'air fryer', source_url: 'https://www.amazon.com.br/s?k=air%20fryer', node_id: '900000', parent_node_id: '999999' }).length, 2);
 
-runAmazonScenarioDryRun({ scenario: { label: 'Fixture', keywords: ['air fryer'] }, fetchImpl: async () => new Response(html, { status: 200 }) })
+runAmazonScenarioDryRun({ scenario: { label: 'Fixture', keywords: ['air fryer'] }, minDelayMs: 0, retryDelayMs: 0, fetchImpl: async () => new Response(html, { status: 200 }) })
   .then((result) => {
     assert.equal(result.products.length, 2);
     assert.equal(result.raw_products, 2);
     assert.equal(result.http_calls, 1);
-    console.log('PASS Amazon scenario dry-run fixture');
+    let attempts = 0;
+    return runAmazonScenarioDryRun({
+      scenario: { label: 'Retry fixture', keywords: ['air fryer'] },
+      minDelayMs: 0,
+      retryDelayMs: 0,
+      maxRetries: 1,
+      fetchImpl: async () => new Response(attempts++ === 0 ? '<html></html>' : html, { status: 200 })
+    });
+  })
+  .then((result) => {
+    assert.equal(result.products.length, 2);
+    assert.equal(result.queries[0].status, 'ok');
+    assert.equal(result.queries[0].retry_count, 1);
+    assert.equal(result.http_calls, 2);
+    console.log('PASS Amazon scenario dry-run fixture and bounded retry');
   })
   .catch((error) => { console.error(error); process.exitCode = 1; });

@@ -1,6 +1,6 @@
 import { isCopyV2TextSafe, validateOfficialAIHook } from "./content-schema";
 import type { OfficialAIRegenerationDependencies } from "./ports";
-import { buildCopyV2ChannelCopy, buildOfficialRegenerationPrompt } from "./prompt";
+import { buildCopyV2ChannelCopy, buildOfficialRegenerationPrompt, sanitizeOfficialAIHook } from "./prompt";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIDraftForRegeneration, type OfficialAIRegenerationCommand, type OfficialAIRegenerationItem, type OfficialAIRegenerationResult } from "./types";
 
 const FORBIDDEN_OPENING = /^\s*(?:[^\p{L}\p{N}]{0,4}\s*)?(?:Olá|Temos um novo|Você vai amar|Confira|Conheça|Não perca)(?=\s|[!,:;.-]|$)/iu;
@@ -14,7 +14,9 @@ function providerHook(value: unknown, channel: OfficialAIDraftForRegeneration["c
   if (!value || typeof value !== "object") return null;
   const data = value as { hook?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> };
   const candidate = data.hooks?.[channel] ?? data.hook ?? data.channelCopies?.[channel];
-  const hook = validateOfficialAIHook(typeof candidate === "string" ? candidate.split(/[\r\n]/u, 1)[0] : candidate);
+  const hook = validateOfficialAIHook(typeof candidate === "string"
+    ? sanitizeOfficialAIHook(candidate.split(/[\r\n]/u, 1)[0])
+    : candidate);
   return hook;
 }
 

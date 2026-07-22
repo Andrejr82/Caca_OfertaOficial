@@ -37,6 +37,26 @@ describe('deterministic product classifier', () => {
     ['Secador de Cabelo Taiff', 'hair_dryer'],
     ['Bicicleta Caloi Aro 29', 'bicycle'],
     ['PlayStation 5 Slim', 'game_console'],
+    ['Pipoqueira Popflix Mondial PP-03', 'popcorn_maker'],
+    ['Espremedor de Frutas Philco PEF750P', 'juicer'],
+    ['Extrator de Sucos Turbo Mondial', 'juicer'],
+    ['Computador PC Gamer Ryzen', 'desktop'],
+    ['Monitor LG UltraWide', 'monitor'],
+    ['Projetor Full HD', 'projector'],
+    ['Caixa de Som Bluetooth JBL', 'speaker'],
+    ['Smartband Xiaomi', 'smartband'],
+    ['Kindle Paperwhite', 'ereader'],
+    ['Drone DJI Mini', 'drone'],
+    ['Lâmpada Inteligente Wi-Fi', 'smart_bulb'],
+    ['iPhone 15 128GB', 'smartphone'],
+    ['HD Externo Portátil 1TB', 'external_hdd'],
+    ['TV Box 4K Android', 'tv_box'],
+    ['Home Theater LG 5.1', 'home_theater'],
+    ['Smart Band Xiaomi Mi Band', 'smartband'],
+    ['Echo Dot 5ª Geração', 'smart_speaker'],
+    ['Drone DJI Mini 4', 'drone'],
+    ['Mi Band 8', 'smartband'],
+    ['Tomada Inteligente Wi-Fi', 'smart_plug'],
   ])('classifies %s as %s', (title, productType) => {
     expect(classifyProduct({ title })).toMatchObject({ productType, productRole: 'main_product', status: 'classified' })
   })
@@ -45,6 +65,10 @@ describe('deterministic product classifier', () => {
     ['Capa para celular Samsung', 'smartphone', 'accessory'],
     ['Kit cafeteira + moedor', 'coffee_maker', 'bundle'],
     ['Cupom para liquidificador', 'blender', 'coupon'],
+    ['Carregador Turbo USB-C', 'charger', 'accessory'],
+    ['Cabo HDMI 2.1', 'cable', 'accessory'],
+    ['Hub USB-C 7 em 1', 'hub', 'accessory'],
+    ['Controle Gamer sem fio', 'game_controller', 'accessory'],
   ])('does not promote %s', (title, productType, productRole) => {
     expect(classifyProduct({ title })).toMatchObject({ productType, productRole, status: 'excluded' })
   })
