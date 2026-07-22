@@ -174,14 +174,19 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
 
   function discardSelectedOffers() {
     if (selectedOfferIds.size === 0) return;
-    if (!window.confirm(`Descartar ${selectedOfferIds.size} oferta(s) selecionada(s)?`)) return;
-    const formData = new FormData();
+    const hasActiveFilters = Boolean(filterTier || filterDecision || filterPlatform || filterCategory || filterSubcategory || filterStatus || minPrice || maxPrice || minDiscount || filterDate || filterOfferType || filterAudience || filterPostingProfile);
+    const discardAllPending = allSelectableSelected && !hasActiveFilters;
+    const confirmation = discardAllPending
+      ? "Descartar TODAS as ofertas pendentes dos marketplaces configurados?"
+      : `Descartar ${selectedOfferIds.size} oferta(s) selecionada(s)?`;
+    if (!window.confirm(confirmation)) return;
     const offerIds = [...selectedOfferIds];
     startDiscarding(async () => {
       let remainingOfferIds = offerIds;
       while (remainingOfferIds.length > 0) {
         const batchFormData = new FormData();
         batchFormData.set("offer_ids", JSON.stringify(remainingOfferIds));
+        if (discardAllPending) batchFormData.set("discard_all_pending", "true");
         const result = await bulkRejectOffersAction(batchFormData);
         remainingOfferIds = result.remainingOfferIds || [];
       }

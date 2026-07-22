@@ -123,6 +123,7 @@ export async function rejectAmazonOfferAction(formData: FormData) {
 
 export async function bulkRejectOffersAction(formData: FormData) {
   const rawOfferIds = String(formData.get("offer_ids") || "[]");
+  const discardAllPending = String(formData.get("discard_all_pending") || "") === "true";
   let offerIds: string[];
   try {
     const parsed = JSON.parse(rawOfferIds);
@@ -132,7 +133,7 @@ export async function bulkRejectOffersAction(formData: FormData) {
   } catch {
     throw new Error("Seleção de ofertas inválida.");
   }
-  if (offerIds.length === 0) throw new Error("Selecione ao menos uma oferta.");
+  if (offerIds.length === 0 && !discardAllPending) throw new Error("Selecione ao menos uma oferta.");
 
   // A limpeza é uma operação de lote restrita aos IDs selecionados. Isso evita
   // centenas de invocações serverless e mantém a transição atômica.
@@ -142,6 +143,26 @@ export async function bulkRejectOffersAction(formData: FormData) {
   const supabase = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
   if (!supabase || !userId) throw new Error("Usuário não autenticado.");
+
+  if (discardAllPending) {
+    const allowedPlatforms = ["Shopee", "Mercado Livre", "Amazon"];
+    const countQuery = await supabase.from("offers").select("id", { count: "exact", head: true })
+      .eq("user_id", userId).eq("status", "pending_manual_review").in("platform", allowedPlatforms);
+    if (countQuery.error) throw new Error(countQuery.error.message);
+    const total = countQuery.count || 0;
+    const { error: rejectAllError } = await supabase.from("offers")
+      .update({ status: "rejected", updated_at: new Date().toISOString() })
+      .eq("user_id", userId).eq("status", "pending_manual_review").in("platform", allowedPlatforms);
+    if (rejectAllError) throw new Error(rejectAllError.message);
+    if (total > 0) await supabase.from("integration_logs").insert({
+      user_id: userId, integration: "official-state-service", action: "bulk_offer_rejection", status: "success",
+      message: `offers:${total}:pending_manual_review->rejected`,
+      metadata: { scope: "all_pending", origin: "offers.action.bulk-reject" }
+    });
+    revalidatePath("/offers");
+    revalidatePath("/dashboard");
+    return { ok: true, successCount: total, failureCount: 0, processedIds: [], remainingOfferIds: [], message: `${total} oferta(s) descartada(s).` };
+  }
 
   const { data: offers, error } = await supabase
     .from("offers")
