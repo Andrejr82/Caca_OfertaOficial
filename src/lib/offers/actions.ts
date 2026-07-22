@@ -134,6 +134,11 @@ export async function bulkRejectOffersAction(formData: FormData) {
   }
   if (offerIds.length === 0) throw new Error("Selecione ao menos uma oferta.");
 
+  // Limita o trabalho por invocação serverless. O cliente continua com os IDs
+  // restantes em novas invocações, evitando timeout ao limpar lotes grandes.
+  const batchOfferIds = offerIds.slice(0, 20);
+  const remainingOfferIds = offerIds.slice(20);
+
   const supabase = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
   if (!supabase || !userId) throw new Error("Usuário não autenticado.");
@@ -142,12 +147,12 @@ export async function bulkRejectOffersAction(formData: FormData) {
     .from("offers")
     .select("id,platform,status,updated_at,created_at")
     .eq("user_id", userId)
-    .in("id", offerIds);
+    .in("id", batchOfferIds);
   if (error) throw new Error(error.message);
 
   const foundOfferIds = new Set((offers || []).map((offer) => offer.id));
   const results: Array<{ id: string; ok: boolean; message?: string }> = [];
-  for (const offerId of offerIds) {
+  for (const offerId of batchOfferIds) {
     if (!foundOfferIds.has(offerId)) {
       results.push({ id: offerId, ok: false, message: "Oferta não encontrada." });
     }
@@ -201,9 +206,11 @@ export async function bulkRejectOffersAction(formData: FormData) {
   revalidatePath("/offers");
   revalidatePath("/dashboard");
   return {
-    ok: results.every((result) => result.ok) && results.length === offerIds.length,
+    ok: results.every((result) => result.ok) && results.length === batchOfferIds.length && remainingOfferIds.length === 0,
     successCount: results.filter((result) => result.ok).length,
-    failureCount: offerIds.length - results.filter((result) => result.ok).length,
+    failureCount: batchOfferIds.length - results.filter((result) => result.ok).length,
+    processedIds: batchOfferIds,
+    remainingOfferIds,
     message: `${results.filter((result) => result.ok).length} oferta(s) descartada(s).`,
   };
 }

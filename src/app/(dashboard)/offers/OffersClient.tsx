@@ -176,9 +176,15 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     if (selectedOfferIds.size === 0) return;
     if (!window.confirm(`Descartar ${selectedOfferIds.size} oferta(s) selecionada(s)?`)) return;
     const formData = new FormData();
-    formData.set("offer_ids", JSON.stringify([...selectedOfferIds]));
+    const offerIds = [...selectedOfferIds];
     startDiscarding(async () => {
-      await bulkRejectOffersAction(formData);
+      let remainingOfferIds = offerIds;
+      while (remainingOfferIds.length > 0) {
+        const batchFormData = new FormData();
+        batchFormData.set("offer_ids", JSON.stringify(remainingOfferIds));
+        const result = await bulkRejectOffersAction(batchFormData);
+        remainingOfferIds = result.remainingOfferIds || [];
+      }
       setSelectedOfferIds(new Set());
     });
   }
