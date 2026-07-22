@@ -605,6 +605,7 @@ async function runShopeeScenarioRecording(scenario) {
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
+    notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   for (const summary of result.marketplaces || []) {
     console.log(`[Shopee V5 Recording] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos, duplicados=${summary.duplicatesRejected}, rejeitados=${summary.rejected}`);
@@ -639,6 +640,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
+    notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
 }
 
