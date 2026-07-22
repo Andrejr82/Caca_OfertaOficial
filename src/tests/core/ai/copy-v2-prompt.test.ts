@@ -35,6 +35,7 @@ describe("Official AI O.P.A.C.", () => {
       "📌 *OFERTA EM DESTAQUE*",
       "🔥 PREÇO BAIXOU",
       "🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
+      "🎧 Achado na Shopee",
       "✨ Bluetooth 5.3",
       "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
       "ℹ️ Consulte disponibilidade e condições no anúncio:",
@@ -53,6 +54,7 @@ describe("Official AI O.P.A.C.", () => {
       "📌 *OFERTA EM DESTAQUE*",
       "💥 ACHADO DO DIA",
       "🛍️ SSD NVMe 1 TB PCIe 4.0",
+      "💻 Achado na Shopee",
       "✨ 1 TB PCIe 4.0",
       "💰 *R$ 79,90*",
       "ℹ️ Consulte disponibilidade e condições no anúncio:",
@@ -95,6 +97,7 @@ describe("Official AI O.P.A.C.", () => {
       "📌 *OFERTA EM DESTAQUE*",
       "💥 ACHADO DO DIA",
       "🛍️ Tênis Casual Feminino",
+      "👟 Achado na Shopee",
       "✅ *Preço atual: R$ 79,90*",
       "ℹ️ Consulte disponibilidade e condições no anúncio:",
       "👉 "

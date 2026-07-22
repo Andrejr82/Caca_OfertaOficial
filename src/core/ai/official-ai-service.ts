@@ -2,6 +2,7 @@ import { emitOfficialAITelemetrySafely, type AIProviderPort, type AIProviderRequ
 import type { BatchCursor } from "./ports";
 import { inspectOfficialAIHook, isCopyV2TextSafe } from "./content-schema";
 import { buildCopyV2ChannelCopy, buildOfficialPrompt } from "./prompt";
+import { validateProductTitle } from "@/core/quality/product-title-quality";
 import type {
   OfficialAIAuditRecord,
   OfficialAICommand,
@@ -203,6 +204,10 @@ function validateOfferDetails(
   offer: OfficialAIOffer,
   mode: InternalMode
 ): { code: string; message: string } | null {
+  const titleQuality = validateProductTitle(offer.productName);
+  if (!titleQuality.valid) {
+    return { code: "INVALID_PRODUCT_TITLE", message: "Offer title is not verifiable" };
+  }
   // Para o modo approval: valida versão (selected = version 1).
   if (mode === "approval" && offer.version !== 1) {
     return { code: "VERSION_CONFLICT", message: "Offer version does not match expected version for approval" };

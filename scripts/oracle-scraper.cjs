@@ -25,6 +25,7 @@ const CLI_SCENARIO_ID = scenarioArgIndex !== -1 ? process.argv[scenarioArgIndex 
 global.WebSocket = require('ws');
 
 const crypto = require('node:crypto');
+const { validateProductTitle } = require('./product-title-quality.cjs');
 const cron = require('node-cron');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
@@ -333,8 +334,10 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
     const productType = classifyDiscoveryTitle(product.title);
     const groupKey = discoveryGroupKey(product, productType);
     const groupKind = groupKey.includes('||') ? 'family' : 'exact';
+    const titleQuality = validateProductTitle(product.title);
     const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
-    await supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v2', classification_status: productType === 'unknown' ? 'review_required' : 'classified', product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`] }, { onConflict: 'discovery_item_id' });
+    const classificationStatus = !titleQuality.valid || productType === 'unknown' ? 'review_required' : 'classified';
+    await supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v2', classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
     const { data: group } = await supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
     if (group?.id) await supabase.from('product_group_members').upsert({ product_group_id: group.id, discovery_item_id: discoveryItemId }, { onConflict: 'product_group_id,discovery_item_id' });
   }

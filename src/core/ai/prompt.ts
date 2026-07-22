@@ -1,4 +1,5 @@
 import type { OfficialAIChannel, OfficialAIDraftForRegeneration, OfficialAIOffer } from "./types";
+import { marketplaceLabel, selectOfferIcons } from "./icon-catalog";
 
 const SYSTEM_PROMPT = `Você é o copywriter de ofertas da Official AI do Caça Oferta.
 Você não conversa, não introduz a mensagem e não escreve parágrafos. Produza somente copy comercial curta no framework O.P.A.C.: Oferta, Produto, Atributo e Conversão.
@@ -125,6 +126,9 @@ function hookFor(facts: CopyV2Facts, hook?: string) {
 export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel, hook?: string) {
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const attribute = objectiveAttribute(facts);
+  const icons = selectOfferIcons(facts.category, facts.productName);
+  const marketplace = marketplaceLabel(facts.marketplace);
+  const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
   const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
 
   if (channel === "whatsapp") {
@@ -132,6 +136,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       `📌 *OFERTA EM DESTAQUE*`,
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
+      `${iconLine} ${marketplace.text}`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(facts.originalPrice ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
       `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
@@ -146,6 +151,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       `📌 *OFERTA EM DESTAQUE*`,
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
+      `${iconLine} ${marketplace.text}`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`

@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { validateProductTitle } = require('./product-title-quality.cjs');
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
@@ -40,6 +41,11 @@ function selectCopyQueue(products, options = {}) {
   const skipped = [];
   const ranked = [...products].sort((a, b) => queueScore(b) - queueScore(a));
   for (const product of ranked) {
+    const titleQuality = validateProductTitle(product.title);
+    if (!titleQuality.valid) {
+      skipped.push({ sourceItemId: product.sourceItemId, reason: titleQuality.reason });
+      continue;
+    }
     const marketplace = String(product.marketplace || '').toLowerCase();
     const category = queueCategory(product);
     const group = queueGroupKey(product);

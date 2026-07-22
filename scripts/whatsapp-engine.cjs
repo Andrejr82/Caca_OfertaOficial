@@ -377,7 +377,7 @@ app.post('/send', async (req, res) => {
                 let uniqueSourceUrl = clickUrl;
                 let finalMessageText = text;
 
-                if (!isNewsletter) {
+                if (!isNewsletter && process.env.WHATSAPP_CACHE_BUSTER === 'true') {
                     const randomStr = Math.random().toString(36).substring(2, 10);
                     uniqueSourceUrl = clickUrl.includes('?')
                         ? `${clickUrl}&_t=${Date.now()}&_r=${randomStr}`
