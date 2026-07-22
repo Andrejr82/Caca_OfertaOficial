@@ -525,6 +525,7 @@ async function runScrapingCycle() {
     requestedAt: new Date().toISOString(),
     discover: scrapeStore,
     persist: persistDiscoveryIngestionV1,
+    copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
@@ -557,6 +558,7 @@ async function runShopeeScenarioRecording(scenario) {
         .map((product) => normalizeShopeeCandidate(product, requestedAt));
     },
     persist: persistDiscoveryIngestionV1,
+    copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
   });
   for (const summary of result.marketplaces || []) {
     console.log(`[Shopee V5 Recording] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos, duplicados=${summary.duplicatesRejected}, rejeitados=${summary.rejected}`);
@@ -589,6 +591,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     persist: persistDiscoveryIngestionV1,
+    copyQueueOptions: { maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 },
   });
 }
 

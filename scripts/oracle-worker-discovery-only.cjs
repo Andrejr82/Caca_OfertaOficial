@@ -5,6 +5,56 @@ const crypto = require('node:crypto');
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
 
+const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 });
+
+function normalizeQueueText(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function queueGroupKey(product) {
+  const title = normalizeQueueText(product.title);
+  const type = normalizeQueueText(product.category?.name) || title.split(' ').slice(0, 3).join(' ');
+  const model = title.match(/\b(?:[a-z]{1,5}\s*)?\d{2,5}[a-z0-9-]*\b/i)?.[0] || '';
+  const capacity = title.match(/\b\d+(?:[.,]\d+)?\s*(?:l|ml|kg|g|w|xicaras?)\b/i)?.[0] || '';
+  return `${type}|${normalizeQueueText(model)}|${normalizeQueueText(capacity)}`;
+}
+
+function queueCategory(product) {
+  return normalizeQueueText(product.category?.name) || 'sem categoria';
+}
+
+function queueScore(product) {
+  const price = Number(product.currentPrice || 0);
+  const oldPrice = Number(product.originalPrice || 0);
+  const discount = oldPrice > price && price > 0 ? (oldPrice - price) / oldPrice : 0;
+  const metrics = product.marketplaceMetrics || {};
+  return Number(product.deterministicScore || 0) * 10 + Math.min(30, discount * 30) + Math.min(20, Number(metrics.sales || 0) > 0 ? 10 : 0) + Math.min(10, Number(metrics.rating || 0) >= 4.5 ? 10 : 0);
+}
+
+function selectCopyQueue(products, options = {}) {
+  const limits = { ...COPY_QUEUE_DEFAULTS, ...options };
+  const marketplaceCounts = new Map();
+  const categoryCounts = new Map();
+  const groups = new Set();
+  const selected = [];
+  const skipped = [];
+  const ranked = [...products].sort((a, b) => queueScore(b) - queueScore(a));
+  for (const product of ranked) {
+    const marketplace = String(product.marketplace || '').toLowerCase();
+    const category = queueCategory(product);
+    const group = queueGroupKey(product);
+    if (groups.has(group)) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'grupo_ja_representado' }); continue; }
+    if ((marketplaceCounts.get(marketplace) || 0) >= limits.maxPerMarketplace) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_marketplace' }); continue; }
+    if ((categoryCounts.get(category) || 0) >= limits.maxPerCategory) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_categoria' }); continue; }
+    if (selected.length >= limits.maxTotal) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_total' }); continue; }
+    selected.push(product);
+    groups.add(group);
+    marketplaceCounts.set(marketplace, (marketplaceCounts.get(marketplace) || 0) + 1);
+    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+  }
+  return { selected, skipped, limits };
+}
+
 function stableId(prefix, value) {
   return `${prefix}-${crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 32)}`;
 }
@@ -73,7 +123,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, notifyWorkPending }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, notifyWorkPending, copyQueueOptions = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -124,9 +174,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         if (sourceItemId) seenSourceItems.add(sourceItemId);
         uniqueProducts.push(product);
       }
+      const queue = copyQueueOptions ? selectCopyQueue(uniqueProducts, copyQueueOptions) : { selected: uniqueProducts, skipped: [], limits: null };
       const ingestions = [];
       let rejected = 0;
-      for (const product of uniqueProducts) {
+      for (const product of queue.selected) {
         try {
           ingestions.push(createIngestionV1(createCandidateV1({
             marketplace,
@@ -150,6 +201,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         marketplace,
         discovered: products.length,
         duplicatesRejected,
+        queueSelected: queue.selected.length,
+        queueSkipped: queue.skipped.length,
+        queueLimits: queue.limits,
         rejected,
         persisted: Number(persisted.accepted || 0),
         state: FINAL_STATE,
