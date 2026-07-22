@@ -541,10 +541,37 @@ async function runMercadoLivreOfficialDryRun() {
   return result;
 }
 
+async function runShopeeScenarioRecording(scenario) {
+  const correlationId = crypto.randomUUID();
+  const requestedAt = new Date().toISOString();
+  const result = await runDiscoveryOnlyCycle({
+    tenantId: ADMIN_USER_ID,
+    correlationId,
+    requestedAt,
+    discover: async (marketplace) => {
+      if (marketplace !== 'Shopee') return [];
+      const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario });
+      return discovered.categories.flatMap((category) => category.products)
+        .map((product) => normalizeShopeeCandidate(product, requestedAt));
+    },
+    persist: persistDiscoveryIngestionV1,
+  });
+  for (const summary of result.marketplaces || []) {
+    console.log(`[Shopee V5 Recording] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos, duplicados=${summary.duplicatesRejected}, rejeitados=${summary.rejected}`);
+  }
+  console.log(`[Shopee V5 Recording] ciclo=${correlationId} estado=${result.finalState} ofertas=${result.offerIds.length}`);
+  return result;
+}
+
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
   if (process.argv.includes('--shopee-native-top20-dry-run')) {
     executeShopeeNativeDiscoveryV5({ dryRun: true, scenario: CLI_SCENARIO_ID }).catch((error) => {
       console.error('[Shopee V5 Dry-Run] ' + error.message);
+      process.exitCode = 1;
+    });
+  } else if (process.argv.includes('--shopee-native-top20-record')) {
+    runShopeeScenarioRecording(CLI_SCENARIO_ID).catch((error) => {
+      console.error('[Shopee V5 Recording] ' + error.message);
       process.exitCode = 1;
     });
   } else if (process.argv.includes('--refresh-shopee-native-catalog')) {
@@ -579,6 +606,7 @@ module.exports = {
   resolveOfficialAITriggerEndpoint,
   refreshShopeeNativeCatalog,
   runMercadoLivreOfficialDryRun,
+  runShopeeScenarioRecording,
   runScrapingCycle,
   scrapeStore,
 };
