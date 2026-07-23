@@ -1,0 +1,140 @@
+'use strict';
+
+const { validateProductTitle } = require('./product-title-quality.cjs');
+
+const PRICE_TIERS = Object.freeze({
+  IMPULSE: 'impulse',
+  MEDIUM: 'medium',
+  HIGH: 'high',
+});
+
+const MAIN_PRODUCT_TERMS = /\b(air\s*fryer|cafeteira|batedeira|liquidificador|mixer|sanduicheira|chaleira|panela|processador|forno|televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|celular|smartphone|notebook|tablet|monitor|console|climatizador|aspirador|t[eê]nis|camiseta|cal[cç]a|moletom|legging|whey|creatina|fralda|mamadeira|carrinho|cama\s*pet|ra[cç][aã]o)\b/i;
+const ACCESSORY_ONLY_TERMS = /\b(acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente))\b/i;
+const ACCESSORY_LEAD_TERMS = /^(?:acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente)|cesto)\b/i;
+const HIGH_VALUE_TERMS = /\b(televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|forno|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|notebook|tablet|monitor|console|celular|smartphone|aspirador\s*rob[oô])\b/i;
+
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function classifyPriceTier(price) {
+  const value = Number(price || 0);
+  if (value <= 0) return null;
+  if (value <= 120) return PRICE_TIERS.IMPULSE;
+  if (value <= 700) return PRICE_TIERS.MEDIUM;
+  return PRICE_TIERS.HIGH;
+}
+
+function classifyProductFamily(product) {
+  const text = normalizeText(`${product?.title || ''} ${product?.category?.name || ''}`);
+  if (HIGH_VALUE_TERMS.test(text)) {
+    if (/televis|smart tv|celular|smartphone|notebook|tablet|monitor|console|aspirador robo/.test(text)) return 'technology_desire';
+    if (/sofa|guarda roupa|cama|colchao|mesa|escrivaninha|cadeira|rack|painel|comoda/.test(text)) return 'home_furniture';
+    return 'large_appliance';
+  }
+  if (/pet|cachorro|gato|bebe|bebe|fralda|mamadeira/.test(text)) return 'pet_baby';
+  if (/tenis|camiseta|calca|moletom|legging|whey|creatina|academia|fitness/.test(text)) return 'fashion_fitness';
+  if (/beleza|perfume|skincare|hidratante|maquiagem|secador|chapinha/.test(text)) return 'beauty';
+  if (/mala|viagem|camping|trilha/.test(text)) return 'travel';
+  return 'impulse_home';
+}
+
+function discountPercent(product) {
+  const current = Number(product?.currentPrice || 0);
+  const original = Number(product?.originalPrice || 0);
+  return original > current && current > 0 ? ((original - current) / original) * 100 : 0;
+}
+
+function absoluteSavings(product) {
+  const current = Number(product?.currentPrice || 0);
+  const original = Number(product?.originalPrice || 0);
+  return original > current ? original - current : 0;
+}
+
+function marketplaceName(product) {
+  return normalizeText(product?.marketplace || '');
+}
+
+function qualityGate(product) {
+  const reasons = [];
+  const title = String(product?.title || '').trim();
+  const titleQuality = validateProductTitle(title);
+  const price = Number(product?.currentPrice || 0);
+  const tier = classifyPriceTier(price);
+  const marketplace = marketplaceName(product);
+  const metrics = product?.marketplaceMetrics || {};
+  const discount = discountPercent(product);
+  const hasVerifiedCommercialSignal = Boolean(
+    metrics.hasVerifiedCoupon || metrics.coupon || metrics.isPrime || metrics.prime
+      || metrics.priceAdvantage || metrics.verifiedPromotion || metrics.discount
+  );
+
+  if (!titleQuality.valid) reasons.push(titleQuality.reason);
+  if (!/^https:\/\//i.test(String(product?.sourceUrl || ''))) reasons.push('LINK_INVALIDO');
+  if (!/^https:\/\//i.test(String(product?.imageUrl || ''))) reasons.push('IMAGEM_INVALIDA');
+  if (!tier) reasons.push('PRECO_INVALIDO');
+  if (ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
+
+  if (marketplace === 'shopee') {
+    const rating = Number(metrics.rating || 0);
+    const sales = Number(metrics.sales || 0);
+    if (rating > 0 && rating < 4.7) reasons.push('AVALIACAO_SHOPEE_BAIXA');
+    if (sales > 0 && sales < 100) reasons.push('VENDAS_SHOPEE_BAIXAS');
+  }
+
+  if (marketplace === 'amazon' && discount <= 0 && !hasVerifiedCommercialSignal) {
+    reasons.push('AMAZON_SEM_VANTAGEM_COMPROVADA');
+  }
+
+  if (tier === PRICE_TIERS.HIGH && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('ALTO_VALOR_SEM_VANTAGEM');
+  if (tier === PRICE_TIERS.MEDIUM && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('VALOR_MEDIO_SEM_VANTAGEM');
+  if (tier === PRICE_TIERS.IMPULSE && discount < 10 && !hasVerifiedCommercialSignal && Number(metrics.sales || 0) < 1000) reasons.push('IMPULSO_SEM_VANTAGEM');
+
+  return {
+    eligible: reasons.length === 0,
+    reasons,
+    tier,
+    family: classifyProductFamily(product),
+    discountPercent: Number(discount.toFixed(2)),
+    absoluteSavings: Number(absoluteSavings(product).toFixed(2)),
+  };
+}
+
+function scoreCandidate(product, gate = qualityGate(product)) {
+  const metrics = product?.marketplaceMetrics || {};
+  const tier = gate.tier || classifyPriceTier(product?.currentPrice);
+  const discount = gate.discountPercent;
+  const savings = gate.absoluteSavings;
+  const base = Math.max(0, Math.min(10, Number(product?.deterministicScore || 0))) * 4;
+  const rating = Number(metrics.rating || 0);
+  const sales = Number(metrics.sales || 0);
+  const officialStore = metrics.officialStoreId || metrics.isOfficialStore || metrics.isMall ? 8 : 0;
+  const shipping = metrics.shippingFree || metrics.hasFreeShipping ? 5 : 0;
+  const discountScore = tier === PRICE_TIERS.HIGH
+    ? Math.min(20, discount * 0.5)
+    : tier === PRICE_TIERS.MEDIUM
+      ? Math.min(22, discount * 0.6)
+      : Math.min(18, discount * 0.35);
+  const savingsScore = tier === PRICE_TIERS.HIGH
+    ? (savings >= 1000 ? 30 : savings >= 500 ? 24 : savings >= 250 ? 18 : savings >= 100 ? 12 : 0)
+    : tier === PRICE_TIERS.MEDIUM
+      ? Math.min(15, savings / 100)
+      : Math.min(8, discount * 0.2);
+  const trustScore = Math.min(15, (rating >= 4.7 ? 10 : rating >= 4.5 ? 6 : 0) + (sales >= 1000 ? 5 : sales >= 100 ? 2 : 0));
+  return Number((base + discountScore + savingsScore + trustScore + officialStore + shipping).toFixed(2));
+}
+
+module.exports = {
+  PRICE_TIERS,
+  classifyPriceTier,
+  classifyProductFamily,
+  discountPercent,
+  absoluteSavings,
+  qualityGate,
+  scoreCandidate,
+};
