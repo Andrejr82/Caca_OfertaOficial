@@ -33,6 +33,8 @@ const ws = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
+const { SCENARIOS: SHOPEE_SCENARIOS, getActiveScenario, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
+const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const {
   runMercadoLivreNativeTop20,
   writeMercadoLivreNativeTop20Reports,
@@ -48,6 +50,12 @@ const CRON_SCHEDULE = '0 0,4,7,9,12,13,14,16,18,20,22 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
+
+function getActiveMarketplaceScenario() {
+  const scenarioId = CLI_SCENARIO_ID;
+  if (scenarioId) return MARKETPLACE_SCENARIOS[scenarioId] || SHOPEE_SCENARIOS[scenarioId] || null;
+  return getActiveScenario(getSaoPauloHour());
+}
 
 let supabaseClient;
 
@@ -354,7 +362,13 @@ async function scrapeStore(store) {
   if (store === 'Mercado Livre') {
     if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
       const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
-      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken });
+      const scenario = getActiveMarketplaceScenario();
+      const result = await runMercadoLivreOfficialIntentCoverage({
+        accessToken,
+        keywords: scenario?.keywords,
+        maxPerIntent: 20,
+        delayMs: 500,
+      });
       return result.products.map((product) => normalizeMercadoLivreCandidate({
         ...product,
         discovered_at: result.generated_at,
