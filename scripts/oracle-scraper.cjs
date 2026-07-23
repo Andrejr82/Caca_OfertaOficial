@@ -689,7 +689,9 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
         const result = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
         return result.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
       }
-      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: 5, delayMs: 300 });
+      // Buscar acima do limite de publicação cria margem para duplicatas,
+      // filtros de qualidade e caps da fila (10 por marketplace/categoria).
+      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: 20, delayMs: 300 });
       return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     persist: persistDiscoveryIngestionV1,
