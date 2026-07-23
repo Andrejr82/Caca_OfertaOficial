@@ -5,6 +5,10 @@ import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-of
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Channel, Offer, Platform } from "@/types/domain";
+import { evaluateQualityGate } from "@/lib/publish/quality-gate";
+import { validateProductTitle } from "@/core/quality/product-title-quality";
+import { parseSheinOneLinkHtml } from "@/lib/publish/shein-link";
+import { fetchMLProductDetails } from "@/lib/platforms/mercadolivre";
 
 interface QuickPostResult {
   ok: boolean;
@@ -31,15 +35,36 @@ async function readLinkMetadata(url: string) {
     const response = await fetch(url, { redirect: "follow", headers: { "user-agent": "Mozilla/5.0 (compatible; CacaOferta/1.0)" }, signal: AbortSignal.timeout(12_000) });
     if (!response.ok) return { title: "", imageUrl: "", price: 0, finalUrl: url };
     const html = await response.text();
-    const title = metaTag(html, "og:title") || metaTag(html, "twitter:title");
+    const socialTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
+    const sheinReference = /shein/i.test(response.url || url) ? parseSheinOneLinkHtml(html) : null;
+    const genericSheinTitle = /não perca esta oferta|great offer|save big|economize muito/i.test(socialTitle);
+    const title = (genericSheinTitle ? sheinReference?.titleFromUrl : socialTitle) || socialTitle;
     const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
     const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
     const normalizedPrice = rawPrice?.includes(",") ? rawPrice.replace(/\./g, "").replace(",", ".") : rawPrice;
     const price = normalizedPrice ? Number(normalizedPrice) : 0;
-    return { title, imageUrl, price: Number.isFinite(price) ? price : 0, finalUrl: response.url || url };
+    return {
+      title,
+      imageUrl,
+      price: Number.isFinite(price) ? price : 0,
+      finalUrl: response.url || url,
+      sheinProductUrl: sheinReference?.productUrl,
+      sheinProductId: sheinReference?.productId,
+      sheinCategoryId: sheinReference?.categoryId,
+    };
   } catch {
     return { title: "", imageUrl: "", price: 0, finalUrl: url };
   }
+}
+
+function detectPlatform(value: string): Platform {
+  const lowerUrl = value.toLowerCase();
+  if (lowerUrl.includes("shein")) return "Shein";
+  if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu") || lowerUrl.includes("magazinevoce")) return "Magalu";
+  if (lowerUrl.includes("shopee") || lowerUrl.includes("s.shopee")) return "Shopee";
+  if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon") || lowerUrl.includes("a.co")) return "Amazon";
+  if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("mercadolibre") || lowerUrl.includes("meli.la")) return "Mercado Livre";
+  return "Outro";
 }
 
 export async function generateQuickPostAction(affiliateUrl: string, channel: Channel | "omnichannel"): Promise<QuickPostResult> {
@@ -49,23 +74,41 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
   if (!userId || !supabase) return { ok: false, status: "UNAUTHENTICATED", message: "Sessão expirada. Entre novamente no painel." };
   if (!/^https?:\/\/\S+$/i.test(url)) return { ok: false, status: "INVALID_URL", message: "Cole uma URL válida, começando com http:// ou https://." };
 
-  const metadata = await readLinkMetadata(url);
+  const detectedPlatform = detectPlatform(url);
+  const metadata = detectedPlatform === "Mercado Livre"
+    ? await fetchMLProductDetails(url, userId) || await readLinkMetadata(url)
+    : await readLinkMetadata(url);
   const operationId = crypto.randomUUID();
   const candidateId = `manual-${operationId}`;
   const ingestionId = `quick-publication-${operationId}`;
   const correlationId = `quick-publication:${operationId}`;
-  const lowerUrl = url.toLowerCase();
-  let platform: Platform = "Outro";
-  if (lowerUrl.includes("shein")) platform = "Shein";
-  else if (lowerUrl.includes("magazineluiza") || lowerUrl.includes("magalu") || lowerUrl.includes("magazinevoce")) platform = "Magalu";
-  else if (lowerUrl.includes("shopee")) platform = "Shopee";
-  else if (lowerUrl.includes("amzn") || lowerUrl.includes("amazon")) platform = "Amazon";
-  else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("mercadolibre")) platform = "Mercado Livre";
+  const platform = detectPlatform(metadata.finalUrl || url) === "Outro" ? detectedPlatform : detectPlatform(metadata.finalUrl || url);
+  const quality = evaluateQualityGate({
+    title: metadata.title,
+    platform,
+    imageUrl: metadata.imageUrl,
+    price: metadata.price,
+    finalUrl: metadata.finalUrl || url,
+  });
+  const titleQuality = validateProductTitle(metadata.title);
+  if (platform === "Outro") {
+    return { ok: false, status: "UNSUPPORTED_MARKETPLACE", message: "Marketplace não reconhecido neste link." };
+  }
+  if (quality.status !== "APPROVED" || quality.classification !== "VALID_PRODUCT" || !titleQuality.valid) {
+    const message = quality.reason === "PRECO_INVALIDO"
+      ? `${platform} não expôs um preço verificável neste link. Use o link direto do item ou informe um preço comprovado.`
+      : "Não foi possível confirmar um produto individual com nome, preço e imagem verificáveis. Cole o link direto do produto.";
+    return {
+      ok: false,
+      status: quality.reason || titleQuality.reason || "INVALID_PRODUCT_LINK",
+      message,
+    };
+  }
 
   const { data: offer, error: offerError } = await supabase.from("offers").insert({
     user_id: userId,
     platform,
-    product_name: metadata.title || "Produto importado por link",
+    product_name: metadata.title,
     original_url: url,
     image_url: metadata.imageUrl || null,
     current_price: metadata.price,
@@ -76,8 +119,8 @@ export async function generateQuickPostAction(affiliateUrl: string, channel: Cha
       candidate_id: candidateId,
       ingestion_id: ingestionId,
       correlation_id: correlationId,
-      discovery_evidence: { source: "quick-publication", resolved_url: metadata.finalUrl },
-      marketplace_metrics: { extracted_at: new Date().toISOString() }
+      discovery_evidence: { source: "quick-publication", resolved_url: metadata.finalUrl, quality_gate: quality.classification },
+      marketplace_metrics: { extracted_at: new Date().toISOString(), comparison: "not_applicable" }
     }
   }).select("*").single<Offer>();
   if (offerError || !offer) return { ok: false, status: "OFFER_CREATE_FAILED", message: `Não foi possível salvar o link: ${offerError?.message || "oferta ausente"}` };

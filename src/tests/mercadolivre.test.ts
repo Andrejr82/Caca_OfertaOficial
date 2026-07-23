@@ -31,6 +31,12 @@ describe("Mercado Livre Integration", () => {
       expect(result?.id).toBe("MLB4447477546");
     });
 
+    it("should prioritize the real item from catalog share links", () => {
+      const url = "https://www.mercadolivre.com.br/fechadura/p/MLB20938207?pdp_filters=item_id%3AMLB3449816175";
+      const result = extractMLId(url);
+      expect(result).toEqual({ type: "item", id: "MLB3449816175" });
+    });
+
     it("should return null for non-Mercado Livre URL without ML IDs", () => {
       const url = "https://www.amazon.com.br/dp/B000123";
       const result = extractMLId(url);
