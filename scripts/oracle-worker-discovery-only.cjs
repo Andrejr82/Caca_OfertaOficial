@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { validateProductTitle } = require('./product-title-quality.cjs');
 const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
+const { interleavePublicationQueue } = require('./publication-queue.cjs');
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
@@ -67,7 +68,7 @@ function selectCopyQueue(products, options = {}, cycleState = null) {
     categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
   }
   if (cycleState) cycleState.selectedCount = Number(cycleState.selectedCount || 0) + selected.length;
-  return { selected, skipped, limits };
+  return { selected: interleavePublicationQueue(selected), skipped, limits };
 }
 
 function stableId(prefix, value) {
