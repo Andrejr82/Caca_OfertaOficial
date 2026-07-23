@@ -8,6 +8,7 @@ Regras obrigatórias:
 - Gere somente um gancho curto no campo hook (ou hooks por canal). Nunca gere produto, preço, desconto, atributo, CTA, hashtags ou URL.
 - O gancho (hook) deve focar no produto ou em um benefício explicitamente comprovado nos dados. Só mencione urgência, prazo ou escassez quando houver evidência persistida para isso.
 - O gancho não pode passar de 90 caracteres.
+- Escreva como uma recomendação curta de uma pessoa: varie a abertura, evite repetir “oferta” e “achado” em toda mensagem e prefira o benefício comercial comprovado.
 - Use somente fatos presentes nos dados de entrada. Nunca invente preço, desconto, frete, cupom, estoque, parcelamento, marca, especificação, atributo ou benefício.
 - O atributo deve existir literalmente no título, nos atributos estruturados persistidos ou nos metadados persistidos. Nunca infira ou deduza atributo. Se não existir, omita a linha.
 - Nunca escreva: Olá, Nova chegada, Temos um novo, Você vai amar, Confira, Não perca, Imperdível, Produto incrível, Compre agora, Aproveite enquanto durar, Essa oportunidade é única, Só agora, Corre que, estoque acaba ou antes que o preço suba.
@@ -99,9 +100,24 @@ function cleanProductName(value: string) {
 }
 
 const DEFAULT_HOOKS = {
-  discount: "🔥 PREÇO BAIXOU",
-  standard: "💥 ACHADO DO DIA"
+  discount: ["🔥 Agora por {price} (economia de {saving})", "💡 Economia de {saving}", "✨ Preço atual: {price} (menos {saving})"],
+  standard: ["✨ Encontramos este por {price}", "💡 Preço atual: {price}", "⭐ Uma opção por {price}"]
 } as const;
+
+function stableIndex(value: string, length: number) {
+  let hash = 0;
+  for (const char of value) hash = (hash * 31 + char.codePointAt(0)!) >>> 0;
+  return hash % length;
+}
+
+function humanContext(facts: CopyV2Facts) {
+  const text = `${facts.category ?? ""} ${facts.productName}`.toLocaleLowerCase("pt-BR");
+  if (/tv|televis|geladeira|lavadora|lava e seca|micro-ondas|cooktop|forno|fogão|ar-condicionado|aspirador/iu.test(text)) return "🏠 Para equipar a casa";
+  if (/sofá|guarda-roupa|cama|colchão|mesa|escrivaninha|cadeira|rack|cômoda/iu.test(text)) return "🏠 Para a casa";
+  if (/celular|notebook|tablet|monitor|console|fone|headset|tecnologia/iu.test(text)) return "📱 Para quem gosta de tecnologia";
+  if (/cachorro|gato|pet|bebê|maternidade|fralda/iu.test(text)) return "🐾 Para a rotina da família";
+  return null;
+}
 
 /**
  * Normaliza hooks legados ou promocionais sem evidência persistida.
@@ -117,10 +133,15 @@ export function sanitizeOfficialAIHook(value: string) {
 
 function hookFor(facts: CopyV2Facts, hook?: string) {
   const value = hook ? sanitizeOfficialAIHook(hook.replace(/\s+/gu, " ")) : "";
-  if (value && value.length <= 90 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
-  return discountPercentage(facts.currentPrice, facts.originalPrice) === null
-    ? DEFAULT_HOOKS.standard
-    : DEFAULT_HOOKS.discount;
+  const isGenericLegacyHook = /^(?:🔥\s*)?(?:preço baixou|achado do dia)$/iu.test(value);
+  if (value && !isGenericLegacyHook && value.length <= 90 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
+  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
+  const saving = facts.originalPrice && facts.originalPrice > facts.currentPrice
+    ? formatBRL(facts.originalPrice - facts.currentPrice)
+    : null;
+  const templates = discount === null ? DEFAULT_HOOKS.standard : DEFAULT_HOOKS.discount;
+  const template = templates[stableIndex(`${facts.marketplace}|${facts.productName}|${facts.currentPrice}`, templates.length)];
+  return template.replace("{price}", formatBRL(facts.currentPrice)).replace("{saving}", saving ?? formatBRL(facts.currentPrice));
 }
 
 export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel, hook?: string) {
@@ -133,14 +154,13 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
 
   if (channel === "whatsapp") {
     const blocks = [
-      `📌 *OFERTA EM DESTAQUE*`,
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       `${iconLine} ${marketplace.text}`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(facts.originalPrice ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
       `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
-      `ℹ️ Consulte disponibilidade e condições no anúncio:`,
+      `⚠️ Preço e condições podem mudar.`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -148,7 +168,6 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
 
   if (channel === "telegram") {
     const blocks = [
-      `📌 *OFERTA EM DESTAQUE*`,
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       `${iconLine} ${marketplace.text}`,
@@ -156,7 +175,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : `💰 *${formatBRL(facts.currentPrice)}*`,
-      `ℹ️ Consulte disponibilidade e condições no anúncio:`,
+      `⚠️ Preço e condições podem mudar.`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -165,7 +184,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
   if (channel === "instagram") {
     const blocks = [
       hookFor(facts, hook),
-      `Uma opção para sua rotina: **${cleanProductName(facts.productName)}**.`,
+      `${humanContext(facts) ?? "Uma opção para sua rotina"}: **${cleanProductName(facts.productName)}**.`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount ? `📉 Economia verificada de **${discount}%** sobre o preço anterior.` : `💰 Consulte o preço atual no anúncio.`,
       discount && facts.originalPrice
@@ -186,7 +205,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
         : `💰 ${formatBRL(facts.currentPrice)}`,
-      `ℹ️ Consulte disponibilidade e condições no anúncio:`,
+      `⚠️ Preço e condições podem mudar.`,
       `👉 `
     ];
     return blocks.join("\n\n");

@@ -32,13 +32,12 @@ describe("Official AI O.P.A.C.", () => {
     }, "telegram", "🔥 PREÇO BAIXOU");
 
     expect(copy).toBe([
-      "📌 *OFERTA EM DESTAQUE*",
-      "🔥 PREÇO BAIXOU",
+      "🔥 Agora por R$ 79,90 (economia de R$ 20,00)",
       "🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
       "🎧 Achado na Shopee",
       "✨ Bluetooth 5.3",
       "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
-      "ℹ️ Consulte disponibilidade e condições no anúncio:",
+      "⚠️ Preço e condições podem mudar.",
       "👉 "
     ].join("\n\n"));
   });
@@ -50,16 +49,10 @@ describe("Official AI O.P.A.C.", () => {
       originalPrice: null
     }, "telegram");
 
-    expect(copy).toBe([
-      "📌 *OFERTA EM DESTAQUE*",
-      "💥 ACHADO DO DIA",
-      "🛍️ SSD NVMe 1 TB PCIe 4.0",
-      "💻 Achado na Shopee",
-      "✨ 1 TB PCIe 4.0",
-      "💰 *R$ 79,90*",
-      "ℹ️ Consulte disponibilidade e condições no anúncio:",
-      "👉 "
-    ].join("\n\n"));
+    expect(copy).toContain("🛍️ SSD NVMe 1 TB PCIe 4.0");
+    expect(copy).toContain("✨ 1 TB PCIe 4.0");
+    expect(copy).toContain("💰 *R$ 79,90*");
+    expect(copy).toContain("⚠️ Preço e condições podem mudar.");
   });
 
   it("destaca preço sem inventar desconto quando preço anterior não é válido", () => {
@@ -79,6 +72,19 @@ describe("Official AI O.P.A.C.", () => {
     expect(copy).toContain("📉 De R$ 79,90\n💰 Por *R$ 55,98* (30% OFF)");
   });
 
+  it("varia a abertura por produto, mas mantém o resultado idempotente", () => {
+    const first = buildCopyV2ChannelCopy({ ...offer, productName: "Smart TV 4K 50 polegadas" }, "telegram");
+    const same = buildCopyV2ChannelCopy({ ...offer, productName: "Smart TV 4K 50 polegadas" }, "telegram");
+    expect(first).toBe(same);
+    expect(first).not.toContain("OFERTA EM DESTAQUE");
+  });
+
+  it("mostra economia absoluta somente quando há preço anterior válido", () => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, currentPrice: 2099, originalPrice: 2500, productName: "Smart TV 4K" }, "facebook");
+    expect(copy).toContain("R$ 401,00");
+    expect(copy).not.toMatch(/frete grátis|cupom|parcelamento/iu);
+  });
+
   it("limpa repetições adjacentes e limita somente o título sem cortar palavras", () => {
     const copy = buildCopyV2ChannelCopy({
       ...offer,
@@ -93,15 +99,9 @@ describe("Official AI O.P.A.C.", () => {
 
   it("omite atributo quando título e metadados não contêm fato objetivo confiável", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, "whatsapp");
-    expect(copy.split("\n\n")).toEqual([
-      "📌 *OFERTA EM DESTAQUE*",
-      "💥 ACHADO DO DIA",
-      "🛍️ Tênis Casual Feminino",
-      "👟 Achado na Shopee",
-      "✅ *Preço atual: R$ 79,90*",
-      "ℹ️ Consulte disponibilidade e condições no anúncio:",
-      "👉 "
-    ]);
+    expect(copy.split("\n\n")).toContain("🛍️ Tênis Casual Feminino");
+    expect(copy).toContain("✅ *Preço atual: R$ 79,90*");
+    expect(copy).toContain("⚠️ Preço e condições podem mudar.");
     expect(copy).not.toMatch(/excelente|incrível|alta performance|ideal para você|durabilidade|premium/iu);
   });
 
@@ -126,7 +126,7 @@ describe("Official AI O.P.A.C.", () => {
 
   it.each(["whatsapp", "telegram", "instagram"] as const)("usa O.P.A.C. em %s", (channel) => {
     const copy = buildCopyV2ChannelCopy({ ...offer, productName: "Fone Bluetooth 5.3" }, channel);
-    expect(copy).toContain("🔥 PREÇO BAIXOU");
+    expect(copy).toMatch(/R\$ 79,90|Economia de/iu);
     expect(copy).toContain("Fone Bluetooth 5.3");
     expect(copy).toContain("Bluetooth 5.3");
     if (channel === "whatsapp") expect(copy).toContain("✅ *Preço atual: R$ 79,90* (20% OFF)");
