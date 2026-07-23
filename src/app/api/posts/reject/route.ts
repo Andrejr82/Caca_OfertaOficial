@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
-const discardableChannels = new Set(["whatsapp", "telegram", "instagram"]);
+const discardableChannels = new Set(["whatsapp", "telegram", "instagram", "facebook"]);
 
 export async function POST(req: Request) {
   try {

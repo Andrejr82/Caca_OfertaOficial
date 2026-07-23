@@ -177,6 +177,21 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
     return blocks.join("\n\n");
   }
 
+  if (channel === "facebook") {
+    const blocks = [
+      hookFor(facts, hook),
+      `🛍️ ${cleanProductName(facts.productName)}`,
+      `${iconLine} ${marketplace.text}`,
+      ...(attribute ? [`✨ ${attribute.text}`] : []),
+      discount && facts.originalPrice
+        ? `📉 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
+        : `💰 ${formatBRL(facts.currentPrice)}`,
+      `ℹ️ Consulte disponibilidade e condições no anúncio:`,
+      `👉 `
+    ];
+    return blocks.join("\n\n");
+  }
+
   // Fallback
   const priceBlock = discount !== null && facts.originalPrice !== null
     ? [`📉 De ${formatBRL(facts.originalPrice)}`, `💰 Por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`]
@@ -208,7 +223,8 @@ export function buildOfficialPrompt(offer: OfficialAIOffer, channels: readonly O
     channelGuidance: {
       whatsapp: "Mais curto, sem hashtags e CTA direto.",
       telegram: "Blocos curtos; preço anterior e desconto válidos permitidos; sem hashtags.",
-      instagram: "Impacto visual, poucas hashtags relevantes e nenhuma URL."
+      instagram: "Impacto visual, poucas hashtags relevantes e nenhuma URL.",
+      facebook: "Feed de Página; texto factual, escaneável, com marketplace, preço e CTA direto; sem URL na resposta."
     },
     required: [
       "hook"

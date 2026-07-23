@@ -7,6 +7,7 @@ import { Trash2 } from "lucide-react";
 import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
 import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions";
+import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions";
 
 // Tipagem base que cobre os campos comuns que os Cards precisam
 interface PostWithOffer {
@@ -153,7 +154,7 @@ export function BatchApprovalList({
                 {channel === "telegram" && <TelegramPostApprovalCard post={post} />}
                 {channel === "instagram" && <InstagramPostApprovalCard post={post} />}
                 {channel === "whatsapp" && <WhatsappPostApprovalCard post={post} />}
-                {/* Se o facebook existir no futuro, adicione aqui */}
+                {channel === "facebook" && <FacebookPostApprovalCard post={post} />}
               </div>
             </div>
           );

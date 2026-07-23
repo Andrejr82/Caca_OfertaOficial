@@ -1,6 +1,6 @@
 import type { StateActor, StateReason } from "@/core/state";
 
-export const OFFICIAL_AI_CHANNELS = ["telegram", "instagram", "whatsapp"] as const;
+export const OFFICIAL_AI_CHANNELS = ["telegram", "instagram", "whatsapp", "facebook"] as const;
 export type OfficialAIChannel = (typeof OFFICIAL_AI_CHANNELS)[number];
 
 /**

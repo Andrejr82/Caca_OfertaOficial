@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
-import { generateOfficialAI, type OfficialAICommand } from "@/core/ai";
+import { generateOfficialAI, type OfficialAIChannel, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
 import { advanceCycleCheckpoint, loadCycleCheckpoint } from "@/lib/ai/official/official-ai-cycle-checkpoint";
+import { hasFacebookEnv } from "@/lib/env";
 
 interface GenerateAIRequest {
   command?: "PROCESS_OFFERS";
@@ -21,6 +22,12 @@ interface GenerateAIRequest {
 }
 
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
+
+function resolveOfficialAIChannels(): readonly OfficialAIChannel[] {
+  return hasFacebookEnv()
+    ? ["telegram", "instagram", "whatsapp", "facebook"]
+    : ["telegram", "instagram", "whatsapp"];
+}
 
 /**
  * POST /api/ai/generate
@@ -85,7 +92,7 @@ export async function POST(request: Request) {
         contractVersion: "pmav5.ai/v1", commandId: page.idempotencyKey, idempotencyKey: page.idempotencyKey,
         correlationId, causationId: `oracle:${correlationId}`, offerId: `CYCLE_PAGE_${page.pageNumber}`,
         tenantId: userId, providerPreference: body.providerPreference,
-        channels: ["telegram", "instagram", "whatsapp"], requestedAt: body.requestedAt || new Date().toISOString(),
+        channels: resolveOfficialAIChannels(), requestedAt: body.requestedAt || new Date().toISOString(),
         actor: { type: "service", id: "oracle-worker", service: "oracle-worker" }, origin: "oracle.discovery",
         reason: { code: "GENERATE_OFFICIAL_CONTENT" },
         batch: { operation: "PROCESS_OFFERS", offerIds: page.offerIds, pageNumber: page.pageNumber, totalPages: page.totalPages }
@@ -135,7 +142,7 @@ export async function POST(request: Request) {
       offerId,
       tenantId: userId,
       providerPreference: body.providerPreference,
-      channels: ["telegram", "instagram", "whatsapp"],
+      channels: resolveOfficialAIChannels(),
       requestedAt: body.requestedAt || request.headers.get("x-requested-at") || DEFAULT_REQUESTED_AT,
       actor: { type: isServiceWorker ? "service" : "user", id: userId, service: "nextjs-ai-route" },
       origin: "api.ai.generate",

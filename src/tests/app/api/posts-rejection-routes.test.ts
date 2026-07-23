@@ -90,14 +90,16 @@ describe("post draft rejection routes", () => {
     await expect(response.json()).resolves.toMatchObject({ ok: false, successCount: 0, failureCount: 1 });
   });
 
-  it("rejects an unsupported channel without writing", async () => {
+  it("allows deleting a Facebook draft without writing to another channel", async () => {
+    installMutationResults({ data: { id: "post-1" }, error: null });
     const response = await rejectPost(postRequest("/api/posts/reject", {
       postId: "post-1",
       channel: "facebook"
     }));
 
-    expect(response.status).toBe(400);
-    expect(from).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ ok: true, successCount: 1 });
+    expect(from).toHaveBeenCalledWith("posts");
   });
 
   it("soft-deletes every selected draft and no unselected post", async () => {

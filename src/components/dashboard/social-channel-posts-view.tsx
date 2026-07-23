@@ -98,7 +98,7 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
   draftPosts,
   historyData,
 }: {
-  channel: "telegram" | "instagram" | "whatsapp";
+  channel: "telegram" | "instagram" | "whatsapp" | "facebook";
   accentClassName: string;
   draftPosts: TDraftPost[];
   historyData: HistoryPostItem[];

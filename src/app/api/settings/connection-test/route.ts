@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isInstagramConfigured } from "@/lib/instagram/client";
-import { hasTelegramEnv } from "@/lib/env";
+import { hasFacebookEnv, hasTelegramEnv } from "@/lib/env";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/utils/logger";
@@ -48,11 +48,21 @@ export async function POST(request: Request) {
     }
 
     if (platform === "Facebook") {
-      const token = process.env.INSTAGRAM_ACCESS_TOKEN;
-      if (!token) {
-        return NextResponse.json({ ok: false, message: "Erro: Token de acesso do Facebook/Meta ausente no .env.local.", lastCheck: now });
+      const token = process.env.FACEBOOK_ACCESS_TOKEN;
+      const pageId = process.env.FACEBOOK_PAGE_ID;
+      if (!hasFacebookEnv() || !token || !pageId) {
+        return NextResponse.json({ ok: false, message: "Erro: FACEBOOK_PAGE_ID ou FACEBOOK_ACCESS_TOKEN ausente no ambiente.", lastCheck: now });
       }
-      return NextResponse.json({ ok: true, message: "Conectado. Página do Facebook vinculada com sucesso via Graph API.", lastCheck: now });
+      try {
+        const response = await fetch(`https://graph.facebook.com/v19.0/${pageId}?fields=id,name&access_token=${encodeURIComponent(token)}`, { signal: AbortSignal.timeout(8000) });
+        const data = await response.json();
+        if (!response.ok || data?.id !== pageId) {
+          return NextResponse.json({ ok: false, message: data?.error?.message || "A Graph API não confirmou a Página.", lastCheck: now });
+        }
+        return NextResponse.json({ ok: true, message: `Conectado. Página ${data.name || pageId} vinculada via Graph API.`, lastCheck: now });
+      } catch {
+        return NextResponse.json({ ok: false, message: "Erro de rede ao conectar com a Graph API do Facebook.", lastCheck: now });
+      }
     }
 
     if (platform === "WhatsApp") {

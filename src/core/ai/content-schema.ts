@@ -13,7 +13,8 @@ const contentSchema = z.object({
   channelCopies: z.object({
     telegram: z.string().trim().min(1).optional(),
     instagram: z.string().trim().min(1).optional(),
-    whatsapp: z.string().trim().min(1).optional()
+    whatsapp: z.string().trim().min(1).optional(),
+    facebook: z.string().trim().min(1).optional()
   }).strict()
 }).strict();
 
