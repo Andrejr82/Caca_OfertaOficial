@@ -398,7 +398,10 @@ async function runAmazonNativeTop20({
     }
   }
 
-  if (tree.length < maxCategories) throw new Error(`Categorias com árvore pública insuficientes: ${tree.length}/${maxCategories}`);
+  // A página pública da Amazon pode devolver uma árvore parcial durante
+  // throttling/desafio. Catálogo parcial válido ainda é útil para a fila;
+  // só falhe quando nenhuma categoria pôde ser lida.
+  if (tree.length === 0) throw new Error('Nenhuma árvore pública de categorias disponível');
   const unique = deduplicate(collected);
   const novelty = applyNovelty(unique.products, knownAsins);
   const products = novelty.products.map((product) => ({ ...product, score: calculateDeterministicScore(product) }));
