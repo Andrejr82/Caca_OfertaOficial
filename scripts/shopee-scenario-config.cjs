@@ -167,6 +167,45 @@ const SCENARIOS = {
   }
 };
 
+// Matriz V2: intenções orientadas a impulso, alto valor e diversidade editorial.
+// Os cenários antigos permanecem disponíveis para compatibilidade e auditoria.
+SCENARIOS.tecnologia_desejo = {
+  id: 'tecnologia_desejo', name: 'Tecnologia e Eletrônicos de Desejo',
+  apiCategories: [100013, 100634, 100644], keywordSelection: 'all', maxPagesPerKeyword: 1,
+  keywords: [...SCENARIOS.gamer_tecnologia.keywords, 'celular', 'notebook', 'tablet', 'monitor', 'console', 'climatizador', 'aspirador robô'],
+};
+SCENARIOS.eletrodomesticos_cozinha = {
+  id: 'eletrodomesticos_cozinha', name: 'Eletrodomésticos e Cozinha',
+  apiCategories: [100010], keywordSelection: 'all', maxPagesPerKeyword: 1,
+  keywords: [...SCENARIOS.eletros_cozinha.keywords, 'Smart TV 4K', 'geladeira', 'refrigerador', 'máquina de lavar', 'lava e seca', 'lava louças', 'cooktop', 'micro ondas', 'ar condicionado', 'fogão'],
+  blockedProductTerms: ['acessório', 'acessorio', 'adaptador', 'cabo', 'chave', 'filtro de linha', 'kit recarga automotivo', 'peça', 'refil', 'suporte'],
+};
+SCENARIOS.impulso_casa = {
+  id: 'impulso_casa', name: 'Impulso para Casa e Utilidades',
+  apiCategories: [100010, 100636], keywordSelection: 'all', maxPagesPerKeyword: 1,
+  keywords: ['organizador de cozinha', 'iluminação', 'utensílios úteis', 'limpeza prática', 'pequenos eletroportáteis', 'itens para escritório', 'cozinha compacta', 'organização doméstica', 'lixeira inox', 'cafeteira compacta', 'luminária de mesa', 'balança digital cozinha'],
+};
+SCENARIOS.casa_moveis = {
+  id: 'casa_moveis', name: 'Casa e Móveis',
+  apiCategories: [100636], keywordSelection: 'all', maxPagesPerKeyword: 1,
+  keywords: ['sofá', 'guarda roupa', 'cama', 'colchão', 'mesa de jantar', 'escrivaninha', 'cadeira de escritório', 'rack e painel para TV', 'cômoda'],
+};
+SCENARIOS.pet_bebe = {
+  id: 'pet_bebe', name: 'Pet e Bebê',
+  apiCategories: [100631, 100632, 100633], keywordSelection: 'all', maxPagesPerKeyword: 1,
+  keywords: [...SCENARIOS.dono_de_pet.keywords, ...SCENARIOS.mae_de_primeira_viagem.keywords],
+};
+SCENARIOS.moda_fitness_beleza_viagem = {
+  id: 'moda_fitness_beleza_viagem', name: 'Moda, Fitness, Beleza e Viagem',
+  apiCategories: [100009, 100011, 100012, 100015, 100534, 100630, 100637], keywordSelection: 'all', maxPagesPerKeyword: 1,
+  keywords: [
+    ...SCENARIOS.moda_masculina.keywords,
+    ...SCENARIOS.treino_academia.keywords,
+    ...SCENARIOS.beleza_autocuidado.keywords,
+    ...SCENARIOS.viagem_aventura.keywords,
+  ],
+};
+
 // 2. Roteamento Inteligente por Horário
 function getSaoPauloHour(date = new Date()) {
   return Number(new Intl.DateTimeFormat('en-US', {
@@ -179,41 +218,12 @@ function getSaoPauloHour(date = new Date()) {
 function getActiveScenario(currentHour) {
   // O cron do Oracle inicia cada uma das janelas configuradas abaixo.
   
-  if (currentHour >= 0 && currentHour < 4) {
-    return SCENARIOS.gamer_tecnologia; // Madrugada Tech
-  }
-  if (currentHour >= 4 && currentHour < 7) {
-    return SCENARIOS.treino_academia; // Manhã Treino
-  }
-  if (currentHour >= 7 && currentHour < 9) {
-    return SCENARIOS.mae_de_primeira_viagem; // Manhã Bebê
-  }
-  if (currentHour >= 9 && currentHour < 12) {
-    return SCENARIOS.viagem_aventura; // Manhã Viagem
-  }
-  if (currentHour >= 12 && currentHour < 13) {
-    return SCENARIOS.beleza_autocuidado; // Tarde Beleza
-  }
-  if (currentHour >= 13 && currentHour < 14) {
-    return SCENARIOS.eletros_cozinha; // Tarde Eletros de Cozinha
-  }
-  if (currentHour >= 14 && currentHour < 16) {
-    return SCENARIOS.dono_de_pet; // Tarde Pet
-  }
-  if (currentHour >= 16 && currentHour < 18) {
-    return SCENARIOS.acessorios_relogios; // Tarde Acessórios
-  }
-  if (currentHour >= 18 && currentHour < 20) {
-    return SCENARIOS.morando_sozinho; // Noite Casa
-  }
-  if (currentHour >= 20 && currentHour < 22) {
-    return SCENARIOS.moda_masculina; // Noite Moda
-  }
-  if (currentHour >= 22) {
-    return SCENARIOS.enxoval_casamento; // Noite Enxoval
-  }
-  
-  return SCENARIOS.dono_de_pet;
+  if (currentHour < 4) return SCENARIOS.tecnologia_desejo;
+  if (currentHour < 8) return SCENARIOS.eletrodomesticos_cozinha;
+  if (currentHour < 12) return SCENARIOS.impulso_casa;
+  if (currentHour < 16) return SCENARIOS.casa_moveis;
+  if (currentHour < 20) return SCENARIOS.pet_bebe;
+  return SCENARIOS.moda_fitness_beleza_viagem;
 }
 
 // 3. Função Auxiliar de Sorteio

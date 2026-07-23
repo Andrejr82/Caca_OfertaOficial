@@ -46,7 +46,7 @@ const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discover
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 // Executa no início de cada janela dos cenários Shopee, evitando perder cenários
 // de 2 horas (7h, 9h, 12h, 14h, 16h, 18h, 20h e 22h).
-const CRON_SCHEDULE = '0 0,4,7,9,12,13,14,16,18,20,22 * * *';
+const CRON_SCHEDULE = '0 0,4,8,12,16,20 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
@@ -429,12 +429,15 @@ async function scrapeStore(store) {
   if (store === 'Amazon') {
     const history = await loadActiveDiscoveryHistory(store);
     const knownAsins = new Set(history.flatMap((row) => [row.product_id, row.item_id].filter(Boolean).map(String)));
-    const result = await runAmazonNativeTop20({ 
-      fetchImpl: global.fetch, 
-      knownAsins,
-      maxCategories: 10,
-      maxSubcategoriesPerCategory: 5
-    });
+    const scenario = getActiveMarketplaceScenario();
+    const result = scenario?.keywords?.length
+      ? await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 })
+      : await runAmazonNativeTop20({
+        fetchImpl: global.fetch,
+        knownAsins,
+        maxCategories: 10,
+        maxSubcategoriesPerCategory: 5,
+      });
     const normalized = result.products
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
       .map((product) => normalizeAmazonCandidate(product, discoveredAt));
@@ -738,6 +741,7 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
 }
 
 module.exports = {
+  CRON_SCHEDULE,
   calculateScoreV1,
   executeShopeeNativeDiscoveryV5,
   fetchAmazonHtmlViaScrapedo,
