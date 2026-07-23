@@ -172,6 +172,17 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
     const urlObj = new URL(url);
     const path = urlObj.pathname;
 
+    // Links de compartilhamento de catálogo podem apontar para /p/MLB...
+    // e carregar o item/oferta real em ?pdp_filters=item_id%3AMLB....
+    // O item tem preço e estoque atuais; priorize-o quando estiver presente.
+    const pdpFilters = urlObj.searchParams.get("pdp_filters") || "";
+    const itemIdParam = urlObj.searchParams.get("item_id")
+      || urlObj.searchParams.get("itemId")
+      || pdpFilters.match(/(?:^|[;,&])item_id[:=](MLB-?\d+)/i)?.[1];
+    if (itemIdParam && /^MLB-?\d+$/i.test(itemIdParam)) {
+      return { type: "item", id: itemIdParam.replace("-", "").toUpperCase() };
+    }
+
     // 1. Testa se é um ID de catálogo de produto (/p/MLB123456)
     const productMatch = path.match(/\/p\/(MLB-?\d+)/i);
     if (productMatch) {
@@ -185,11 +196,6 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
     }
 
     // 3. Testa nos parâmetros de busca (ex: itemId=MLB123456)
-    const itemIdParam = urlObj.searchParams.get("itemId");
-    if (itemIdParam && itemIdParam.toUpperCase().startsWith("MLB")) {
-      return { type: "item", id: itemIdParam.toUpperCase() };
-    }
-
     return null;
   } catch {
     // Fallback se o parser de URL falhar (regex direto na string de texto)
