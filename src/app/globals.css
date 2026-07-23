@@ -106,6 +106,23 @@ button, input, select, textarea {
   font: inherit;
 }
 
+/* Touch-friendly defaults for the dashboard without changing desktop sizing. */
+@media (max-width: 1023px) {
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea {
+    min-height: 44px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 1rem;
+  }
+}
+
 /* ═══════════════════════════════════════════════
    GLASS UTILITY CLASSES
    ═══════════════════════════════════════════════ */

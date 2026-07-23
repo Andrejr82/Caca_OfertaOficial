@@ -52,6 +52,18 @@ const navSections = [
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { isOpen, toggle } = useSidebar();
   const pathname = usePathname();
+  const closeMobileMenu = () => {
+    if (typeof window !== "undefined" && window.matchMedia("(max-width: 1023px)").matches && isOpen) {
+      toggle();
+    }
+  };
+
+  const mobileNav = [
+    navSections[0].items[0],
+    navSections[1].items[3],
+    navSections[2].items[0],
+    navSections[2].items[1]
+  ];
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-base">
@@ -115,6 +127,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                             : "text-white/50 hover:bg-white/[0.04] hover:text-white/80"
                           }
                         `}
+                        onClick={closeMobileMenu}
                       >
                         {/* Active indicator bar */}
                         {isActive && (
@@ -178,7 +191,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="flex items-center gap-2 text-sm text-white/40">
             <button 
               onClick={toggle}
-              className="mr-2 p-1.5 -ml-2 rounded-md hover:bg-white/10 lg:hidden text-white/70"
+              className="mr-2 -ml-2 inline-flex min-h-11 min-w-11 items-center justify-center rounded-md text-white/70 hover:bg-white/10 lg:hidden"
+              aria-label="Abrir menu"
             >
               <Menu size={18} />
             </button>
@@ -199,9 +213,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page Content */}
-        <main className="flex-1 overflow-x-hidden overflow-y-auto p-6 lg:p-8">
+        <main className="flex-1 overflow-x-hidden overflow-y-auto px-4 pb-24 pt-4 sm:px-6 lg:p-8">
           {children}
         </main>
+
+        <nav
+          aria-label="Navegação rápida"
+          className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-4 border-t border-white/[0.08] bg-[#0c1020]/95 px-2 pb-[env(safe-area-inset-bottom)] pt-1 backdrop-blur-xl lg:hidden"
+        >
+          {mobileNav.map((item) => {
+            const Icon = item.icon;
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={closeMobileMenu}
+                className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold ${active ? "text-emerald-400" : "text-white/50"}`}
+                aria-current={active ? "page" : undefined}
+              >
+                <Icon size={20} aria-hidden="true" />
+                <span className="max-w-full truncate">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );
