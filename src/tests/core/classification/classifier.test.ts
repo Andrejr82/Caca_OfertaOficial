@@ -2,6 +2,20 @@ import { describe, expect, it } from 'vitest'
 import { classifyProduct } from '@/core/classification/classifier'
 
 describe('deterministic product classifier', () => {
+  it('classifies high-value appliances and furniture as main products', () => {
+    for (const title of [
+      'Lava-Louças Brastemp 8 Serviços Inox',
+      'Smart TV Samsung 55 4K',
+      'Guarda-Roupa Casal 6 Portas',
+      'Cadeira de Escritório Ergonômica',
+      'Colchão Emma Original Solteiro',
+    ]) {
+      const result = classifyProduct({ title })
+      expect(result.productRole).toBe('main_product')
+      expect(result.status).toBe('classified')
+    }
+  })
+
   it('classifies a known air fryer as a main product', () => {
     expect(classifyProduct({ title: 'Air Fryer Philco PAF95A 9,5L 220V 1800W' })).toMatchObject({
       productType: 'air_fryer', productRole: 'main_product', status: 'classified',

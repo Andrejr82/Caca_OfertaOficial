@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { validateProductTitle } = require('./product-title-quality.cjs');
+const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
@@ -25,11 +26,7 @@ function queueCategory(product) {
 }
 
 function queueScore(product) {
-  const price = Number(product.currentPrice || 0);
-  const oldPrice = Number(product.originalPrice || 0);
-  const discount = oldPrice > price && price > 0 ? (oldPrice - price) / oldPrice : 0;
-  const metrics = product.marketplaceMetrics || {};
-  return Number(product.deterministicScore || 0) * 10 + Math.min(30, discount * 30) + Math.min(20, Number(metrics.sales || 0) > 0 ? 10 : 0) + Math.min(10, Number(metrics.rating || 0) >= 4.5 ? 10 : 0);
+  return scoreCandidate(product);
 }
 
 function selectCopyQueue(products, options = {}, cycleState = null) {
@@ -39,8 +36,18 @@ function selectCopyQueue(products, options = {}, cycleState = null) {
   const groups = cycleState?.groups || new Set();
   const selected = [];
   const skipped = [];
-  const ranked = [...products].sort((a, b) => queueScore(b) - queueScore(a));
-  for (const product of ranked) {
+  const ranked = [...products]
+    .map((product) => {
+      const candidate = product.marketplace ? product : { ...product, marketplace: limits.marketplace };
+      return { product: candidate, gate: qualityGate(candidate) };
+    })
+    .sort((a, b) => queueScore(b.product) - queueScore(a.product));
+  for (const entry of ranked) {
+    const product = entry.product;
+    if (!entry.gate.eligible) {
+      skipped.push({ sourceItemId: product.sourceItemId, reason: entry.gate.reasons[0], reasons: entry.gate.reasons });
+      continue;
+    }
     const titleQuality = validateProductTitle(product.title);
     if (!titleQuality.valid) {
       skipped.push({ sourceItemId: product.sourceItemId, reason: titleQuality.reason });
@@ -54,7 +61,7 @@ function selectCopyQueue(products, options = {}, cycleState = null) {
     if ((categoryCounts.get(category) || 0) >= limits.maxPerCategory) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_categoria' }); continue; }
     const selectedCount = Number(cycleState?.selectedCount || 0) + selected.length;
     if (selectedCount >= limits.maxTotal) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_total' }); continue; }
-    selected.push(product);
+    selected.push({ ...product, curation: entry.gate, curationScore: queueScore(product) });
     groups.add(group);
     marketplaceCounts.set(marketplace, (marketplaceCounts.get(marketplace) || 0) + 1);
     categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
@@ -278,5 +285,6 @@ module.exports = {
   MARKETPLACES,
   createCandidateV1,
   createIngestionV1,
+  selectCopyQueue,
   runDiscoveryOnlyCycle,
 };
