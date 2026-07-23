@@ -1,0 +1,7 @@
+{
+  "id": "motion-master-v1",
+  "canvas": { "width": 720, "height": 1280, "fps": 25 },
+  "protectedZones": [{ "x": 130, "y": 70, "width": 290, "height": 400 }],
+  "card": { "x": 430, "y": 430, "width": 250, "height": 370 },
+  "subtitle": { "x": 48, "y": 1030, "width": 624, "height": 170 }
+}

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "legacy-jbl-demo",
+      "role": "legacy",
+      "status": "archived",
+      "path": "legacy/Video_Avatar_Ofeerta.mp4",
+      "sha256": null,
+      "approvedAt": null
+    },
+    {
+      "id": "motion-master-v1",
+      "role": "motion-master",
+      "status": "proposed",
+      "path": "masters/motion-master-v1.mp4",
+      "sha256": null,
+      "approvedAt": null
+    }
+  ]
+}

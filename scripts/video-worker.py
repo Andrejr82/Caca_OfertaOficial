@@ -23,7 +23,11 @@ from pathlib import Path
 from textwrap import wrap
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
-from video_worker_runtime import build_edge_tts_command, validate_video_template
+from video_worker_runtime import validate_video_template
+from video_pipeline.quality_gate import inspect_video
+from video_pipeline.lipsync import run_lipsync
+from video_pipeline.preflight import run_preflight
+from video_pipeline.tts import synthesize_audio
 
 
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
@@ -154,14 +158,8 @@ def make_caption(script: str, destination: Path) -> None:
 
 
 def make_reference_badges(destination: Path) -> None:
-    """Replace baked reference lower-thirds with our own neutral badges."""
-    badges = Image.new("RGBA", (720, 1280), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(badges)
-    draw.rounded_rectangle((80, 975, 640, 1085), radius=22, fill=(245, 245, 245, 245), outline=(255, 190, 0, 240), width=3)
-    draw.text((125, 1008), "OFERTA VERIFICADA HOJE", font=font(24, bold=True), fill=(20, 24, 30, 255))
-    draw.rounded_rectangle((150, 1165, 600, 1235), radius=16, fill=(4, 7, 12, 210), outline=(255, 190, 0, 150), width=2)
-    draw.text((205, 1188), "PREÇO SUJEITO A ALTERAÇÃO", font=font(15, bold=True), fill="white")
-    badges.save(destination, "PNG")
+    """Create a transparent layer; no copy or legacy lower-third is allowed."""
+    Image.new("RGBA", (720, 1280), (0, 0, 0, 0)).save(destination, "PNG")
 
 
 def resolve_edge_tts_python() -> Path:
@@ -175,10 +173,7 @@ def resolve_edge_tts_python() -> Path:
 
 
 def speak(script: str, destination: Path) -> None:
-    subprocess.run(
-        build_edge_tts_command(resolve_edge_tts_python(), VOICE, TTS_RATE, TTS_PITCH, script, destination),
-        check=True, timeout=180,
-    )
+    synthesize_audio(resolve_edge_tts_python(), VOICE, TTS_RATE, TTS_PITCH, script, destination)
 
 
 def reference_cleanup_filter(template: dict, include_card: bool = False) -> str:
@@ -287,6 +282,8 @@ def validate_worker_runtime() -> None:
         raise SystemExit(f"Preflight falhou: vídeo-base não encontrado: {BASE_VIDEO_PATH}")
     if RENDER_ENGINE == "reference" and REFERENCE_SOURCE == "avatar" and not AVATAR_PATH.exists():
         raise SystemExit(f"Preflight falhou: avatar não encontrado: {AVATAR_PATH}")
+    if REFERENCE_SOURCE == "video" and BASE_VIDEO_PATH.name.lower() == "video_avatar_ofeerta.mp4":
+        raise SystemExit("Preflight falhou: Video_Avatar_Ofeerta.mp4 é legado e não pode ser fonte de produção.")
     if LIP_SYNC_ENGINE == "musetalk":
         validate_musetalk_runtime()
 
@@ -312,19 +309,10 @@ def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
     )
     result_dir = workdir / "musetalk-results"
     result_dir.mkdir()
-    command = [
-        str(resolve_musetalk_python()), "-m", "scripts.inference",
-        "--inference_config", str(config),
-        "--result_dir", str(result_dir),
-        "--unet_model_path", str(MUSETALK_UNET),
-        "--unet_config", str(MUSETALK_UNET_CONFIG),
-        "--version", MUSETALK_VERSION,
-    ]
-    subprocess.run(command, cwd=MUSETALK_DIR, check=True, timeout=1800)
-    generated = sorted(result_dir.rglob("*.mp4"), key=lambda path: path.stat().st_mtime, reverse=True)
-    if not generated:
-        raise RuntimeError("MuseTalk terminou sem produzir um MP4.")
-    shutil.copyfile(generated[0], output)
+    run_lipsync(
+        resolve_musetalk_python(), MUSETALK_DIR, config, result_dir,
+        MUSETALK_UNET, MUSETALK_UNET_CONFIG, MUSETALK_VERSION, output,
+    )
 
 
 def overlay_card_on_video(
@@ -505,6 +493,10 @@ def process(job: dict) -> None:
                 raise RuntimeError("Avatar não encontrado. Configure VIDEO_AVATAR_PATH ou VIDEO_AVATAR_URL.")
             heartbeat(job_id, "composing_video")
             render(avatar, card, caption, audio, video)
+        heartbeat(job_id, "quality_gate")
+        quality_report = inspect_video(video, audio, template)
+        if not quality_report.ok:
+            raise RuntimeError(f"Quality gate rejeitou o vídeo: {json.dumps(quality_report.as_dict(), ensure_ascii=False)}")
         heartbeat(job_id, "uploading_media")
         video_url = signed_upload(job_id, "video", video)
         audio_url = signed_upload(job_id, "audio", audio)
@@ -524,7 +516,20 @@ def main() -> None:
         raise SystemExit("MuseTalk requer VIDEO_MUSETALK_DIR, VIDEO_MUSETALK_CONFIG, VIDEO_MUSETALK_UNET e VIDEO_MUSETALK_UNET_CONFIG.")
     validate_worker_runtime()
     if "--preflight" in sys.argv:
-        print("Preflight concluído: TTS, FFmpeg, template e runtime de vídeo estão prontos.", flush=True)
+        report = run_preflight({
+            "python": str(resolve_edge_tts_python()),
+            "lip_sync_engine": LIP_SYNC_ENGINE,
+            "musetalk_dir": str(MUSETALK_DIR or ""),
+            "musetalk_config": str(MUSETALK_CONFIG or ""),
+            "musetalk_unet": str(MUSETALK_UNET or ""),
+            "musetalk_unet_config": str(MUSETALK_UNET_CONFIG or ""),
+            "reference_source": REFERENCE_SOURCE,
+            "master_video": str(BASE_VIDEO_PATH),
+            "template_path": str(TEMPLATE_PATH),
+        })
+        if not report.ok:
+            raise SystemExit(f"Preflight falhou: {'; '.join(report.failures)}")
+        print("Preflight concluído: nenhum job foi reivindicado.", flush=True)
         return
     processed = 0
     print(f"Worker iniciado; limite desta execução: {MAX_JOBS} jobs.", flush=True)
