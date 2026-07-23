@@ -51,6 +51,29 @@ function instagramMode(offer: { product_name?: string | null; notes?: string | n
   return coupon ? "synchronous" : "asynchronous";
 }
 
+function facebookPremiumImageUrl(offer: {
+  id?: string | null;
+  platform?: string | null;
+  image_url?: string | null;
+}) {
+  const platform = String(offer.platform ?? "").trim().toLowerCase().replace(/[ _-]+/g, "");
+  const shouldUsePremium = platform === "amazon" || platform === "mercadolivre";
+  if (!shouldUsePremium || !offer.id) return offer.image_url ?? null;
+
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
+  return `${baseUrl.replace(/\/$/, "")}/api/images/whatsapp-premium?offerId=${encodeURIComponent(offer.id)}`;
+}
+
+function resolvePublicationImage(
+  channel: OfficialPublicationChannel,
+  offer: { id?: string | null; platform?: string | null; image_url?: string | null; coupon?: string | null; product_name?: string | null; notes?: string | null } | null | undefined
+) {
+  if (!offer) return Promise.resolve(null);
+  if (isCouponOffer(offer)) return resolveCouponPublishImageUrl(offer);
+  if (channel === "facebook") return Promise.resolve(facebookPremiumImageUrl(offer));
+  return Promise.resolve(offer.image_url ?? null);
+}
+
 export class SupabaseOfficialPublicationAdapter implements
   PublicationRepositoryPort,
   PublicationReceiptPort,
@@ -99,9 +122,7 @@ export class SupabaseOfficialPublicationAdapter implements
       content: coupon
         ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
         : data.content,
-      mediaUrl: coupon
-        ? await resolveCouponPublishImageUrl(related)
-        : related?.image_url ?? null,
+      mediaUrl: await resolvePublicationImage(channel, related),
       destination: this.destinations[channel] ?? "",
       metadata: channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}
     };
@@ -129,9 +150,7 @@ export class SupabaseOfficialPublicationAdapter implements
         content: coupon
           ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
           : item.content,
-        mediaUrl: coupon
-          ? await resolveCouponPublishImageUrl(related)
-          : related?.image_url ?? null,
+        mediaUrl: await resolvePublicationImage(channel, related),
         destination: this.destinations[channel] ?? "",
         metadata: (channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}) as Readonly<Record<string, string | number | boolean>>
       };
