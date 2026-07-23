@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 from video_pipeline.preflight import run_preflight
 from video_pipeline.tts import build_edge_tts_command
+from video_worker_runtime import build_avatar_motion_filter
 
 
 class VideoPipelineTests(unittest.TestCase):
@@ -32,6 +33,13 @@ class VideoPipelineTests(unittest.TestCase):
         self.assertFalse(report.ok)
         self.assertIn('master_video', report.checks)
         self.assertIn('musetalk_dir', report.checks)
+
+    def test_avatar_motion_filter_is_deterministic_and_has_no_legacy_overlay(self):
+        command = build_avatar_motion_filter()
+        self.assertIn('zoompan', command)
+        self.assertIn('sin(on/', command)
+        self.assertNotIn('JBL', command)
+        self.assertNotIn('OFERTA ENCONTRADA', command)
 
 
 if __name__ == '__main__':

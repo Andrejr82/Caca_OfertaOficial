@@ -3,6 +3,18 @@
 from pathlib import Path
 
 
+def build_avatar_motion_filter() -> str:
+    """Create deterministic camera/parallax motion from the static avatar PNG."""
+    return (
+        "[0:v]scale=720:1280:force_original_aspect_ratio=decrease,"
+        "pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=black,"
+        "zoompan=z='1.0+0.035*sin(on/180)':"
+        "x='iw/2-(iw/zoom/2)+8*sin(on/40)':"
+        "y='ih/2-(ih/zoom/2)+4*sin(on/55)':"
+        "d=1:s=720x1280:fps=25,format=yuv420p[v]"
+    )
+
+
 def validate_video_template(name: str, template: dict) -> None:
     card = template.get("card", {})
     canvas = template.get("canvas", {})

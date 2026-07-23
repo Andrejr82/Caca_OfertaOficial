@@ -23,7 +23,7 @@ from pathlib import Path
 from textwrap import wrap
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
-from video_worker_runtime import validate_video_template
+from video_worker_runtime import build_avatar_motion_filter, validate_video_template
 from video_pipeline.quality_gate import inspect_video
 from video_pipeline.lipsync import run_lipsync
 from video_pipeline.preflight import run_preflight
@@ -203,13 +203,7 @@ def make_avatar_motion_video(avatar: Path, audio: Path, output: Path) -> None:
         raise RuntimeError(f"Avatar não encontrado: {avatar}")
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
-    filters = (
-        "[0:v]scale=720:1080:force_original_aspect_ratio=decrease,"
-        "pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=black,"
-        "zoompan=z='min(zoom+0.00035,1.035)':"
-        "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-        "d=1:s=720x1280:fps=25,format=yuv420p[v]"
-    )
+    filters = build_avatar_motion_filter()
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(avatar),
