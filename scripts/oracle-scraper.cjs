@@ -328,6 +328,21 @@ function discoveryGroupKey(product, productType) {
   return `${productType}|${model.trim()}|${capacity.trim()}`.replace(/\s+/g, ' ').trim();
 }
 
+async function filterNovelNormalizedProducts(marketplace, products) {
+  if (!Array.isArray(products) || products.length === 0) return [];
+  const history = await loadActiveDiscoveryHistory(marketplace);
+  const known = new Set(history.flatMap((row) => [
+    row.item_id,
+    row.product_id,
+    row.shopee_item_id,
+    row.original_url,
+  ].filter(Boolean).map(String)));
+  return products.filter((product) => ![
+    product.sourceItemId,
+    product.sourceUrl,
+  ].filter(Boolean).some((key) => known.has(String(key))));
+}
+
 async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue }) {
   const supabase = getSupabase();
   const { data: run, error: runError } = await supabase.from('discovery_runs').insert({
@@ -357,9 +372,10 @@ async function scrapeStore(store) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
     const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario: CLI_SCENARIO_ID });
-    return result.categories
+    const normalized = result.categories
       .flatMap((category) => category.products)
       .map((product) => normalizeShopeeCandidate(product, discoveredAt));
+    return filterNovelNormalizedProducts(store, normalized);
   }
   if (store === 'Mercado Livre') {
     if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
@@ -373,7 +389,7 @@ async function scrapeStore(store) {
         maxPerIntent: 20,
         delayMs: 500,
       });
-      return result.products
+      const normalized = result.products
         .filter((product) => ![product.item_id, product.product_id, product.product_url]
           .filter(Boolean)
           .some((key) => known.has(String(key))))
@@ -382,6 +398,7 @@ async function scrapeStore(store) {
         discovered_at: result.generated_at,
         source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
         }));
+      return filterNovelNormalizedProducts(store, normalized);
     }
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
@@ -394,11 +411,12 @@ async function scrapeStore(store) {
         'https://www.mercadolivre.com.br/mais-vendidos/casa-moveis-decoracao'
       ]
     });
-    return result.products
+    const normalized = result.products
       .filter((product) => ![product.item_id, product.product_id, product.product_url]
         .filter(Boolean)
         .some((key) => known.has(String(key))))
       .map(normalizeMercadoLivreCandidate);
+    return filterNovelNormalizedProducts(store, normalized);
   }
   if (store === 'Amazon') {
     const history = await loadActiveDiscoveryHistory(store);
@@ -409,9 +427,10 @@ async function scrapeStore(store) {
       maxCategories: 10,
       maxSubcategoriesPerCategory: 5
     });
-    return result.products
+    const normalized = result.products
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
       .map((product) => normalizeAmazonCandidate(product, discoveredAt));
+    return filterNovelNormalizedProducts(store, normalized);
   }
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
 }
