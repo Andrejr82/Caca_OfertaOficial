@@ -213,16 +213,24 @@ async function executeShopeeNativeDiscoveryV5(options = {}) {
 
 
 async function loadActiveDiscoveryHistory(marketplace) {
-  const { data, error } = await getSupabase()
-    .from('offers')
-    .select('item_id, product_id, shopee_item_id, original_url, status')
-    .eq('user_id', ADMIN_USER_ID)
-    .eq('platform', marketplace);
-  if (error) throw new Error('Novelty ' + marketplace + ': ' + error.message);
+  const supabase = getSupabase();
+  const pageSize = 1000;
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('offers')
+      .select('item_id, product_id, shopee_item_id, original_url, status')
+      .eq('user_id', ADMIN_USER_ID)
+      .eq('platform', marketplace)
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error('Novelty ' + marketplace + ': ' + error.message);
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
   // Every existing identity is excluded from automatic discovery, including
   // previously rejected offers. Re-selecting rejected rows was inflating the
   // persisted counter without creating new panel items.
-  return data || [];
+  return rows;
 }
 
 function normalizeShopeeCandidate(product, discoveredAt) {
