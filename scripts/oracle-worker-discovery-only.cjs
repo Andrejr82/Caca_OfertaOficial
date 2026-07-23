@@ -6,7 +6,7 @@ const { validateProductTitle } = require('./product-title-quality.cjs');
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
 
-const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 20, maxPerMarketplace: 5, maxPerCategory: 3 });
+const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 });
 
 function normalizeQueueText(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();

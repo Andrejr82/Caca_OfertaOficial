@@ -19,9 +19,9 @@ export function buildAutomatedCopyQueue(
   offers: CurationOfferInput[],
   options: AutomatedCopyQueueOptions = {}
 ) {
-  const maxTotal = options.maxTotal ?? 20
-  const maxPerMarketplace = options.maxPerMarketplace ?? 5
-  const maxPerCategory = options.maxPerCategory ?? 3
+  const maxTotal = options.maxTotal ?? 30
+  const maxPerMarketplace = options.maxPerMarketplace ?? 10
+  const maxPerCategory = options.maxPerCategory ?? 10
   const curated = curateOffers(offers).sort((a, b) => b.curationScore - a.curationScore)
   const marketplaceCount = new Map<string, number>()
   const categoryCount = new Map<string, number>()
