@@ -225,6 +225,8 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         queueLimits: queue.limits,
         rejected,
         persisted: Number(persisted.accepted || 0),
+        inserted: Number(persisted.inserted || 0),
+        updated: Number(persisted.updated || 0),
         state: FINAL_STATE,
       });
       summaries.push(summary);

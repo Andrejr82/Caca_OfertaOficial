@@ -161,7 +161,6 @@ async function loadShopeeNoveltyKeys() {
   if (error) throw new Error('Novelty Shopee V5: ' + error.message);
   const keys = new Set();
   for (const offer of data || []) {
-    if (offer.status === 'rejected') continue;
     if (offer.shopee_item_id) keys.add('item:' + offer.shopee_item_id);
     if (offer.shopee_item_id && offer.shopee_shop_id) {
       keys.add('shopItem:' + offer.shopee_shop_id + ':' + offer.shopee_item_id);
@@ -220,7 +219,10 @@ async function loadActiveDiscoveryHistory(marketplace) {
     .eq('user_id', ADMIN_USER_ID)
     .eq('platform', marketplace);
   if (error) throw new Error('Novelty ' + marketplace + ': ' + error.message);
-  return (data || []).filter((row) => row.status !== 'rejected');
+  // Every existing identity is excluded from automatic discovery, including
+  // previously rejected offers. Re-selecting rejected rows was inflating the
+  // persisted counter without creating new panel items.
+  return data || [];
 }
 
 function normalizeShopeeCandidate(product, discoveredAt) {
@@ -363,17 +365,23 @@ async function scrapeStore(store) {
     if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
       const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
       const scenario = getActiveMarketplaceScenario();
+      const history = await loadActiveDiscoveryHistory(store);
+      const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
       const result = await runMercadoLivreOfficialIntentCoverage({
         accessToken,
         keywords: scenario?.keywords,
         maxPerIntent: 20,
         delayMs: 500,
       });
-      return result.products.map((product) => normalizeMercadoLivreCandidate({
+      return result.products
+        .filter((product) => ![product.item_id, product.product_id, product.product_url]
+          .filter(Boolean)
+          .some((key) => known.has(String(key))))
+        .map((product) => normalizeMercadoLivreCandidate({
         ...product,
         discovered_at: result.generated_at,
         source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
-      }));
+        }));
     }
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
@@ -593,7 +601,7 @@ async function runScrapingCycle() {
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
   if (result.marketplaces) {
     for (const summary of result.marketplaces) {
-      console.log(`[Oracle Discovery-Only V5] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos`);
+      console.log(`[Oracle Discovery-Only V5] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos (${summary.inserted} novos, ${summary.updated} atualizados)`);
     }
   }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
