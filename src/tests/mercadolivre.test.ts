@@ -84,6 +84,51 @@ describe("Mercado Livre Integration", () => {
       expect(metadata?.imageSource).toBe("mercadolivre_api");
     });
 
+    it("should parse the permitted bulk item endpoint response", async () => {
+      const fetchMock = vi.spyOn(global, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => [{ code: 200, body: {
+          title: "Fechadura Digital",
+          price: 899,
+          permalink: "https://produto.mercadolivre.com.br/MLB-3449816175",
+          pictures: [{ secure_url: "https://http2.mlstatic.com/fechadura.jpg" }]
+        } }]
+      } as Response);
+
+      const metadata = await fetchMLProductDetails("https://produto.mercadolivre.com.br/MLB-3449816175");
+      expect(metadata?.title).toBe("Fechadura Digital");
+      expect(metadata?.price).toBe(899);
+      expect(fetchMock.mock.calls[0]?.[0]).toContain("/items?ids=MLB3449816175");
+    });
+
+    it("should use catalog endpoints when the item endpoint is forbidden", async () => {
+      const fetchMock = vi.spyOn(global, "fetch")
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [{ code: 403, body: { message: "forbidden" } }],
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ results: [{ item_id: "MLB5797769086", price: 2099, thumbnail: "https://img.test/tv.jpg" }] }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ name: "Smart TV TCL 43\"", buy_box_winner: { price: 2099 } }),
+        } as Response);
+
+      const metadata = await fetchMLProductDetails(
+        "https://www.mercadolivre.com.br/smart-tv/p/MLB49197748?pdp_filters=item_id%3AMLB5797769086",
+      );
+      expect(metadata?.title).toContain("Smart TV TCL");
+      expect(metadata?.price).toBe(2099);
+      expect(metadata?.imageUrl).toBe("https://img.test/tv.jpg");
+      expect(fetchMock.mock.calls.map(([input]) => String(input))).toEqual([
+        expect.stringContaining("/items?ids=MLB5797769086"),
+        expect.stringContaining("/products/MLB49197748/items"),
+        expect.stringContaining("/products/MLB49197748"),
+      ]);
+    });
+
     it("should fetch catalog product details and parse them correctly", async () => {
       const mockProduct = {
         name: "Celular Catalogo Teste",
