@@ -183,7 +183,9 @@ async function executeShopeeNativeDiscoveryV5(options = {}) {
   let forcedScenario = null;
   if (options.scenario) {
     const scenarioConfig = require('./shopee-scenario-config.cjs');
-    forcedScenario = scenarioConfig.SCENARIOS[options.scenario];
+    forcedScenario = typeof options.scenario === 'string'
+      ? scenarioConfig.SCENARIOS[options.scenario]
+      : options.scenario;
     if (!forcedScenario) {
       throw new Error(`Cenário Shopee '--scenario ${options.scenario}' não encontrado.`);
     }
@@ -379,7 +381,7 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
 async function scrapeStore(store) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
-    const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario: CLI_SCENARIO_ID });
+    const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario: getActiveMarketplaceScenario() });
     const normalized = result.categories
       .flatMap((category) => category.products)
       .map((product) => normalizeShopeeCandidate(product, discoveredAt));
