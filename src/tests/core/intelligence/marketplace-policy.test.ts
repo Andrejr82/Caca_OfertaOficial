@@ -24,4 +24,30 @@ describe('marketplace policy', () => {
   it('rejects unsupported marketplaces instead of guessing', () => {
     expect(scoreMarketplaceOffer({ marketplace: 'Magalu', price: 100 })).toMatchObject({ marketplace: 'unsupported', eligible: false, score: 0 })
   })
+
+  // Sprint 3: Qualidade Shopee
+  it('accepts Shopee products with rating 4.5', () => {
+    const result = scoreMarketplaceOffer({ marketplace: 'Shopee', price: 100, oldPrice: 150, sellerRating: 4.5, sellerSales: 100, hasFreeShipping: true, deliveryDays: 2 })
+    expect(result.eligible).toBe(true)
+    expect(result.blockers).not.toContain('avaliacao_baixa')
+  })
+
+  it('rejects Shopee products with rating < 4.5', () => {
+    const result = scoreMarketplaceOffer({ marketplace: 'Shopee', price: 100, sellerRating: 4.4, sellerSales: 100 })
+    expect(result.eligible).toBe(false)
+    expect(result.blockers).toContain('avaliacao_baixa')
+  })
+
+  it('allows Shopee products with 0 sales if they are from Mall or Official Store (lançamento)', () => {
+    const result = scoreMarketplaceOffer({ marketplace: 'Shopee', price: 100, oldPrice: 150, sellerRating: 4.8, sellerSales: 0, isMall: true, hasFreeShipping: true, deliveryDays: 2 })
+    expect(result.eligible).toBe(true)
+    expect(result.reasons).toContain('lancamento_oficial')
+    expect(result.blockers).not.toContain('vendas_insuficientes')
+  })
+
+  it('rejects Shopee products with low sales if they are not Mall or Official Store', () => {
+    const result = scoreMarketplaceOffer({ marketplace: 'Shopee', price: 100, sellerRating: 4.8, sellerSales: 10 })
+    expect(result.eligible).toBe(false)
+    expect(result.blockers).toContain('vendas_insuficientes')
+  })
 })

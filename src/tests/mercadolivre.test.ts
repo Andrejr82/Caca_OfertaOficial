@@ -72,7 +72,8 @@ describe("Mercado Livre Integration", () => {
 
       vi.spyOn(global, "fetch").mockResolvedValue({
         ok: true,
-        json: async () => mockItem
+        json: async () => mockItem,
+        text: async () => "<html></html>"
       } as Response);
 
       const metadata = await fetchMLProductDetails("https://produto.mercadolivre.com.br/MLB-12345");
@@ -92,7 +93,8 @@ describe("Mercado Livre Integration", () => {
           price: 899,
           permalink: "https://produto.mercadolivre.com.br/MLB-3449816175",
           pictures: [{ secure_url: "https://http2.mlstatic.com/fechadura.jpg" }]
-        } }]
+        } }],
+        text: async () => "<html></html>"
       } as Response);
 
       const metadata = await fetchMLProductDetails("https://produto.mercadolivre.com.br/MLB-3449816175");
@@ -114,6 +116,10 @@ describe("Mercado Livre Integration", () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ name: "Smart TV TCL 43\"", buy_box_winner: { price: 2099 } }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => "<html><script type=\"application/ld+json\">{\"aggregateRating\":{\"ratingValue\":\"4.8\"}}</script></html>",
         } as Response);
 
       const metadata = await fetchMLProductDetails(
@@ -126,6 +132,7 @@ describe("Mercado Livre Integration", () => {
         expect.stringContaining("/items?ids=MLB5797769086"),
         expect.stringContaining("/products/MLB49197748/items"),
         expect.stringContaining("/products/MLB49197748"),
+        expect.stringContaining("MLB49197748"),
       ]);
     });
 
@@ -139,7 +146,8 @@ describe("Mercado Livre Integration", () => {
 
       vi.spyOn(global, "fetch").mockResolvedValue({
         ok: true,
-        json: async () => mockProduct
+        json: async () => mockProduct,
+        text: async () => "<html></html>"
       } as Response);
 
       const metadata = await fetchMLProductDetails("https://www.mercadolivre.com.br/p/MLB21473210");

@@ -5,7 +5,7 @@ export type ProductTitleQuality = {
 };
 
 const GENERIC_TITLE = /^(?:gen[eê]rico|generic|produto\s+gen[eê]rico|generic\s+product|sem\s+nome|unknown|unnamed|produto|item|placeholder)$/iu;
-const CODE_ONLY = /^(?:[a-z]{2,6}[-_ ]?)?\d{6,14}$/iu;
+const CODE_ONLY = /^(?:mlb[-_ ]?\d{6,14}|b0[-_ ]?[a-z0-9]{8}|sku[-_ ]?\d+|c[oó]digo[-_ ]?\d+|[a-z0-9]{10,20})$/iu;
 
 function usefulWords(value: string) {
   return value

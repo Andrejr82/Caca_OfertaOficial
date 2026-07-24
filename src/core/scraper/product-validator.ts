@@ -242,6 +242,41 @@ export function validateProduct(product: any, source: string): ValidationResult 
     price = parseFloat(cleaned) || 0;
   }
   
+  // Sprint 2: Validação Centralizada de Preço e Desconto
+  let oldPrice = 0;
+  if (typeof product.old_price === 'number') {
+    oldPrice = product.old_price;
+  } else if (product.old_price != null) {
+    const rawOld = String(product.old_price).replace(/[R$\s.]/g, '').replace(',', '.');
+    oldPrice = parseFloat(rawOld) || 0;
+  }
+
+  if (!product.explainability) {
+    product.explainability = {};
+  }
+
+  if (!oldPrice) {
+    product.old_price = null;
+    product.discount_percent = null;
+    product.explainability.discount_reason = "OLD_PRICE_MISSING";
+  } else if (oldPrice <= price) {
+    product.old_price = null;
+    product.discount_percent = null;
+    product.explainability.discount_reason = oldPrice === price ? "OLD_PRICE_EQUAL_CURRENT" : "OLD_PRICE_BELOW_CURRENT";
+  } else {
+    const discountPct = (oldPrice - price) / oldPrice;
+    if (discountPct > 0.8) {
+      product.old_price = null;
+      product.discount_percent = null;
+      product.explainability.discount_reason = "DISCOUNT_SUSPICIOUS";
+    } else {
+      product.old_price = oldPrice;
+      product.discount_percent = Math.round(discountPct * 100);
+      product.explainability.discount_reason = "VALID";
+    }
+  }
+
+
   const image = (product.image || product.image_url || "").trim();
   const url = (product.url || product.original_url || "").trim();
   const amazonSource = isAmazonSource(source);
