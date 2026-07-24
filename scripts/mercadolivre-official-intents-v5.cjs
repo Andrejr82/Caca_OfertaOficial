@@ -7,9 +7,12 @@ const { SCENARIOS } = require('./amazon-scenario-config.cjs');
 const { coverageGate } = require('./coverage-policy.cjs');
 
 const API_ROOT = 'https://api.mercadolibre.com';
+const API_TIMEOUT_MS = 45000;
 const REPORT_PATH = 'reports/mercadolivre-official-intents-v5-dry-run.json';
 const DEFAULT_TENANT_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-const MIN_PRODUCTS_PER_INTENT = 15;
+// O worker coleta até 20 por intenção; 10 válidos deixam margem para
+// duplicatas/rejeições sem permitir cobertura frágil na seleção automática.
+const MIN_PRODUCTS_PER_INTENT = 10;
 // Categorias de catálogo com poucos anúncios ativos. A exceção é explícita
 // e auditável; não reduz o gate das demais intenções nem mistura categorias.
 const MIN_PRODUCTS_BY_INTENT = {
@@ -113,7 +116,7 @@ const PREFERRED_DOMAIN_META = {
   , 'MLB-LEGGINGS': { domain_id: 'MLB-LEGGINGS', category_id: 'MLB278018', category_name: 'Leggings' }
 };
 const SAFE_CLOTHING_DOMAINS = /(?:CLOTHING|CLOTHES|SPORTSWEAR|JACKETS|PANTS|SHIRTS|SHORTS|LEGGINGS|BODY_SHAPERS|FASHION)/i;
-const BLOCKED_CLOTHING_DOMAINS = /(?:BOOK|PET|MUGS|PERFUMES|WALLETS|ZIPPERS|HANDBAGS|SUNGLASSES|KETTLEBELLS)/i;
+const BLOCKED_CLOTHING_DOMAINS = /(?:BOOK|PET|MUGS|PERFUMES|WALLETS|ZIPPERS|HANDBAGS|SUNGLASSES|KETTLEBELLS|BASEBALL|SOFTBALL)/i;
 
 function rankDomains(domains, intent) {
   const query = intent.toLocaleLowerCase('pt-BR');
@@ -176,7 +179,10 @@ async function refreshAccessToken({ fetchImpl = global.fetch, env = process.env,
 }
 
 async function apiGet(path, { fetchImpl = global.fetch, accessToken } = {}) {
-  const response = await fetchImpl(`${API_ROOT}${path}`, { headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` } });
+  const response = await fetchImpl(`${API_ROOT}${path}`, {
+    headers: { Accept: 'application/json', Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(API_TIMEOUT_MS),
+  });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(`ML API HTTP ${response.status}: ${body.message || path}`);
   return body;
@@ -344,4 +350,13 @@ async function main() {
 
 if (require.main === module) main().catch((error) => { console.error(error.message); process.exitCode = 1; });
 
-module.exports = { refreshAccessToken, persistRefreshedCredentials, apiGet, normalizeItems, runMercadoLivreOfficialIntentCoverage, SEARCH_ALIASES };
+module.exports = {
+  refreshAccessToken,
+  persistRefreshedCredentials,
+  apiGet,
+  normalizeItems,
+  runMercadoLivreOfficialIntentCoverage,
+  catalogFallbackProducts,
+  MIN_PRODUCTS_PER_INTENT,
+  SEARCH_ALIASES
+};
