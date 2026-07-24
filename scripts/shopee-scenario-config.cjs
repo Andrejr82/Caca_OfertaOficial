@@ -265,6 +265,11 @@ function getCycleScenario(startHour, durationHours = 4) {
   };
 }
 
+function getCycleStartHour(currentHour) {
+  const hour = ((Number(currentHour) % 24) + 24) % 24;
+  return hour - (hour % 4);
+}
+
 // 3. Função Auxiliar de Sorteio
 function getRandomItems(array, count = 5) {
   if (!array || array.length === 0) return [];
@@ -315,6 +320,7 @@ module.exports = {
   getSaoPauloHour,
   getActiveScenario,
   getCycleScenario,
+  getCycleStartHour,
   getScenarioWindow,
   SCENARIO_WINDOWS,
   getRandomItems,
