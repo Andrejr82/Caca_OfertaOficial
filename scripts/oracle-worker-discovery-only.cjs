@@ -84,7 +84,7 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
   for (const entry of ranked) {
     const product = entry.product;
     if (!entry.gate.eligible) {
-      skipped.push({ sourceItemId: product.sourceItemId, reason: entry.gate.reasons[0], reasons: entry.gate.reasons });
+      skipped.push({ sourceItemId: product.sourceItemId, reason: entry.gate.reasons[0], reasons: entry.gate.reasons, warnings: entry.gate.warnings || [] });
       continue;
     }
     const titleQuality = validateProductTitle(product.title);
@@ -312,6 +312,25 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         await persist(deferredIngestions, marketplace, 'deferred');
       }
 
+      let amazonTelemetry = undefined;
+      if (marketplace.toLowerCase() === 'amazon') {
+        const allProcessed = [...queue.selected.map(s => s.curation), ...(queue.deferred || []).map(d => ({ warnings: [] })), ...(queue.skipped || [])];
+        const missing_commercial_data = allProcessed.filter(p => (p?.warnings || []).includes('DADOS_COMERCIAIS_INDISPONIVEIS')).length;
+        const quality_rejected = (queue.skipped || []).filter(s => s.reason !== 'limite_marketplace' && s.reason !== 'grupo_ja_representado' && !s.reason?.startsWith('deferred_')).length;
+        amazonTelemetry = {
+          amazon_discovered: products.length,
+          amazon_structurally_valid: uniqueProducts.length,
+          amazon_missing_commercial_data: missing_commercial_data,
+          amazon_commercial_signal_found: uniqueProducts.length - missing_commercial_data,
+          amazon_quality_rejected: quality_rejected,
+          amazon_ranked: uniqueProducts.length,
+          amazon_selected: queue.selected.length,
+          amazon_deferred: queue.deferred?.length || 0,
+          amazon_persisted: Number(persisted.accepted || 0),
+          reasons: (queue.skipped || []).reduce((acc, s) => { acc[s.reason] = (acc[s.reason] || 0) + 1; return acc; }, {})
+        };
+      }
+
       const summary = Object.freeze({
         marketplace,
         discovered: products.length,
@@ -325,6 +344,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         inserted: Number(persisted.inserted || 0),
         updated: Number(persisted.updated || 0),
         state: FINAL_STATE,
+        ...(amazonTelemetry ? { amazonTelemetry } : {})
       });
       summaries.push(summary);
       await safeObserve('discovery.marketplace.completed', {

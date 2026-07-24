@@ -62,6 +62,7 @@ function marketplaceName(product) {
 
 function qualityGate(product) {
   const reasons = [];
+  const warnings = [];
   const title = String(product?.title || '').trim();
   const titleQuality = validateProductTitle(title);
   const price = Number(product?.currentPrice || 0);
@@ -87,17 +88,28 @@ function qualityGate(product) {
     if (sales > 0 && sales < 100) reasons.push('VENDAS_SHOPEE_BAIXAS');
   }
 
-  if (marketplace === 'amazon' && discount <= 0 && !hasVerifiedCommercialSignal) {
-    reasons.push('AMAZON_SEM_VANTAGEM_COMPROVADA');
+  const hasCommercialData = Boolean(product?.originalPrice != null || metrics.rating != null || metrics.reviewCount != null || hasVerifiedCommercialSignal);
+
+  if (marketplace === 'amazon') {
+    if (!hasCommercialData) {
+      warnings.push('DADOS_COMERCIAIS_INDISPONIVEIS');
+    } else if (discount <= 0 && !hasVerifiedCommercialSignal) {
+      reasons.push('AMAZON_SEM_VANTAGEM_COMPROVADA');
+    }
   }
 
-  if (tier === PRICE_TIERS.HIGH && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('ALTO_VALOR_SEM_VANTAGEM');
-  if (tier === PRICE_TIERS.MEDIUM && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('VALOR_MEDIO_SEM_VANTAGEM');
-  if (tier === PRICE_TIERS.IMPULSE && discount < 10 && !hasVerifiedCommercialSignal && Number(metrics.sales || 0) < 1000) reasons.push('IMPULSO_SEM_VANTAGEM');
+  if (hasCommercialData) {
+    if (tier === PRICE_TIERS.HIGH && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('ALTO_VALOR_SEM_VANTAGEM');
+    if (tier === PRICE_TIERS.MEDIUM && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('VALOR_MEDIO_SEM_VANTAGEM');
+    if (tier === PRICE_TIERS.IMPULSE && discount < 10 && !hasVerifiedCommercialSignal && Number(metrics.sales || 0) < 1000) reasons.push('IMPULSO_SEM_VANTAGEM');
+  } else {
+    warnings.push('AVALIACAO_DE_VANTAGEM_INDISPONIVEL');
+  }
 
   return {
     eligible: reasons.length === 0,
     reasons,
+    warnings,
     tier,
     family: classifyProductFamily(product),
     discountPercent: Number(discount.toFixed(2)),
@@ -126,7 +138,14 @@ function scoreCandidate(product, gate = qualityGate(product)) {
       ? Math.min(15, savings / 100)
       : Math.min(8, discount * 0.2);
   const trustScore = Math.min(15, (rating >= 4.7 ? 10 : rating >= 4.5 ? 6 : 0) + (sales >= 1000 ? 5 : sales >= 100 ? 2 : 0));
-  return Number((base + discountScore + savingsScore + trustScore + officialStore + shipping).toFixed(2));
+  
+  let penalty = 0;
+  if ((gate.warnings || []).includes('DADOS_COMERCIAIS_INDISPONIVEIS')) {
+    const rawPenalty = Number(process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY ?? -8);
+    penalty = (Number.isFinite(rawPenalty) && rawPenalty <= 0) ? rawPenalty : -8;
+  }
+  
+  return Number(Math.max(0, base + discountScore + savingsScore + trustScore + officialStore + shipping + penalty).toFixed(2));
 }
 
 module.exports = {

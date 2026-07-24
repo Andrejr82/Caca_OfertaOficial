@@ -25,7 +25,8 @@ const PRODUCT_KEYS = [
   'seller',
   'discount',
   'score',
-  'novelty'
+  'novelty',
+  'marketplaceMetrics'
 ];
 
 function cleanText(value) {
@@ -54,6 +55,31 @@ function extractProductPrice(root) {
   const fraction = cleanText(root.find('.a-price-fraction').first().text());
   if (whole) return parseBrazilPrice(fraction ? `${whole},${fraction}` : whole);
   return null;
+}
+
+function extractProductCommercials(root, price) {
+  let original_price = parseBrazilPrice(root.find('.a-text-price .a-offscreen').first().text());
+  if (original_price <= price) original_price = null;
+  const discount = original_price ? ((original_price - price) / original_price) * 100 : null;
+
+  const textLower = cleanText(root.text()).toLowerCase();
+  const prime = root.find('.a-icon-prime').length > 0 || /\bprime\b/i.test(textLower);
+  const coupon = root.find('.s-coupon-highlight-color, .s-coupon-unclipped').length > 0;
+  const promotion = root.find('.savingPriceOverride, .promoPrice').length > 0;
+
+  const ratingText = root.find('.a-icon-star-small, .a-icon-alt').first().text();
+  const ratingMatch = ratingText.match(/(\d+[.,]\d+)/);
+  const rating = ratingMatch ? Number(ratingMatch[1].replace(',', '.')) : null;
+
+  const reviewText = root.find('a[href*="#customerReviews"] > span.a-size-small, .a-size-small .a-link-normal, span.a-size-base').first().text();
+  const reviewMatch = reviewText.replace(/\./g, '').match(/(\d+)/);
+  const reviewCount = reviewMatch ? Number(reviewMatch[1]) : null;
+
+  return {
+    original_price,
+    discount: discount !== null ? Math.max(0, Math.min(100, discount)) : null,
+    marketplaceMetrics: { prime, coupon, promotion, rating, reviewCount }
+  };
 }
 
 function parseRootCategories(html) {
@@ -132,6 +158,9 @@ function parseRankingPage(html, source) {
       || root.find(`a[href*="/dp/${asin}"]`).first().text()
     );
 
+    const price = extractProductPrice(root);
+    const commercials = extractProductCommercials(root, price);
+
     byRank.set(rank, {
       marketplace: 'Amazon',
       category: source.category,
@@ -144,12 +173,13 @@ function parseRankingPage(html, source) {
       title,
       image: cleanText(picture.attr('src')) || null,
       canonical_url: /^[A-Z0-9]{10}$/.test(asin) ? `https://www.amazon.com.br/dp/${asin}` : null,
-      price: extractProductPrice(root),
-      original_price: null,
+      price,
+      original_price: commercials.original_price,
       seller: null,
-      discount: null,
+      discount: commercials.discount,
       score: null,
-      novelty: null
+      novelty: null,
+      marketplaceMetrics: commercials.marketplaceMetrics
     });
   });
 
@@ -168,12 +198,15 @@ function parseSearchPage(html, source) {
     if (/\/sspa\//i.test(link)) return;
     const image = root.find('img[src]').first();
     const title = cleanText(root.find('h2').first().text() || image.attr('alt'));
+    const price = extractProductPrice(root);
+    const commercials = extractProductCommercials(root, price);
     products.push({
       marketplace: 'Amazon', category: 'Cenário Amazon', subcategory: source.keyword,
       node_id: source.node_id, parent_node_id: source.parent_node_id, source_url: source.source_url,
       rank: products.length + 1, asin, title, image: cleanText(image.attr('src')) || null,
-      canonical_url: `https://www.amazon.com.br/dp/${asin}`, price: extractProductPrice(root),
-      original_price: null, seller: null, discount: null, score: null, novelty: null
+      canonical_url: `https://www.amazon.com.br/dp/${asin}`, price,
+      original_price: commercials.original_price, seller: null, discount: commercials.discount, score: null, novelty: null,
+      marketplaceMetrics: commercials.marketplaceMetrics
     });
   });
   return products;
