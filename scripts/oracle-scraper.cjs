@@ -235,6 +235,59 @@ async function loadActiveDiscoveryHistory(marketplace) {
   return rows;
 }
 
+async function loadDeferredDiscoveryIngestions(marketplace) {
+  const supabase = getSupabase();
+  const pageSize = 1000;
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await supabase
+      .from('offers')
+      .select('id, platform, product_name, category, original_url, image_url, current_price, old_price, score, explainability, item_id, product_id, shopee_item_id, shopee_shop_id, shopee_product_cat_id, native_category_order, native_category_position, seller_id, seller_name, shipping_free, source_categories')
+      .eq('user_id', ADMIN_USER_ID)
+      .eq('platform', marketplace)
+      .eq('status', 'deferred')
+      .range(from, from + pageSize - 1);
+    if (error) throw new Error('Deferred ' + marketplace + ': ' + error.message);
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+  }
+  
+  return rows.map(row => {
+     const exp = row.explainability || {};
+     const metrics = exp.marketplace_metrics || {};
+     let sourceItemId = '';
+     if (marketplace === 'Shopee') {
+        sourceItemId = row.shopee_item_id || metrics.itemId;
+     } else if (marketplace === 'Mercado Livre') {
+        sourceItemId = row.item_id || row.product_id || metrics.itemId || metrics.productId;
+     } else if (marketplace === 'Amazon') {
+        sourceItemId = row.product_id || metrics.asin;
+     }
+     
+     return {
+        sourceItemId: String(sourceItemId || ''),
+        sourceUrl: row.original_url,
+        title: row.product_name,
+        imageUrl: row.image_url,
+        currentPrice: row.current_price,
+        originalPrice: row.old_price,
+        category: { name: row.category, ...exp.discovery_evidence },
+        marketplaceMetrics: metrics,
+        deterministicScore: row.score,
+        discoveredAt: exp.discovery_evidence?.discoveredAt || new Date().toISOString(),
+        
+        deferredAt: exp.deferred_at,
+        lastAttemptAt: exp.last_attempt_at,
+        nextEligibleAt: exp.next_eligible_at,
+        attempts: exp.attempts,
+        initialReason: exp.initial_reason,
+        finalReason: exp.final_reason,
+        curationScore: exp.curation_score,
+        commercialHash: exp.commercial_hash,
+     };
+  }).filter(r => r.sourceItemId);
+}
+
 function normalizeShopeeCandidate(product, discoveredAt) {
   return {
     sourceItemId: product.itemId,
@@ -448,10 +501,38 @@ async function scrapeStore(store) {
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
 }
 
-async function persistDiscoveryIngestionV1(ingestions, marketplace) {
-  if (!ingestions.length) return { accepted: 0, offerIds: [], state: FINAL_STATE };
+async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE) {
+  if (!ingestions.length) return { accepted: 0, offerIds: [], state: targetStatus };
   const rows = ingestions.map(({ candidate, ingestionId, correlationId }) => {
     const metrics = candidate.marketplaceMetrics;
+    const isDeferred = targetStatus === 'deferred';
+    const rawPayload = candidate.rawPayload || candidate;
+    
+    let explainability = {
+      contract_version: candidate.contractVersion,
+      ingestion_contract_version: 'pmav5.ingestion/v1',
+      candidate_id: candidate.candidateId,
+      ingestion_id: ingestionId,
+      correlation_id: correlationId,
+      discovery_evidence: candidate.discoveryEvidence,
+      marketplace_metrics: metrics,
+    };
+
+    if (isDeferred) {
+      explainability = {
+        ...explainability,
+        deferred_at: rawPayload.deferredAt || new Date().toISOString(),
+        last_attempt_at: rawPayload.lastAttemptAt || new Date().toISOString(),
+        next_eligible_at: rawPayload.nextEligibleAt || new Date().toISOString(),
+        attempts: rawPayload.attempts || 1,
+        initial_reason: rawPayload.initialReason || 'limite_categoria',
+        final_reason: rawPayload.finalReason || 'limite_categoria',
+        curation_score: rawPayload.curationScore || candidate.deterministicScore,
+        original_position: candidate.discoveryEvidence?.position || null,
+        commercial_hash: rawPayload.commercialHash || crypto.createHash('sha256').update(`${marketplace}:${candidate.sourceItemId}`).digest('hex'),
+      };
+    }
+
     const row = {
       user_id: candidate.tenantId,
       platform: candidate.marketplace,
@@ -462,17 +543,9 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace) {
       current_price: candidate.currentPrice,
       old_price: candidate.originalPrice,
       score: candidate.deterministicScore,
-      status: FINAL_STATE,
-      explainability: {
-        contract_version: candidate.contractVersion,
-        ingestion_contract_version: 'pmav5.ingestion/v1',
-        candidate_id: candidate.candidateId,
-        ingestion_id: ingestionId,
-        correlation_id: correlationId,
-        discovery_evidence: candidate.discoveryEvidence,
-        marketplace_metrics: metrics,
-      },
-      notes: '[Oracle Discovery-Only V5] ' + marketplace + '; aguardando revisão manual.',
+      status: targetStatus,
+      explainability,
+      notes: '[Oracle Discovery-Only V5] ' + marketplace + (isDeferred ? '; deferred' : '; aguardando revisão manual.'),
     };
     if (marketplace === 'Shopee') {
       Object.assign(row, {
@@ -690,6 +763,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
       });
       return discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
+    loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: Math.min(50, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 3 },
@@ -705,6 +779,7 @@ async function runScrapingCycle() {
     correlationId: crypto.randomUUID(),
     requestedAt: new Date().toISOString(),
     discover: scrapeStore,
+    loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
@@ -739,6 +814,7 @@ async function runShopeeScenarioRecording(scenario) {
       return discovered.categories.flatMap((category) => category.products)
         .map((product) => normalizeShopeeCandidate(product, requestedAt));
     },
+    loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
@@ -776,6 +852,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: 20, delayMs: 300 });
       return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
+    loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
