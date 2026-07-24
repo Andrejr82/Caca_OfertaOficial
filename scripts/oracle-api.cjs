@@ -162,6 +162,24 @@ app.post('/api/amazon/trends', async (req, res) => {
   return res.status(403).json({ error: 'Amazon Discovery API desativada.' });
 });
 
+app.post('/api/manual/trends', async (req, res) => {
+  const { token, tenantId, category, marketplaces, limit } = req.body || {};
+  if (!isAuthorized(token)) {
+    return res.status(401).json({ ok: false, code: 'UNAUTHORIZED', message: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
+  }
+  if (!tenantId || !Array.isArray(marketplaces) || marketplaces.length === 0) {
+    return res.status(400).json({ ok: false, code: 'INVALID_MANUAL_DISCOVERY_REQUEST', message: 'tenantId e ao menos um marketplace são obrigatórios.' });
+  }
+  try {
+    const { runManualMarketplaceScenarioRecording } = require('./oracle-scraper.cjs');
+    const result = await runManualMarketplaceScenarioRecording({ tenantId, category, marketplaces, limit });
+    return res.json({ ok: true, result, message: `Busca manual concluída: ${result.offerIds.length} oferta(s) persistida(s) e enviada(s) à Official AI.` });
+  } catch (error) {
+    console.error(`[API] Busca manual falhou: ${error.message || String(error)}`);
+    return res.status(502).json({ ok: false, code: 'MANUAL_DISCOVERY_FAILED', message: error.message || 'Falha na busca manual.' });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Micro-API Oracle rodando firme e forte na porta ${PORT}`);
 });

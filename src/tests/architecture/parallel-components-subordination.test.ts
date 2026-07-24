@@ -15,7 +15,6 @@ const officialClients = {
 const blockedComponents = [
   "src/lib/publish/actions.ts",
   "src/app/api/scraper/cron/route.ts",
-  "src/app/api/scraper/trends/route.ts",
   "src/app/api/scraper/import/route.ts",
   "src/app/api/instagram/poll-comments/route.ts"
 ] as const;
@@ -43,6 +42,14 @@ describe("PMAV5-009 parallel component subordination", () => {
     expect(component).toContain("fetchMarketplaceCoupons");
     expect(component).toContain("persistCouponDrafts");
     expect(component).not.toContain("PARALLEL_COMPONENT_DISABLED");
+  });
+
+  it("manual trends route delegates discovery to the authenticated Oracle boundary", () => {
+    const component = source("src/app/api/scraper/trends/route.ts");
+    expect(component).toContain("/api/manual/trends");
+    expect(component).toContain("ORACLE_API_KEY");
+    expect(component).toContain("tenantId: user.id");
+    expect(component).not.toMatch(/discoverAndIngest|fetchShopeeCandidates|rankOffersBatch/);
   });
 
   it.each(parallelComponents)("%s cannot write offer or post state or create posts", (path) => {

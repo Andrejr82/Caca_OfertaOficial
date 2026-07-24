@@ -41,7 +41,7 @@ const {
 } = require('./mercadolivre-native-top20-v5.cjs');
 const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
-const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
+const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 // Executa ciclos de 4 horas. O roteador transforma cada ciclo em um bundle
@@ -589,7 +589,7 @@ async function notifyWorkPendingToOfficialAI(cycleResult) {
         endpoint,
         {
           command: 'PROCESS_OFFERS', offerIds, correlationId: cycleResult.correlationId,
-          commandId: `ai:cycle:${cycleResult.correlationId}:v1`, tenantId: ADMIN_USER_ID,
+          commandId: `ai:cycle:${cycleResult.correlationId}:v1`, tenantId: cycleResult.tenantId || ADMIN_USER_ID,
           requestedAt: cycleResult.requestedAt || new Date().toISOString(),
         },
         {
@@ -616,6 +616,86 @@ async function notifyWorkPendingToOfficialAI(cycleResult) {
     console.warn(`[Disparo Oficial da Official AI] Aviso para ciclo=${cycleResult.correlationId}: ${msg}`);
     throw error;
   }
+}
+
+function normalizeManualScenarioValue(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function resolveManualScenarioId(category) {
+  const requested = normalizeManualScenarioValue(category);
+  if (!requested || requested === 'geral') return null;
+  const scenarioEntries = Object.entries(MARKETPLACE_SCENARIOS);
+  const direct = scenarioEntries.find(([id]) => normalizeManualScenarioValue(id) === requested);
+  if (direct) return direct[0];
+  const byLabel = scenarioEntries.find(([, scenario]) => normalizeManualScenarioValue(scenario.label || scenario.name) === requested);
+  if (byLabel) return byLabel[0];
+  const aliases = new Map([
+    ['eletronicos', 'tecnologia_desejo'],
+    ['informatica', 'tecnologia_desejo'],
+    ['televisao', 'tecnologia_desejo'],
+    ['eletrodomesticos', 'eletrodomesticos_cozinha'],
+    ['eletroportateis', 'eletrodomesticos_cozinha'],
+    ['moveis_e_decoracao', 'casa_moveis'],
+    ['utilidades_domesticas', 'impulso_casa'],
+    ['cama_mesa_e_banho', 'impulso_casa'],
+    ['moda_beleza_e_perfumaria', 'moda_fitness_beleza_viagem'],
+    ['esporte_e_lazer', 'treino_academia'],
+    ['petshop', 'dono_de_pet'],
+    ['criancas_e_bebes', 'mae_de_primeira_viagem'],
+  ]);
+  return aliases.get(requested) || null;
+}
+
+async function runManualMarketplaceScenarioRecording({ tenantId, category, marketplaces, limit }) {
+  if (!tenantId) throw new Error('tenantId é obrigatório');
+  const selectedMarketplaces = [...new Set((Array.isArray(marketplaces) ? marketplaces : [])
+    .map((marketplace) => String(marketplace || '').trim())
+    .filter((marketplace) => MARKETPLACES.includes(marketplace)))];
+  if (selectedMarketplaces.length === 0) throw new Error('Selecione ao menos um marketplace autorizado');
+  const scenarioId = resolveManualScenarioId(category);
+  const scenario = scenarioId ? MARKETPLACE_SCENARIOS[scenarioId] : getActiveMarketplaceScenario();
+  if (!scenario?.keywords?.length) throw new Error('A categoria selecionada não possui intenções configuradas');
+  const perMarketplace = Math.min(Math.max(Number(limit) || 5, 1), 50);
+  const correlationId = crypto.randomUUID();
+  const requestedAt = new Date().toISOString();
+  const mlToken = selectedMarketplaces.includes('Mercado Livre')
+    ? await refreshMercadoLivreAccessToken({ persist: true })
+    : null;
+  const result = await runDiscoveryOnlyCycle({
+    tenantId,
+    correlationId,
+    requestedAt,
+    marketplaces: selectedMarketplaces,
+    discover: async (marketplace) => {
+      if (marketplace === 'Shopee') {
+        const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId || undefined });
+        return discovered.categories.flatMap((group) => group.products)
+          .map((product) => normalizeShopeeCandidate(product, requestedAt));
+      }
+      if (marketplace === 'Amazon') {
+        const discovered = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
+        return discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+      }
+      const discovered = await runMercadoLivreOfficialIntentCoverage({
+        accessToken: mlToken,
+        keywords: scenario.keywords,
+        maxPerIntent: Math.max(10, Math.min(20, perMarketplace * 2)),
+        delayMs: 300,
+      });
+      return discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+    },
+    persist: persistDiscoveryIngestionV1,
+    persistV2Metadata: persistDiscoveryV2Metadata,
+    copyQueueOptions: { maxTotal: Math.min(50, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 3 },
+    notifyWorkPending: notifyWorkPendingToOfficialAI,
+  });
+  return { ...result, category: category || 'Geral', scenarioId: scenarioId || null, requestedMarketplaces: selectedMarketplaces, limit: perMarketplace };
 }
 
 async function runScrapingCycle() {
@@ -757,6 +837,7 @@ module.exports = {
   runMercadoLivreOfficialDryRun,
   runShopeeScenarioRecording,
   runMultiMarketplaceScenarioRecording,
+  runManualMarketplaceScenarioRecording,
   runScrapingCycle,
   scrapeStore,
 };

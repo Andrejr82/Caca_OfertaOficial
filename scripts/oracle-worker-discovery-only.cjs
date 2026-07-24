@@ -139,7 +139,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null, marketplaces = MARKETPLACES }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -178,8 +178,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     categoryCounts: new Map(),
     groups: new Set(),
   };
+  const requestedMarketplaces = [...new Set((Array.isArray(marketplaces) ? marketplaces : MARKETPLACES)
+    .map((marketplace) => String(marketplace || '').trim())
+    .filter((marketplace) => MARKETPLACES.includes(marketplace)))];
+  if (requestedMarketplaces.length === 0) throw new Error('Nenhum marketplace autorizado foi selecionado');
   try {
-    for (const marketplace of MARKETPLACES) {
+    for (const marketplace of requestedMarketplaces) {
       const marketplaceStartedAt = Date.now();
       await safeObserve('discovery.marketplace.started', { marketplace });
       const products = await discover(marketplace);
@@ -258,6 +262,8 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
 
   const result = Object.freeze({
     correlationId,
+    tenantId,
+    requestedAt,
     marketplaces: Object.freeze(summaries),
     offerIds: Object.freeze([...materializedOfferIds]),
     finalState: FINAL_STATE,
