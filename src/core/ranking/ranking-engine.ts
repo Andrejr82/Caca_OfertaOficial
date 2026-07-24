@@ -128,10 +128,10 @@ export class RankingEngine {
 
   /**
    * Calcula o Score Base Total antes da IA (Retrocompatibilidade)
-   * Utiliza EXCLUSIVAMENTE a Official Policy.
+   * Agora utiliza a Commercial Policy (V5).
    */
   static calculateBaseScore(product: ScoreInput, store: string): number {
-    return this.evaluatePolicies(product, store).officialPolicy;
+    return this.evaluatePolicies(product, store).commercialPolicy;
   }
 
   /**

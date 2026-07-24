@@ -1,7 +1,7 @@
 import { classifyProduct } from '@/core/classification/classifier'
 import { buildGroupKeys } from '@/core/classification/grouping'
 import { scoreMarketplaceOffer, type MarketplaceOfferSignals } from '@/core/intelligence/marketplace-policy'
-import { buildAutomatedCopyQueue, type AutomatedCopyQueueOptions } from '@/core/intelligence/copy-v2-automation'
+import { buildAutomatedCopyQueue, type AutomatedCopyQueueOptions, type DeferredCopyQueueItem } from '@/core/intelligence/copy-v2-automation'
 import { curateOffers, type CuratedOffer } from '@/core/intelligence/curation-engine'
 
 export interface RawDiscoveryItem extends MarketplaceOfferSignals {
@@ -19,9 +19,13 @@ export interface DiscoveryV2Item {
   curation: CuratedOffer
 }
 
-export interface DiscoveryV2Options extends AutomatedCopyQueueOptions {}
+export type DiscoveryV2Options = AutomatedCopyQueueOptions
 
-export function processDiscoveryV2(items: RawDiscoveryItem[], options?: DiscoveryV2Options) {
+export function processDiscoveryV2(
+  items: RawDiscoveryItem[], 
+  options?: DiscoveryV2Options,
+  previouslyDeferred: DeferredCopyQueueItem[] = []
+) {
   const curationInputs = items.map((item) => ({ ...item, id: item.externalId }))
   const curated = curateOffers(curationInputs)
   const curationById = new Map(curated.map((item) => [item.id, item]))
@@ -35,5 +39,5 @@ export function processDiscoveryV2(items: RawDiscoveryItem[], options?: Discover
       curation: curationById.get(raw.externalId)!,
     }
   })
-  return { items: processed, copyQueue: buildAutomatedCopyQueue(curationInputs, options) }
+  return { items: processed, copyQueue: buildAutomatedCopyQueue(curationInputs, options, previouslyDeferred) }
 }

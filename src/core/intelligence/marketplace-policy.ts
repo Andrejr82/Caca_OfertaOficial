@@ -90,11 +90,30 @@ function marketplaceTrustScore(marketplace: SupportedMarketplace, offer: Marketp
     }
   }
   if (offer.sellerRating !== undefined) {
-    if (offer.sellerRating >= 4.7) score += 10
-    else if (offer.sellerRating >= 4.3) score += 6
-    else if (offer.sellerRating < 4) blockers.push('avaliacao_baixa')
+    if (marketplace === 'shopee') {
+      if (offer.sellerRating >= 4.5) score += 10
+      else blockers.push('avaliacao_baixa')
+    } else {
+      if (offer.sellerRating >= 4.7) score += 10
+      else if (offer.sellerRating >= 4.3) score += 6
+      else if (offer.sellerRating < 4) blockers.push('avaliacao_baixa')
+    }
   }
-  if ((offer.sellerSales ?? 0) >= 100) score += 5
+
+  const sales = offer.sellerSales ?? 0;
+  if (marketplace === 'shopee') {
+    const minSales = Number(process.env.SHOPEE_MIN_SALES) || 50;
+    if (sales >= minSales) {
+      score += 5;
+    } else if (sales === 0 && (offer.isOfficialStore || offer.isMall)) {
+      score += 5;
+      reasons.push('lancamento_oficial');
+    } else {
+      blockers.push('vendas_insuficientes');
+    }
+  } else {
+    if (sales >= 100) score += 5;
+  }
   if (marketplace === 'amazon' && offer.isPrime) {
     score += 10
     reasons.push('prime')

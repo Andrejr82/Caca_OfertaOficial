@@ -30,19 +30,57 @@ function queueScore(product) {
   return scoreCandidate(product);
 }
 
-function selectCopyQueue(products, options = {}, cycleState = null) {
+function selectCopyQueue(products, options = {}, cycleState = null, previouslyDeferred = []) {
   const limits = { ...COPY_QUEUE_DEFAULTS, ...options };
   const marketplaceCounts = cycleState?.marketplaceCounts || new Map();
   const categoryCounts = cycleState?.categoryCounts || new Map();
   const groups = cycleState?.groups || new Set();
   const selected = [];
   const skipped = [];
-  const ranked = [...products]
+  const deferred = [];
+  const maxAttempts = Number(limits.deferredMaxAttempts || 3);
+  const ttlHours = Number(limits.deferredTtlHours || 24);
+  const nowMs = Date.now();
+  const nowIso = new Date(nowMs).toISOString();
+
+  const allCandidates = new Map();
+  for (const item of previouslyDeferred) {
+    if (item.nextEligibleAt && new Date(item.nextEligibleAt).getTime() > nowMs) {
+      deferred.push(item);
+      continue;
+    }
+    const ageHours = (nowMs - new Date(item.deferredAt || nowIso).getTime()) / (1000 * 60 * 60);
+    if (ageHours > ttlHours) {
+      skipped.push({ sourceItemId: item.sourceItemId, reason: 'deferred_ttl_expired' });
+      continue;
+    }
+    if (Number(item.attempts || 0) >= maxAttempts) {
+      skipped.push({ sourceItemId: item.sourceItemId, reason: 'deferred_max_attempts' });
+      continue;
+    }
+    allCandidates.set(item.sourceItemId, { ...item, isDeferred: true });
+  }
+
+  for (const product of products) {
+    if (!allCandidates.has(product.sourceItemId)) {
+      allCandidates.set(product.sourceItemId, { ...product, isDeferred: false, attempts: 0 });
+    }
+  }
+
+  const ranked = Array.from(allCandidates.values())
     .map((product) => {
       const candidate = product.marketplace ? product : { ...product, marketplace: limits.marketplace };
       return { product: candidate, gate: qualityGate(candidate) };
     })
-    .sort((a, b) => queueScore(b.product) - queueScore(a.product));
+    .sort((a, b) => {
+      const scoreDiff = queueScore(b.product) - queueScore(a.product);
+      if (scoreDiff !== 0) return scoreDiff;
+      const aAge = a.product.deferredAt ? new Date(a.product.deferredAt).getTime() : nowMs;
+      const bAge = b.product.deferredAt ? new Date(b.product.deferredAt).getTime() : nowMs;
+      if (aAge !== bAge) return aAge - bAge;
+      return String(a.product.sourceItemId).localeCompare(String(b.product.sourceItemId));
+    });
+
   for (const entry of ranked) {
     const product = entry.product;
     if (!entry.gate.eligible) {
@@ -57,18 +95,45 @@ function selectCopyQueue(products, options = {}, cycleState = null) {
     const marketplace = String(product.marketplace || limits.marketplace || '').toLowerCase();
     const category = queueCategory(product);
     const group = queueGroupKey(product);
+    
     if (groups.has(group)) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'grupo_ja_representado' }); continue; }
     if ((marketplaceCounts.get(marketplace) || 0) >= limits.maxPerMarketplace) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_marketplace' }); continue; }
-    if ((categoryCounts.get(category) || 0) >= limits.maxPerCategory) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_categoria' }); continue; }
+    
+    const categoryCount = categoryCounts.get(category) || 0;
     const selectedCount = Number(cycleState?.selectedCount || 0) + selected.length;
-    if (selectedCount >= limits.maxTotal) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_total' }); continue; }
+    
+    let deferReason = null;
+    if (categoryCount >= limits.maxPerCategory) {
+      deferReason = 'limite_categoria';
+    } else if (selectedCount >= limits.maxTotal) {
+      deferReason = 'limite_total';
+    }
+
+    if (deferReason) {
+      const attempts = (product.attempts || 0) + 1;
+      const deferredAt = product.deferredAt || nowIso;
+      deferred.push({ 
+        ...product,
+        attempts,
+        deferredAt,
+        lastAttemptAt: nowIso,
+        nextEligibleAt: new Date(nowMs + 2 * 60 * 60 * 1000).toISOString(),
+        initialReason: product.initialReason || deferReason,
+        finalReason: deferReason,
+        curationScore: queueScore(product),
+        commercialHash: crypto.createHash('sha256').update(`${marketplace}:${product.sourceItemId}`).digest('hex')
+      });
+      continue;
+    }
+    
+    delete product.isDeferred;
     selected.push({ ...product, curation: entry.gate, curationScore: queueScore(product) });
     groups.add(group);
     marketplaceCounts.set(marketplace, (marketplaceCounts.get(marketplace) || 0) + 1);
-    categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
+    categoryCounts.set(category, categoryCount + 1);
   }
   if (cycleState) cycleState.selectedCount = Number(cycleState.selectedCount || 0) + selected.length;
-  return { selected: interleavePublicationQueue(selected), skipped, limits };
+  return { selected: interleavePublicationQueue(selected), skipped, deferred, limits };
 }
 
 function stableId(prefix, value) {
@@ -139,7 +204,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null, marketplaces = MARKETPLACES }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null, marketplaces = MARKETPLACES }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -187,6 +252,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const marketplaceStartedAt = Date.now();
       await safeObserve('discovery.marketplace.started', { marketplace });
       const products = await discover(marketplace);
+      const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
       const uniqueProducts = [];
       const seenSourceItems = new Set();
@@ -201,8 +267,8 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         uniqueProducts.push(product);
       }
       const queue = copyQueueOptions
-        ? selectCopyQueue(uniqueProducts, { ...copyQueueOptions, marketplace }, cycleQueueState)
-        : { selected: uniqueProducts, skipped: [], limits: null };
+        ? selectCopyQueue(uniqueProducts, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred)
+        : { selected: uniqueProducts, skipped: [], deferred: [], limits: null };
       if (typeof persistV2Metadata === 'function') {
         await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: uniqueProducts, queue });
       }
@@ -221,19 +287,38 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           console.warn(`[Oracle Discovery-Only] Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
         }
       }
-      const persisted = await persist(ingestions, marketplace);
+      const persisted = await persist(ingestions, marketplace, FINAL_STATE);
       if (persisted?.state !== FINAL_STATE) {
         throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
       }
       for (const offerId of persisted.offerIds || []) {
         if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
       }
+
+      if (queue.deferred?.length > 0) {
+        const deferredIngestions = [];
+        for (const product of queue.deferred) {
+          try {
+            deferredIngestions.push(createIngestionV1(createCandidateV1({
+              marketplace,
+              product,
+              tenantId,
+              correlationId,
+            }), requestedAt));
+          } catch (error) {
+            console.warn(`[Oracle Discovery-Only] Deferred Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
+          }
+        }
+        await persist(deferredIngestions, marketplace, 'deferred');
+      }
+
       const summary = Object.freeze({
         marketplace,
         discovered: products.length,
         duplicatesRejected,
         queueSelected: queue.selected.length,
         queueSkipped: queue.skipped.length,
+        queueDeferred: queue.deferred?.length || 0,
         queueLimits: queue.limits,
         rejected,
         persisted: Number(persisted.accepted || 0),

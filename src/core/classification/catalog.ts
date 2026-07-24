@@ -76,6 +76,7 @@ export const PRODUCT_TYPES = {
   dress: /\b(vestido)\b/i,
   t_shirt: /\b(camiseta|camisa)\b/i,
   pants: /\b(calca|calça|jeans|bermuda|shorts)\b/i,
+
   jacket: /\b(jaqueta|casaco|blusa|moletom)\b/i,
   casual_shoe: /\b(tenis|tênis)\b/i,
   sandal: /\b(sandalia|sandália|chinelo)\b/i,
@@ -84,8 +85,12 @@ export const PRODUCT_TYPES = {
   hair_straightener: /\b(chapinha|prancha\s*(de\s*)?cabelo)\b/i,
   skincare: /\b(hidratante|protetor\s*solar|serum|sérum|skincare)\b/i,
   makeup: /\b(base|batom|mascara|máscara|corretivo|maquiagem)\b/i,
+  perfume: /\b(perfume|fragrancia|fragrância|eau\s*de\s*parfum|eau\s*de\s*toilette|colonia|colônia)\b/i,
   bicycle: /\bbicicleta\b/i,
-  fitness: /\b(halter|esteira|academia|fitness|yoga|colchonete)\b/i,
+  fitness: /\b(halter|esteira|academia|fitness|yoga|colchonete|whey|suplemento|creatina)\b/i,
+  automotive: /\b(pneu|calota|bateria\s*automotiva|som\s*automotivo|capacete|oleo\s*de\s*motor|óleo\s*de\s*motor|multimidia\s*automotiva)\b/i,
+  tools: /\b(furadeira|parafusadeira|kit\s*ferramentas|chave\s*de\s*fenda|martelete|serra\s*eletrica|serra\s*marmore)\b/i,
+  games: /\b(jogo\s*ps4|jogo\s*ps5|jogo\s*xbox|jogo\s*switch|mídia\s*física)\b/i,
 } as const
 
 export const ACCESSORY_TERMS = /\b(cesto|silicone|suporte|cadarco|cadarço|refil|peca|peça|case|capa|pelicula|película|protetor|acessorio|acessório|carregador|power\s*bank|cabo|hub|adaptador|controle)\b/i

@@ -1,5 +1,5 @@
 export const platforms = ["Shopee", "Amazon", "Magalu", "Mercado Livre", "Shein", "Netshoes", "Outro"] as const;
-export const offerStatuses = ["draft", "approved", "pending_manual_review", "selected", "posted", "rejected"] as const;
+export const offerStatuses = ["draft", "approved", "pending_manual_review", "selected", "posted", "rejected", "deferred"] as const;
 export const channels = ["telegram", "instagram", "whatsapp", "facebook", "site", "blog"] as const;
 export const saleStatuses = ["pending", "confirmed", "cancelled"] as const;
 

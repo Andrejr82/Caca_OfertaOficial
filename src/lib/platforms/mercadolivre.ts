@@ -253,6 +253,8 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
     let originalPrice: number | null = null;
     let imageUrl: string | undefined;
     let permalink = url;
+    let htmlContent: string | null = null;
+    let rating: number | undefined = undefined;
 
     let apiData: any = null;
     if (mlIdInfo.type === "item") {
@@ -340,9 +342,9 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
                "Accept-Language": "pt-BR,pt;q=0.9"
              }
           });
-          const html = await htmlRes.text();
-          const metaPriceMatch = html.match(/<meta\s+property=["']product:preconfigured_price:amount["']\s+content=["']([^"']+)["']/i) ||
-                             html.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+          htmlContent = await htmlRes.text();
+          const metaPriceMatch = htmlContent.match(/<meta\s+property=["']product:preconfigured_price:amount["']\s+content=["']([^"']+)["']/i) ||
+                             htmlContent.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
           if (metaPriceMatch) {
             price = parseFloat(metaPriceMatch[1]);
             console.log(`[ML API] Preço resgatado via fallback HTML: R$ ${price}`);
@@ -369,6 +371,57 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       imageUrl = "https:" + imageUrl;
     }
 
+    // Extração de Rating Real via HTML/JSON-LD
+    try {
+      if (!htmlContent) {
+        const htmlRes = await fetch(permalink, {
+           headers: {
+             "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+             "Accept-Language": "pt-BR,pt;q=0.9"
+           }
+        });
+        htmlContent = await htmlRes.text();
+      }
+
+      // Procura AggregateRating no JSON-LD
+      const jsonLdMatches = htmlContent.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
+      if (jsonLdMatches) {
+        for (const match of jsonLdMatches) {
+          try {
+            const cleanJson = match.replace(/<script[^>]*>|<\/script>/gi, '').trim();
+            const data = JSON.parse(cleanJson);
+            const items = Array.isArray(data) ? data : [data];
+            for (const item of items) {
+              if (item?.aggregateRating?.ratingValue) {
+                const parsedRating = parseFloat(item.aggregateRating.ratingValue);
+                if (!isNaN(parsedRating) && parsedRating > 0) {
+                  rating = parsedRating;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // ignore JSON parse error for this block
+          }
+          if (rating !== undefined) break;
+        }
+      }
+
+      // Se não encontrou no JSON-LD, tenta na meta tag ou itemprop
+      if (rating === undefined) {
+        const ratingMatch = htmlContent.match(/<meta\s+itemprop=["']ratingValue["']\s+content=["']([^"']+)["']/i) ||
+                            htmlContent.match(/"ratingValue"\s*:\s*"?([0-9.]+)"?/i);
+        if (ratingMatch) {
+          const parsedRating = parseFloat(ratingMatch[1]);
+          if (!isNaN(parsedRating) && parsedRating > 0) {
+            rating = parsedRating;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn(`[ML API] Falha ao extrair rating HTML para ${permalink}:`, err);
+    }
+
     const confidenceScore = price > 0 ? 100 : 70;
 
     return {
@@ -382,7 +435,8 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       extractionDate: new Date().toISOString(),
       sold_quantity: apiData ? apiData.sold_quantity : undefined,
       official_store_id: apiData ? apiData.official_store_id : undefined,
-      available_quantity: apiData ? apiData.available_quantity : undefined
+      available_quantity: apiData ? apiData.available_quantity : undefined,
+      rating
     };
   } catch (error) {
     console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);

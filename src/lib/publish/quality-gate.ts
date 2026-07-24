@@ -13,6 +13,7 @@ export interface LinkMetadata {
   sold_quantity?: number;
   available_quantity?: number;
   official_store_id?: number | string | null;
+  rating?: number;
 }
 
 export type PageClassification =
