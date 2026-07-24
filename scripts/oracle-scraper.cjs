@@ -33,7 +33,7 @@ const ws = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
-const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
+const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const {
   runMercadoLivreNativeTop20,
@@ -54,7 +54,7 @@ const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
 function getActiveMarketplaceScenario() {
   const scenarioId = CLI_SCENARIO_ID;
   if (scenarioId) return MARKETPLACE_SCENARIOS[scenarioId] || SHOPEE_SCENARIOS[scenarioId] || null;
-  return getCycleScenario(getSaoPauloHour(), 4);
+  return getCycleScenario(getCycleStartHour(getSaoPauloHour()), 4);
 }
 
 let supabaseClient;

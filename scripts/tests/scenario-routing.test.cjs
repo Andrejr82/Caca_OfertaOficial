@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { SCENARIOS, getActiveScenario, getCycleScenario, SCENARIO_WINDOWS } = require('../shopee-scenario-config.cjs');
+const { SCENARIOS, getActiveScenario, getCycleScenario, getCycleStartHour, SCENARIO_WINDOWS } = require('../shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-scenario-config.cjs');
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
 const { CRON_SCHEDULE } = require('../oracle-scraper.cjs');
@@ -14,6 +14,7 @@ test('uses six four-hour discovery windows over the canonical 11 editorial windo
     'beleza_autocuidado', 'acessorios_relogios', 'moda_masculina',
   ]);
   assert.equal(SCENARIO_WINDOWS.length, 11);
+  assert.equal(getCycleStartHour(21), 20);
   assert.deepEqual(getCycleScenario(20, 4).scenarioIds, ['moda_masculina', 'enxoval_casamento']);
 });
 
