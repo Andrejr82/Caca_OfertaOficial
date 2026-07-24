@@ -42,6 +42,7 @@ const {
 const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
+const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 // Executa ciclos de 4 horas. O roteador transforma cada ciclo em um bundle
@@ -219,12 +220,16 @@ async function loadActiveDiscoveryHistory(marketplace) {
   const pageSize = 1000;
   const rows = [];
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from('offers')
-      .select('item_id, product_id, shopee_item_id, original_url, status')
-      .eq('user_id', ADMIN_USER_ID)
-      .eq('platform', marketplace)
-      .range(from, from + pageSize - 1);
+    const { data, error } = await withTimeout(
+      supabase
+        .from('offers')
+        .select('item_id, product_id, shopee_item_id, original_url, status')
+        .eq('user_id', ADMIN_USER_ID)
+        .eq('platform', marketplace)
+        .range(from, from + pageSize - 1),
+      Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+      `loadActiveDiscoveryHistory_${marketplace}`
+    );
     if (error) throw new Error('Novelty ' + marketplace + ': ' + error.message);
     rows.push(...(data || []));
     if (!data || data.length < pageSize) break;
@@ -240,13 +245,17 @@ async function loadDeferredDiscoveryIngestions(marketplace) {
   const pageSize = 1000;
   const rows = [];
   for (let from = 0; ; from += pageSize) {
-    const { data, error } = await supabase
-      .from('offers')
-      .select('id, platform, product_name, category, original_url, image_url, current_price, old_price, score, explainability, item_id, product_id, shopee_item_id, shopee_shop_id, shopee_product_cat_id, native_category_order, native_category_position, seller_id, seller_name, shipping_free, source_categories')
-      .eq('user_id', ADMIN_USER_ID)
-      .eq('platform', marketplace)
-      .eq('status', 'deferred')
-      .range(from, from + pageSize - 1);
+    const { data, error } = await withTimeout(
+      supabase
+        .from('offers')
+        .select('id, platform, product_name, category, original_url, image_url, current_price, old_price, score, explainability, item_id, product_id, shopee_item_id, shopee_shop_id, shopee_product_cat_id, native_category_order, native_category_position, seller_id, seller_name, shipping_free, source_categories')
+        .eq('user_id', ADMIN_USER_ID)
+        .eq('platform', marketplace)
+        .eq('status', 'deferred')
+        .range(from, from + pageSize - 1),
+      Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+      `loadDeferredDiscoveryIngestions_${marketplace}`
+    );
     if (error) throw new Error('Deferred ' + marketplace + ': ' + error.message);
     rows.push(...(data || []));
     if (!data || data.length < pageSize) break;
@@ -391,54 +400,98 @@ function discoveryGroupKey(product, productType) {
   return `${productType}|${model.trim()}|${capacity.trim()}`.replace(/\s+/g, ' ').trim();
 }
 
-async function filterNovelNormalizedProducts(marketplace, products) {
+async function filterNovelNormalizedProducts(marketplace, products, stageLogger) {
   if (!Array.isArray(products) || products.length === 0) return [];
-  const history = await loadActiveDiscoveryHistory(marketplace);
-  const known = new Set(history.flatMap((row) => [
-    row.item_id,
-    row.product_id,
-    row.shopee_item_id,
-    row.original_url,
-  ].filter(Boolean).map(String)));
-  return products.filter((product) => ![
-    product.sourceItemId,
-    product.sourceUrl,
-  ].filter(Boolean).some((key) => known.has(String(key))));
-}
+  
+  let stageStartedAt;
+  if (stageLogger) stageStartedAt = stageLogger.start('filterNovelNormalizedProducts', products.length);
 
-async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue }) {
-  const supabase = getSupabase();
-  const { data: run, error: runError } = await supabase.from('discovery_runs').insert({
-    user_id: tenantId, marketplace, scenario: queue?.limits ? 'oracle-worker-v2' : 'oracle-worker', started_at: requestedAt, finished_at: new Date().toISOString()
-  }).select('id').single();
-  if (runError || !run) throw new Error(`Discovery V2 run failed: ${runError?.message || 'run not created'}`);
-  const itemRows = products.map((product) => ({ user_id: tenantId, discovery_run_id: run.id, marketplace, external_id: String(product.sourceItemId), source_url: product.sourceUrl, raw_payload: product.rawPayload || product, title_raw: String(product.title) }));
-  const { data: items, error: itemError } = itemRows.length ? await supabase.from('discovery_items').insert(itemRows).select('id,external_id') : { data: [], error: null };
-  if (itemError) throw new Error(`Discovery V2 items failed: ${itemError.message}`);
-  const itemByExternal = new Map((items || []).map((item) => [String(item.external_id), item.id]));
-  for (const product of products) {
-    const discoveryItemId = itemByExternal.get(String(product.sourceItemId));
-    if (!discoveryItemId) continue;
-    const productType = classifyDiscoveryTitle(product.title);
-    const groupKey = discoveryGroupKey(product, productType);
-    const groupKind = groupKey.includes('||') ? 'family' : 'exact';
-    const titleQuality = validateProductTitle(product.title);
-    const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
-    const classificationStatus = !titleQuality.valid || productType === 'unknown' ? 'review_required' : 'classified';
-    await supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v2', classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
-    const { data: group } = await supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
-    if (group?.id) await supabase.from('product_group_members').upsert({ product_group_id: group.id, discovery_item_id: discoveryItemId }, { onConflict: 'product_group_id,discovery_item_id' });
+  try {
+    const history = await loadActiveDiscoveryHistory(marketplace);
+    const known = new Set(history.flatMap((row) => [
+      row.item_id,
+      row.product_id,
+      row.shopee_item_id,
+      row.original_url,
+    ].filter(Boolean).map(String)));
+    
+    const filtered = products.filter((product) => ![
+      product.sourceItemId,
+      product.sourceUrl,
+    ].filter(Boolean).some((key) => known.has(String(key))));
+
+    if (stageLogger) stageLogger.end('filterNovelNormalizedProducts', stageStartedAt, filtered.length);
+    return filtered;
+  } catch (err) {
+    if (stageLogger) stageLogger.error('filterNovelNormalizedProducts', stageStartedAt, err.message);
+    throw err;
   }
 }
 
-async function scrapeStore(store) {
+async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue }, stageLogger = null) {
+  let stageStartedAt;
+  if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryV2Metadata', products.length);
+
+  try {
+    const supabase = getSupabase();
+    
+    const insertRunPromise = supabase.from('discovery_runs').insert({
+      user_id: tenantId, marketplace, scenario: queue?.limits ? 'oracle-worker-v2' : 'oracle-worker', started_at: requestedAt, finished_at: new Date().toISOString()
+    }).select('id').single();
+    
+    const { data: run, error: runError } = await withTimeout(insertRunPromise, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_insertRun`);
+    if (runError || !run) throw new Error(`Discovery V2 run failed: ${runError?.message || 'run not created'}`);
+    const itemRows = products.map((product) => ({ user_id: tenantId, discovery_run_id: run.id, marketplace, external_id: String(product.sourceItemId), source_url: product.sourceUrl, raw_payload: product.rawPayload || product, title_raw: String(product.title) }));
+    
+    let items = [], itemError = null;
+    if (itemRows.length) {
+      const itemsResult = await withTimeout(
+        supabase.from('discovery_items').insert(itemRows).select('id,external_id'),
+        Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+        `persistV2Metadata_insertItems`
+      );
+      items = itemsResult.data;
+      itemError = itemsResult.error;
+    }
+    
+    if (itemError) throw new Error(`Discovery V2 items failed: ${itemError.message}`);
+  const itemByExternal = new Map((items || []).map((item) => [String(item.external_id), item.id]));
+    for (const product of products) {
+      const discoveryItemId = itemByExternal.get(String(product.sourceItemId));
+      if (!discoveryItemId) continue;
+      const productType = classifyDiscoveryTitle(product.title);
+      const groupKey = discoveryGroupKey(product, productType);
+      const groupKind = groupKey.includes('||') ? 'family' : 'exact';
+      const titleQuality = validateProductTitle(product.title);
+      const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
+      const classificationStatus = !titleQuality.valid || productType === 'unknown' ? 'review_required' : 'classified';
+      
+      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v2', classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
+      await withTimeout(p1, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertClassification`);
+      
+      const p2 = supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
+      const { data: group } = await withTimeout(p2, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertGroup`);
+      
+      if (group?.id) {
+        const p3 = supabase.from('product_group_members').upsert({ product_group_id: group.id, discovery_item_id: discoveryItemId }, { onConflict: 'product_group_id,discovery_item_id' });
+        await withTimeout(p3, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertMember`);
+      }
+    }
+    if (stageLogger) stageLogger.end('persistDiscoveryV2Metadata', stageStartedAt, products.length);
+  } catch (err) {
+    if (stageLogger) stageLogger.error('persistDiscoveryV2Metadata', stageStartedAt, err.message);
+    throw err;
+  }
+}
+
+async function scrapeStore(store, stageLogger = null) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
     const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario: getActiveMarketplaceScenario() });
     const normalized = result.categories
       .flatMap((category) => category.products)
       .map((product) => normalizeShopeeCandidate(product, discoveredAt));
-    return filterNovelNormalizedProducts(store, normalized);
+    return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   if (store === 'Mercado Livre') {
     if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
@@ -446,12 +499,19 @@ async function scrapeStore(store) {
       const scenario = getActiveMarketplaceScenario();
       const history = await loadActiveDiscoveryHistory(store);
       const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
+      
+      let intentStageStartedAt;
+      if (stageLogger) intentStageStartedAt = stageLogger.start('ML_official_intents', scenario?.keywords?.length || 0);
+      
       const result = await runMercadoLivreOfficialIntentCoverage({
         accessToken,
         keywords: scenario?.keywords,
         maxPerIntent: 20,
         delayMs: 500,
       });
+      
+      if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
+      
       const normalized = result.products
         .filter((product) => ![product.item_id, product.product_id, product.product_url]
           .filter(Boolean)
@@ -461,7 +521,7 @@ async function scrapeStore(store) {
         discovered_at: result.generated_at,
         source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
         }));
-      return filterNovelNormalizedProducts(store, normalized);
+      return filterNovelNormalizedProducts(store, normalized, stageLogger);
     }
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
@@ -479,12 +539,16 @@ async function scrapeStore(store) {
         .filter(Boolean)
         .some((key) => known.has(String(key))))
       .map(normalizeMercadoLivreCandidate);
-    return filterNovelNormalizedProducts(store, normalized);
+    return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   if (store === 'Amazon') {
     const history = await loadActiveDiscoveryHistory(store);
     const knownAsins = new Set(history.flatMap((row) => [row.product_id, row.item_id].filter(Boolean).map(String)));
     const scenario = getActiveMarketplaceScenario();
+    
+    let amazonStageStartedAt;
+    if (stageLogger) amazonStageStartedAt = stageLogger.start('Amazon_Top20_extraction', scenario?.keywords?.length || 0);
+    
     const result = scenario?.keywords?.length
       ? await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 })
       : await runAmazonNativeTop20({
@@ -493,16 +557,26 @@ async function scrapeStore(store) {
         maxCategories: 10,
         maxSubcategoriesPerCategory: 5,
       });
+      
+    if (stageLogger) stageLogger.end('Amazon_Top20_extraction', amazonStageStartedAt, result.products.length);
+    
     const normalized = result.products
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
       .map((product) => normalizeAmazonCandidate(product, discoveredAt));
-    return filterNovelNormalizedProducts(store, normalized);
+    return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
 }
 
-async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE) {
-  if (!ingestions.length) return { accepted: 0, offerIds: [], state: targetStatus };
+async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE, stageLogger = null) {
+  let stageStartedAt;
+  if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryIngestionV1', ingestions.length);
+
+  try {
+    if (!ingestions.length) {
+      if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
+      return { accepted: 0, offerIds: [], state: targetStatus };
+    }
   const rows = ingestions.map(({ candidate, ingestionId, correlationId }) => {
     const metrics = candidate.marketplaceMetrics;
     const isDeferred = targetStatus === 'deferred';
@@ -572,24 +646,37 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     }
     return row;
   });
-  const { data, error } = await getSupabase().rpc(
-    'upsert_discovery_offers_v2',
-    {
-      p_marketplace: marketplace,
-      p_rows: rows,
-    }
-  );
-  if (error) throw new Error('Ingestion V1 ' + marketplace + ': ' + error.message);
-  
-  return { 
-    accepted: data.inserted + data.updated,
-    inserted: data.inserted,
-    updated: data.updated,
-    ignored: data.ignored,
-    failed: data.failed,
-    offerIds: [...new Set(Array.isArray(data.offer_ids) ? data.offer_ids : [])],
-    state: FINAL_STATE 
-  };
+    const rpcPromise = getSupabase().rpc(
+      'upsert_discovery_offers_v2',
+      {
+        p_marketplace: marketplace,
+        p_rows: rows,
+      }
+    );
+    
+    const { data, error } = await withTimeout(
+      rpcPromise,
+      Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+      `persistDiscoveryIngestionV1_rpc_${marketplace}`
+    );
+    
+    if (error) throw new Error('Ingestion V1 ' + marketplace + ': ' + error.message);
+    
+    if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, data.inserted + data.updated);
+    
+    return { 
+      accepted: data.inserted + data.updated,
+      inserted: data.inserted,
+      updated: data.updated,
+      ignored: data.ignored,
+      failed: data.failed,
+      offerIds: [...new Set(Array.isArray(data.offer_ids) ? data.offer_ids : [])],
+      state: FINAL_STATE 
+    };
+  } catch (err) {
+    if (stageLogger) stageLogger.error('persistDiscoveryIngestionV1', stageStartedAt, err.message);
+    throw err;
+  }
 }
 
 function validateOfficialAIUrl(url) {
@@ -772,18 +859,24 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
   return { ...result, category: category || 'Geral', scenarioId: scenarioId || null, requestedMarketplaces: selectedMarketplaces, limit: perMarketplace };
 }
 
-async function runScrapingCycle() {
+async function runScrapingCycleCore() {
   const startedAt = Date.now();
+  const correlationId = crypto.randomUUID();
+  const stageLogger = createStageLogger(correlationId);
+  
+  console.log(`[Oracle Boot] commit=38407b2 amazonMissingCommercialDataPenalty=${process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY || -8} startedAt=${new Date(startedAt).toISOString()}`);
+
   const result = await runDiscoveryOnlyCycle({
     tenantId: ADMIN_USER_ID,
-    correlationId: crypto.randomUUID(),
+    correlationId,
     requestedAt: new Date().toISOString(),
-    discover: scrapeStore,
+    discover: (store) => scrapeStore(store, stageLogger),
     loadDeferred: loadDeferredDiscoveryIngestions,
-    persist: persistDiscoveryIngestionV1,
-    persistV2Metadata: persistDiscoveryV2Metadata,
+    persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
+    persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
+    stageLogger
   });
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
   if (result.marketplaces) {
@@ -793,6 +886,13 @@ async function runScrapingCycle() {
   }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
   return result;
+}
+
+async function runScrapingCycle() {
+  const timeoutMs = Number(process.env.DISCOVERY_CYCLE_TIMEOUT_MS || 2700000); // 45 minutos por padrão
+  return runWithWatchdog(runScrapingCycleCore, timeoutMs, () => {
+    console.error(`[Watchdog] cycle_status=failed_timeout elapsedMs=${timeoutMs}`);
+  });
 }
 
 async function runMercadoLivreOfficialDryRun() {

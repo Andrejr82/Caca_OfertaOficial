@@ -30,7 +30,10 @@ function queueScore(product) {
   return scoreCandidate(product);
 }
 
-function selectCopyQueue(products, options = {}, cycleState = null, previouslyDeferred = []) {
+function selectCopyQueue(products, options = {}, cycleState = null, previouslyDeferred = [], stageLogger = null) {
+  let stageStartedAt;
+  if (stageLogger) stageStartedAt = stageLogger.start('selectCopyQueue', products.length);
+
   const limits = { ...COPY_QUEUE_DEFAULTS, ...options };
   const marketplaceCounts = cycleState?.marketplaceCounts || new Map();
   const categoryCounts = cycleState?.categoryCounts || new Map();
@@ -133,6 +136,7 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     categoryCounts.set(category, categoryCount + 1);
   }
   if (cycleState) cycleState.selectedCount = Number(cycleState.selectedCount || 0) + selected.length;
+  if (stageLogger) stageLogger.end('selectCopyQueue', stageStartedAt, selected.length);
   return { selected: interleavePublicationQueue(selected), skipped, deferred, limits };
 }
 
@@ -204,7 +208,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null, marketplaces = MARKETPLACES }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -267,7 +271,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         uniqueProducts.push(product);
       }
       const queue = copyQueueOptions
-        ? selectCopyQueue(uniqueProducts, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred)
+        ? selectCopyQueue(uniqueProducts, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger)
         : { selected: uniqueProducts, skipped: [], deferred: [], limits: null };
       if (typeof persistV2Metadata === 'function') {
         await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: uniqueProducts, queue });
