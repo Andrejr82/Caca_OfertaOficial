@@ -211,6 +211,11 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
   }
 }
 
+function extractMLCatalogId(url: string): string | null {
+  const match = url.match(/\/p\/(MLB-?\d+)/i);
+  return match ? match[1].replace("-", "").toUpperCase() : null;
+}
+
 /**
  * Busca os detalhes do produto do Mercado Livre usando a API oficial
  */
@@ -251,25 +256,59 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
 
     let apiData: any = null;
     if (mlIdInfo.type === "item") {
-      // Consulta detalhes do item
-      const itemUrl = `https://api.mercadolibre.com/items/${mlIdInfo.id}`;
+      // O endpoint individual /items/{id} pode retornar 403 para aplicativos
+      // válidos. O endpoint em lote é o mesmo usado pelo pipeline oficial.
+      const itemUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(mlIdInfo.id)}`;
       const response = await fetch(itemUrl, { headers });
 
       if (!response.ok) {
         throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
-      apiData = await response.json();
-      title = apiData.title || title;
-      price = apiData.price || 0;
-      originalPrice = apiData.original_price || null;
-      permalink = apiData.permalink || permalink;
+      const payload = await response.json();
+      const firstResult = Array.isArray(payload) ? payload[0] : null;
+      if (firstResult && Number(firstResult.code) >= 400) {
+        const catalogId = extractMLCatalogId(url);
+        if (!catalogId) {
+          throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
+        }
 
-      if (apiData.pictures && apiData.pictures.length > 0) {
-        // Pega a primeira foto em alta qualidade
-        imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
-      } else if (apiData.thumbnail) {
-        imageUrl = apiData.thumbnail;
+        // Links de catálogo podem bloquear o item individual. Nesse caso,
+        // usa-se o endpoint oficial do catálogo para localizar a oferta real.
+        const catalogItemsResponse = await fetch(
+          `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
+          { headers },
+        );
+        if (!catalogItemsResponse.ok) {
+          throw new Error(`Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
+        }
+        const catalogItems = await catalogItemsResponse.json();
+        const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+        const matchedItem = Array.isArray(catalogResults)
+          ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
+          : null;
+        const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
+        const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
+        apiData = { ...catalogData, ...(matchedItem || {}) };
+        title = matchedItem?.title || catalogData.name || catalogData.title || title;
+        price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
+        originalPrice = matchedItem?.original_price || catalogData.original_price || null;
+        permalink = matchedItem?.permalink || catalogData.permalink || permalink;
+        imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
+          || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
+      } else {
+        apiData = firstResult?.body || payload;
+        title = apiData.title || title;
+        price = apiData.price || 0;
+        originalPrice = apiData.original_price || null;
+        permalink = apiData.permalink || permalink;
+
+        if (apiData.pictures && apiData.pictures.length > 0) {
+          // Pega a primeira foto em alta qualidade
+          imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
+        } else if (apiData.thumbnail) {
+          imageUrl = apiData.thumbnail;
+        }
       }
     } else {
       // Consulta detalhes do produto de catálogo
