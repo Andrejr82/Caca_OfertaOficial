@@ -33,6 +33,15 @@ const defaultCouponSources = {
   netshoes: false
 };
 
+const productAvailability = {
+  mercadolivre: "supported",
+  magalu: "unsupported",
+  shopee: "supported",
+  shein: "unsupported",
+  amazon: "supported",
+  netshoes: "unsupported"
+} as const;
+
 const couponAvailability = {
   mercadolivre: "supported",
   magalu: "supported",
@@ -88,6 +97,9 @@ export function TrendsAction() {
   const setSources = mode === "products" ? setProductSources : setCouponSources;
 
   const handleSourceChange = (key: keyof typeof sources, checked: boolean) => {
+    if (mode === "products" && productAvailability[key as keyof typeof productAvailability] !== "supported") {
+      return;
+    }
     if (mode === "coupons" && couponAvailability[key as keyof typeof couponAvailability] !== "supported") {
       return;
     }
@@ -106,7 +118,7 @@ export function TrendsAction() {
 
   const activeSourcesCount = Object.entries(sources).filter(([key, enabled]) => {
     if (!enabled) return false;
-    if (mode === "products") return true;
+    if (mode === "products") return productAvailability[key as keyof typeof productAvailability] === "supported";
     return couponAvailability[key as keyof typeof couponAvailability] === "supported";
   }).length;
 
@@ -129,7 +141,7 @@ export function TrendsAction() {
     const selectedSources = (Object.keys(sourceLabels) as Array<keyof typeof sourceLabels>)
       .filter((key) => {
         if (!sources[key]) return false;
-        if (mode === "products") return true;
+        if (mode === "products") return productAvailability[key] === "supported";
         return couponAvailability[key] === "supported";
       })
       .map((key) => sourceLabels[key]);
@@ -234,25 +246,26 @@ export function TrendsAction() {
             {(Object.keys(sourceLabels) as Array<keyof typeof sourceLabels>).map((key) => {
               const couponState = couponAvailability[key];
               const isCouponSupported = couponState === "supported";
-              const disabledInCoupons = mode === "coupons" && !isCouponSupported;
+              const isProductSupported = productAvailability[key] === "supported";
+              const disabledInMode = mode === "products" ? !isProductSupported : !isCouponSupported;
               const showMercadoLivreTooltip = mode === "coupons" && key === "mercadolivre";
               const helperText =
-                mode === "coupons" && couponState === "unsupported"
-                  ? "Não suportado"
+                disabledInMode
+                  ? "Não disponível neste fluxo"
                   : null;
 
               return (
                 <label
                   key={key}
                   title={showMercadoLivreTooltip ? mercadolivreCouponTooltip : undefined}
-                  onClick={disabledInCoupons ? (e) => e.preventDefault() : undefined}
-                  className={`flex items-center gap-2 text-sm font-medium ${disabledInCoupons ? "cursor-not-allowed text-white/35" : "cursor-pointer"}`}
+                  onClick={disabledInMode ? (e) => e.preventDefault() : undefined}
+                  className={`flex items-center gap-2 text-sm font-medium ${disabledInMode ? "cursor-not-allowed text-white/35" : "cursor-pointer"}`}
                 >
                   <input
                     type="checkbox"
                     checked={sources[key]}
-                    disabled={disabledInCoupons}
-                    onChange={disabledInCoupons ? undefined : (e) => handleSourceChange(key, e.target.checked)}
+                    disabled={disabledInMode}
+                    onChange={disabledInMode ? undefined : (e) => handleSourceChange(key, e.target.checked)}
                     className="rounded border-moss/20 text-moss focus:ring-moss h-4 w-4 disabled:opacity-50 disabled:cursor-not-allowed"
                   />
                   <span>{sourceLabels[key]}</span>

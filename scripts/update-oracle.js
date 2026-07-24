@@ -10,17 +10,19 @@ require('dotenv').config({ path: '.env.local' });
  *
  * O modo Git anterior não era seguro para alterações ainda não commitadas:
  * `git pull` simplesmente não levaria essas correções para a VPS. Este
- * script envia somente os arquivos explicitamente aprovados e reinicia apenas
- * o oracle-scraper, que é o processo afetado.
+ * script envia somente os arquivos explicitamente aprovados e reinicia o
+ * Worker e a API, que compartilham o contrato manual.
  */
 
 const SERVER_IP = process.env.ORACLE_SERVER_IP || '193.122.242.178';
 const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';
 const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '/home/ubuntu/Caca_OfertaOficial';
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
+const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
 const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const DEPLOY_FILES = [
+  'scripts/oracle-api.cjs',
   'scripts/oracle-scraper.cjs',
   'scripts/oracle-worker-discovery-only.cjs',
   'scripts/curation-policy.cjs',
@@ -30,7 +32,7 @@ const DEPLOY_FILES = [
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
-if (!/^[A-Za-z0-9._/-]+$/.test(PM2_SCRAPER_NAME)) throw new Error('Nome PM2 inválido.');
+if (!/^[A-Za-z0-9._/-]+$/.test(PM2_SCRAPER_NAME) || !/^[A-Za-z0-9._/-]+$/.test(PM2_API_NAME)) throw new Error('Nome PM2 inválido.');
 if (!/^\/[A-Za-z0-9._/-]+$/.test(PROJECT_DIR)) throw new Error('ORACLE_PROJECT_DIR deve ser um caminho absoluto seguro.');
 
 const ssh = (command) => execFileSync('ssh', [
@@ -75,8 +77,8 @@ try {
     const backupPath = `${remoteBackup}/${relativeFile}`;
     return `if test -f '${remotePath}'; then cp -p '${remotePath}' '${backupPath}'; fi`;
   }).join('; ');
-  ssh(`set -eu; ${backupFiles}; ${remoteFiles}; rm -rf '${remoteStage}'; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null`);
-  console.log('Deploy do Oracle Worker concluído.');
+  ssh(`set -eu; ${backupFiles}; ${remoteFiles}; rm -rf '${remoteStage}'; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 restart '${PM2_API_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null; pm2 describe '${PM2_API_NAME}' >/dev/null`);
+  console.log('Deploy do Oracle Worker e da API concluído.');
 } catch (error) {
   try { ssh(`rm -rf '${remoteStage}'`); } catch { /* limpeza best-effort */ }
   console.error(`Falha no deploy Oracle: ${error.message}`);
