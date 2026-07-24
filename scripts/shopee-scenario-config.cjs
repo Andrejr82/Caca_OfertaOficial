@@ -206,7 +206,29 @@ SCENARIOS.moda_fitness_beleza_viagem = {
   ],
 };
 
-// 2. Roteamento Inteligente por Horário
+// 2. Roteamento canônico por Horário
+// A curadoria editorial é definida em janelas de intenção; o Oracle continua
+// executando ciclos de 4 horas e, por isso, cada ciclo recebe as janelas que
+// intersectam seu período (sem voltar a usar cenários genéricos agrupados).
+const SCENARIO_WINDOWS = Object.freeze([
+  { start: 0, end: 4, scenarioId: 'tecnologia_desejo', label: 'Gamer e Tecnologia' },
+  { start: 4, end: 7, scenarioId: 'treino_academia', label: 'Treino e Academia' },
+  { start: 7, end: 9, scenarioId: 'mae_de_primeira_viagem', label: 'Mãe de Primeira Viagem' },
+  { start: 9, end: 12, scenarioId: 'viagem_aventura', label: 'Viagem e Aventura' },
+  { start: 12, end: 13, scenarioId: 'beleza_autocuidado', label: 'Beleza e Autocuidado' },
+  { start: 13, end: 14, scenarioId: 'eletrodomesticos_cozinha', label: 'Eletrodomésticos de Alto Valor' },
+  { start: 14, end: 16, scenarioId: 'dono_de_pet', label: 'Dono de Pet' },
+  { start: 16, end: 18, scenarioId: 'acessorios_relogios', label: 'Acessórios e Relógios' },
+  { start: 18, end: 20, scenarioId: 'morando_sozinho', label: 'Morando Sozinho' },
+  { start: 20, end: 22, scenarioId: 'moda_masculina', label: 'Moda Masculina' },
+  { start: 22, end: 24, scenarioId: 'enxoval_casamento', label: 'Enxoval de Casamento' },
+]);
+
+function getScenarioWindow(currentHour) {
+  const hour = ((Number(currentHour) % 24) + 24) % 24;
+  return SCENARIO_WINDOWS.find((window) => hour >= window.start && hour < window.end);
+}
+
 function getSaoPauloHour(date = new Date()) {
   return Number(new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Sao_Paulo',
@@ -216,14 +238,31 @@ function getSaoPauloHour(date = new Date()) {
 }
 
 function getActiveScenario(currentHour) {
-  // O cron do Oracle inicia cada uma das janelas configuradas abaixo.
-  
-  if (currentHour < 4) return SCENARIOS.tecnologia_desejo;
-  if (currentHour < 8) return SCENARIOS.eletrodomesticos_cozinha;
-  if (currentHour < 12) return SCENARIOS.impulso_casa;
-  if (currentHour < 16) return SCENARIOS.casa_moveis;
-  if (currentHour < 20) return SCENARIOS.pet_bebe;
-  return SCENARIOS.moda_fitness_beleza_viagem;
+  const window = getScenarioWindow(currentHour);
+  const scenario = SCENARIOS[window.scenarioId];
+  return { ...scenario, name: window.label, schedule: window };
+}
+
+function getCycleScenario(startHour, durationHours = 4) {
+  const start = ((Number(startHour) % 24) + 24) % 24;
+  const windows = SCENARIO_WINDOWS.filter((window) => {
+    const distance = (window.start - start + 24) % 24;
+    return distance < durationHours || (start + durationHours > 24 && window.start < (start + durationHours) % 24);
+  });
+  const selected = windows.length ? windows : [getScenarioWindow(start)];
+  const configs = selected.map((window) => ({ ...SCENARIOS[window.scenarioId], name: window.label, schedule: window }));
+  const first = configs[0];
+  return {
+    ...first,
+    id: `cycle_${selected.map((window) => window.scenarioId).join('__')}`,
+    name: selected.map((window) => window.label).join(' + '),
+    scenarioIds: selected.map((window) => window.scenarioId),
+    schedule: selected,
+    keywords: [...new Set(configs.flatMap((config) => config.keywords || []))],
+    apiCategories: [...new Set(configs.flatMap((config) => config.apiCategories || []))],
+    allowedProductTerms: [...new Set(configs.flatMap((config) => config.allowedProductTerms || []))],
+    blockedProductTerms: [...new Set(configs.flatMap((config) => config.blockedProductTerms || []))],
+  };
 }
 
 // 3. Função Auxiliar de Sorteio
@@ -275,6 +314,9 @@ module.exports = {
   SCENARIOS,
   getSaoPauloHour,
   getActiveScenario,
+  getCycleScenario,
+  getScenarioWindow,
+  SCENARIO_WINDOWS,
   getRandomItems,
   normalizeProductTitle,
   matchesScenarioProduct,
