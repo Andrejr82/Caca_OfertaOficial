@@ -10,7 +10,7 @@ assert.equal(scenario.keywordSelection, 'all');
 assert.equal(scenario.keywords.length, 24);
 assert.equal(scenario.maxPagesPerKeyword, 1);
 assert.equal(getActiveScenario(12).id, 'beleza_autocuidado');
-assert.equal(getActiveScenario(13).id, 'eletros_cozinha');
+assert.equal(getActiveScenario(13).id, 'eletrodomesticos_cozinha');
 assert.equal(getActiveScenario(14).id, 'dono_de_pet');
 
 for (const title of [

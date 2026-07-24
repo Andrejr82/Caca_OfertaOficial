@@ -33,7 +33,7 @@ const ws = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
-const { SCENARIOS: SHOPEE_SCENARIOS, getActiveScenario, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
+const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const {
   runMercadoLivreNativeTop20,
@@ -44,8 +44,8 @@ const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOffic
 const { FINAL_STATE, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-// Executa no início de cada janela dos cenários Shopee, evitando perder cenários
-// de 2 horas (7h, 9h, 12h, 14h, 16h, 18h, 20h e 22h).
+// Executa ciclos de 4 horas. O roteador transforma cada ciclo em um bundle
+// determinístico das janelas editoriais que ele atravessa.
 const CRON_SCHEDULE = '0 0,4,8,12,16,20 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
@@ -54,7 +54,7 @@ const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
 function getActiveMarketplaceScenario() {
   const scenarioId = CLI_SCENARIO_ID;
   if (scenarioId) return MARKETPLACE_SCENARIOS[scenarioId] || SHOPEE_SCENARIOS[scenarioId] || null;
-  return getActiveScenario(getSaoPauloHour());
+  return getCycleScenario(getSaoPauloHour(), 4);
 }
 
 let supabaseClient;
@@ -625,7 +625,7 @@ async function runScrapingCycle() {
     discover: scrapeStore,
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
+    copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);
@@ -659,7 +659,7 @@ async function runShopeeScenarioRecording(scenario) {
     },
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
+    copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   for (const summary of result.marketplaces || []) {
@@ -696,7 +696,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     },
     persist: persistDiscoveryIngestionV1,
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
+    copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
 }
