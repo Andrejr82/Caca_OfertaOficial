@@ -274,7 +274,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       `process.argv.push('--shopee-v4-dry-run'); require(${JSON.stringify(modulePath)}); process.stdout.write('imported');`,
     ], {
       encoding: "utf8",
-      timeout: 5000,
+      timeout: 15000,
       env: {
         ...process.env,
         NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",

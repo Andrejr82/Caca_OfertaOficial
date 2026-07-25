@@ -1,5 +1,12 @@
 'use strict';
 
+/**
+ * Feature flag: desire_score permanece OBSERVACIONAL nesta sprint.
+ * Somente ativado via DESIRE_SCORE_ENABLED=true em ambiente de simulação.
+ * NÃO altera o ranking produtivo enquanto false (padrão).
+ */
+const DESIRE_SCORE_ENABLED = process.env.DESIRE_SCORE_ENABLED === 'true';
+
 const { validateProductTitle } = require('./product-title-quality.cjs');
 
 const PRICE_TIERS = Object.freeze({
@@ -117,7 +124,12 @@ function qualityGate(product) {
   };
 }
 
-function scoreCandidate(product, gate = qualityGate(product)) {
+/**
+ * qualityScore — OPERACIONAL.
+ * Mede integridade estrutural, preço válido, dados confiáveis.
+ * Este é o score produtivo. scoreCandidate() é um alias direto.
+ */
+function qualityScore(product, gate = qualityGate(product)) {
   const metrics = product?.marketplaceMetrics || {};
   const tier = gate.tier || classifyPriceTier(product?.currentPrice);
   const discount = gate.discountPercent;
@@ -138,22 +150,66 @@ function scoreCandidate(product, gate = qualityGate(product)) {
       ? Math.min(15, savings / 100)
       : Math.min(8, discount * 0.2);
   const trustScore = Math.min(15, (rating >= 4.7 ? 10 : rating >= 4.5 ? 6 : 0) + (sales >= 1000 ? 5 : sales >= 100 ? 2 : 0));
-  
+
   let penalty = 0;
   if ((gate.warnings || []).includes('DADOS_COMERCIAIS_INDISPONIVEIS')) {
     const rawPenalty = Number(process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY ?? -8);
     penalty = (Number.isFinite(rawPenalty) && rawPenalty <= 0) ? rawPenalty : -8;
   }
-  
+
   return Number(Math.max(0, base + discountScore + savingsScore + trustScore + officialStore + shipping + penalty).toFixed(2));
 }
 
+/**
+ * desireScore — OBSERVACIONAL (DESIRE_SCORE_ENABLED=false por padrão).
+ * Mede apelo comercial: marca, tendência, rating, avaliações, novidade.
+ * NÃO altera o ranking produtivo nesta sprint.
+ * Retorna null quando DESIRE_SCORE_ENABLED=false.
+ */
+function desireScore(product, gate = qualityGate(product)) {
+  if (!DESIRE_SCORE_ENABLED) return null;
+  const metrics = product?.marketplaceMetrics || {};
+  const rating = Number(metrics.rating || 0);
+  const reviewCount = Number(metrics.reviewCount || metrics.sales || 0);
+  const discount = gate.discountPercent;
+  const hasPrime = Boolean(metrics.prime || metrics.isPrime);
+  const hasCoupon = Boolean(metrics.coupon || metrics.hasVerifiedCoupon);
+
+  // Componentes experimentais — pesos a calibrar após simulação
+  const ratingSignal    = rating >= 4.7 ? 25 : rating >= 4.5 ? 18 : rating >= 4.0 ? 10 : 0;
+  const socialProof     = reviewCount >= 5000 ? 20 : reviewCount >= 1000 ? 15 : reviewCount >= 100 ? 8 : 0;
+  const discountSignal  = discount >= 30 ? 20 : discount >= 15 ? 12 : discount >= 5 ? 5 : 0;
+  const primeSignal     = hasPrime ? 10 : 0;
+  const couponSignal    = hasCoupon ? 8 : 0;
+  const noveltySignal   = product.novelty === 'NEW' ? 5 : 0;
+
+  return Number((ratingSignal + socialProof + discountSignal + primeSignal + couponSignal + noveltySignal).toFixed(2));
+}
+
+/**
+ * scoreCandidate — COMPORTAMENTO PRODUTIVO PRESERVADO.
+ * É um alias direto para qualityScore().
+ * desireScore é calculado internamente mas não afeta o retorno produtivo.
+ */
+function scoreCandidate(product, gate = qualityGate(product)) {
+  // Calcula desire_score de forma observacional (sem efeito no retorno)
+  const _desire = desireScore(product, gate);
+  if (_desire !== null) {
+    // Em ambiente de debug, logar o desire_score observacional
+    // (sem console.log para não poluir produção)
+  }
+  return qualityScore(product, gate);
+}
+
 module.exports = {
+  DESIRE_SCORE_ENABLED,
   PRICE_TIERS,
   classifyPriceTier,
   classifyProductFamily,
   discountPercent,
   absoluteSavings,
   qualityGate,
+  qualityScore,
+  desireScore,
   scoreCandidate,
 };

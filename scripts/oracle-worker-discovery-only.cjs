@@ -4,6 +4,8 @@ const crypto = require('node:crypto');
 const { validateProductTitle } = require('./product-title-quality.cjs');
 const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
+const { selectBestVariants } = require('./family-variant-selector.cjs');
+
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
@@ -84,6 +86,10 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
       return String(a.product.sourceItemId).localeCompare(String(b.product.sourceItemId));
     });
 
+  // ─── Fase de seleção familiar (APÓS gate e scores) ─────────────────────────
+  // Ajuste #1: a agregação por família ocorre depois que os candidatos já
+  // passaram pelo qualityGate. Produtos inválidos não competem por família.
+  const eligibleForFamily = [];
   for (const entry of ranked) {
     const product = entry.product;
     if (!entry.gate.eligible) {
@@ -95,16 +101,51 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
       skipped.push({ sourceItemId: product.sourceItemId, reason: titleQuality.reason });
       continue;
     }
+    // Candidato elegível: guardar gate para uso no FamilyVariantSelector
+    eligibleForFamily.push({ ...product, _gate: entry.gate });
+  }
+
+  // Aplica dedup por família: seleciona melhor variante, demais ficam como familyDeferred
+  const activeFamilyMap = options.activeFamilyMap instanceof Map ? options.activeFamilyMap : new Map();
+  const familyResult = selectBestVariants(eligibleForFamily, activeFamilyMap);
+
+  // Produtos sem família detectada passam direto para o loop de seleção normal
+  const postFamilySelected = [...familyResult.selected, ...familyResult.ungrouped];
+
+  // Variantes preteridas por família → deferred com motivo específico
+  for (const fp of familyResult.familyDeferred) {
+    const attempts = (fp.attempts || 0) + 1;
+    const marketplace = String(fp.marketplace || limits.marketplace || '').toLowerCase();
+    deferred.push({
+      ...fp,
+      attempts,
+      deferredAt: fp.deferredAt || nowIso,
+      lastAttemptAt: nowIso,
+      nextEligibleAt: new Date(nowMs + 2 * 60 * 60 * 1000).toISOString(),
+      initialReason: fp.initialReason || fp._deferralReason,
+      finalReason: fp._deferralReason,
+      curationScore: queueScore(fp),
+      commercialHash: crypto.createHash('sha256').update(`${marketplace}:${fp.sourceItemId}`).digest('hex'),
+      // Persistir identidade familiar em explainability (Ajuste #2 e #8)
+      familyKey: fp._familyKey || null,
+      familyEvidence: fp._familyEvidence || [],
+      familyConfidence: fp._familyConfidence || 0,
+      selectedSourceItemId: fp._selectedSourceItemId || null,
+    });
+  }
+
+  // ─── Aplica limites de marketplace/categoria nos eleitos ──────────────────
+  for (const product of postFamilySelected) {
     const marketplace = String(product.marketplace || limits.marketplace || '').toLowerCase();
     const category = queueCategory(product);
     const group = queueGroupKey(product);
-    
+
     if (groups.has(group)) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'grupo_ja_representado' }); continue; }
     if ((marketplaceCounts.get(marketplace) || 0) >= limits.maxPerMarketplace) { skipped.push({ sourceItemId: product.sourceItemId, reason: 'limite_marketplace' }); continue; }
-    
+
     const categoryCount = categoryCounts.get(category) || 0;
     const selectedCount = Number(cycleState?.selectedCount || 0) + selected.length;
-    
+
     let deferReason = null;
     if (categoryCount >= limits.maxPerCategory) {
       deferReason = 'limite_categoria';
@@ -115,7 +156,7 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     if (deferReason) {
       const attempts = (product.attempts || 0) + 1;
       const deferredAt = product.deferredAt || nowIso;
-      deferred.push({ 
+      deferred.push({
         ...product,
         attempts,
         deferredAt,
@@ -124,20 +165,31 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
         initialReason: product.initialReason || deferReason,
         finalReason: deferReason,
         curationScore: queueScore(product),
-        commercialHash: crypto.createHash('sha256').update(`${marketplace}:${product.sourceItemId}`).digest('hex')
+        commercialHash: crypto.createHash('sha256').update(`${marketplace}:${product.sourceItemId}`).digest('hex'),
+        familyKey: product._familyKey || null,
+        familyEvidence: product._familyEvidence || [],
+        familyConfidence: product._familyConfidence || 0,
       });
       continue;
     }
-    
-    delete product.isDeferred;
-    selected.push({ ...product, curation: entry.gate, curationScore: queueScore(product) });
+
+    const { _gate, _familyKey, _familyEvidence, _familyConfidence, _selectedVariantReason, _variantScore, isDeferred, ...cleanProduct } = product;
+    selected.push({
+      ...cleanProduct,
+      curation: _gate || qualityGate(product),
+      curationScore: queueScore(product),
+      familyKey: _familyKey || null,
+      familyEvidence: _familyEvidence || [],
+      familyConfidence: _familyConfidence || 0,
+      selectedVariantReason: _selectedVariantReason || null,
+    });
     groups.add(group);
     marketplaceCounts.set(marketplace, (marketplaceCounts.get(marketplace) || 0) + 1);
     categoryCounts.set(category, categoryCount + 1);
   }
   if (cycleState) cycleState.selectedCount = Number(cycleState.selectedCount || 0) + selected.length;
   if (stageLogger) stageLogger.end('selectCopyQueue', stageStartedAt, selected.length);
-  return { selected: interleavePublicationQueue(selected), skipped, deferred, limits };
+  return { selected: interleavePublicationQueue(selected), skipped, deferred, limits, familySummary: familyResult.familySummary };
 }
 
 function stableId(prefix, value) {

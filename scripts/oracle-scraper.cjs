@@ -357,6 +357,10 @@ function normalizeMercadoLivreCandidate(product) {
 }
 
 function normalizeAmazonCandidate(product, discoveredAt) {
+  // product.marketplaceMetrics é gerado por extractProductCommercials no parser.
+  // Antes desta correção, prime/coupon/promotion/rating/reviewCount ficavam
+  // apenas no rawPayload e nunca chegavam ao qualityGate nem ao scoreCandidate.
+  const pm = product.marketplaceMetrics || {};
   return {
     sourceItemId: product.asin,
     sourceUrl: product.canonical_url,
@@ -375,6 +379,12 @@ function normalizeAmazonCandidate(product, discoveredAt) {
       seller: product.seller,
       discount: product.discount,
       novelty: product.novelty,
+      // Campos comerciais propagados (corrigido — antes ausentes):
+      prime: pm.prime ?? false,
+      coupon: pm.coupon ?? false,
+      promotion: pm.promotion ?? false,
+      rating: pm.rating ?? null,
+      reviewCount: pm.reviewCount ?? null,
     },
     deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0))),
     discoveredAt,

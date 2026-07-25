@@ -7,7 +7,10 @@
  * - Validar domínio final contra allowlist de marketplaces
  * - Detectar loops e limitar número de saltos
  * - Retornar URL canônica resolvida + cadeia de redirects
+ * - Extrair identidade (ID) da URL original e final, detectando discrepâncias ou mascaramento por anti-bots.
  */
+
+import { extractMLId } from "../platforms/mercadolivre";
 
 export interface UrlResolveOptions {
   maxRedirects?: number;
@@ -19,6 +22,10 @@ export interface UrlResolveResult {
   redirectChain: string[];
   marketplace?: "Shopee" | "Mercado Livre" | "Shein" | "Outro";
   htmlBody?: string;
+  originalItemId?: string | null;
+  finalItemId?: string | null;
+  selectedItemId?: string | null;
+  identitySource?: "ORIGINAL_URL" | "FINAL_URL" | "BOTH" | "MISMATCH";
   errorCode?:
     | "SSRF_BLOCKED"
     | "REDIRECT_LOOP"
@@ -26,7 +33,11 @@ export interface UrlResolveResult {
     | "UNEXPECTED_REDIRECT_DOMAIN"
     | "TIMEOUT_RESOLVING_URL"
     | "EMPTY_RESPONSE"
-    | "INVALID_INPUT_URL";
+    | "INVALID_INPUT_URL"
+    | "PRODUCT_ID_MISMATCH"
+    | "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID"
+    | "CAMPAIGN_PAGE_NOT_PRODUCT"
+    | "AFFILIATE_SHOWCASE_NOT_PRODUCT";
 }
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
@@ -131,6 +142,81 @@ function isRelayDomain(hostname: string): boolean {
   return RELAY_DOMAINS.some((r) => h === r || h.endsWith("." + r));
 }
 
+// ─── Extração de Identidade e Reconciliação ────────────────────────────────
+
+export function extractShopeeIdFromUrl(url: string): string | null {
+  const match1 = url.match(/shopee\.com\.br\/.*?i\.(\d+)\.(\d+)/);
+  if (match1) return `${match1[1]}.${match1[2]}`;
+  const match2 = url.match(/shopee\.com\.br\/product\/(\d+)\/(\d+)/);
+  if (match2) return `${match2[1]}.${match2[2]}`;
+  return null;
+}
+
+export function extractGenericId(url: string, marketplace?: "Shopee" | "Mercado Livre" | "Shein" | "Outro"): string | null {
+  if (marketplace === "Mercado Livre") return extractMLId(url)?.id || null;
+  if (marketplace === "Shopee") return extractShopeeIdFromUrl(url);
+  return null;
+}
+
+function buildFinalResult(
+  resolvedUrl: string,
+  redirectChain: string[],
+  marketplace: UrlResolveResult["marketplace"],
+  originalItemId: string | null,
+  htmlBody?: string
+): UrlResolveResult {
+  const finalItemId = extractGenericId(resolvedUrl, marketplace);
+  
+  let identitySource: UrlResolveResult["identitySource"];
+  let selectedItemId: string | null = null;
+  let errorCode: UrlResolveResult["errorCode"];
+
+  // Anti-bot ou Interstitial ML (mascara o ID)
+  if (originalItemId && (resolvedUrl.includes("/gz/account-verification") || resolvedUrl.includes("/jms/item/captcha"))) {
+    identitySource = "ORIGINAL_URL";
+    selectedItemId = originalItemId;
+    errorCode = "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID";
+  }
+  // Vitrines / Campanhas
+  else if (resolvedUrl.includes("shopee.com.br/opaanlp/")) {
+    errorCode = "CAMPAIGN_PAGE_NOT_PRODUCT";
+  }
+  else if (resolvedUrl.includes("/social/")) {
+    errorCode = "AFFILIATE_SHOWCASE_NOT_PRODUCT";
+  }
+  // Produto padrão
+  else {
+    if (originalItemId && finalItemId) {
+      if (originalItemId === finalItemId) {
+        identitySource = "BOTH";
+        selectedItemId = originalItemId;
+      } else {
+        identitySource = "MISMATCH";
+        selectedItemId = null;
+        errorCode = "PRODUCT_ID_MISMATCH";
+      }
+    } else if (finalItemId) {
+      identitySource = "FINAL_URL";
+      selectedItemId = finalItemId;
+    } else if (originalItemId) {
+      identitySource = "ORIGINAL_URL";
+      selectedItemId = originalItemId;
+    }
+  }
+
+  return {
+    resolvedUrl,
+    redirectChain,
+    marketplace,
+    originalItemId,
+    finalItemId,
+    selectedItemId,
+    identitySource,
+    errorCode,
+    htmlBody,
+  };
+}
+
 // ─── Resolvedor Principal ────────────────────────────────────────────────────
 
 /**
@@ -169,6 +255,10 @@ export async function resolveMarketplaceUrl(
     return { resolvedUrl: inputUrl, redirectChain: [], errorCode: "SSRF_BLOCKED" };
   }
 
+  // Extrair ID Original antes de qualquer redirect
+  const inputMarketplace = isAllowedMarketplaceDomain(parsedInput.hostname) ? detectMarketplace(parsedInput.hostname) : undefined;
+  const originalItemId = inputMarketplace ? extractGenericId(inputUrl, inputMarketplace) : null;
+
   // ─── Resolução iterativa com detecção de loop ─────────────────────────────
 
   const redirectChain: string[] = [];
@@ -191,11 +281,8 @@ export async function resolveMarketplaceUrl(
       try {
         const parsed = new URL(currentUrl);
         if (isAllowedMarketplaceDomain(parsed.hostname)) {
-          return {
-            resolvedUrl: currentUrl,
-            redirectChain,
-            marketplace: detectMarketplace(parsed.hostname),
-          };
+          const finalMarketplace = detectMarketplace(parsed.hostname);
+          return buildFinalResult(currentUrl, redirectChain, finalMarketplace, originalItemId);
         }
       } catch { /* ignorar */ }
       return { resolvedUrl: currentUrl, redirectChain, errorCode: "REDIRECT_LIMIT_EXCEEDED" };
@@ -259,12 +346,8 @@ export async function resolveMarketplaceUrl(
     if (finalUrl === currentUrl) {
       let htmlBody: string | undefined;
       try { htmlBody = await response.text(); } catch { /* ignorar */ }
-      return {
-        resolvedUrl: finalUrl,
-        redirectChain,
-        marketplace: detectMarketplace(finalParsed.hostname),
-        htmlBody,
-      };
+      const finalMarketplace = detectMarketplace(finalParsed.hostname);
+      return buildFinalResult(finalUrl, redirectChain, finalMarketplace, originalItemId, htmlBody);
     }
 
     // ─── URL mudou ─────────────────────────────────────────────────────────
@@ -279,12 +362,8 @@ export async function resolveMarketplaceUrl(
     if (!isRelayDomain(finalParsed.hostname)) {
       let htmlBody: string | undefined;
       try { htmlBody = await response.text(); } catch { /* ignorar */ }
-      return {
-        resolvedUrl: finalUrl,
-        redirectChain,
-        marketplace: detectMarketplace(finalParsed.hostname),
-        htmlBody,
-      };
+      const finalMarketplace = detectMarketplace(finalParsed.hostname);
+      return buildFinalResult(finalUrl, redirectChain, finalMarketplace, originalItemId, htmlBody);
     }
 
     // É um relay domain (ex: meli.la/loop2) → continuar iterando para buscar o destino real

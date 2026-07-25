@@ -67,13 +67,42 @@ function extractProductCommercials(root, price) {
   const coupon = root.find('.s-coupon-highlight-color, .s-coupon-unclipped').length > 0;
   const promotion = root.find('.savingPriceOverride, .promoPrice').length > 0;
 
-  const ratingText = root.find('.a-icon-star-small, .a-icon-alt').first().text();
-  const ratingMatch = ratingText.match(/(\d+[.,]\d+)/);
-  const rating = ratingMatch ? Number(ratingMatch[1].replace(',', '.')) : null;
+  // Rating: cascata de seletores por especificidade decrescente.
+  // Seletores alternativos cobrem layouts de Best Sellers e Search.
+  let rating = null;
+  const RATING_SELECTORS = [
+    '.a-icon-star-small .a-icon-alt',   // Best Sellers — texto dentro do ícone
+    '.a-icon-alt',                       // Search — span direto com "4,5 de 5 estrelas"
+    '[data-hook="average-star-rating"] .a-icon-alt',
+    'i.a-star-small .a-icon-alt',
+  ];
+  for (const sel of RATING_SELECTORS) {
+    const text = root.find(sel).first().text();
+    const match = text.match(/(\d+[.,]\d+)/);
+    if (match) {
+      rating = Number(match[1].replace(',', '.'));
+      if (rating >= 1 && rating <= 5) break;
+      rating = null;
+    }
+  }
 
-  const reviewText = root.find('a[href*="#customerReviews"] > span.a-size-small, .a-size-small .a-link-normal, span.a-size-base').first().text();
-  const reviewMatch = reviewText.replace(/\./g, '').match(/(\d+)/);
-  const reviewCount = reviewMatch ? Number(reviewMatch[1]) : null;
+  // reviewCount: prioriza link #customerReviews antes dos seletores genéricos.
+  let reviewCount = null;
+  const REVIEW_SELECTORS = [
+    'a[href*="#customerReviews"] > span.a-size-small',
+    'a[href*="#customerReviews"] .a-size-small',
+    'a[href*="customerReviews"] span',
+    '.a-size-small.a-link-normal',
+  ];
+  for (const sel of REVIEW_SELECTORS) {
+    const text = root.find(sel).first().text().replace(/\./g, '').replace(/,/g, '');
+    const match = text.match(/^(\d+)$/);
+    if (match) {
+      reviewCount = Number(match[1]);
+      if (reviewCount > 0) break;
+      reviewCount = null;
+    }
+  }
 
   return {
     original_price,

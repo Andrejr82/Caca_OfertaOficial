@@ -200,3 +200,87 @@ describe("resolveMarketplaceUrl", () => {
     expect(["REDIRECT_LIMIT_EXCEEDED", undefined].includes(result.errorCode)).toBe(true);
   });
 });
+
+// ─── Reconciliação de Identidade (Cirúrgica) ────────────────────────────────
+
+describe("Reconciliação de Identidade e Anti-Bot", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("1. MLB presente na URL original e ausente na final (FINAL Anti-Bot)", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://www.mercadolivre.com.br/gz/account-verification?go=..." },
+      body: "captcha",
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://produto.mercadolivre.com.br/MLB-12345-produto-_JM");
+    expect(result.errorCode).toBe("ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID");
+    expect(result.originalItemId).toBe("MLB12345");
+    expect(result.selectedItemId).toBe("MLB12345");
+    expect(result.identitySource).toBe("ORIGINAL_URL");
+  });
+
+  it("2. final URL anti-bot", async () => {
+    // Sem originalItemId, então só falha ou passa
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://www.mercadolivre.com.br/gz/account-verification" },
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://mercadolivre.com.br/busca");
+    expect(result.originalItemId).toBeNull();
+    // Como não tem ID original, cai no default
+    expect(result.errorCode).toBeUndefined();
+  });
+
+  it("3. originalItemId preservado e 4. original e final IDs iguais", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://produto.mercadolivre.com.br/MLB-12345-final-_JM" },
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://produto.mercadolivre.com.br/MLB-12345-orig-_JM");
+    expect(result.originalItemId).toBe("MLB12345");
+    expect(result.finalItemId).toBe("MLB12345");
+    expect(result.selectedItemId).toBe("MLB12345");
+    expect(result.identitySource).toBe("BOTH");
+    expect(result.errorCode).toBeUndefined();
+  });
+
+  it("5. original e final IDs diferentes", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://produto.mercadolivre.com.br/MLB-99999-final-_JM" },
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://produto.mercadolivre.com.br/MLB-11111-orig-_JM");
+    expect(result.originalItemId).toBe("MLB11111");
+    expect(result.finalItemId).toBe("MLB99999");
+    expect(result.selectedItemId).toBeNull();
+    expect(result.identitySource).toBe("MISMATCH");
+    expect(result.errorCode).toBe("PRODUCT_ID_MISMATCH");
+  });
+
+  it("6. meli.la para /social/ (9. vitrine não tratada como produto)", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://www.mercadolivre.com.br/social/doandre" },
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://meli.la/short");
+    expect(result.errorCode).toBe("AFFILIATE_SHOWCASE_NOT_PRODUCT");
+  });
+
+  it("7. Shopee opaanlp (8. campanha não tratada como produto)", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://shopee.com.br/opaanlp/1234/5678" },
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://s.shopee.com.br/short");
+    expect(result.errorCode).toBe("CAMPAIGN_PAGE_NOT_PRODUCT");
+  });
+
+});

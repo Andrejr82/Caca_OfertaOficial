@@ -262,6 +262,9 @@ export async function generateQuickPostAction(
   let itemId: string | undefined;
   let shopId: string | undefined;
   let generatedAffiliateUrl = "";
+  let originalItemId: string | null | undefined;
+  let finalItemId: string | null | undefined;
+  let identitySource: string | undefined;
 
   // ─── Mercado Livre ────────────────────────────────────────────────────────
   if (detectedPlatform === "Mercado Livre") {
@@ -269,7 +272,7 @@ export async function generateQuickPostAction(
     log("[Express Link Start]", { requestId: operationId, stage: "resolve_url", marketplace: "Mercado Livre" });
     const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
 
-    if (resolved.errorCode) {
+    if (resolved.errorCode && resolved.errorCode !== "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
       const msgMap: Record<string, string> = {
         SSRF_BLOCKED: "Este link aponta para um destino não permitido.",
         REDIRECT_LOOP: "Não conseguimos resolver o link do Mercado Livre — foi detectado um loop de redirecionamento.",
@@ -277,31 +280,43 @@ export async function generateQuickPostAction(
         UNEXPECTED_REDIRECT_DOMAIN: "Esse link redirecionou para um domínio não reconhecido.",
         TIMEOUT_RESOLVING_URL: "O processamento desse link excedeu o tempo permitido.",
         EMPTY_RESPONSE: "Não conseguimos abrir o link do Mercado Livre.",
+        PRODUCT_ID_MISMATCH: "Incompatibilidade de produto detectada durante o redirecionamento.",
+        AFFILIATE_SHOWCASE_NOT_PRODUCT: "O link direciona para uma vitrine com vários produtos. Cole o link de um produto específico.",
       };
       log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
       return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link do Mercado Livre." };
     }
 
+    if (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
+      log("[Express Fallback]", { requestId: operationId, message: "Produto identificado pela URL original; validação continuada pela API.", originalItemId: resolved.originalItemId });
+    }
+
     resolvedUrl = resolved.resolvedUrl;
+    originalItemId = resolved.originalItemId;
+    finalItemId = resolved.finalItemId;
+    identitySource = resolved.identitySource;
     log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length });
 
-    // PASSO 2: Extrair item ID da URL RESOLVIDA
-    const mlIdInfo = extractMLId(resolvedUrl);
-    if (mlIdInfo) {
-      itemId = mlIdInfo.id;
+    // PASSO 2: Usar o ID selecionado (original ou final)
+    if (resolved.selectedItemId) {
+      itemId = resolved.selectedItemId;
     }
 
     // PASSO 3: Buscar dados do produto via API ML (com OAuth token do usuário)
-    log("[Express Parse Start]", { requestId: operationId, marketplace: "Mercado Livre", itemId });
-    const mlData = await fetchMLProductDetails(resolvedUrl, userId);
+    // Se caiu no anti-bot mas temos o ID, podemos montar uma URL válida para a API (a API usa o ID)
+    const urlForApi = (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID" && itemId)
+      ? `https://produto.mercadolivre.com.br/${itemId.replace("MLB", "MLB-")}`
+      : resolvedUrl;
+    
+    log("[Express Parse Start]", { requestId: operationId, marketplace: "Mercado Livre", itemId, identitySource: resolved.identitySource });
+    const mlData = await fetchMLProductDetails(urlForApi, userId);
 
     if (mlData) {
       title = mlData.title;
       imageUrl = mlData.imageUrl || "";
       price = mlData.price ?? 0;
-      canonicalUrl = mlData.finalUrl || resolvedUrl;
+      canonicalUrl = mlData.finalUrl || urlForApi;
       if (!itemId) {
-        // Tentar extrair da URL final da API
         const extractedId = extractMLId(canonicalUrl);
         if (extractedId) itemId = extractedId.id;
       }
@@ -341,7 +356,7 @@ export async function generateQuickPostAction(
     // Resolver short link s.shopee.com.br → shopee.com.br/product/...
     const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
 
-    if (resolved.errorCode) {
+    if (resolved.errorCode && resolved.errorCode !== "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
       const msgMap: Record<string, string> = {
         SSRF_BLOCKED: "Este link aponta para um destino não permitido.",
         REDIRECT_LOOP: "Não conseguimos abrir o link compartilhado da Shopee — loop de redirecionamento.",
@@ -349,14 +364,24 @@ export async function generateQuickPostAction(
         UNEXPECTED_REDIRECT_DOMAIN: "Esse link da Shopee redirecionou para um domínio não reconhecido.",
         TIMEOUT_RESOLVING_URL: "O processamento desse link da Shopee excedeu o tempo permitido.",
         EMPTY_RESPONSE: "Não conseguimos abrir o link compartilhado da Shopee.",
+        PRODUCT_ID_MISMATCH: "Incompatibilidade de produto detectada durante o redirecionamento.",
+        CAMPAIGN_PAGE_NOT_PRODUCT: "O link direciona para uma campanha da Shopee, não para um produto individual.",
+        AFFILIATE_SHOWCASE_NOT_PRODUCT: "O link direciona para uma vitrine com vários produtos. Cole o link de um produto específico.",
       };
       log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
       return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link da Shopee." };
     }
 
+    if (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
+      log("[Express Fallback]", { requestId: operationId, message: "Produto identificado pela URL original; validação continuada." });
+    }
+
     resolvedUrl = resolved.resolvedUrl;
     canonicalUrl = resolvedUrl;
-    log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length });
+    originalItemId = resolved.originalItemId;
+    finalItemId = resolved.finalItemId;
+    identitySource = resolved.identitySource;
+    log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length, identitySource: resolved.identitySource });
 
     // Extrair metadados da página resolvida (HTML já capturado pelo resolver)
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Shopee" });
@@ -365,7 +390,10 @@ export async function generateQuickPostAction(
     imageUrl = shopeeData.imageUrl;
     price = shopeeData.price;
     shopId = shopeeData.shopId;
-    itemId = shopeeData.itemId;
+    
+    // Usar o ID da URL se foi extraído de forma segura, senão usa o que o scraping achar (se achar)
+    itemId = resolved.selectedItemId || shopeeData.itemId;
+    
     generatedAffiliateUrl = resolvedUrl; // Shopee: usa o link resolvido como affiliate (app Shopee gerencia comissão)
 
     log("[Express Parse End]", { requestId: operationId, marketplace: "Shopee", hasTitle: !!title, hasPrice: price > 0, hasImage: !!imageUrl });
@@ -446,6 +474,10 @@ export async function generateQuickPostAction(
           affiliate_url: generatedAffiliateUrl, // URL com parâmetros de afiliado
           item_id: itemId,
           shop_id: shopId,
+          original_item_id: originalItemId,
+          final_item_id: finalItemId,
+          selected_item_id: itemId,
+          identity_source: identitySource,
           quality_gate: "VALID_PRODUCT",
         },
         marketplace_metrics: {
