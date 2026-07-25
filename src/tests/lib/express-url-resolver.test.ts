@@ -272,14 +272,25 @@ describe("Reconciliação de Identidade e Anti-Bot", () => {
     expect(result.errorCode).toBe("AFFILIATE_SHOWCASE_NOT_PRODUCT");
   });
 
-  it("7. Shopee opaanlp (8. campanha não tratada como produto)", async () => {
+  it("7. Shopee opaanlp com IDs é aceito como produto", async () => {
     mockFetch([{
       status: 200,
       headers: { location: "https://shopee.com.br/opaanlp/1234/5678" },
     }]);
 
     const result = await resolveMarketplaceUrl("https://s.shopee.com.br/short");
-    expect(result.errorCode).toBe("CAMPAIGN_PAGE_NOT_PRODUCT");
+    expect(result.errorCode).toBeUndefined();
+    expect(result.finalItemId).toBe("1234.5678");
+  });
+
+  it("8. Shopee opaanlp sem IDs (campanha genérica) retorna erro", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://shopee.com.br/opaanlp/" },
+    }]);
+
+    const result = await resolveMarketplaceUrl("https://s.shopee.com.br/short");
+    expect(result.errorCode).toBe("SHOPEE_PRODUCT_IDS_NOT_FOUND");
   });
 
 });

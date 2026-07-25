@@ -1,5 +1,7 @@
 "use server";
 
+import { createHash } from "crypto";
+
 import { generateOfficialAI, type OfficialAIChannel, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -116,6 +118,60 @@ function extractShopeeIds(url: string): { shopId?: string; itemId?: string } {
     if (shopId || itemId) return { shopId, itemId };
   } catch { /* ignorar */ }
   return {};
+}
+
+// ─── API Oficial da Shopee (GraphQL) ─────────────────────────────────────────
+
+export async function fetchShopeeOfficialProduct(shopId: string, itemId: string): Promise<{
+  title: string;
+  imageUrl: string;
+  price: number;
+} | null> {
+  const appId = process.env.SHOPEE_APP_ID || "";
+  const appSecret = process.env.SHOPEE_APP_SECRET || "";
+  if (!appId || !appSecret) {
+    console.warn("[ACTIONS][SHOPEE] SHOPEE_APP_ID ou SHOPEE_APP_SECRET não configurados.");
+    return null;
+  }
+
+  const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { productName imageUrl priceMin } } }";
+  const keyword = `https://shopee.com.br/product/${shopId}/${itemId}`;
+  const variables = { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true };
+  const requestBody = JSON.stringify({ query, variables });
+  
+  const timestamp = Math.floor(Date.now() / 1000);
+  const signature = createHash("sha256")
+    .update(`${appId}${timestamp}${requestBody}${appSecret}`)
+    .digest("hex");
+
+  try {
+    const response = await fetch("https://open-api.affiliate.shopee.com.br/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`
+      },
+      body: requestBody,
+      signal: AbortSignal.timeout(12_000)
+    });
+
+    const data = await response.json();
+    const nodes = data?.data?.productOfferV2?.nodes;
+    if (Array.isArray(nodes) && nodes.length > 0) {
+      const product = nodes[0];
+      const price = parseFloat(product.priceMin);
+      if (product.productName && product.imageUrl && price > 0) {
+        return {
+          title: product.productName,
+          imageUrl: product.imageUrl,
+          price
+        };
+      }
+    }
+  } catch (error) {
+    console.error("[ACTIONS][SHOPEE] Falha ao consultar API Oficial:", error);
+  }
+  return null;
 }
 
 // ─── Leitura de metadados HTML (Shopee e fallback) ────────────────────────────
@@ -412,6 +468,7 @@ export async function generateQuickPostAction(
         PRODUCT_ID_MISMATCH: "Incompatibilidade de produto detectada durante o redirecionamento.",
         CAMPAIGN_PAGE_NOT_PRODUCT: "O link direciona para uma campanha da Shopee, não para um produto individual.",
         AFFILIATE_SHOWCASE_NOT_PRODUCT: "O link direciona para uma vitrine com vários produtos. Cole o link de um produto específico.",
+        SHOPEE_PRODUCT_IDS_NOT_FOUND: "Não foi possível extrair a identidade do produto a partir da URL da campanha da Shopee."
       };
       log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
       return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link da Shopee." };
@@ -428,18 +485,43 @@ export async function generateQuickPostAction(
     identitySource = resolved.identitySource;
     log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length, identitySource: resolved.identitySource });
 
-    // Extrair metadados da página resolvida (HTML já capturado pelo resolver)
-    log("[Express Parse Start]", { requestId: operationId, marketplace: "Shopee" });
-    const shopeeData = await readShopeeMetadata(resolvedUrl, resolved.htmlBody);
-    title = shopeeData.title;
-    imageUrl = shopeeData.imageUrl;
-    price = shopeeData.price;
-    shopId = shopeeData.shopId;
+    // Usar o ID da URL se foi extraído de forma segura
+    const extractedIds = extractShopeeIds(resolvedUrl);
+    itemId = resolved.selectedItemId || extractedIds.itemId;
+    shopId = extractedIds.shopId;
     
-    // Usar o ID da URL se foi extraído de forma segura, senão usa o que o scraping achar (se achar)
-    itemId = resolved.selectedItemId || shopeeData.itemId;
+    log("[Express Parse Start]", { requestId: operationId, marketplace: "Shopee", hasShopId: !!shopId, hasItemId: !!itemId });
     
-    generatedAffiliateUrl = resolvedUrl; // Shopee: usa o link resolvido como affiliate (app Shopee gerencia comissão)
+    // Se temos shopId e itemId (como no caso do opaanlp), tenta a API oficial primeiro
+    let apiSuccess = false;
+    if (shopId && itemId) {
+      const apiData = await fetchShopeeOfficialProduct(shopId, itemId);
+      if (apiData) {
+        title = apiData.title;
+        imageUrl = apiData.imageUrl;
+        price = apiData.price;
+        apiSuccess = true;
+      }
+    }
+    
+    // Fallback: se a API oficial não retornar (ou não termos IDs), usa readShopeeMetadata (scraping)
+    if (!apiSuccess) {
+      const shopeeData = await readShopeeMetadata(resolvedUrl, resolved.htmlBody);
+      title = shopeeData.title;
+      imageUrl = shopeeData.imageUrl;
+      price = shopeeData.price;
+      shopId = shopId || shopeeData.shopId;
+      itemId = itemId || shopeeData.itemId;
+    }
+    
+    // Em caso de opaanlp e API não retornou dados (e scraping também costuma falhar), retornar erro customizado
+    if (!apiSuccess && resolvedUrl.includes("shopee.com.br/opaanlp/")) {
+      log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "url_resolution" });
+      return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "O produto não pôde ser confirmado pela API da Shopee. A oferta pode ter expirado ou estar indisponível." };
+    }
+    
+    // Shopee: preserva sempre o link afiliado (que pode ser o original s.shopee.com.br ou o resolvido com afiliação)
+    generatedAffiliateUrl = inputUrl.includes("s.shopee.com.br") ? inputUrl : resolvedUrl; 
 
     log("[Express Parse End]", { requestId: operationId, marketplace: "Shopee", hasTitle: !!title, hasPrice: price > 0, hasImage: !!imageUrl });
   }

@@ -35,7 +35,11 @@ export interface ExpressValidationResult {
     | "PRODUCT_NAME_MISSING"
     | "CURRENT_PRICE_MISSING"
     | "PRODUCT_IMAGE_MISSING"
-    | "VALIDATION_TOO_STRICT";
+    | "VALIDATION_TOO_STRICT"
+    | "PRODUCT_PAGE_NOT_CONFIRMED"
+    | "SHOPEE_PRODUCT_IDS_NOT_FOUND"
+    | "SHOPEE_PRODUCT_NOT_CONFIRMED"
+    | "SHOPEE_API_METADATA_MISSING";
   errorStage?: string;
   details?: Record<string, string>;
 }
@@ -55,6 +59,10 @@ const ALLOWED_IMAGE_DOMAINS = [
   // Shein
   "img.ltwebstatic.com",
   "shein.com",
+  // Amazon
+  "m.media-amazon.com",
+  "images-amazon.com",
+  "media-amazon.com",
   // Genéricos de produto
   "cdn.icecat.us",
 ];
@@ -174,7 +182,8 @@ export function validateExpressProduct(input: ExpressProductInput): ExpressValid
   let errorStage: string | undefined;
 
   if (!identityConfirmed) {
-    errorCode = "PRODUCT_ID_NOT_FOUND";
+    if (input.marketplace === "Shein") errorCode = "PRODUCT_PAGE_NOT_CONFIRMED";
+    else errorCode = "PRODUCT_ID_NOT_FOUND";
     errorStage = "identity_validation";
   } else if (!nameConfirmed) {
     errorCode = "PRODUCT_NAME_MISSING";
@@ -209,12 +218,20 @@ export function getExpressErrorMessage(
   switch (errorCode) {
     case "PRODUCT_ID_NOT_FOUND":
       return `O link do ${marketplace} foi reconhecido, mas o produto individual não pôde ser identificado. Cole o link direto do produto.`;
+    case "PRODUCT_PAGE_NOT_CONFIRMED":
+      return `A página não parece ser de um produto específico (pode ser uma vitrine, campanha ou categoria). Use um link direto de produto.`;
     case "PRODUCT_NAME_MISSING":
       return `O produto foi encontrado, mas o nome não pôde ser confirmado. Tente o link direto da página do produto.`;
     case "CURRENT_PRICE_MISSING":
       return `${marketplace} não expôs um preço verificável neste link. Use o link direto do item.`;
     case "PRODUCT_IMAGE_MISSING":
       return `A imagem principal do produto não pôde ser validada. Verifique se o link aponta para um produto com imagem.`;
+    case "SHOPEE_PRODUCT_IDS_NOT_FOUND":
+      return `Não foi possível extrair a identidade do produto a partir da URL da campanha da Shopee.`;
+    case "SHOPEE_PRODUCT_NOT_CONFIRMED":
+      return `O produto não pôde ser confirmado pela API da Shopee. A oferta pode ter expirado ou estar indisponível.`;
+    case "SHOPEE_API_METADATA_MISSING":
+      return `Os dados essenciais do produto (nome, preço, imagem) não foram retornados pela API da Shopee.`;
     default:
       return `Não foi possível processar este link. Cole o link direto do produto em ${marketplace}.`;
   }

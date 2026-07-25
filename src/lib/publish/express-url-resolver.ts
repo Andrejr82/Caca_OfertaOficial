@@ -37,7 +37,8 @@ export interface UrlResolveResult {
     | "PRODUCT_ID_MISMATCH"
     | "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID"
     | "CAMPAIGN_PAGE_NOT_PRODUCT"
-    | "AFFILIATE_SHOWCASE_NOT_PRODUCT";
+    | "AFFILIATE_SHOWCASE_NOT_PRODUCT"
+    | "SHOPEE_PRODUCT_IDS_NOT_FOUND";
 }
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
@@ -162,6 +163,8 @@ export function extractShopeeIdFromUrl(url: string): string | null {
   if (match1) return `${match1[1]}.${match1[2]}`;
   const match2 = url.match(/shopee\.com\.br\/product\/(\d+)\/(\d+)/);
   if (match2) return `${match2[1]}.${match2[2]}`;
+  const match3 = url.match(/shopee\.com\.br\/opaanlp\/(\d+)\/(\d+)/i);
+  if (match3) return `${match3[1]}.${match3[2]}`;
   return null;
 }
 
@@ -203,10 +206,16 @@ function buildFinalResult(
     selectedItemId = originalItemId;
     errorCode = "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID";
   }
-  // Vitrines / Campanhas
+  // Shopee OPAANLP (pode ser produto ou campanha genérica)
   else if (resolvedUrl.includes("shopee.com.br/opaanlp/")) {
-    errorCode = "CAMPAIGN_PAGE_NOT_PRODUCT";
+    if (finalItemId) {
+      identitySource = "FINAL_URL";
+      selectedItemId = finalItemId;
+    } else {
+      errorCode = "SHOPEE_PRODUCT_IDS_NOT_FOUND";
+    }
   }
+  // Vitrines
   else if (resolvedUrl.includes("/social/")) {
     errorCode = "AFFILIATE_SHOWCASE_NOT_PRODUCT";
   }
