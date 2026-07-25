@@ -89,7 +89,6 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
       <div className="grid gap-3">
         <header className="flex flex-wrap justify-between items-start gap-2 border-b border-blue-500/10 pb-2">
           <div>
-            <h3 className="font-bold text-lg text-ink">{post.offers.product_name}</h3>
             <p className="text-xs text-ink/60">🏪 Achado na {post.offers.platform} · <span className="font-semibold text-blue-600">{price}</span></p>
             <p className="text-xs text-ink/55 mt-1 break-all">Link: <a href={link} target="_blank" rel="noreferrer" className="text-blue-700 underline">{link}</a></p>
           </div>

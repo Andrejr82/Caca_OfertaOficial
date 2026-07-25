@@ -185,7 +185,7 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
           <div>
             {couponOffer ? (
               <>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 mb-2">
                   <span className="text-xs rounded-full bg-sky-100 text-sky-800 px-2.5 py-0.5 font-semibold uppercase inline-flex items-center gap-1">
                     <Ticket size={12} />
                     Cupom
@@ -194,9 +194,8 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
                     Marketplace: <span className="font-semibold">{post.offers.platform}</span>
                   </span>
                 </div>
-                <h3 className="font-bold text-lg text-ink mt-2">{cleanCouponTitle(post.offers.product_name)}</h3>
                 {post.offers.coupon ? <p className="text-sm font-semibold text-sky-700">Código: {post.offers.coupon}</p> : null}
-                <p className="text-xs text-ink/70 mt-2">{couponDetails?.description}</p>
+                <p className="text-xs text-ink/70 mt-1">{couponDetails?.description}</p>
                 {couponDetails?.validity ? <p className="text-xs text-ink/55 mt-1">Validade: {couponDetails.validity}</p> : null}
                 <p className="text-xs text-ink/55 mt-1 break-all">
                   Link afiliado:{" "}
@@ -207,7 +206,6 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
               </>
             ) : (
               <>
-                <h3 className="font-bold text-lg text-ink">{post.offers.product_name}</h3>
                 <p className="text-xs text-ink/60">
                   Plataforma: <span className="font-semibold">{post.offers.platform}</span> | Preço: <span className="font-semibold text-sky-600">{formattedPrice}</span>
                   {formattedOldPrice && ` (Anterior: ${formattedOldPrice})`}
