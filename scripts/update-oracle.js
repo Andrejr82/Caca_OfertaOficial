@@ -31,6 +31,9 @@ const DEPLOY_FILES = [
   'scripts/oracle-scraper.cjs',
   'scripts/oracle-worker-discovery-only.cjs',
   'scripts/oracle-resilience.cjs',
+  'scripts/family-variant-selector.cjs',
+  'scripts/family-key-engine.cjs',
+  'scripts/curation-policy.cjs',
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
