@@ -61,6 +61,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
   const [isProcessing, setIsProcessing] = useState(false);
   const [processProgress, setProcessProgress] = useState({ current: 0, total: 0 });
   const [processErrors, setProcessErrors] = useState<string[]>([]);
+  const [processSummary, setProcessSummary] = useState<{ total: number; success: number; failed: number } | null>(null);
 
   // Queue of prepared posts
   const [posts, setPosts] = useState<PreparedPost[]>([]);
@@ -73,52 +74,74 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
       .filter((l) => l.length > 5 && (l.startsWith("http://") || l.startsWith("https://")));
   }
 
-  // ─── Batch generate ───
+  // ─── Batch generate com isolamento por item (MAX_CONCURRENCY=3) ───
   async function handleBatchGenerate(e: React.FormEvent) {
     e.preventDefault();
     const links = parseLinks(linksInput);
     if (links.length === 0) return;
 
+    const MAX_CONCURRENCY = 3;
     setIsProcessing(true);
     setProcessProgress({ current: 0, total: links.length });
     setProcessErrors([]);
+    setProcessSummary(null);
 
-    const newPosts: PreparedPost[] = [];
+    // Reservar posições na ordem original
+    const newPosts: (PreparedPost | null)[] = new Array(links.length).fill(null);
     const errors: string[] = [];
+    let completed = 0;
 
-    for (let i = 0; i < links.length; i++) {
-      setProcessProgress({ current: i + 1, total: links.length });
+    // Processar em lotes de MAX_CONCURRENCY — falha de um não cancela os demais
+    for (let batchStart = 0; batchStart < links.length; batchStart += MAX_CONCURRENCY) {
+      const batch = links.slice(batchStart, batchStart + MAX_CONCURRENCY);
 
-      try {
-        const res = await generateQuickPostAction(links[i], channel);
-        if (res.ok && res.copy && res.offer) {
-          newPosts.push({
-            id: `post-${Date.now()}-${i}`,
-            url: links[i],
-            productName: res.offer?.product_name || "Produto",
-            imageUrl: res.offer?.image_url || "",
-            trackedUrl: res.trackedUrl || "",
-            copy: res.copy,
-            copies: res.copies,
-            targetChannels: channel === "omnichannel" ? ["telegram", "instagram", "whatsapp"] : [channel],
-            status: "ready",
-            publishMessage: "",
-            expanded: i === 0, // Expand first post by default
-            offerId: res.offer.id,
-            platform: res.offer?.platform,
-          });
+      const batchResults = await Promise.allSettled(
+        batch.map((link, batchIdx) =>
+          generateQuickPostAction(link, channel).then((res) => ({ res, index: batchStart + batchIdx }))
+        )
+      );
+
+      for (let ri = 0; ri < batchResults.length; ri++) {
+        const settled = batchResults[ri];
+        const globalIndex = batchStart + ri;
+        completed++;
+        setProcessProgress({ current: completed, total: links.length });
+
+        if (settled.status === "fulfilled") {
+          const { res, index } = settled.value;
+          if (res.ok && res.copy && res.offer) {
+            newPosts[index] = {
+              id: `post-${Date.now()}-${index}`,
+              url: links[index],
+              productName: res.offer?.product_name || "Produto",
+              imageUrl: res.offer?.image_url || "",
+              trackedUrl: res.trackedUrl || (res as any).affiliateUrl || "",
+              copy: res.copy,
+              copies: res.copies,
+              targetChannels: channel === "omnichannel" ? ["telegram", "instagram", "whatsapp"] : [channel],
+              status: "ready",
+              publishMessage: "",
+              expanded: index === 0,
+              offerId: res.offer.id,
+              platform: res.offer?.platform,
+            };
+          } else {
+            errors.push(`Link ${globalIndex + 1}: ${res.message || "Erro desconhecido"}`);
+          }
         } else {
-          errors.push(`Link ${i + 1}: ${res.message || "Erro desconhecido"}`);
+          errors.push(
+            `Link ${globalIndex + 1}: ${settled.reason instanceof Error ? settled.reason.message : "Erro no servidor"}`
+          );
         }
-      } catch (err) {
-        errors.push(`Link ${i + 1}: ${err instanceof Error ? err.message : "Erro no servidor"}`);
       }
     }
 
-    setPosts((prev) => [...newPosts, ...prev]);
+    const validPosts = newPosts.filter(Boolean) as PreparedPost[];
+    setPosts((prev) => [...validPosts, ...prev]);
     setProcessErrors(errors);
+    setProcessSummary({ total: links.length, success: validPosts.length, failed: errors.length });
     setIsProcessing(false);
-    if (newPosts.length > 0) setLinksInput("");
+    if (validPosts.length > 0) setLinksInput("");
   }
 
   // ─── Publish single post ───
@@ -133,8 +156,8 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
     try {
       let results = [];
       for (const ch of post.targetChannels) {
-        let copyToUse = post.copies ? (post.copies as any)[ch] : post.copy;
-        
+        const copyToUse = post.copies ? (post.copies as any)[ch] : post.copy;
+
         if (ch === "telegram") {
           results.push(await publishToTelegramAction(copyToUse, post.imageUrl || undefined));
         } else if (ch === "instagram") {
@@ -172,7 +195,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
         )
       );
     }
-  }, [posts, channel]);
+  }, [posts]);
 
   // ─── Preview state transition ───
   function handlePreview(postId: string) {
@@ -189,8 +212,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
   // ─── Publish ALL ready posts ───
   async function handlePublishAll() {
-    const readyPosts = posts.filter((p) => p.status === "ready");
-    // Change all ready to preview
+    void posts.filter((p) => p.status === "ready");
     setPosts((prev) =>
       prev.map((p) => (p.status === "ready" ? { ...p, status: "confirming" as const, expanded: true } : p))
     );
@@ -235,7 +257,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             <textarea
               value={linksInput}
               onChange={(e) => setLinksInput(e.target.value)}
-              placeholder={"Cole seus links aqui, um por linha:\nhttps://onelink.shein.com/...\nhttps://s.shopee.com.br/...\nhttps://amzn.to/..."}
+              placeholder={"Cole seus links aqui, um por linha:\nhttps://s.shopee.com.br/...\nhttps://meli.la/...\nhttps://br.shein.com/..."}
               className="glass-input focus-ring w-full max-w-full rounded-lg py-3 px-4 text-sm font-mono resize-none h-[120px] overflow-auto whitespace-pre-wrap break-all"
               style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
               disabled={isProcessing}
@@ -287,7 +309,27 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
           </div>
         )}
 
-        {/* Processing Errors */}
+        {/* Processing Summary */}
+        {processSummary && !isProcessing && (
+          <div className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
+            processSummary.failed === 0
+              ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+              : processSummary.success === 0
+              ? "bg-red-500/10 border border-red-500/20 text-red-400"
+              : "bg-amber-500/10 border border-amber-500/20 text-amber-400"
+          }`}>
+            {processSummary.failed === 0
+              ? <CheckCircle2 size={14} />
+              : <AlertCircle size={14} />}
+            <span>
+              {processSummary.total} link{processSummary.total > 1 ? "s" : ""} processado{processSummary.total > 1 ? "s" : ""} —{" "}
+              {processSummary.success} confirmado{processSummary.success !== 1 ? "s" : ""},{" "}
+              {processSummary.failed} falha{processSummary.failed !== 1 ? "s" : ""}
+            </span>
+          </div>
+        )}
+
+        {/* Processing Errors (individual) */}
         {processErrors.length > 0 && (
           <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm space-y-1">
             <p className="font-bold flex items-center gap-1.5"><AlertCircle size={16} /> {processErrors.length} erro(s) no processamento:</p>
@@ -363,10 +405,10 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
               <div className="h-12 w-12 rounded-lg overflow-hidden bg-white/5 flex-shrink-0 flex items-center justify-center">
                 {post.imageUrl ? (
                   <div className="relative h-full w-full flex items-center justify-center">
-                    <img 
+                    <img
                       src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} referrerPolicy="no-referrer"
-                      alt="" 
-                      className="object-cover w-full h-full" 
+                      alt=""
+                      className="object-cover w-full h-full"
                     />
                   </div>
                 ) : (
@@ -374,7 +416,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                 )}
               </div>
 
-              {/* Info — takes remaining space, truncates text */}
+              {/* Info */}
               <div className="flex-1 min-w-0">
                 <h3 className="text-sm font-medium text-white/80 truncate">{post.productName}</h3>
                 <p className="text-xs text-white/30 truncate">{post.url}</p>
@@ -443,13 +485,13 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                     <div className="bg-[#005c4b] rounded-xl rounded-tr-none p-1 shadow-sm relative">
                       {/* Triangle tail */}
                       <div className="absolute top-0 -right-2 w-0 h-0 border-t-[10px] border-t-[#005c4b] border-r-[10px] border-r-transparent"></div>
-                      
+
                       {/* Image */}
                       {post.targetChannels.includes("whatsapp") ? (
                         <PremiumImagePreview offerId={post.offerId} productName={post.productName} />
                       ) : (
                         <div className="relative rounded-lg overflow-hidden bg-black/20 flex items-center justify-center min-h-[200px]">
-                          <img src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} className="object-contain w-full h-full p-2" />
+                          <img src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} className="object-contain w-full h-full p-2" alt={post.productName} />
                         </div>
                       )}
 
@@ -457,7 +499,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                       <div className="px-2 pt-2 pb-1 text-[14px] text-white/95 whitespace-pre-wrap font-sans leading-relaxed break-words">
                         {post.targetChannels.length > 1 && post.copies ? (post.copies as any)["whatsapp"] : post.copy}
                       </div>
-                      
+
                       {/* Time */}
                       <div className="text-[10px] text-white/60 text-right px-2 pb-1 flex justify-end items-center gap-1">
                         12:00 <CheckCircle2 size={10} className="text-blue-400" />
@@ -480,19 +522,19 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                     {/* Image preview */}
                     {post.imageUrl && (
                       <div className="relative rounded-lg overflow-hidden bg-white/5 border border-white/[0.05] h-[280px] w-full flex items-center justify-center">
-                        <img 
+                        <img
                           src={`/api/images/proxy?url=${encodeURIComponent(post.imageUrl)}`} referrerPolicy="no-referrer"
-                          alt={post.productName} 
-                          className="object-contain w-full h-full p-2" 
+                          alt={post.productName}
+                          className="object-contain w-full h-full p-2"
                         />
                       </div>
                     )}
 
                     {/* Copy editor */}
                     <div className="min-w-0 space-y-3">
-                      
+
                       {/* Alerta Semi-Automático Shein */}
-                      {(post.url.includes("shein.com") || post.trackedUrl.includes("caca_oferta_manual_link")) && (
+                      {post.url.includes("shein.com") && (
                         <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-start gap-2">
                           <AlertCircle className="text-amber-500 mt-0.5 flex-shrink-0" size={16} />
                           <div className="text-xs text-amber-500/90 leading-relaxed">
@@ -545,7 +587,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                           <Trash2 size={12} /> Remover
                         </Button>
 
-                        {/* Spacer pushes publish button to the right */}
+                        {/* Spacer */}
                         <div className="flex-1" />
 
                         {post.status === "ready" && (

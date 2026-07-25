@@ -1,0 +1,144 @@
+{
+  "_comment": "Fixtures locais para a Sprint Publicação Expressa V5. Não chamar internet durante npm test.",
+  "shopeeShortLinks": [
+    {
+      "inputUrl": "https://s.shopee.com.br/7AcDy9IMDA",
+      "marketplace": "Shopee",
+      "expectedResolvedDomain": "shopee.com.br",
+      "mockResolvedUrl": "https://shopee.com.br/product/123456789/1001234567",
+      "mockShopId": "123456789",
+      "mockItemId": "1001234567",
+      "mockOgTitle": "Kit Conjunto Feminino Calça E Blusa Cropped Social Moda Tendência 2024",
+      "mockOgImage": "https://down-br.img.susercontent.com/file/br-11134207-7r98o-lyvyezqs1z9k07",
+      "mockPrice": 95.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://s.shopee.com.br/5fnQBTvNoQ",
+      "marketplace": "Shopee",
+      "expectedResolvedDomain": "shopee.com.br",
+      "mockResolvedUrl": "https://shopee.com.br/product/987654321/2009876543",
+      "mockShopId": "987654321",
+      "mockItemId": "2009876543",
+      "mockOgTitle": "Tênis Masculino Esportivo Running Academia Corrida",
+      "mockOgImage": "https://down-br.img.susercontent.com/file/br-11134207-abc123",
+      "mockPrice": 129.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://s.shopee.com.br/qiAQZRvZP",
+      "marketplace": "Shopee",
+      "expectedResolvedDomain": "shopee.com.br",
+      "mockResolvedUrl": "https://shopee.com.br/product/111222333/3001112223",
+      "mockShopId": "111222333",
+      "mockItemId": "3001112223",
+      "mockOgTitle": "Camiseta Oversized Masculina Algodão Premium Streetwear",
+      "mockOgImage": "https://down-br.img.susercontent.com/file/br-11134207-xyz789",
+      "mockPrice": 59.90,
+      "expectedErrorCode": null
+    }
+  ],
+  "meliLaShortLinks": [
+    {
+      "inputUrl": "https://meli.la/1uQ6YYf",
+      "marketplace": "Mercado Livre",
+      "expectedResolvedDomain": "mercadolivre.com.br",
+      "mockResolvedUrl": "https://www.mercadolivre.com.br/calca-jeans/MLB-5001112223-_JM",
+      "mockItemId": "MLB5001112223",
+      "mockTitle": "Calça Jeans Masculina Slim Fit Premium",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_123456-MLA12345678901_012024-O.jpg",
+      "mockPrice": 149.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/2KJ7Wco",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5002223334",
+      "mockTitle": "Tênis Nike Revolution 6 Masculino",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_456789-MLA12345678902_012024-O.jpg",
+      "mockPrice": 299.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/2VVhrSg",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5003334445",
+      "mockTitle": "Relógio Smartwatch Feminino com Monitor Cardíaco",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_789012-MLA12345678903_012024-O.jpg",
+      "mockPrice": 189.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/1U3GBxZ",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5004445556",
+      "mockTitle": "Mochila Escolar Grande Impermeável USB",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_345678-MLA12345678904_012024-O.jpg",
+      "mockPrice": 89.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/1hSh4hP",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5005556667",
+      "mockTitle": "Fone de Ouvido Bluetooth 5.0 TWS Premium",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_901234-MLA12345678905_012024-O.jpg",
+      "mockPrice": 69.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/1Q8ZyLb",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5006667778",
+      "mockTitle": "Luminária LED Mesa Escritório Articulável Touch",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_567890-MLA12345678906_012024-O.jpg",
+      "mockPrice": 79.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/2wpKTuo",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5007778889",
+      "mockTitle": "Cadeira Gamer Ergonômica Com Apoio Lombar",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_123901-MLA12345678907_012024-O.jpg",
+      "mockPrice": 599.90,
+      "expectedErrorCode": null
+    },
+    {
+      "inputUrl": "https://meli.la/2wGoD8u",
+      "marketplace": "Mercado Livre",
+      "mockItemId": "MLB5008889990",
+      "mockTitle": "Panela de Pressão Elétrica Digital 5L Inox",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_456012-MLA12345678908_012024-O.jpg",
+      "mockPrice": 249.90,
+      "expectedErrorCode": null
+    }
+  ],
+  "meliFullLink": [
+    {
+      "inputUrl": "https://www.mercadolivre.com.br/calca-skinny-preta-masculina-jeans-com-elastano-lycra/up/MLBU1440966567?pdp_filters=item_id%3AMLB6059303240&matt_tool=38524122&ua=vCneNXBu66-FWNLFSZQpglVqgDwQrkHgUE_t2zf9CxvZSyk#origin=share&sid=share&wid=MLB6059303240&action=copy",
+      "marketplace": "Mercado Livre",
+      "expectedItemId": "MLB6059303240",
+      "mockTitle": "Calça Skinny Preta Masculina Jeans com Elastano Lycra",
+      "mockImageUrl": "https://http2.mlstatic.com/D_NQ_NP_calca-skinny.jpg",
+      "mockPrice": 129.90,
+      "expectedErrorCode": null
+    }
+  ],
+  "ssrfTestCases": [
+    { "url": "http://localhost/admin", "expectedError": "SSRF_BLOCKED" },
+    { "url": "http://127.0.0.1:8080/", "expectedError": "SSRF_BLOCKED" },
+    { "url": "http://0.0.0.0/", "expectedError": "SSRF_BLOCKED" },
+    { "url": "http://169.254.169.254/latest/meta-data/", "expectedError": "SSRF_BLOCKED" },
+    { "url": "http://192.168.1.1/", "expectedError": "SSRF_BLOCKED" },
+    { "url": "http://10.0.0.1/", "expectedError": "SSRF_BLOCKED" },
+    { "url": "ftp://files.example.com/data", "expectedError": "SSRF_BLOCKED" },
+    { "url": "file:///etc/passwd", "expectedError": "SSRF_BLOCKED" }
+  ],
+  "redirectEdgeCases": [
+    { "description": "redirect loop", "expectedError": "REDIRECT_LOOP" },
+    { "description": "redirect limit exceeded", "maxRedirects": 10, "expectedError": "REDIRECT_LIMIT_EXCEEDED" },
+    { "description": "redirect to unauthorized domain", "expectedError": "UNEXPECTED_REDIRECT_DOMAIN" },
+    { "description": "relative redirect", "shouldResolve": true }
+  ]
+}

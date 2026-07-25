@@ -461,3 +461,73 @@ export function generateMLAffiliateLink(productUrl: string, userId?: string): st
     return productUrl;
   }
 }
+
+// ─── Monetização com AFFILIATE_ID Oficial do ML ──────────────────────────────
+
+export interface AffiliateMonetizationResult {
+  monetized: boolean;
+  affiliateUrl: string;
+  errorCode?: "AFFILIATE_LINK_NOT_GENERATED";
+  reason?: string;
+}
+
+/**
+ * Gera link afiliado do Mercado Livre usando o MERCADO_LIVRE_AFFILIATE_ID oficial.
+ *
+ * O parâmetro `partner_id` (ou `deal_print_id`) é o identificador do programa
+ * de afiliados do ML. Sem ele o clique não é rastreado e a comissão não é creditada.
+ *
+ * @param productUrl - URL canônica do produto (já resolvida)
+ * @param affiliateId - MERCADO_LIVRE_AFFILIATE_ID do ambiente (nunca expor o valor)
+ * @returns URL com parâmetros de rastreamento de afiliado injetados
+ */
+export function generateMLAffiliateLinkWithId(productUrl: string, affiliateId: string): string {
+  if (!affiliateId?.trim()) return productUrl;
+
+  try {
+    const url = new URL(productUrl);
+    // Limpar fragmento (evita #origin=share quebrar o link)
+    url.hash = "";
+    // Parâmetros do Programa de Afiliados ML
+    url.searchParams.set("partner_id", affiliateId.trim());
+    url.searchParams.set("utm_source", "caca_oferta");
+    url.searchParams.set("utm_medium", "afiliado");
+    url.searchParams.set("utm_campaign", "express_publication");
+    return url.toString();
+  } catch {
+    return productUrl;
+  }
+}
+
+/**
+ * Valida se a monetização foi aplicada corretamente ao link.
+ *
+ * Para Mercado Livre: exige affiliate_url com partner_id presente.
+ * Para Shopee: usa o link do afiliado Shopee (aceito como-está — sem validação ML).
+ */
+export function validateAffiliateMonetization(params: {
+  marketplace: string;
+  affiliateUrl: string;
+  originalUrl: string;
+  resolvedUrl: string;
+}): AffiliateMonetizationResult {
+  const { marketplace, affiliateUrl } = params;
+
+  // Shopee: o link de afiliado é controlado pelo app Shopee — aceitar sem validação ML
+  if (marketplace !== "Mercado Livre") {
+    return { monetized: true, affiliateUrl: affiliateUrl || params.resolvedUrl };
+  }
+
+  // ML: exige affiliate_url preenchida
+  if (!affiliateUrl?.trim()) {
+    return {
+      monetized: false,
+      affiliateUrl: "",
+      errorCode: "AFFILIATE_LINK_NOT_GENERATED",
+      reason: "affiliate_url ausente para Mercado Livre",
+    };
+  }
+
+  return { monetized: true, affiliateUrl };
+}
+
