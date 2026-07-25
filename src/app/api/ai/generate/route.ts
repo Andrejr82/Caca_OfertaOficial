@@ -6,6 +6,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
 import { advanceCycleCheckpoint, loadCycleCheckpoint } from "@/lib/ai/official/official-ai-cycle-checkpoint";
 import { hasFacebookEnv } from "@/lib/env";
+import { publishOfficialPost } from "@/core/publication";
+import { createOfficialPublicationServiceDependencies } from "@/lib/publication/official/create-official-publication-service";
 
 interface GenerateAIRequest {
   command?: "PROCESS_OFFERS";
@@ -116,6 +118,29 @@ export async function POST(request: Request) {
           });
         } catch { /* telemetry cannot alter the completed cycle */ }
       }
+
+      if ('drafts' in result && result.drafts) {
+        const approvedDrafts = result.drafts.filter(d => (d as any).offerStatus === "approved");
+        if (approvedDrafts.length > 0) {
+          const pubDependencies = createOfficialPublicationServiceDependencies(supabase, userId);
+          await Promise.allSettled(approvedDrafts.map(draft => publishOfficialPost({
+            contractVersion: "pmav5.publication/v1",
+            commandId: `pub:${draft.postId}`,
+            idempotencyKey: `pub:${draft.postId}`,
+            correlationId, causationId: command.causationId,
+            postId: draft.postId, channel: draft.channel,
+            tenantId: userId, requestedAt: new Date().toISOString(),
+            actor: command.actor, origin: command.origin,
+            reason: { code: "PUBLISH_OFFICIAL_CONTENT" },
+            offerId: (draft as any).offerId || command.offerId,
+            payloadReference: `post:${draft.postId}:v0`,
+            expectedOfferState: "approved",
+            expectedOfferVersion: 2,
+            expectedPostState: "draft",
+            expectedPostVersion: 0
+          }, pubDependencies)));
+        }
+      }
       return NextResponse.json({
         ok: result.status !== "rejected", status: advanced.status, correlationId,
         offerIdsReceived: offerIds.length, pageNumber: page.pageNumber, totalPages: pages.length,
@@ -158,6 +183,27 @@ export async function POST(request: Request) {
     // drafted = Modo 1 (Draft Generation): sucesso sem mudança de estado
     // approved = Modo 2 (Approval): sucesso com promoção de estado
     const ok = result.status === "approved" || result.status === "drafted";
+    
+    if (result.status === "approved" && 'drafts' in result && result.drafts) {
+      const pubDependencies = createOfficialPublicationServiceDependencies(supabase, userId);
+      await Promise.allSettled(result.drafts.map(draft => publishOfficialPost({
+        contractVersion: "pmav5.publication/v1",
+        commandId: `pub:${draft.postId}`,
+        idempotencyKey: `pub:${draft.postId}`,
+        correlationId: command.correlationId, causationId: command.causationId,
+        offerId: command.offerId,
+        postId: draft.postId, channel: draft.channel,
+        tenantId: userId, requestedAt: new Date().toISOString(),
+        actor: command.actor, origin: command.origin,
+        reason: { code: "PUBLISH_OFFICIAL_CONTENT" },
+        payloadReference: `post:${draft.postId}:v0`,
+        expectedOfferState: "approved",
+        expectedOfferVersion: 2,
+        expectedPostState: "draft",
+        expectedPostVersion: 0
+      }, pubDependencies)));
+    }
+
     return NextResponse.json(
       { ok, ...result },
       { status: ok ? 200 : 409 }
