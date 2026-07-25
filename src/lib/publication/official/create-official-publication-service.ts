@@ -43,12 +43,12 @@ function technicalReceiptDependencies() {
 
 function destinations(): Record<OfficialPublicationChannel, string> {
   return {
-    telegram: process.env.TELEGRAM_CHANNEL_ID ?? "",
-    whatsapp: resolveConfiguredWhatsAppTargetId() ?? "",
+    telegram: process.env.TELEGRAM_CHANNEL_ID || "",
+    whatsapp: resolveConfiguredWhatsAppTargetId() || "",
     instagram: process.env.INSTAGRAM_ACCESS_TOKEN
-      ? process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID ?? "auto-discover"
+      ? (process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID || "auto-discover")
       : "",
-    facebook: process.env.FACEBOOK_PAGE_ID ?? ""
+    facebook: process.env.FACEBOOK_PAGE_ID || ""
   };
 }
 
@@ -82,10 +82,7 @@ function createTransportRegistry() {
     new InstagramPublicationTransport({
       ...receiptDependencies,
       send: async (input) => {
-        if (input.metadata.instagramMode !== "synchronous") {
-          throw new Error("Instagram asynchronous publication is fail-closed until a final receipt is available");
-        }
-        if (!input.mediaUrl) throw new Error("Instagram synchronous publication requires persisted media");
+        if (!input.mediaUrl) throw new Error("Instagram publication requires persisted media (image URL)");
         const externalId = await publishToInstagram(input.mediaUrl, input.text);
         return { externalId, sentAt: new Date().toISOString(), final: true };
       }

@@ -26,9 +26,18 @@ export async function publishToFacebook(
   }
 
   const pageId = process.env.FACEBOOK_PAGE_ID;
-  const token = process.env.FACEBOOK_ACCESS_TOKEN;
+  let token = process.env.FACEBOOK_ACCESS_TOKEN;
 
   try {
+    // Tentar obter o token da página caso o token fornecido seja um User Token
+    const pageTokenRes = await fetch(`https://graph.facebook.com/v19.0/${pageId}?fields=access_token&access_token=${token}`);
+    if (pageTokenRes.ok) {
+      const pageTokenData = await pageTokenRes.json();
+      if (pageTokenData.access_token) {
+        token = pageTokenData.access_token;
+      }
+    }
+
     let endpoint = `https://graph.facebook.com/v19.0/${pageId}/feed`;
     const payload: any = {
       message,
