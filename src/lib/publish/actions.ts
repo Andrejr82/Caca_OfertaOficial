@@ -298,7 +298,6 @@ async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promi
     }
   }
 
-  // Título: tentar <title> ou og:title
   const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
   let titleText = titleMatch ? decodeHtml(titleMatch[1].trim()) : "";
   let title = titleText || metaTag(html, "og:title") || metaTag(html, "twitter:title");
@@ -306,12 +305,17 @@ async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promi
     title = title.replace(/\s*[|:-]\s*Amazon\.com.*/i, "").trim();
   }
 
-  const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
-  const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
-  const normalizedPrice = rawPrice?.includes(",")
-    ? rawPrice.replace(/\./g, "").replace(",", ".")
-    : rawPrice;
-  const price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(html);
+  const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image") || html.match(/"hiRes":"([^"]+)"/)?.[1] || html.match(/"large":"([^"]+)"/)?.[1] || "";
+  
+  let price = 0;
+  const offscreenMatch = html.match(/<span class="a-offscreen">R\$\s*([\d.,]+)<\/span>/);
+  if (offscreenMatch) {
+    price = Number(offscreenMatch[1].replace(/\./g, "").replace(",", "."));
+  } else {
+    const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
+    const normalizedPrice = rawPrice?.includes(",") ? rawPrice.replace(/\./g, "").replace(",", ".") : rawPrice;
+    price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(html);
+  }
 
   return {
     title,
