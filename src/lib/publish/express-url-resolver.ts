@@ -20,7 +20,7 @@ export interface UrlResolveOptions {
 export interface UrlResolveResult {
   resolvedUrl: string;
   redirectChain: string[];
-  marketplace?: "Shopee" | "Mercado Livre" | "Shein" | "Outro";
+  marketplace?: "Shopee" | "Mercado Livre" | "Shein" | "Amazon" | "Outro";
   htmlBody?: string;
   originalItemId?: string | null;
   finalItemId?: string | null;
@@ -60,6 +60,11 @@ const ALLOWED_INPUT_DOMAINS = [
   "br.shein.com",
   "shein.com",
   "onelink.shein.com",
+  "amzn.to",
+  "a.co",
+  "amazon.com.br",
+  "amazon.com",
+  "www.amazon.com.br",
 ];
 
 /**
@@ -81,6 +86,11 @@ const ALLOWED_DESTINATION_DOMAINS = [
   "meli.la",
   "br.shein.com",
   "shein.com",
+  "amazon.com.br",
+  "amazon.com",
+  "www.amazon.com.br",
+  "amzn.to",
+  "a.co",
 ];
 
 /**
@@ -125,6 +135,7 @@ function detectMarketplace(hostname: string): UrlResolveResult["marketplace"] {
   if (h.includes("shopee")) return "Shopee";
   if (h.includes("mercadolivre") || h.includes("mercadolibre") || h === "meli.la") return "Mercado Livre";
   if (h.includes("shein")) return "Shein";
+  if (h.includes("amazon") || h.includes("amzn") || h === "a.co") return "Amazon";
   return "Outro";
 }
 
@@ -135,6 +146,8 @@ const RELAY_DOMAINS = [
   "meli.la",
   "s.shopee.com.br",
   "onelink.shein.com",
+  "amzn.to",
+  "a.co",
 ];
 
 function isRelayDomain(hostname: string): boolean {
@@ -152,9 +165,22 @@ export function extractShopeeIdFromUrl(url: string): string | null {
   return null;
 }
 
-export function extractGenericId(url: string, marketplace?: "Shopee" | "Mercado Livre" | "Shein" | "Outro"): string | null {
+export function extractGenericId(url: string, marketplace?: UrlResolveResult["marketplace"]): string | null {
   if (marketplace === "Mercado Livre") return extractMLId(url)?.id || null;
   if (marketplace === "Shopee") return extractShopeeIdFromUrl(url);
+  if (marketplace === "Amazon") {
+    // Tenta /dp/ASIN ou /gp/product/ASIN
+    const match = url.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})/i);
+    if (match) return match[1];
+  }
+  if (marketplace === "Shein") {
+    // Tenta query param goods_id
+    const goodsMatch = url.match(/[?&]goods_id=(\d+)/i);
+    if (goodsMatch) return goodsMatch[1];
+    // Tenta slug -p-PID.html
+    const slugMatch = url.match(/-p-(\d+)/i);
+    if (slugMatch) return slugMatch[1];
+  }
   return null;
 }
 

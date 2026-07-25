@@ -79,7 +79,6 @@ describe("isAllowedMarketplaceDomain", () => {
   it("bloqueia domínios não autorizados", () => {
     expect(isAllowedMarketplaceDomain("evil.com")).toBe(false);
     expect(isAllowedMarketplaceDomain("localhost")).toBe(false);
-    expect(isAllowedMarketplaceDomain("amazon.com.br")).toBe(false);
   });
 });
 
@@ -283,4 +282,52 @@ describe("Reconciliação de Identidade e Anti-Bot", () => {
     expect(result.errorCode).toBe("CAMPAIGN_PAGE_NOT_PRODUCT");
   });
 
+});
+
+// ─── TDD Amazon e Shein (Multimarketplace) ────────────────────────────────
+
+describe("Amazon e Shein - Resolução e Extração", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("extrai ASIN da Amazon em URL /dp/ASIN", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://www.amazon.com.br/dp/B0CX23G2H8?ref=..." }
+    }]);
+    const result = await resolveMarketplaceUrl("https://amzn.to/short");
+    expect(result.finalItemId).toBe("B0CX23G2H8");
+    expect(result.marketplace).toBe("Amazon");
+  });
+
+  it("extrai ASIN da Amazon em URL /gp/product/ASIN", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://amazon.com.br/gp/product/B0CX23G2H8/ref=..." }
+    }]);
+    const result = await resolveMarketplaceUrl("https://a.co/short");
+    expect(result.finalItemId).toBe("B0CX23G2H8");
+    expect(result.marketplace).toBe("Amazon");
+  });
+
+  it("extrai PID da Shein via goods_id", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://br.shein.com/product.html?goods_id=12345678" }
+    }]);
+    const result = await resolveMarketplaceUrl("https://onelink.shein.com/short");
+    expect(result.finalItemId).toBe("12345678");
+    expect(result.marketplace).toBe("Shein");
+  });
+
+  it("extrai PID da Shein via slug", async () => {
+    mockFetch([{
+      status: 200,
+      headers: { location: "https://br.shein.com/Vestido-Lindo-p-987654.html" }
+    }]);
+    const result = await resolveMarketplaceUrl("https://onelink.shein.com/short2");
+    expect(result.finalItemId).toBe("987654");
+    expect(result.marketplace).toBe("Shein");
+  });
 });

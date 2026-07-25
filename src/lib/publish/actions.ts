@@ -165,58 +165,103 @@ async function readShopeeMetadata(resolvedUrl: string, htmlBody?: string): Promi
 
 // ─── Leitura de metadados genérico para Shein ────────────────────────────────
 
-async function readSheinMetadata(url: string): Promise<{
+async function readSheinMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
   title: string;
   imageUrl: string;
   price: number;
-  finalUrl: string;
 }> {
-  try {
-    const response = await fetch(url, {
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "pt-BR,pt;q=0.9",
-      },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!response.ok) return { title: "", imageUrl: "", price: 0, finalUrl: url };
-    const html = await response.text();
-
-    const socialTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
-    const isGeneric = /(?:categoria|campanha|collection|great offer|economize muito|não perca)/i.test(socialTitle);
-    const sheinRef = parseSheinOneLinkHtml(html);
-    const title = (isGeneric && sheinRef?.titleFromUrl) ? sheinRef.titleFromUrl : socialTitle;
-
-    // Tentar extrair título do slug da URL para páginas de produto Shein br.shein.com
-    let finalTitle = title;
-    if (!finalTitle || finalTitle.length < 10) {
-      try {
-        const parsed = new URL(url);
-        const slugMatch = parsed.pathname.match(/\/([^/]+)-p-\d+/i);
-        if (slugMatch) {
-          finalTitle = slugMatch[1].replace(/[-_]/g, " ").trim();
-        }
-      } catch { /* ignorar */ }
+  let html = htmlBody;
+  if (!html) {
+    try {
+      const resp = await fetch(resolvedUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "pt-BR,pt;q=0.9",
+        },
+        signal: AbortSignal.timeout(12_000),
+      });
+      html = await resp.text();
+    } catch {
+      html = "";
     }
-
-    const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
-    const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
-    const normalizedPrice = rawPrice?.includes(",")
-      ? rawPrice.replace(/\./g, "").replace(",", ".")
-      : rawPrice;
-    const price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(html);
-
-    return {
-      title: finalTitle,
-      imageUrl,
-      price: Number.isFinite(price) ? price : 0,
-      finalUrl: response.url || url,
-    };
-  } catch {
-    return { title: "", imageUrl: "", price: 0, finalUrl: url };
   }
+
+  const socialTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
+  const isGeneric = /(?:categoria|campanha|collection|great offer|economize muito|não perca)/i.test(socialTitle);
+  const sheinRef = parseSheinOneLinkHtml(html);
+  const title = (isGeneric && sheinRef?.titleFromUrl) ? sheinRef.titleFromUrl : socialTitle;
+
+  // Tentar extrair título do slug da URL para páginas de produto Shein br.shein.com
+  let finalTitle = title;
+  if (!finalTitle || finalTitle.length < 10) {
+    try {
+      const parsed = new URL(resolvedUrl);
+      const slugMatch = parsed.pathname.match(/\/([^/]+)-p-\d+/i);
+      if (slugMatch) {
+        finalTitle = slugMatch[1].replace(/[-_]/g, " ").trim();
+      }
+    } catch { /* ignorar */ }
+  }
+
+  const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
+  const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
+  const normalizedPrice = rawPrice?.includes(",")
+    ? rawPrice.replace(/\./g, "").replace(",", ".")
+    : rawPrice;
+  const price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(html);
+
+  return {
+    title: finalTitle,
+    imageUrl,
+    price: Number.isFinite(price) ? price : 0,
+  };
+}
+
+// ─── Leitura de metadados genérico para Amazon ───────────────────────────────
+
+async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
+  title: string;
+  imageUrl: string;
+  price: number;
+}> {
+  let html = htmlBody;
+  if (!html) {
+    try {
+      const resp = await fetch(resolvedUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "pt-BR,pt;q=0.9",
+        },
+        signal: AbortSignal.timeout(12_000),
+      });
+      html = await resp.text();
+    } catch {
+      html = "";
+    }
+  }
+
+  // Título: tentar <title> ou og:title
+  const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+  let titleText = titleMatch ? decodeHtml(titleMatch[1].trim()) : "";
+  let title = titleText || metaTag(html, "og:title") || metaTag(html, "twitter:title");
+  if (title && (title.includes("Amazon.com") || title.includes(" | Amazon"))) {
+    title = title.replace(/\s*[|:-]\s*Amazon\.com.*/i, "").trim();
+  }
+
+  const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
+  const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
+  const normalizedPrice = rawPrice?.includes(",")
+    ? rawPrice.replace(/\./g, "").replace(",", ".")
+    : rawPrice;
+  const price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(html);
+
+  return {
+    title,
+    imageUrl,
+    price: Number.isFinite(price) ? price : 0,
+  };
 }
 
 // ─── Action Principal: Publicação Expressa ────────────────────────────────────
@@ -243,11 +288,11 @@ export async function generateQuickPostAction(
   }
 
   const detectedPlatform = detectPlatform(inputUrl);
-  if (detectedPlatform === "Outro" || detectedPlatform === "Amazon" || detectedPlatform === "Magalu") {
+  if (detectedPlatform === "Outro" || detectedPlatform === "Magalu") {
     return {
       ok: false,
       status: "UNSUPPORTED_MARKETPLACE",
-      message: "Marketplace não reconhecido neste link. Suportamos Shopee, Mercado Livre e Shein.",
+      message: "Marketplace não reconhecido neste link. Suportamos Shopee, Mercado Livre, Shein e Amazon.",
     };
   }
 
@@ -401,24 +446,88 @@ export async function generateQuickPostAction(
 
   // ─── Shein ────────────────────────────────────────────────────────────────
   else if (detectedPlatform === "Shein") {
+    log("[Express Link Start]", { requestId: operationId, stage: "resolve_url", marketplace: "Shein" });
+    const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
+
+    if (resolved.errorCode) {
+      const msgMap: Record<string, string> = {
+        SSRF_BLOCKED: "Este link aponta para um destino não permitido.",
+        REDIRECT_LOOP: "Não conseguimos resolver o link da Shein — foi detectado um loop de redirecionamento.",
+        REDIRECT_LIMIT_EXCEEDED: "O link da Shein redireciona muitas vezes e não pôde ser resolvido.",
+        UNEXPECTED_REDIRECT_DOMAIN: "Esse link redirecionou para um domínio não reconhecido.",
+        TIMEOUT_RESOLVING_URL: "O processamento desse link excedeu o tempo permitido.",
+        EMPTY_RESPONSE: "Não conseguimos abrir o link da Shein.",
+      };
+      log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
+      return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link da Shein." };
+    }
+
+    resolvedUrl = resolved.resolvedUrl;
+    canonicalUrl = resolvedUrl;
+    originalItemId = resolved.originalItemId;
+    finalItemId = resolved.finalItemId;
+    identitySource = resolved.identitySource;
+    itemId = resolved.selectedItemId || undefined;
+
+    log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length, identitySource });
+
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Shein" });
-    const sheinData = await readSheinMetadata(inputUrl);
+    const sheinData = await readSheinMetadata(resolvedUrl, resolved.htmlBody);
     title = sheinData.title;
     imageUrl = sheinData.imageUrl;
     price = sheinData.price;
-    resolvedUrl = sheinData.finalUrl;
-    canonicalUrl = sheinData.finalUrl;
-
-    // Extrair product ID da URL Shein
-    try {
-      const parsed = new URL(canonicalUrl);
-      const pidMatch = parsed.pathname.match(/-p-(\d+)/i);
-      if (pidMatch) itemId = pidMatch[1];
-    } catch { /* ignorar */ }
-
     generatedAffiliateUrl = canonicalUrl; // Shein: link direto (usuário gera afiliado via app)
 
     log("[Express Parse End]", { requestId: operationId, marketplace: "Shein", hasTitle: !!title, hasPrice: price > 0, hasImage: !!imageUrl });
+  }
+
+  // ─── Amazon ───────────────────────────────────────────────────────────────
+  else if (detectedPlatform === "Amazon") {
+    log("[Express Link Start]", { requestId: operationId, stage: "resolve_url", marketplace: "Amazon" });
+    const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
+
+    if (resolved.errorCode) {
+      const msgMap: Record<string, string> = {
+        SSRF_BLOCKED: "Este link aponta para um destino não permitido.",
+        REDIRECT_LOOP: "Não conseguimos resolver o link da Amazon — foi detectado um loop de redirecionamento.",
+        REDIRECT_LIMIT_EXCEEDED: "O link da Amazon redireciona muitas vezes e não pôde ser resolvido.",
+        UNEXPECTED_REDIRECT_DOMAIN: "Esse link redirecionou para um domínio não reconhecido.",
+        TIMEOUT_RESOLVING_URL: "O processamento desse link excedeu o tempo permitido.",
+        EMPTY_RESPONSE: "Não conseguimos abrir o link da Amazon.",
+      };
+      log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
+      return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link da Amazon." };
+    }
+
+    resolvedUrl = resolved.resolvedUrl;
+    canonicalUrl = resolvedUrl;
+    originalItemId = resolved.originalItemId;
+    finalItemId = resolved.finalItemId;
+    identitySource = resolved.identitySource;
+    itemId = resolved.selectedItemId || undefined;
+
+    log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length, identitySource });
+
+    log("[Express Parse Start]", { requestId: operationId, marketplace: "Amazon" });
+    const amazonData = await readAmazonMetadata(resolvedUrl, resolved.htmlBody);
+    title = amazonData.title;
+    imageUrl = amazonData.imageUrl;
+    price = amazonData.price;
+
+    const amzPartnerTag = process.env.AMAZON_PARTNER_TAG || "";
+    if (amzPartnerTag && canonicalUrl) {
+      try {
+        const urlObj = new URL(canonicalUrl);
+        urlObj.searchParams.set("tag", amzPartnerTag);
+        generatedAffiliateUrl = urlObj.toString();
+      } catch {
+        generatedAffiliateUrl = canonicalUrl;
+      }
+    } else {
+      generatedAffiliateUrl = canonicalUrl;
+    }
+
+    log("[Express Parse End]", { requestId: operationId, marketplace: "Amazon", hasTitle: !!title, hasPrice: price > 0, hasImage: !!imageUrl });
   }
 
   // ─── Validação Progressiva ────────────────────────────────────────────────
