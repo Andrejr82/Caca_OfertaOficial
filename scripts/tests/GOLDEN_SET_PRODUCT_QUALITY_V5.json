@@ -1,0 +1,238 @@
+{
+  "version": "V5",
+  "description": "Golden Set de produtos para testes de regressão da Sprint V5. Determinístico e independente do Supabase produtivo.",
+  "products": [
+    {
+      "id": "GS-001",
+      "description": "Kit 10 potes de vidro herméticos — produto único, sem família agrupável",
+      "input": {
+        "marketplace": "Shopee",
+        "sourceItemId": "SH-POTE-VIDRO-10",
+        "sourceUrl": "https://shopee.com.br/kit-10-potes-vidro",
+        "title": "Kit 10 Potes de Vidro Herméticos 350ml Organização Cozinha",
+        "imageUrl": "https://cf.shopee.com.br/file/potes-vidro.jpg",
+        "currentPrice": 89.90,
+        "originalPrice": 119.90,
+        "deterministicScore": 7,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Cozinha e Organização", "source": "Shopee Affiliate" },
+        "marketplaceMetrics": { "rating": 4.8, "reviewCount": 2340, "prime": false, "coupon": false, "isMall": true, "sales": 5000 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "UNIQUE",
+        "family_key_contains": "shopee|pote",
+        "family_confidence_min": 0.60,
+        "editorial_category": "Cozinha e Organização",
+        "warnings": [],
+        "claim_validation_for": "Kit com 10 potes herméticos — durável e prático"
+      }
+    },
+    {
+      "id": "GS-002",
+      "description": "Assadeira Tramontina 22cm — variante A da família",
+      "input": {
+        "marketplace": "Amazon",
+        "sourceItemId": "B-TRAMO-22",
+        "asin": "B00TRAMO22A",
+        "sourceUrl": "https://www.amazon.com.br/dp/B00TRAMO22A",
+        "title": "Tramontina Assadeira Funda Antiaderente 22 cm",
+        "imageUrl": "https://m.media-amazon.com/images/I/tramo22.jpg",
+        "currentPrice": 59.90,
+        "originalPrice": 79.90,
+        "deterministicScore": 7,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Cozinha", "source": "Amazon Best Sellers" },
+        "marketplaceMetrics": { "asin": "B00TRAMO22A", "prime": true, "coupon": false, "rating": 4.6, "reviewCount": 890 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "SAME_PRODUCT_FAMILY",
+        "family_key_shared_with": "GS-003",
+        "family_confidence_min": 0.60,
+        "editorial_category": "Cozinha e Organização",
+        "warnings": [],
+        "claim_validation_for": "25% de desconto nesta assadeira Tramontina"
+      }
+    },
+    {
+      "id": "GS-003",
+      "description": "Assadeira Tramontina 34cm — variante B da mesma família (GS-002)",
+      "input": {
+        "marketplace": "Amazon",
+        "sourceItemId": "B-TRAMO-34",
+        "asin": "B00TRAMO34A",
+        "sourceUrl": "https://www.amazon.com.br/dp/B00TRAMO34A",
+        "title": "Tramontina Assadeira Funda Antiaderente 34 cm",
+        "imageUrl": "https://m.media-amazon.com/images/I/tramo34.jpg",
+        "currentPrice": 79.90,
+        "originalPrice": 109.90,
+        "deterministicScore": 7,
+        "discoveredAt": "2026-07-01T10:01:00Z",
+        "category": { "name": "Cozinha", "source": "Amazon Best Sellers" },
+        "marketplaceMetrics": { "asin": "B00TRAMO34A", "prime": true, "coupon": false, "rating": 4.7, "reviewCount": 1250 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "SAME_PRODUCT_FAMILY",
+        "family_key_shared_with": "GS-002",
+        "is_best_variant": true,
+        "editorial_category": "Cozinha e Organização",
+        "warnings": [],
+        "note": "Deve ser selecionada sobre GS-002 por maior rating+reviews+desconto"
+      }
+    },
+    {
+      "id": "GS-004",
+      "description": "Liquidificador Philips Walita 550W",
+      "input": {
+        "marketplace": "Amazon",
+        "sourceItemId": "B-WALITA-550",
+        "asin": "B00WALITA55",
+        "sourceUrl": "https://www.amazon.com.br/dp/B00WALITA55",
+        "title": "Philips Walita Liquidificador Daily 550W Preto",
+        "imageUrl": "https://m.media-amazon.com/images/I/walita550.jpg",
+        "currentPrice": 199.90,
+        "originalPrice": 249.90,
+        "deterministicScore": 8,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Cozinha", "source": "Amazon Best Sellers" },
+        "marketplaceMetrics": { "asin": "B00WALITA55", "prime": true, "coupon": false, "rating": 4.5, "reviewCount": 3400 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "UNIQUE",
+        "family_key_NOT_shared_with": "GS-005",
+        "family_confidence_min": 0.60,
+        "editorial_category": "Cozinha e Organização",
+        "warnings": []
+      }
+    },
+    {
+      "id": "GS-005",
+      "description": "Liquidificador Philips Walita 1200W — família DIFERENTE de GS-004 (potência relevante)",
+      "input": {
+        "marketplace": "Amazon",
+        "sourceItemId": "B-WALITA-1200",
+        "asin": "B00WALI1200",
+        "sourceUrl": "https://www.amazon.com.br/dp/B00WALI1200",
+        "title": "Philips Walita Liquidificador Pro 1200W Preto",
+        "imageUrl": "https://m.media-amazon.com/images/I/walita1200.jpg",
+        "currentPrice": 399.90,
+        "originalPrice": 499.90,
+        "deterministicScore": 8,
+        "discoveredAt": "2026-07-01T10:02:00Z",
+        "category": { "name": "Cozinha", "source": "Amazon Best Sellers" },
+        "marketplaceMetrics": { "asin": "B00WALI1200", "prime": true, "coupon": false, "rating": 4.6, "reviewCount": 1100 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "UNIQUE",
+        "family_key_NOT_shared_with": "GS-004",
+        "editorial_category": "Cozinha e Organização",
+        "warnings": [],
+        "note": "Potência 1200W deve ser preservada na family_key — produto diferente de 550W"
+      }
+    },
+    {
+      "id": "GS-006",
+      "description": "Frigideira Tramontina — família DIFERENTE das assadeiras GS-002 e GS-003",
+      "input": {
+        "marketplace": "Amazon",
+        "sourceItemId": "B-TRAMO-FRIG",
+        "asin": "B00TRAMOFRIG",
+        "sourceUrl": "https://www.amazon.com.br/dp/B00TRAMOFRIG",
+        "title": "Tramontina Frigideira Antiaderente 28cm",
+        "imageUrl": "https://m.media-amazon.com/images/I/tramofrig.jpg",
+        "currentPrice": 89.90,
+        "originalPrice": 119.90,
+        "deterministicScore": 7,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Cozinha", "source": "Amazon Best Sellers" },
+        "marketplaceMetrics": { "asin": "B00TRAMOFRIG", "prime": false, "coupon": true, "rating": 4.5, "reviewCount": 670 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "UNIQUE",
+        "family_key_NOT_shared_with": "GS-002",
+        "family_key_NOT_shared_with_also": "GS-003",
+        "editorial_category": "Cozinha e Organização",
+        "warnings": [],
+        "note": "Frigideira ≠ Assadeira — mesmo com mesma marca Tramontina"
+      }
+    },
+    {
+      "id": "GS-007",
+      "description": "Tapete de Banheiro Antiderrapante — categoria editorial correta",
+      "input": {
+        "marketplace": "Shopee",
+        "sourceItemId": "SH-TAPETE-BAN",
+        "sourceUrl": "https://shopee.com.br/tapete-banheiro",
+        "title": "Tapete Banheiro Antiderrapante 40x60cm Cinza Lavavel",
+        "imageUrl": "https://cf.shopee.com.br/file/tapete-ban.jpg",
+        "currentPrice": 39.90,
+        "originalPrice": 59.90,
+        "deterministicScore": 6,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Casa e Decoração", "source": "Shopee Affiliate" },
+        "marketplaceMetrics": { "rating": 4.8, "reviewCount": 560, "isMall": true, "sales": 3000 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "UNIQUE",
+        "family_key_NOT_shared_with": "GS-008",
+        "editorial_category": "Casa e Banheiro",
+        "warnings": [],
+        "note": "Tapete de banheiro deve ter editorial_category = 'Casa e Banheiro'"
+      }
+    },
+    {
+      "id": "GS-008",
+      "description": "Tapete de Sala Shaggy — família DIFERENTE de tapete de banheiro (GS-007)",
+      "input": {
+        "marketplace": "Shopee",
+        "sourceItemId": "SH-TAPETE-SALA",
+        "sourceUrl": "https://shopee.com.br/tapete-sala",
+        "title": "Tapete Sala Shaggy Felpudo 150x200cm Bege Macio",
+        "imageUrl": "https://cf.shopee.com.br/file/tapete-sala.jpg",
+        "currentPrice": 149.90,
+        "originalPrice": 199.90,
+        "deterministicScore": 6,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Casa e Decoração", "source": "Shopee Affiliate" },
+        "marketplaceMetrics": { "rating": 4.8, "reviewCount": 210, "isMall": true, "sales": 1200 }
+      },
+      "expected": {
+        "gate_eligible": true,
+        "duplicate_level": "UNIQUE",
+        "family_key_NOT_shared_with": "GS-007",
+        "editorial_category": "Casa e Sala",
+        "warnings": [],
+        "note": "Tapete de sala ≠ tapete de banheiro — família e categoria diferentes"
+      }
+    },
+    {
+      "id": "GS-009",
+      "description": "Produto com preço inválido — não deve passar pelo gate",
+      "input": {
+        "marketplace": "Amazon",
+        "sourceItemId": "B-INVALIDO",
+        "asin": "B00INVALIDO",
+        "sourceUrl": "https://www.amazon.com.br/dp/B00INVALIDO",
+        "title": "Produto Sem Preço Válido",
+        "imageUrl": "https://m.media-amazon.com/images/I/invalido.jpg",
+        "currentPrice": -10,
+        "originalPrice": null,
+        "deterministicScore": 5,
+        "discoveredAt": "2026-07-01T10:00:00Z",
+        "category": { "name": "Eletrônicos", "source": "Amazon Best Sellers" },
+        "marketplaceMetrics": {}
+      },
+      "expected": {
+        "gate_eligible": false,
+        "gate_reason": "PRECO_INVALIDO",
+        "note": "Produto inválido não pode competir por representação de família"
+      }
+    }
+  ]
+}
