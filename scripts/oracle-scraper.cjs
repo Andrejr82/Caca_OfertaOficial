@@ -871,7 +871,20 @@ async function runScrapingCycleCore() {
   const correlationId = crypto.randomUUID();
   const stageLogger = createStageLogger(correlationId);
   
-  console.log(`[Oracle Boot] commit=38407b2 amazonMissingCommercialDataPenalty=${process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY || -8} startedAt=${new Date(startedAt).toISOString()}`);
+  let releaseId = process.env.ORACLE_RELEASE_ID;
+  let deployedAt = '';
+  if (!releaseId) {
+    try {
+      const fs = require('node:fs');
+      const releaseData = JSON.parse(fs.readFileSync('.runtime-release.json', 'utf8'));
+      releaseId = releaseData.release_id || releaseData.commit || 'unknown';
+      deployedAt = releaseData.deployed_at ? ` deployedAt=${releaseData.deployed_at}` : '';
+    } catch {
+      releaseId = 'unknown';
+    }
+  }
+
+  console.log(`[Oracle Boot] release=${releaseId}${deployedAt} amazonMissingCommercialDataPenalty=${process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY || -8} startedAt=${new Date(startedAt).toISOString()}`);
 
   const result = await runDiscoveryOnlyCycle({
     tenantId: ADMIN_USER_ID,
