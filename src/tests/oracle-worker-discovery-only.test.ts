@@ -271,10 +271,10 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     const modulePath = resolve(process.cwd(), "scripts/oracle-scraper.cjs");
     const execution = spawnSync(process.execPath, [
       "-e",
-      `process.argv.push('--shopee-v4-dry-run'); require(${JSON.stringify(modulePath)}); process.stdout.write('imported'); process.exit(0);`,
+      `process.argv.push('--shopee-v4-dry-run'); require(${JSON.stringify(modulePath)}); process.stdout.write('imported');`,
     ], {
       encoding: "utf8",
-      timeout: 20_000,
+      timeout: 5000,
       env: {
         ...process.env,
         NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",

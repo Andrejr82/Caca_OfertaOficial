@@ -407,7 +407,7 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
   if (stageLogger) stageStartedAt = stageLogger.start('filterNovelNormalizedProducts', products.length);
 
   try {
-    const history = await loadActiveDiscoveryHistory(marketplace);
+    const history = await loadActiveDiscoveryHistory(marketplace, stageLogger);
     const known = new Set(history.flatMap((row) => [
       row.item_id,
       row.product_id,
@@ -654,14 +654,21 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       }
     );
     
+    let rpcStartedAt;
+    if (stageLogger) rpcStartedAt = stageLogger.start('RPC_upsert_discovery_offers_v2', rows.length);
+    
     const { data, error } = await withTimeout(
       rpcPromise,
       Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
       `persistDiscoveryIngestionV1_rpc_${marketplace}`
     );
     
-    if (error) throw new Error('Ingestion V1 ' + marketplace + ': ' + error.message);
+    if (error) {
+      if (stageLogger) stageLogger.error('RPC_upsert_discovery_offers_v2', rpcStartedAt, error.message);
+      throw new Error('Ingestion V1 ' + marketplace + ': ' + error.message);
+    }
     
+    if (stageLogger) stageLogger.end('RPC_upsert_discovery_offers_v2', rpcStartedAt, data.inserted + data.updated);
     if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, data.inserted + data.updated);
     
     return { 

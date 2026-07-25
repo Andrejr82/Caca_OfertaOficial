@@ -22,13 +22,9 @@ const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
 const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const DEPLOY_FILES = [
-  'scripts/oracle-api.cjs',
   'scripts/oracle-scraper.cjs',
   'scripts/oracle-worker-discovery-only.cjs',
-  'scripts/curation-policy.cjs',
-  'scripts/publication-queue.cjs',
-  'scripts/shopee-scenario-config.cjs',
-  'scripts/mercadolivre-official-intents-v5.cjs',
+  'scripts/oracle-resilience.cjs',
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
@@ -77,7 +73,7 @@ try {
     const backupPath = `${remoteBackup}/${relativeFile}`;
     return `if test -f '${remotePath}'; then cp -p '${remotePath}' '${backupPath}'; fi`;
   }).join('; ');
-  ssh(`set -eu; ${backupFiles}; ${remoteFiles}; rm -rf '${remoteStage}'; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 restart '${PM2_API_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null; pm2 describe '${PM2_API_NAME}' >/dev/null`);
+  ssh(`set -eu; ${backupFiles}; ${remoteFiles}; rm -rf '${remoteStage}'; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null`);
   console.log('Deploy do Oracle Worker e da API concluído.');
 } catch (error) {
   try { ssh(`rm -rf '${remoteStage}'`); } catch { /* limpeza best-effort */ }

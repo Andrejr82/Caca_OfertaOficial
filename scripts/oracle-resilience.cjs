@@ -1,17 +1,34 @@
 'use strict';
 
-function withTimeout(promise, ms, stageName) {
+function withTimeout(thenable, timeoutMs, stageName) {
+  // Converte "thenable" (como objetos do PostgREST) em uma Promise nativa.
+  const operation = Promise.resolve(thenable);
+
   let timeoutId;
   const timeoutPromise = new Promise((_, reject) => {
     timeoutId = setTimeout(() => {
-      reject(new Error(`Timeout de ${ms}ms excedido na etapa: ${stageName}`));
-    }, ms);
+      const error = new Error(`Timeout de ${timeoutMs}ms excedido na etapa: ${stageName}`);
+      error.code = 'ORACLE_OPERATION_TIMEOUT';
+      error.context = { stage: stageName, timeoutMs };
+      
+      // NOTA SOBRE CANCELAMENTO:
+      // O timeout interrompe a espera do worker no Node, mas não efetua 
+      // o cancelamento físico da requisição TCP no Supabase (não utiliza AbortController),
+      // pois a API encadeada PostgREST não provê uma interface fácil de signal para
+      // todas as chamadas. Portanto, a resposta pode chegar tardiamente na rede, 
+      // mas será ignorada pelo worker e coletada pelo GC.
+      reject(error);
+    }, timeoutMs);
+
+    if (timeoutId && typeof timeoutId.unref === 'function') {
+      timeoutId.unref();
+    }
   });
 
-  return Promise.race([
-    promise.finally(() => clearTimeout(timeoutId)),
-    timeoutPromise
-  ]);
+  return Promise.race([operation, timeoutPromise])
+    .finally(() => {
+      if (timeoutId) clearTimeout(timeoutId);
+    });
 }
 
 async function runWithWatchdog(cycleFn, timeoutMs, onTimeout) {
