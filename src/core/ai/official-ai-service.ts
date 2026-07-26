@@ -546,96 +546,61 @@ export async function generateOfficialAI(
   }
 
   // 7. Inferência (comum a ambos os modos).
-  let inference: AIProviderResponse;
-  let deterministicFallback = false;
-  const inferenceStartedAt = Date.now();
-  const prompt = buildOfficialPrompt(offer!, command.channels);
+  // 7. Inferência (comum a ambos os modos).
+  // LLM desativado por restrição de segurança (Copy determinística V2.1)
+  let inference: any = { provider: "deterministic-engine", model: "generate.ts", latencyMs: 0 };
+  let providerData = null;
+
   await emitTelemetry(dependencies, {
     eventType: "official_ai.inference.started", correlationId: command.correlationId, offerId: command.offerId,
-    marketplace: offer!.marketplace, provider: provider?.name ?? null, model: provider?.model ?? null, stage: "inference",
-    details: { temperature: 0.4, maxTokens: 2_000, timeoutMs: 30_000 }
+    marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
+    details: { policy: "deterministic-only" }
   });
-  try {
-    if (!provider) throw new Error("Provider unavailable");
-    inference = await generateWithRetry(provider, {
-      prompt, correlationId: command.correlationId,
-      timeoutMs: 30_000, temperature: 0.4, maxTokens: 2_000,
-      metadata: { commandId: command.commandId, offerId: command.offerId, marketplace: offer!.marketplace }
-    });
-  } catch (error) {
-    await emitTelemetry(dependencies, {
-      eventType: "official_ai.inference.failed", correlationId: command.correlationId, offerId: command.offerId,
-      marketplace: offer!.marketplace, provider: provider?.name ?? null, model: provider?.model ?? null, stage: "inference",
-      durationMs: Date.now() - inferenceStartedAt, details: exceptionDetails(error)
-    });
-    if (mode !== "draft_generation" && mode !== "copy_v2" && mode !== "copy_v2_auto") {
-      return rejectAndRecord(
-        command, dependencies, fingerprint,
-        "PROVIDER_FAILURE", error instanceof Error ? error.message : "Provider failed",
-        "provider", "selected", provider?.name ?? null, provider?.model ?? null
-      );
-    }
-    deterministicFallback = true;
-    inference = {
-      content: {}, provider: "deterministic-fallback", model: "template-v1", latencyMs: 0,
-      finishReason: "provider-fallback"
-    };
-  }
+
   await emitTelemetry(dependencies, {
     eventType: "official_ai.inference.completed", correlationId: command.correlationId, offerId: command.offerId,
     marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
-    durationMs: inference.latencyMs, details: { finishReason: inference.finishReason ?? null, usage: inference.usage ?? null }
+    durationMs: 0, details: { finishReason: "skipped-llm-by-policy" }
   });
 
-  // 8. Validação do conteúdo gerado (comum a ambos os modos).
-  const providerData = inference.content && typeof inference.content === "object"
-    ? inference.content as Record<string, any>
-    : {};
-  const inspections = Object.fromEntries(command.channels.map((channel) => {
-    // Tenta extrair o hook de várias estruturas possíveis geradas pelos LLMs
-    const rawCandidate = 
-      providerData.hooks?.[channel] ?? 
-      providerData[channel]?.hook ?? 
-      providerData.hook ?? 
-      providerData.channelCopies?.[channel]?.hook ??
-      providerData.channelCopies?.[channel];
-      
-    const candidate = typeof rawCandidate === "string" ? rawCandidate.split(/[\r\n]/u, 1)[0] : rawCandidate;
-    return [channel, inspectOfficialAIHook(candidate)];
-  }));
-  for (const channel of command.channels) {
-    const inspection = inspections[channel];
-    await emitTelemetry(dependencies, {
-      eventType: inspection.hook ? "official_ai.validation.channel.accepted" : "official_ai.validation.channel.rejected",
-      correlationId: command.correlationId, offerId: command.offerId, marketplace: offer!.marketplace,
-      provider: inference.provider, model: inference.model, stage: "hook_validation",
-      details: { channel, rule: inspection.rule, hookFound: Boolean(inspection.hook), length: inspection.receivedLength }
-    });
+  const { generateAllMessages } = await import("@/lib/messages/generate");
+  const mappedOffer: any = {
+    id: offer!.id,
+    user_id: offer!.tenantId,
+    platform: offer!.marketplace,
+    product_name: offer!.productName,
+    category: offer!.category,
+    original_url: offer!.originalUrl,
+    image_url: offer!.imageUrl,
+    current_price: offer!.currentPrice,
+    old_price: offer!.originalPrice,
+    status: offer!.state,
+    created_at: offer!.createdAt,
+    updated_at: offer!.createdAt,
+    explainability: offer!.explainability
+  };
+
+  const trackedUrl = (offer!.explainability?.tracked_url as string) || (offer!.explainability?.trackedUrl as string);
+  const affiliateUrl = (offer!.explainability?.affiliate_url as string) || (offer!.explainability?.affiliateUrl as string);
+  const finalLinkUrl = trackedUrl || affiliateUrl;
+
+  if (!finalLinkUrl || typeof finalLinkUrl !== "string") {
+    return {
+      status: "rejected",
+      code: "NO_MONETIZED_LINK",
+      message: "Offer does not have a valid monetized link (tracked_url or affiliate_url)",
+      commandId: command.commandId,
+      offerId: command.offerId,
+      offerState: (offer!.state === "approved" || !offer!.state ? "unknown" : offer!.state) as "pending_manual_review" | "selected" | "unknown",
+      failureStage: "draft_generation",
+      replay: false,
+      rejectedAt: new Date().toISOString()
+    };
   }
-  const hooks = Object.fromEntries(command.channels.map((channel) => [channel, inspections[channel].hook]));
-  if (Object.values(hooks).some((hook) => !hook)) {
-    await emitTelemetry(dependencies, {
-      eventType: "official_ai.validation.failed", correlationId: command.correlationId, offerId: command.offerId,
-      marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "hook_validation",
-      durationMs: Date.now() - inferenceStartedAt,
-      details: { 
-        errorCode: "INVALID_PROVIDER_OUTPUT", 
-        failedChannels: command.channels.filter((channel) => !hooks[channel]).map((channel) => ({ channel, rule: inspections[channel].rule })),
-        rawProviderData: providerData
-      }
-    });
-    if (mode !== "draft_generation" && mode !== "copy_v2" && mode !== "copy_v2_auto") {
-      return rejectAndRecord(
-        command, dependencies, fingerprint,
-        "INVALID_PROVIDER_OUTPUT", "Provider output does not match the official schema",
-        "provider_output", "selected", inference.provider, inference.model, inference.latencyMs
-      );
-    }
-    deterministicFallback = true;
-  }
-  const effectiveHooks = deterministicFallback
-    ? Object.fromEntries(command.channels.map((channel) => [channel, undefined]))
-    : hooks;
+
+  const monetizedLink: any = { tracked_url: finalLinkUrl };
+  const generatedMessages = generateAllMessages(mappedOffer, monetizedLink);
+
   const content = {
     title: offer!.productName,
     description: `Oferta ${offer!.marketplace}`,
@@ -644,22 +609,16 @@ export async function generateOfficialAI(
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: ["Preço atual"],
-    explanation: deterministicFallback
-      ? "Copy determinística baseada nos dados persistidos; provider de IA indisponível ou resposta inválida."
-      : "Copy baseada no gancho validado pelo provider.",
-    channelCopies: Object.fromEntries(command.channels.map((channel) => [channel, buildCopyV2ChannelCopy({
-      ...offer!,
-      evidence: offer!.explainability
-    }, channel, effectiveHooks[channel] ?? undefined)]))
+    explanation: "Copy determinística gerada pela engine comercial (generate.ts) sem chamada LLM.",
+    channelCopies: Object.fromEntries(command.channels.map((channel) => {
+      let text = "";
+      if (channel === "instagram") text = generatedMessages.instagram.feed;
+      else if (channel === "facebook") text = generatedMessages.facebook;
+      else if (channel === "telegram") text = generatedMessages.telegram;
+      else if (channel === "whatsapp") text = generatedMessages.whatsapp;
+      return [channel, text];
+    }))
   };
-  if (command.channels.some((channel) => !isCopyV2TextSafe(content.channelCopies[channel]))) {
-    return rejectAndRecord(
-      command, dependencies, fingerprint,
-      "INVALID_FINAL_COPY", "Rendered Copy V2 contains forbidden content",
-      "provider_output", mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected",
-      inference.provider, inference.model, inference.latencyMs
-    );
-  }
 
   // 9. Persistência dos drafts (comum a ambos os modos).
   let drafts;
@@ -732,7 +691,17 @@ export async function generateOfficialAI(
   }
 
   // Modo 2 — Approval (comportamento anterior inalterado).
-  const approval = await dependencies.approval.approveSelected({ command, offer: offer!, drafts });
+  let approval;
+  try {
+    approval = await dependencies.approval.approveSelected({ command, offer: offer!, drafts });
+  } catch (error) {
+    return rejectAndRecord(
+      command, dependencies, fingerprint,
+      "APPROVAL_FAILURE", error instanceof Error ? error.message : "Approval failed", "approval", "selected",
+      inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true
+    );
+  }
+
   if (approval.status === "rejected") {
     return rejectAndRecord(
       command, dependencies, fingerprint,
