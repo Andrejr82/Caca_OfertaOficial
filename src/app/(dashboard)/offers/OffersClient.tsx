@@ -10,6 +10,7 @@ import { GenerateAIMessagesButton } from "@/components/messages/message-actions"
 import { getCategoryOptions } from "@/lib/offers/category-taxonomy";
 import { classifyOfferForPanel, classifyPanelEditorial, PANEL_AUDIENCES, PANEL_OFFER_TYPES, PANEL_POSTING_PROFILES, UNCLASSIFIED_PANEL_CATEGORY } from "@/lib/offers/panel-category-filter";
 import { curateOffers } from "@/core/intelligence/curation-engine";
+import { getMarketplaceCatalogKey, selectCatalogWinner } from "@/lib/offers/catalog-grouping";
 
 type OfferWithDraftCount = Offer & { draft_count?: number };
 const OFFER_FILTER_STORAGE_KEY = "caca-oferta:panel-filters:offers:v1";
@@ -31,6 +32,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [sortBy, setSortBy] = useState<string>("date");
   const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [isDiscarding, startDiscarding] = useTransition();
 
   const selectedCategory = getCategoryOptions().find((category) => category.value === filterCategory);
@@ -75,7 +77,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     const expl = offer.explainability || {};
     const tier = expl.tier || "C";
     const decision = expl.aiDecision?.status || "N/A";
-    
+
     if (filterTier && tier !== filterTier) return false;
     if (filterDecision && decision !== filterDecision) return false;
     if (filterPlatform && offer.platform !== filterPlatform) return false;
@@ -123,7 +125,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const sorted = [...filtered].sort((a, b) => {
     const explA = a.explainability || {};
     const explB = b.explainability || {};
-    
+
     if (sortBy === "priority") {
       const offB = explB.commercialComparison?.officialPolicy || b.score;
       const offA = explA.commercialComparison?.officialPolicy || a.score;
@@ -156,9 +158,27 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const allSelectableSelected = selectableOffers.length > 0 && selectableOffers.every((offer) => selectedOfferIds.has(offer.id));
 
   function toggleOffer(offerId: string) {
+    const targetOffer = initialOffers.find(o => o.id === offerId);
+    if (!targetOffer) return;
+    const targetKey = targetOffer.status !== "pending_manual_review" ? `individual:${targetOffer.id}` : getMarketplaceCatalogKey(targetOffer);
+
     setSelectedOfferIds((current) => {
       const next = new Set(current);
-      if (next.has(offerId)) next.delete(offerId); else next.add(offerId);
+      if (next.has(offerId)) {
+        next.delete(offerId);
+      } else {
+        const groupAlreadySelected = Array.from(next).some(id => {
+          const o = initialOffers.find(o => o.id === id);
+          if (!o) return false;
+          const key = o.status !== "pending_manual_review" ? `individual:${o.id}` : getMarketplaceCatalogKey(o);
+          return key === targetKey;
+        });
+        if (groupAlreadySelected && targetKey !== `individual:${targetOffer.id}`) {
+          alert("Uma oferta deste mesmo grupo de catálogo já está selecionada.");
+          return current;
+        }
+        next.add(offerId);
+      }
       return next;
     });
   }
@@ -166,8 +186,24 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   function toggleAllOffers() {
     setSelectedOfferIds((current) => {
       const next = new Set(current);
-      if (allSelectableSelected) selectableOffers.forEach((offer) => next.delete(offer.id));
-      else selectableOffers.forEach((offer) => next.add(offer.id));
+      if (allSelectableSelected) {
+        selectableOffers.forEach((offer) => next.delete(offer.id));
+      } else {
+        const usedKeys = new Set<string>();
+        Array.from(next).forEach(id => {
+          const o = initialOffers.find(o => o.id === id);
+          if (o) usedKeys.add(o.status !== "pending_manual_review" ? `individual:${o.id}` : getMarketplaceCatalogKey(o));
+        });
+        selectableOffers.forEach((offer) => {
+          if (!next.has(offer.id)) {
+            const key = offer.status !== "pending_manual_review" ? `individual:${offer.id}` : getMarketplaceCatalogKey(offer);
+            if (!usedKeys.has(key)) {
+              usedKeys.add(key);
+              next.add(offer.id);
+            }
+          }
+        });
+      }
       return next;
     });
   }
@@ -235,7 +271,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           {availableSubcategories.map((subcategory) => <option key={subcategory} value={subcategory}>{subcategory}</option>)}
         </select>
 
-        <select 
+        <select
           className="bg-black/20 text-white text-sm rounded p-2"
           value={filterTier} onChange={e => setFilterTier(e.target.value)}
         >
@@ -280,7 +316,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <input className="min-w-0 flex-1 bg-transparent p-2 text-sm text-white" type="date" value={filterDate} onChange={(event) => setFilterDate(event.target.value)} />
         </label>
 
-        <select 
+        <select
           className="bg-black/20 text-white text-sm rounded p-2"
           value={filterDecision} onChange={e => setFilterDecision(e.target.value)}
         >
@@ -290,7 +326,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <option value="REJECT">REJECT</option>
         </select>
 
-        <select 
+        <select
           className="bg-black/20 text-white text-sm rounded p-2"
           value={sortBy} onChange={e => setSortBy(e.target.value)}
         >
@@ -304,179 +340,221 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
       </div>
 
       <div className="space-y-4">
-        {sorted.length ? sorted.map((offer, index) => {
-          const expl = offer.explainability || {};
-          const tier = expl.tier || "C";
-          const quality = expl.quality?.status || "N/A";
-          const dedup = expl.deduplication?.status || "N/A";
-          const aiDecision = expl.aiDecision?.status || "N/A";
-          
-          const comp = expl.commercialComparison;
-          const officialScore = comp?.officialPolicy || offer.score;
-          const commercialScore = comp?.commercialPolicy || 0;
-          const delta = comp?.delta || 0;
-          const deltaLevel = comp?.deltaLevel || "LOW";
-          const changed = comp?.changed || false;
-          const confidence = comp?.confidence || "N/A";
-          const qualityObj = expl.commercialQuality || { status: "COMUM", confidence: "N/A" };
-          const qualityBadge = qualityObj.status || "COMUM";
-          const qualityConf = qualityObj.confidence || "N/A";
-          
-          const decision = changed ? "CHANGED" : "UNCHANGED";
-          const editorial = classifyPanelEditorial(offer);
-          
-          const badges = expl.signals || [];
-          const reason = comp?.reasons?.join(" | ") || expl.aiDecision?.reason || expl.quality?.reason || "N/A";
-          const nativeShopee = offer.platform === "Shopee" && Boolean(offer.shopee_product_cat_id);
-          const metrics = offer.marketplace_metrics || {};
-          const transitionRequestedAt = offer.updated_at || offer.created_at;
-          const draftCount = (offer as OfferWithDraftCount).draft_count || 0;
-          const hasDraftsReady = (offer.status === "pending_manual_review" || offer.status === "selected") && draftCount > 0;
-          const curation = curationById.get(offer.id);
+        {(() => {
+          if (sorted.length === 0) return <p className="py-6 text-center text-sm text-white/30">Nenhuma oferta atende aos filtros.</p>;
 
-          const tierColor = 
-            tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
-            tier === "A" ? "text-green-400 bg-green-400/10 border-green-400/20" :
-            tier === "B" ? "text-blue-400 bg-blue-400/10 border-blue-400/20" :
-            tier === "C" ? "text-yellow-400 bg-yellow-400/10 border-yellow-400/20" :
-            "text-red-400 bg-red-400/10 border-red-400/20";
+          const groupedOffers = new Map<string, typeof sorted>();
+          sorted.forEach((offer) => {
+            const isPending = offer.status === "pending_manual_review";
+            const key = isPending ? getMarketplaceCatalogKey(offer) : `individual:${offer.id}`;
+            if (!groupedOffers.has(key)) groupedOffers.set(key, []);
+            groupedOffers.get(key)!.push(offer);
+          });
 
-          return (
-            <div key={offer.id} className="border border-white/[0.05] rounded-lg p-4 bg-white/[0.01] flex flex-col gap-3">
-              <div className="flex justify-between items-start gap-4">
-                <input
-                  type="checkbox"
-                  aria-label={`Selecionar oferta ${offer.product_name}`}
-                  checked={selectedOfferIds.has(offer.id)}
-                  onChange={() => toggleOffer(offer.id)}
-                  disabled={offer.status !== "pending_manual_review" || isDiscarding}
-                  className="mt-1 h-4 w-4 shrink-0 accent-red-500 disabled:opacity-30"
-                />
-                {offer.image_url && (
-                  <img src={offer.image_url} alt="" className="h-20 w-20 rounded-md object-cover" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded border ${tierColor}`}>Tier {tier}</span>
-                    <Badge label={offer.platform} />
-                    {curation && (
-                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${curation.decision === "recommend" ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" : curation.decision === "exclude" ? "text-red-300 bg-red-500/10 border-red-500/20" : "text-amber-300 bg-amber-500/10 border-amber-500/20"}`}>
-                        Curadoria {curation.curationScore} · {curation.decision}
-                      </span>
-                    )}
-                    {hasDraftsReady && (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded border text-violet-300 bg-violet-500/10 border-violet-500/20">
-                        ✦ {draftCount} draft{draftCount !== 1 ? "s" : ""} prontos
-                      </span>
-                    )}
-                    {badges.map((b: string) => <Badge key={b} label={b.replace(/_/g, " ")} tone="neutral" />)}
-                    {editorial.types.slice(0, 3).map((type) => <Badge key={type} label={type} tone="future" />)}
-                  </div>
-                  <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
-                  <p className="text-[11px] text-white/40">
-                    {offer.category || "Sem categoria"}{offer.subcategory ? ` / ${offer.subcategory}` : ""}
-                    {nativeShopee ? ` • Top ${offer.native_category_position} • productCatId ${offer.shopee_product_cat_id}` : ""}
-                    {` • R$ ${offer.current_price}`}
-                    {offer.old_price ? ` (de R$ ${offer.old_price})` : ""}
-                  </p>
-                  {nativeShopee && (
-                    <p className="mt-1 text-[11px] text-white/55">
-                      Vendas: {metrics.sales ?? 0} • Desconto: {metrics.discount ?? 0}% • Avaliação: {metrics.rating ?? "N/A"} • Comissão: {offer.commission_rate ?? 0}% • Seller: {metrics.seller || "N/A"}
-                    </p>
+          const renderGroups = Array.from(groupedOffers.values()).map(group => {
+            if (group.length === 1) return { winner: group[0], alternatives: [], key: `individual:${group[0].id}` };
+            const winner = selectCatalogWinner(group) as OfferWithDraftCount;
+            const alternatives = group.filter(o => o.id !== winner.id);
+            return { winner, alternatives, key: getMarketplaceCatalogKey(winner) };
+          });
+
+          const renderOffer = (offer: OfferWithDraftCount, groupContext?: { total: number, expanded: boolean, toggleExpand: () => void, isAlternative: boolean }) => {
+            const expl = offer.explainability || {};
+            const tier = expl.tier || "C";
+            const quality = expl.quality?.status || "N/A";
+            const dedup = expl.deduplication?.status || "N/A";
+            const aiDecision = expl.aiDecision?.status || "N/A";
+
+            const comp = expl.commercialComparison;
+            const officialScore = comp?.officialPolicy || offer.score;
+            const commercialScore = comp?.commercialPolicy || 0;
+            const delta = comp?.delta || 0;
+            const deltaLevel = comp?.deltaLevel || "LOW";
+            const changed = comp?.changed || false;
+            const confidence = comp?.confidence || "N/A";
+            const qualityObj = expl.commercialQuality || { status: "COMUM", confidence: "N/A" };
+            const qualityBadge = qualityObj.status || "COMUM";
+            const qualityConf = qualityObj.confidence || "N/A";
+
+            const decision = changed ? "CHANGED" : "UNCHANGED";
+            const editorial = classifyPanelEditorial(offer);
+
+            const badges = expl.signals || [];
+            const reason = comp?.reasons?.join(" | ") || expl.aiDecision?.reason || expl.quality?.reason || "N/A";
+            const nativeShopee = offer.platform === "Shopee" && Boolean(offer.shopee_product_cat_id);
+            const metrics = offer.marketplace_metrics || {};
+            const transitionRequestedAt = offer.updated_at || offer.created_at;
+            const draftCount = offer.draft_count || 0;
+            const hasDraftsReady = (offer.status === "pending_manual_review" || offer.status === "selected") && draftCount > 0;
+            const curation = curationById.get(offer.id);
+
+            const tierColor =
+              tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
+              tier === "A" ? "text-green-400 bg-green-400/10 border-green-400/20" :
+              tier === "B" ? "text-blue-400 bg-blue-400/10 border-blue-400/20" :
+              tier === "C" ? "text-yellow-400 bg-yellow-400/10 border-yellow-400/20" :
+              "text-red-400 bg-red-400/10 border-red-400/20";
+
+            return (
+              <div key={offer.id} className={`border border-white/[0.05] rounded-lg p-4 bg-white/[0.01] flex flex-col gap-3 ${groupContext?.isAlternative ? "ml-8 border-l-2 border-l-blue-500/50 bg-black/40" : ""}`}>
+                <div className="flex justify-between items-start gap-4">
+                  <input
+                    type="checkbox"
+                    aria-label={`Selecionar oferta ${offer.product_name}`}
+                    checked={selectedOfferIds.has(offer.id)}
+                    onChange={() => toggleOffer(offer.id)}
+                    disabled={offer.status !== "pending_manual_review" || isDiscarding}
+                    className="mt-1 h-4 w-4 shrink-0 accent-red-500 disabled:opacity-30"
+                  />
+                  {offer.image_url && (
+                    <img src={offer.image_url} alt="" className="h-20 w-20 rounded-md object-cover" />
                   )}
-                  {offer.platform === "Mercado Livre" && <p className="text-[11px] text-white/40">Posição {offer.source_position ?? "—"} • {offer.seller_name || "Seller não informado"} • {offer.shipping_free ? "Frete grátis" : "Frete não informado"}</p>}
-                  {curation && (
-                    <p className="text-[11px] text-white/45">
-                      Grupo: {curation.groupKeys[0] || "sem grupo seguro"} • Confiança: {curation.marketplaceScore.trustScore}/50 • Oferta: {curation.marketplaceScore.offerScore}/40
-                    </p>
-                  )}
-                </div>
-                <div className="text-right">
-                  <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
-                  <div className="flex items-center justify-end gap-2 text-sm font-bold">
-                    <span className="text-white/80">{officialScore}</span>
-                    <span className="text-white/30">/</span>
-                    <span className={changed ? (delta > 0 ? "text-emerald-400" : "text-red-400") : "text-white/80"}>
-                      {commercialScore}
-                    </span>
-                  </div>
-                  {changed && (
-                    <div className="text-[10px] mt-1 text-white/50">
-                      Delta: {delta > 0 ? `+${delta}` : delta} ({deltaLevel})
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded border ${tierColor}`}>Tier {tier}</span>
+                      <Badge label={offer.platform} />
+                      {curation && (
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded border ${curation.decision === "recommend" ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/20" : curation.decision === "exclude" ? "text-red-300 bg-red-500/10 border-red-500/20" : "text-amber-300 bg-amber-500/10 border-amber-500/20"}`}>
+                          Curadoria {curation.curationScore} · {curation.decision}
+                        </span>
+                      )}
+                      {hasDraftsReady && (
+                        <span className="text-xs font-bold px-2 py-0.5 rounded border text-violet-300 bg-violet-500/10 border-violet-500/20">
+                          ✦ {draftCount} draft{draftCount !== 1 ? "s" : ""} prontos
+                        </span>
+                      )}
+                      {badges.map((b: string) => <Badge key={b} label={b.replace(/_/g, " ")} tone="neutral" />)}
+                      {editorial.types.slice(0, 3).map((type) => <Badge key={type} label={type} tone="future" />)}
+                      {groupContext && groupContext.total > 1 && !groupContext.isAlternative && (
+                        <button
+                          type="button"
+                          onClick={groupContext.toggleExpand}
+                          className="ml-auto flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-colors border border-blue-500/20"
+                        >
+                          {groupContext.expanded ? "Ocultar alternativas" : `+ ${groupContext.total - 1} alternativas de catálogo`}
+                        </button>
+                      )}
                     </div>
-                  )}
-                  <div className="mt-1 text-[10px] uppercase font-bold text-blue-300">
-                    Quality: {qualityBadge} ({qualityConf})
+                    <p className="text-sm font-semibold text-white/90 truncate">{offer.product_name}</p>
+                    <p className="text-[11px] text-white/40">
+                      {offer.category || "Sem categoria"}{offer.subcategory ? ` / ${offer.subcategory}` : ""}
+                      {nativeShopee ? ` • Top ${offer.native_category_position} • productCatId ${offer.shopee_product_cat_id}` : ""}
+                      {` • R$ ${offer.current_price}`}
+                      {offer.old_price ? ` (de R$ ${offer.old_price})` : ""}
+                    </p>
+                    {nativeShopee && (
+                      <p className="mt-1 text-[11px] text-white/55">
+                        Vendas: {metrics.sales ?? 0} • Desconto: {metrics.discount ?? 0}% • Avaliação: {metrics.rating ?? "N/A"} • Comissão: {offer.commission_rate ?? 0}% • Seller: {metrics.seller || "N/A"}
+                      </p>
+                    )}
+                    {offer.platform === "Mercado Livre" && <p className="text-[11px] text-white/40">Posição {offer.source_position ?? "—"} • {offer.seller_name || "Seller não informado"} • {offer.shipping_free ? "Frete grátis" : "Frete não informado"}</p>}
+                    {curation && (
+                      <p className="text-[11px] text-white/45">
+                        Grupo: {curation.groupKeys[0] || "sem grupo seguro"} • Confiança: {curation.marketplaceScore.trustScore}/50 • Oferta: {curation.marketplaceScore.offerScore}/40
+                      </p>
+                    )}
                   </div>
-                  <div className={`mt-1 text-[10px] font-bold ${changed ? "text-yellow-400" : "text-white/30"}`}>
-                    Decision: {decision}
+                  <div className="text-right">
+                    <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
+                    <div className="flex items-center justify-end gap-2 text-sm font-bold">
+                      <span className="text-white/80">{officialScore}</span>
+                      <span className="text-white/30">/</span>
+                      <span className={changed ? (delta > 0 ? "text-emerald-400" : "text-red-400") : "text-white/80"}>
+                        {commercialScore}
+                      </span>
+                    </div>
+                    {changed && (
+                      <div className="text-[10px] mt-1 text-white/50">
+                        Delta: {delta > 0 ? `+${delta}` : delta} ({deltaLevel})
+                      </div>
+                    )}
+                    <div className="mt-1 text-[10px] uppercase font-bold text-blue-300">
+                      Quality: {qualityBadge} ({qualityConf})
+                    </div>
+                    <div className={`mt-1 text-[10px] font-bold ${changed ? "text-yellow-400" : "text-white/30"}`}>
+                      Decision: {decision}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="text-xs text-white/50 bg-black/20 p-2 rounded">
-                <span className="font-semibold">Reason:</span> {reason}
-              </div>
-
-              {nativeShopee && offer.status === "selected" && (
-                <div className="flex gap-2 flex-wrap items-center">
-                  <form action={selectShopeeCandidateAction}>
-                    <input type="hidden" name="offer_id" value={offer.id} />
-                    <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
-                    <input type="hidden" name="requested_at" value={transitionRequestedAt} />
-                    <button className="rounded bg-emerald-500 px-3 py-2 text-xs font-bold text-black" type="submit">Selecionar</button>
-                  </form>
-                  <form action={rejectShopeeCandidateAction}>
-                    <input type="hidden" name="offer_id" value={offer.id} />
-                    <input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} />
-                    <input type="hidden" name="requested_at" value={transitionRequestedAt} />
-                    <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
-                  </form>
-                  {/* ADR-014: Official AI Modo 1 — gera drafts sem alterar estado da offer */}
-                  <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
-                  <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
+                <div className="text-xs text-white/50 bg-black/20 p-2 rounded">
+                  <span className="font-semibold">Reason:</span> {reason}
                 </div>
-              )}
 
-              {offer.platform === "Mercado Livre" && offer.status === "selected" && (
-                <div className="flex gap-2 flex-wrap items-center">
-                  <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
-                  <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
-                  {/* ADR-014: Official AI Modo 1 */}
-                  <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
+                {nativeShopee && offer.status === "selected" && (
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <form action={selectShopeeCandidateAction}>
+                      <input type="hidden" name="offer_id" value={offer.id} />
+                      <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
+                      <input type="hidden" name="requested_at" value={transitionRequestedAt as string} />
+                      <button className="rounded bg-emerald-500 px-3 py-2 text-xs font-bold text-black" type="submit">Selecionar</button>
+                    </form>
+                    <form action={rejectShopeeCandidateAction}>
+                      <input type="hidden" name="offer_id" value={offer.id} />
+                      <input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} />
+                      <input type="hidden" name="requested_at" value={transitionRequestedAt as string} />
+                      <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
+                    </form>
+                    <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
+                    <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
+                  </div>
+                )}
+
+                {offer.platform === "Mercado Livre" && offer.status === "selected" && (
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                    <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                    <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
+                  </div>
+                )}
+
+                {offer.platform === "Amazon" && offer.status === "selected" && (
+                  <div className="flex gap-2 flex-wrap items-center">
+                    <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
+                    <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                    <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
+                  </div>
+                )}
+
+                {/* Timeline Horizontal */}
+                <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-white/40 overflow-x-auto pb-1">
+                  <span>Extracted</span>
+                  <span>→</span>
+                  <span className={quality === "APPROVED" ? "text-green-400" : quality === "REJECTED" ? "text-red-400" : ""}>Qual: {quality}</span>
+                  <span>→</span>
+                  <span className="text-blue-400">Rank</span>
+                  <span>→</span>
+                  <span className={tier === "S" ? "text-emerald-400" : ""}>Intell</span>
+                  <span>→</span>
+                  <span className={dedup === "UNIQUE" ? "text-green-400" : dedup === "DUPLICATE" ? "text-yellow-400" : ""}>Dedup: {dedup}</span>
+                  <span>→</span>
+                  <span className={aiDecision === "APPROVE" ? "text-green-400" : aiDecision === "REJECT" ? "text-red-400" : ""}>AI: {aiDecision}</span>
+                  <span>→</span>
+                  <span className={offer.status === "approved" || offer.status === "posted" ? "text-green-400" : ""}>Pub: {offer.status}</span>
                 </div>
-              )}
-
-              {offer.platform === "Amazon" && offer.status === "selected" && (
-                <div className="flex gap-2 flex-wrap items-center">
-                  <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
-                  <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
-                  {/* ADR-014: Official AI Modo 1 */}
-                  <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
-                </div>
-              )}
-
-              {/* Timeline Horizontal */}
-              <div className="flex items-center gap-2 text-[10px] uppercase font-bold text-white/40 overflow-x-auto pb-1">
-                <span>Extracted</span>
-                <span>→</span>
-                <span className={quality === "APPROVED" ? "text-green-400" : quality === "REJECTED" ? "text-red-400" : ""}>Qual: {quality}</span>
-                <span>→</span>
-                <span className="text-blue-400">Rank</span>
-                <span>→</span>
-                <span className={tier === "S" ? "text-emerald-400" : ""}>Intell</span>
-                <span>→</span>
-                <span className={dedup === "UNIQUE" ? "text-green-400" : dedup === "DUPLICATE" ? "text-yellow-400" : ""}>Dedup: {dedup}</span>
-                <span>→</span>
-                <span className={aiDecision === "APPROVE" ? "text-green-400" : aiDecision === "REJECT" ? "text-red-400" : ""}>AI: {aiDecision}</span>
-                <span>→</span>
-                <span className={offer.status === "approved" || offer.status === "posted" ? "text-green-400" : ""}>Pub: {offer.status}</span>
               </div>
-            </div>
-          );
-        }) : (
-          <p className="py-6 text-center text-sm text-white/30">Nenhuma oferta atende aos filtros.</p>
-        )}
+            );
+          };
+
+          return renderGroups.map(({ winner, alternatives, key }) => {
+            const isExpanded = expandedGroups.has(key);
+            const toggleExpand = () => {
+              setExpandedGroups(prev => {
+                const next = new Set(prev);
+                if (next.has(key)) next.delete(key);
+                else next.add(key);
+                return next;
+              });
+            };
+
+            return (
+              <div key={key} className="flex flex-col gap-2">
+                {renderOffer(winner, { total: alternatives.length + 1, expanded: isExpanded, toggleExpand, isAlternative: false })}
+                {isExpanded && alternatives.map(alt => renderOffer(alt as OfferWithDraftCount, { total: alternatives.length + 1, expanded: isExpanded, toggleExpand, isAlternative: true }))}
+              </div>
+            );
+          });
+        })()}
       </div>
     </section>
   );
