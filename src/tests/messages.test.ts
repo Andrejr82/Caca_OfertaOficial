@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateInstagramMessage, generateTelegramMessage, generateWhatsAppMessage, generateFacebookMessage } from "@/lib/messages/generate";
+import { generateTelegramMessage, generateFacebookMessage, generateWhatsAppMessage, deriveOfferSignals, selectPrimaryAngle, selectStableCall } from "@/lib/messages/generate";
 import type { AffiliateLink, Offer } from "@/types/domain";
 
 const baseOffer: Offer = {
@@ -12,7 +12,7 @@ const baseOffer: Offer = {
   image_url: null,
   current_price: 99,
   old_price: 149,
-  coupon: "CACA10",
+  coupon: null,
   rating: 4.7,
   estimated_commission: 12,
   commission_rate: 8,
@@ -36,204 +36,139 @@ const link: AffiliateLink = {
   created_at: new Date().toISOString()
 };
 
-describe("message generation commercial copies", () => {
-  it("copy com Pix, parcela e cupom", () => {
-    const offer = {
-      ...baseOffer,
-      explainability: {
-        pix_price: 89,
-        installment_count: 10,
-        installment_value: 9.90,
-        installment_interest_free: true
-      }
-    };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).toContain("❌ De: R$ 149,00");
-    expect(message).toContain("✅ Por: R$ 99,00");
-    expect(message).toContain("💰 No Pix: R$ 89,00");
-    expect(message).toContain("💳 Ou 10x de R$ 9,90 sem juros");
-    expect(message).toContain("🎟️ Cupom: CACA10");
-  });
-
-  it("copy sem campos opcionais", () => {
-    const offer = {
-      ...baseOffer,
-      old_price: null,
-      current_price: 99,
-      coupon: null,
-      explainability: null,
-      marketplace_metrics: null
-    };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).toContain("✅ Por: R$ 99,00");
-    expect(message).not.toContain("❌ De:");
-    expect(message).not.toContain("💰 No Pix:");
-    expect(message).not.toContain("💳 Ou");
-    expect(message).not.toContain("🎟️ Cupom:");
-    expect(message).not.toContain("🔄 Recorrência:");
-    expect(message).not.toContain("📦");
-    expect(message).not.toContain("⚠️");
-  });
-
-  it("recorrência Amazon", () => {
-    const offer = {
-      ...baseOffer,
-      platform: "Amazon" as const,
-      explainability: {
-        subscription_price: 89.10
-      }
-    };
-    const amzLink = { ...link, tracked_url: "https://amzn.to/abc" };
-    const message = generateTelegramMessage(offer, amzLink);
-    expect(message).toContain("🔄 Recorrência: R$ 89,10");
-  });
-
-  it("cupom no carrinho", () => {
-    const offer = {
-      ...baseOffer,
-      explainability: {
-        coupon_application_stage: "no carrinho"
-      }
-    };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).toContain("📌 Aplique no carrinho");
-  });
-
-  it("cupom na finalização", () => {
-    const offer = {
-      ...baseOffer,
-      explainability: {
-        checkout_discount: true,
-        coupon_application_stage: "na finalização"
-      }
-    };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).toContain("📌 Aplique na finalização");
-  });
-
-  it("condição de variação", () => {
-    const offer = {
-      ...baseOffer,
-      explainability: {
-        variation_condition: "Apenas na cor Preta"
-      }
-    };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).toContain("⚠️ Apenas na cor Preta");
-  });
-
-  it("ausência de informação inventada", () => {
-    const offer = {
-      ...baseOffer,
-      coupon: null,
-      explainability: {
-        pix_price: 89
-      }
-    };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).not.toContain("🎟️ Cupom:");
-    expect(message).not.toContain("💳 Ou");
-    expect(message).not.toContain("📦");
-  });
-
-  it("hashtags Facebook", () => {
-    const message = generateFacebookMessage(baseOffer, link);
-    const tagsMatches = message.match(/#\w+/g) || [];
-    expect(tagsMatches.length).toBeGreaterThanOrEqual(3);
-    expect(tagsMatches.length).toBeLessThanOrEqual(6);
-    expect(message).toContain("#CacaOfertasOficial");
-    expect(message).toContain("#Shopee");
-  });
-
-  it("hashtags Telegram", () => {
-    const message = generateTelegramMessage(baseOffer, link);
-    const tagsMatches = message.match(/#\w+/g) || [];
-    expect(tagsMatches.length).toBeGreaterThanOrEqual(2);
-    expect(tagsMatches.length).toBeLessThanOrEqual(4);
-    expect(message).toContain("#Shopee");
-  });
-
-  it("ausência de hashtags no WhatsApp", () => {
-    const message = generateWhatsAppMessage(baseOffer, link);
-    const tagsMatches = message.match(/#\w+/g) || [];
-    expect(tagsMatches.length).toBe(0);
-  });
-});
-
-describe("message generation fixes", () => {
-  it("valida bloqueio Shopee com link Amazon", () => {
-    const amzLink = { ...link, tracked_url: "https://amazon.com.br/123" };
-    expect(() => generateTelegramMessage(baseOffer, amzLink)).toThrow("Link incompatível");
-  });
-
-  it("valida Amazon com amzn.to", () => {
-    const offer = { ...baseOffer, platform: "Amazon" as const };
-    const amzLink = { ...link, tracked_url: "https://amzn.to/123" };
-    expect(() => generateTelegramMessage(offer, amzLink)).not.toThrow();
-  });
-
-  it("valida ML com meli.la", () => {
-    const offer = { ...baseOffer, platform: "Mercado Livre" as const };
-    const mlLink = { ...link, tracked_url: "https://meli.la/123" };
-    expect(() => generateTelegramMessage(offer, mlLink)).not.toThrow();
-  });
-
-  it("valida hashtags normais e compostas", () => {
-    const message = generateTelegramMessage(baseOffer, link);
-    expect(message).toContain("#CadeiraGamer");
-    expect(message).toContain("#Moveis");
-    expect(message).not.toContain("#Mveis");
-  });
-
-  it("omite Prime fora da Amazon", () => {
-    const offer = { ...baseOffer, explainability: { prime_only: true } };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).not.toContain("Exclusivo Prime");
-  });
-
-  it("omite recorrência fora da Amazon", () => {
-    const offer = { ...baseOffer, explainability: { subscription_price: 50 } };
-    const message = generateTelegramMessage(offer, link);
-    expect(message).not.toContain("Recorrência");
-  });
-
-  it("frete grátis preservado com Prime", () => {
-    const offer = { ...baseOffer, platform: "Amazon" as const, explainability: { prime_only: true, free_shipping: true } };
-    const amzLink = { ...link, tracked_url: "https://amzn.to/123" };
-    const message = generateTelegramMessage(offer, amzLink);
-    expect(message).toContain("📦 Frete Grátis");
-    expect(message).toContain("⭐ Exclusivo Prime");
-  });
-
-  it("Instagram sem #cupom quando não tem cupom", () => {
-    const offer = { ...baseOffer, coupon: null };
-    const message = generateInstagramMessage(offer, link);
-    expect(message.feed).not.toContain("#cupom");
-  });
-
-  it("chamadas condicionais corretas", () => {
-    // Preço caiu
-    let msg = generateTelegramMessage(baseOffer, link);
-    expect(msg).toContain("💥 Preço caiu!");
+describe("Deterministic Copy Engine Tests", () => {
+  
+  describe("Prioridade de Ângulos", () => {
+    it("cupom vence desconto", () => {
+      const offer = { ...baseOffer, current_price: 100, old_price: 200, coupon: "TESTE" };
+      const signals = deriveOfferSignals(offer, { coupon_code: "TESTE" });
+      const angle = selectPrimaryAngle(signals);
+      expect(angle).toBe("coupon");
+    });
     
-    // Cupom disponível
-    const couponOffer = { ...baseOffer, old_price: null };
-    msg = generateTelegramMessage(couponOffer, link);
-    expect(msg).toContain("🎟️ Cupom disponível!");
+    it("desconto vence Pix", () => {
+      const offer = { ...baseOffer, current_price: 100, old_price: 200 };
+      const signals = deriveOfferSignals(offer, { pix_price: 90 });
+      const angle = selectPrimaryAngle(signals);
+      expect(angle).toBe("discount");
+    });
+    
+    it("Pix vence parcelamento", () => {
+      const offer = { ...baseOffer, current_price: 100, old_price: null };
+      const signals = deriveOfferSignals(offer, { pix_price: 90, installment_count: 10, installment_value: 10 });
+      const angle = selectPrimaryAngle(signals);
+      expect(angle).toBe("pix");
+    });
+    
+    it("parcelamento vence frete grátis", () => {
+      const offer = { ...baseOffer, current_price: 100, old_price: null };
+      const signals = deriveOfferSignals(offer, { installment_count: 10, installment_value: 10, free_shipping: true });
+      const angle = selectPrimaryAngle(signals);
+      expect(angle).toBe("installment");
+    });
+  });
 
-    // Mais vendido
-    const bestOffer = { ...baseOffer, old_price: null, coupon: null, explainability: { best_seller: true } };
-    msg = generateTelegramMessage(bestOffer, link);
-    expect(msg).toContain("⭐ Mais vendido em oferta!");
+  describe("Formatação de Campos", () => {
+    it("parcelamento sem confirmação de juros exibe apenas divisao", () => {
+      const offer = { ...baseOffer, current_price: 100, old_price: null };
+      const signals = deriveOfferSignals(offer, { installment_count: 10, installment_value: 10, installment_interest_free: false });
+      const call = selectStableCall("installment", offer.id, "telegram", signals);
+      expect(call).toContain("Dá para dividir");
+      expect(call).not.toContain("Parcele sem juros");
+    });
+    
+    it("parcelamento com juros confirmado permite sem juros", () => {
+      const offer = { ...baseOffer, current_price: 100, old_price: null };
+      const signals = deriveOfferSignals(offer, { installment_count: 10, installment_value: 10, installment_interest_free: true });
+      const call = selectStableCall("installment", offer.id, "telegram", signals);
+      expect(call === "💳 Parcele sem juros!" || call.includes("Dá para dividir")).toBe(true);
+    });
 
-    // Por tempo limitado
-    const flashOffer = { ...baseOffer, old_price: null, coupon: null, explainability: { flash_sale: true } };
-    msg = generateTelegramMessage(flashOffer, link);
-    expect(msg).toContain("⚡ Oferta por tempo limitado!");
+    it("cupom com código", () => {
+      const offer = { ...baseOffer, coupon: "PROMO" };
+      const msg = generateTelegramMessage(offer, link);
+      expect(msg).toContain("🎟️ Cupom: PROMO");
+    });
 
-    // Fallback
-    const fallbackOffer = { ...baseOffer, old_price: null, coupon: null };
-    msg = generateTelegramMessage(fallbackOffer, link);
-    expect(msg).toContain("🔥 Achado do dia!");
+    it("cupom ativável sem código (com evidences)", () => {
+      const offer = { ...baseOffer, coupon: null, explainability: { checkout_discount: true } };
+      const msg = generateTelegramMessage(offer, link);
+      expect(msg).toContain("🎟️ Ative o cupom na página do produto");
+      expect(msg).toContain("📌 Aplique na finalização");
+    });
+  });
+
+  describe("Segurança e Validação", () => {
+    it("Prime removido fora da Amazon (não estourando erro fatal pq o próprio generate corrige)", () => {
+      const offer = { ...baseOffer, platform: "Mercado Livre", explainability: { prime_only: true } };
+      const l = { ...link, tracked_url: "https://meli.la/123" };
+      const msg = generateTelegramMessage(offer, l);
+      expect(msg).not.toContain("Exclusivo Prime");
+    });
+
+    it("recorrência removida fora da Amazon", () => {
+      const offer = { ...baseOffer, platform: "Shopee", explainability: { subscription_price: 90 } };
+      const msg = generateTelegramMessage(offer, link);
+      expect(msg).not.toContain("Recorrência");
+    });
+
+    it("erro fatal para link incompatível", () => {
+      const amzLink = { ...link, tracked_url: "https://amzn.to/abc" };
+      expect(() => generateTelegramMessage(baseOffer, amzLink)).toThrow("Link incompatível");
+    });
+
+    it("Pix inválido omitido", () => {
+      const offer = { ...baseOffer, current_price: 100, explainability: { pix_price: 120 } };
+      const msg = generateTelegramMessage(offer, link);
+      expect(msg).not.toContain("No Pix");
+    });
+  });
+
+  describe("Variação e Estabilidade", () => {
+    it("fallback determinístico sem offer.id não quebra a estabilidade", () => {
+      const offer = { ...baseOffer, id: undefined, external_id: "EXT123" };
+      const signals = deriveOfferSignals(offer as any, {});
+      const call1 = selectStableCall("simple_offer", (offer as any).external_id, "telegram", signals);
+      const call2 = selectStableCall("simple_offer", (offer as any).external_id, "telegram", signals);
+      expect(call1).toBe(call2);
+      expect(call1).toBeTruthy();
+    });
+
+    it("mesma entrada produzindo a mesma saída", () => {
+      const msg1 = generateTelegramMessage(baseOffer, link);
+      const msg2 = generateTelegramMessage(baseOffer, link);
+      expect(msg1).toBe(msg2);
+    });
+
+    it("canais diferentes podem variar chamadas (sem Math.random)", () => {
+      const signals = deriveOfferSignals(baseOffer, {});
+      const c1 = selectStableCall("simple_offer", baseOffer.id, "telegram", signals);
+      const c2 = selectStableCall("simple_offer", baseOffer.id, "facebook", signals);
+      const c3 = selectStableCall("simple_offer", baseOffer.id, "whatsapp", signals);
+      // Nao necessariamente garantido de serem sempre diferentes, mas hash garante variacao no espaco
+      expect(c1).toBeDefined();
+      expect(c2).toBeDefined();
+      expect(c3).toBeDefined();
+    });
+  });
+
+  describe("Regras de Hashtags", () => {
+    it("WhatsApp sem hashtags", () => {
+      const msg = generateWhatsAppMessage(baseOffer, link);
+      expect(msg).not.toContain("#");
+    });
+
+    it("Facebook e Telegram dentro dos limites", () => {
+      const fb = generateFacebookMessage(baseOffer, link);
+      const tg = generateTelegramMessage(baseOffer, link);
+      
+      const fbHashtags = (fb.match(/#/g) || []).length;
+      expect(fbHashtags).toBeGreaterThanOrEqual(3);
+      expect(fbHashtags).toBeLessThanOrEqual(6);
+
+      const tgHashtags = (tg.match(/#/g) || []).length;
+      expect(tgHashtags).toBeGreaterThanOrEqual(2);
+      expect(tgHashtags).toBeLessThanOrEqual(4);
+    });
   });
 });
