@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { generateOfficialAI, type OfficialAIChannel, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { randomUUID } from "crypto";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -59,7 +60,35 @@ export async function POST(request: Request) {
     else if (lowerUrl.includes("shein")) platform = "Shein";
     else if (lowerUrl.includes("mercadolivre") || lowerUrl.includes("ml")) platform = "Mercado Livre";
 
-    const { data: newOffer, error: insertError } = await adminClient.from("offers").insert({
+    let valid = false;
+    if (platform === "Magalu") {
+      valid = lowerUrl.includes("magazinevoce") || lowerUrl.includes("parceiromagalu");
+    } else if (platform === "Shein") {
+      valid = lowerUrl.includes("affiliateid") || lowerUrl.includes("adp");
+    } else if (platform === "Amazon") {
+      valid = lowerUrl.includes("tag=");
+    } else if (platform === "Shopee") {
+      valid = lowerUrl.includes("shope.ee") || lowerUrl.includes("affiliates") || lowerUrl.includes("ext_camp");
+    } else if (platform === "Mercado Livre") {
+      valid = lowerUrl.includes("partner_id=");
+    } else {
+      valid = true;
+    }
+
+    if (!valid) {
+      return NextResponse.json({
+        ok: false,
+        code: "URL_NOT_MONETIZED",
+        message: `URL comum rejeitada. O link fornecido para ${platform} não possui parâmetros de afiliado ou não é suportado.`
+      }, { status: 400, headers: corsHeaders });
+    }
+
+    const newOfferId = randomUUID();
+    const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://caca-oferta-oficial.vercel.app";
+    const trackedUrl = `${APP_URL}/go/tg_${newOfferId}`;
+
+    const { error: insertError } = await adminClient.from("offers").insert({
+      id: newOfferId,
       product_name: body.title,
       current_price: body.price,
       original_url: body.finalUrl,
@@ -74,13 +103,30 @@ export async function POST(request: Request) {
         ingestion_id: "ext-ingestion",
         correlation_id: request.headers.get("x-correlation-id") || "ext-correlation",
         discovery_evidence: { source: "chrome-extension" },
-        marketplace_metrics: { extracted_at: new Date().toISOString() }
+        marketplace_metrics: { extracted_at: new Date().toISOString() },
+        affiliate_url: body.finalUrl,
+        tracked_url: trackedUrl
       }
-    }).select("id").single();
+    });
 
-    if (insertError || !newOffer) {
-       return NextResponse.json({ ok: false, code: "INSERT_OFFER_FAILED", message: insertError?.message || "Falha ao salvar oferta" }, { status: 500, headers: corsHeaders });
+    if (insertError) {
+       return NextResponse.json({ ok: false, code: "INSERT_OFFER_FAILED", message: insertError.message || "Falha ao salvar oferta" }, { status: 500, headers: corsHeaders });
     }
+
+    const { error: linkError } = await adminClient.from("affiliate_links").upsert({
+      offer_id: newOfferId,
+      user_id: adminId,
+      original_url: body.finalUrl,
+      channel: "telegram",
+      sub_id: `tg_${newOfferId}`,
+      tracked_url: trackedUrl
+    });
+
+    if (linkError) {
+      console.error("Falha ao salvar link de afiliado:", linkError);
+    }
+
+    const newOffer = { id: newOfferId };
 
     // Se o usuário selecionou canais, chama a IA para gerar os rascunhos
     if (body.channels && body.channels.length > 0) {
