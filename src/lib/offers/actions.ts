@@ -27,6 +27,15 @@ async function transitionManualStatus(
   const requestedAt = new Date(rawRequestedAt).toISOString();
   const commandId = String(formData.get("command_id") || `${offerId}:${action}:${requestedAt}`);
   const toState = action === "select" ? "selected" : "rejected";
+
+  const { data: offer } = await supabase.from("offers").select("status").eq("id", offerId).single();
+  if (!offer) throw new Error("Oferta não encontrada.");
+
+  if (offer.status === toState) {
+    revalidatePath("/offers");
+    return;
+  }
+
   const result = await transitionOfficialOfferState({
     commandId,
     idempotencyKey: commandId,

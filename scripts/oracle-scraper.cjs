@@ -531,7 +531,12 @@ async function scrapeStore(store, stageLogger = null) {
         discovered_at: result.generated_at,
         source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
         }));
-      return filterNovelNormalizedProducts(store, normalized, stageLogger);
+      
+      const filteredNovel = await filterNovelNormalizedProducts(store, normalized, stageLogger);
+      if (filteredNovel.length > 0) return filteredNovel;
+      
+      // Fallback para fontes amplas se o cenário não trouxer novos candidatos
+      if (stageLogger) stageLogger.info('ML_fallback', intentStageStartedAt, 'Acionando fallback para fontes amplas do ML (ofertas/mais vendidos)');
     }
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
