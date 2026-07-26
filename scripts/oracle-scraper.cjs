@@ -729,7 +729,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     if (offerIds.length > 0) {
       const { data: offersData, error: selectErr } = await getSupabase()
         .from('offers')
-        .select('id, user_id, explainability')
+        .select('id, user_id, original_url, explainability')
         .in('id', offerIds);
         
       if (offersData && !selectErr) {
@@ -744,7 +744,9 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
             linksToInsert.push({
               offer_id: o.id,
               user_id: o.user_id,
+              original_url: o.original_url,
               channel: 'telegram',
+              sub_id: `tg_${o.id}`,
               tracked_url: trkUrl
             });
             const newExp = { ...o.explainability, tracked_url: trkUrl };
