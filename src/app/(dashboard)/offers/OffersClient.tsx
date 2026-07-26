@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useFormStatus } from "react-dom";
 import { Badge } from "@/components/ui/badge";
 import type { Offer } from "@/types/domain";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction } from "@/lib/offers/actions";
@@ -12,6 +13,14 @@ import { classifyOfferForPanel, classifyPanelEditorial, PANEL_AUDIENCES, PANEL_O
 import { curateOffers } from "@/core/intelligence/curation-engine";
 import { getMarketplaceCatalogKey, selectCatalogWinner } from "@/lib/offers/catalog-grouping";
 
+function SubmitButton({ children, className }: { children: React.ReactNode, className: string }) {
+  const { pending } = useFormStatus();
+  return (
+    <button className={`${className} ${pending ? 'opacity-50 cursor-not-allowed' : ''}`} type="submit" disabled={pending}>
+      {pending ? "..." : children}
+    </button>
+  );
+}
 type OfferWithDraftCount = Offer & { draft_count?: number };
 const OFFER_FILTER_STORAGE_KEY = "caca-oferta:panel-filters:offers:v1";
 
@@ -481,37 +490,52 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                   <span className="font-semibold">Reason:</span> {reason}
                 </div>
 
-                {nativeShopee && offer.status === "selected" && (
+                {nativeShopee && (offer.status === "selected" || offer.status === "pending_manual_review") && (
                   <div className="flex gap-2 flex-wrap items-center">
-                    <form action={selectShopeeCandidateAction}>
-                      <input type="hidden" name="offer_id" value={offer.id} />
-                      <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
-                      <input type="hidden" name="requested_at" value={transitionRequestedAt as string} />
-                      <button className="rounded bg-emerald-500 px-3 py-2 text-xs font-bold text-black" type="submit">Selecionar</button>
-                    </form>
-                    <form action={rejectShopeeCandidateAction}>
-                      <input type="hidden" name="offer_id" value={offer.id} />
-                      <input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} />
-                      <input type="hidden" name="requested_at" value={transitionRequestedAt as string} />
-                      <button className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300" type="submit">Descartar</button>
-                    </form>
+                    {offer.status === "pending_manual_review" && (
+                      <>
+                        <form action={selectShopeeCandidateAction}>
+                          <input type="hidden" name="offer_id" value={offer.id} />
+                          <input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} />
+                          <input type="hidden" name="requested_at" value={transitionRequestedAt} />
+                          <SubmitButton className="rounded bg-emerald-500 px-3 py-2 text-xs font-bold text-black">Selecionar</SubmitButton>
+                        </form>
+                        <form action={rejectShopeeCandidateAction}>
+                          <input type="hidden" name="offer_id" value={offer.id} />
+                          <input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} />
+                          <input type="hidden" name="requested_at" value={transitionRequestedAt} />
+                          <SubmitButton className="rounded border border-red-400/40 px-3 py-2 text-xs font-bold text-red-300">Descartar</SubmitButton>
+                        </form>
+                      </>
+                    )}
+                    {/* ADR-014: Official AI Modo 1 — gera drafts sem alterar estado da offer */}
                     <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
                     <a className="ml-auto text-xs text-blue-300 underline" href={offer.original_url} target="_blank" rel="noreferrer">Abrir produto</a>
                   </div>
                 )}
 
-                {offer.platform === "Mercado Livre" && offer.status === "selected" && (
+                {offer.platform === "Mercado Livre" && (offer.status === "selected" || offer.status === "pending_manual_review") && (
                   <div className="flex gap-2 flex-wrap items-center">
-                    <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
-                    <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                    {offer.status === "pending_manual_review" && (
+                      <>
+                        <form action={selectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><SubmitButton className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</SubmitButton></form>
+                        <form action={rejectMercadoLivreOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><SubmitButton className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</SubmitButton></form>
+                      </>
+                    )}
+                    {/* ADR-014: Official AI Modo 1 */}
                     <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
                   </div>
                 )}
 
-                {offer.platform === "Amazon" && offer.status === "selected" && (
+                {offer.platform === "Amazon" && (offer.status === "selected" || offer.status === "pending_manual_review") && (
                   <div className="flex gap-2 flex-wrap items-center">
-                    <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</button></form>
-                    <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt as string} /><button className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</button></form>
+                    {offer.status === "pending_manual_review" && (
+                      <>
+                        <form action={selectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:select:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><SubmitButton className="rounded bg-emerald-500 px-3 py-1 text-xs font-bold text-black">Selecionar</SubmitButton></form>
+                        <form action={rejectAmazonOfferAction}><input type="hidden" name="offer_id" value={offer.id} /><input type="hidden" name="command_id" value={`curation:${offer.id}:reject:${transitionRequestedAt}`} /><input type="hidden" name="requested_at" value={transitionRequestedAt} /><SubmitButton className="rounded bg-red-500/20 px-3 py-1 text-xs font-bold text-red-300">Descartar</SubmitButton></form>
+                      </>
+                    )}
+                    {/* ADR-014: Official AI Modo 1 */}
                     <GenerateAIMessagesButton offerId={offer.id} hasDrafts={hasDraftsReady} />
                   </div>
                 )}
