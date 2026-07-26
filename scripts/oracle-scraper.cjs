@@ -729,7 +729,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     if (offerIds.length > 0) {
       const { data: offersData, error: selectErr } = await getSupabase()
         .from('offers')
-        .select('id, explainability')
+        .select('id, user_id, explainability')
         .in('id', offerIds);
         
       if (offersData && !selectErr) {
@@ -743,6 +743,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
             const trkUrl = `${APP_URL}/go/tg_${o.id}`;
             linksToInsert.push({
               offer_id: o.id,
+              user_id: o.user_id,
               channel: 'telegram',
               tracked_url: trkUrl
             });
