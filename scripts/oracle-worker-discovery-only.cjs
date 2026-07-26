@@ -310,29 +310,45 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const products = await discover(marketplace);
       const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
+      
       const uniqueProducts = [];
       const seenSourceItems = new Set();
       let duplicatesRejected = 0;
+      let technicalRejections = 0;
+      
       for (const product of products) {
         const sourceItemId = String(product?.sourceItemId || '');
         if (sourceItemId && seenSourceItems.has(sourceItemId)) {
           duplicatesRejected += 1;
           continue;
         }
+        
+        // 1. Validação técnica mínima (apenas bloqueios fortes)
+        const gate = qualityGate(product);
+        const titleQuality = validateProductTitle(product.title);
+        const urlValid = /^https:\/\//i.test(String(product.sourceUrl || ''));
+        const imgValid = /^https:\/\//i.test(String(product.imageUrl || ''));
+        const isAccessory = gate.reasons.includes('ACESSORIO_OU_CONSUMIVEL');
+        const isPriceInvalid = gate.reasons.includes('PRECO_INVALIDO');
+        const amazonMissing = gate.warnings && gate.warnings.includes('DADOS_COMERCIAIS_INDISPONIVEIS');
+        
+        if (!titleQuality.valid || !urlValid || !imgValid || isPriceInvalid || isAccessory || amazonMissing) {
+          technicalRejections += 1;
+          continue;
+        }
+
         if (sourceItemId) seenSourceItems.add(sourceItemId);
         uniqueProducts.push(product);
       }
-      const queue = copyQueueOptions
-        ? selectCopyQueue(uniqueProducts, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger)
-        : { selected: uniqueProducts, skipped: [], deferred: [], limits: null };
-      if (typeof persistV2Metadata === 'function') {
-        await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: uniqueProducts, queue });
-      }
-      const ingestions = [];
+      
+      // 2. Persistir até 200 válidos na página de ofertas
+      const candidatesToPersist = uniqueProducts.slice(0, 200);
+      const allIngestions = [];
       let rejected = 0;
-      for (const product of queue.selected) {
+      
+      for (const product of candidatesToPersist) {
         try {
-          ingestions.push(createIngestionV1(createCandidateV1({
+          allIngestions.push(createIngestionV1(createCandidateV1({
             marketplace,
             product,
             tenantId,
@@ -343,29 +359,42 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           console.warn(`[Oracle Discovery-Only] Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
         }
       }
-      const persisted = await persist(ingestions, marketplace, FINAL_STATE);
-      if (persisted?.state !== FINAL_STATE) {
+      
+      const persistedAll = await persist(allIngestions, marketplace, FINAL_STATE);
+      if (persistedAll?.state !== FINAL_STATE) {
         throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
       }
-      for (const offerId of persisted.offerIds || []) {
-        if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
-      }
 
-      if (queue.deferred?.length > 0) {
-        const deferredIngestions = [];
-        for (const product of queue.deferred) {
+      // 3. Ranking e seleção (fila automática) após persistência
+      const queue = copyQueueOptions
+        ? selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger)
+        : { selected: candidatesToPersist, skipped: [], deferred: [], limits: null };
+      
+      if (typeof persistV2Metadata === 'function') {
+        await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: candidatesToPersist, queue });
+      }
+      
+      // 4. Repersistir apenas os selecionados para obter seus offerIds específicos para a IA
+      if (queue.selected.length > 0) {
+        const selectedIngestions = [];
+        for (const product of queue.selected) {
           try {
-            deferredIngestions.push(createIngestionV1(createCandidateV1({
+            selectedIngestions.push(createIngestionV1(createCandidateV1({
               marketplace,
               product,
               tenantId,
               correlationId,
             }), requestedAt));
           } catch (error) {
-            console.warn(`[Oracle Discovery-Only] Deferred Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
+            console.warn(`[Oracle Discovery-Only] Selected candidate rejeitado marketplace=${marketplace}: ${error.message}`);
           }
         }
-        await persist(deferredIngestions, marketplace, 'deferred');
+        
+        const persistedSelected = await persist(selectedIngestions, marketplace, FINAL_STATE);
+        
+        for (const offerId of persistedSelected.offerIds || []) {
+          if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
+        }
       }
 
       let amazonTelemetry = undefined;
@@ -382,7 +411,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           amazon_ranked: uniqueProducts.length,
           amazon_selected: queue.selected.length,
           amazon_deferred: queue.deferred?.length || 0,
-          amazon_persisted: Number(persisted.accepted || 0),
+          amazon_persisted: Number(persistedAll.accepted || 0),
           reasons: (queue.skipped || []).reduce((acc, s) => { acc[s.reason] = (acc[s.reason] || 0) + 1; return acc; }, {})
         };
       }
@@ -395,10 +424,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         queueSkipped: queue.skipped.length,
         queueDeferred: queue.deferred?.length || 0,
         queueLimits: queue.limits,
-        rejected,
-        persisted: Number(persisted.accepted || 0),
-        inserted: Number(persisted.inserted || 0),
-        updated: Number(persisted.updated || 0),
+        rejected: rejected + technicalRejections,
+        persisted: Number(persistedAll.accepted || 0),
+        inserted: persistedAll.inserted,
+        updated: persistedAll.updated,
         state: FINAL_STATE,
         ...(amazonTelemetry ? { amazonTelemetry } : {})
       });
