@@ -16,25 +16,50 @@ function discountPercent(offer: Pick<Offer, "old_price" | "current_price">) {
   return Math.round(((offer.old_price - offer.current_price) / offer.old_price) * 100);
 }
 
-function slugToHashtags(name: string): string {
-  // Generate relevant hashtags from product name
-  const words = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => w.length > 3)
-    .slice(0, 5)
-    .map((w) => `#${w.replace(/[^a-z0-9]/g, "")}`);
+function cleanStr(s: string) {
+  return s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "");
+}
 
-  const base = ["#ofertadodia", "#promoção", "#cupom", "#achadinho", "#desconto", "#promocao", "#oferta"];
-  return [...base, ...words].join(" ");
+function toPascalCase(str: string) {
+  return str.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join("");
+}
+
+export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  const url = link.tracked_url.toLowerCase();
+  const platform = (offer.platform || "").toLowerCase();
+  
+  if (platform.includes("amazon")) {
+    if (!url.includes("amazon.") && !url.includes("amzn.to")) {
+      throw new Error("Link incompatível com o marketplace");
+    }
+  } else if (platform.includes("mercado livre") || platform.includes("mercadolivre")) {
+    if (!url.includes("mercadolivre.") && !url.includes("meli.la")) {
+      throw new Error("Link incompatível com o marketplace");
+    }
+  } else if (platform.includes("shopee")) {
+    if (!url.includes("shopee.")) {
+      throw new Error("Link incompatível com o marketplace");
+    }
+  }
 }
 
 export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  validateLinkMarketplace(offer, link);
   const hasPrice = offer.current_price > 0;
   const discount = discountPercent(offer);
-  const hashtags = slugToHashtags(offer.product_name);
+  
+  const productWords = offer.product_name.split(/\s+/).slice(0, 2).join(" ");
+  const productTag = `#${cleanStr(toPascalCase(productWords))}`;
+  const categoryTag = offer.category ? `#${cleanStr(toPascalCase(offer.category))}` : "";
+  const marketplaceTag = `#${cleanStr(toPascalCase(normalizeMarketplace(offer.platform)))}`;
+
+  const hashtagsArr = [
+    "#ofertadodia", "#promocao",
+    offer.coupon ? "#cupom" : "",
+    "#achadinho", "#desconto", "#oferta",
+    productTag, categoryTag, marketplaceTag
+  ].filter(Boolean);
+  const hashtags = Array.from(new Set(hashtagsArr)).join(" ");
 
   const priceLine = hasPrice ? `💰 ${formatCurrency(offer.current_price)}` : "💰 Confira o preço no link da bio";
   const discountLine = discount > 0 ? `📉 ${discount}% de desconto!` : "";
@@ -75,9 +100,9 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
   ];
 
   const carousel = [
-    `📦 ${offer.product_name}`,
-    `🤔 Pra quem é? Ideal pra quem busca qualidade e bom preço.`,
-    `✅ Diferenciais: produto de qualidade da ${offer.platform || "loja"}.`,
+    `🛍️ ${offer.product_name}`,
+    `🎯 Pra quem é? Ideal pra quem busca qualidade e bom preço.`,
+    `⭐ Diferenciais: produto de qualidade da ${offer.platform || "loja"}.`,
     `💡 Dica: aproveite enquanto está disponível nesse preço.`,
     hasPrice ? `💰 Por apenas ${formatCurrency(offer.current_price)}${discount > 0 ? ` (${discount}% OFF)` : ""}` : "💰 Consulte o preço no anúncio",
     offer.coupon ? `🎫 Use o cupom ${offer.coupon} e economize ainda mais!` : "ℹ️ Consulte disponibilidade e condições.",
@@ -89,7 +114,9 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
 
 function extractCommercialData(offer: Offer) {
   const e = offer.explainability || {};
-  const m = offer.marketplace_metrics || {};
+  const m = (offer.marketplace_metrics as any) || {};
+  
+  const isAmazon = (offer.platform || "").toLowerCase().includes("amazon");
   
   return {
     pix_price: e.pix_price ?? m.pix_price,
@@ -100,40 +127,35 @@ function extractCommercialData(offer: Offer) {
     coupon_description: e.coupon_description || m.coupon_description,
     coupon_application_stage: e.coupon_application_stage || m.coupon_application_stage,
     checkout_discount: e.checkout_discount ?? m.checkout_discount,
-    subscription_price: e.subscription_price ?? m.subscription_price,
-    prime_only: e.prime_only ?? m.prime_only,
+    subscription_price: isAmazon ? (e.subscription_price ?? m.subscription_price) : undefined,
+    prime_only: isAmazon ? (e.prime_only ?? m.prime_only) : undefined,
     free_shipping: offer.shipping_free ?? e.free_shipping ?? m.free_shipping,
     seller_name: offer.seller_name || m.seller || e.seller_name,
     official_store: e.official_store ?? m.official_store,
     variation_condition: e.variation_condition || m.variation_condition,
+    best_seller: e.best_seller ?? m.best_seller,
+    flash_sale: e.flash_sale ?? m.flash_sale,
   };
 }
 
 function generateHashtags(offer: Offer, channel: "facebook" | "telegram" | "whatsapp") {
   if (channel === "whatsapp") return "";
   
-  const words = offer.product_name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .split(/\s+/)
-    .filter((w) => w.length > 3)
-    .slice(0, 3)
-    .map((w) => `#${w.replace(/[^a-z0-9]/g, "")}`);
-
-  const categoryTag = offer.category ? `#${offer.category.replace(/[^a-zA-Z0-9]/g, "")}` : "";
-  const marketplaceTag = `#${normalizeMarketplace(offer.platform).replace(/[^a-zA-Z0-9]/g, "")}`;
+  const productWords = offer.product_name.split(/\s+/).slice(0, 2).join(" ");
+  const productTag = `#${cleanStr(toPascalCase(productWords))}`;
+  const categoryTag = offer.category ? `#${cleanStr(toPascalCase(offer.category))}` : "";
+  const marketplaceTag = `#${cleanStr(toPascalCase(normalizeMarketplace(offer.platform)))}`;
   
   if (channel === "facebook") {
-    const base = ["#CacaOfertasOficial", marketplaceTag, categoryTag].filter(Boolean);
-    const result = Array.from(new Set([...base, ...words, "#promocao"])).slice(0, 6);
+    const base = ["#CacaOfertasOficial", productTag, categoryTag, marketplaceTag].filter(Boolean);
+    const result = Array.from(new Set([...base, "#Oferta"])).slice(0, 6);
     return result.join(" ");
   }
   
   if (channel === "telegram") {
-    const base = [marketplaceTag, categoryTag].filter(Boolean);
-    const result = Array.from(new Set([...base, ...words])).slice(0, 4);
-    if (result.length < 2) result.push("#oferta");
+    const base = [productTag, categoryTag, marketplaceTag].filter(Boolean);
+    const result = Array.from(new Set([...base])).slice(0, 4);
+    if (result.length < 2) result.push("#Oferta");
     return result.join(" ");
   }
 
@@ -141,12 +163,24 @@ function generateHashtags(offer: Offer, channel: "facebook" | "telegram" | "what
 }
 
 function buildCommercialBlocks(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, hashtags: string) {
+  validateLinkMarketplace(offer, link);
   const cd = extractCommercialData(offer);
   const hasPrice = offer.current_price > 0;
   
   const blocks: string[] = [];
 
-  blocks.push(`🔥 Achado do dia!`);
+  let title = `🔥 Achado do dia!`;
+  if (hasPrice && offer.old_price && offer.old_price > offer.current_price) {
+    title = `💥 Preço caiu!`;
+  } else if (cd.coupon_code) {
+    title = `🎟️ Cupom disponível!`;
+  } else if (cd.best_seller) {
+    title = `⭐ Mais vendido em oferta!`;
+  } else if (cd.flash_sale) {
+    title = `⚡ Oferta por tempo limitado!`;
+  }
+
+  blocks.push(title);
   blocks.push("");
   blocks.push(`🛍️ ${offer.product_name}`);
   blocks.push("");
@@ -186,11 +220,15 @@ function buildCommercialBlocks(offer: Offer, link: Pick<AffiliateLink, "tracked_
   if (cd.subscription_price) {
     extras.push(`🔄 Recorrência: ${formatCurrency(cd.subscription_price)}`);
   }
-  if (cd.prime_only) {
-    extras.push(`📦 Exclusivo Prime`);
-  } else if (cd.free_shipping) {
+  
+  if (cd.free_shipping) {
     extras.push(`📦 Frete Grátis`);
   }
+  
+  if (cd.prime_only) {
+    extras.push(`⭐ Exclusivo Prime`);
+  }
+  
   if (cd.variation_condition) {
     extras.push(`⚠️ ${cd.variation_condition}`);
   }
