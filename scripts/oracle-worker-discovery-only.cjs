@@ -5,10 +5,59 @@ const { validateProductTitle } = require('./product-title-quality.cjs');
 const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
+'use strict';
+
+const crypto = require('node:crypto');
+const { validateProductTitle } = require('./product-title-quality.cjs');
+const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
+const { interleavePublicationQueue } = require('./publication-queue.cjs');
+const { selectBestVariants } = require('./family-variant-selector.cjs');
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
+
+function validateCanonicalUrl(url) {
+  const str = String(url || '').trim();
+  if (!str) return false;
+  if (!/^https?:\/\//i.test(str)) return false;
+  if (str.includes('click.linksynergy.com') || str.includes('onelink.shein.com')) return false;
+  
+  // Rejeitar Amazon /r/ se não tiver identificador na URL (mas permitir amzn.to)
+  if (str.includes('amazon.') && str.includes('/r/')) {
+    if (!str.includes('/dp/') && !str.includes('/gp/product/')) return false;
+  }
+  return true;
+}
+
+function validateNativeIdentity(marketplace, product) {
+  const m = String(marketplace || '').toLowerCase();
+  const metrics = product.marketplaceMetrics || {};
+
+  if (m === 'mercado livre') {
+    const id = metrics.item_id || metrics.itemId || metrics.product_id;
+    if (!id || id === 'null' || id === 'undefined') return false;
+    if (String(id).includes('http') || String(id).includes('/')) return false;
+    return true;
+  }
+
+  if (m === 'amazon') {
+    const id = metrics.asin || metrics.product_id || product.sourceItemId;
+    if (!id || id === 'null' || id === 'undefined') return false;
+    if (!/^[A-Z0-9]{10}$/i.test(String(id))) return false;
+    return true;
+  }
+
+  if (m === 'shopee') {
+    const id = metrics.shopee_item_id;
+    if (!id || id === 'null' || id === 'undefined') return false;
+    if (product.title && product.title.toLowerCase().includes('test product')) return false;
+    return true;
+  }
+
+  return false;
+}
+
 
 const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 });
 
@@ -200,6 +249,9 @@ function assertCandidateInput(product) {
   const required = ['sourceItemId', 'sourceUrl', 'title', 'imageUrl', 'currentPrice', 'category', 'deterministicScore', 'discoveredAt'];
   const missing = required.filter((field) => product?.[field] == null || product[field] === '');
   if (missing.length) throw new Error(`Candidate V1 inválido: ${missing.join(', ')}`);
+  if (product.sourceItemId === 'null' || product.sourceItemId === 'undefined' || !product.sourceItemId) {
+    throw new Error('Candidate V1 inválido: sourceItemId nulo');
+  }
   if (!/^https:\/\//i.test(product.sourceUrl) || !/^https:\/\//i.test(product.imageUrl)) {
     throw new Error('Candidate V1 inválido: URLs devem usar HTTPS');
   }
@@ -285,9 +337,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         tenantId,
         ...details,
       }));
-    } catch {
-      // Telemetry is best-effort and must never change Discovery behavior.
-    }
+    } catch {}
   };
   await safeObserve('discovery.started');
   await safeObserve('worker.heartbeat');
@@ -311,19 +361,28 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
       
-      const uniqueProducts = [];
-      const seenSourceItems = new Set();
+      const uniqueProductsMap = new Map();
       let duplicatesRejected = 0;
       let technicalRejections = 0;
+      let rejected = 0;
       
       for (const product of products) {
         const sourceItemId = String(product?.sourceItemId || '');
-        if (sourceItemId && seenSourceItems.has(sourceItemId)) {
-          duplicatesRejected += 1;
-          continue;
+        if (sourceItemId === 'null' || sourceItemId === 'undefined' || !sourceItemId) {
+           technicalRejections += 1;
+           continue;
         }
-        
-        // 1. Validação técnica mínima (apenas bloqueios fortes)
+
+        if (!validateNativeIdentity(marketplace, product)) {
+           technicalRejections += 1;
+           continue;
+        }
+
+        if (!validateCanonicalUrl(product.sourceUrl)) {
+           technicalRejections += 1;
+           continue;
+        }
+
         const gate = qualityGate(product);
         const titleQuality = validateProductTitle(product.title);
         const urlValid = /^https:\/\//i.test(String(product.sourceUrl || ''));
@@ -337,44 +396,71 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           continue;
         }
 
-        if (sourceItemId) seenSourceItems.add(sourceItemId);
-        uniqueProducts.push(product);
-      }
-      
-      // 2. Persistir até 200 válidos na página de ofertas
-      const candidatesToPersist = uniqueProducts.slice(0, 200);
-      const allIngestions = [];
-      let rejected = 0;
-      
-      for (const product of candidatesToPersist) {
-        try {
-          allIngestions.push(createIngestionV1(createCandidateV1({
-            marketplace,
-            product,
-            tenantId,
-            correlationId,
-          }), requestedAt));
-        } catch (error) {
-          rejected += 1;
-          console.warn(`[Oracle Discovery-Only] Candidate rejeitado marketplace=${marketplace}: ${error.message}`);
+        let groupKey = sourceItemId;
+        const mLower = String(marketplace).toLowerCase();
+        if (mLower === 'mercado livre' && product.sourceUrl) {
+          const match = product.sourceUrl.match(/\/p\/MLB\d+/i);
+          if (match) groupKey = match[0].toLowerCase();
+        } else if (mLower === 'amazon') {
+          const m = product.marketplaceMetrics || {};
+          const asin = m.asin || m.product_id || sourceItemId;
+          groupKey = String(asin).toUpperCase();
+        } else if (mLower === 'shopee') {
+          const m = product.marketplaceMetrics || {};
+          if (m.shopee_item_id && m.shop_id) {
+             groupKey = `${m.shopee_item_id}-${m.shop_id}`;
+          } else if (m.shopee_item_id) {
+             groupKey = String(m.shopee_item_id);
+          }
+        }
+
+        const existing = uniqueProductsMap.get(groupKey);
+        if (existing) {
+           const scoreDiff = scoreCandidate(product) - scoreCandidate(existing);
+           const pDisc = (product.originalPrice || product.currentPrice) - product.currentPrice;
+           const eDisc = (existing.originalPrice || existing.currentPrice) - existing.currentPrice;
+           const discDiff = pDisc - eDisc;
+           const priceDiff = existing.currentPrice - product.currentPrice;
+           const pPos = product.marketplaceMetrics?.sourcePosition ?? product.marketplaceMetrics?.position ?? 9999;
+           const ePos = existing.marketplaceMetrics?.sourcePosition ?? existing.marketplaceMetrics?.position ?? 9999;
+           const posDiff = ePos - pPos;
+           const pTime = new Date(product.discoveredAt || 0).getTime();
+           const eTime = new Date(existing.discoveredAt || 0).getTime();
+           const timeDiff = pTime - eTime;
+
+           let shouldReplace = false;
+           if (scoreDiff > 0) shouldReplace = true;
+           else if (scoreDiff === 0 && discDiff > 0) shouldReplace = true;
+           else if (scoreDiff === 0 && discDiff === 0 && priceDiff > 0) shouldReplace = true;
+           else if (scoreDiff === 0 && discDiff === 0 && priceDiff === 0 && posDiff > 0) shouldReplace = true;
+           else if (scoreDiff === 0 && discDiff === 0 && priceDiff === 0 && posDiff === 0 && timeDiff > 0) shouldReplace = true;
+           else if (scoreDiff === 0 && discDiff === 0 && priceDiff === 0 && posDiff === 0 && timeDiff === 0) {
+             if (product.sourceItemId.localeCompare(existing.sourceItemId) > 0) shouldReplace = true;
+           }
+
+           if (shouldReplace) {
+             uniqueProductsMap.set(groupKey, product);
+           }
+           duplicatesRejected += 1;
+        } else {
+           uniqueProductsMap.set(groupKey, product);
         }
       }
       
-      const persistedAll = await persist(allIngestions, marketplace, FINAL_STATE);
-      if (persistedAll?.state !== FINAL_STATE) {
-        throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
-      }
+      const uniqueProducts = Array.from(uniqueProductsMap.values());
+      const candidatesToPersist = uniqueProducts.slice(0, 200);
 
-      // 3. Ranking e seleção (fila automática) após persistência
-      const queue = copyQueueOptions
-        ? selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger)
-        : { selected: candidatesToPersist, skipped: [], deferred: [], limits: null };
+      if (!copyQueueOptions) {
+        throw new Error('copyQueueOptions is required. Automatic selection bypassed.');
+      }
+      const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger);
       
       if (typeof persistV2Metadata === 'function') {
         await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: candidatesToPersist, queue });
       }
-      
-      // 4. Repersistir apenas os selecionados para obter seus offerIds específicos para a IA
+
+      let persistedAll = { accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] };
+
       if (queue.selected.length > 0) {
         const selectedIngestions = [];
         for (const product of queue.selected) {
@@ -386,15 +472,20 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
               correlationId,
             }), requestedAt));
           } catch (error) {
+            rejected += 1;
             console.warn(`[Oracle Discovery-Only] Selected candidate rejeitado marketplace=${marketplace}: ${error.message}`);
           }
         }
         
-        const persistedSelected = await persist(selectedIngestions, marketplace, FINAL_STATE);
+        persistedAll = await persist(selectedIngestions, marketplace, FINAL_STATE);
+        if (persistedAll?.state !== FINAL_STATE) {
+          throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
+        }
         
-        for (const offerId of persistedSelected.offerIds || []) {
+        for (const offerId of persistedAll.offerIds || []) {
           if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
         }
+        technicalRejections += rejected;
       }
 
       let amazonTelemetry = undefined;
@@ -424,10 +515,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         queueSkipped: queue.skipped.length,
         queueDeferred: queue.deferred?.length || 0,
         queueLimits: queue.limits,
-        rejected: rejected + technicalRejections,
+        rejected: technicalRejections,
         persisted: Number(persistedAll.accepted || 0),
-        inserted: persistedAll.inserted,
-        updated: persistedAll.updated,
+        inserted: persistedAll.inserted || 0,
+        updated: persistedAll.updated || 0,
         state: FINAL_STATE,
         ...(amazonTelemetry ? { amazonTelemetry } : {})
       });
@@ -468,15 +559,16 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     try {
       await notifyWorkPending(result);
     } catch (error) {
-      await safeObserve('discovery.notification.failed', {
-        error: error.message || String(error),
-      });
+      if (typeof safeObserve === 'function') {
+        await safeObserve('discovery.notification.failed', {
+          error: error.message || String(error),
+        });
+      }
     }
   }
 
   return result;
 }
-
 module.exports = {
   FINAL_STATE,
   MARKETPLACES,
@@ -484,4 +576,6 @@ module.exports = {
   createIngestionV1,
   selectCopyQueue,
   runDiscoveryOnlyCycle,
+  validateCanonicalUrl,
+  validateNativeIdentity,
 };
