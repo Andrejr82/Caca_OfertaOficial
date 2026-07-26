@@ -5,13 +5,6 @@ const { validateProductTitle } = require('./product-title-quality.cjs');
 const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
-'use strict';
-
-const crypto = require('node:crypto');
-const { validateProductTitle } = require('./product-title-quality.cjs');
-const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
-const { interleavePublicationQueue } = require('./publication-queue.cjs');
-const { selectBestVariants } = require('./family-variant-selector.cjs');
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
@@ -49,7 +42,7 @@ function validateNativeIdentity(marketplace, product) {
   }
 
   if (m === 'shopee') {
-    const id = metrics.shopee_item_id;
+    const id = metrics.shopee_item_id || metrics.itemId;
     if (!id || id === 'null' || id === 'undefined') return false;
     if (product.title && product.title.toLowerCase().includes('test product')) return false;
     return true;
@@ -407,10 +400,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           groupKey = String(asin).toUpperCase();
         } else if (mLower === 'shopee') {
           const m = product.marketplaceMetrics || {};
-          if (m.shopee_item_id && m.shop_id) {
-             groupKey = `${m.shopee_item_id}-${m.shop_id}`;
-          } else if (m.shopee_item_id) {
-             groupKey = String(m.shopee_item_id);
+          const shopeeId = m.shopee_item_id || m.itemId;
+          const shopId = m.shop_id || m.shopId;
+          if (shopeeId && shopId) {
+             groupKey = `${shopeeId}-${shopId}`;
+          } else if (shopeeId) {
+             groupKey = String(shopeeId);
           }
         }
 

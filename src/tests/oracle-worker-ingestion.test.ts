@@ -15,8 +15,8 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       it('rejects onelink.shein.com gateway', () => {
         expect(validateCanonicalUrl('https://onelink.shein.com/44/xxx')).toBe(false);
       });
-      it('rejects amzn.to without ASIN', () => {
-        expect(validateCanonicalUrl('https://amzn.to/3xyz')).toBe(false);
+      it('accepts amzn.to', () => {
+        expect(validateCanonicalUrl('https://amzn.to/3xyz')).toBe(true);
       });
       it('rejects amazon /r/ gateway', () => {
         expect(validateCanonicalUrl('https://www.amazon.com.br/r/123')).toBe(false);
@@ -45,11 +45,14 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       it('rejects Amazon without ASIN', () => {
         expect(validateNativeIdentity('Amazon', { marketplaceMetrics: {} })).toBe(false);
       });
-      it('accepts Shopee with shopee_item_id', () => {
+      it('accepts Shopee with shopee_item_id (legacy)', () => {
         expect(validateNativeIdentity('Shopee', { marketplaceMetrics: { shopee_item_id: '12345' } })).toBe(true);
       });
+      it('accepts Shopee with itemId (native)', () => {
+        expect(validateNativeIdentity('Shopee', { marketplaceMetrics: { itemId: '12345' } })).toBe(true);
+      });
       it('rejects Shopee Test Product', () => {
-        expect(validateNativeIdentity('Shopee', { title: 'Test Product 123', marketplaceMetrics: { shopee_item_id: '123' } })).toBe(false);
+        expect(validateNativeIdentity('Shopee', { title: 'Test Product 123', marketplaceMetrics: { itemId: '123' } })).toBe(false);
       });
       it('rejects Shopee without id', () => {
         expect(validateNativeIdentity('Shopee', { marketplaceMetrics: { } })).toBe(false);
