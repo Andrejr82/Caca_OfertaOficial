@@ -31,34 +31,6 @@ function slugToHashtags(name: string): string {
   return [...base, ...words].join(" ");
 }
 
-export function generateTelegramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  const hasPrice = offer.current_price > 0;
-  
-  const priceLines = hasPrice 
-    ? [
-        offer.old_price && offer.old_price > offer.current_price ? `❌ De ${formatCurrency(offer.old_price)}` : null,
-        `✅ Por ${formatCurrency(offer.current_price)}`
-      ].filter(Boolean)
-    : [`⚠️ Preço no link`];
-
-  const lines = [
-    `🚨 *${offer.product_name}*`,
-    "",
-    ...priceLines,
-    "",
-    offer.coupon ? `🎟️ Use o cupom: ${offer.coupon}\n` : null,
-    `✨ link: ${link.tracked_url}`,
-    "",
-    `#ofertadodia #promoção #cupom #achadinho #desconto`,
-    "",
-    `Siga nossas Redes Sociais 👇`,
-    `📸 Instagram: https://www.instagram.com/${officialBrand.instagram}`,
-    `💬 WhatsApp: ${officialBrand.whatsappUrl || "https://whatsapp.com/channel/0029VbCLje16rsQz9pKFeo3c"}`
-  ];
-
-  return lines.filter(l => l !== null).join("\n");
-}
-
 export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
   const hasPrice = offer.current_price > 0;
   const discount = discountPercent(offer);
@@ -115,51 +87,146 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
   return { feed, stories, reels, carousel };
 }
 
-export function generateWhatsAppMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  const hasPrice = offer.current_price > 0;
-  const couponOffer = Boolean(offer.coupon) || offer.product_name.startsWith("[CUPOM]");
-  const title = couponOffer ? "CUPOM LIBERADO" : offer.product_name;
-  const marketplace = normalizeMarketplace(offer.platform);
-
-  let priceBlock = "";
-  const formatCurrency = (val: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+function extractCommercialData(offer: Offer) {
+  const e = offer.explainability || {};
+  const m = offer.marketplace_metrics || {};
   
-  if (hasPrice) {
-    if (offer.old_price && offer.old_price > offer.current_price) {
-      priceBlock = `💰 De: ${formatCurrency(offer.old_price)}\n🔥 Por: ${formatCurrency(offer.current_price)}`;
-    } else {
-      priceBlock = `🔥 Por: ${formatCurrency(offer.current_price)}`;
-    }
-  } else {
-    priceBlock = `💰 Confira o preço no link`;
+  return {
+    pix_price: e.pix_price ?? m.pix_price,
+    installment_count: e.installment_count ?? m.installment_count,
+    installment_value: e.installment_value ?? m.installment_value,
+    installment_interest_free: e.installment_interest_free ?? m.installment_interest_free,
+    coupon_code: offer.coupon || e.coupon_code || m.coupon_code,
+    coupon_description: e.coupon_description || m.coupon_description,
+    coupon_application_stage: e.coupon_application_stage || m.coupon_application_stage,
+    checkout_discount: e.checkout_discount ?? m.checkout_discount,
+    subscription_price: e.subscription_price ?? m.subscription_price,
+    prime_only: e.prime_only ?? m.prime_only,
+    free_shipping: offer.shipping_free ?? e.free_shipping ?? m.free_shipping,
+    seller_name: offer.seller_name || m.seller || e.seller_name,
+    official_store: e.official_store ?? m.official_store,
+    variation_condition: e.variation_condition || m.variation_condition,
+  };
+}
+
+function generateHashtags(offer: Offer, channel: "facebook" | "telegram" | "whatsapp") {
+  if (channel === "whatsapp") return "";
+  
+  const words = offer.product_name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+    .slice(0, 3)
+    .map((w) => `#${w.replace(/[^a-z0-9]/g, "")}`);
+
+  const categoryTag = offer.category ? `#${offer.category.replace(/[^a-zA-Z0-9]/g, "")}` : "";
+  const marketplaceTag = `#${normalizeMarketplace(offer.platform).replace(/[^a-zA-Z0-9]/g, "")}`;
+  
+  if (channel === "facebook") {
+    const base = ["#CacaOfertasOficial", marketplaceTag, categoryTag].filter(Boolean);
+    const result = Array.from(new Set([...base, ...words, "#promocao"])).slice(0, 6);
+    return result.join(" ");
+  }
+  
+  if (channel === "telegram") {
+    const base = [marketplaceTag, categoryTag].filter(Boolean);
+    const result = Array.from(new Set([...base, ...words])).slice(0, 4);
+    if (result.length < 2) result.push("#oferta");
+    return result.join(" ");
   }
 
-  const couponBlock = offer.coupon ? `\n🎟 Use o cupom: ${offer.coupon}` : "";
+  return "";
+}
 
-  const searchableText = `${offer.product_name}`.toLowerCase();
-  const possibleBenefits = ['Prime Day', 'Black Friday', 'Oferta Relâmpago', 'Frete Grátis', 'Cashback', 'Desconto Progressivo', 'Loja Oficial', 'Oferta Exclusiva'];
-  const foundBenefits = possibleBenefits.filter(b => searchableText.includes(b.toLowerCase()));
-  const benefitBlock = foundBenefits.length > 0 ? `\n✨ ${foundBenefits.join(', ')}` : "";
+function buildCommercialBlocks(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, hashtags: string) {
+  const cd = extractCommercialData(offer);
+  const hasPrice = offer.current_price > 0;
+  
+  const blocks: string[] = [];
 
-  const ctaBase = couponOffer ? "Resgate antes que acabe" : "Garantir oferta";
-  const finalCta = `🛒 ${ctaBase}`;
+  blocks.push(`🔥 Achado do dia!`);
+  blocks.push("");
+  blocks.push(`🛍️ ${offer.product_name}`);
+  blocks.push("");
+  
+  const storeText = cd.official_store ? `${normalizeMarketplace(offer.platform)} (Loja Oficial)` : normalizeMarketplace(offer.platform);
+  blocks.push(`🏪 ${storeText}`);
+  blocks.push("");
 
-  const blocks = [
-    `🚨 ${title}`,
-    priceBlock,
-    `🛒 ${marketplace}${couponBlock}${benefitBlock}`,
-    `🔗 ${link.tracked_url}`,
-    finalCta
-  ];
+  if (hasPrice) {
+    if (offer.old_price && offer.old_price > offer.current_price) {
+      blocks.push(`❌ De: ${formatCurrency(offer.old_price)}`);
+    }
+    blocks.push(`✅ Por: ${formatCurrency(offer.current_price)}`);
+    
+    if (cd.pix_price && cd.pix_price < offer.current_price) {
+      blocks.push(`💰 No Pix: ${formatCurrency(cd.pix_price)}`);
+    }
+    
+    if (cd.installment_count && cd.installment_value) {
+      const semJuros = cd.installment_interest_free ? " sem juros" : "";
+      blocks.push(`💳 Ou ${cd.installment_count}x de ${formatCurrency(cd.installment_value)}${semJuros}`);
+    }
+    blocks.push("");
+  }
 
-  return blocks.filter(Boolean).join("\n\n");
+  if (cd.coupon_code) {
+    blocks.push(`🎟️ Cupom: ${cd.coupon_code}`);
+    if (cd.coupon_application_stage) {
+      blocks.push(`📌 Aplique ${cd.coupon_application_stage}`);
+    } else if (cd.checkout_discount) {
+      blocks.push(`📌 Aplique na finalização`);
+    }
+    blocks.push("");
+  }
+
+  const extras = [];
+  if (cd.subscription_price) {
+    extras.push(`🔄 Recorrência: ${formatCurrency(cd.subscription_price)}`);
+  }
+  if (cd.prime_only) {
+    extras.push(`📦 Exclusivo Prime`);
+  } else if (cd.free_shipping) {
+    extras.push(`📦 Frete Grátis`);
+  }
+  if (cd.variation_condition) {
+    extras.push(`⚠️ ${cd.variation_condition}`);
+  }
+
+  if (extras.length > 0) {
+    blocks.push(...extras);
+    blocks.push("");
+  }
+
+  blocks.push(`👉 Comprar:\n${link.tracked_url}`);
+  
+  if (hashtags) {
+    blocks.push("");
+    blocks.push(hashtags);
+  }
+
+  return blocks.filter(l => l !== null).join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+export function generateTelegramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  return buildCommercialBlocks(offer, link, generateHashtags(offer, "telegram"));
+}
+
+export function generateFacebookMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  return buildCommercialBlocks(offer, link, generateHashtags(offer, "facebook"));
+}
+
+export function generateWhatsAppMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  return buildCommercialBlocks(offer, link, generateHashtags(offer, "whatsapp"));
 }
 
 export function generateAllMessages(offer: Offer, link: AffiliateLink) {
   return {
     telegram: generateTelegramMessage(offer, link),
+    facebook: generateFacebookMessage(offer, link),
     instagram: generateInstagramMessage(offer, link),
     whatsapp: generateWhatsAppMessage(offer, link),
   };
 }
-
