@@ -32,6 +32,44 @@ const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
+require('tsx/cjs');
+const { generateMLAffiliateLinkWithId } = require('../src/lib/platforms/mercadolivre.ts');
+
+function processMonetization(marketplace, originalUrl) {
+  let affiliateUrl = null;
+  let valid = false;
+
+  if (marketplace === 'Amazon') {
+    const tag = process.env.AMAZON_PARTNER_TAG || 'cacaofertaofi-20';
+    try {
+      const u = new URL(originalUrl);
+      u.searchParams.set('tag', tag);
+      affiliateUrl = u.toString();
+      valid = true;
+    } catch { }
+  } else if (marketplace === 'Mercado Livre') {
+    const affiliateId = process.env.MERCADO_LIVRE_AFFILIATE_ID || 'cacaofertaoficial';
+    affiliateUrl = generateMLAffiliateLinkWithId(originalUrl, affiliateId);
+    try {
+      const u = new URL(affiliateUrl);
+      valid = !!u.searchParams.get('partner_id');
+    } catch {
+      valid = false;
+    }
+  } else if (marketplace === 'Shopee') {
+    valid = originalUrl.includes('shope.ee') || originalUrl.includes('affiliates') || originalUrl.includes('ext_camp') || originalUrl.includes('is_from_login=true');
+    if (valid) affiliateUrl = originalUrl;
+  } else if (marketplace === 'Shein') {
+    valid = originalUrl.includes('affiliateID') || originalUrl.includes('adp');
+    if (valid) affiliateUrl = originalUrl;
+  } else {
+    valid = true;
+    affiliateUrl = originalUrl;
+  }
+
+  return { valid, affiliateUrl };
+}
+
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
@@ -602,6 +640,13 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       marketplace_metrics: metrics,
     };
 
+    const monetization = processMonetization(marketplace, candidate.sourceUrl);
+    if (!monetization.valid) {
+      return null;
+    }
+    explainability.affiliate_url = monetization.affiliateUrl;
+
+
     if (isDeferred) {
       explainability = {
         ...explainability,
@@ -655,7 +700,13 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       Object.assign(row, { product_id: metrics.asin, source_position: metrics.sourcePosition });
     }
     return row;
-  });
+  }).filter(Boolean);
+
+  if (rows.length === 0) {
+    if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
+    return { accepted: 0, offerIds: [], state: targetStatus };
+  }
+
     const rpcPromise = getSupabase().rpc(
       'upsert_discovery_offers_v2',
       {
@@ -669,13 +720,42 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     
     const { data, error } = await withTimeout(
       rpcPromise,
-      Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
-      `persistDiscoveryIngestionV1_rpc_${marketplace}`
+      15000,
+      'upsert_discovery_offers_v2'
     );
-    
-    if (error) {
-      if (stageLogger) stageLogger.error('RPC_upsert_discovery_offers_v2', rpcStartedAt, error.message);
-      throw new Error('Ingestion V1 ' + marketplace + ': ' + error.message);
+    if (error) throw new Error(error.message || 'Falha no RPC');
+
+    const offerIds = data?.offer_ids || [];
+    if (offerIds.length > 0) {
+      const { data: offersData, error: selectErr } = await getSupabase()
+        .from('offers')
+        .select('id, explainability')
+        .in('id', offerIds);
+        
+      if (offersData && !selectErr) {
+        const linksToInsert = [];
+        const updatesToExplainability = [];
+        const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://caca-oferta-oficial.vercel.app';
+        
+        for (const o of offersData) {
+          const affUrl = o.explainability?.affiliate_url;
+          if (affUrl && !o.explainability?.tracked_url) {
+            const trkUrl = `${APP_URL}/go/tg_${o.id}`;
+            linksToInsert.push({
+              offer_id: o.id,
+              channel: 'telegram',
+              tracked_url: trkUrl
+            });
+            const newExp = { ...o.explainability, tracked_url: trkUrl };
+            updatesToExplainability.push(getSupabase().from('offers').update({ explainability: newExp }).eq('id', o.id));
+          }
+        }
+        
+        if (linksToInsert.length > 0) {
+          await getSupabase().from('affiliate_links').upsert(linksToInsert, { onConflict: 'offer_id, channel' });
+          await Promise.all(updatesToExplainability);
+        }
+      }
     }
     
     if (stageLogger) stageLogger.end('RPC_upsert_discovery_offers_v2', rpcStartedAt, data.inserted + data.updated);
