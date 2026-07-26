@@ -41,7 +41,8 @@ const offer: OfficialAIOffer = {
     ingestion_id: "ingestion-1",
     correlation_id: "discovery-1",
     discovery_evidence: { provider: "Shopee Native V5" },
-    marketplace_metrics: { sourceItemId: "source-1" }
+    marketplace_metrics: { sourceItemId: "source-1" },
+    tracked_url: "https://shopee.com.br/tracked"
   },
   createdAt: "2026-07-15T14:00:00.000Z"
 };
@@ -358,5 +359,28 @@ describe("generateOfficialAI", () => {
     });
     expect(dependencies.offers.findPendingWithoutDrafts).toHaveBeenCalledWith("tenant-1", undefined);
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejeita e chama idempotency.complete quando a oferta não possui link monetizado", async () => {
+    const offerWithoutLink = {
+      ...offer,
+      explainability: { ...offer.explainability, tracked_url: undefined, affiliate_url: undefined }
+    };
+    const dependencies = createDependencies({
+      offers: { findById: vi.fn().mockResolvedValue(offerWithoutLink) }
+    });
+
+    const result = await generateOfficialAI(command, dependencies);
+
+    expect(result).toMatchObject({
+      status: "rejected",
+      code: "NO_MONETIZED_LINK",
+    });
+    // The command should not remain pending
+    expect(dependencies.idempotency.complete).toHaveBeenCalledWith(
+      command.idempotencyKey,
+      expect.any(String),
+      expect.objectContaining({ status: "rejected", code: "NO_MONETIZED_LINK" })
+    );
   });
 });

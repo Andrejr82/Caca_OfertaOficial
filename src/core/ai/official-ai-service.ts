@@ -585,17 +585,15 @@ export async function generateOfficialAI(
   const finalLinkUrl = trackedUrl || affiliateUrl;
 
   if (!finalLinkUrl || typeof finalLinkUrl !== "string") {
-    return {
-      status: "rejected",
-      code: "NO_MONETIZED_LINK",
-      message: "Offer does not have a valid monetized link (tracked_url or affiliate_url)",
-      commandId: command.commandId,
-      offerId: command.offerId,
-      offerState: (offer!.state === "approved" || !offer!.state ? "unknown" : offer!.state) as "pending_manual_review" | "selected" | "unknown",
-      failureStage: "draft_generation",
-      replay: false,
-      rejectedAt: new Date().toISOString()
-    };
+    return rejectAndRecord(
+      command, 
+      dependencies, 
+      fingerprint, 
+      "NO_MONETIZED_LINK", 
+      "Offer does not have a valid monetized link (tracked_url or affiliate_url)", 
+      "draft_generation", 
+      (offer!.state === "approved" || !offer!.state ? "unknown" : offer!.state) as "pending_manual_review" | "selected" | "unknown"
+    );
   }
 
   const monetizedLink: any = { tracked_url: finalLinkUrl };
