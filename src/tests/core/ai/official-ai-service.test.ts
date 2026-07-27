@@ -42,9 +42,16 @@ const offer: OfficialAIOffer = {
     correlation_id: "discovery-1",
     discovery_evidence: { provider: "Shopee Native V5" },
     marketplace_metrics: { sourceItemId: "source-1" },
+    affiliate_url: "https://s.shopee.com.br/test-affiliate",
     tracked_url: "https://shopee.com.br/tracked?aff_click=1"
   },
-  createdAt: "2026-07-15T14:00:00.000Z"
+  createdAt: "2026-07-15T14:00:00.000Z",
+  affiliateLinks: [
+    { channel: "telegram", trackedUrl: "https://app.com/go/tg_offer-1" },
+    { channel: "instagram", trackedUrl: "https://app.com/go/ig_offer-1" },
+    { channel: "whatsapp", trackedUrl: "https://app.com/go/wp_offer-1" },
+    { channel: "facebook", trackedUrl: "https://app.com/go/fb_offer-1" }
+  ]
 };
 
 const content: OfficialAIContent = {
@@ -364,7 +371,8 @@ describe("generateOfficialAI", () => {
   it("rejeita e chama idempotency.complete quando a oferta não possui link monetizado", async () => {
     const offerWithoutLink = {
       ...offer,
-      explainability: { ...offer.explainability, tracked_url: undefined, affiliate_url: undefined }
+      explainability: { ...offer.explainability, tracked_url: undefined, affiliate_url: undefined },
+      affiliateLinks: []
     };
     const dependencies = createDependencies({
       offers: { findById: vi.fn().mockResolvedValue(offerWithoutLink) }
@@ -374,13 +382,13 @@ describe("generateOfficialAI", () => {
 
     expect(result).toMatchObject({
       status: "rejected",
-      code: "NO_MONETIZED_LINK",
+      code: "MISSING_CHANNEL_AFFILIATE_LINK",
     });
     // The command should not remain pending
     expect(dependencies.idempotency.complete).toHaveBeenCalledWith(
       command.idempotencyKey,
       expect.any(String),
-      expect.objectContaining({ status: "rejected", code: "NO_MONETIZED_LINK" })
+      expect.objectContaining({ status: "rejected", code: "MISSING_CHANNEL_AFFILIATE_LINK" })
     );
   });
 });

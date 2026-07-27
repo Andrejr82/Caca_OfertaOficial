@@ -70,7 +70,7 @@ export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, 
     if (!urlToCheck.includes("amazon.") && !urlToCheck.includes("amzn.to")) {
       throw new Error("Link incompatível com o marketplace");
     }
-    if (!urlToCheck.includes("tag=") && !urlToCheck.includes("amzn.to")) {
+    if (!urlToCheck.includes("tag=") && !urlToCheck.includes("amzn.to") && !urlToCheck.includes("link.amazon/")) {
       throw new Error("Link incompatível com o marketplace");
     }
   } else if (platform.includes("mercado livre") || platform.includes("mercadolivre")) {
@@ -84,7 +84,7 @@ export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, 
     if (!urlToCheck.includes("shopee.") && !urlToCheck.includes("shope.ee")) {
       throw new Error("Link incompatível com o marketplace");
     }
-    if (!urlToCheck.includes("shope.ee") && !urlToCheck.includes("aff_click") && !urlToCheck.includes("customized")) {
+    if (!urlToCheck.includes("shope.ee") && !urlToCheck.includes("s.shopee.com.br") && !urlToCheck.includes("aff_click") && !urlToCheck.includes("customized")) {
       throw new Error("Link incompatível com o marketplace");
     }
   }
@@ -553,23 +553,20 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
   return { feed, stories, reels, carousel };
 }
 
-export function generateAllMessages(offer: Offer, linkOrLinks: AffiliateLink | AffiliateLink[]) {
-  const linksArray = Array.isArray(linkOrLinks) ? linkOrLinks : [linkOrLinks];
-
-  if (!(offer as any).affiliate_links || (offer as any).affiliate_links.length === 0) {
-    (offer as any).affiliate_links = linksArray;
+export function generateAllMessages(offer: Offer, linksArray: AffiliateLink[]) {
+  const requiredChannels = ["telegram", "whatsapp", "facebook", "instagram"];
+  const safeLinks = Array.isArray(linksArray) ? linksArray : [];
+  const missingChannels = requiredChannels.filter((channel) => !safeLinks.some((link) => link.channel === channel));
+  if (missingChannels.length > 0) {
+    throw new Error(`affiliate_links ausentes para os canais: ${missingChannels.join(", ")}`);
   }
 
-  const getLinkForChannel = (ch: string) => {
-    const fromOffer = Array.isArray((offer as any).affiliate_links)
-      ? (offer as any).affiliate_links.find((l: any) => l.channel === ch)
-      : null;
-    if (fromOffer) return fromOffer;
+  (offer as any).affiliate_links = safeLinks;
 
-    const fromArray = linksArray.find((l: any) => l.channel === ch);
-    if (fromArray) return fromArray;
-
-    return linksArray[0];
+  const getLinkForChannel = (channel: string) => {
+    const link = safeLinks.find((candidate) => candidate.channel === channel);
+    if (!link) throw new Error(`affiliate_links ausentes para o canal: ${channel}`);
+    return link;
   };
 
   return {

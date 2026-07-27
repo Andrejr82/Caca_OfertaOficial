@@ -30,6 +30,7 @@ const VALID_EXPLAINABILITY = {
   correlation_id: "disc-1",
   discovery_evidence: { provider: "Shopee Native V5" },
   marketplace_metrics: { sourceItemId: "src-1" },
+  affiliate_url: "https://s.shopee.com.br/test-affiliate",
   tracked_url: "https://shopee.com.br/produto/1?aff_click=1"
 };
 
@@ -47,7 +48,13 @@ function makeOffer(id: string, valid = true): OfficialAIOffer {
     originalPrice: 149.9,
     category: "Eletronicos",
     explainability: valid ? VALID_EXPLAINABILITY : { contract_version: "legacy" },
-    createdAt: "2026-07-15T14:00:00.000Z"
+    createdAt: "2026-07-15T14:00:00.000Z",
+    affiliateLinks: valid ? [
+      { channel: "telegram", trackedUrl: `https://app.com/go/tg_${id}` },
+      { channel: "instagram", trackedUrl: `https://app.com/go/ig_${id}` },
+      { channel: "whatsapp", trackedUrl: `https://app.com/go/wp_${id}` },
+      { channel: "facebook", trackedUrl: `https://app.com/go/fb_${id}` }
+    ] : []
   };
 }
 
@@ -386,4 +393,3 @@ describe("Cursor Errors", () => {
     expect(deps.idempotency.complete).toHaveBeenCalled();
   });
 });
-

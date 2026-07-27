@@ -29,8 +29,15 @@ function offer(id: string, tenantId = "tenant-1", valid = true): OfficialAIOffer
       contract_version: "pmav5.candidate/v1", candidate_id: `candidate-${id}`,
       ingestion_id: `ingestion-${id}`, correlation_id: "cycle-1",
       discovery_evidence: { provider: "native" }, marketplace_metrics: { sourceItemId: id },
+      affiliate_url: "https://s.shopee.com.br/test-affiliate",
       tracked_url: `https://shopee.com.br/product/${id}?aff_click=1`
-    } : { contract_version: "legacy" }
+    } : { contract_version: "legacy" },
+    affiliateLinks: valid ? [
+      { channel: "telegram", trackedUrl: `https://app.com/go/tg_${id}` },
+      { channel: "instagram", trackedUrl: `https://app.com/go/ig_${id}` },
+      { channel: "whatsapp", trackedUrl: `https://app.com/go/wp_${id}` },
+      { channel: "facebook", trackedUrl: `https://app.com/go/fb_${id}` }
+    ] : []
   };
 }
 

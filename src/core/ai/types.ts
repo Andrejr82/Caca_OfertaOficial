@@ -60,6 +60,13 @@ export interface OfficialAIOffer {
   category: string | null;
   explainability: Record<string, unknown>;
   createdAt: string;
+  affiliateLinks?: readonly OfficialAIAffiliateLink[];
+}
+
+export interface OfficialAIAffiliateLink {
+  channel: OfficialAIChannel;
+  trackedUrl: string;
+  subId?: string;
 }
 
 export interface OfficialAIContent {

@@ -63,9 +63,16 @@ const pendingOffer: OfficialAIOffer = {
     correlation_id: "discovery-pending-1",
     discovery_evidence: { provider: "Shopee Native V5" },
     marketplace_metrics: { sourceItemId: "source-1" },
+    affiliate_url: "https://s.shopee.com.br/test-affiliate",
     tracked_url: "https://shopee.com.br/product/pending?aff_click=1"
   },
-  createdAt: "2026-07-15T14:00:00.000Z"
+  createdAt: "2026-07-15T14:00:00.000Z",
+  affiliateLinks: [
+    { channel: "telegram", trackedUrl: "https://app.com/go/tg_offer-pending" },
+    { channel: "instagram", trackedUrl: "https://app.com/go/ig_offer-pending" },
+    { channel: "whatsapp", trackedUrl: "https://app.com/go/wp_offer-pending" },
+    { channel: "facebook", trackedUrl: "https://app.com/go/fb_offer-pending" }
+  ]
 };
 
 /** Oferta em selected — aciona Approval automaticamente (comportamento anterior) */

@@ -65,13 +65,27 @@ describe("SupabaseOfficialAIAdapter", () => {
         product_name: "Produto", original_url: "https://amazon.com.br/dp/1",
         image_url: "https://images.example.com/1.jpg", current_price: 100, old_price: 120,
         category: "Casa", explainability: { contract_version: "pmav5.candidate/v1" },
-        created_at: "2026-07-15T14:00:00.000Z"
+        created_at: "2026-07-15T14:00:00.000Z",
+        affiliate_links: [
+          { channel: "telegram", tracked_url: "https://caca-oferta-oficial.vercel.app/go/tg_offer-1", sub_id: "tg_offer-1" },
+          { channel: "whatsapp", tracked_url: "https://caca-oferta-oficial.vercel.app/go/wp_offer-1", sub_id: "wp_offer-1" },
+          { channel: "facebook", tracked_url: "https://caca-oferta-oficial.vercel.app/go/fb_offer-1", sub_id: "fb_offer-1" },
+          { channel: "instagram", tracked_url: "https://caca-oferta-oficial.vercel.app/go/ig_offer-1", sub_id: "ig_offer-1" }
+        ]
       }, error: null
     });
     const client = { from: vi.fn(() => builder) };
     const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
 
     await expect(adapter.findById("offer-1", "tenant-1")).resolves.toMatchObject(offer);
+    await expect(adapter.findById("offer-1", "tenant-1")).resolves.toMatchObject({
+      affiliateLinks: [
+        { channel: "telegram", trackedUrl: "https://caca-oferta-oficial.vercel.app/go/tg_offer-1", subId: "tg_offer-1" },
+        { channel: "whatsapp", trackedUrl: "https://caca-oferta-oficial.vercel.app/go/wp_offer-1", subId: "wp_offer-1" },
+        { channel: "facebook", trackedUrl: "https://caca-oferta-oficial.vercel.app/go/fb_offer-1", subId: "fb_offer-1" },
+        { channel: "instagram", trackedUrl: "https://caca-oferta-oficial.vercel.app/go/ig_offer-1", subId: "ig_offer-1" }
+      ]
+    });
     expect(client.from).toHaveBeenCalledWith("offers");
     expect(builder.eq).toHaveBeenCalledWith("id", "offer-1");
     expect(builder.eq).toHaveBeenCalledWith("user_id", "tenant-1");

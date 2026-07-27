@@ -196,6 +196,15 @@ describe("Deterministic Copy Engine Tests", () => {
   });
 
   describe("Geração com múltiplos links (4 canais)", () => {
+    it("deve rejeitar geração sem links nativos para todos os canais", () => {
+      const offer = { ...baseOffer };
+      const telegramOnly = { channel: "telegram", tracked_url: "https://app.com/go/tg_full" } as any;
+
+      expect(() => generateAllMessages(offer, telegramOnly)).toThrow(
+        "affiliate_links ausentes para os canais: telegram, whatsapp, facebook, instagram"
+      );
+    });
+
     it("deve selecionar exatamente o link correto para cada canal a partir de offer.affiliate_links", () => {
       const fullUUID = "11111111-2222-3333-4444-555555555555";
       const offerWithLinks = {
@@ -209,11 +218,7 @@ describe("Deterministic Copy Engine Tests", () => {
         ]
       };
 
-      // Mock the fallback link (this is what `messages/page.tsx` passes today - only Telegram)
-      const fallbackLink = { channel: "telegram", tracked_url: `https://app.com/go/tg_${fullUUID}` } as any;
-
-      // Se a engine usar apenas o fallbackLink, o facebook vai dar erro de "incompatível".
-      const msgs = generateAllMessages(offerWithLinks, fallbackLink);
+      const msgs = generateAllMessages(offerWithLinks, offerWithLinks.affiliate_links as any);
 
       // Telegram deve ter apenas o link tg_
       expect(msgs.telegram).toContain(`tg_${fullUUID}`);

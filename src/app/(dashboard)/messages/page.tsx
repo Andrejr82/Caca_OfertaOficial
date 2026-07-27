@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { generateAllMessages } from "@/lib/messages/generate";
 import { getOfferPosts, listAffiliateLinks, listOffers } from "@/lib/offers/queries";
-import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { GenerateAIMessagesButton, CopyToClipboardButton } from "@/components/messages/message-actions";
 import { Badge } from "@/components/ui/badge";
-import type { AffiliateLink } from "@/types/domain";
 
 export default async function MessagesPage(props: { searchParams: Promise<{ offerId?: string }> }) {
   const searchParams = await props.searchParams;
@@ -42,39 +40,27 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
   // Fallback para o gerador de template clássico se não houver posts no banco
   if (!messages && offer) {
     const offerLinks = links.filter((item) => item.offer_id === offer.id);
-    if (offerLinks.length === 0) {
-      offerLinks.push({
-        id: "preview",
-        user_id: offer.user_id,
-        offer_id: offer.id,
-        channel: "telegram",
-        original_url: offer.original_url,
-        sub_id: createSubId("telegram", offer.product_name, offer.id),
-        tracked_url: createTrackedUrl(offer.original_url, createSubId("telegram", offer.product_name, offer.id)),
-        clicks: 0,
-        created_at: new Date().toISOString()
-      } as AffiliateLink);
-    }
-    const fallbackGen = generateAllMessages(offer, offerLinks);
-    // Para simplificar a visualização, consolidamos os rascunhos de Instagram na visualização de fallback
-    const fallbackInst = [
-      fallbackGen.instagram.feed,
-      "",
-      "=== STORIES SUGERIDOS ===",
-      ...fallbackGen.instagram.stories.map((s) => `• ${s}`),
-      "",
-      "=== REELS SUGERIDO ===",
-      ...fallbackGen.instagram.reels.map((r) => `- ${r}`),
-      "",
-      "=== CARROSSEL SUGERIDO ===",
-      ...fallbackGen.instagram.carousel.map((c) => `- ${c}`)
-    ].join("\n");
+    if (offerLinks.length > 0) {
+      const generated = generateAllMessages(offer, offerLinks);
+      const instagram = [
+        generated.instagram.feed,
+        "",
+        "=== STORIES SUGERIDOS ===",
+        ...generated.instagram.stories.map((s) => `• ${s}`),
+        "",
+        "=== REELS SUGERIDO ===",
+        ...generated.instagram.reels.map((r) => `- ${r}`),
+        "",
+        "=== CARROSSEL SUGERIDO ===",
+        ...generated.instagram.carousel.map((c) => `- ${c}`)
+      ].join("\n");
 
-    messages = {
-      telegram: fallbackGen.telegram,
-      instagramFeed: fallbackInst,
-      whatsapp: fallbackGen.whatsapp
-    };
+      messages = {
+        telegram: generated.telegram,
+        instagramFeed: instagram,
+        whatsapp: generated.whatsapp
+      };
+    }
   }
 
   return (
