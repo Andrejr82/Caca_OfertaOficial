@@ -13,6 +13,16 @@ export function isAmazonAffiliateInput(url: string): boolean {
     || /[?&]tag=/.test(value);
 }
 
+export function isShopeeAffiliateInput(url: string): boolean {
+  const value = url.toLowerCase();
+  return value.includes("s.shopee.com.br/")
+    || value.includes("shope.ee/")
+    || value.includes("aff_click")
+    || value.includes("customized")
+    || value.includes("ext_camp")
+    || value.includes("is_from_login=true");
+}
+
 export function buildExpressAffiliateLinks(input: {
   offerId: string;
   userId: string;
