@@ -88,6 +88,15 @@ function extractJsonLdPrice(html: string): number {
   return 0;
 }
 
+function parseMarketplacePrice(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value !== "string") return 0;
+  const normalized = value.replace(/[^\d,.-]/g, "");
+  if (!normalized) return 0;
+  const parsed = Number(normalized.includes(",") ? normalized.replace(/\./g, "").replace(",", ".") : normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
 // ─── Detector de marketplace ──────────────────────────────────────────────────
 
 function detectPlatform(value: string): Platform {
@@ -166,11 +175,14 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
       const nodes = data?.data?.productOfferV2?.nodes;
       if (Array.isArray(nodes) && nodes.length > 0) {
         const product = nodes.find((node: any) => !node.itemId || String(node.itemId) === String(itemId)) || nodes[0];
-        const price = parseFloat(product.priceMin);
-        if (product.productName && product.imageUrl && price > 0) {
+        const price = parseMarketplacePrice(product.priceMin);
+        const imageUrl = typeof product.imageUrl === "string" && product.imageUrl.startsWith("//")
+          ? `https:${product.imageUrl}`
+          : product.imageUrl;
+        if (product.productName && imageUrl && price > 0) {
           return {
             title: product.productName,
-            imageUrl: product.imageUrl,
+            imageUrl,
             price,
             affiliateUrl: typeof product.offerLink === "string" && isShopeeAffiliateInput(product.offerLink)
               ? product.offerLink
@@ -371,7 +383,7 @@ export async function readSheinMetadata(resolvedUrl: string, htmlBody?: string):
 
 // ─── Leitura de metadados genérico para Amazon ───────────────────────────────
 
-async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
+export async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
   title: string;
   imageUrl: string;
   price: number;
@@ -403,7 +415,7 @@ async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promi
   const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image") || html.match(/"hiRes":"([^"]+)"/)?.[1] || html.match(/"large":"([^"]+)"/)?.[1] || "";
   
   let price = 0;
-  const offscreenMatch = html.match(/<span class="a-offscreen">R\$\s*([\d.,]+)<\/span>/);
+  const offscreenMatch = html.match(/<span[^>]*class=["'][^"']*a-offscreen[^"']*["'][^>]*>\s*(?:R\$\s*)?([\d.,]+)\s*<\/span>/i);
   if (offscreenMatch) {
     price = Number(offscreenMatch[1].replace(/\./g, "").replace(",", "."));
   } else {
