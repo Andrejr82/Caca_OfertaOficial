@@ -259,6 +259,46 @@ async function forceRefreshMLAccessToken(userId: string): Promise<string | null>
 }
 
 /**
+ * Reaproveita uma oferta já validada pelo Oracle quando a API de item bloqueia
+ * a consulta direta. O item_id exato evita trocar o anúncio por outro vendedor.
+ */
+async function findStoredOracleOffer(itemId: string): Promise<LinkMetadata | null> {
+  const clients = [createSupabaseAdminClient(), await createServerSupabaseClient()].filter(Boolean) as Array<NonNullable<ReturnType<typeof createSupabaseAdminClient>>>;
+  for (const client of clients) {
+    try {
+      const { data, error } = await client
+        .from("offers")
+        .select("product_name,current_price,old_price,image_url,original_url,rating,updated_at")
+        .eq("platform", "Mercado Livre")
+        .eq("item_id", itemId)
+        .not("product_name", "is", null)
+        .gt("current_price", 0)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !data) continue;
+
+      return {
+        title: String(data.product_name),
+        platform: "Mercado Livre" as Platform,
+        imageUrl: typeof data.image_url === "string" ? data.image_url : undefined,
+        price: Number(data.current_price),
+        finalUrl: typeof data.original_url === "string" ? data.original_url : undefined,
+        imageSource: "oracle_offer",
+        confidenceScore: 100,
+        extractionDate: data.updated_at || new Date().toISOString(),
+      };
+    } catch (error) {
+      console.warn("[ML API] Falha ao consultar oferta Oracle persistida", {
+        itemId,
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
+    }
+  }
+  return null;
+}
+
+/**
  * Extrai o ID do item ou produto de catálogo de uma URL do Mercado Livre
  */
 export function extractMLId(url: string): { type: "item" | "product"; id: string } | null {
@@ -657,6 +697,11 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       rating
     }};
   } catch (error) {
+    const storedOffer = await findStoredOracleOffer(mlIdInfo.id);
+    if (storedOffer) {
+      console.log("[ML API] Oferta Oracle reutilizada após falha da API", { itemId: mlIdInfo.id });
+      return { ok: true, data: storedOffer };
+    }
     if (error instanceof MLApiRequestError) {
       console.warn("[ML API] Falha HTTP na consulta de produto", {
         itemId: mlIdInfo.id,
