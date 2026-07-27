@@ -522,7 +522,15 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       rating
     }};
   } catch (error) {
-    console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);
+    if (error instanceof MLApiRequestError) {
+      console.warn("[ML API] Falha HTTP na consulta de produto", {
+        itemId: mlIdInfo.id,
+        status: error.status,
+        endpoint: mlIdInfo.type === "item" ? "items" : "products",
+      });
+    } else {
+      console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);
+    }
     return {
       ok: false,
       code: error instanceof MLApiRequestError
