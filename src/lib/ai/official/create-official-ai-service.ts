@@ -46,7 +46,15 @@ export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
   constructor(options: OfficialAIProviderRegistryOptions = {}) {
     const env = options.env ?? process.env;
     const now = options.now ?? Date.now;
-    const primary = this.readProvider(env.LLM_PROVIDER, "LLM_PROVIDER");
+    // A chave é a fonte de verdade operacional. LLM_PROVIDER é opcional para
+    // manter o mesmo comportamento do Oracle/health check quando a Vercel
+    // possui apenas GROQ_API_KEY ou CEREBRAS_API_KEY configurada.
+    const inferredProvider = env.GROQ_API_KEY?.trim()
+      ? "groq"
+      : env.CEREBRAS_API_KEY?.trim()
+        ? "cerebras"
+        : undefined;
+    const primary = this.readProvider(env.LLM_PROVIDER ?? inferredProvider, "LLM_PROVIDER");
     const fallback = env.LLM_FALLBACK
       ? this.readProvider(env.LLM_FALLBACK, "LLM_FALLBACK")
       : undefined;
