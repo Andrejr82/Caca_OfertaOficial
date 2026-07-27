@@ -72,6 +72,17 @@ function normalizePlatform(value: string | null | undefined) {
   return normalizeText(value).toLowerCase();
 }
 
+/** Remove marketplace resize tokens while preserving the original image host/path. */
+export function normalizeSourceImageUrl(value: string) {
+  const url = normalizeText(value);
+  if (!/amazon\./i.test(url)) return url;
+
+  return url
+    .replace(/\._AC_[^/?#]+_/i, "")
+    .replace(/_AC_[^/?#]+_/i, "")
+    .replace(/_(?:SL|SX|SY|UF|QL)\d+(?:,\d+)?_/gi, "");
+}
+
 function isCouponOffer(offer: OfferForPreview) {
   return Boolean(offer.coupon) || normalizeText(offer.product_name).startsWith("[CUPOM]");
 }
@@ -267,7 +278,7 @@ async function generateOfferPreview(
   let imageInput: Buffer;
 
   try {
-    const imageUrl = normalizeText(offer.image_url);
+    const imageUrl = normalizeSourceImageUrl(offer.image_url || "");
     if (!/^https?:\/\//i.test(imageUrl)) {
       throw new Error("MISSING_REMOTE_IMAGE");
     }
@@ -320,3 +331,4 @@ export async function generateOfferOgPreview(offer: OfferForPreview): Promise<Of
 export async function generateOfferWhatsAppPreview(offer: OfferForPreview): Promise<OfferPreviewResult> {
   return generateOfferPreview(offer, "whatsapp");
 }
+
