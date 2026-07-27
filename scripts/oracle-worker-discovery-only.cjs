@@ -456,9 +456,6 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const uniqueProducts = Array.from(uniqueProductsMap.values());
       const candidatesToPersist = uniqueProducts;
 
-      if (!copyQueueOptions) {
-        throw new Error('copyQueueOptions is required. Automatic selection bypassed.');
-      }
       const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger);
       
       if (typeof persistV2Metadata === 'function') {

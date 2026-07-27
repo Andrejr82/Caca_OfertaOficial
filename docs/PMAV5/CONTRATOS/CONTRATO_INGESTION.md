@@ -26,6 +26,8 @@ Transformar Candidate do Worker ou captura autenticada da Extensão em entrada o
 
 `capture` deve conter source URL/item id, marketplace, título, imagem, preço, metadados de origem e evidência de identidade. Credenciais, IA, copy e canais são proibidos.
 
+Publicação Expressa é produtora futura de `capture` autenticado: deve enviar produto normalizado para este contrato e não deve manter persistência direta ou geração de copy como responsabilidade de ingestão.
+
 ## Saída
 
 | Resultado | Campos |

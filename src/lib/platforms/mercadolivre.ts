@@ -259,14 +259,36 @@ function extractMLCatalogId(url: string): string | null {
   return match ? match[1].replace("-", "").toUpperCase() : null;
 }
 
+export type MLApiFailureCode =
+  | "MARKETPLACE_AUTH_DENIED"
+  | "MARKETPLACE_SOURCE_UNAVAILABLE";
+
+export function classifyMLApiFailure(status: number): MLApiFailureCode {
+  if (status === 401 || status === 403) {
+    return "MARKETPLACE_AUTH_DENIED";
+  }
+
+  return "MARKETPLACE_SOURCE_UNAVAILABLE";
+}
+
+export type MLProductDetailsResult =
+  | { ok: true; data: LinkMetadata }
+  | { ok: false; code: MLApiFailureCode | "INVALID_PRODUCT_ID" };
+
+class MLApiRequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
 /**
  * Busca os detalhes do produto do Mercado Livre usando a API oficial
  */
-export async function fetchMLProductDetails(url: string, userId?: string): Promise<LinkMetadata | null> {
+export async function fetchMLProductDetailsResult(url: string, userId?: string): Promise<MLProductDetailsResult> {
   const mlIdInfo = extractMLId(url);
   if (!mlIdInfo) {
     console.warn(`[ML API] Não foi possível extrair um ID do Mercado Livre válido da URL: ${url}`);
-    return null;
+    return { ok: false, code: "INVALID_PRODUCT_ID" };
   }
 
   console.log(`[ML API] ID do Mercado Livre identificado: ${mlIdInfo.id} (${mlIdInfo.type})`);
@@ -325,7 +347,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       }
 
       if (!response.ok) {
-        throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
+        throw new MLApiRequestError(response.status, `Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
       const payload = await response.json();
@@ -333,7 +355,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       if (firstResult && Number(firstResult.code) >= 400) {
         const catalogId = extractMLCatalogId(url);
         if (!catalogId) {
-          throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
+          throw new MLApiRequestError(Number(firstResult.code), `Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
         }
 
         // Links de catálogo podem bloquear o item individual. Nesse caso,
@@ -343,7 +365,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
           { headers },
         );
         if (!catalogItemsResponse.ok) {
-          throw new Error(`Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
+          throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
         }
         const catalogItems = await catalogItemsResponse.json();
         const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
@@ -379,7 +401,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       const response = await fetch(productUrl, { headers });
 
       if (!response.ok) {
-        throw new Error(`Erro ao buscar produto de catálogo ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
+        throw new MLApiRequestError(response.status, `Erro ao buscar produto de catálogo ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
       apiData = await response.json();
@@ -485,7 +507,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
 
     const confidenceScore = price > 0 ? 100 : 70;
 
-    return {
+    return { ok: true, data: {
       title,
       platform: "Mercado Livre" as Platform,
       imageUrl,
@@ -498,11 +520,22 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       official_store_id: apiData ? apiData.official_store_id : undefined,
       available_quantity: apiData ? apiData.available_quantity : undefined,
       rating
-    };
+    }};
   } catch (error) {
     console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);
-    return null;
+    return {
+      ok: false,
+      code: error instanceof MLApiRequestError
+        ? classifyMLApiFailure(error.status)
+        : "MARKETPLACE_SOURCE_UNAVAILABLE",
+    };
   }
+}
+
+/** Compatibilidade para consumidores que ainda esperam apenas metadados ou null. */
+export async function fetchMLProductDetails(url: string, userId?: string): Promise<LinkMetadata | null> {
+  const result = await fetchMLProductDetailsResult(url, userId);
+  return result.ok ? result.data : null;
 }
 
 /**

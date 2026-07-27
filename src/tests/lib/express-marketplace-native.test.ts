@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchShopeeOfficialProduct, readAmazonMetadata } from "@/lib/publish/actions";
+import { classifyMLApiFailure, fetchMLProductDetailsResult } from "@/lib/platforms/mercadolivre";
 
 describe("extração nativa da Publicação Expressa", () => {
   afterEach(() => {
@@ -30,5 +31,27 @@ describe("extração nativa da Publicação Expressa", () => {
       imageUrl: "https://m.media-amazon.com/images/I/tenis.jpg",
       price: 249.9,
     });
+  });
+});
+
+describe("falhas da API do Mercado Livre", () => {
+  it("classifica 403 como credencial ou permissão, não como produto ausente", () => {
+    expect(classifyMLApiFailure(403)).toBe("MARKETPLACE_AUTH_DENIED");
+  });
+
+  it("classifica indisponibilidade não autorizada como fonte temporariamente indisponível", () => {
+    expect(classifyMLApiFailure(429)).toBe("MARKETPLACE_SOURCE_UNAVAILABLE");
+  });
+
+  it("propaga 403 da fonte oficial como falha de autenticação tipada", async () => {
+    vi.spyOn(global, "fetch").mockResolvedValue({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+    } as Response);
+
+    await expect(
+      fetchMLProductDetailsResult("https://produto.mercadolivre.com.br/MLB-6861361746-produto-_JM"),
+    ).resolves.toEqual({ ok: false, code: "MARKETPLACE_AUTH_DENIED" });
   });
 });
