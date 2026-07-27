@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildExpressAffiliateLinks, isAmazonAffiliateInput } from "@/lib/publish/express-affiliate-links";
+import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
 
 describe("buildExpressAffiliateLinks", () => {
   it("gera exatamente um link persistível por canal com UUID completo", () => {
@@ -29,6 +29,15 @@ describe("isAmazonAffiliateInput", () => {
     expect(isAmazonAffiliateInput("https://amzn.to/abc123")).toBe(true);
     expect(isAmazonAffiliateInput("https://www.amazon.com.br/dp/B0ABC12345?tag=loja-20")).toBe(true);
     expect(isAmazonAffiliateInput("https://www.amazon.com.br/dp/B0ABC12345")).toBe(false);
+  });
+});
+
+describe("isShopeeAffiliateInput", () => {
+  it("reconhece shortlinks e assinaturas oficiais, mas não URL comum", () => {
+    expect(isShopeeAffiliateInput("https://s.shopee.com.br/abc")).toBe(true);
+    expect(isShopeeAffiliateInput("https://shope.ee/abc")).toBe(true);
+    expect(isShopeeAffiliateInput("https://shopee.com.br/product/1/2?aff_click=1")).toBe(true);
+    expect(isShopeeAffiliateInput("https://shopee.com.br/product/1/2")).toBe(false);
   });
 });
 
