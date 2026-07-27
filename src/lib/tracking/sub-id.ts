@@ -11,7 +11,6 @@ export function slugifyProductName(productName: string) {
 }
 
 export function createSubId(channel: Channel, productName: string, offerId: string) {
-  const shortId = offerId.replace(/-/g, "").slice(0, 8);
   const channelPrefix = {
     telegram: "tg",
     instagram: "ig",
@@ -21,7 +20,7 @@ export function createSubId(channel: Channel, productName: string, offerId: stri
     blog: "bg"
   }[channel] || "x";
   
-  return `${channelPrefix}_${shortId}`;
+  return `${channelPrefix}_${offerId}`;
 }
 
 export function createTrackedUrl(

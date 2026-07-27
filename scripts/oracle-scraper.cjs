@@ -756,18 +756,32 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
         
         for (const o of offersData) {
           const affUrl = o.explainability?.affiliate_url;
-          if (affUrl && !o.explainability?.tracked_url) {
-            const trkUrl = `${APP_URL}/go/tg_${o.id}`;
-            linksToInsert.push({
-              offer_id: o.id,
-              user_id: o.user_id,
-              original_url: o.original_url,
-              channel: 'telegram',
-              sub_id: `tg_${o.id}`,
-              tracked_url: trkUrl
-            });
-            const newExp = { ...o.explainability, tracked_url: trkUrl };
-            updatesToExplainability.push(getSupabase().from('offers').update({ explainability: newExp }).eq('id', o.id));
+          if (affUrl) {
+            const channels = [
+              { name: 'telegram', prefix: 'tg_' },
+              { name: 'whatsapp', prefix: 'wp_' },
+              { name: 'facebook', prefix: 'fb_' },
+              { name: 'instagram', prefix: 'ig_' }
+            ];
+
+            for (const ch of channels) {
+              const trkUrl = `${APP_URL}/go/${ch.prefix}${o.id}`;
+              linksToInsert.push({
+                offer_id: o.id,
+                user_id: o.user_id,
+                original_url: o.original_url,
+                channel: ch.name,
+                sub_id: `${ch.prefix}${o.id}`,
+                tracked_url: trkUrl
+              });
+            }
+
+            // Mantém o tracked_url primário no explainability, se ainda não houver
+            if (!o.explainability?.tracked_url) {
+              const primaryTrkUrl = `${APP_URL}/go/tg_${o.id}`;
+              const newExp = { ...o.explainability, tracked_url: primaryTrkUrl };
+              updatesToExplainability.push(getSupabase().from('offers').update({ explainability: newExp }).eq('id', o.id));
+            }
           }
         }
         
