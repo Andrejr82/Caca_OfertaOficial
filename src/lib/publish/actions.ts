@@ -437,10 +437,11 @@ export async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string)
 
 async function generateQuickPostActionInternal(
   affiliateUrl: string,
-  channel: Channel | "omnichannel"
+  channel: Channel | "omnichannel",
+  requestId = crypto.randomUUID(),
 ): Promise<QuickPostResult> {
   const inputUrl = affiliateUrl.trim();
-  const operationId = crypto.randomUUID();
+  const operationId = requestId;
 
   log("[Express Start]", { requestId: operationId, inputUrl: sanitizeUrlForLog(inputUrl) });
 
@@ -921,12 +922,13 @@ export async function generateQuickPostAction(
   affiliateUrl: string,
   channel: Channel | "omnichannel",
 ): Promise<QuickPostResult> {
+  const requestId = crypto.randomUUID();
   try {
-    return await generateQuickPostActionInternal(affiliateUrl, channel);
+    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     log("[Express Unhandled Error]", {
-      requestId: crypto.randomUUID(),
+      requestId,
       errorType: error instanceof Error ? error.name : typeof error,
       message: message.slice(0, 240),
     });
