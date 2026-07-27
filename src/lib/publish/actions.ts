@@ -113,6 +113,10 @@ function extractShopeeIds(url: string): { shopId?: string; itemId?: string } {
     const iMatch = parsed.pathname.match(/\/i\.(\d+)\.(\d+)/i);
     if (iMatch) return { shopId: iMatch[1], itemId: iMatch[2] };
 
+    // Shortlinks afiliados podem resolver para /opaanlp/{shopId}/{itemId}.
+    const opaanlpMatch = parsed.pathname.match(/\/opaanlp\/(\d+)\/(\d+)/i);
+    if (opaanlpMatch) return { shopId: opaanlpMatch[1], itemId: opaanlpMatch[2] };
+
     // Parâmetros de query
     const shopId = parsed.searchParams.get("shop_id") || undefined;
     const itemId = parsed.searchParams.get("item_id") || undefined;
@@ -183,7 +187,21 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
 
 // ─── Leitura de metadados HTML (Shopee e fallback) ────────────────────────────
 
-async function readShopeeMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
+function extractShopeeTitleFromUrl(url: string): string {
+  try {
+    const pathname = decodeURIComponent(new URL(url).pathname);
+    const match = pathname.match(/\/([^/]+?)-i\.\d+\.\d+\/?$/i);
+    if (!match) return "";
+    return match[1]
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function readShopeeMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
   title: string;
   imageUrl: string;
   price: number;
@@ -210,9 +228,39 @@ async function readShopeeMetadata(resolvedUrl: string, htmlBody?: string): Promi
     }
   }
 
-  const ogTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
-  const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
-  const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
+  let metadataHtml = html;
+
+  // Links afiliados da Shopee frequentemente resolvem para /opaanlp, uma
+  // página intermediária sem metadados do produto. Tentar a página canônica
+  // pelos IDs preserva a identidade já confirmada sem aceitar dados fictícios.
+  const isOpaanlp = /shopee\.com\.br\/opaanlp\/\d+\/\d+/i.test(resolvedUrl);
+  if (isOpaanlp && (!metaTag(metadataHtml, "og:title") || !metaTag(metadataHtml, "og:image"))) {
+    const directUrl = shopId && itemId
+      ? `https://shopee.com.br/product/${shopId}/${itemId}`
+      : "";
+    if (directUrl) {
+      try {
+        const response = await fetch(directUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9",
+          },
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (response.ok !== false) {
+          const directHtml = await response.text();
+          if (directHtml) metadataHtml = directHtml;
+        }
+      } catch {
+        // A API/HTML original continua sendo usada como fonte disponível.
+      }
+    }
+  }
+
+  const ogTitle = metaTag(metadataHtml, "og:title") || metaTag(metadataHtml, "twitter:title");
+  const imageUrl = metaTag(metadataHtml, "og:image") || metaTag(metadataHtml, "twitter:image") || metaTag(html, "og:image") || metaTag(html, "twitter:image");
+  const rawPrice = metaTag(metadataHtml, "product:price:amount") || metaTag(metadataHtml, "og:price:amount") || metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
   const normalizedPrice = rawPrice?.includes(",")
     ? rawPrice.replace(/\./g, "").replace(",", ".")
     : rawPrice;
@@ -222,8 +270,9 @@ async function readShopeeMetadata(resolvedUrl: string, htmlBody?: string): Promi
   const isGeneric = /(?:shopee|great offer|save big|economize muito|não perca esta oferta)/i.test(ogTitle);
   const sheinRef = /shein/i.test(resolvedUrl) ? parseSheinOneLinkHtml(html) : null;
   const title = (isGeneric && sheinRef?.titleFromUrl) ? sheinRef.titleFromUrl : ogTitle;
+  const finalTitle = title || extractShopeeTitleFromUrl(resolvedUrl);
 
-  return { title, imageUrl, price: Number.isFinite(price) ? price : 0, shopId, itemId };
+  return { title: finalTitle, imageUrl, price: Number.isFinite(price) ? price : 0, shopId, itemId };
 }
 
 // ─── Leitura de metadados genérico para Shein ────────────────────────────────
