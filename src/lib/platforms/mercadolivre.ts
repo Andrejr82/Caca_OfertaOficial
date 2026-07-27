@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { LinkMetadata } from "@/lib/publish/quality-gate";
 import { Platform } from "@/types/domain";
 
@@ -45,9 +46,13 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
 
     const data = await response.json();
     const { access_token, refresh_token: newRefreshToken, expires_in, user_id } = data;
+    if (!access_token || !expires_in) {
+      console.error("[ML API] Resposta de renovação sem access_token ou expires_in.");
+      return null;
+    }
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    const supabase = await createServerSupabaseClient();
+    const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
     if (!supabase) {
       console.error("[ML API] Supabase client não disponível para salvar novo token.");
       return access_token; // Retorna o token mesmo que falhe em salvar no banco (para uso imediato)
@@ -61,7 +66,7 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
           key: "ml_credentials",
           value: {
             access_token,
-            refresh_token: newRefreshToken,
+             refresh_token: newRefreshToken || refreshToken,
             expires_at: expiresAt,
             ml_user_id: user_id
           },
@@ -267,12 +272,12 @@ function extractMLCatalogId(url: string): string | null {
 
 export type MLApiFailureCode =
   | "MARKETPLACE_AUTH_DENIED"
+  | "MARKETPLACE_PERMISSION_DENIED"
   | "MARKETPLACE_SOURCE_UNAVAILABLE";
 
 export function classifyMLApiFailure(status: number): MLApiFailureCode {
-  if (status === 401 || status === 403) {
-    return "MARKETPLACE_AUTH_DENIED";
-  }
+  if (status === 401) return "MARKETPLACE_AUTH_DENIED";
+  if (status === 403) return "MARKETPLACE_PERMISSION_DENIED";
 
   return "MARKETPLACE_SOURCE_UNAVAILABLE";
 }
@@ -326,7 +331,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
   }
 
   try {
-    let title = "Oferta Mercado Livre";
+    let title = "";
     let price = 0;
     let originalPrice: number | null = null;
     let imageUrl: string | undefined;

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchShopeeOfficialProduct, readAmazonMetadata } from "@/lib/publish/actions";
+import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
 import { classifyMLApiFailure, fetchMLProductDetailsResult } from "@/lib/platforms/mercadolivre";
 
 describe("extração nativa da Publicação Expressa", () => {
@@ -36,15 +37,21 @@ describe("extração nativa da Publicação Expressa", () => {
 });
 
 describe("falhas da API do Mercado Livre", () => {
+  it("preserva o link de catálogo quando a identidade veio do fallback anti-bot", () => {
+    const catalogUrl = "https://www.mercadolivre.com.br/produto/p/MLB70426632?pdp_filters=item_id%3AMLB6861361746";
+    expect(chooseMLExtractionUrl(catalogUrl, "https://produto.mercadolivre.com.br/MLB-6861361746", true, "MLB6861361746")).toBe(catalogUrl);
+    expect(chooseMLExtractionUrl(catalogUrl, "https://produto.mercadolivre.com.br/MLB-6861361746", false, "MLB6861361746")).toContain("produto.mercadolivre.com.br");
+  });
+
   it("classifica 403 como credencial ou permissão, não como produto ausente", () => {
-    expect(classifyMLApiFailure(403)).toBe("MARKETPLACE_AUTH_DENIED");
+    expect(classifyMLApiFailure(403)).toBe("MARKETPLACE_PERMISSION_DENIED");
   });
 
   it("classifica indisponibilidade não autorizada como fonte temporariamente indisponível", () => {
     expect(classifyMLApiFailure(429)).toBe("MARKETPLACE_SOURCE_UNAVAILABLE");
   });
 
-  it("propaga 403 da fonte oficial como falha de autenticação tipada", async () => {
+  it("propaga 403 da fonte oficial como falha de permissão tipada", async () => {
     vi.spyOn(global, "fetch").mockResolvedValue({
       ok: false,
       status: 403,
@@ -53,7 +60,7 @@ describe("falhas da API do Mercado Livre", () => {
 
     await expect(
       fetchMLProductDetailsResult("https://produto.mercadolivre.com.br/MLB-6861361746-produto-_JM"),
-    ).resolves.toEqual({ ok: false, code: "MARKETPLACE_AUTH_DENIED" });
+    ).resolves.toEqual({ ok: false, code: "MARKETPLACE_PERMISSION_DENIED" });
   });
 
   it("usa o catálogo quando a consulta do item retorna 403", async () => {

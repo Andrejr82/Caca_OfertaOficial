@@ -15,6 +15,7 @@ import { classifyResolution } from "@/lib/publish/product-extraction-contract";
 import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/express-product-validator";
 import { extractMLId } from "@/lib/platforms/mercadolivre";
 import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
+import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -521,9 +522,15 @@ export async function generateQuickPostAction(
 
     // PASSO 3: Buscar dados do produto via API ML (com OAuth token do usuário)
     // Se caiu no anti-bot mas temos o ID, podemos montar uma URL válida para a API (a API usa o ID)
-    const urlForApi = (resolutionOutcome.status === "confirmed_identity" && itemId)
-      ? `https://produto.mercadolivre.com.br/${itemId.replace("MLB", "MLB-")}`
-      : resolvedUrl;
+    // Preserve the original catalog URL when anti-bot resolution already
+    // confirmed the item. The catalog id is required by the official
+    // /products/{catalog}/items fallback when /items returns 403.
+    const urlForApi = chooseMLExtractionUrl(
+      inputUrl,
+      resolvedUrl,
+      resolutionOutcome.status === "confirmed_identity",
+      itemId,
+    );
     
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Mercado Livre", itemId, identitySource: resolved.identitySource });
     const mlResult = await fetchMLProductDetailsResult(urlForApi, userId);
@@ -531,6 +538,7 @@ export async function generateQuickPostAction(
     if (!mlResult.ok) {
       const failureMessages: Record<string, string> = {
         MARKETPLACE_AUTH_DENIED: "A integração do Mercado Livre precisa ser reconectada para confirmar este produto.",
+        MARKETPLACE_PERMISSION_DENIED: "O Mercado Livre recusou o acesso a este produto para a aplicação. Verifique as permissões da integração.",
         MARKETPLACE_SOURCE_UNAVAILABLE: "O Mercado Livre não respondeu com dados do produto. Tente novamente em alguns minutos.",
         INVALID_PRODUCT_ID: "Não foi possível confirmar a identidade do produto do Mercado Livre.",
       };
