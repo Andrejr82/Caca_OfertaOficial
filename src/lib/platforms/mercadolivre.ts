@@ -134,7 +134,8 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
     return null;
   }
 
-  const { data, error } = await supabase
+  let credentialsOwnerId = userId;
+  let { data, error } = await supabase
     .from("app_settings")
     .select("value")
     .eq("user_id", userId)
@@ -144,6 +145,18 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
   if (error) {
     console.error(`[ML API] Erro ao buscar credenciais do Mercado Livre para usuário ${userId}:`, error);
     return null;
+  }
+
+  if ((!data || !data.value) && userId !== SHARED_ML_CREDENTIALS_OWNER) {
+    const shared = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("user_id", SHARED_ML_CREDENTIALS_OWNER)
+      .eq("key", "ml_credentials")
+      .maybeSingle();
+    data = shared.data;
+    error = shared.error;
+    credentialsOwnerId = SHARED_ML_CREDENTIALS_OWNER;
   }
 
   if (!data || !data.value) {
@@ -158,26 +171,40 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
   // Se o token estiver expirado ou a menos de 5 minutos de expirar, renova
   if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
     console.log(`[ML API] Token do Mercado Livre para ${userId} está expirado ou próximo de expirar. Renovando...`);
-    return refreshMLToken(userId, credentials.refresh_token);
+    return refreshMLToken(credentialsOwnerId, credentials.refresh_token);
   }
 
   return credentials.access_token;
 }
 
+const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
+
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
 async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return null;
-  const { data, error } = await supabase
+  let ownerId = userId;
+  let { data, error } = await supabase
     .from("app_settings")
     .select("value")
     .eq("user_id", userId)
     .eq("key", "ml_credentials")
     .maybeSingle();
+  if (error || !data?.value) {
+    const shared = await supabase
+      .from("app_settings")
+      .select("value")
+      .eq("user_id", SHARED_ML_CREDENTIALS_OWNER)
+      .eq("key", "ml_credentials")
+      .maybeSingle();
+    data = shared.data;
+    error = shared.error;
+    ownerId = SHARED_ML_CREDENTIALS_OWNER;
+  }
   if (error || !data?.value) return null;
   const credentials = data.value as Partial<MLCredentials>;
   if (!credentials.refresh_token) return null;
-  return refreshMLToken(userId, credentials.refresh_token);
+  return refreshMLToken(ownerId, credentials.refresh_token);
 }
 
 /**
