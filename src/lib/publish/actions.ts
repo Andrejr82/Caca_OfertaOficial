@@ -326,7 +326,22 @@ export async function readSheinMetadata(resolvedUrl: string, htmlBody?: string):
   const sourceHtml = productHtml || html;
   const socialTitle = metaTag(sourceHtml, "og:title") || metaTag(sourceHtml, "twitter:title") || metaTag(html, "og:title") || metaTag(html, "twitter:title");
   const isGeneric = /(?:categoria|campanha|collection|great offer|economize muito|não perca)/i.test(socialTitle);
-  const title = (isGeneric && sheinRef?.titleFromUrl) ? sheinRef.titleFromUrl : socialTitle;
+  let jsonLdName = "";
+  let jsonLdImage = "";
+  const jsonLdBlocks = sourceHtml.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi) || [];
+  for (const block of jsonLdBlocks) {
+    try {
+      const data = JSON.parse(block.replace(/<script[^>]*>|<\/script>/gi, "").trim());
+      const entries = Array.isArray(data) ? data : [data];
+      const product = entries.find((entry: any) => entry?.name || entry?.image);
+      if (product) {
+        jsonLdName = typeof product.name === "string" ? decodeHtml(product.name).trim() : "";
+        jsonLdImage = Array.isArray(product.image) ? String(product.image[0] || "") : String(product.image || "");
+        if (jsonLdName || jsonLdImage) break;
+      }
+    } catch { /* ignorar JSON-LD inválido */ }
+  }
+  const title = (isGeneric && sheinRef?.titleFromUrl) ? sheinRef.titleFromUrl : (socialTitle || jsonLdName);
 
   // Tentar extrair título do slug da URL para páginas de produto Shein br.shein.com
   let finalTitle = title;
@@ -340,7 +355,7 @@ export async function readSheinMetadata(resolvedUrl: string, htmlBody?: string):
     } catch { /* ignorar */ }
   }
 
-  const imageUrl = metaTag(sourceHtml, "og:image") || metaTag(sourceHtml, "twitter:image") || metaTag(html, "og:image") || metaTag(html, "twitter:image");
+  const imageUrl = metaTag(sourceHtml, "og:image") || metaTag(sourceHtml, "twitter:image") || jsonLdImage || metaTag(html, "og:image") || metaTag(html, "twitter:image");
   const rawPrice = metaTag(sourceHtml, "product:price:amount") || metaTag(sourceHtml, "og:price:amount") || metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
   const normalizedPrice = rawPrice?.includes(",")
     ? rawPrice.replace(/\./g, "").replace(",", ".")
@@ -653,7 +668,11 @@ export async function generateQuickPostAction(
     title = sheinData.title;
     imageUrl = sheinData.imageUrl;
     price = sheinData.price;
-    generatedAffiliateUrl = canonicalUrl; // Shein: link direto (usuário gera afiliado via app)
+    // OneLink já é monetizado; preserve-o como affiliate_url. Links diretos
+    // continuam sendo tratados como URL canônica para o fluxo manual.
+    generatedAffiliateUrl = /^https?:\/\/onelink\.shein\.com\//i.test(inputUrl)
+      ? inputUrl
+      : canonicalUrl;
 
     log("[Express Parse End]", { requestId: operationId, marketplace: "Shein", hasTitle: !!title, hasPrice: price > 0, hasImage: !!imageUrl });
   }
