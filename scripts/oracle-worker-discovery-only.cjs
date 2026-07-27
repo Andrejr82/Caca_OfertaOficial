@@ -305,7 +305,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -359,7 +359,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       let technicalRejections = 0;
       let rejected = 0;
       
-      for (const product of products) {
+      for (let product of products) {
         const sourceItemId = String(product?.sourceItemId || '');
         if (sourceItemId === 'null' || sourceItemId === 'undefined' || !sourceItemId) {
            technicalRejections += 1;
@@ -376,10 +376,19 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
            continue;
         }
 
-        const gate = qualityGate(product);
-        const titleQuality = validateProductTitle(product.title);
-        const urlValid = /^https:\/\//i.test(String(product.sourceUrl || ''));
-        const imgValid = /^https:\/\//i.test(String(product.imageUrl || ''));
+        let preparedProduct = product;
+        if (typeof prepareCandidate === 'function') {
+          preparedProduct = await prepareCandidate(product, marketplace);
+          if (!preparedProduct) {
+            technicalRejections += 1;
+            continue;
+          }
+        }
+
+        const gate = qualityGate(preparedProduct);
+        const titleQuality = validateProductTitle(preparedProduct.title);
+        const urlValid = /^https:\/\//i.test(String(preparedProduct.sourceUrl || ''));
+        const imgValid = /^https:\/\//i.test(String(preparedProduct.imageUrl || ''));
         const isAccessory = gate.reasons.includes('ACESSORIO_OU_CONSUMIVEL');
         const isPriceInvalid = gate.reasons.includes('PRECO_INVALIDO');
         const amazonMissing = gate.warnings && gate.warnings.includes('DADOS_COMERCIAIS_INDISPONIVEIS');
@@ -389,6 +398,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           continue;
         }
 
+        product = preparedProduct;
         let groupKey = sourceItemId;
         const mLower = String(marketplace).toLowerCase();
         if (mLower === 'mercado livre' && product.sourceUrl) {
@@ -424,12 +434,13 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
            const timeDiff = pTime - eTime;
 
            let shouldReplace = false;
-           if (scoreDiff > 0) shouldReplace = true;
-           else if (scoreDiff === 0 && discDiff > 0) shouldReplace = true;
-           else if (scoreDiff === 0 && discDiff === 0 && priceDiff > 0) shouldReplace = true;
-           else if (scoreDiff === 0 && discDiff === 0 && priceDiff === 0 && posDiff > 0) shouldReplace = true;
-           else if (scoreDiff === 0 && discDiff === 0 && priceDiff === 0 && posDiff === 0 && timeDiff > 0) shouldReplace = true;
-           else if (scoreDiff === 0 && discDiff === 0 && priceDiff === 0 && posDiff === 0 && timeDiff === 0) {
+           // Para o mesmo produto/catalogo, menor preco valido e o criterio editorial primario.
+           if (priceDiff > 0) shouldReplace = true;
+           else if (priceDiff === 0 && scoreDiff > 0) shouldReplace = true;
+           else if (priceDiff === 0 && scoreDiff === 0 && discDiff > 0) shouldReplace = true;
+           else if (priceDiff === 0 && scoreDiff === 0 && discDiff === 0 && posDiff > 0) shouldReplace = true;
+           else if (priceDiff === 0 && scoreDiff === 0 && discDiff === 0 && posDiff === 0 && timeDiff > 0) shouldReplace = true;
+           else if (priceDiff === 0 && scoreDiff === 0 && discDiff === 0 && posDiff === 0 && timeDiff === 0) {
              if (product.sourceItemId.localeCompare(existing.sourceItemId) > 0) shouldReplace = true;
            }
 
@@ -443,7 +454,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
       
       const uniqueProducts = Array.from(uniqueProductsMap.values());
-      const candidatesToPersist = uniqueProducts.slice(0, 200);
+      const candidatesToPersist = uniqueProducts;
 
       if (!copyQueueOptions) {
         throw new Error('copyQueueOptions is required. Automatic selection bypassed.');
