@@ -341,4 +341,21 @@ describe("Amazon e Shein - Resolução e Extração", () => {
     expect(result.finalItemId).toBe("987654");
     expect(result.marketplace).toBe("Shein");
   });
+
+  it("confirma produto Shein quando o OneLink entrega a URL no HTML", async () => {
+    const oneLinkHtml = '<input id="url" value="https://br.shein.com/Tenis-Masculino-p-123456-cat-100.html">';
+    vi.spyOn(global, "fetch").mockResolvedValueOnce({
+      status: 200,
+      ok: true,
+      headers: { get: () => null },
+      url: "https://onelink.shein.com/44/5wio94zbneju",
+      text: async () => oneLinkHtml,
+    } as unknown as Response);
+
+    const result = await resolveMarketplaceUrl("https://onelink.shein.com/44/5wio94zbneju");
+
+    expect(result.finalItemId).toBe("123456");
+    expect(result.resolvedUrl).toContain("br.shein.com/Tenis-Masculino-p-123456-cat-100.html");
+    expect(result.identitySource).toBe("FINAL_URL");
+  });
 });
