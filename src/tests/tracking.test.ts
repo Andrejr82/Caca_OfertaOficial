@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createSubId, createTrackedUrl, slugifyProductName } from "@/lib/tracking/sub-id";
+// CJS helper is exercised directly; the worker has no TypeScript declaration file.
+const { buildAffiliateLinkRows } = require("../../scripts/oracle-scraper.cjs");
 
 describe("tracking helpers", () => {
   it("creates stable channel sub ids without truncation", () => {
@@ -17,6 +19,20 @@ describe("tracking helpers", () => {
 });
 
 describe("Ingestão Oracle (oracle-scraper)", () => {
+  it("gera links reais e completos para os quatro canais", () => {
+    const rows = buildAffiliateLinkRows({
+      id: "12345678-aaaa-bbbb-cccc-123456789000",
+      user_id: "user_123",
+      original_url: "https://example.com",
+    }, "https://app.com/");
+
+    expect(rows.map((row: any) => row.channel)).toEqual([
+      "telegram", "whatsapp", "facebook", "instagram",
+    ]);
+    expect(rows.every((row: any) => row.tracked_url.endsWith(row.sub_id))).toBe(true);
+    expect(rows.every((row: any) => row.sub_id.includes("12345678-aaaa-bbbb-cccc-123456789000"))).toBe(true);
+  });
+
   it("Gera quatro affiliate_links para oferta sem tracked_url", () => {
     const o = {
       id: "12345678-aaaa-bbbb-cccc-123456789000",
