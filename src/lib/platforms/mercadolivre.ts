@@ -233,7 +233,14 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
     accessToken = await getValidMLAccessToken(userId);
   }
 
-  // Fallback para token genérico da aplicação se o usuário não tiver token vinculado
+  // O fluxo nativo/Oracle mantém um token oficial de usuário no ambiente.
+  // Priorizá-lo evita consultar a API com client-credentials, que não possui
+  // permissão para o endpoint de item e retorna 401/403.
+  if (!accessToken) {
+    accessToken = process.env.MERCADO_LIVRE_ACCESS_TOKEN || null;
+  }
+
+  // Último fallback: token genérico da aplicação.
   if (!accessToken) {
     console.log(`[ML API] Usuário sem token OAuth. Utilizando fallback App Token (Client Credentials).`);
     accessToken = await getAppMLAccessToken();
