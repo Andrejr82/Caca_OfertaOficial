@@ -133,11 +133,12 @@ export async function getAppMLAccessToken(): Promise<string | null> {
  * Obtém um token de acesso do Mercado Livre válido para o usuário (renovando se necessário)
  */
 export async function getValidMLAccessToken(userId: string): Promise<string | null> {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) {
-    console.warn("[ML API] Supabase client não disponível ao verificar token.");
-    return null;
-  }
+  try {
+    const supabase = await createServerSupabaseClient();
+    if (!supabase) {
+      console.warn("[ML API] Supabase client não disponível ao verificar token.");
+      return null;
+    }
 
   let credentialsOwnerId = userId;
   let { data, error } = await supabase
@@ -179,7 +180,13 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
     return refreshMLToken(credentialsOwnerId, credentials.refresh_token);
   }
 
-  return credentials.access_token;
+    return credentials.access_token;
+  } catch (error) {
+    console.error("[ML API] Falha inesperada ao carregar credenciais do Mercado Livre; seguindo com token operacional.", {
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return null;
+  }
 }
 
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
