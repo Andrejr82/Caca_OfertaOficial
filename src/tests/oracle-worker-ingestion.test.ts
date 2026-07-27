@@ -160,6 +160,30 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       expect(persistArg[0].candidate.sourceItemId).toBe('MLB2');
     });
 
+    it('prioritizes the lowest valid price within a catalog', async () => {
+      const expensive = {
+        ...validCandidateBase,
+        sourceItemId: 'MLB-expensive',
+        sourceUrl: 'https://produto.mercadolivre.com.br/p/MLB777',
+        currentPrice: 120,
+        deterministicScore: 10,
+        marketplaceMetrics: { item_id: 'MLB-expensive', sourcePosition: 1 }
+      };
+      const cheaper = {
+        ...validCandidateBase,
+        sourceItemId: 'MLB-cheaper',
+        sourceUrl: 'https://produto.mercadolivre.com.br/p/MLB777',
+        currentPrice: 80,
+        deterministicScore: 1,
+        marketplaceMetrics: { item_id: 'MLB-cheaper', sourcePosition: 2 }
+      };
+      mockDiscover.mockResolvedValue([expensive, cheaper]);
+
+      await runDiscoveryOnlyCycle({ ...baseContext, discover: mockDiscover, persist: mockPersist });
+
+      expect(mockPersist.mock.calls[0][0][0].candidate.sourceItemId).toBe('MLB-cheaper');
+    });
+
     it('does not group ML products from different catalogs', async () => {
       const p1 = {
         ...validCandidateBase,
@@ -189,6 +213,55 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       expect(mockPersist).toHaveBeenCalledTimes(1);
       const persistArg = mockPersist.mock.calls[0][0];
       expect(persistArg).toHaveLength(2);
+    });
+
+    it('applies monetization preparation before queue selection', async () => {
+      const invalid = {
+        ...validCandidateBase,
+        sourceItemId: 'MLB-invalid',
+        marketplaceMetrics: { item_id: 'MLB-invalid', sourcePosition: 1 }
+      };
+      const valid = {
+        ...validCandidateBase,
+        sourceItemId: 'MLB-valid',
+        marketplaceMetrics: { item_id: 'MLB-valid', sourcePosition: 2 }
+      };
+      mockDiscover.mockResolvedValue([invalid, valid]);
+
+      await runDiscoveryOnlyCycle({
+        ...baseContext,
+        discover: mockDiscover,
+        persist: mockPersist,
+        prepareCandidate: vi.fn(async (product) => product.sourceItemId === 'MLB-valid'
+          ? { ...product, monetization: { valid: true, affiliateUrl: 'https://meli.la/valid' } }
+          : null),
+      });
+
+      const persistArg = mockPersist.mock.calls[0][0];
+      expect(persistArg).toHaveLength(1);
+      expect(persistArg[0].candidate.sourceItemId).toBe('MLB-valid');
+    });
+
+    it('ranqueia todos os candidatos antes de aplicar o limite da fila', async () => {
+      const candidates = Array.from({ length: 201 }, (_, index) => ({
+        ...validCandidateBase,
+        title: `Cafeteira Marca${index} Modelo ${index + 1000} 1L`,
+        sourceItemId: `MLB-${index}`,
+        sourceUrl: `https://produto.mercadolivre.com.br/MLB-${index}`,
+        currentPrice: 100,
+        deterministicScore: index === 200 ? 10 : 1,
+        marketplaceMetrics: { item_id: `MLB-${index}`, sourcePosition: index + 1 }
+      }));
+      mockDiscover.mockResolvedValue(candidates);
+
+      await runDiscoveryOnlyCycle({
+        ...baseContext,
+        discover: mockDiscover,
+        persist: mockPersist,
+      });
+
+      const persistedIds = mockPersist.mock.calls[0][0].map((ingestion) => ingestion.candidate.sourceItemId);
+      expect(persistedIds).toContain('MLB-200');
     });
   });
 });
