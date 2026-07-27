@@ -31,4 +31,24 @@ describe("Publicação Expressa — metadados Shein OneLink", () => {
       expect.objectContaining({ headers: expect.any(Object) }),
     );
   });
+
+  it("extrai a URL do produto quando o OneLink a entrega em script", async () => {
+    const oneLinkHtml = `window.__DATA__ = {"url":"https:\\/\\/br.shein.com\\/Tenis-Masculino-p-123456-cat-100.html"};`;
+    const productHtml = `
+      <meta property="og:title" content="Tênis Masculino Shein">
+      <meta property="og:image" content="https://img.ltwebstatic.com/product.jpg">
+      <meta property="product:price:amount" content="69.90">
+    `;
+    const fetchMock = vi.fn().mockResolvedValueOnce(new Response(productHtml, { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await readSheinMetadata("https://onelink.shein.com/44/abc", oneLinkHtml);
+
+    expect(result.title).toBe("Tênis Masculino Shein");
+    expect(result.price).toBe(69.9);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://br.shein.com/Tenis-Masculino-p-123456-cat-100.html",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
+  });
 });
