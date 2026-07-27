@@ -436,7 +436,15 @@ type ExpressFallbackAttempt = {
     | "TIMEOUT"
     | "REQUEST_FAILED";
   httpStatus?: number;
+  responseMessage?: string;
 };
+
+function sanitizeFallbackError(value: string): string {
+  return value
+    .replace(/(token|key|secret|authorization)=?[^&\s,}]*/gi, "$1=[redacted]")
+    .replace(/(token|key|secret|authorization)\s*[:=]\s*["'][^"']+["']/gi, "$1=[redacted]")
+    .slice(0, 300);
+}
 
 /**
  * Obtém os dados do produto através do gateway Oracle quando o marketplace
@@ -471,7 +479,15 @@ export async function fetchExpressFallbackMetadataDetailed(url: string): Promise
       body: JSON.stringify({ url, token: oracleApiKey }),
       signal: AbortSignal.timeout(55_000),
     });
-    if (!response.ok) return { data: null, failureCode: "HTTP_ERROR", httpStatus: response.status };
+    if (!response.ok) {
+      const responseMessage = sanitizeFallbackError(await response.text().catch(() => ""));
+      return {
+        data: null,
+        failureCode: "HTTP_ERROR",
+        httpStatus: response.status,
+        ...(responseMessage ? { responseMessage } : {}),
+      };
+    }
 
     const payload = await response.json();
     const extract = payload?.data?.extract;
@@ -842,6 +858,7 @@ export async function generateQuickPostAction(
         marketplace: detectedPlatform,
         failureCode: fallbackAttempt.failureCode,
         ...(fallbackAttempt.httpStatus ? { httpStatus: fallbackAttempt.httpStatus } : {}),
+        ...(fallbackAttempt.responseMessage ? { responseMessage: fallbackAttempt.responseMessage } : {}),
       });
     }
   }
