@@ -173,39 +173,37 @@ export function selectPrimaryAngle(signals: OfferSignals): string {
 
 const callsByAngle: Record<string, string[]> = {
   coupon: [
-    "🎟️ Cupom disponível!",
-    "🏷️ Use o cupom e pague menos!"
+    "CUPOM DISPONÍVEL!",
+    "USE O CUPOM E PAGUE MENOS!"
   ],
   discount: [
-    "💥 Preço caiu!",
-    "📉 Desconto confirmado!",
-    "🔥 Menor preço encontrado!"
+    "🔥 PREÇO ESPECIAL!",
+    "🔥 OFERTA DO DIA!"
   ],
   pix: [
-    "💰 Menor preço no Pix!",
-    "⚡ Economia pagando no Pix!"
+    "PREÇO ESPECIAL NO PIX!",
+    "ECONOMIA PAGANDO NO PIX!"
   ],
   installment: [], // Handled dynamically
   free_shipping: [
-    "📦 Frete grátis confirmado!",
-    "🚚 Aproveite com frete grátis!"
+    "FRETE GRÁTIS CONFIRMADO!",
+    "APROVEITE O FRETE GRÁTIS!"
   ],
   subscription: [
-    "🔄 Menor preço na recorrência!"
+    "MENOR PREÇO NA RECORRÊNCIA!"
   ],
   prime: [
-    "⭐ Oferta exclusiva para Prime!"
+    "OFERTA EXCLUSIVA PARA PRIME!"
   ],
   official_store: [
-    "🏪 Oferta em loja oficial!"
+    "LOJA OFICIAL"
   ],
   best_seller: [
-    "⭐ Mais vendido em oferta!"
+    "MAIS VENDIDO EM OFERTA!"
   ],
   simple_offer: [
-    "🔥 Oferta encontrada!",
-    "🛍️ Achadinho do dia!",
-    "⭐ Vale conferir!"
+    "🔥 OFERTA DO DIA!",
+    "VALE CONFERIR!"
   ]
 };
 
@@ -230,6 +228,11 @@ export function selectStableCall(angle: string, fallbackId: string, channel: str
     }
   }
 
+  if (angle === "discount" && signals.discountPercent) {
+    const icon = signals.discountPercent >= 50 ? "😱" : "🔥";
+    return `${icon} ${signals.discountPercent}% DE DESCONTO!`;
+  }
+
   return list[hash % list.length];
 }
 
@@ -238,17 +241,18 @@ export function buildCommercialBlocks(offer: Offer, commercialData: any, signals
   const blocks: string[] = [];
   const hasPrice = offer.current_price > 0;
 
-  blocks.push(`🛍️ ${offer.product_name}`);
+  blocks.push(offer.product_name);
   blocks.push("");
   
   const storeText = signals.isOfficialStore ? `${normalizeMarketplace(offer.platform)} (Loja Oficial)` : normalizeMarketplace(offer.platform);
-  blocks.push(`🏪 ${storeText}`);
+  blocks.push(storeText);
   blocks.push("");
 
   if (hasPrice) {
     if (signals.hasRealDiscount && offer.old_price) {
       blocks.push(`❌ De: ${formatCurrency(offer.old_price)}`);
       blocks.push(`💰 Por: ${formatCurrency(offer.current_price)} (${signals.discountPercent}% OFF)`);
+      blocks.push(`Economize ${formatCurrency(offer.old_price - offer.current_price)}`);
     } else {
       blocks.push(`💰 Por: ${formatCurrency(offer.current_price)}`);
     }
@@ -342,7 +346,7 @@ export function renderCopy(call: string, blocks: string[], channel: string, link
       throw new Error(`Validation Error: Link incompatível ou ausente para o canal ${channel}.`);
     }
 
-    finalBlocks.push(`👉 Comprar:\n${finalUrl}`);
+    finalBlocks.push(`👇 Comprar:\n${finalUrl}`);
   }
 
   if (hashtags) {
