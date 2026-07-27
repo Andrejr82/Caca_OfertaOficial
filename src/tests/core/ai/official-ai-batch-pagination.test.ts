@@ -29,7 +29,8 @@ const VALID_EXPLAINABILITY = {
   ingestion_id: "ing-1",
   correlation_id: "disc-1",
   discovery_evidence: { provider: "Shopee Native V5" },
-  marketplace_metrics: { sourceItemId: "src-1" }
+  marketplace_metrics: { sourceItemId: "src-1" },
+  tracked_url: "https://shopee.com.br/produto/1?aff_click=1"
 };
 
 function makeOffer(id: string, valid = true): OfficialAIOffer {

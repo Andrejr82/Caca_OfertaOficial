@@ -88,11 +88,11 @@ describe("SupabaseOfficialAIAdapter", () => {
 
     expect(result).toEqual([{ postId: "post-1", affiliateLinkId: "link-1", channel: "telegram", state: "draft" }]);
     expect(link.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      user_id: "tenant-1", offer_id: "offer-1", channel: "telegram", sub_id: "tg_offer1"
+      user_id: "tenant-1", offer_id: "offer-1", channel: "telegram", sub_id: "tg_offer-1"
     }), { onConflict: "offer_id,channel" });
     expect(insertedPost.insert).toHaveBeenCalledWith(expect.objectContaining({
       status: "draft",
-      content: "Telegram oficial\n\n👉 https://cacaoferta.com.br/go/tg_offer1",
+      content: "Telegram oficial\n\n👉 https://cacaoferta.com.br/go/tg_offer-1",
       affiliate_link_id: "link-1"
     }));
   });

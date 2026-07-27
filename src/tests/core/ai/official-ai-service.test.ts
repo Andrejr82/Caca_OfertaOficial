@@ -42,7 +42,7 @@ const offer: OfficialAIOffer = {
     correlation_id: "discovery-1",
     discovery_evidence: { provider: "Shopee Native V5" },
     marketplace_metrics: { sourceItemId: "source-1" },
-    tracked_url: "https://shopee.com.br/tracked"
+    tracked_url: "https://shopee.com.br/tracked?aff_click=1"
   },
   createdAt: "2026-07-15T14:00:00.000Z"
 };
