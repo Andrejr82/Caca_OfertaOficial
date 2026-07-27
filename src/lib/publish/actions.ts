@@ -13,7 +13,7 @@ import { fetchMLProductDetails, generateMLAffiliateLinkWithId, validateAffiliate
 import { resolveMarketplaceUrl } from "@/lib/publish/express-url-resolver";
 import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/express-product-validator";
 import { extractMLId } from "@/lib/platforms/mercadolivre";
-import { buildExpressAffiliateLinks, isAmazonAffiliateInput } from "@/lib/publish/express-affiliate-links";
+import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -127,6 +127,7 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
   title: string;
   imageUrl: string;
   price: number;
+  affiliateUrl: string;
 } | null> {
   const appId = process.env.SHOPEE_APP_ID || "";
   const appSecret = process.env.SHOPEE_APP_SECRET || "";
@@ -135,7 +136,7 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
     return null;
   }
 
-  const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { productName imageUrl priceMin } } }";
+  const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { productName imageUrl priceMin offerLink } } }";
   const keyword = `https://shopee.com.br/product/${shopId}/${itemId}`;
   const variables = { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true };
   const requestBody = JSON.stringify({ query, variables });
@@ -165,7 +166,10 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
         return {
           title: product.productName,
           imageUrl: product.imageUrl,
-          price
+          price,
+          affiliateUrl: typeof product.offerLink === "string" && isShopeeAffiliateInput(product.offerLink)
+            ? product.offerLink
+            : ""
         };
       }
     }
@@ -499,12 +503,14 @@ export async function generateQuickPostAction(
     
     // Se temos shopId e itemId (como no caso do opaanlp), tenta a API oficial primeiro
     let apiSuccess = false;
+    let shopeeAffiliateUrl = "";
     if (shopId && itemId) {
       const apiData = await fetchShopeeOfficialProduct(shopId, itemId);
       if (apiData) {
         title = apiData.title;
         imageUrl = apiData.imageUrl;
         price = apiData.price;
+        shopeeAffiliateUrl = apiData.affiliateUrl;
         apiSuccess = true;
       }
     }
@@ -526,7 +532,16 @@ export async function generateQuickPostAction(
     }
     
     // Shopee: preserva sempre o link afiliado (que pode ser o original s.shopee.com.br ou o resolvido com afiliação)
-    generatedAffiliateUrl = inputUrl.includes("s.shopee.com.br") ? inputUrl : resolvedUrl; 
+    generatedAffiliateUrl = isShopeeAffiliateInput(inputUrl) ? inputUrl : shopeeAffiliateUrl;
+
+    if (!generatedAffiliateUrl) {
+      log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_AFFILIATE_LINK_NOT_RETURNED", stage: "monetization" });
+      return {
+        ok: false,
+        status: "SHOPEE_AFFILIATE_LINK_NOT_RETURNED",
+        message: "A Shopee não retornou um link afiliado para este produto. Use o link da página de afiliados.",
+      };
+    }
 
     log("[Express Parse End]", { requestId: operationId, marketplace: "Shopee", hasTitle: !!title, hasPrice: price > 0, hasImage: !!imageUrl });
   }
