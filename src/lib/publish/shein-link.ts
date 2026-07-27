@@ -35,9 +35,11 @@ function decodeUrl(value: string) {
  * product metadata and is never inferred from the link.
  */
 export function parseSheinOneLinkHtml(html: string): SheinLinkProductReference | null {
-  const match = html.match(/<input[^>]+id=["']url["'][^>]+value=["']([^"']+)["']/i);
-  if (!match) return null;
-  const productUrl = decodeHtml(match[1].trim());
+  const input = html.match(/<input\b[^>]*\bid=["']url["'][^>]*>/i)?.[0];
+  if (!input) return null;
+  const valueMatch = input.match(/\bvalue=["']([^"']+)["']/i);
+  if (!valueMatch) return null;
+  const productUrl = decodeHtml(valueMatch[1].trim());
   const parsed = productUrl.match(/\/([^/?#]+)-p-(\d+)-cat-(\d+)\.html/i);
   if (!parsed) return null;
   const slug = decodeUrl(parsed[1]).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();

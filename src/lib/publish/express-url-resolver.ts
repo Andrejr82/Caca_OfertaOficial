@@ -11,6 +11,7 @@
  */
 
 import { extractMLId } from "../platforms/mercadolivre";
+import { parseSheinOneLinkHtml } from "./shein-link";
 
 export interface UrlResolveOptions {
   maxRedirects?: number;
@@ -196,7 +197,11 @@ function buildFinalResult(
   originalItemId: string | null,
   htmlBody?: string
 ): UrlResolveResult {
-  const finalItemId = extractGenericId(resolvedUrl, marketplace);
+  const sheinReference = marketplace === "Shein" && htmlBody
+    ? parseSheinOneLinkHtml(htmlBody)
+    : null;
+  const canonicalResolvedUrl = sheinReference?.productUrl || resolvedUrl;
+  const finalItemId = extractGenericId(canonicalResolvedUrl, marketplace) || sheinReference?.productId || null;
   
   let identitySource: UrlResolveResult["identitySource"];
   let selectedItemId: string | null = null;
@@ -242,7 +247,7 @@ function buildFinalResult(
   }
 
   return {
-    resolvedUrl,
+    resolvedUrl: canonicalResolvedUrl,
     redirectChain,
     marketplace,
     originalItemId,

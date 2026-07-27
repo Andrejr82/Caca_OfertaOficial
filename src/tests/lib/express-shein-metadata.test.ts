@@ -24,6 +24,8 @@ describe("Publicação Expressa — metadados Shein OneLink", () => {
     );
 
     expect(result.price).toBe(69.9);
+    expect(result.title).toBe("Produto Shein");
+    expect(result.imageUrl).toBe("https://img.shein.test/product.jpg");
     expect(fetchMock).toHaveBeenCalledWith(
       "https://br.shein.com/Produto-p-123456-cat-100.html?onelink=44/abc&url_from=affiliate",
       expect.objectContaining({ headers: expect.any(Object) }),
