@@ -935,7 +935,7 @@ export async function generateQuickPostAction(
     return {
       ok: false,
       status: "EXPRESS_INTERNAL_ERROR",
-      message: "Não foi possível concluir o processamento deste link. Consulte os logs e tente novamente.",
+      message: `Não foi possível concluir o processamento deste link. Código de diagnóstico: ${requestId}`,
     };
   }
 }
