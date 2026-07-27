@@ -7,6 +7,7 @@ describe("extração nativa da Publicação Expressa", () => {
     vi.restoreAllMocks();
     delete process.env.SHOPEE_APP_ID;
     delete process.env.SHOPEE_APP_SECRET;
+    delete process.env.MERCADO_LIVRE_ACCESS_TOKEN;
   });
 
   it("normaliza preço brasileiro e imagem sem protocolo da Shopee Open API", async () => {
@@ -53,5 +54,29 @@ describe("falhas da API do Mercado Livre", () => {
     await expect(
       fetchMLProductDetailsResult("https://produto.mercadolivre.com.br/MLB-6861361746-produto-_JM"),
     ).resolves.toEqual({ ok: false, code: "MARKETPLACE_AUTH_DENIED" });
+  });
+
+  it("usa o catálogo quando a consulta do item retorna 403", async () => {
+    process.env.MERCADO_LIVRE_ACCESS_TOKEN = "test-token";
+    const fetchMock = vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce({ ok: false, status: 403, statusText: "Forbidden" } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ results: [{ item_id: "MLB6861361746", price: 79.9, thumbnail: "https://img.example/item.jpg" }] }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ name: "Massageador Facial", pictures: [{ secure_url: "https://img.example/catalog.jpg" }], permalink: "https://www.mercadolivre.com.br/p/MLB70426632", buy_box_winner: { price: 79.9 } }),
+      } as Response);
+
+    await expect(
+      fetchMLProductDetailsResult("https://www.mercadolivre.com.br/p/MLB70426632?pdp_filters=item_id%3AMLB6861361746"),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { title: "Massageador Facial", price: 79.9, imageUrl: "https://img.example/item.jpg" },
+    });
+    const requests = fetchMock.mock.calls.map(([request]) => String(request));
+    expect(requests).toContain("https://api.mercadolibre.com/products/MLB70426632/items?limit=20");
+    expect(requests).toContain("https://api.mercadolibre.com/products/MLB70426632");
   });
 });
