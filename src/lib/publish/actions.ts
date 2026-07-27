@@ -435,12 +435,13 @@ export async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string)
 
 // ─── Action Principal: Publicação Expressa ────────────────────────────────────
 
-export async function generateQuickPostAction(
+async function generateQuickPostActionInternal(
   affiliateUrl: string,
-  channel: Channel | "omnichannel"
+  channel: Channel | "omnichannel",
+  requestId = crypto.randomUUID(),
 ): Promise<QuickPostResult> {
   const inputUrl = affiliateUrl.trim();
-  const operationId = crypto.randomUUID();
+  const operationId = requestId;
 
   log("[Express Start]", { requestId: operationId, inputUrl: sanitizeUrlForLog(inputUrl) });
 
@@ -915,6 +916,28 @@ export async function generateQuickPostAction(
     trackedUrl: firstLink,
     affiliateUrl: generatedAffiliateUrl,
   };
+}
+
+export async function generateQuickPostAction(
+  affiliateUrl: string,
+  channel: Channel | "omnichannel",
+): Promise<QuickPostResult> {
+  const requestId = crypto.randomUUID();
+  try {
+    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    log("[Express Unhandled Error]", {
+      requestId,
+      errorType: error instanceof Error ? error.name : typeof error,
+      message: message.slice(0, 240),
+    });
+    return {
+      ok: false,
+      status: "EXPRESS_INTERNAL_ERROR",
+      message: "Não foi possível concluir o processamento deste link. Consulte os logs e tente novamente.",
+    };
+  }
 }
 
 // ─── Ações de publicação (stubs — publicação via canais oficiais) ────────────

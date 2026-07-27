@@ -185,7 +185,27 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
 
 async function refreshMLTokenFromEnvironment(): Promise<string | null> {
-  const refreshToken = process.env.MERCADO_LIVRE_REFRESH_TOKEN;
+  // O refresh token do OAuth é rotativo. O valor configurado na Vercel é
+  // apenas o bootstrap; depois da primeira renovação, o token vigente fica
+  // em app_settings. Sempre prefira o valor persistido para não reutilizar
+  // um token antigo e provocar uma falsa necessidade de reconexão.
+  let refreshToken: string | undefined;
+  const admin = createSupabaseAdminClient();
+  if (admin) {
+    const { data, error } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("user_id", SHARED_ML_CREDENTIALS_OWNER)
+      .eq("key", "ml_credentials")
+      .maybeSingle();
+    if (error) {
+      console.warn("[ML API] Não foi possível ler o refresh token operacional persistido; usando bootstrap da Vercel.");
+    } else {
+      const persisted = data?.value as Partial<MLCredentials> | null;
+      refreshToken = persisted?.refresh_token;
+    }
+  }
+  refreshToken ||= process.env.MERCADO_LIVRE_REFRESH_TOKEN;
   if (!refreshToken) return null;
   return refreshMLToken(SHARED_ML_CREDENTIALS_OWNER, refreshToken);
 }
