@@ -263,7 +263,16 @@ async function forceRefreshMLAccessToken(userId: string): Promise<string | null>
  * a consulta direta. O item_id exato evita trocar o anúncio por outro vendedor.
  */
 async function findStoredOracleOffer(itemId: string): Promise<LinkMetadata | null> {
-  const clients = [createSupabaseAdminClient(), await createServerSupabaseClient()].filter(Boolean) as Array<NonNullable<ReturnType<typeof createSupabaseAdminClient>>>;
+  let clients: Array<any> = [];
+  try {
+    clients = [createSupabaseAdminClient(), await createServerSupabaseClient()].filter(Boolean);
+  } catch (error) {
+    console.warn("[ML API] Não foi possível inicializar a leitura da oferta Oracle", {
+      itemId,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return null;
+  }
   for (const client of clients) {
     try {
       const { data, error } = await client
