@@ -32,8 +32,20 @@ const { createClient } = require('@supabase/supabase-js');
 const ws = require('ws');
 require('dotenv').config({ path: '.env.local' });
 
-require('tsx/cjs');
-const { generateMLAffiliateLinkWithId } = require('../src/lib/platforms/mercadolivre.ts');
+function generateMLAffiliateLinkWithId(productUrl, affiliateId) {
+  if (!affiliateId || !affiliateId.trim()) return productUrl;
+  try {
+    const url = new URL(productUrl);
+    url.hash = "";
+    url.searchParams.set("partner_id", affiliateId.trim());
+    url.searchParams.set("utm_source", "caca_oferta");
+    url.searchParams.set("utm_medium", "afiliado");
+    url.searchParams.set("utm_campaign", "express_publication");
+    return url.toString();
+  } catch {
+    return productUrl;
+  }
+}
 
 function processMonetization(marketplace, originalUrl) {
   let affiliateUrl = null;
@@ -57,7 +69,7 @@ function processMonetization(marketplace, originalUrl) {
       valid = false;
     }
   } else if (marketplace === 'Shopee') {
-    valid = originalUrl.includes('shope.ee') || originalUrl.includes('affiliates') || originalUrl.includes('ext_camp') || originalUrl.includes('is_from_login=true');
+    valid = originalUrl.includes('s.shopee.com.br') || originalUrl.includes('shope.ee') || originalUrl.includes('affiliates') || originalUrl.includes('ext_camp') || originalUrl.includes('is_from_login=true');
     if (valid) affiliateUrl = originalUrl;
   } else if (marketplace === 'Shein') {
     valid = originalUrl.includes('affiliateID') || originalUrl.includes('adp');
@@ -1135,4 +1147,6 @@ module.exports = {
   runManualMarketplaceScenarioRecording,
   runScrapingCycle,
   scrapeStore,
+  generateMLAffiliateLinkWithId,
+  processMonetization
 };
