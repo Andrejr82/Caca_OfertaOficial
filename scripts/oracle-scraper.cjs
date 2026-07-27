@@ -82,6 +82,31 @@ function processMonetization(marketplace, originalUrl) {
   return { valid, affiliateUrl };
 }
 
+function prepareDiscoveryCandidate(marketplace, candidate) {
+  const monetization = processMonetization(marketplace, candidate?.sourceUrl);
+  if (!monetization.valid) return null;
+  return { ...candidate, monetization };
+}
+
+const AFFILIATE_CHANNELS = Object.freeze([
+  { name: 'telegram', prefix: 'tg_' },
+  { name: 'whatsapp', prefix: 'wp_' },
+  { name: 'facebook', prefix: 'fb_' },
+  { name: 'instagram', prefix: 'ig_' },
+]);
+
+function buildAffiliateLinkRows(offer, appUrl) {
+  const baseUrl = String(appUrl || '').replace(/\/$/, '');
+  return AFFILIATE_CHANNELS.map((channel) => ({
+    offer_id: offer.id,
+    user_id: offer.user_id,
+    original_url: offer.original_url,
+    channel: channel.name,
+    sub_id: `${channel.prefix}${offer.id}`,
+    tracked_url: `${baseUrl}/go/${channel.prefix}${offer.id}`,
+  }));
+}
+
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
@@ -657,7 +682,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       marketplace_metrics: metrics,
     };
 
-    const monetization = processMonetization(marketplace, candidate.sourceUrl);
+    const monetization = candidate.monetization || processMonetization(marketplace, candidate.sourceUrl);
     if (!monetization.valid) {
       return null;
     }
@@ -749,7 +774,8 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
         .select('id, user_id, original_url, explainability')
         .in('id', offerIds);
         
-      if (offersData && !selectErr) {
+      if (selectErr) throw new Error(`Falha ao consultar ofertas persistidas: ${selectErr.message}`);
+      if (offersData) {
         const linksToInsert = [];
         const updatesToExplainability = [];
         const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://caca-oferta-oficial.vercel.app';
@@ -757,24 +783,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
         for (const o of offersData) {
           const affUrl = o.explainability?.affiliate_url;
           if (affUrl) {
-            const channels = [
-              { name: 'telegram', prefix: 'tg_' },
-              { name: 'whatsapp', prefix: 'wp_' },
-              { name: 'facebook', prefix: 'fb_' },
-              { name: 'instagram', prefix: 'ig_' }
-            ];
-
-            for (const ch of channels) {
-              const trkUrl = `${APP_URL}/go/${ch.prefix}${o.id}`;
-              linksToInsert.push({
-                offer_id: o.id,
-                user_id: o.user_id,
-                original_url: o.original_url,
-                channel: ch.name,
-                sub_id: `${ch.prefix}${o.id}`,
-                tracked_url: trkUrl
-              });
-            }
+            linksToInsert.push(...buildAffiliateLinkRows(o, APP_URL));
 
             // Mantém o tracked_url primário no explainability, se ainda não houver
             if (!o.explainability?.tracked_url) {
@@ -786,8 +795,37 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
         }
         
         if (linksToInsert.length > 0) {
-          await getSupabase().from('affiliate_links').upsert(linksToInsert, { onConflict: 'offer_id, channel' });
-          await Promise.all(updatesToExplainability);
+          const { error: linksError } = await getSupabase()
+            .from('affiliate_links')
+            .upsert(linksToInsert, { onConflict: 'offer_id, channel' });
+          if (linksError) throw new Error(`Falha ao persistir affiliate_links: ${linksError.message}`);
+
+          const { data: persistedLinks, error: verifyError } = await getSupabase()
+            .from('affiliate_links')
+            .select('offer_id, channel, tracked_url, sub_id')
+            .in('offer_id', offersData.map((offer) => offer.id));
+          if (verifyError) throw new Error(`Falha ao verificar affiliate_links: ${verifyError.message}`);
+
+          const linksByOffer = new Map();
+          for (const link of persistedLinks || []) {
+            if (!linksByOffer.has(link.offer_id)) linksByOffer.set(link.offer_id, new Map());
+            linksByOffer.get(link.offer_id).set(link.channel, link);
+          }
+          for (const offer of offersData) {
+            if (!offer.explainability?.affiliate_url) continue;
+            const byChannel = linksByOffer.get(offer.id);
+            for (const channel of AFFILIATE_CHANNELS) {
+              const link = byChannel?.get(channel.name);
+              const expected = `${String(APP_URL).replace(/\/$/, '')}/go/${channel.prefix}${offer.id}`;
+              if (!link || link.tracked_url !== expected || link.sub_id !== `${channel.prefix}${offer.id}`) {
+                throw new Error(`affiliate_links incompletos para offer_id=${offer.id}, canal=${channel.name}`);
+              }
+            }
+          }
+
+          const updateResults = await Promise.all(updatesToExplainability);
+          const updateError = updateResults.find((result) => result?.error)?.error;
+          if (updateError) throw new Error(`Falha ao atualizar explainability: ${updateError.message}`);
         }
       }
     }
@@ -983,6 +1021,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
+    prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: Math.min(50, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1017,6 +1056,7 @@ async function runScrapingCycleCore() {
     discover: (store) => scrapeStore(store, stageLogger),
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
+    prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1060,6 +1100,7 @@ async function runShopeeScenarioRecording(scenario) {
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
+    prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1098,6 +1139,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
+    prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1162,5 +1204,6 @@ module.exports = {
   runScrapingCycle,
   scrapeStore,
   generateMLAffiliateLinkWithId,
-  processMonetization
+  processMonetization,
+  buildAffiliateLinkRows
 };
