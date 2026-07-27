@@ -439,9 +439,11 @@ async function generateQuickPostActionInternal(
   affiliateUrl: string,
   channel: Channel | "omnichannel",
   requestId = crypto.randomUUID(),
+  diagnostics?: { stage: string },
 ): Promise<QuickPostResult> {
   const inputUrl = affiliateUrl.trim();
   const operationId = requestId;
+  const stage = (value: string) => { if (diagnostics) diagnostics.stage = value; };
 
   log("[Express Start]", { requestId: operationId, inputUrl: sanitizeUrlForLog(inputUrl) });
 
@@ -483,6 +485,7 @@ async function generateQuickPostActionInternal(
 
   // ─── Mercado Livre ────────────────────────────────────────────────────────
   if (detectedPlatform === "Mercado Livre") {
+    stage("mercado_livre_extraction");
     // PASSO 1: Resolver URL (seguir meli.la → mercadolivre.com.br)
     log("[Express Link Start]", { requestId: operationId, stage: "resolve_url", marketplace: "Mercado Livre" });
     const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
@@ -767,6 +770,7 @@ async function generateQuickPostActionInternal(
   // ─── Validação Progressiva ────────────────────────────────────────────────
   const platform = detectedPlatform;
   log("[Express Validation]", { requestId: operationId, marketplace: platform, itemId, shopId });
+  stage("validation");
 
   const validation = validateExpressProduct({
     title,
@@ -793,6 +797,7 @@ async function generateQuickPostActionInternal(
   const correlationId = `quick-publication:${operationId}`;
 
   log("[Express Persist Start]", { requestId: operationId, marketplace: platform });
+  stage("persist_offer");
 
   const { data: offer, error: offerError } = await supabase
     .from("offers")
@@ -853,6 +858,8 @@ async function generateQuickPostActionInternal(
     return { ok: false, status: "AFFILIATE_LINKS_CREATE_FAILED", message: "Não foi possível preparar os links rastreáveis da oferta." };
   }
 
+  stage("generate_ai_copy");
+
   const targetChannels: OfficialAIChannel[] = channel === "omnichannel"
     ? ["telegram", "instagram", "whatsapp"]
     : channel === "telegram" || channel === "instagram" || channel === "whatsapp"
@@ -891,6 +898,8 @@ async function generateQuickPostActionInternal(
     return { ok: false, status: "DRAFT_READ_FAILED", message: postsError?.message || "A IA respondeu, mas o rascunho não foi localizado." };
   }
 
+  stage("read_generated_posts");
+
   const copies = Object.fromEntries(
     posts.map((post: any) => [post.channel, post.content])
   ) as QuickPostResult["copies"];
@@ -923,19 +932,21 @@ export async function generateQuickPostAction(
   channel: Channel | "omnichannel",
 ): Promise<QuickPostResult> {
   const requestId = crypto.randomUUID();
+  const diagnostics = { stage: "start" };
   try {
-    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId);
+    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     log("[Express Unhandled Error]", {
       requestId,
+      stage: diagnostics.stage,
       errorType: error instanceof Error ? error.name : typeof error,
       message: message.slice(0, 240),
     });
     return {
       ok: false,
       status: "EXPRESS_INTERNAL_ERROR",
-      message: `Não foi possível concluir o processamento deste link. Código de diagnóstico: ${requestId}`,
+      message: `Não foi possível concluir o processamento deste link. Etapa: ${diagnostics.stage}. Código de diagnóstico: ${requestId}`,
     };
   }
 }
