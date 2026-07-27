@@ -3,6 +3,7 @@ import { isInstagramConfigured } from "@/lib/instagram/client";
 import { hasFacebookEnv, hasTelegramEnv } from "@/lib/env";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
 import { logger } from "@/lib/utils/logger";
 
 export async function POST(request: Request) {
@@ -131,7 +132,23 @@ export async function POST(request: Request) {
       if (!clientId) {
         return NextResponse.json({ ok: false, message: "Erro: MERCADO_LIVRE_APP_ID/MERCADO_LIVRE_CLIENT_ID ausente no arquivo .env.local.", lastCheck: now });
       }
-      return NextResponse.json({ ok: true, message: "Conectado. Credenciais do Mercado Livre válidas. Scraper pronto.", lastCheck: now });
+      const accessToken = await getValidMLAccessToken(user.id);
+      if (!accessToken) {
+        return NextResponse.json({ ok: false, message: "A integração do Mercado Livre precisa ser reconectada.", lastCheck: now });
+      }
+      try {
+        const response = await fetch("https://api.mercadolibre.com/users/me", {
+          headers: { Accept: "application/json", Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(8000),
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data?.id) {
+          return NextResponse.json({ ok: false, message: `Mercado Livre recusou a credencial (HTTP ${response.status}). Reconecte a integração.`, lastCheck: now });
+        }
+        return NextResponse.json({ ok: true, message: "Conectado. OAuth do Mercado Livre validado pela API.", lastCheck: now });
+      } catch {
+        return NextResponse.json({ ok: false, message: "Não foi possível consultar a API do Mercado Livre.", lastCheck: now });
+      }
     }
 
     if (platform === "Amazon") {

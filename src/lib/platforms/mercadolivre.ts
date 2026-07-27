@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { LinkMetadata } from "@/lib/publish/quality-gate";
 import { Platform } from "@/types/domain";
 
@@ -45,9 +46,13 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
 
     const data = await response.json();
     const { access_token, refresh_token: newRefreshToken, expires_in, user_id } = data;
+    if (!access_token || !expires_in) {
+      console.error("[ML API] Resposta de renovação sem access_token ou expires_in.");
+      return null;
+    }
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    const supabase = await createServerSupabaseClient();
+    const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
     if (!supabase) {
       console.error("[ML API] Supabase client não disponível para salvar novo token.");
       return access_token; // Retorna o token mesmo que falhe em salvar no banco (para uso imediato)
@@ -61,7 +66,7 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
           key: "ml_credentials",
           value: {
             access_token,
-            refresh_token: newRefreshToken,
+             refresh_token: newRefreshToken || refreshToken,
             expires_at: expiresAt,
             ml_user_id: user_id
           },
@@ -179,6 +184,12 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
 
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
 
+async function refreshMLTokenFromEnvironment(): Promise<string | null> {
+  const refreshToken = process.env.MERCADO_LIVRE_REFRESH_TOKEN;
+  if (!refreshToken) return null;
+  return refreshMLToken(SHARED_ML_CREDENTIALS_OWNER, refreshToken);
+}
+
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
 async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
   const supabase = await createServerSupabaseClient();
@@ -261,12 +272,12 @@ function extractMLCatalogId(url: string): string | null {
 
 export type MLApiFailureCode =
   | "MARKETPLACE_AUTH_DENIED"
+  | "MARKETPLACE_PERMISSION_DENIED"
   | "MARKETPLACE_SOURCE_UNAVAILABLE";
 
 export function classifyMLApiFailure(status: number): MLApiFailureCode {
-  if (status === 401 || status === 403) {
-    return "MARKETPLACE_AUTH_DENIED";
-  }
+  if (status === 401) return "MARKETPLACE_AUTH_DENIED";
+  if (status === 403) return "MARKETPLACE_PERMISSION_DENIED";
 
   return "MARKETPLACE_SOURCE_UNAVAILABLE";
 }
@@ -320,7 +331,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
   }
 
   try {
-    let title = "Oferta Mercado Livre";
+    let title = "";
     let price = 0;
     let originalPrice: number | null = null;
     let imageUrl: string | undefined;
@@ -348,6 +359,16 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
 
       let catalogFallbackApplied = false;
       if (!response.ok && response.status === 403) {
+        // O Oracle usa o refresh token operacional da Vercel para consultar
+        // produtos de terceiros. Tente esse token antes do fallback de catálogo
+        // quando o OAuth do usuário não tiver permissão para o item.
+        const operationalToken = await refreshMLTokenFromEnvironment();
+        if (operationalToken && operationalToken !== accessToken) {
+          accessToken = operationalToken;
+          headers["Authorization"] = `Bearer ${operationalToken}`;
+          response = await fetch(itemUrl, { headers });
+        }
+
         const catalogId = extractMLCatalogId(url);
         if (catalogId) {
           // O endpoint de item pode negar acesso mesmo com OAuth válido.
