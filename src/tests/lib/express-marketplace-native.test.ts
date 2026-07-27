@@ -86,4 +86,30 @@ describe("falhas da API do Mercado Livre", () => {
     expect(requests).toContain("https://api.mercadolibre.com/products/MLB70426632/items?limit=20");
     expect(requests).toContain("https://api.mercadolibre.com/products/MLB70426632");
   });
+
+  it("usa a primeira oferta do catálogo quando a URL não traz pdp_filters", async () => {
+    vi.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const request = String(input);
+      if (request.endsWith("/products/MLB57427066/items?limit=20")) {
+        return {
+          ok: true,
+          json: async () => ({ results: [{ item_id: "MLB4447861777", price: 26.41, thumbnail: "https://img.example/item.jpg", permalink: "https://produto.mercadolivre.com.br/MLB-4447861777" }] }),
+        } as Response;
+      }
+      if (request.endsWith("/products/MLB57427066")) {
+        return {
+          ok: true,
+          json: async () => ({ name: "Massageador Facial", pictures: [{ secure_url: "https://img.example/catalog.jpg" }], permalink: "https://www.mercadolivre.com.br/p/MLB57427066" }),
+        } as Response;
+      }
+      return { ok: true, text: async () => "" } as Response;
+    });
+
+    await expect(
+      fetchMLProductDetailsResult("https://www.mercadolivre.com.br/massageador/p/MLB57427066"),
+    ).resolves.toMatchObject({
+      ok: true,
+      data: { title: "Massageador Facial", price: 26.41, imageUrl: "https://img.example/item.jpg" },
+    });
+  });
 });
