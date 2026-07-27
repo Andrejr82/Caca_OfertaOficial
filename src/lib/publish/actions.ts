@@ -419,6 +419,60 @@ async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promi
   };
 }
 
+type ExpressFallbackMetadata = {
+  title: string;
+  imageUrl: string;
+  price: number;
+};
+
+/**
+ * Obtém os dados do produto através do gateway Oracle quando o marketplace
+ * entrega uma página anti-bot ou uma casca renderizada por JavaScript ao
+ * servidor da Vercel. O Oracle usa o provedor adequado por marketplace
+ * (Scrapfly para Shopee/ML e Scrape.do para Amazon), mas nunca é a primeira
+ * escolha: APIs oficiais e HTML direto continuam tendo prioridade.
+ */
+export async function fetchExpressFallbackMetadata(url: string): Promise<ExpressFallbackMetadata | null> {
+  const oracleBaseUrl = process.env.ORACLE_REMOTE_URL
+    || process.env.ORACLE_WORKER_URL
+    || process.env.ORACLE_API_URL;
+  const oracleApiKey = process.env.ORACLE_API_KEY;
+
+  if (!oracleBaseUrl || !oracleApiKey) return null;
+
+  let endpoint: string;
+  try {
+    const parsed = new URL(oracleBaseUrl);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    endpoint = `${oracleBaseUrl.replace(/\/+$/, "").replace(/\/api\/scrape$/, "")}/api/scrape`;
+  } catch {
+    return null;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ url, token: oracleApiKey }),
+      signal: AbortSignal.timeout(55_000),
+    });
+    if (!response.ok) return null;
+
+    const payload = await response.json();
+    const extract = payload?.data?.extract;
+    const title = typeof extract?.title === "string" ? extract.title.trim() : "";
+    const imageUrl = typeof extract?.image === "string" ? extract.image.trim() : "";
+    const rawPrice = typeof extract?.price === "number" || typeof extract?.price === "string"
+      ? Number(extract.price)
+      : 0;
+
+    if (!title && !imageUrl && (!Number.isFinite(rawPrice) || rawPrice <= 0)) return null;
+    return { title, imageUrl, price: Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : 0 };
+  } catch {
+    return null;
+  }
+}
+
 // ─── Action Principal: Publicação Expressa ────────────────────────────────────
 
 export async function generateQuickPostAction(
@@ -729,6 +783,34 @@ export async function generateQuickPostAction(
   }
 
   // ─── Validação Progressiva ────────────────────────────────────────────────
+  // Marketplaces podem devolver uma tela anti-bot (ML) ou HTML sem dados
+  // hidratados (Shopee/Amazon). Só nesse caso usamos o gateway Oracle; campos
+  // já confirmados por API oficial nunca são substituídos por scraping.
+  if (!title || !imageUrl || price <= 0) {
+    log("[Express Fallback Start]", {
+      requestId: operationId,
+      marketplace: detectedPlatform,
+      missingTitle: !title,
+      missingImage: !imageUrl,
+      missingPrice: price <= 0,
+    });
+    const fallbackData = await fetchExpressFallbackMetadata(inputUrl);
+    if (fallbackData) {
+      title = title || fallbackData.title;
+      imageUrl = imageUrl || fallbackData.imageUrl;
+      price = price > 0 ? price : fallbackData.price;
+      log("[Express Fallback End]", {
+        requestId: operationId,
+        marketplace: detectedPlatform,
+        hasTitle: !!title,
+        hasImage: !!imageUrl,
+        hasPrice: price > 0,
+      });
+    } else {
+      log("[Express Fallback Unavailable]", { requestId: operationId, marketplace: detectedPlatform });
+    }
+  }
+
   const platform = detectedPlatform;
   log("[Express Validation]", { requestId: operationId, marketplace: platform, itemId, shopId });
 
