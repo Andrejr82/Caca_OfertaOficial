@@ -346,53 +346,84 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
         }
       }
 
-      if (!response.ok) {
+      let catalogFallbackApplied = false;
+      if (!response.ok && response.status === 403) {
+        const catalogId = extractMLCatalogId(url);
+        if (catalogId) {
+          // O endpoint de item pode negar acesso mesmo com OAuth válido.
+          // Reutilizamos o fallback oficial do Oracle: dados de catálogo
+          // continuam trazendo título, preço e imagem da oferta.
+          const catalogItemsResponse = await fetch(
+            `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
+            { headers },
+          );
+          if (!catalogItemsResponse.ok) {
+            throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
+          }
+          const catalogItems = await catalogItemsResponse.json();
+          const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+          const matchedItem = Array.isArray(catalogResults)
+            ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
+            : null;
+          const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
+          const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
+          apiData = { ...catalogData, ...(matchedItem || {}) };
+          title = matchedItem?.title || catalogData.name || catalogData.title || title;
+          price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
+          originalPrice = matchedItem?.original_price || catalogData.original_price || null;
+          permalink = matchedItem?.permalink || catalogData.permalink || permalink;
+          imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
+            || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
+          catalogFallbackApplied = Boolean(matchedItem || catalogData.name || catalogData.title);
+        }
+      }
+
+      if (!response.ok && !catalogFallbackApplied) {
         throw new MLApiRequestError(response.status, `Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
-      const payload = await response.json();
-      const firstResult = Array.isArray(payload) ? payload[0] : null;
-      if (firstResult && Number(firstResult.code) >= 400) {
-        const catalogId = extractMLCatalogId(url);
-        if (!catalogId) {
-          throw new MLApiRequestError(Number(firstResult.code), `Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
-        }
+      if (!catalogFallbackApplied) {
+        const payload = await response.json();
+        const firstResult = Array.isArray(payload) ? payload[0] : null;
+        if (firstResult && Number(firstResult.code) >= 400) {
+          const catalogId = extractMLCatalogId(url);
+          if (!catalogId) {
+            throw new MLApiRequestError(Number(firstResult.code), `Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
+          }
 
-        // Links de catálogo podem bloquear o item individual. Nesse caso,
-        // usa-se o endpoint oficial do catálogo para localizar a oferta real.
-        const catalogItemsResponse = await fetch(
-          `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
-          { headers },
-        );
-        if (!catalogItemsResponse.ok) {
-          throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
-        }
-        const catalogItems = await catalogItemsResponse.json();
-        const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
-        const matchedItem = Array.isArray(catalogResults)
-          ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
-          : null;
-        const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
-        const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
-        apiData = { ...catalogData, ...(matchedItem || {}) };
-        title = matchedItem?.title || catalogData.name || catalogData.title || title;
-        price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
-        originalPrice = matchedItem?.original_price || catalogData.original_price || null;
-        permalink = matchedItem?.permalink || catalogData.permalink || permalink;
-        imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
-          || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
-      } else {
-        apiData = firstResult?.body || payload;
-        title = apiData.title || title;
-        price = apiData.price || 0;
-        originalPrice = apiData.original_price || null;
-        permalink = apiData.permalink || permalink;
+          const catalogItemsResponse = await fetch(
+            `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
+            { headers },
+          );
+          if (!catalogItemsResponse.ok) {
+            throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
+          }
+          const catalogItems = await catalogItemsResponse.json();
+          const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+          const matchedItem = Array.isArray(catalogResults)
+            ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
+            : null;
+          const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
+          const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
+          apiData = { ...catalogData, ...(matchedItem || {}) };
+          title = matchedItem?.title || catalogData.name || catalogData.title || title;
+          price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
+          originalPrice = matchedItem?.original_price || catalogData.original_price || null;
+          permalink = matchedItem?.permalink || catalogData.permalink || permalink;
+          imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
+            || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
+        } else {
+          apiData = firstResult?.body || payload;
+          title = apiData.title || title;
+          price = apiData.price || 0;
+          originalPrice = apiData.original_price || null;
+          permalink = apiData.permalink || permalink;
 
-        if (apiData.pictures && apiData.pictures.length > 0) {
-          // Pega a primeira foto em alta qualidade
-          imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
-        } else if (apiData.thumbnail) {
-          imageUrl = apiData.thumbnail;
+          if (apiData.pictures && apiData.pictures.length > 0) {
+            imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
+          } else if (apiData.thumbnail) {
+            imageUrl = apiData.thumbnail;
+          }
         }
       }
     } else {
