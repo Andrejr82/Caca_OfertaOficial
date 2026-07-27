@@ -248,8 +248,10 @@ export function buildCommercialBlocks(offer: Offer, commercialData: any, signals
   if (hasPrice) {
     if (signals.hasRealDiscount && offer.old_price) {
       blocks.push(`❌ De: ${formatCurrency(offer.old_price)}`);
+      blocks.push(`💰 Por: ${formatCurrency(offer.current_price)} (${signals.discountPercent}% OFF)`);
+    } else {
+      blocks.push(`💰 Por: ${formatCurrency(offer.current_price)}`);
     }
-    blocks.push(`✅ Por: ${formatCurrency(offer.current_price)}`);
     
     if (signals.hasPixBenefit) {
       blocks.push(`💰 No Pix: ${formatCurrency(commercialData.pix_price)}`);
@@ -301,8 +303,48 @@ export function buildCommercialBlocks(offer: Offer, commercialData: any, signals
 }
 
 // Rule 3: Fluxo separado e renderizador simples
-export function renderCopy(call: string, blocks: string[], channel: string, link: Pick<AffiliateLink, "tracked_url">, hashtags: string): string {
-  const finalBlocks = [call, "", ...blocks, `👉 Comprar:\n${link.tracked_url}`];
+export function renderCopy(call: string, blocks: string[], channel: string, link: Pick<AffiliateLink, "tracked_url">, hashtags: string, offer: any): string {
+  const finalBlocks = [call, "", ...blocks];
+
+  if (channel !== "instagram") {
+    let finalUrl = "";
+
+    // Tentar pegar do array affiliate_links injetado no offer
+    if (offer && Array.isArray(offer.affiliate_links)) {
+      const match = offer.affiliate_links.find((l: any) => l.channel === channel);
+      if (match && match.tracked_url) {
+        finalUrl = match.tracked_url;
+      }
+    }
+
+    // Se não encontrou no array, verifica se o link repassado é compatível com o canal
+    if (!finalUrl) {
+      const prefixMap: Record<string, string> = { telegram: "tg_", whatsapp: "wp_", facebook: "fb_" };
+      const requiredPrefix = prefixMap[channel];
+
+      if (requiredPrefix && link.tracked_url) {
+        // Se usar nosso redirecionador, precisa ter o prefixo correto
+        if (link.tracked_url.includes("/go/")) {
+          if (link.tracked_url.includes(`/go/${requiredPrefix}`)) {
+            finalUrl = link.tracked_url;
+          }
+        } else {
+          // Links diretos (ex: meli.la, amzn.to) sem nosso redirecionador são aceitos
+          finalUrl = link.tracked_url;
+        }
+      } else if (!requiredPrefix && link.tracked_url) {
+        // Se for um canal sem prefixo estrito requerido, aceitamos o link fornecido
+        finalUrl = link.tracked_url;
+      }
+    }
+
+    if (!finalUrl) {
+      throw new Error(`Validation Error: Link incompatível ou ausente para o canal ${channel}.`);
+    }
+
+    finalBlocks.push(`👉 Comprar:\n${finalUrl}`);
+  }
+
   if (hashtags) {
     finalBlocks.push("");
     finalBlocks.push(hashtags);
@@ -420,7 +462,7 @@ function processChannel(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, 
   const blocks = buildCommercialBlocks(offer, commercialData, signals);
   const hashtags = generateHashtags(offer, channel);
   
-  const copy = renderCopy(call, blocks, channel, link, hashtags);
+  const copy = renderCopy(call, blocks, channel, link, hashtags, offer);
   const validation = validateGeneratedCopy(copy, offer, commercialData, signals, angle, channel, hashtags, link);
   
   if (!validation.valid) {

@@ -8,7 +8,7 @@ const baseOffer: any = {
   platform: "Shopee",
   product_name: "Cadeira Gamer",
   category: "Móveis",
-  original_url: "https://example.com",
+  original_url: "https://shope.ee/123",
   image_url: null,
   current_price: 99,
   old_price: 149,
@@ -30,10 +30,24 @@ const link: AffiliateLink = {
   offer_id: baseOffer.id,
   channel: "telegram",
   original_url: baseOffer.original_url,
-  tracked_url: "https://shopee.com.br/123",
+  tracked_url: "https://cacaoferta.com.br/go/tg_11111111",
   sub_id: "telegram_fone",
   clicks: 0,
   created_at: new Date().toISOString()
+};
+
+const fbLink: AffiliateLink = {
+  ...link,
+  channel: "facebook",
+  tracked_url: "https://cacaoferta.com.br/go/fb_11111111",
+  sub_id: "facebook_fone"
+};
+
+const wpLink: AffiliateLink = {
+  ...link,
+  channel: "whatsapp",
+  tracked_url: "https://cacaoferta.com.br/go/wp_11111111",
+  sub_id: "whatsapp_fone"
 };
 
 describe("Deterministic Copy Engine Tests", () => {
@@ -117,6 +131,15 @@ describe("Deterministic Copy Engine Tests", () => {
       expect(() => generateTelegramMessage(baseOffer, amzLink)).toThrow("Link incompatível");
     });
 
+    it("canal sem link correspondente é rejeitado", () => {
+      expect(() => generateFacebookMessage(baseOffer, wpLink)).toThrow("Link incompatível ou ausente para o canal facebook");
+    });
+
+    it("canal com link real é aceito e nenhum prefixo é substituído", () => {
+      const fb = generateFacebookMessage(baseOffer, fbLink);
+      expect(fb).toContain("👉 Comprar:\nhttps://cacaoferta.com.br/go/fb_11111111");
+    });
+
     it("Pix inválido omitido", () => {
       const offer = { ...baseOffer, current_price: 100, explainability: { pix_price: 120 } };
       const msg = generateTelegramMessage(offer, link);
@@ -154,12 +177,12 @@ describe("Deterministic Copy Engine Tests", () => {
 
   describe("Regras de Hashtags", () => {
     it("WhatsApp sem hashtags", () => {
-      const msg = generateWhatsAppMessage(baseOffer, link);
+      const msg = generateWhatsAppMessage(baseOffer, wpLink);
       expect(msg).not.toContain("#");
     });
 
     it("Facebook e Telegram dentro dos limites", () => {
-      const fb = generateFacebookMessage(baseOffer, link);
+      const fb = generateFacebookMessage(baseOffer, fbLink);
       const tg = generateTelegramMessage(baseOffer, link);
       
       const fbHashtags = (fb.match(/#/g) || []).length;
