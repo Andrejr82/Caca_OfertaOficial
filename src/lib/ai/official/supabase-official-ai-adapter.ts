@@ -26,6 +26,15 @@ export const STALE_PENDING_AFTER_MS = 5 * 60 * 1000;
 export const DEFAULT_BATCH_SIZE = 50;
 const MAX_BATCH_SIZE = 1000;
 
+function mapAffiliateLinks(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((link): link is { channel: string; tracked_url: string; sub_id?: string } =>
+      Boolean(link && typeof link === "object" && typeof (link as any).channel === "string" && typeof (link as any).tracked_url === "string")
+    )
+    .map((link) => ({ channel: link.channel as any, trackedUrl: link.tracked_url, subId: link.sub_id }));
+}
+
 export function getOfficialAIBatchSize(): number {
   const raw = process.env.OFFICIAL_AI_BATCH_SIZE;
   if (raw === undefined || raw === null || raw.trim() === "") {
@@ -88,7 +97,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
       .eq("id", offerId)
       .eq("user_id", tenantId)
       .maybeSingle();
@@ -107,7 +116,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       originalPrice: data.old_price == null ? null : Number(data.old_price),
       category: data.category,
       explainability: (data.explainability ?? {}) as Record<string, unknown>,
-      createdAt: data.created_at
+      createdAt: data.created_at,
+      affiliateLinks: mapAffiliateLinks((data as any).affiliate_links)
     };
   }
 
@@ -116,7 +126,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     const batchSize = getOfficialAIBatchSize();
     let query = this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
       .eq("user_id", tenantId)
       .eq("status", "pending_manual_review")
       .order("created_at", { ascending: true })
@@ -184,7 +194,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       originalPrice: data.old_price == null ? null : Number(data.old_price),
       category: data.category,
       explainability: (data.explainability ?? {}) as Record<string, unknown>,
-      createdAt: data.created_at
+      createdAt: data.created_at,
+      affiliateLinks: mapAffiliateLinks((data as any).affiliate_links)
     }));
   }
 

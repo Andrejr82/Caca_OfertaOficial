@@ -577,27 +577,30 @@ export async function generateOfficialAI(
     status: offer!.state,
     created_at: offer!.createdAt,
     updated_at: offer!.createdAt,
-    explainability: offer!.explainability
+    explainability: offer!.explainability,
+    affiliate_links: (offer!.affiliateLinks ?? []).map((link) => ({
+      channel: link.channel,
+      tracked_url: link.trackedUrl,
+      sub_id: link.subId
+    }))
   };
 
-  const trackedUrl = (offer!.explainability?.tracked_url as string) || (offer!.explainability?.trackedUrl as string);
-  const affiliateUrl = (offer!.explainability?.affiliate_url as string) || (offer!.explainability?.affiliateUrl as string);
-  const finalLinkUrl = trackedUrl || affiliateUrl;
-
-  if (!finalLinkUrl || typeof finalLinkUrl !== "string") {
+  const requiredChannels = ["telegram", "whatsapp", "facebook", "instagram"] as const;
+  const availableChannels = new Set((mappedOffer.affiliate_links as Array<{ channel: string }>).map((link) => link.channel));
+  const missingChannels = requiredChannels.filter((channel) => !availableChannels.has(channel));
+  if (missingChannels.length > 0) {
     return rejectAndRecord(
-      command, 
-      dependencies, 
-      fingerprint, 
-      "NO_MONETIZED_LINK", 
-      "Offer does not have a valid monetized link (tracked_url or affiliate_url)", 
-      "draft_generation", 
+      command,
+      dependencies,
+      fingerprint,
+      "MISSING_CHANNEL_AFFILIATE_LINK",
+      `Offer does not have affiliate_links for channel(s): ${missingChannels.join(", ")}`,
+      "draft_generation",
       (offer!.state === "approved" || !offer!.state ? "unknown" : offer!.state) as "pending_manual_review" | "selected" | "unknown"
     );
   }
 
-  const monetizedLink: any = { tracked_url: finalLinkUrl };
-  const generatedMessages = generateAllMessages(mappedOffer, monetizedLink);
+  const generatedMessages = generateAllMessages(mappedOffer, mappedOffer.affiliate_links);
 
   const content = {
     title: offer!.productName,
