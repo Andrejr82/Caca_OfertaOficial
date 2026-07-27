@@ -5,6 +5,7 @@ import { createHash } from "crypto";
 import { generateOfficialAI, type OfficialAIChannel, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Channel, Offer, Platform } from "@/types/domain";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
@@ -883,7 +884,11 @@ async function generateQuickPostActionInternal(
     reason: { code: "GENERATE_OFFICIAL_CONTENT" },
   };
 
-  const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(supabase, userId));
+  // O Oracle/Inngest executa a Official AI com service role. Reutilizar o
+  // cliente da sessão aqui quebra o mesmo contrato quando RLS bloqueia
+  // leituras/gravações auxiliares (audit, idempotência, posts e drafts).
+  const aiClient = createSupabaseAdminClient() || supabase;
+  const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(aiClient, userId));
   if (result.status === "rejected") {
     return { ok: false, status: result.code, message: result.message };
   }
