@@ -164,6 +164,22 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
   return credentials.access_token;
 }
 
+/** Força a renovação quando a API rejeita um token ainda marcado como válido. */
+async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("app_settings")
+    .select("value")
+    .eq("user_id", userId)
+    .eq("key", "ml_credentials")
+    .maybeSingle();
+  if (error || !data?.value) return null;
+  const credentials = data.value as Partial<MLCredentials>;
+  if (!credentials.refresh_token) return null;
+  return refreshMLToken(userId, credentials.refresh_token);
+}
+
 /**
  * Extrai o ID do item ou produto de catálogo de uma URL do Mercado Livre
  */
@@ -268,7 +284,18 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       // O endpoint individual /items/{id} pode retornar 403 para aplicativos
       // válidos. O endpoint em lote é o mesmo usado pelo pipeline oficial.
       const itemUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(mlIdInfo.id)}`;
-      const response = await fetch(itemUrl, { headers });
+      let response = await fetch(itemUrl, { headers });
+
+      // Tokens podem ser revogados antes do expires_at. Renova uma vez e
+      // repete a consulta oficial para evitar o falso "nome não confirmado".
+      if (!response.ok && userId && (response.status === 401 || response.status === 403)) {
+        const refreshedToken = await forceRefreshMLAccessToken(userId);
+        if (refreshedToken) {
+          accessToken = refreshedToken;
+          headers["Authorization"] = `Bearer ${refreshedToken}`;
+          response = await fetch(itemUrl, { headers });
+        }
+      }
 
       if (!response.ok) {
         throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
