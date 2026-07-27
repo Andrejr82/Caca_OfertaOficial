@@ -62,6 +62,7 @@ const ALLOWED_INPUT_DOMAINS = [
   "shein.com",
   "onelink.shein.com",
   "amzn.to",
+  "link.amazon",
   "a.co",
   "amazon.com.br",
   "amazon.com",
@@ -91,6 +92,7 @@ const ALLOWED_DESTINATION_DOMAINS = [
   "amazon.com",
   "www.amazon.com.br",
   "amzn.to",
+  "link.amazon",
   "a.co",
 ];
 
