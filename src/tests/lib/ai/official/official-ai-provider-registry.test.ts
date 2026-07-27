@@ -98,6 +98,12 @@ describe("OfficialAIProviderRegistry", () => {
     expect(calledKeys(fetcher)).toEqual(["cerebras-primary-secret", "cerebras-secondary-secret"]);
   });
 
+  it("seleciona Groq quando a chave está configurada mas LLM_PROVIDER não foi definido", async () => {
+    const fetcher = vi.fn().mockResolvedValueOnce(success());
+    await registry(canonicalEnv({ LLM_PROVIDER: undefined, LLM_FALLBACK: undefined, CEREBRAS_API_KEY: "", CEREBRAS_API_KEY_2: "" }), fetcher).registry.resolve().generate(request);
+    expect(calledKeys(fetcher)).toEqual(["groq-primary-secret"]);
+  });
+
   it("rejeita ausência de qualquer credencial", () => {
     expect(() => registry(canonicalEnv({
       CEREBRAS_API_KEY: "", CEREBRAS_API_KEY_2: "", GROQ_API_KEY: "", GROQ_API_KEY_2: ""
