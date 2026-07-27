@@ -111,6 +111,46 @@ describe("SupabaseOfficialAIAdapter", () => {
     }));
   });
 
+  it("reutiliza o link persistido e não duplica URL já presente na copy", async () => {
+    const trackedUrl = "https://caca-oferta-oficial.vercel.app/go/wp_offer-1";
+    const persistedOffer = {
+      ...offer,
+      affiliateLinks: [{ channel: "whatsapp" as const, trackedUrl, subId: "wp_offer-1" }]
+    };
+    const link = chain({ data: { id: "link-wp" }, error: null });
+    const noPost = chain({ data: null, error: null });
+    const insertedPost = chain({ data: { id: "post-wp", affiliate_link_id: "link-wp", channel: "whatsapp", status: "draft" }, error: null });
+    const client = { from: vi.fn().mockReturnValueOnce(link).mockReturnValueOnce(noPost).mockReturnValueOnce(insertedPost) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await adapter.persistDrafts({
+      command: { ...command, channels: ["whatsapp"] },
+      offer: persistedOffer,
+      content: { ...content, channelCopies: { whatsapp: `Copy\n\n👉 Comprar:\n${trackedUrl}` } },
+      channels: ["whatsapp"]
+    });
+
+    expect(link.upsert).toHaveBeenCalledWith(expect.objectContaining({ tracked_url: trackedUrl, sub_id: "wp_offer-1" }), { onConflict: "offer_id,channel" });
+    expect(insertedPost.insert).toHaveBeenCalledWith(expect.objectContaining({ content: `Copy\n\n👉 Comprar:\n${trackedUrl}` }));
+  });
+
+  it("não adiciona URL direta ao draft do Instagram", async () => {
+    const link = chain({ data: { id: "link-ig" }, error: null });
+    const noPost = chain({ data: null, error: null });
+    const insertedPost = chain({ data: { id: "post-ig", affiliate_link_id: "link-ig", channel: "instagram", status: "draft" }, error: null });
+    const client = { from: vi.fn().mockReturnValueOnce(link).mockReturnValueOnce(noPost).mockReturnValueOnce(insertedPost) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await adapter.persistDrafts({
+      command: { ...command, channels: ["instagram"] },
+      offer,
+      content: { ...content, channelCopies: { instagram: "Link na bio do @caca.ofertaoficial" } },
+      channels: ["instagram"]
+    });
+
+    expect(insertedPost.insert).toHaveBeenCalledWith(expect.objectContaining({ content: "Link na bio do @caca.ofertaoficial" }));
+  });
+
   it("reutiliza post draft existente sem inserir outro", async () => {
     const link = chain({ data: { id: "link-1" }, error: null });
     const existingPost = chain({ data: { id: "post-1", affiliate_link_id: "link-1", channel: "telegram", status: "draft" }, error: null });

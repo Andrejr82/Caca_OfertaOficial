@@ -203,8 +203,9 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     const drafts = [];
     for (const channel of input.channels) {
       const startedAt = Date.now();
-      const subId = createSubId(channel, input.offer.productName, input.offer.id);
-      const trackedUrl = createTrackedUrl(input.offer.originalUrl, subId);
+      const persistedLink = input.offer.affiliateLinks?.find((link) => link.channel === channel);
+      const subId = persistedLink?.subId ?? createSubId(channel, input.offer.productName, input.offer.id);
+      const trackedUrl = persistedLink?.trackedUrl ?? createTrackedUrl(input.offer.originalUrl, subId);
       const { data: link, error: linkError } = await this.client
         .from("affiliate_links")
         .upsert({
@@ -243,10 +244,24 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
             offer_id: input.offer.id,
             affiliate_link_id: link.id,
             channel,
-          // Mantém o CTA e o link na mesma linha quando o template termina
-          // com o indicador de ação (evita o dedo apontar para o vazio).
           content: (() => {
             const copy = (input.content.channelCopies[channel] || "").trimEnd();
+            const urls = copy.match(/https?:\/\/\S+/g) ?? [];
+
+            if (channel === "instagram") {
+              if (urls.length > 0) {
+                throw new Error("Instagram copy cannot contain a direct URL");
+              }
+              return copy;
+            }
+
+            if (urls.length > 0) {
+              if (urls.length === 1 && urls[0] === trackedUrl) return copy;
+              throw new Error(`Copy contains an invalid or duplicate URL for ${channel}`);
+            }
+
+            // Mantém o CTA e o link na mesma linha quando o template termina
+            // com o indicador de ação (evita o dedo apontar para o vazio).
             return copy.endsWith("👉") ? `${copy} ${trackedUrl}` : `${copy}\n\n👉 ${trackedUrl}`;
           })(),
             status: "draft"
