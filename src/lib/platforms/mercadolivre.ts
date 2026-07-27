@@ -185,11 +185,14 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
 
 async function refreshMLTokenFromEnvironment(): Promise<string | null> {
-  // O refresh token do OAuth é rotativo. O valor configurado na Vercel é
-  // apenas o bootstrap; depois da primeira renovação, o token vigente fica
-  // em app_settings. Sempre prefira o valor persistido para não reutilizar
-  // um token antigo e provocar uma falsa necessidade de reconexão.
-  let refreshToken: string | undefined;
+  // O Oracle usa o refresh token operacional configurado na Vercel. Como o
+  // Mercado Livre pode rotacioná-lo, também tentamos o valor persistido no
+  // Supabase. Os dois são tentados isoladamente: um token persistido inválido
+  // não pode bloquear o token operacional válido (e vice-versa).
+  const candidates: Array<{ source: "environment" | "supabase"; token: string }> = [];
+  const environmentToken = process.env.MERCADO_LIVRE_REFRESH_TOKEN;
+  if (environmentToken) candidates.push({ source: "environment", token: environmentToken });
+
   const admin = createSupabaseAdminClient();
   if (admin) {
     const { data, error } = await admin
@@ -202,12 +205,22 @@ async function refreshMLTokenFromEnvironment(): Promise<string | null> {
       console.warn("[ML API] Não foi possível ler o refresh token operacional persistido; usando bootstrap da Vercel.");
     } else {
       const persisted = data?.value as Partial<MLCredentials> | null;
-      refreshToken = persisted?.refresh_token;
+      if (persisted?.refresh_token && persisted.refresh_token !== environmentToken) {
+        candidates.push({ source: "supabase", token: persisted.refresh_token });
+      }
     }
   }
-  refreshToken ||= process.env.MERCADO_LIVRE_REFRESH_TOKEN;
-  if (!refreshToken) return null;
-  return refreshMLToken(SHARED_ML_CREDENTIALS_OWNER, refreshToken);
+
+  for (const candidate of candidates) {
+    const accessToken = await refreshMLToken(SHARED_ML_CREDENTIALS_OWNER, candidate.token);
+    if (accessToken) {
+      console.log(`[ML API] Token operacional renovado pela fonte ${candidate.source}.`);
+      return accessToken;
+    }
+    console.warn(`[ML API] Refresh operacional rejeitado pela fonte ${candidate.source}; tentando a próxima fonte.`);
+  }
+
+  return null;
 }
 
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
@@ -355,6 +368,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
     let price = 0;
     let originalPrice: number | null = null;
     let imageUrl: string | undefined;
+    let catalogOfferImageUrl: string | undefined;
     let permalink = url;
     let htmlContent: string | null = null;
     let rating: number | undefined = undefined;
@@ -365,6 +379,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       // válidos. O endpoint em lote é o mesmo usado pelo pipeline oficial.
       const itemUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(mlIdInfo.id)}`;
       let response = await fetch(itemUrl, { headers });
+      console.log("[ML API] Consulta de item concluída", { itemId: mlIdInfo.id, status: response.status, endpoint: "items" });
 
       // Tokens podem ser revogados antes do expires_at. Renova uma vez e
       // repete a consulta oficial para evitar o falso "nome não confirmado".
@@ -387,6 +402,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
           accessToken = operationalToken;
           headers["Authorization"] = `Bearer ${operationalToken}`;
           response = await fetch(itemUrl, { headers });
+          console.log("[ML API] Consulta de item após refresh concluída", { itemId: mlIdInfo.id, status: response.status, endpoint: "items" });
         }
 
         const catalogId = extractMLCatalogId(url);
@@ -398,6 +414,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
             `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
             { headers },
           );
+          console.log("[ML API] Consulta de ofertas do catálogo concluída", { catalogId, status: catalogItemsResponse.status, endpoint: "products/items" });
           if (!catalogItemsResponse.ok) {
             throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
           }
@@ -436,6 +453,7 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
             `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
             { headers },
           );
+          console.log("[ML API] Consulta de ofertas do catálogo concluída", { catalogId, status: catalogItemsResponse.status, endpoint: "products/items" });
           if (!catalogItemsResponse.ok) {
             throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
           }
@@ -480,8 +498,44 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       title = apiData.name || apiData.title || title;
       permalink = apiData.permalink || permalink;
 
+      // O endpoint /products/{id} descreve o catálogo, mas normalmente não
+      // contém o preço da oferta. O Oracle consulta as ofertas do catálogo
+      // como fonte primária; reproduzimos esse contrato aqui para que um link
+      // /p/MLB... também seja processável sem exigir pdp_filters.
+      try {
+        const catalogItemsResponse = await fetch(
+          `${productUrl}/items?limit=20`,
+          { headers },
+        );
+        if (catalogItemsResponse.ok) {
+          const catalogItems = await catalogItemsResponse.json();
+          const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+          const firstOffer = Array.isArray(catalogResults) ? catalogResults.find((item: any) => Number(item.price) > 0) || catalogResults[0] : null;
+          if (firstOffer) {
+            apiData = { ...apiData, ...firstOffer };
+            permalink = firstOffer.permalink || permalink;
+            catalogOfferImageUrl = firstOffer.thumbnail || firstOffer.pictures?.[0]?.secure_url || firstOffer.pictures?.[0]?.url;
+            imageUrl = catalogOfferImageUrl || imageUrl;
+            price = Number(firstOffer.price) || 0;
+          }
+        } else {
+          console.warn("[ML API] Falha ao buscar ofertas do catálogo", {
+            catalogId: mlIdInfo.id,
+            status: catalogItemsResponse.status,
+            endpoint: "products/items",
+          });
+        }
+      } catch (catalogError) {
+        console.warn("[ML API] Erro ao buscar ofertas do catálogo", {
+          catalogId: mlIdInfo.id,
+          errorType: catalogError instanceof Error ? catalogError.name : typeof catalogError,
+        });
+      }
+
       // Obtém preço do buy box
-      if (apiData.buy_box_winner) {
+      if (price > 0) {
+        // A oferta do catálogo já forneceu o preço atual.
+      } else if (apiData.buy_box_winner) {
         price = apiData.buy_box_winner.price || 0;
       } else if (apiData.price) {
         price = apiData.price;
@@ -509,7 +563,9 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
         }
       }
 
-      if (apiData && apiData.pictures && apiData.pictures.length > 0) {
+      if (catalogOfferImageUrl) {
+        imageUrl = catalogOfferImageUrl;
+      } else if (apiData && apiData.pictures && apiData.pictures.length > 0) {
         imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
       } else if (apiData && apiData.thumbnail) {
         imageUrl = apiData.thumbnail;
