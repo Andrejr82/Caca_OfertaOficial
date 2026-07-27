@@ -57,19 +57,34 @@ function toPascalCase(str: string) {
 }
 
 export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  const url = link.tracked_url.toLowerCase();
+  const trackedUrl = (link.tracked_url || "").toLowerCase();
+  const affiliateUrl = (offer.explainability?.affiliate_url || "").toLowerCase();
+  const originalUrl = (offer.original_url || "").toLowerCase();
   const platform = (offer.platform || "").toLowerCase();
-  
+
+  const isGoRedirect = trackedUrl.includes("/go/");
+  // Se for redirect /go/, nós exigimos que a oferta possua um affiliate_url ou que a original_url possua monetização.
+  const urlToCheck = isGoRedirect ? (affiliateUrl || originalUrl) : trackedUrl;
+
   if (platform.includes("amazon")) {
-    if (!url.includes("amazon.") && !url.includes("amzn.to")) {
+    if (!urlToCheck.includes("amazon.") && !urlToCheck.includes("amzn.to")) {
+      throw new Error("Link incompatível com o marketplace");
+    }
+    if (!urlToCheck.includes("tag=") && !urlToCheck.includes("amzn.to")) {
       throw new Error("Link incompatível com o marketplace");
     }
   } else if (platform.includes("mercado livre") || platform.includes("mercadolivre")) {
-    if (!url.includes("mercadolivre.") && !url.includes("meli.la")) {
+    if (!urlToCheck.includes("mercadolivre.") && !urlToCheck.includes("meli.la")) {
+      throw new Error("Link incompatível com o marketplace");
+    }
+    if (!urlToCheck.includes("meli.la") && !urlToCheck.includes("camp=") && !urlToCheck.includes("partner_id=") && !urlToCheck.includes("afiliados")) {
       throw new Error("Link incompatível com o marketplace");
     }
   } else if (platform.includes("shopee")) {
-    if (!url.includes("shopee.")) {
+    if (!urlToCheck.includes("shopee.") && !urlToCheck.includes("shope.ee")) {
+      throw new Error("Link incompatível com o marketplace");
+    }
+    if (!urlToCheck.includes("shope.ee") && !urlToCheck.includes("aff_click") && !urlToCheck.includes("customized")) {
       throw new Error("Link incompatível com o marketplace");
     }
   }
