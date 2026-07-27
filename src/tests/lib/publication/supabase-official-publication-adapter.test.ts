@@ -63,9 +63,9 @@ describe("SupabaseOfficialPublicationAdapter", () => {
     const offerBuilder = chain({ data: { id: "offer-1", user_id: "tenant-1", status: "approved" }, error: null });
     const postBuilder = chain({
       data: {
-        id: "post-1", user_id: "tenant-1", offer_id: "offer-1", channel: "instagram",
-        status: "draft", content: "Persistido", offers: {
-          image_url: "https://images.example/1.jpg", product_name: "Produto", notes: null
+          id: "post-1", user_id: "tenant-1", offer_id: "offer-1", channel: "instagram",
+          status: "draft", content: "Persistido", offers: {
+          id: "offer-1", image_url: "https://images.example/1.jpg", product_name: "Produto", notes: null
         }
       }, error: null
     });
@@ -77,11 +77,36 @@ describe("SupabaseOfficialPublicationAdapter", () => {
     await expect(adapter.findOffer("offer-1", "tenant-1")).resolves.toEqual({ id: "offer-1", tenantId: "tenant-1", state: "approved", version: 2 });
     await expect(adapter.findPost("post-1", "tenant-1")).resolves.toMatchObject({
       id: "post-1", offerId: "offer-1", channel: "instagram", state: "draft", version: 0,
-      content: "Persistido", mediaUrl: "https://images.example/1.jpg", destination: "instagram-account",
+      content: "Persistido", mediaUrl: "https://caca-oferta-oficial.vercel.app/api/images/whatsapp-premium?offerId=offer-1", destination: "instagram-account",
       metadata: { instagramMode: "asynchronous" }
     });
     expect(offerBuilder.eq).toHaveBeenCalledWith("user_id", "tenant-1");
     expect(postBuilder.eq).toHaveBeenCalledWith("user_id", "tenant-1");
+  });
+
+  it("uses the processed social image for every non-coupon publication channel", async () => {
+    const expectedMediaUrl = "https://caca-oferta-oficial.vercel.app/api/images/whatsapp-premium?offerId=offer-1";
+
+    for (const channel of ["telegram", "whatsapp", "facebook", "instagram"] as const) {
+      const postBuilder = chain({
+        data: {
+          id: `post-${channel}`, user_id: "tenant-1", offer_id: "offer-1", channel,
+          status: "draft", content: "Persistido", offers: {
+            id: "offer-1", image_url: "https://m.media-amazon.com/images/I/61Kvr5FA5mL._AC_UL320_.jpg",
+            product_name: "Produto", notes: null, platform: "Amazon", coupon: null
+          }, affiliate_links: { tracked_url: "https://example.com/go" }
+        }, error: null
+      });
+      const client = { from: vi.fn().mockReturnValue(postBuilder) };
+      const adapter = new SupabaseOfficialPublicationAdapter(client as never, "tenant-1", {
+        telegram: "@ofertas", whatsapp: "group@g.us", instagram: "instagram-account", facebook: "facebook-page"
+      });
+
+      await expect(adapter.findPost(`post-${channel}`, "tenant-1")).resolves.toMatchObject({
+        channel,
+        mediaUrl: expectedMediaUrl
+      });
+    }
   });
 
   it("persists an immutable receipt before updating technical post metadata", async () => {
@@ -168,3 +193,4 @@ it("OfficialPublicationStateAdapter delegates both final states exclusively to t
   await expect(memory.findById("post", "post-1", "tenant-1")).resolves.toMatchObject({ state: "published" });
   await expect(memory.findById("offer", "offer-1", "tenant-1")).resolves.toMatchObject({ state: "posted" });
 });
+

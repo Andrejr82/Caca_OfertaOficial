@@ -51,14 +51,11 @@ function instagramMode(offer: { product_name?: string | null; notes?: string | n
   return coupon ? "synchronous" : "asynchronous";
 }
 
-function facebookPremiumImageUrl(offer: {
+function socialImageUrl(offer: {
   id?: string | null;
-  platform?: string | null;
   image_url?: string | null;
 }) {
-  const platform = String(offer.platform ?? "").trim().toLowerCase().replace(/[ _-]+/g, "");
-  const shouldUsePremium = platform === "amazon" || platform === "mercadolivre";
-  if (!shouldUsePremium || !offer.id) return offer.image_url ?? null;
+  if (!offer.id) return offer.image_url ?? null;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
   return `${baseUrl.replace(/\/$/, "")}/api/images/whatsapp-premium?offerId=${encodeURIComponent(offer.id)}`;
@@ -70,8 +67,7 @@ function resolvePublicationImage(
 ) {
   if (!offer) return Promise.resolve(null);
   if (isCouponOffer(offer)) return resolveCouponPublishImageUrl(offer);
-  if (channel === "facebook") return Promise.resolve(facebookPremiumImageUrl(offer));
-  return Promise.resolve(offer.image_url ?? null);
+  return Promise.resolve(socialImageUrl(offer));
 }
 
 export class SupabaseOfficialPublicationAdapter implements
@@ -102,7 +98,7 @@ export class SupabaseOfficialPublicationAdapter implements
   async findPost(postId: string, tenantId: string): Promise<OfficialPublicationPost | null> {
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client.from("posts")
-      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes,platform,coupon,original_url),affiliate_links(tracked_url)")
+      .select("id,user_id,offer_id,channel,status,content,offers(id,image_url,product_name,notes,platform,coupon,original_url),affiliate_links(tracked_url)")
       .eq("id", postId)
       .eq("user_id", tenantId)
       .maybeSingle();
@@ -131,7 +127,7 @@ export class SupabaseOfficialPublicationAdapter implements
   async findPostsByOffer(offerId: string, tenantId: string): Promise<readonly OfficialPublicationPost[]> {
     if (tenantId !== this.tenantId) return [];
     const { data, error } = await this.client.from("posts")
-      .select("id,user_id,offer_id,channel,status,content,offers(image_url,product_name,notes,platform,coupon,original_url),affiliate_links(tracked_url)")
+      .select("id,user_id,offer_id,channel,status,content,offers(id,image_url,product_name,notes,platform,coupon,original_url),affiliate_links(tracked_url)")
       .eq("offer_id", offerId)
       .eq("user_id", tenantId);
     if (error) throw new Error(`Official publication related posts read failed: ${error.message}`);
@@ -384,3 +380,4 @@ export class OfficialPublicationStateAdapter implements PublicationStatePort {
       : { status: "rejected" as const, code: result.code, message: result.message };
   }
 }
+
