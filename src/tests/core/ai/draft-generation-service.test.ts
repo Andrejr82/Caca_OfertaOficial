@@ -245,13 +245,14 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
     // A Official Publication só consome "approved" — que não foi produzido
   });
 
-  it("✓ fallback determinístico mantém pending_manual_review e persiste drafts sem aprovação", async () => {
+  it("✓ política determinística mantém pending_manual_review sem chamar provider", async () => {
+    const generate = vi.fn().mockRejectedValue(new Error("provider down"));
     const dependencies = createDependencies({
       providers: {
         resolve: vi.fn().mockReturnValue({
           name: "groq",
           model: "llama-3.3-70b-versatile",
-          generate: vi.fn().mockRejectedValue(new Error("provider down"))
+          generate
         })
       }
     });
@@ -261,8 +262,9 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
     expect(result.status).toBe("drafted");
     if (result.status === "drafted") {
       expect(result.offerState).toBe("pending_manual_review");
-      expect(result.providerEvidence?.provider).toBe("deterministic-fallback");
+      expect(result.providerEvidence?.provider).toBe("deterministic-engine");
     }
+    expect(generate).not.toHaveBeenCalled();
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
@@ -360,12 +362,6 @@ describe("generateOfficialAI — Modo 2: Approval (selected → approved)", () =
       offerId: "offer-selected"
     };
     const dependencies = createDependencies({}, selectedOffer);
-    const provider = dependencies.providers.resolve("groq");
-
-    vi.mocked(provider.generate).mockImplementation(async () => {
-      order.push("provider");
-      return { content, provider: "groq", model: provider.model, latencyMs: 10, finishReason: "stop" };
-    });
     vi.mocked(dependencies.content.persistDrafts).mockImplementation(async () => {
       order.push("drafts");
       return draftsResult;
@@ -378,7 +374,7 @@ describe("generateOfficialAI — Modo 2: Approval (selected → approved)", () =
     const result = await generateOfficialAI(approvalCommand, dependencies);
 
     expect(result.status).toBe("approved");
-    expect(order).toEqual(["provider", "drafts", "approved"]);
+    expect(order).toEqual(["drafts", "approved"]);
   });
 
   it("✓ modo Approval: auditoria registrada com result=approved e transitionCompleted=true", async () => {

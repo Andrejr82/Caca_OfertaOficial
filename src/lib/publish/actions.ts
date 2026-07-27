@@ -9,8 +9,9 @@ import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Channel, Offer, Platform } from "@/types/domain";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
 import { parseSheinOneLinkHtml } from "@/lib/publish/shein-link";
-import { fetchMLProductDetails, generateMLAffiliateLinkWithId, validateAffiliateMonetization } from "@/lib/platforms/mercadolivre";
+import { fetchMLProductDetailsResult, generateMLAffiliateLinkWithId, validateAffiliateMonetization } from "@/lib/platforms/mercadolivre";
 import { resolveMarketplaceUrl } from "@/lib/publish/express-url-resolver";
+import { classifyResolution } from "@/lib/publish/product-extraction-contract";
 import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/express-product-validator";
 import { extractMLId } from "@/lib/platforms/mercadolivre";
 import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
@@ -484,7 +485,9 @@ export async function generateQuickPostAction(
     log("[Express Link Start]", { requestId: operationId, stage: "resolve_url", marketplace: "Mercado Livre" });
     const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
 
-    if (resolved.errorCode && resolved.errorCode !== "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
+    const resolutionOutcome = classifyResolution(resolved);
+
+    if (resolutionOutcome.status === "rejected") {
       const msgMap: Record<string, string> = {
         SSRF_BLOCKED: "Este link aponta para um destino não permitido.",
         REDIRECT_LOOP: "Não conseguimos resolver o link do Mercado Livre — foi detectado um loop de redirecionamento.",
@@ -495,11 +498,11 @@ export async function generateQuickPostAction(
         PRODUCT_ID_MISMATCH: "Incompatibilidade de produto detectada durante o redirecionamento.",
         AFFILIATE_SHOWCASE_NOT_PRODUCT: "O link direciona para uma vitrine com vários produtos. Cole o link de um produto específico.",
       };
-      log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
-      return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link do Mercado Livre." };
+      log("[Express Link Error]", { requestId: operationId, errorCode: resolutionOutcome.code, stage: "url_resolution" });
+      return { ok: false, status: resolutionOutcome.code, message: msgMap[resolutionOutcome.code] || "Erro ao resolver o link do Mercado Livre." };
     }
 
-    if (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
+    if (resolutionOutcome.status === "confirmed_identity") {
       log("[Express Fallback]", { requestId: operationId, message: "Produto identificado pela URL original; validação continuada pela API.", originalItemId: resolved.originalItemId });
     }
 
@@ -510,28 +513,40 @@ export async function generateQuickPostAction(
     log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length });
 
     // PASSO 2: Usar o ID selecionado (original ou final)
-    if (resolved.selectedItemId) {
+    if (resolutionOutcome.status === "confirmed_identity") {
+      itemId = resolutionOutcome.itemId;
+    } else if (resolved.selectedItemId) {
       itemId = resolved.selectedItemId;
     }
 
     // PASSO 3: Buscar dados do produto via API ML (com OAuth token do usuário)
     // Se caiu no anti-bot mas temos o ID, podemos montar uma URL válida para a API (a API usa o ID)
-    const urlForApi = (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID" && itemId)
+    const urlForApi = (resolutionOutcome.status === "confirmed_identity" && itemId)
       ? `https://produto.mercadolivre.com.br/${itemId.replace("MLB", "MLB-")}`
       : resolvedUrl;
     
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Mercado Livre", itemId, identitySource: resolved.identitySource });
-    const mlData = await fetchMLProductDetails(urlForApi, userId);
+    const mlResult = await fetchMLProductDetailsResult(urlForApi, userId);
 
-    if (mlData) {
-      title = mlData.title;
-      imageUrl = mlData.imageUrl || "";
-      price = mlData.price ?? 0;
-      canonicalUrl = mlData.finalUrl || urlForApi;
-      if (!itemId) {
-        const extractedId = extractMLId(canonicalUrl);
-        if (extractedId) itemId = extractedId.id;
-      }
+    if (!mlResult.ok) {
+      const failureMessages: Record<string, string> = {
+        MARKETPLACE_AUTH_DENIED: "A integração do Mercado Livre precisa ser reconectada para confirmar este produto.",
+        MARKETPLACE_SOURCE_UNAVAILABLE: "O Mercado Livre não respondeu com dados do produto. Tente novamente em alguns minutos.",
+        INVALID_PRODUCT_ID: "Não foi possível confirmar a identidade do produto do Mercado Livre.",
+      };
+      log("[Express Link Error]", { requestId: operationId, errorCode: mlResult.code, stage: "marketplace_provider" });
+      return { ok: false, status: mlResult.code, message: failureMessages[mlResult.code] };
+    }
+
+    const mlData = mlResult.data;
+
+    title = mlData.title;
+    imageUrl = mlData.imageUrl || "";
+    price = mlData.price ?? 0;
+    canonicalUrl = mlData.finalUrl || urlForApi;
+    if (!itemId) {
+      const extractedId = extractMLId(canonicalUrl);
+      if (extractedId) itemId = extractedId.id;
     }
 
 

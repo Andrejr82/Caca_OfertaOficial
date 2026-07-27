@@ -69,8 +69,12 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       imageUrl: "https://example.com/item-1.jpg",
       currentPrice: 99.9,
       originalPrice: 129.9,
-      category: { id: "cat-1", name: "Categoria Oficial", source: "official" },
-      marketplaceMetrics: { sourcePosition: 1 },
+      category: { id: `cat-${marketplace}`, name: `Categoria ${marketplace}`, source: "official" },
+      marketplaceMetrics: marketplace === "Shopee"
+        ? { sourcePosition: 1, shopee_item_id: "1001", shop_id: "2001" }
+        : marketplace === "Mercado Livre"
+          ? { sourcePosition: 1, item_id: "MLB1001" }
+          : { sourcePosition: 1, asin: "B000000001" },
       deterministicScore: 8.5,
       discoveredAt: "2026-07-13T12:00:00.000Z",
     }]);
@@ -115,7 +119,18 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       tenantId: "00000000-0000-4000-8000-000000000001",
       correlationId: "cycle-pmav5-005",
       requestedAt: "2026-07-13T12:00:00.000Z",
-      discover: async () => [],
+      discover: async () => [{
+        sourceItemId: "B000000001",
+        sourceUrl: "https://www.amazon.com.br/dp/B000000001",
+        title: "Oferta Amazon Válida",
+        imageUrl: "https://example.com/item.jpg",
+        currentPrice: 99.9,
+        originalPrice: 129.9,
+        category: { id: "cat-1", name: "Categoria Oficial", source: "official" },
+        marketplaceMetrics: { sourcePosition: 1, asin: "B000000001" },
+        deterministicScore: 8.5,
+        discoveredAt: "2026-07-13T12:00:00.000Z",
+      }],
       persist: async () => ({ accepted: 0, state: "selected" }),
     })).rejects.toThrow("pending_manual_review");
   });
@@ -134,7 +149,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       currentPrice: 99.9,
       originalPrice: 129.9,
       category: { id: "cat-1", name: "Categoria Oficial", source: "official" },
-      marketplaceMetrics: { sourcePosition: 1 },
+      marketplaceMetrics: { sourcePosition: 1, shopee_item_id: "1001", shop_id: "2001" },
       deterministicScore: 8.5,
       discoveredAt: "2026-07-13T12:00:00.000Z",
     };
@@ -145,11 +160,17 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       requestedAt: "2026-07-13T12:00:00.000Z",
       discover: async (marketplace: string) => marketplace === "Shopee"
         ? [{ ...valid, sourceItemId: "invalid", imageUrl: null }]
-        : [valid],
+        : [{
+          ...valid,
+          category: { id: `cat-${marketplace}`, name: `Categoria ${marketplace}`, source: "official" },
+          marketplaceMetrics: marketplace === "Mercado Livre"
+            ? { sourcePosition: 1, item_id: "MLB1001" }
+            : { sourcePosition: 1, asin: "B000000001" },
+        }],
       persist,
     });
 
-    expect(persist.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(persist.mock.calls.length).toBeGreaterThanOrEqual(2);
     expect(result.marketplaces).toMatchObject([
       { marketplace: "Shopee", discovered: 1, rejected: 1, persisted: 0 },
       { marketplace: "Mercado Livre", rejected: 0, persisted: 1 },
@@ -184,7 +205,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         return { accepted: ingestions.length, state: "pending_manual_review" };
       },
     });
-    expect(persisted[2]).toHaveLength(1);
+    expect(persisted[0]).toHaveLength(1);
     expect(result.marketplaces[2]).toMatchObject({
       marketplace: "Amazon",
       discovered: 2,
@@ -296,7 +317,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       currentPrice: 50.0,
       originalPrice: 80.0,
       category: { id: "cat-1", name: "Categoria Oficial", source: "official" },
-      marketplaceMetrics: { sourcePosition: 1 },
+      marketplaceMetrics: { sourcePosition: 1, shopee_item_id: "1001", shop_id: "2001" },
       deterministicScore: 9.0,
       discoveredAt: "2026-07-13T12:00:00.000Z",
     };

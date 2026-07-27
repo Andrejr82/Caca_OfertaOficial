@@ -8,6 +8,7 @@ export class InstagramPublicationTransport implements PublicationTransportPort {
   async publish(request: PublicationTransportRequest) {
     if (request.channel !== this.channel) throw new Error("Instagram transport channel mismatch");
     const result = await this.dependencies.send(technicalInput(request));
+    if (result.final !== true) throw new Error("Instagram provider did not return a final receipt");
     return confirmedReceipt(request, this.dependencies, "meta-instagram-graph", result);
   }
 }
