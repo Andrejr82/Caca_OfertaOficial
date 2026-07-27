@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateTelegramMessage, generateFacebookMessage, generateWhatsAppMessage, deriveOfferSignals, selectPrimaryAngle, selectStableCall } from "@/lib/messages/generate";
+import { generateTelegramMessage, generateFacebookMessage, generateWhatsAppMessage, deriveOfferSignals, selectPrimaryAngle, selectStableCall, generateAllMessages } from "@/lib/messages/generate";
 import type { AffiliateLink, Offer } from "@/types/domain";
 
 const baseOffer: any = {
@@ -192,6 +192,47 @@ describe("Deterministic Copy Engine Tests", () => {
       const tgHashtags = (tg.match(/#/g) || []).length;
       expect(tgHashtags).toBeGreaterThanOrEqual(2);
       expect(tgHashtags).toBeLessThanOrEqual(4);
+    });
+  });
+
+  describe("Geração com múltiplos links (4 canais)", () => {
+    it("deve selecionar exatamente o link correto para cada canal a partir de offer.affiliate_links", () => {
+      const fullUUID = "11111111-2222-3333-4444-555555555555";
+      const offerWithLinks = {
+        ...baseOffer,
+        id: fullUUID,
+        affiliate_links: [
+          { channel: "telegram", tracked_url: `https://app.com/go/tg_${fullUUID}` },
+          { channel: "whatsapp", tracked_url: `https://app.com/go/wp_${fullUUID}` },
+          { channel: "facebook", tracked_url: `https://app.com/go/fb_${fullUUID}` },
+          { channel: "instagram", tracked_url: `https://app.com/go/ig_${fullUUID}` }
+        ]
+      };
+
+      // Mock the fallback link (this is what `messages/page.tsx` passes today - only Telegram)
+      const fallbackLink = { channel: "telegram", tracked_url: `https://app.com/go/tg_${fullUUID}` } as any;
+
+      // Se a engine usar apenas o fallbackLink, o facebook vai dar erro de "incompatível".
+      const msgs = generateAllMessages(offerWithLinks, fallbackLink);
+
+      // Telegram deve ter apenas o link tg_
+      expect(msgs.telegram).toContain(`tg_${fullUUID}`);
+      expect(msgs.telegram).not.toContain(`fb_${fullUUID}`);
+      expect(msgs.telegram).not.toContain(`wp_${fullUUID}`);
+
+      // WhatsApp deve ter apenas wp_
+      expect(msgs.whatsapp).toContain(`wp_${fullUUID}`);
+      expect(msgs.whatsapp).not.toContain(`tg_${fullUUID}`);
+      expect(msgs.whatsapp).not.toContain(`fb_${fullUUID}`);
+
+      // Facebook deve ter apenas fb_
+      expect(msgs.facebook).toContain(`fb_${fullUUID}`);
+      expect(msgs.facebook).not.toContain(`tg_${fullUUID}`);
+      expect(msgs.facebook).not.toContain(`wp_${fullUUID}`);
+
+      // Instagram não deve conter URL do go/
+      expect(msgs.instagram.feed).not.toContain(`ig_${fullUUID}`);
+      expect(msgs.instagram.feed).toContain("Link na bio");
     });
   });
 });

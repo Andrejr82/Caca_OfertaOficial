@@ -16,20 +16,7 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
   const selectedOfferId = searchParams.offerId;
   const offer = offers.find((o) => o.id === selectedOfferId) || offers[0];
 
-  const link = offer
-    ? (links.find((item) => item.offer_id === offer.id) || {
-        id: "preview",
-        user_id: offer.user_id,
-        offer_id: offer.id,
-        channel: "telegram",
-        original_url: offer.original_url,
-        sub_id: createSubId("telegram", offer.product_name, offer.id),
-        tracked_url: createTrackedUrl(offer.original_url, createSubId("telegram", offer.product_name, offer.id)),
-        clicks: 0,
-        created_at: new Date().toISOString()
-      } satisfies AffiliateLink)
-    : null;
-
+  // A variável 'link' fixa foi substituída pela filtragem offerLinks.
   // Busca se já existem posts gerados pela IA no banco de dados para esta oferta
   let messages: { telegram: string; instagramFeed: string; whatsapp: string } | null = null;
   let isAIGenerated = false;
@@ -53,8 +40,22 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
   }
 
   // Fallback para o gerador de template clássico se não houver posts no banco
-  if (!messages && offer && link) {
-    const fallbackGen = generateAllMessages(offer, link);
+  if (!messages && offer) {
+    const offerLinks = links.filter((item) => item.offer_id === offer.id);
+    if (offerLinks.length === 0) {
+      offerLinks.push({
+        id: "preview",
+        user_id: offer.user_id,
+        offer_id: offer.id,
+        channel: "telegram",
+        original_url: offer.original_url,
+        sub_id: createSubId("telegram", offer.product_name, offer.id),
+        tracked_url: createTrackedUrl(offer.original_url, createSubId("telegram", offer.product_name, offer.id)),
+        clicks: 0,
+        created_at: new Date().toISOString()
+      } as AffiliateLink);
+    }
+    const fallbackGen = generateAllMessages(offer, offerLinks);
     // Para simplificar a visualização, consolidamos os rascunhos de Instagram na visualização de fallback
     const fallbackInst = [
       fallbackGen.instagram.feed,

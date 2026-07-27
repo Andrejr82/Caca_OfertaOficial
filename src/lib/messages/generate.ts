@@ -553,11 +553,29 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
   return { feed, stories, reels, carousel };
 }
 
-export function generateAllMessages(offer: Offer, link: AffiliateLink) {
+export function generateAllMessages(offer: Offer, linkOrLinks: AffiliateLink | AffiliateLink[]) {
+  const linksArray = Array.isArray(linkOrLinks) ? linkOrLinks : [linkOrLinks];
+
+  if (!(offer as any).affiliate_links || (offer as any).affiliate_links.length === 0) {
+    (offer as any).affiliate_links = linksArray;
+  }
+
+  const getLinkForChannel = (ch: string) => {
+    const fromOffer = Array.isArray((offer as any).affiliate_links)
+      ? (offer as any).affiliate_links.find((l: any) => l.channel === ch)
+      : null;
+    if (fromOffer) return fromOffer;
+
+    const fromArray = linksArray.find((l: any) => l.channel === ch);
+    if (fromArray) return fromArray;
+
+    return linksArray[0];
+  };
+
   return {
-    telegram: generateTelegramMessage(offer, link),
-    facebook: generateFacebookMessage(offer, link),
-    instagram: generateInstagramMessage(offer, link),
-    whatsapp: generateWhatsAppMessage(offer, link),
+    telegram: generateTelegramMessage(offer, getLinkForChannel("telegram")),
+    facebook: generateFacebookMessage(offer, getLinkForChannel("facebook")),
+    instagram: generateInstagramMessage(offer, getLinkForChannel("instagram")),
+    whatsapp: generateWhatsAppMessage(offer, getLinkForChannel("whatsapp")),
   };
 }
