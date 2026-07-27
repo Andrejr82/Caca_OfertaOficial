@@ -13,6 +13,7 @@ import { fetchMLProductDetails, generateMLAffiliateLinkWithId, validateAffiliate
 import { resolveMarketplaceUrl } from "@/lib/publish/express-url-resolver";
 import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/express-product-validator";
 import { extractMLId } from "@/lib/platforms/mercadolivre";
+import { buildExpressAffiliateLinks, isAmazonAffiliateInput } from "@/lib/publish/express-affiliate-links";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -601,7 +602,9 @@ export async function generateQuickPostAction(
     price = amazonData.price;
 
     const amzPartnerTag = process.env.AMAZON_PARTNER_TAG || "";
-    if (amzPartnerTag && canonicalUrl) {
+    if (isAmazonAffiliateInput(inputUrl)) {
+      generatedAffiliateUrl = inputUrl;
+    } else if (amzPartnerTag && canonicalUrl) {
       try {
         const urlObj = new URL(canonicalUrl);
         urlObj.searchParams.set("tag", amzPartnerTag);
@@ -692,6 +695,19 @@ export async function generateQuickPostAction(
   log("[Express Persist End]", { requestId: operationId, offerId: offer.id });
 
   // ─── Geração de Copy com IA ───────────────────────────────────────────────
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
+  const { error: affiliateLinksError } = await supabase
+    .from("affiliate_links")
+    .upsert(
+      buildExpressAffiliateLinks({ offerId: offer.id, userId, originalUrl: inputUrl, appUrl }),
+      { onConflict: "offer_id,channel" }
+    );
+
+  if (affiliateLinksError) {
+    log("[Express Link Error]", { requestId: operationId, errorCode: "AFFILIATE_LINKS_CREATE_FAILED" });
+    return { ok: false, status: "AFFILIATE_LINKS_CREATE_FAILED", message: "Não foi possível preparar os links rastreáveis da oferta." };
+  }
+
   const targetChannels: OfficialAIChannel[] = channel === "omnichannel"
     ? ["telegram", "instagram", "whatsapp"]
     : channel === "telegram" || channel === "instagram" || channel === "whatsapp"
@@ -777,3 +793,4 @@ export async function publishToWhatsAppAction(text: string, imageUrl?: string) {
   void imageUrl;
   return { ok: false, message: "A publicação direta continua sendo feita pela aba oficial do canal." };
 }
+
