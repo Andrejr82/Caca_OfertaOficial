@@ -83,6 +83,27 @@ describe("Deterministic Copy Engine Tests", () => {
   });
 
   describe("Formatação de Campos", () => {
+    it("apresenta desconto e economia sem emoji decorativo no título", () => {
+      const msg = generateTelegramMessage(baseOffer, link);
+      expect(msg).toContain("🔥 34% DE DESCONTO!");
+      expect(msg).toContain("Economize R$\u00a050,00");
+      expect(msg).not.toContain("🛍️ Cadeira Gamer");
+      expect((msg.match(/[\u{1F300}-\u{1FAFF}]/gu) || []).length).toBeLessThanOrEqual(4);
+    });
+
+    it("não anuncia desconto quando não há preço anterior válido", () => {
+      const offer = { ...baseOffer, old_price: null, current_price: 99 };
+      const msg = generateTelegramMessage(offer, link);
+      expect(msg).not.toContain("DE DESCONTO");
+      expect(msg).not.toContain("Economize");
+    });
+
+    it("usa frete grátis como benefício contextual", () => {
+      const offer = { ...baseOffer, old_price: null, shipping_free: true };
+      const msg = generateTelegramMessage(offer, link);
+      expect(msg).toContain("📦 Frete Grátis");
+    });
+
     it("parcelamento sem confirmação de juros exibe apenas divisao", () => {
       const offer = { ...baseOffer, current_price: 100, old_price: null };
       const signals = deriveOfferSignals(offer, { installment_count: 10, installment_value: 10, installment_interest_free: false });
@@ -137,7 +158,7 @@ describe("Deterministic Copy Engine Tests", () => {
 
     it("canal com link real é aceito e nenhum prefixo é substituído", () => {
       const fb = generateFacebookMessage(baseOffer, fbLink);
-      expect(fb).toContain("👉 Comprar:\nhttps://cacaoferta.com.br/go/fb_11111111");
+      expect(fb).toContain("👇 Comprar:\nhttps://cacaoferta.com.br/go/fb_11111111");
     });
 
     it("Pix inválido omitido", () => {
