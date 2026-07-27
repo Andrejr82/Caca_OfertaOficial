@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchShopeeOfficialProduct } from "@/lib/publish/actions";
+import { fetchShopeeOfficialProduct, readShopeeMetadata } from "@/lib/publish/actions";
 
 describe("fetchShopeeOfficialProduct", () => {
   afterEach(() => {
@@ -63,5 +63,33 @@ describe("fetchShopeeOfficialProduct", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).variables.keyword).toBe("22494398493");
+  });
+
+  it("extrai o nome do produto do slug da URL quando a página não expõe og:title", async () => {
+    const html = '<meta property="og:image" content="https://img.shopee.test/item.jpg">';
+    const result = await readShopeeMetadata(
+      "https://shopee.com.br/Aspirador-Vertical-Electrolux-Com-Fio-Stk15-127V-Urban-Grey-i.1509845472.22494398493",
+      html,
+    );
+
+    expect(result.title).toBe("Aspirador Vertical Electrolux Com Fio Stk15 127V Urban Grey");
+  });
+
+  it("usa a página canônica do produto quando opaanlp não fornece título", async () => {
+    vi.stubGlobal("fetch", vi.fn()
+      .mockResolvedValueOnce({ text: async () => "" })
+      .mockResolvedValueOnce({
+        text: async () => '<meta property="og:title" content="Aspirador Vertical Electrolux STK15">',
+      }));
+
+    const result = await readShopeeMetadata(
+      "https://shopee.com.br/opaanlp/1509845472/22494398493",
+    );
+
+    expect(result.title).toContain("Aspirador Vertical Electrolux");
+    expect(fetch).toHaveBeenCalledWith(
+      "https://shopee.com.br/product/1509845472/22494398493",
+      expect.objectContaining({ headers: expect.any(Object) }),
+    );
   });
 });
