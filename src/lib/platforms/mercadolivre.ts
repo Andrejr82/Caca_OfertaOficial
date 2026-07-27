@@ -179,6 +179,12 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
 
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
 
+async function refreshMLTokenFromEnvironment(): Promise<string | null> {
+  const refreshToken = process.env.MERCADO_LIVRE_REFRESH_TOKEN;
+  if (!refreshToken) return null;
+  return refreshMLToken(SHARED_ML_CREDENTIALS_OWNER, refreshToken);
+}
+
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
 async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
   const supabase = await createServerSupabaseClient();
@@ -348,6 +354,16 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
 
       let catalogFallbackApplied = false;
       if (!response.ok && response.status === 403) {
+        // O Oracle usa o refresh token operacional da Vercel para consultar
+        // produtos de terceiros. Tente esse token antes do fallback de catálogo
+        // quando o OAuth do usuário não tiver permissão para o item.
+        const operationalToken = await refreshMLTokenFromEnvironment();
+        if (operationalToken && operationalToken !== accessToken) {
+          accessToken = operationalToken;
+          headers["Authorization"] = `Bearer ${operationalToken}`;
+          response = await fetch(itemUrl, { headers });
+        }
+
         const catalogId = extractMLCatalogId(url);
         if (catalogId) {
           // O endpoint de item pode negar acesso mesmo com OAuth válido.
