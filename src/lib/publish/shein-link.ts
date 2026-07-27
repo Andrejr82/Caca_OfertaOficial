@@ -35,11 +35,16 @@ function decodeUrl(value: string) {
  * product metadata and is never inferred from the link.
  */
 export function parseSheinOneLinkHtml(html: string): SheinLinkProductReference | null {
-  const input = html.match(/<input\b[^>]*\bid=["']url["'][^>]*>/i)?.[0];
-  if (!input) return null;
-  const valueMatch = input.match(/\bvalue=["']([^"']+)["']/i);
-  if (!valueMatch) return null;
-  const productUrl = decodeHtml(valueMatch[1].trim());
+  const normalizedHtml = html
+    .replace(/\\\//g, "/")
+    .replace(/&amp;/g, "&")
+    .replace(/\\"/g, '"');
+  const input = normalizedHtml.match(/<input\b[^>]*\bid=["']url["'][^>]*>/i)?.[0];
+  const valueMatch = input?.match(/\bvalue=["']([^"']+)["']/i);
+  const embeddedUrl = normalizedHtml.match(/https?:\/\/(?:br\.)?shein\.com\/[^\s"'<>]+-p-\d+-cat-\d+\.html(?:\?[^\s"'<>]*)?/i)?.[0];
+  const rawProductUrl = valueMatch?.[1] || embeddedUrl;
+  if (!rawProductUrl) return null;
+  const productUrl = decodeHtml(rawProductUrl.trim()).replace(/[\\,;}]+$/, "");
   const parsed = productUrl.match(/\/([^/?#]+)-p-(\d+)-cat-(\d+)\.html/i);
   if (!parsed) return null;
   const slug = decodeUrl(parsed[1]).replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
