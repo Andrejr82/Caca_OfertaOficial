@@ -39,4 +39,3 @@ export function buildExpressAffiliateLinks(input: {
     tracked_url: `${baseUrl}/go/${prefix}${input.offerId}`,
   }));
 }
-
