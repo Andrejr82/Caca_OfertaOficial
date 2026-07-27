@@ -409,4 +409,3 @@ export async function resolveMarketplaceUrl(
 
   return { resolvedUrl: currentUrl, redirectChain, errorCode: "REDIRECT_LIMIT_EXCEEDED" };
 }
-

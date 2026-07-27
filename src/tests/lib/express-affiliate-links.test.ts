@@ -40,4 +40,3 @@ describe("isShopeeAffiliateInput", () => {
     expect(isShopeeAffiliateInput("https://shopee.com.br/product/1/2")).toBe(false);
   });
 });
-

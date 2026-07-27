@@ -136,45 +136,47 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
     return null;
   }
 
-  const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { productName imageUrl priceMin offerLink } } }";
-  const keyword = `https://shopee.com.br/product/${shopId}/${itemId}`;
-  const variables = { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true };
-  const requestBody = JSON.stringify({ query, variables });
-  
-  const timestamp = Math.floor(Date.now() / 1000);
-  const signature = createHash("sha256")
-    .update(`${appId}${timestamp}${requestBody}${appSecret}`)
-    .digest("hex");
+  const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName imageUrl priceMin offerLink } } }";
+  const keywords = [`https://shopee.com.br/product/${shopId}/${itemId}`, itemId];
 
-  try {
-    const response = await fetch("https://open-api.affiliate.shopee.com.br/graphql", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`
-      },
-      body: requestBody,
-      signal: AbortSignal.timeout(12_000)
-    });
+  for (const keyword of keywords) {
+    const variables = { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true };
+    const requestBody = JSON.stringify({ query, variables });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = createHash("sha256")
+      .update(`${appId}${timestamp}${requestBody}${appSecret}`)
+      .digest("hex");
 
-    const data = await response.json();
-    const nodes = data?.data?.productOfferV2?.nodes;
-    if (Array.isArray(nodes) && nodes.length > 0) {
-      const product = nodes[0];
-      const price = parseFloat(product.priceMin);
-      if (product.productName && product.imageUrl && price > 0) {
-        return {
-          title: product.productName,
-          imageUrl: product.imageUrl,
-          price,
-          affiliateUrl: typeof product.offerLink === "string" && isShopeeAffiliateInput(product.offerLink)
-            ? product.offerLink
-            : ""
-        };
+    try {
+      const response = await fetch("https://open-api.affiliate.shopee.com.br/graphql", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `SHA256 Credential=${appId}, Timestamp=${timestamp}, Signature=${signature}`
+        },
+        body: requestBody,
+        signal: AbortSignal.timeout(12_000)
+      });
+
+      const data = await response.json();
+      const nodes = data?.data?.productOfferV2?.nodes;
+      if (Array.isArray(nodes) && nodes.length > 0) {
+        const product = nodes.find((node: any) => !node.itemId || String(node.itemId) === String(itemId)) || nodes[0];
+        const price = parseFloat(product.priceMin);
+        if (product.productName && product.imageUrl && price > 0) {
+          return {
+            title: product.productName,
+            imageUrl: product.imageUrl,
+            price,
+            affiliateUrl: typeof product.offerLink === "string" && isShopeeAffiliateInput(product.offerLink)
+              ? product.offerLink
+              : ""
+          };
+        }
       }
+    } catch (error) {
+      console.error("[ACTIONS][SHOPEE] Falha ao consultar API Oficial:", error);
     }
-  } catch (error) {
-    console.error("[ACTIONS][SHOPEE] Falha ao consultar API Oficial:", error);
   }
   return null;
 }
@@ -226,7 +228,7 @@ async function readShopeeMetadata(resolvedUrl: string, htmlBody?: string): Promi
 
 // ─── Leitura de metadados genérico para Shein ────────────────────────────────
 
-async function readSheinMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
+export async function readSheinMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
   title: string;
   imageUrl: string;
   price: number;
@@ -248,9 +250,33 @@ async function readSheinMetadata(resolvedUrl: string, htmlBody?: string): Promis
     }
   }
 
-  const socialTitle = metaTag(html, "og:title") || metaTag(html, "twitter:title");
-  const isGeneric = /(?:categoria|campanha|collection|great offer|economize muito|não perca)/i.test(socialTitle);
   const sheinRef = parseSheinOneLinkHtml(html);
+  let productHtml = "";
+
+  // OneLinks normalmente entregam uma landing page. Quando ela contém a URL
+  // atribuída do produto, buscamos essa página para obter preço/imagem reais,
+  // preservando o OneLink original como URL monetizada.
+  if (sheinRef?.productUrl && sheinRef.productUrl !== resolvedUrl) {
+    try {
+      const productUrl = new URL(sheinRef.productUrl);
+      const host = productUrl.hostname.toLowerCase();
+      if (host === "shein.com" || host.endsWith(".shein.com")) {
+        const productResponse = await fetch(sheinRef.productUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "pt-BR,pt;q=0.9",
+          },
+          signal: AbortSignal.timeout(12_000),
+        });
+        if (productResponse.ok) productHtml = await productResponse.text();
+      }
+    } catch { /* manter os metadados da landing page como fallback */ }
+  }
+
+  const sourceHtml = productHtml || html;
+  const socialTitle = metaTag(sourceHtml, "og:title") || metaTag(sourceHtml, "twitter:title") || metaTag(html, "og:title") || metaTag(html, "twitter:title");
+  const isGeneric = /(?:categoria|campanha|collection|great offer|economize muito|não perca)/i.test(socialTitle);
   const title = (isGeneric && sheinRef?.titleFromUrl) ? sheinRef.titleFromUrl : socialTitle;
 
   // Tentar extrair título do slug da URL para páginas de produto Shein br.shein.com
@@ -265,12 +291,12 @@ async function readSheinMetadata(resolvedUrl: string, htmlBody?: string): Promis
     } catch { /* ignorar */ }
   }
 
-  const imageUrl = metaTag(html, "og:image") || metaTag(html, "twitter:image");
-  const rawPrice = metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
+  const imageUrl = metaTag(sourceHtml, "og:image") || metaTag(sourceHtml, "twitter:image") || metaTag(html, "og:image") || metaTag(html, "twitter:image");
+  const rawPrice = metaTag(sourceHtml, "product:price:amount") || metaTag(sourceHtml, "og:price:amount") || metaTag(html, "product:price:amount") || metaTag(html, "og:price:amount");
   const normalizedPrice = rawPrice?.includes(",")
     ? rawPrice.replace(/\./g, "").replace(",", ".")
     : rawPrice;
-  const price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(html);
+  const price = normalizedPrice ? Number(normalizedPrice) : extractJsonLdPrice(sourceHtml);
 
   return {
     title: finalTitle,
@@ -526,7 +552,7 @@ export async function generateQuickPostAction(
     }
     
     // Em caso de opaanlp e API não retornou dados (e scraping também costuma falhar), retornar erro customizado
-    if (!apiSuccess && resolvedUrl.includes("shopee.com.br/opaanlp/")) {
+    if (!apiSuccess && resolvedUrl.includes("shopee.com.br/opaanlp/") && !isShopeeAffiliateInput(inputUrl)) {
       log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "url_resolution" });
       return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "O produto não pôde ser confirmado pela API da Shopee. A oferta pode ter expirado ou estar indisponível." };
     }
@@ -808,4 +834,3 @@ export async function publishToWhatsAppAction(text: string, imageUrl?: string) {
   void imageUrl;
   return { ok: false, message: "A publicação direta continua sendo feita pela aba oficial do canal." };
 }
-
