@@ -425,6 +425,19 @@ type ExpressFallbackMetadata = {
   price: number;
 };
 
+type ExpressFallbackAttempt = {
+  data: ExpressFallbackMetadata | null;
+  failureCode?:
+    | "CONFIG_MISSING"
+    | "CONFIG_INVALID"
+    | "HTTP_ERROR"
+    | "INVALID_RESPONSE"
+    | "PRODUCT_DATA_EMPTY"
+    | "TIMEOUT"
+    | "REQUEST_FAILED";
+  httpStatus?: number;
+};
+
 /**
  * Obtém os dados do produto através do gateway Oracle quando o marketplace
  * entrega uma página anti-bot ou uma casca renderizada por JavaScript ao
@@ -432,21 +445,23 @@ type ExpressFallbackMetadata = {
  * (Scrapfly para Shopee/ML e Scrape.do para Amazon), mas nunca é a primeira
  * escolha: APIs oficiais e HTML direto continuam tendo prioridade.
  */
-export async function fetchExpressFallbackMetadata(url: string): Promise<ExpressFallbackMetadata | null> {
+export async function fetchExpressFallbackMetadataDetailed(url: string): Promise<ExpressFallbackAttempt> {
   const oracleBaseUrl = process.env.ORACLE_REMOTE_URL
     || process.env.ORACLE_WORKER_URL
     || process.env.ORACLE_API_URL;
   const oracleApiKey = process.env.ORACLE_API_KEY;
 
-  if (!oracleBaseUrl || !oracleApiKey) return null;
+  if (!oracleBaseUrl || !oracleApiKey) return { data: null, failureCode: "CONFIG_MISSING" };
 
   let endpoint: string;
   try {
     const parsed = new URL(oracleBaseUrl);
-    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      return { data: null, failureCode: "CONFIG_INVALID" };
+    }
     endpoint = `${oracleBaseUrl.replace(/\/+$/, "").replace(/\/api\/scrape$/, "")}/api/scrape`;
   } catch {
-    return null;
+    return { data: null, failureCode: "CONFIG_INVALID" };
   }
 
   try {
@@ -456,21 +471,35 @@ export async function fetchExpressFallbackMetadata(url: string): Promise<Express
       body: JSON.stringify({ url, token: oracleApiKey }),
       signal: AbortSignal.timeout(55_000),
     });
-    if (!response.ok) return null;
+    if (!response.ok) return { data: null, failureCode: "HTTP_ERROR", httpStatus: response.status };
 
     const payload = await response.json();
     const extract = payload?.data?.extract;
+    if (!extract || typeof extract !== "object") {
+      return { data: null, failureCode: "INVALID_RESPONSE" };
+    }
     const title = typeof extract?.title === "string" ? extract.title.trim() : "";
     const imageUrl = typeof extract?.image === "string" ? extract.image.trim() : "";
     const rawPrice = typeof extract?.price === "number" || typeof extract?.price === "string"
       ? Number(extract.price)
       : 0;
 
-    if (!title && !imageUrl && (!Number.isFinite(rawPrice) || rawPrice <= 0)) return null;
-    return { title, imageUrl, price: Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : 0 };
-  } catch {
-    return null;
+    if (!title && !imageUrl && (!Number.isFinite(rawPrice) || rawPrice <= 0)) {
+      return { data: null, failureCode: "PRODUCT_DATA_EMPTY" };
+    }
+    return {
+      data: { title, imageUrl, price: Number.isFinite(rawPrice) && rawPrice > 0 ? rawPrice : 0 },
+    };
+  } catch (error: unknown) {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      return { data: null, failureCode: "TIMEOUT" };
+    }
+    return { data: null, failureCode: "REQUEST_FAILED" };
   }
+}
+
+export async function fetchExpressFallbackMetadata(url: string): Promise<ExpressFallbackMetadata | null> {
+  return (await fetchExpressFallbackMetadataDetailed(url)).data;
 }
 
 // ─── Action Principal: Publicação Expressa ────────────────────────────────────
@@ -794,7 +823,8 @@ export async function generateQuickPostAction(
       missingImage: !imageUrl,
       missingPrice: price <= 0,
     });
-    const fallbackData = await fetchExpressFallbackMetadata(inputUrl);
+    const fallbackAttempt = await fetchExpressFallbackMetadataDetailed(inputUrl);
+    const fallbackData = fallbackAttempt.data;
     if (fallbackData) {
       title = title || fallbackData.title;
       imageUrl = imageUrl || fallbackData.imageUrl;
@@ -807,7 +837,12 @@ export async function generateQuickPostAction(
         hasPrice: price > 0,
       });
     } else {
-      log("[Express Fallback Unavailable]", { requestId: operationId, marketplace: detectedPlatform });
+      log("[Express Fallback Unavailable]", {
+        requestId: operationId,
+        marketplace: detectedPlatform,
+        failureCode: fallbackAttempt.failureCode,
+        ...(fallbackAttempt.httpStatus ? { httpStatus: fallbackAttempt.httpStatus } : {}),
+      });
     }
   }
 
