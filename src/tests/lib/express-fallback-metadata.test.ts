@@ -32,7 +32,7 @@ describe("fetchExpressFallbackMetadata", () => {
   it("distingue erro HTTP da Oracle de configuração ausente", async () => {
     process.env.ORACLE_REMOTE_URL = "https://oracle.example.com";
     process.env.ORACLE_API_KEY = "test-key";
-    vi.spyOn(global, "fetch").mockResolvedValue({ ok: false, status: 401 } as Response);
+    vi.spyOn(global, "fetch").mockResolvedValue({ ok: false, status: 401, text: async () => "unauthorized" } as Response);
 
     await expect(fetchExpressFallbackMetadataDetailed("https://example.com/item"))
       .resolves.toMatchObject({ data: null, failureCode: "HTTP_ERROR", httpStatus: 401 });
