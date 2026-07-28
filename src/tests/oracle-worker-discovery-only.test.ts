@@ -14,6 +14,21 @@ function functionSource(name: string): string {
   return workerSource.slice(start, next < 0 ? workerSource.length : next);
 }
 
+function createValidAmazonCandidate() {
+  return {
+    sourceItemId: "B000000001",
+    sourceUrl: "https://www.amazon.com.br/dp/B000000001",
+    title: "Oferta Amazon",
+    imageUrl: "https://example.com/item.jpg",
+    currentPrice: 99.9,
+    originalPrice: 129.9,
+    category: { id: "cat-amazon", name: "Categoria Amazon", source: "official" },
+    marketplaceMetrics: { sourcePosition: 1, asin: "B000000001" },
+    deterministicScore: 8.5,
+    discoveredAt: "2026-07-13T12:00:00.000Z",
+  };
+}
+
 describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
   it("emite eventos correlacionados sem alterar o resultado", async () => {
     const { FINAL_STATE, runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
@@ -343,6 +358,56 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       correlationId: "cycle-pmav5-notify",
       offerIds: ["offer-cycle-1"]
     }));
+  });
+
+  it("não executa shadow mode com a flag desligada", async () => {
+    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const qualityShadow = vi.fn();
+    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
+    delete process.env.OFFER_QUALITY_PIPELINE_V2;
+
+    try {
+      await runDiscoveryOnlyCycle({
+        tenantId: "tenant-1",
+        correlationId: "cycle-shadow-off",
+        requestedAt: new Date().toISOString(),
+        marketplaces: ["Amazon"],
+        discover: async () => [createValidAmazonCandidate()],
+        persist: async () => ({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-1"] }),
+        qualityShadow,
+      });
+      expect(qualityShadow).not.toHaveBeenCalled();
+    } finally {
+      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
+      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
+    }
+  });
+
+  it("executa shadow mode somente como observação e preserva a persistência V1", async () => {
+    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const qualityShadow = vi.fn().mockResolvedValue(undefined);
+    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-1"] });
+    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
+    process.env.OFFER_QUALITY_PIPELINE_V2 = "shadow";
+
+    try {
+      const result = await runDiscoveryOnlyCycle({
+        tenantId: "tenant-1",
+        correlationId: "cycle-shadow-on",
+        requestedAt: new Date().toISOString(),
+        marketplaces: ["Amazon"],
+        discover: async () => [createValidAmazonCandidate()],
+        persist,
+        qualityShadow,
+      });
+      expect(qualityShadow).toHaveBeenCalledTimes(1);
+      expect(qualityShadow).toHaveBeenCalledWith(expect.objectContaining({ marketplace: "Amazon" }));
+      expect(persist).toHaveBeenCalledTimes(1);
+      expect(result.finalState).toBe("pending_manual_review");
+    } finally {
+      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
+      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
+    }
   });
 
   it("não notifica a Official AI sem IDs reais materializados", async () => {
