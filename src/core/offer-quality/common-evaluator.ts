@@ -20,7 +20,7 @@ function validateMonetization(candidate: OfferQualityCandidate): MonetizationSta
   for (const channel of CHANNELS) {
     const link = byChannel.get(channel);
     if (!link) return "incomplete";
-    const expected = new RegExp(`/go/\${PREFIXES[channel]}\${UUID}(?:$|[?#])`, "i");
+    const expected = new RegExp("/go/" + PREFIXES[channel] + UUID + "(?:$|[?#])", "i");
     if (!expected.test(link.trackedUrl)) return "incomplete";
   }
   return "complete";
