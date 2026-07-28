@@ -58,7 +58,8 @@ function toPascalCase(str: string) {
 
 export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
   const trackedUrl = (link.tracked_url || "").toLowerCase();
-  const affiliateUrl = (offer.explainability?.affiliate_url || "").toLowerCase();
+  const discoveryEvidence = offer.explainability?.discovery_evidence as { affiliate_url?: unknown } | undefined;
+  const affiliateUrl = (offer.explainability?.affiliate_url || discoveryEvidence?.affiliate_url || "").toString().toLowerCase();
   const originalUrl = (offer.original_url || "").toLowerCase();
   const platform = (offer.platform || "").toLowerCase();
 

@@ -34,6 +34,20 @@ describe("validateLinkMarketplace", () => {
     expect(() => validateLinkMarketplace(offer, { tracked_url: "https://caca-oferta-oficial.vercel.app/go/tg_123" })).not.toThrow();
   });
 
+  it("aceita Mercado Livre quando a Expressa guarda o link afiliado em discovery_evidence", () => {
+    const offer = {
+      ...baseOffer,
+      platform: "Mercado Livre" as const,
+      original_url: "https://www.mercadolivre.com.br/produto/MLB-123",
+      explainability: {
+        discovery_evidence: {
+          affiliate_url: "https://www.mercadolivre.com.br/produto/MLB-123?partner_id=foo"
+        }
+      }
+    };
+    expect(() => validateLinkMarketplace(offer, { tracked_url: "https://caca-oferta-oficial.vercel.app/go/tg_123" })).not.toThrow();
+  });
+
   it("aceita Shopee com affiliate_url válida + tracked_url /go/...", () => {
     const offer = {
       ...baseOffer,
