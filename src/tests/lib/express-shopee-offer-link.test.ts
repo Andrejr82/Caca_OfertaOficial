@@ -103,7 +103,7 @@ describe("fetchShopeeOfficialProduct", () => {
       }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await fetchShopeeMetadataViaOracle("408715442", "22499247158");
+    const result = await fetchShopeeMetadataViaOracle("408715442", "22499247158", "aspirador vertical");
     expect(result).toEqual({
       title: "Produto confirmado pela Oracle",
       price: 79.9,
@@ -114,6 +114,7 @@ describe("fetchShopeeOfficialProduct", () => {
     expect(oracleCall[0]).toBe("https://oracle.example.com/api/shopee/product");
     expect(oracleCall[1].body).toContain("oracle-test-key");
     expect(oracleCall[1].body).toContain("22499247158");
+    expect(oracleCall[1].body).toContain("aspirador vertical");
   });
 
   it("usa o endpoint padrão da Oracle quando a URL remota não foi definida", async () => {

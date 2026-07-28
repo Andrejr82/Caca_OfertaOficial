@@ -209,7 +209,7 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
  * leitura técnica à Oracle (que já possui o provedor anti-bot), mantendo a
  * criação/publicação sob a fronteira oficial desta aplicação.
  */
-export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: string): Promise<{
+export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: string, keyword = ""): Promise<{
   title: string;
   imageUrl: string;
   price: number;
@@ -234,7 +234,7 @@ export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: strin
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shopId, itemId, token: apiKey }),
+      body: JSON.stringify({ shopId, itemId, keyword: keyword.trim().slice(0, 100), token: apiKey }),
       signal: AbortSignal.timeout(60_000),
       cache: "no-store",
     });
@@ -493,6 +493,7 @@ export async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string)
 async function generateQuickPostActionInternal(
   affiliateUrl: string,
   channel: Channel | "omnichannel",
+  shopeeKeyword = "",
   requestId = crypto.randomUUID(),
   diagnostics?: { stage: string },
 ): Promise<QuickPostResult> {
@@ -704,7 +705,7 @@ async function generateQuickPostActionInternal(
       return { ok: false, status: "SHOPEE_PRODUCT_IDS_NOT_FOUND", message: "Não foi possível confirmar a identidade do produto no link da Shopee." };
     }
 
-    const oracleData = await fetchShopeeMetadataViaOracle(shopId, itemId);
+    const oracleData = await fetchShopeeMetadataViaOracle(shopId, itemId, shopeeKeyword);
     if (!oracleData) {
       log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "marketplace_provider" });
       return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "A API oficial da Shopee não confirmou este produto. A oferta pode ter expirado, estar indisponível ou não participar do programa de afiliados." };
@@ -986,11 +987,12 @@ async function generateQuickPostActionInternal(
 export async function generateQuickPostAction(
   affiliateUrl: string,
   channel: Channel | "omnichannel",
+  shopeeKeyword = "",
 ): Promise<QuickPostResult> {
   const requestId = crypto.randomUUID();
   const diagnostics = { stage: "start" };
   try {
-    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics);
+    return await generateQuickPostActionInternal(affiliateUrl, channel, shopeeKeyword, requestId, diagnostics);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     log("[Express Unhandled Error]", {

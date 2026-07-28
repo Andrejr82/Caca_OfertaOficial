@@ -233,40 +233,80 @@ async function fetchShopeeNativeCategoryProducts(category, payloadObject) {
  * Esta é a mesma fronteira assinada usada pela descoberta nativa, exposta para
  * consumidores internos como a Publicação Expressa sem compartilhar segredos.
  */
-async function lookupShopeeAffiliateProduct(shopId, itemId) {
+function normalizeShopeeAffiliateProduct(node, shopId, itemId) {
+  if (String(node?.itemId || '') !== itemId) return null;
+  // The same item id can only be published when it is the product requested by
+  // the Express link.  Do not accept a merely similar keyword result.
+  if (node?.shopId != null && String(node.shopId) !== shopId) return null;
+  const price = Number.parseFloat(String(node.priceMin || '').replace(',', '.'));
+  const title = String(node.productName || '').trim();
+  const imageUrl = String(node.imageUrl || '').trim();
+  if (!title || !imageUrl || !Number.isFinite(price) || price <= 0) return null;
+  return {
+    shopId,
+    itemId,
+    title,
+    imageUrl: imageUrl.startsWith('//') ? `https:${imageUrl}` : imageUrl,
+    price,
+    affiliateUrl: String(node.offerLink || ''),
+  };
+}
+
+async function lookupShopeeAffiliateProduct(shopId, itemId, keyword = '') {
   const normalizedShopId = String(shopId || '').trim();
   const normalizedItemId = String(itemId || '').trim();
   if (!/^\d+$/.test(normalizedShopId) || !/^\d+$/.test(normalizedItemId)) return null;
 
+  // The automatic Oracle cycle has already confirmed these rows through the
+  // official Shopee API. Reusing an exact stored identity avoids a needless
+  // second marketplace request and preserves the same discovery contract.
+  const { data: knownOffer, error: knownOfferError } = await getSupabase()
+    .from('offers')
+    .select('product_name, image_url, current_price, original_url, shopee_item_id, shopee_shop_id')
+    .eq('user_id', ADMIN_USER_ID)
+    .eq('platform', 'Shopee')
+    .eq('shopee_item_id', normalizedItemId)
+    .eq('shopee_shop_id', normalizedShopId)
+    .order('updated_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (knownOfferError) throw new Error('Consulta de oferta Shopee já descoberta falhou: ' + knownOfferError.message);
+  if (knownOffer) {
+    const price = Number(knownOffer.current_price);
+    const title = String(knownOffer.product_name || '').trim();
+    const imageUrl = String(knownOffer.image_url || '').trim();
+    if (title && imageUrl && Number.isFinite(price) && price > 0) {
+      return {
+        shopId: normalizedShopId,
+        itemId: normalizedItemId,
+        title,
+        imageUrl,
+        price,
+        affiliateUrl: String(knownOffer.original_url || ''),
+      };
+    }
+  }
+
   const query = 'query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId } } }';
+  const providedKeyword = String(keyword || '').trim().replace(/\s+/g, ' ').slice(0, 100);
   const keywords = [
     `https://shopee.com.br/product/${normalizedShopId}/${normalizedItemId}`,
     normalizedItemId,
+    ...(providedKeyword ? [providedKeyword] : []),
   ];
 
   for (const keyword of keywords) {
     const payload = JSON.stringify({
       operationName: 'ShopeePromotionOffers',
       query,
-      variables: { keyword, productCatId: null, page: 1, limit: 20, sortType: 2, isAMSOffer: true },
+      variables: { keyword, productCatId: null, page: 1, limit: providedKeyword === keyword ? 50 : 20, sortType: 2, isAMSOffer: true },
     });
     const response = await callShopeeAffiliateApi(payload);
     if (!response || response.status !== 200 || (response.data?.errors || []).length) continue;
     const nodes = response.data?.data?.productOfferV2?.nodes || [];
-    const product = nodes.find((node) => String(node?.itemId || '') === normalizedItemId);
-    if (!product) continue;
-    const price = Number.parseFloat(String(product.priceMin || '').replace(',', '.'));
-    const title = String(product.productName || '').trim();
-    const imageUrl = String(product.imageUrl || '').trim();
-    if (!title || !imageUrl || !Number.isFinite(price) || price <= 0) continue;
-    return {
-      shopId: normalizedShopId,
-      itemId: normalizedItemId,
-      title,
-      imageUrl: imageUrl.startsWith('//') ? `https:${imageUrl}` : imageUrl,
-      price,
-      affiliateUrl: String(product.offerLink || ''),
-    };
+    const product = nodes.find((node) => normalizeShopeeAffiliateProduct(node, normalizedShopId, normalizedItemId));
+    const normalizedProduct = normalizeShopeeAffiliateProduct(product, normalizedShopId, normalizedItemId);
+    if (normalizedProduct) return normalizedProduct;
   }
   return null;
 }
