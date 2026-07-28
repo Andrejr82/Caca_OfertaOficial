@@ -178,7 +178,7 @@
 - [ ] **Step 1: Execute exactly one approved dry-run evidence run.**
 - [ ] **Step 2: Review the report manually for false grouping and false rejection.**
 - [ ] **Step 3: Publish the branch for PR review without enabling the flag.**
-- [ ] **Step 4: Request approval before any future integration work.****
+- [ ] **Step 4: Request approval before any future integration work.**
 
 ## Verification Gate
 
