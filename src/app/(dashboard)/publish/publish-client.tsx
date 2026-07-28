@@ -257,11 +257,12 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             <textarea
               value={linksInput}
               onChange={(e) => setLinksInput(e.target.value)}
-              placeholder={"Cole seus links aqui, um por linha:\nhttps://s.shopee.com.br/...\nhttps://meli.la/...\nhttps://br.shein.com/..."}
+              placeholder={"Cole seus links aqui, um por linha:\nhttps://s.shopee.com.br/codigo-afiliado\nhttps://shopee.com.br/produto-i.loja.item\nhttps://meli.la/..."}
               className="glass-input focus-ring w-full max-w-full rounded-lg py-3 px-4 text-sm font-mono resize-none h-[120px] overflow-auto whitespace-pre-wrap break-all"
               style={{ wordBreak: 'break-all', overflowWrap: 'anywhere' }}
               disabled={isProcessing}
             />
+            <p className="mt-1 text-xs text-white/40">Shopee: aceitamos o link curto de afiliado ou a URL normal de um produto individual.</p>
           </Field>
 
           <div className="grid gap-4 content-end">

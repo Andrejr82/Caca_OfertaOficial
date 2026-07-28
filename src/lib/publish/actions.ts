@@ -17,6 +17,7 @@ import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/ex
 import { extractMLId } from "@/lib/platforms/mercadolivre";
 import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
 import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
+import { selectShopeeIdentity } from "@/lib/publish/shopee-identity";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -690,9 +691,12 @@ async function generateQuickPostActionInternal(
     log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length, identitySource: resolved.identitySource });
 
     // Usar o ID da URL se foi extraído de forma segura
-    const extractedIds = extractShopeeIds(resolvedUrl);
-    itemId = resolved.selectedItemId || extractedIds.itemId;
-    shopId = extractedIds.shopId;
+    const shopeeIdentity = selectShopeeIdentity({
+      selectedItemId: resolved.selectedItemId,
+      resolvedUrl,
+    });
+    itemId = shopeeIdentity.itemId;
+    shopId = shopeeIdentity.shopId;
     
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Shopee", hasShopId: !!shopId, hasItemId: !!itemId });
     
