@@ -1,0 +1,59 @@
+[
+  {
+    "marketplace": "Mercado Livre",
+    "nativeIdentity": "MLB1234567890",
+    "sourceItemId": "MLB1234567890",
+    "title": "Air Fryer Digital 4 Litros",
+    "sourceUrl": "https://www.mercadolivre.com.br/p/MLB1234567890",
+    "imageUrl": "https://http2.mlstatic.com/image.jpg",
+    "currentPrice": 199.9,
+    "originalPrice": 299.9,
+    "marketplaceMetrics": { "item_id": "MLB1234567890", "rating": 4.8, "sales": 1200, "shippingFree": true },
+    "currentFlowStatus": "pending_manual_review",
+    "discountEvidence": { "source": "fixture_price_history" },
+    "affiliateLinks": [
+      { "channel": "telegram", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/tg_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "whatsapp", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/wp_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "facebook", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/fb_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "instagram", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/ig_123e4567-e89b-12d3-a456-426614174000" }
+    ]
+  },
+  {
+    "marketplace": "Amazon",
+    "nativeIdentity": "B0ABC12345",
+    "sourceItemId": "B0ABC12345",
+    "title": "Cafeteira Espresso Compacta",
+    "sourceUrl": "https://www.amazon.com.br/dp/B0ABC12345",
+    "imageUrl": "https://images.example/amazon.jpg",
+    "currentPrice": 249.9,
+    "originalPrice": 349.9,
+    "marketplaceMetrics": { "asin": "B0ABC12345", "rating": 4.7, "sales": 800, "shippingFree": true },
+    "currentFlowStatus": "pending_manual_review",
+    "discountEvidence": { "source": "fixture_price_history" },
+    "affiliateLinks": [
+      { "channel": "telegram", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/tg_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "whatsapp", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/wp_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "facebook", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/fb_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "instagram", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/ig_123e4567-e89b-12d3-a456-426614174000" }
+    ]
+  },
+  {
+    "marketplace": "Shopee",
+    "nativeIdentity": "123456789",
+    "sourceItemId": "123456789",
+    "title": "Organizador Multiuso para Cozinha",
+    "sourceUrl": "https://shopee.com.br/product/777/123456789",
+    "imageUrl": "https://cf.shopee.com.br/image.jpg",
+    "currentPrice": 39.9,
+    "originalPrice": 59.9,
+    "marketplaceMetrics": { "itemId": "123456789", "shopId": "777", "rating": 4.8, "sales": 500, "shippingFree": true },
+    "currentFlowStatus": "pending_manual_review",
+    "discountEvidence": { "source": "fixture_price_history" },
+    "affiliateLinks": [
+      { "channel": "telegram", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/tg_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "whatsapp", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/wp_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "facebook", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/fb_123e4567-e89b-12d3-a456-426614174000" },
+      { "channel": "instagram", "trackedUrl": "https://caca-oferta-oficial.vercel.app/go/ig_123e4567-e89b-12d3-a456-426614174000" }
+    ]
+  }
+]
