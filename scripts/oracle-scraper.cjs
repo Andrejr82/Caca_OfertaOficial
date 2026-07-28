@@ -228,6 +228,49 @@ async function fetchShopeeNativeCategoryProducts(category, payloadObject) {
   };
 }
 
+/**
+ * Consulta determinística de um SKU já identificado por shopId/itemId.
+ * Esta é a mesma fronteira assinada usada pela descoberta nativa, exposta para
+ * consumidores internos como a Publicação Expressa sem compartilhar segredos.
+ */
+async function lookupShopeeAffiliateProduct(shopId, itemId) {
+  const normalizedShopId = String(shopId || '').trim();
+  const normalizedItemId = String(itemId || '').trim();
+  if (!/^\d+$/.test(normalizedShopId) || !/^\d+$/.test(normalizedItemId)) return null;
+
+  const query = 'query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId } } }';
+  const keywords = [
+    `https://shopee.com.br/product/${normalizedShopId}/${normalizedItemId}`,
+    normalizedItemId,
+  ];
+
+  for (const keyword of keywords) {
+    const payload = JSON.stringify({
+      operationName: 'ShopeePromotionOffers',
+      query,
+      variables: { keyword, productCatId: null, page: 1, limit: 20, sortType: 2, isAMSOffer: true },
+    });
+    const response = await callShopeeAffiliateApi(payload);
+    if (!response || response.status !== 200 || (response.data?.errors || []).length) continue;
+    const nodes = response.data?.data?.productOfferV2?.nodes || [];
+    const product = nodes.find((node) => String(node?.itemId || '') === normalizedItemId);
+    if (!product) continue;
+    const price = Number.parseFloat(String(product.priceMin || '').replace(',', '.'));
+    const title = String(product.productName || '').trim();
+    const imageUrl = String(product.imageUrl || '').trim();
+    if (!title || !imageUrl || !Number.isFinite(price) || price <= 0) continue;
+    return {
+      shopId: normalizedShopId,
+      itemId: normalizedItemId,
+      title,
+      imageUrl: imageUrl.startsWith('//') ? `https:${imageUrl}` : imageUrl,
+      price,
+      affiliateUrl: String(product.offerLink || ''),
+    };
+  }
+  return null;
+}
+
 async function loadShopeeNoveltyKeys() {
   const { data, error } = await getSupabase()
     .from('offers')
@@ -1197,6 +1240,7 @@ module.exports = {
   persistDiscoveryIngestionV1,
   resolveOfficialAITriggerEndpoint,
   refreshShopeeNativeCatalog,
+  lookupShopeeAffiliateProduct,
   runMercadoLivreOfficialDryRun,
   runShopeeScenarioRecording,
   runMultiMarketplaceScenarioRecording,

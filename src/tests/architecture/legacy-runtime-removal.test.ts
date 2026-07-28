@@ -99,11 +99,12 @@ describe("PMAV5-010 legacy runtime removal", () => {
     expect(worker).not.toMatch(/fetchAmazonDiscoveryV3|fetchShopeeDiscoveryV4|runShopeeV4DryRun/);
   });
 
-  it("mantém endpoints Shopee legados do Oracle API fail-closed e sem pipeline antigo", () => {
+  it("mantém tendência Shopee legada fail-closed e expõe apenas a consulta oficial por SKU", () => {
     const oracleApi = source("scripts/oracle-api.cjs");
     expect(oracleApi).not.toContain("runShopeeOfficialPipeline");
     expect(oracleApi).toMatch(/\/api\/shopee\/trends[\s\S]*LEGACY_ENDPOINT_DISABLED/);
-    expect(oracleApi).toMatch(/\/api\/shopee\/product[\s\S]*LEGACY_ENDPOINT_DISABLED/);
+    expect(oracleApi).toContain("lookupShopeeAffiliateProduct");
+    expect(oracleApi).toContain("SHOPEE_PRODUCT_NOT_FOUND");
   });
 
   it("não mantém referências de entrypoint para runtimes removidos", () => {

@@ -140,12 +140,25 @@ app.post('/api/shopee/trends', async (req, res) => {
 });
 
 app.post('/api/shopee/product', async (req, res) => {
-  const { token } = req.body || {};
+  const { token, shopId, itemId } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
   }
-  return res.status(410).json({ success: false, code: 'LEGACY_ENDPOINT_DISABLED', error: LEGACY_ENDPOINT_DISABLED });
+  if (!/^\d+$/.test(String(shopId || '')) || !/^\d+$/.test(String(itemId || ''))) {
+    return res.status(400).json({ ok: false, code: 'INVALID_SHOPEE_PRODUCT_ID', message: 'shopId e itemId numéricos são obrigatórios.' });
+  }
+  try {
+    const { lookupShopeeAffiliateProduct } = require('./oracle-scraper.cjs');
+    const product = await lookupShopeeAffiliateProduct(shopId, itemId);
+    if (!product) {
+      return res.status(404).json({ ok: false, code: 'SHOPEE_PRODUCT_NOT_FOUND', message: 'A API oficial da Shopee não confirmou este SKU.' });
+    }
+    return res.json({ ok: true, data: product });
+  } catch (error) {
+    console.error(`[API] Consulta Shopee por SKU falhou: ${error.message || String(error)}`);
+    return res.status(502).json({ ok: false, code: 'SHOPEE_PRODUCT_LOOKUP_FAILED', message: 'A Oracle não concluiu a consulta oficial Shopee.' });
+  }
 });
 
 app.post('/api/netshoes/trends', async (req, res) => {

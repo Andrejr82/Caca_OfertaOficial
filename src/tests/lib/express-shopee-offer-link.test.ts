@@ -98,33 +98,35 @@ describe("fetchShopeeOfficialProduct", () => {
     vi.stubEnv("ORACLE_API_KEY", "oracle-test-key");
     const fetchMock = vi.fn()
       .mockImplementationOnce(() => new Response(JSON.stringify({
-        success: true,
-        data: { extract: { title: "Produto confirmado pela Oracle", price: "R$ 79,90", image: "https://img.example.com/product.jpg" } },
+        ok: true,
+        data: { title: "Produto confirmado pela Oracle", price: "R$ 79,90", imageUrl: "https://img.example.com/product.jpg", affiliateUrl: "https://s.shopee.com.br/test" },
       }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await fetchShopeeMetadataViaOracle("https://shopee.com.br/product/408715442/22499247158");
+    const result = await fetchShopeeMetadataViaOracle("408715442", "22499247158");
     expect(result).toEqual({
       title: "Produto confirmado pela Oracle",
       price: 79.9,
       imageUrl: "https://img.example.com/product.jpg",
+      affiliateUrl: "https://s.shopee.com.br/test",
     });
     const oracleCall = fetchMock.mock.calls[0];
-    expect(oracleCall[0]).toBe("https://oracle.example.com/api/scrape");
+    expect(oracleCall[0]).toBe("https://oracle.example.com/api/shopee/product");
     expect(oracleCall[1].body).toContain("oracle-test-key");
+    expect(oracleCall[1].body).toContain("22499247158");
   });
 
   it("usa o endpoint padrão da Oracle quando a URL remota não foi definida", async () => {
     vi.stubEnv("ORACLE_API_KEY", "oracle-test-key");
     const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      success: true,
-      data: { extract: { title: "Produto Oracle", price: 10, image: "https://img.example.com/p.jpg" } },
+      ok: true,
+      data: { title: "Produto Oracle", price: 10, imageUrl: "https://img.example.com/p.jpg", affiliateUrl: "" },
     }), { status: 200 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await fetchShopeeMetadataViaOracle("https://shopee.com.br/product/1/2");
+    await fetchShopeeMetadataViaOracle("1", "2");
 
-    expect(fetchMock.mock.calls[0][0]).toBe("http://193.122.242.178:3002/api/scrape");
+    expect(fetchMock.mock.calls[0][0]).toBe("http://193.122.242.178:3002/api/shopee/product");
   });
 
   it("extrai o nome do produto do slug da URL quando a página não expõe og:title", async () => {

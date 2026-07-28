@@ -209,10 +209,11 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
  * leitura técnica à Oracle (que já possui o provedor anti-bot), mantendo a
  * criação/publicação sob a fronteira oficial desta aplicação.
  */
-export async function fetchShopeeMetadataViaOracle(url: string): Promise<{
+export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: string): Promise<{
   title: string;
   imageUrl: string;
   price: number;
+  affiliateUrl: string;
 } | null> {
   // A API técnica da Oracle é exposta na VPS; as variáveis permitem override
   // em ambientes diferentes sem deixar a Publicação Expressa sem fallback.
@@ -228,22 +229,23 @@ export async function fetchShopeeMetadataViaOracle(url: string): Promise<{
     return null;
   }
 
-  const endpoint = `${baseUrl.replace(/\/+$/, "").replace(/\/api\/scrape$/, "")}/api/scrape`;
+  const endpoint = `${baseUrl.replace(/\/+$/, "").replace(/\/api\/scrape$/, "")}/api/shopee/product`;
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, token: apiKey }),
-      signal: AbortSignal.timeout(25_000),
+      body: JSON.stringify({ shopId, itemId, token: apiKey }),
+      signal: AbortSignal.timeout(60_000),
       cache: "no-store",
     });
     const payload = await response.json().catch(() => null);
-    const extract = payload?.data?.extract;
-    const title = typeof extract?.title === "string" ? extract.title.trim() : "";
-    const imageUrl = typeof extract?.image === "string" ? extract.image.trim() : "";
-    const price = parseMarketplacePrice(extract?.price);
+    const product = payload?.data;
+    const title = typeof product?.title === "string" ? product.title.trim() : "";
+    const imageUrl = typeof product?.imageUrl === "string" ? product.imageUrl.trim() : "";
+    const price = parseMarketplacePrice(product?.price);
+    const affiliateUrl = typeof product?.affiliateUrl === "string" ? product.affiliateUrl.trim() : "";
     if (!response.ok || !title || !imageUrl || price <= 0) return null;
-    return { title, imageUrl, price };
+    return { title, imageUrl, price, affiliateUrl };
   } catch (error) {
     console.warn("[ACTIONS][SHOPEE] Fallback técnico Oracle indisponível", {
       errorType: error instanceof Error ? error.name : typeof error,
@@ -694,57 +696,23 @@ async function generateQuickPostActionInternal(
     
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Shopee", hasShopId: !!shopId, hasItemId: !!itemId });
     
-    // Se temos shopId e itemId (como no caso do opaanlp), tenta a API oficial primeiro
-    let apiSuccess = false;
+    // O contrato Shopee é executado pela Oracle, que detém o cliente oficial,
+    // assinatura, política de retry e as credenciais do marketplace.
     let shopeeAffiliateUrl = "";
-    if (shopId && itemId) {
-      const apiData = await fetchShopeeOfficialProduct(shopId, itemId);
-      if (apiData) {
-        title = apiData.title;
-        imageUrl = apiData.imageUrl;
-        price = apiData.price;
-        shopeeAffiliateUrl = apiData.affiliateUrl;
-        apiSuccess = true;
-      }
-    }
-    
-    // Fallback: se a API oficial não retornar (ou não termos IDs), usa readShopeeMetadata (scraping)
-    if (!apiSuccess) {
-      const shopeeData = await readShopeeMetadata(resolvedUrl, resolved.htmlBody);
-      title = shopeeData.title;
-      imageUrl = shopeeData.imageUrl;
-      price = shopeeData.price;
-      shopId = shopId || shopeeData.shopId;
-      itemId = itemId || shopeeData.itemId;
+    if (!shopId || !itemId) {
+      log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_IDS_NOT_FOUND", stage: "url_resolution" });
+      return { ok: false, status: "SHOPEE_PRODUCT_IDS_NOT_FOUND", message: "Não foi possível confirmar a identidade do produto no link da Shopee." };
     }
 
-    // O HTML público da Shopee pode exigir sessão. Quando isso acontecer, a
-    // Oracle faz a mesma leitura com seu provedor técnico autenticado.
-    if (!title || !imageUrl || price <= 0) {
-      // A Oracle deve receber primeiro a URL afiliada original: o redirecionamento
-      // da Shopee carrega os parâmetros que permitem ao provedor técnico alcançar
-      // a PDP. A URL canônica só é uma segunda tentativa sem esses parâmetros.
-      const oracleUrls = [...new Set([
-        inputUrl,
-        resolvedUrl,
-        shopId && itemId ? `https://shopee.com.br/product/${shopId}/${itemId}` : "",
-      ].filter(Boolean))];
-      for (const oracleUrl of oracleUrls) {
-        const oracleData = await fetchShopeeMetadataViaOracle(oracleUrl);
-        if (!oracleData) continue;
-        title = oracleData.title;
-        imageUrl = oracleData.imageUrl;
-        price = oracleData.price;
-        log("[Express Fallback]", { requestId: operationId, marketplace: "Shopee", message: "Metadados confirmados pela Oracle." });
-        break;
-      }
+    const oracleData = await fetchShopeeMetadataViaOracle(shopId, itemId);
+    if (!oracleData) {
+      log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "marketplace_provider" });
+      return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "A API oficial da Shopee não confirmou este produto. A oferta pode ter expirado, estar indisponível ou não participar do programa de afiliados." };
     }
-    
-    // Em caso de opaanlp e API não retornou dados (e scraping também costuma falhar), retornar erro customizado
-    if (!apiSuccess && resolvedUrl.includes("shopee.com.br/opaanlp/") && !isShopeeAffiliateInput(inputUrl)) {
-      log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "url_resolution" });
-      return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "O produto não pôde ser confirmado pela API da Shopee. A oferta pode ter expirado ou estar indisponível." };
-    }
+    title = oracleData.title;
+    imageUrl = oracleData.imageUrl;
+    price = oracleData.price;
+    shopeeAffiliateUrl = oracleData.affiliateUrl;
     
     // Shopee: preserva sempre o link afiliado (que pode ser o original s.shopee.com.br ou o resolvido com afiliação)
     generatedAffiliateUrl = isShopeeAffiliateInput(inputUrl) ? inputUrl : shopeeAffiliateUrl;
