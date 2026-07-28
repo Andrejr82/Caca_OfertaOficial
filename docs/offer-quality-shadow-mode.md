@@ -17,6 +17,12 @@ OFFER_QUALITY_PIPELINE_V2=false
 Qualquer erro do callback é isolado em `discovery.quality.shadow.failed` e não
 derruba o ciclo V1.
 
+Quando a flag está em `shadow`, o `oracle-scraper.cjs` carrega o runtime
+empacotado `scripts/offer-quality-shadow-runtime.cjs`. Esse runtime converte os
+candidatos do ciclo, executa o avaliador V2 e compara os vencedores V2 com os
+selecionados pela fila V1. Ele retorna apenas contadores sanitizados para a
+telemetria; não recebe cliente Supabase e não possui caminho de publicação.
+
 ## Contrato operacional
 
 O callback recebe somente dados do ciclo atual:

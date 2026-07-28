@@ -1,5 +1,6 @@
 import {
   createOfferQualityCandidate,
+  type OfferQualityCandidateInput,
   type OfferQualityCandidate,
   type OfferQualityDecision,
   type OfferQualityReport,
@@ -36,7 +37,7 @@ export interface OfferQualityEvaluationOptions {
 }
 
 export function evaluateCandidates(
-  rawCandidates: readonly OfferQualityCandidate[],
+  rawCandidates: readonly OfferQualityCandidateInput[],
   options: OfferQualityEvaluationOptions,
 ): OfferQualityReport {
   const decisions: OfferQualityDecision[] = [];

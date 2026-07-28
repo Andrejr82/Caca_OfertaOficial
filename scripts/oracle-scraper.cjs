@@ -119,6 +119,27 @@ const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOffic
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 
+function createQualityShadowRunner() {
+  if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'shadow') return null;
+  let runtime;
+  try {
+    runtime = require('./offer-quality-shadow-runtime.cjs');
+  } catch (error) {
+    return async () => { throw new Error(`Runtime de qualidade shadow indisponível: ${error.message}`); };
+  }
+  if (typeof runtime.evaluateDiscoveryShadow !== 'function') {
+    return async () => { throw new Error('Runtime de qualidade shadow sem avaliador'); };
+  }
+  return async (payload) => runtime.evaluateDiscoveryShadow(
+    payload.candidates || [],
+    payload.queue || {},
+    {
+      runId: `shadow-${payload.correlationId}-${payload.marketplace}`,
+      generatedAt: new Date().toISOString(),
+    },
+  );
+}
+
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 // Executa ciclos de 4 horas. O roteador transforma cada ciclo em um bundle
 // determinístico das janelas editoriais que ele atravessa.
@@ -1105,6 +1126,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
+    qualityShadow: createQualityShadowRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: Math.min(50, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1140,6 +1162,7 @@ async function runScrapingCycleCore() {
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
+    qualityShadow: createQualityShadowRunner(),
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 15, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1184,6 +1207,7 @@ async function runShopeeScenarioRecording(scenario) {
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
+    qualityShadow: createQualityShadowRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1223,6 +1247,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
+    qualityShadow: createQualityShadowRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,

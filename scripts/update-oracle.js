@@ -34,6 +34,7 @@ const DEPLOY_FILES = [
   'scripts/family-variant-selector.cjs',
   'scripts/family-key-engine.cjs',
   'scripts/curation-policy.cjs',
+  'scripts/offer-quality-shadow-runtime.cjs',
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
