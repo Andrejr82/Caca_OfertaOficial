@@ -32,3 +32,17 @@ export function selectShopeeIdentity(input: ShopeeIdentityInput): ShopeeIdentity
   if (/^\d+$/.test(selected)) return { shopId: fromUrl.shopId, itemId: selected };
   return fromUrl;
 }
+
+export function deriveShopeeKeyword(url: string): string {
+  try {
+    const slug = decodeURIComponent(new URL(url).pathname)
+      .match(/\/([^/]+?)-i\.\d+\.\d+\/?$/i)?.[1];
+    return (slug || "")
+      .replace(/[-_]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 100);
+  } catch {
+    return "";
+  }
+}

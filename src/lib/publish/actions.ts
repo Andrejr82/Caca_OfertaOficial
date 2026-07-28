@@ -17,7 +17,7 @@ import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/ex
 import { extractMLId } from "@/lib/platforms/mercadolivre";
 import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
 import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
-import { selectShopeeIdentity } from "@/lib/publish/shopee-identity";
+import { deriveShopeeKeyword, selectShopeeIdentity } from "@/lib/publish/shopee-identity";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -210,7 +210,7 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
  * ciclo automático (inclusive por keywords) e depois consulta o SKU, sempre
  * exigindo o mesmo itemId do link.
  */
-export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: string): Promise<{
+export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: string, keyword = ""): Promise<{
   title: string;
   imageUrl: string;
   price: number;
@@ -235,7 +235,7 @@ export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: strin
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ shopId, itemId, token: apiKey }),
+      body: JSON.stringify({ shopId, itemId, keyword: keyword.trim().slice(0, 100), token: apiKey }),
       signal: AbortSignal.timeout(60_000),
       cache: "no-store",
     });
@@ -708,7 +708,7 @@ async function generateQuickPostActionInternal(
       return { ok: false, status: "SHOPEE_PRODUCT_IDS_NOT_FOUND", message: "Não foi possível confirmar a identidade do produto no link da Shopee." };
     }
 
-    const oracleData = await fetchShopeeMetadataViaOracle(shopId, itemId);
+    const oracleData = await fetchShopeeMetadataViaOracle(shopId, itemId, deriveShopeeKeyword(resolvedUrl));
     if (!oracleData) {
       log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "marketplace_provider" });
       return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "A API oficial da Shopee não confirmou este produto. A oferta pode ter expirado, estar indisponível ou não participar do programa de afiliados." };
