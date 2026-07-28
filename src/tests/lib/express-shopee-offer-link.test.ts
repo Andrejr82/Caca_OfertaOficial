@@ -65,6 +65,32 @@ describe("fetchShopeeOfficialProduct", () => {
     expect(JSON.parse(fetchMock.mock.calls[1][1].body).variables.keyword).toBe("22494398493");
   });
 
+  it("envia o mesmo contrato GraphQL da descoberta nativa da Oracle", async () => {
+    vi.stubEnv("SHOPEE_APP_ID", "app-test");
+    vi.stubEnv("SHOPEE_APP_SECRET", "secret-test");
+    const fetchMock = vi.fn().mockImplementation(() => new Response(JSON.stringify({
+      data: { productOfferV2: { nodes: [] } },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchShopeeOfficialProduct("408715442", "22499247158");
+
+    const payload = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(payload).toMatchObject({
+      operationName: "ShopeePromotionOffers",
+      variables: {
+        keyword: "https://shopee.com.br/product/408715442/22499247158",
+        productCatId: null,
+        page: 1,
+        limit: 20,
+        sortType: 2,
+        isAMSOffer: true,
+      },
+    });
+    expect(payload.query).toContain("shopId");
+    expect(payload.query).toContain("productLink");
+  });
+
   it("extrai o nome do produto do slug da URL quando a página não expõe og:title", async () => {
     const html = '<meta property="og:image" content="https://img.shopee.test/item.jpg">';
     const result = await readShopeeMetadata(

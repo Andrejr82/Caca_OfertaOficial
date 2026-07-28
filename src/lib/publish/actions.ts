@@ -152,12 +152,15 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
     return null;
   }
 
-  const query = "query ShopeePromotionOffers($keyword: String, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName imageUrl priceMin offerLink } } }";
+  // Mantido em paridade com o payload assinado da descoberta nativa na Oracle.
+  // A Open API é sensível ao contrato GraphQL, principalmente em produtos que
+  // chegam por link curto e não possuem metadados HTML públicos.
+  const query = "query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds } pageInfo { page limit hasNextPage } } }";
   const keywords = [`https://shopee.com.br/product/${shopId}/${itemId}`, itemId];
 
   for (const keyword of keywords) {
-    const variables = { keyword, page: 1, limit: 1, sortType: 2, isAMSOffer: true };
-    const requestBody = JSON.stringify({ query, variables });
+    const variables = { keyword, productCatId: null, page: 1, limit: 20, sortType: 2, isAMSOffer: true };
+    const requestBody = JSON.stringify({ operationName: "ShopeePromotionOffers", query, variables });
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = createHash("sha256")
       .update(`${appId}${timestamp}${requestBody}${appSecret}`)
