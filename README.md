@@ -2,6 +2,8 @@
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
+O runtime operacional atual está descrito em [docs/RELEASE_STATUS_2026-07-28.md](docs/RELEASE_STATUS_2026-07-28.md). Os documentos PMAV5 são registros históricos e contratuais; não substituem a verificação do código e do manifesto de release.
+
 ## Arquitetura atual
 
 A arquitetura canônica está em [docs/architecture-current.md](docs/architecture-current.md). A documentação oficial, organizada por assunto, está em [docs/official.md](docs/official.md).
@@ -13,7 +15,7 @@ flowchart LR
   B --> D["Official AI\n/api/ai/generate"]
   C --> E["Painel Next.js"]
   E --> F["Curadoria e drafts"]
-  F --> G["Telegram / Instagram / WhatsApp"]
+  F --> G["Telegram / Instagram / WhatsApp / Facebook"]
 ```
 
 Fluxo principal:
@@ -23,6 +25,8 @@ Fluxo principal:
 3. A Official AI gera drafts de copy e links rastreáveis.
 4. O painel permite curadoria, aprovação e rejeição.
 5. As publicações aprovadas são enviadas pelos transportes oficiais configurados.
+
+O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `08:00`, `12:00`, `16:00` e `20:00`, `America/Sao_Paulo`). O ciclo Discovery-Only atual materializa candidatos de Shopee, Mercado Livre e Amazon; Shein, Magalu e Netshoes permanecem capacidades separadas até homologação própria. A Publicação Expressa é um fluxo independente de ingestão de links, com validação de marketplace e monetização antes da geração de copy.
 
 ## Estrutura do repositório
 

@@ -1,6 +1,6 @@
 # Arquitetura atual — Caça Oferta Oficial
 
-> Fonte canônica documental do runtime versionado no repositório em 2026-07-19. A implementação continua sendo a autoridade final.
+> Fonte canônica documental do runtime versionado no repositório em 2026-07-28. A implementação e o manifesto de release continuam sendo a autoridade final.
 
 ## Visão geral
 
@@ -18,6 +18,7 @@ flowchart LR
   T --> TG["Telegram"]
   T --> IG["Instagram"]
   T --> WA["WhatsApp Engine"]
+  T --> FB["Facebook"]
   O -. "POST /api/scrape quando solicitado" .-> OA["Oracle API :3002"]
   OA --> SF["Scrapfly / Scrape.do"]
   WA --> WS["WhatsApp :3001\nBaileys"]
@@ -42,7 +43,7 @@ flowchart LR
 2. Deduplicação local por `sourceItemId` e validação do contrato Candidate V1.
 3. Persistência por `upsert_discovery_offers_v1/v2` e índices únicos quando há identidade nativa; a oferta termina em `pending_manual_review`.
 4. O worker chama `/api/ai/generate` com `command=PROCESS_OFFERS`, `correlationId`, `offerIds` e autorização de service role. O ciclo é paginado em lotes de 50 e usa checkpoint persistido.
-5. A Official AI lê ofertas `pending_manual_review` sem drafts e gera drafts para `telegram`, `instagram` e `whatsapp`. Nesse modo o estado da oferta permanece `pending_manual_review`.
+5. A Official AI lê ofertas `pending_manual_review` sem drafts e gera drafts para os canais habilitados (`telegram`, `instagram`, `whatsapp` e `facebook`). Nesse modo o estado da oferta permanece `pending_manual_review`.
 6. Para uma oferta já `selected`, a mesma Official AI pode gerar drafts e aprovar a oferta; o serviço de estado/idempotência registra a transição.
 7. O painel lê ofertas/posts do Supabase. Os componentes de aprovação operam sobre posts em `draft`; rejeição em lote marca posts como `deleted`.
 8. Rotas de publicação exigem autenticação, aprovação oficial e parâmetros `postId`/`offerId`; os transportes escrevem o resultado e recibos/logs conforme o adaptador.
@@ -64,7 +65,7 @@ O schema de `offers` também aceita `draft`, `pending_manual_review`, `selected`
 
 `POST /api/ai/generate` é a rota oficial. Uma chamada individual recebe `offerId`; um ciclo recebe `command=PROCESS_OFFERS` e só é aceito com bearer igual à `SUPABASE_SERVICE_ROLE_KEY`. O Oracle Worker envia a lista de IDs, divide deterministicamente em páginas de 50 e avança o checkpoint até `batchCompleted`.
 
-O serviço usa providers OpenAI-compatible para Groq (`https://api.groq.com/openai/v1/chat/completions`) e Cerebras (`https://api.cerebras.ai/v1/chat/completions`). A escolha, fallback e modelos dependem da composição efetiva em `src/lib/ai/official` e dos providers em `src/core/ai/providers`.
+O serviço usa providers OpenAI-compatible para Groq (`https://api.groq.com/openai/v1/chat/completions`) e Cerebras (`https://api.cerebras.ai/v1/chat/completions`). A seleção do provider e do modelo depende da composição efetiva em `src/lib/ai/official` e dos providers em `src/core/ai/providers`; não há fallback sintético de links ou troca de prefixo entre canais.
 
 Idempotência é aplicada por `commandId`/`idempotencyKey`, checkpoint do ciclo, persistência de drafts e adaptadores oficiais de Supabase. A regeneração é limitada e valida cópia contra preço, desconto, cupom, frete e rating da oferta.
 
@@ -88,7 +89,9 @@ Inngest está integrado em `/api/inngest` e em `src/lib/inngest/functions.ts` co
 
 ## Oracle Cloud e operação
 
-O código define três processos esperados pelo Capacity Hunter: `oracle-api`, `oracle-scraper` e `whatsapp-bot`. O scraper cria um scheduler `node-cron` `0 */4 * * *`, timezone `America/Sao_Paulo`, com `noOverlap: true`; ao iniciar, executa um ciclo e depois agenda os seguintes. O worker encerra cada ciclo em `pending_manual_review`.
+O código define três processos esperados pelo Capacity Hunter: `oracle-api`, `oracle-scraper` e `whatsapp-bot`. O scraper cria um scheduler `node-cron` `0 0,4,8,12,16,20 * * *`, timezone `America/Sao_Paulo`, com `noOverlap: true`; ao iniciar, executa um ciclo e depois agenda os seguintes. O worker encerra cada ciclo em `pending_manual_review`.
+
+A Publicação Expressa é um fluxo separado: resolve a URL, confirma o produto no marketplace, converte links diretos em destino monetizado quando o adapter possuir credencial válida, persiste o vínculo de afiliado e somente então permite a geração de copy. Falhas de confirmação devem permanecer explícitas; não se deve fabricar produto, link ou identidade.
 
 O Oracle→Vercel é um POST para a URL configurada em `OFFICIAL_AI_TRIGGER_URL`, ou para a base pública resolvida por `APP_URL`, `NEXT_PUBLIC_APP_URL`, `PUBLIC_APP_URL`, `NEXTAUTH_URL`, `AUTH_URL` ou `VERCEL_PROJECT_PRODUCTION_URL`, sempre terminando em `/api/ai/generate`. O request usa bearer da service role quando disponível e timeout de 120 s. O Vercel→Oracle usa `POST /api/scrape` na porta 3002, autenticado por `ORACLE_API_KEY`; a API seleciona Scrapfly para não-Amazon e Scrape.do para Amazon. O botão manual de tendências usa o proxy autenticado `/api/scraper/trends`, que encaminha `category`, `sources`, `limit` e `tenantId` para `POST /api/manual/trends`; a execução permanece no Oracle Worker e reutiliza a mesma fila, persistência e Official AI. O endereço público/privado real deve ser configurado em `ORACLE_REMOTE_URL`.
 
@@ -96,7 +99,7 @@ Logs operacionais são `console.log`/`console.warn`/`console.error` dos processo
 
 ## Variáveis
 
-A lista canônica é `.env.example` e as leituras do código. Núcleo: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GROQ_API_KEY`, `GROQ_MODEL`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHANNEL_ID`, `WHATSAPP_ENGINE_URL`, `WHATSAPP_ENGINE_API_KEY`, `WHATSAPP_TARGET_ID`, credenciais de marketplaces e `OFFICIAL_AI_TRIGGER_URL`/`OFFICIAL_AI_BATCH_SIZE`. As chaves necessárias ao endpoint Inngest devem ser documentadas somente se forem lidas pelo ambiente/deploy efetivo.
+A lista segura de referência está em `.env.example`; os valores reais nunca devem ser versionados. O inventário inclui Supabase, Groq/Cerebras, URLs públicas, Oracle, transportes sociais, credenciais de marketplaces, limites de Discovery, observabilidade e armazenamento de mídia. Variáveis de teste, entradas de scripts e aliases de retrocompatibilidade estão marcadas separadamente.
 
 ## Operação e limites
 
