@@ -305,7 +305,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -457,6 +457,34 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const candidatesToPersist = uniqueProducts;
 
       const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger);
+
+      // Shadow mode is observational only. It is deliberately opt-in and never
+      // changes queue selection or persistence while the flag is not "shadow".
+      if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'shadow' && typeof qualityShadow === 'function') {
+        try {
+          await qualityShadow(Object.freeze({
+            correlationId,
+            marketplace,
+            candidates: Object.freeze([...candidatesToPersist]),
+            queue: Object.freeze({
+              selected: Object.freeze([...(queue.selected || [])]),
+              skipped: Object.freeze([...(queue.skipped || [])]),
+              deferred: Object.freeze([...(queue.deferred || [])]),
+            }),
+          }));
+          await safeObserve('discovery.quality.shadow.completed', {
+            marketplace,
+            candidates: candidatesToPersist.length,
+            selected: queue.selected.length,
+            rejected: queue.skipped.length,
+          });
+        } catch (shadowError) {
+          await safeObserve('discovery.quality.shadow.failed', {
+            marketplace,
+            error: shadowError?.message || String(shadowError),
+          });
+        }
+      }
       
       if (typeof persistV2Metadata === 'function') {
         await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: candidatesToPersist, queue });
