@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchShopeeOfficialProduct, readShopeeMetadata } from "@/lib/publish/actions";
+import { fetchShopeeMetadataViaOracle, fetchShopeeOfficialProduct, readShopeeMetadata } from "@/lib/publish/actions";
 
 describe("fetchShopeeOfficialProduct", () => {
   afterEach(() => {
@@ -89,6 +89,29 @@ describe("fetchShopeeOfficialProduct", () => {
     });
     expect(payload.query).toContain("shopId");
     expect(payload.query).toContain("productLink");
+  });
+
+  it("usa a leitura técnica da Oracle quando a Shopee não indexa o SKU na API afiliada", async () => {
+    vi.stubEnv("SHOPEE_APP_ID", "app-test");
+    vi.stubEnv("SHOPEE_APP_SECRET", "secret-test");
+    vi.stubEnv("ORACLE_REMOTE_URL", "https://oracle.example.com");
+    vi.stubEnv("ORACLE_API_KEY", "oracle-test-key");
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(() => new Response(JSON.stringify({
+        success: true,
+        data: { extract: { title: "Produto confirmado pela Oracle", price: "R$ 79,90", image: "https://img.example.com/product.jpg" } },
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchShopeeMetadataViaOracle("https://shopee.com.br/product/408715442/22499247158");
+    expect(result).toEqual({
+      title: "Produto confirmado pela Oracle",
+      price: 79.9,
+      imageUrl: "https://img.example.com/product.jpg",
+    });
+    const oracleCall = fetchMock.mock.calls[0];
+    expect(oracleCall[0]).toBe("https://oracle.example.com/api/scrape");
+    expect(oracleCall[1].body).toContain("oracle-test-key");
   });
 
   it("extrai o nome do produto do slug da URL quando a página não expõe og:title", async () => {

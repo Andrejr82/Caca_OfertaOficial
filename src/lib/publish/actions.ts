@@ -203,6 +203,45 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
   return null;
 }
 
+/**
+ * A API de afiliados só indexa itens elegíveis no catálogo promocional. Para
+ * um link afiliado válido que não esteja nesse índice, delegamos apenas a
+ * leitura técnica à Oracle (que já possui o provedor anti-bot), mantendo a
+ * criação/publicação sob a fronteira oficial desta aplicação.
+ */
+export async function fetchShopeeMetadataViaOracle(url: string): Promise<{
+  title: string;
+  imageUrl: string;
+  price: number;
+} | null> {
+  const baseUrl = process.env.ORACLE_REMOTE_URL || process.env.ORACLE_WORKER_URL || process.env.ORACLE_API_URL;
+  const apiKey = process.env.ORACLE_API_KEY;
+  if (!baseUrl || !apiKey) return null;
+
+  const endpoint = `${baseUrl.replace(/\/+$/, "").replace(/\/api\/scrape$/, "")}/api/scrape`;
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url, token: apiKey }),
+      signal: AbortSignal.timeout(25_000),
+      cache: "no-store",
+    });
+    const payload = await response.json().catch(() => null);
+    const extract = payload?.data?.extract;
+    const title = typeof extract?.title === "string" ? extract.title.trim() : "";
+    const imageUrl = typeof extract?.image === "string" ? extract.image.trim() : "";
+    const price = parseMarketplacePrice(extract?.price);
+    if (!response.ok || !title || !imageUrl || price <= 0) return null;
+    return { title, imageUrl, price };
+  } catch (error) {
+    console.warn("[ACTIONS][SHOPEE] Fallback técnico Oracle indisponível", {
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return null;
+  }
+}
+
 // ─── Leitura de metadados HTML (Shopee e fallback) ────────────────────────────
 
 function extractShopeeTitleFromUrl(url: string): string {
@@ -667,6 +706,20 @@ async function generateQuickPostActionInternal(
       price = shopeeData.price;
       shopId = shopId || shopeeData.shopId;
       itemId = itemId || shopeeData.itemId;
+    }
+
+    // O HTML público da Shopee pode exigir sessão. Quando isso acontecer, a
+    // Oracle faz a mesma leitura com seu provedor técnico autenticado.
+    if (!title || !imageUrl || price <= 0) {
+      const oracleData = await fetchShopeeMetadataViaOracle(
+        shopId && itemId ? `https://shopee.com.br/product/${shopId}/${itemId}` : resolvedUrl,
+      );
+      if (oracleData) {
+        title = oracleData.title;
+        imageUrl = oracleData.imageUrl;
+        price = oracleData.price;
+        log("[Express Fallback]", { requestId: operationId, marketplace: "Shopee", message: "Metadados confirmados pela Oracle." });
+      }
     }
     
     // Em caso de opaanlp e API não retornou dados (e scraping também costuma falhar), retornar erro customizado
