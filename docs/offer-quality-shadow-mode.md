@@ -13,6 +13,9 @@ OFFER_QUALITY_PIPELINE_V2=false
 - `shadow`: o worker pode receber um callback observacional (`qualityShadow`)
   com candidatos, selecionados, rejeitados e deferred. O callback não pode
   persistir, publicar ou alterar a fila.
+- `active`: o worker executa a admissão V2 antes de `selectCopyQueue` e passa
+  somente os vencedores admitidos para a fila V1. Este estado é opt-in e não
+  deve ser usado sem aprovação de um ciclo controlado.
 
 Qualquer erro do callback é isolado em `discovery.quality.shadow.failed` e não
 derruba o ciclo V1.
@@ -32,9 +35,15 @@ O callback recebe somente dados do ciclo atual:
 - `candidates` após a validação estrutural;
 - `queue.selected`, `queue.skipped` e `queue.deferred`.
 
-O worker continua chamando a persistência V1 exatamente como antes. A flag não
-deve ser alterada em produção sem revisão do relatório comparativo V1 × V2 e
-aprovação explícita.
+Em `false` e `shadow`, o worker continua chamando a persistência V1 exatamente
+como antes. Em `active`, a persistência ainda é a V1 existente, mas recebe
+somente os candidatos admitidos pelo V2. A flag não deve ser alterada em
+produção sem revisão do relatório comparativo V1 × V2 e aprovação explícita.
+
+Na admissão `active`, o Oracle usa apenas `product.monetization.valid`, já
+validado antes da fila. Nenhum `tracked_url`, UUID ou prefixo de canal é
+fabricado nessa etapa; os quatro links continuam sendo criados e verificados
+somente depois que o Supabase materializa o `offer_id`.
 
 ## Verificação
 
@@ -44,6 +53,9 @@ Os testes comprovam que:
 2. em `shadow`, o callback é chamado de forma observacional;
 3. a persistência V1 continua sendo chamada uma única vez;
 4. falhas do shadow não alteram o estado final do ciclo.
+
+No modo `active`, uma falha do avaliador é fail-closed para o marketplace: o
+ciclo não cai silenciosamente para a seleção V1.
 
 Não há escrita adicional no Supabase, reinício da Oracle/PM2 ou chamada de
 publicação nesse modo.

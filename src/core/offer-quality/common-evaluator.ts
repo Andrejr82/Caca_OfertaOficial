@@ -14,6 +14,7 @@ const CHANNELS = ["telegram", "whatsapp", "facebook", "instagram"] as const;
 const PREFIXES = { telegram: "tg_", whatsapp: "wp_", facebook: "fb_", instagram: "ig_" } as const;
 
 function validateMonetization(candidate: OfferQualityCandidate): MonetizationStatus {
+  if (candidate.prePersistMonetized === true) return "complete";
   const links = candidate.affiliateLinks ?? [];
   const byChannel = new Map(links.map((link) => [link.channel, link]));
   if (byChannel.size !== 4 || CHANNELS.some((channel) => !byChannel.has(channel))) return "incomplete";

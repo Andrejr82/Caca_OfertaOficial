@@ -111,6 +111,13 @@ Limitações verificáveis: produção Oracle/Vercel/Supabase e execução exter
 
 `src/app/api/**`; `src/core/**`; `src/lib/**`; `src/app/(dashboard)/**`; `scripts/oracle-scraper.cjs`; `scripts/oracle-worker-discovery-only.cjs`; `scripts/oracle-api.cjs`; `scripts/whatsapp-engine.cjs`; `apps/oracle-capacity-hunter/src/**`; `supabase/schema.sql`; `supabase/migrations/**`; `.env.example`; `src/lib/env.ts`; `package.json`; `vercel.json`.
 
-## Avaliação paralela de qualidade (inativa)
+## Avaliação de qualidade V2 (desligada por padrão)
 
-A branch `feat/offer-quality-dry-run` contém uma camada read-only para avaliar candidatos de Mercado Livre, Amazon e Shopee antes de futura persistência. Ela usa contratos Candidate V1-like, identidade nativa, agrupamento, score explicável, validação dos quatro canais e relatórios JSON/NDJSON. A flag `OFFER_QUALITY_PIPELINE_V2=false` permanece desligada; portanto, esta capacidade não altera o Oracle Worker, Supabase, painel, IA ou publicação.
+A camada V2 avalia candidatos de Mercado Livre, Amazon e Shopee com identidade
+nativa, agrupamento, score explicável e validação de monetização. Nesta branch,
+o adaptador de admissão está preparado antes de `selectCopyQueue`, mas
+`OFFER_QUALITY_PIPELINE_V2=false` continua desligada; portanto, o runtime
+produz exatamente o caminho V1 atual. `shadow` apenas compara V1 × V2, e
+somente `active` filtraria candidatos antes da fila, mediante aprovação
+explícita e ciclo controlado. Nenhum deploy, gravação Supabase, publicação ou
+mudança de PM2 é realizado por esta implementação.

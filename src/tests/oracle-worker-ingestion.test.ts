@@ -110,6 +110,33 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       mockDiscover = vi.fn();
     });
 
+    it('carrega a admissão V2 somente quando a flag está active', async () => {
+      const scraper = require('../../scripts/oracle-scraper.cjs');
+      const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
+      delete process.env.OFFER_QUALITY_PIPELINE_V2;
+      expect(scraper.createQualityAdmissionRunner()).toBeNull();
+
+      process.env.OFFER_QUALITY_PIPELINE_V2 = 'active';
+      try {
+        const runner = scraper.createQualityAdmissionRunner();
+        expect(typeof runner).toBe('function');
+        const result = await runner([{
+          sourceItemId: 'B0ABC12345',
+          sourceUrl: 'https://www.amazon.com.br/dp/B0ABC12345',
+          title: 'Cafeteira Espresso Compacta',
+          imageUrl: 'https://images.example/cafe.jpg',
+          currentPrice: 99,
+          originalPrice: 129,
+          marketplaceMetrics: { asin: 'B0ABC12345', rating: 4.8, sales: 1000 },
+          monetization: { valid: true },
+        }], 'Amazon');
+        expect(result.accepted).toHaveLength(1);
+      } finally {
+        if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
+        else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
+      }
+    });
+
     const baseContext = {
       tenantId: 't1',
       correlationId: 'c1',

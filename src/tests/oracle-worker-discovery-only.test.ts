@@ -363,6 +363,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
   it("não executa shadow mode com a flag desligada", async () => {
     const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
     const qualityShadow = vi.fn();
+    const qualityAdmission = vi.fn();
     const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
     delete process.env.OFFER_QUALITY_PIPELINE_V2;
 
@@ -375,8 +376,10 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         discover: async () => [createValidAmazonCandidate()],
         persist: async () => ({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-1"] }),
         qualityShadow,
+        qualityAdmission,
       });
       expect(qualityShadow).not.toHaveBeenCalled();
+      expect(qualityAdmission).not.toHaveBeenCalled();
     } finally {
       if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
       else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
@@ -404,6 +407,54 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       expect(qualityShadow).toHaveBeenCalledWith(expect.objectContaining({ marketplace: "Amazon" }));
       expect(persist).toHaveBeenCalledTimes(1);
       expect(result.finalState).toBe("pending_manual_review");
+    } finally {
+      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
+      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
+    }
+  });
+
+  it("em active usa somente os candidatos admitidos pelo V2 antes da fila", async () => {
+    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
+    process.env.OFFER_QUALITY_PIPELINE_V2 = "active";
+    const first = createValidAmazonCandidate();
+    const second = { ...createValidAmazonCandidate(), sourceItemId: "B000000002", marketplaceMetrics: { sourcePosition: 2, asin: "B000000002" } };
+    const qualityAdmission = vi.fn().mockImplementation((products: unknown[]) => ({ accepted: [products[0]], rejected: [] }));
+    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-active-1"] });
+
+    try {
+      await runDiscoveryOnlyCycle({
+        tenantId: "tenant-1",
+        correlationId: "cycle-quality-active",
+        requestedAt: new Date().toISOString(),
+        marketplaces: ["Amazon"],
+        discover: async () => [first, second],
+        persist,
+        qualityAdmission,
+      });
+      expect(qualityAdmission).toHaveBeenCalledTimes(1);
+      expect(persist).toHaveBeenCalledTimes(1);
+      expect((persist.mock.calls[0][0] as any[])).toHaveLength(1);
+      expect((persist.mock.calls[0][0] as any[])[0].candidate.sourceItemId).toBe(first.sourceItemId);
+    } finally {
+      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
+      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
+    }
+  });
+
+  it("em active falha fechado quando o adaptador V2 não está disponível", async () => {
+    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
+    process.env.OFFER_QUALITY_PIPELINE_V2 = "active";
+    try {
+      await expect(runDiscoveryOnlyCycle({
+        tenantId: "tenant-1",
+        correlationId: "cycle-quality-active-missing",
+        requestedAt: new Date().toISOString(),
+        marketplaces: ["Amazon"],
+        discover: async () => [createValidAmazonCandidate()],
+        persist: async () => ({ accepted: 1, state: "pending_manual_review", offerIds: ["must-not-persist"] }),
+      })).rejects.toThrow("Admissão Offer Quality V2 indisponível");
     } finally {
       if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
       else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;

@@ -305,7 +305,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -454,9 +454,44 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
       
       const uniqueProducts = Array.from(uniqueProductsMap.values());
-      const candidatesToPersist = uniqueProducts;
+      let candidatesToPersist = uniqueProducts;
+      let deferredForQueue = previouslyDeferred;
 
-      const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, previouslyDeferred, stageLogger);
+      // Active V2 is an explicit opt-in. The default and shadow paths keep the
+      // exact V1 candidate set and queue behavior.
+      if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'active' && typeof qualityAdmission !== 'function') {
+        const missingAdmissionError = new Error('Admissão Offer Quality V2 indisponível');
+        await safeObserve('discovery.quality.active.failed', {
+          marketplace,
+          error: missingAdmissionError.message,
+        });
+        throw missingAdmissionError;
+      }
+
+      if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'active' && typeof qualityAdmission === 'function') {
+        try {
+          const admission = await qualityAdmission(Object.freeze([...uniqueProducts, ...previouslyDeferred]), marketplace);
+          const admitted = Array.isArray(admission?.accepted) ? admission.accepted : [];
+          const admittedIds = new Set(admitted.map((product) => String(product?.sourceItemId || '')));
+          candidatesToPersist = uniqueProducts.filter((product) => admittedIds.has(String(product.sourceItemId)));
+          deferredForQueue = previouslyDeferred.filter((product) => admittedIds.has(String(product?.sourceItemId || '')));
+          technicalRejections += Array.isArray(admission?.rejected) ? admission.rejected.length : 0;
+          await safeObserve('discovery.quality.active.completed', {
+            marketplace,
+            candidates: uniqueProducts.length,
+            admitted: candidatesToPersist.length,
+            rejected: Array.isArray(admission?.rejected) ? admission.rejected.length : 0,
+          });
+        } catch (qualityError) {
+          await safeObserve('discovery.quality.active.failed', {
+            marketplace,
+            error: qualityError?.message || String(qualityError),
+          });
+          throw qualityError;
+        }
+      }
+
+      const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
 
       // Shadow mode is observational only. It is deliberately opt-in and never
       // changes queue selection or persistence while the flag is not "shadow".
