@@ -721,14 +721,22 @@ async function generateQuickPostActionInternal(
     // O HTML público da Shopee pode exigir sessão. Quando isso acontecer, a
     // Oracle faz a mesma leitura com seu provedor técnico autenticado.
     if (!title || !imageUrl || price <= 0) {
-      const oracleData = await fetchShopeeMetadataViaOracle(
-        shopId && itemId ? `https://shopee.com.br/product/${shopId}/${itemId}` : resolvedUrl,
-      );
-      if (oracleData) {
+      // A Oracle deve receber primeiro a URL afiliada original: o redirecionamento
+      // da Shopee carrega os parâmetros que permitem ao provedor técnico alcançar
+      // a PDP. A URL canônica só é uma segunda tentativa sem esses parâmetros.
+      const oracleUrls = [...new Set([
+        inputUrl,
+        resolvedUrl,
+        shopId && itemId ? `https://shopee.com.br/product/${shopId}/${itemId}` : "",
+      ].filter(Boolean))];
+      for (const oracleUrl of oracleUrls) {
+        const oracleData = await fetchShopeeMetadataViaOracle(oracleUrl);
+        if (!oracleData) continue;
         title = oracleData.title;
         imageUrl = oracleData.imageUrl;
         price = oracleData.price;
         log("[Express Fallback]", { requestId: operationId, marketplace: "Shopee", message: "Metadados confirmados pela Oracle." });
+        break;
       }
     }
     
