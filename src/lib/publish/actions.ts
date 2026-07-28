@@ -204,10 +204,9 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
 }
 
 /**
- * A API de afiliados só indexa itens elegíveis no catálogo promocional. Para
- * um link afiliado válido que não esteja nesse índice, delegamos apenas a
- * leitura técnica à Oracle (que já possui o provedor anti-bot), mantendo a
- * criação/publicação sob a fronteira oficial desta aplicação.
+ * A Publicação Expressa chama a Oracle porque ela contém o único cliente
+ * oficial Shopee assinado. A Oracle tenta a oferta já descoberta, o SKU e,
+ * opcionalmente, a keyword; em todos os casos exige o mesmo itemId do link.
  */
 export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: string, keyword = ""): Promise<{
   title: string;
@@ -708,7 +707,7 @@ async function generateQuickPostActionInternal(
     const oracleData = await fetchShopeeMetadataViaOracle(shopId, itemId, shopeeKeyword);
     if (!oracleData) {
       log("[Express Link Error]", { requestId: operationId, errorCode: "SHOPEE_PRODUCT_NOT_CONFIRMED", stage: "marketplace_provider" });
-      return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: "A API oficial da Shopee não confirmou este produto. A oferta pode ter expirado, estar indisponível ou não participar do programa de afiliados." };
+      return { ok: false, status: "SHOPEE_PRODUCT_NOT_CONFIRMED", message: shopeeKeyword.trim() ? "A API oficial da Shopee não confirmou este produto, mesmo com a keyword informada. A oferta pode ter expirado, estar indisponível ou não participar do programa de afiliados." : "A API oficial da Shopee não confirmou este produto. A oferta pode ter expirado, estar indisponível ou não participar do programa de afiliados." };
     }
     title = oracleData.title;
     imageUrl = oracleData.imageUrl;
