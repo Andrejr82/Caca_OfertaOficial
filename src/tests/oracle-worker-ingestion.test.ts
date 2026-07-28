@@ -1,7 +1,10 @@
 // @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   runDiscoveryOnlyCycle,
+  selectCopyQueue,
   validateCanonicalUrl,
   validateNativeIdentity
 } from '../../scripts/oracle-worker-discovery-only.cjs';
@@ -57,6 +60,44 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       it('rejects Shopee without id', () => {
         expect(validateNativeIdentity('Shopee', { marketplaceMetrics: { } })).toBe(false);
       });
+    });
+
+    it('seleciona no máximo 15 ofertas válidas, com 5 por marketplace e 3 por categoria, sem preencher vagas com duplicatas ou inválidas', () => {
+      const marketplaces = ['Mercado Livre', 'Amazon', 'Shopee'];
+      const candidates = marketplaces.flatMap((marketplace, marketplaceIndex) =>
+        Array.from({ length: 5 }, (_, categoryIndex) => ({
+          marketplace,
+          sourceItemId: `${marketplaceIndex}-${categoryIndex}`,
+          sourceUrl: `https://example.com/${marketplaceIndex}-${categoryIndex}`,
+          imageUrl: `https://example.com/${marketplaceIndex}-${categoryIndex}.jpg`,
+          title: `Produto ${marketplaceIndex} modelo ${1000 + marketplaceIndex * 10 + categoryIndex}`,
+          currentPrice: 100,
+          originalPrice: 200,
+          deterministicScore: 9,
+          category: { name: `Categoria ${categoryIndex}` },
+          marketplaceMetrics: { rating: 4.8, sales: 2000 },
+        })),
+      );
+
+      const queue = selectCopyQueue([
+        ...candidates,
+        { ...candidates[0], deterministicScore: 1 },
+        { ...candidates[0], sourceItemId: 'invalida', sourceUrl: 'http://example.com/invalida' },
+      ], { maxTotal: 15, maxPerMarketplace: 5, maxPerCategory: 3 });
+
+      expect(queue.selected).toHaveLength(15);
+      expect(new Set(queue.selected.map((candidate) => candidate.sourceItemId)).size).toBe(15);
+      expect(queue.selected.filter((candidate) => candidate.marketplace === 'Mercado Livre')).toHaveLength(5);
+      expect(queue.selected.filter((candidate) => candidate.marketplace === 'Amazon')).toHaveLength(5);
+      expect(queue.selected.filter((candidate) => candidate.marketplace === 'Shopee')).toHaveLength(5);
+      expect(queue.selected.filter((candidate) => candidate.category.name === 'Categoria 0')).toHaveLength(3);
+      expect(queue.selected.map((candidate) => candidate.sourceItemId)).not.toContain('invalida');
+    });
+
+    it('configura o ciclo agendado para no máximo 15 ofertas, 5 por marketplace e 3 por categoria', () => {
+      const scraperSource = readFileSync(resolve(process.cwd(), 'scripts/oracle-scraper.cjs'), 'utf8');
+
+      expect(scraperSource).toContain('copyQueueOptions: { maxTotal: 15, maxPerMarketplace: 5, maxPerCategory: 3 }');
     });
   });
 
