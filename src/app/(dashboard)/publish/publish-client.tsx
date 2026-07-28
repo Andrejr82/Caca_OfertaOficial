@@ -55,7 +55,6 @@ function PremiumImagePreview({ offerId, productName }: { offerId?: string; produ
 // ─── Component ───
 export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
   const [linksInput, setLinksInput] = useState(initialUrl);
-  const [shopeeKeyword, setShopeeKeyword] = useState("");
   const [channel, setChannel] = useState<Channel | "omnichannel">("omnichannel");
 
   // Batch processing
@@ -98,7 +97,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
       const batchResults = await Promise.allSettled(
         batch.map((link, batchIdx) =>
-          generateQuickPostAction(link, channel, shopeeKeyword).then((res) => ({ res, index: batchStart + batchIdx }))
+          generateQuickPostAction(link, channel).then((res) => ({ res, index: batchStart + batchIdx }))
         )
       );
 
@@ -294,18 +293,6 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             </Button>
           </div>
         </div>
-
-        <Field label="Keyword da Shopee (opcional; fallback da API oficial)">
-          <input
-            value={shopeeKeyword}
-            onChange={(e) => setShopeeKeyword(e.target.value)}
-            placeholder="Ex.: aspirador vertical"
-            maxLength={100}
-            className="glass-input focus-ring w-full rounded-lg py-3 px-4 text-sm"
-            disabled={isProcessing}
-          />
-          <p className="mt-1 text-xs text-white/40">Usada apenas se o SKU do link não estiver indexado; o resultado só é aceito quando o itemId é idêntico ao do link.</p>
-        </Field>
 
         {/* Progress Bar */}
         {isProcessing && (

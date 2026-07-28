@@ -140,7 +140,7 @@ app.post('/api/shopee/trends', async (req, res) => {
 });
 
 app.post('/api/shopee/product', async (req, res) => {
-  const { token, shopId, itemId, keyword } = req.body || {};
+  const { token, shopId, itemId } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
@@ -148,12 +148,9 @@ app.post('/api/shopee/product', async (req, res) => {
   if (!/^\d+$/.test(String(shopId || '')) || !/^\d+$/.test(String(itemId || ''))) {
     return res.status(400).json({ ok: false, code: 'INVALID_SHOPEE_PRODUCT_ID', message: 'shopId e itemId numéricos são obrigatórios.' });
   }
-  if (keyword != null && (typeof keyword !== 'string' || keyword.trim().length > 100)) {
-    return res.status(400).json({ ok: false, code: 'INVALID_SHOPEE_KEYWORD', message: 'keyword deve ter no máximo 100 caracteres.' });
-  }
   try {
     const { lookupShopeeAffiliateProduct } = require('./oracle-scraper.cjs');
-    const product = await lookupShopeeAffiliateProduct(shopId, itemId, keyword || '');
+    const product = await lookupShopeeAffiliateProduct(shopId, itemId);
     if (!product) {
       return res.status(404).json({ ok: false, code: 'SHOPEE_PRODUCT_NOT_FOUND', message: 'A API oficial da Shopee não confirmou este SKU.' });
     }
