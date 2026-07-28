@@ -16,3 +16,15 @@ export function createSupabaseAdminClient() {
     }
   });
 }
+
+/**
+ * Use at server-side boundaries whose work must bypass tenant RLS consistently
+ * (for example, the Official AI persistence flow).
+ */
+export function createRequiredSupabaseAdminClient() {
+  const client = createSupabaseAdminClient();
+  if (!client) {
+    throw new Error("SUPABASE_SERVICE_ROLE_KEY and NEXT_PUBLIC_SUPABASE_URL are required");
+  }
+  return client;
+}

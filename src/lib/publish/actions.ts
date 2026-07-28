@@ -4,8 +4,8 @@ import { createHash } from "crypto";
 
 import { generateOfficialAI, type OfficialAIChannel, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
+import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Channel, Offer, Platform } from "@/types/domain";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
@@ -455,6 +455,17 @@ async function generateQuickPostActionInternal(
     return { ok: false, status: "UNAUTHENTICATED", message: "Sessão expirada. Entre novamente no painel." };
   }
 
+  let aiClient;
+  try {
+    aiClient = createRequiredSupabaseAdminClient();
+  } catch {
+    return {
+      ok: false,
+      status: "DEPENDENCY_UNAVAILABLE",
+      message: "A Publicação Expressa está indisponível: configure SUPABASE_SERVICE_ROLE_KEY e NEXT_PUBLIC_SUPABASE_URL no ambiente da aplicação.",
+    };
+  }
+
   // ── Validação básica de URL ───────────────────────────────────────────────
   if (!/^https?:\/\/\S+$/i.test(inputUrl)) {
     return { ok: false, status: "INVALID_URL", message: "Cole uma URL válida, começando com http:// ou https://." };
@@ -884,10 +895,8 @@ async function generateQuickPostActionInternal(
     reason: { code: "GENERATE_OFFICIAL_CONTENT" },
   };
 
-  // O Oracle/Inngest executa a Official AI com service role. Reutilizar o
-  // cliente da sessão aqui quebra o mesmo contrato quando RLS bloqueia
-  // leituras/gravações auxiliares (audit, idempotência, posts e drafts).
-  const aiClient = createSupabaseAdminClient() || supabase;
+  // A Official AI executada pela Oracle usa service role. A Expressa precisa
+  // da mesma autoridade para idempotência, auditoria e persistência de drafts.
   const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(aiClient, userId));
   if (result.status === "rejected") {
     return { ok: false, status: result.code, message: result.message };
