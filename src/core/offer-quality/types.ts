@@ -22,6 +22,8 @@ export interface OfferQualityCandidateInput {
   currentFlowStatus?: string | null;
   discountEvidence?: Readonly<Record<string, unknown>> | null;
   affiliateLinks?: readonly OfferQualityAffiliateLink[];
+  /** Pre-persist admission may rely on the Oracle's validated monetization signal. */
+  prePersistMonetized?: boolean;
 }
 
 export interface OfferQualityCandidate extends OfferQualityCandidateInput {
