@@ -21,6 +21,19 @@ describe("buildExpressAffiliateLinks", () => {
     ]);
     expect(new Set(rows.map((row) => row.sub_id)).size).toBe(4);
   });
+
+  it("usa a URL afiliada monetizada como destino do redirecionamento", () => {
+    const affiliateUrl = "https://s.shopee.com.br/3B69PxdvEv";
+    const rows = buildExpressAffiliateLinks({
+      offerId: "45e2fca7-6100-4fb5-8f1a-021e6b84a86e",
+      userId: "user-1",
+      originalUrl: "https://shopee.com.br/produto-i.123.456",
+      affiliateUrl,
+      appUrl: "https://caca-oferta-oficial.vercel.app",
+    });
+
+    expect(rows.every((row) => row.original_url === affiliateUrl)).toBe(true);
+  });
 });
 
 describe("isAmazonAffiliateInput", () => {

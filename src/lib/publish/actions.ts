@@ -913,7 +913,13 @@ async function generateQuickPostActionInternal(
   const { error: affiliateLinksError } = await supabase
     .from("affiliate_links")
     .upsert(
-      buildExpressAffiliateLinks({ offerId: offer.id, userId, originalUrl: inputUrl, appUrl }),
+      buildExpressAffiliateLinks({
+        offerId: offer.id,
+        userId,
+        originalUrl: inputUrl,
+        affiliateUrl: generatedAffiliateUrl,
+        appUrl,
+      }),
       { onConflict: "offer_id,channel" }
     );
 

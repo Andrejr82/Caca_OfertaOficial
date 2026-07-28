@@ -27,13 +27,15 @@ export function buildExpressAffiliateLinks(input: {
   offerId: string;
   userId: string;
   originalUrl: string;
+  affiliateUrl?: string;
   appUrl: string;
 }) {
   const baseUrl = input.appUrl.replace(/\/$/, "");
+  const redirectUrl = input.affiliateUrl?.trim() || input.originalUrl;
   return EXPRESS_AFFILIATE_CHANNELS.map(({ channel, prefix }) => ({
     offer_id: input.offerId,
     user_id: input.userId,
-    original_url: input.originalUrl,
+    original_url: redirectUrl,
     channel,
     sub_id: `${prefix}${input.offerId}`,
     tracked_url: `${baseUrl}/go/${prefix}${input.offerId}`,
