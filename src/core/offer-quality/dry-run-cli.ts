@@ -21,22 +21,29 @@ async function readCandidates(inputPath: string): Promise<OfferQualityCandidate[
   return parsed as OfferQualityCandidate[];
 }
 
-const inputPath = resolve(argument("--input"));
-const outputDir = resolve(argument("--output"));
-const runId = `dry-run-${Date.now()}`;
-const generatedAt = new Date().toISOString();
-const candidates = await readCandidates(inputPath);
-const report = evaluateCandidates(candidates, { runId, generatedAt });
+async function main(): Promise<void> {
+  const inputPath = resolve(argument("--input"));
+  const outputDir = resolve(argument("--output"));
+  const runId = `dry-run-${Date.now()}`;
+  const generatedAt = new Date().toISOString();
+  const candidates = await readCandidates(inputPath);
+  const report = evaluateCandidates(candidates, { runId, generatedAt });
 
-await mkdir(outputDir, { recursive: true });
-await writeFile(resolve(outputDir, `${runId}.json`), serializeReport(report), "utf8");
-await writeFile(resolve(outputDir, `${runId}.ndjson`), serializeNdjson(report), "utf8");
+  await mkdir(outputDir, { recursive: true });
+  await writeFile(resolve(outputDir, `${runId}.json`), serializeReport(report), "utf8");
+  await writeFile(resolve(outputDir, `${runId}.ndjson`), serializeNdjson(report), "utf8");
 
-console.log(JSON.stringify({
-  runId,
-  recordCount: report.recordCount,
-  groups: report.groupCount,
-  winners: report.winners.length,
-  rejected: report.decisions.filter((decision) => decision.decision === "rejected").length,
-  persist_attempts: report.persistAttemptCount,
-}, null, 2));
+  console.log(JSON.stringify({
+    runId,
+    recordCount: report.recordCount,
+    groups: report.groupCount,
+    winners: report.winners.length,
+    rejected: report.decisions.filter((decision) => decision.decision === "rejected").length,
+    persist_attempts: report.persistAttemptCount,
+  }, null, 2));
+}
+
+main().catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});
