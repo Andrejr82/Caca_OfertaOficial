@@ -114,6 +114,19 @@ describe("fetchShopeeOfficialProduct", () => {
     expect(oracleCall[1].body).toContain("oracle-test-key");
   });
 
+  it("usa o endpoint padrão da Oracle quando a URL remota não foi definida", async () => {
+    vi.stubEnv("ORACLE_API_KEY", "oracle-test-key");
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      success: true,
+      data: { extract: { title: "Produto Oracle", price: 10, image: "https://img.example.com/p.jpg" } },
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchShopeeMetadataViaOracle("https://shopee.com.br/product/1/2");
+
+    expect(fetchMock.mock.calls[0][0]).toBe("http://193.122.242.178:3002/api/scrape");
+  });
+
   it("extrai o nome do produto do slug da URL quando a página não expõe og:title", async () => {
     const html = '<meta property="og:image" content="https://img.shopee.test/item.jpg">';
     const result = await readShopeeMetadata(
