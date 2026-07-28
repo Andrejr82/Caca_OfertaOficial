@@ -8,6 +8,8 @@ describe("extração nativa da Publicação Expressa", () => {
     vi.restoreAllMocks();
     delete process.env.SHOPEE_APP_ID;
     delete process.env.SHOPEE_APP_SECRET;
+    delete process.env.ORACLE_API_KEY;
+    delete process.env.ORACLE_REMOTE_URL;
     delete process.env.MERCADO_LIVRE_ACCESS_TOKEN;
   });
 
@@ -24,6 +26,33 @@ describe("extração nativa da Publicação Expressa", () => {
       imageUrl: "https://cf.shopee.com.br/item.jpg",
       price: 129.9,
     });
+  });
+
+  it("usa a Open API oficial quando o lookup Oracle não confirma o SKU", async () => {
+    process.env.ORACLE_API_KEY = "oracle-key";
+    process.env.ORACLE_REMOTE_URL = "https://oracle.example";
+    process.env.SHOPEE_APP_ID = "app";
+    process.env.SHOPEE_APP_SECRET = "secret";
+    const fetchMock = vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ok: false, code: "SHOPEE_PRODUCT_NOT_FOUND" }), { status: 404 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          productOfferV2: {
+            nodes: [{
+              itemId: "23692960598",
+              productName: "Kit Facas de Cozinha",
+              imageUrl: "//cf.shopee.com.br/facas.jpg",
+              priceMin: "39,90",
+              offerLink: "https://s.shopee.com.br/afiliado",
+            }],
+          },
+        },
+      }), { status: 200 }));
+
+    const { fetchShopeeMetadataViaOracle } = await import("@/lib/publish/actions");
+    await expect(fetchShopeeMetadataViaOracle("390307022", "23692960598", "kit facas"))
+      .resolves.toMatchObject({ title: "Kit Facas de Cozinha", price: 39.9 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
   it("extrai título, preço e imagem da página Amazon sem provedor externo", async () => {

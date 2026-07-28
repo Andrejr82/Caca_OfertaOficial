@@ -216,6 +216,7 @@ export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: strin
   price: number;
   affiliateUrl: string;
 } | null> {
+  const fallbackToOfficialApi = () => fetchShopeeOfficialProduct(shopId, itemId);
   // A API técnica da Oracle é exposta na VPS; as variáveis permitem override
   // em ambientes diferentes sem deixar a Publicação Expressa sem fallback.
   const baseUrl = process.env.ORACLE_REMOTE_URL
@@ -227,7 +228,7 @@ export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: strin
     console.warn("[ACTIONS][SHOPEE] Fallback Oracle sem chave configurada", {
       hasOracleRemoteUrl: Boolean(process.env.ORACLE_REMOTE_URL || process.env.ORACLE_WORKER_URL || process.env.ORACLE_API_URL),
     });
-    return null;
+    return fallbackToOfficialApi();
   }
 
   const endpoint = `${baseUrl.replace(/\/+$/, "").replace(/\/api\/scrape$/, "")}/api/shopee/product`;
@@ -245,13 +246,13 @@ export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: strin
     const imageUrl = typeof product?.imageUrl === "string" ? product.imageUrl.trim() : "";
     const price = parseMarketplacePrice(product?.price);
     const affiliateUrl = typeof product?.affiliateUrl === "string" ? product.affiliateUrl.trim() : "";
-    if (!response.ok || !title || !imageUrl || price <= 0) return null;
+    if (!response.ok || !title || !imageUrl || price <= 0) return fallbackToOfficialApi();
     return { title, imageUrl, price, affiliateUrl };
   } catch (error) {
     console.warn("[ACTIONS][SHOPEE] Fallback técnico Oracle indisponível", {
       errorType: error instanceof Error ? error.name : typeof error,
     });
-    return null;
+    return fallbackToOfficialApi();
   }
 }
 
