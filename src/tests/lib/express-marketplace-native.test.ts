@@ -55,6 +55,32 @@ describe("extração nativa da Publicação Expressa", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
+  it("continua a busca oficial pela palavra-chave extraída da URL", async () => {
+    process.env.SHOPEE_APP_ID = "app";
+    process.env.SHOPEE_APP_SECRET = "secret";
+    const fetchMock = vi.spyOn(global, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { productOfferV2: { nodes: [] } } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { productOfferV2: { nodes: [] } } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        data: {
+          productOfferV2: {
+            nodes: [{
+              itemId: "21163105419",
+              productName: "Balança Digital Medidora Corporal",
+              imageUrl: "//cf.shopee.com.br/balanca.jpg",
+              priceMin: "89,90",
+              offerLink: "https://s.shopee.com.br/balanca",
+            }],
+          },
+        },
+      }), { status: 200 }));
+
+    await expect(fetchShopeeOfficialProduct("375201738", "21163105419", "Balança Digital Medidora Corporal"))
+      .resolves.toMatchObject({ title: "Balança Digital Medidora Corporal", price: 89.9 });
+    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body)).variables.keyword)
+      .toBe("Balança Digital Medidora Corporal");
+  });
+
   it("extrai título, preço e imagem da página Amazon sem provedor externo", async () => {
     const html = `<title>Tênis Pounce Lite Running Adulto | Amazon.com.br</title><meta property="og:image" content="https://m.media-amazon.com/images/I/tenis.jpg"><span data-x="1" class="foo a-offscreen">R$ 249,90</span>`;
     await expect(readAmazonMetadata("https://www.amazon.com.br/dp/B0D1YHS4TT", html)).resolves.toEqual({

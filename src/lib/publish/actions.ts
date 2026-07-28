@@ -140,7 +140,7 @@ function extractShopeeIds(url: string): { shopId?: string; itemId?: string } {
 
 // ─── API Oficial da Shopee (GraphQL) ─────────────────────────────────────────
 
-export async function fetchShopeeOfficialProduct(shopId: string, itemId: string): Promise<{
+export async function fetchShopeeOfficialProduct(shopId: string, itemId: string, keyword = ""): Promise<{
   title: string;
   imageUrl: string;
   price: number;
@@ -157,7 +157,12 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string)
   // A Open API é sensível ao contrato GraphQL, principalmente em produtos que
   // chegam por link curto e não possuem metadados HTML públicos.
   const query = "query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds } pageInfo { page limit hasNextPage } } }";
-  const keywords = [`https://shopee.com.br/product/${shopId}/${itemId}`, itemId];
+  const normalizedKeyword = keyword.trim().replace(/\s+/g, " ").slice(0, 100);
+  const keywords = [
+    `https://shopee.com.br/product/${shopId}/${itemId}`,
+    itemId,
+    ...(normalizedKeyword ? [normalizedKeyword] : []),
+  ];
 
   for (const keyword of keywords) {
     const variables = { keyword, productCatId: null, page: 1, limit: 20, sortType: 2, isAMSOffer: true };
@@ -216,7 +221,7 @@ export async function fetchShopeeMetadataViaOracle(shopId: string, itemId: strin
   price: number;
   affiliateUrl: string;
 } | null> {
-  const fallbackToOfficialApi = () => fetchShopeeOfficialProduct(shopId, itemId);
+  const fallbackToOfficialApi = () => fetchShopeeOfficialProduct(shopId, itemId, keyword);
   // A API técnica da Oracle é exposta na VPS; as variáveis permitem override
   // em ambientes diferentes sem deixar a Publicação Expressa sem fallback.
   const baseUrl = process.env.ORACLE_REMOTE_URL
