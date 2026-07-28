@@ -462,7 +462,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       // changes queue selection or persistence while the flag is not "shadow".
       if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'shadow' && typeof qualityShadow === 'function') {
         try {
-          await qualityShadow(Object.freeze({
+          const shadowResult = await qualityShadow(Object.freeze({
             correlationId,
             marketplace,
             candidates: Object.freeze([...candidatesToPersist]),
@@ -477,6 +477,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
             candidates: candidatesToPersist.length,
             selected: queue.selected.length,
             rejected: queue.skipped.length,
+            ...(shadowResult && typeof shadowResult === 'object' ? shadowResult : {}),
           });
         } catch (shadowError) {
           await safeObserve('discovery.quality.shadow.failed', {
