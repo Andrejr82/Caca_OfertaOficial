@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-07-28]
+- Discovery: filtragem de monetização antes da fila, verificação de links e prevenção de persistência inválida.
+- Tracking e copys: links persistidos por canal, UUID completo, isolamento de prefixos e prevenção de links duplicados na copy.
+- Formatação comercial: desconto percentual e blocos de preço mais consistentes.
+- Imagens sociais: normalização de URLs de imagem de origem para previews e publicação.
+- Publicação Expressa: persistência de links afiliados, contratos de extração por marketplace e redirecionamento para destinos monetizados.
+- Operação: atualização do manifesto e dos scripts Oracle somente por release verificado; nenhum segredo ou dado histórico foi incluído na documentação.
+
 ## [Unreleased]
 - Fase 4 (Discovery Intelligence): Consolidação definitiva da Discovery Intelligence na Release 4.0. Implementação de novas regras focadas (Anti-Lixo e Price Floor) no Marketplace da Shopee.
 - Relatórios Inteligentes (Sprint 00.7.1): Implementação de report de métricas reais eliminando placeholders/mocks.
