@@ -1,5 +1,6 @@
 import { officialBrand } from "@/lib/env";
 import type { AffiliateLink, Offer } from "@/types/domain";
+import { isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
 
 export type OfferSignals = {
   hasRealDiscount: boolean;
@@ -85,7 +86,7 @@ export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, 
     if (!urlToCheck.includes("shopee.") && !urlToCheck.includes("shope.ee")) {
       throw new Error("Link incompatível com o marketplace");
     }
-    if (!urlToCheck.includes("shope.ee") && !urlToCheck.includes("s.shopee.com.br") && !urlToCheck.includes("aff_click") && !urlToCheck.includes("customized")) {
+    if (!isShopeeAffiliateInput(urlToCheck)) {
       throw new Error("Link incompatível com o marketplace");
     }
   }

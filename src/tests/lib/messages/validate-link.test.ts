@@ -58,6 +58,20 @@ describe("validateLinkMarketplace", () => {
     expect(() => validateLinkMarketplace(offer, { tracked_url: "https://caca-oferta-oficial.vercel.app/go/tg_123" })).not.toThrow();
   });
 
+  it("aceita Shopee com o marcador ext_camp reconhecido pela Publicação Expressa", () => {
+    const offer = {
+      ...baseOffer,
+      platform: "Shopee" as const,
+      original_url: "https://shopee.com.br/product/123/456",
+      explainability: {
+        discovery_evidence: {
+          affiliate_url: "https://shopee.com.br/product/123/456?ext_camp=affiliate"
+        }
+      }
+    };
+    expect(() => validateLinkMarketplace(offer, { tracked_url: "https://caca-oferta-oficial.vercel.app/go/tg_123" })).not.toThrow();
+  });
+
   it("rejeita URL comum sem monetização", () => {
     const offer = {
       ...baseOffer,
