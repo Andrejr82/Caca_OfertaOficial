@@ -29,7 +29,7 @@
 **Interfaces:**
 - Produce `OfferQualityCandidate`, `OfferQualityDecision`, `OfferQualityReport`, `ScoreBreakdown`, `DiscountConfidence` and `DecisionKind`.
 - Require `marketplace` to be `Mercado Livre`, `Amazon` or `Shopee`.
-- Represent `recordCount`, `persistAttemptCount) and `persistAttemptCount` in the report, with the latter always zero for dry-run.
+- Represent `recordCount` and `persistAttemptCount` in the report, with `persistAttemptCount` always zero for dry-run.
 
 - [ ] **Step 1: Write failing type/shape tests** asserting a valid candidate contains native identity, price, image and source metadata, and that a report defaults to zero persistence attempts.
 - [ ] **Step 2: Run** `npm test -- src/tests/core/offer-quality/types.test.ts`; confirm failure because the contracts do not exist.
@@ -137,7 +137,7 @@
 - [ ] **Step 3: Implement the CLI as a thin CommonJS adapter around the pure evaluator**.
 - [ ] **Step 4: Re-run targeted tests** and verify all pass.
 - [ ] **Step 5: Add a small deterministic fixture under `src/tests/fixtures/offer-quality/`** covering all marketplaces.
-- [ ] **Step 6: Run the CLI against the fixture and confirm reports contain zero persistence attempts.
+- [ ] **Step 6: Run the CLI against the fixture and confirm reports contain zero persistence attempts.**
 - [ ] **Step 7: Commit** with `feat(quality): add feature-flagged offer quality dry-run`.
 
 ### Task 6: Document operation and verification
@@ -159,7 +159,7 @@
 - [ ] **Step 1: Write documentation tests/checks** that verify the flag, command and no-write language are present.
 - [ ] **Step 2: Run the checks and confirm failure before documentation is added.**
 - [ ] **Step 3: Add the documentation.**
-- [ ] **Step 4: Run targeted quality tests, `npm run typecheck`, `npm run build` and `git diff --check`.
+- [ ] **Step 4: Run targeted quality tests, `npm run typecheck`, `npm run build` and `git diff --check`.**
 - [ ] **Step 5: Review the complete diff and verify no production runtime path changed.**
 - [ ] **Step 6: Commit** with `docs(quality): document read-only dry-run operation`.
 
@@ -177,8 +177,8 @@
 
 - [ ] **Step 1: Execute exactly one approved dry-run evidence run.**
 - [ ] **Step 2: Review the report manually for false grouping and false rejection.**
-- [ ] **Step 3: Publish the branch for PR review without enabling the flag.
-- [ ] **Step 4: Request approval before any future integration work.**
+- [ ] **Step 3: Publish the branch for PR review without enabling the flag.**
+- [ ] **Step 4: Request approval before any future integration work.****
 
 ## Verification Gate
 
