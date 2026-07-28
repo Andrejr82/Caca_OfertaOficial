@@ -109,15 +109,18 @@ describe("Oracle cycle pages", () => {
     const deps = dependencies(rows);
     let active = 0;
     let peak = 0;
-    deps.providers.resolve = vi.fn(() => ({
-      name: "groq" as const, model: "test", generate: vi.fn(async () => {
+    deps.content.persistDrafts = vi.fn(async ({ offer: row, channels }) => {
         active += 1;
         peak = Math.max(peak, active);
         await new Promise((resolve) => setTimeout(resolve, 5));
         active -= 1;
-        return { content, provider: "groq" as const, model: "test", latencyMs: 5 };
-      })
-    }));
+        return channels.map((channel: "telegram" | "instagram" | "whatsapp") => ({
+          postId: `post-${row.id}-${channel}`,
+          affiliateLinkId: `link-${row.id}-${channel}`,
+          channel,
+          state: "draft" as const,
+        }));
+    });
     const result = await generateOfficialAI(pageCommand(rows.map((row) => row.id)), deps);
     expect(result.status).toBe("drafted");
     expect(peak).toBeGreaterThan(1);

@@ -4,16 +4,19 @@ import { createHash } from "crypto";
 
 import { generateOfficialAI, type OfficialAIChannel, type OfficialAICommand } from "@/core/ai";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
+import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { Channel, Offer, Platform } from "@/types/domain";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
 import { parseSheinOneLinkHtml } from "@/lib/publish/shein-link";
-import { fetchMLProductDetails, generateMLAffiliateLinkWithId, validateAffiliateMonetization } from "@/lib/platforms/mercadolivre";
+import { fetchMLProductDetailsResult, generateMLAffiliateLinkWithId, validateAffiliateMonetization } from "@/lib/platforms/mercadolivre";
 import { resolveMarketplaceUrl } from "@/lib/publish/express-url-resolver";
+import { classifyResolution } from "@/lib/publish/product-extraction-contract";
 import { validateExpressProduct, getExpressErrorMessage } from "@/lib/publish/express-product-validator";
 import { extractMLId } from "@/lib/platforms/mercadolivre";
 import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
+import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -433,12 +436,15 @@ export async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string)
 
 // ─── Action Principal: Publicação Expressa ────────────────────────────────────
 
-export async function generateQuickPostAction(
+async function generateQuickPostActionInternal(
   affiliateUrl: string,
-  channel: Channel | "omnichannel"
+  channel: Channel | "omnichannel",
+  requestId = crypto.randomUUID(),
+  diagnostics?: { stage: string },
 ): Promise<QuickPostResult> {
   const inputUrl = affiliateUrl.trim();
-  const operationId = crypto.randomUUID();
+  const operationId = requestId;
+  const stage = (value: string) => { if (diagnostics) diagnostics.stage = value; };
 
   log("[Express Start]", { requestId: operationId, inputUrl: sanitizeUrlForLog(inputUrl) });
 
@@ -447,6 +453,17 @@ export async function generateQuickPostAction(
   const supabase = await createServerSupabaseClient();
   if (!userId || !supabase) {
     return { ok: false, status: "UNAUTHENTICATED", message: "Sessão expirada. Entre novamente no painel." };
+  }
+
+  let aiClient;
+  try {
+    aiClient = createRequiredSupabaseAdminClient();
+  } catch {
+    return {
+      ok: false,
+      status: "DEPENDENCY_UNAVAILABLE",
+      message: "A Publicação Expressa está indisponível: configure SUPABASE_SERVICE_ROLE_KEY e NEXT_PUBLIC_SUPABASE_URL no ambiente da aplicação.",
+    };
   }
 
   // ── Validação básica de URL ───────────────────────────────────────────────
@@ -480,11 +497,14 @@ export async function generateQuickPostAction(
 
   // ─── Mercado Livre ────────────────────────────────────────────────────────
   if (detectedPlatform === "Mercado Livre") {
+    stage("mercado_livre_extraction");
     // PASSO 1: Resolver URL (seguir meli.la → mercadolivre.com.br)
     log("[Express Link Start]", { requestId: operationId, stage: "resolve_url", marketplace: "Mercado Livre" });
     const resolved = await resolveMarketplaceUrl(inputUrl, { maxRedirects: 10, timeoutMs: 15_000 });
 
-    if (resolved.errorCode && resolved.errorCode !== "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
+    const resolutionOutcome = classifyResolution(resolved);
+
+    if (resolutionOutcome.status === "rejected") {
       const msgMap: Record<string, string> = {
         SSRF_BLOCKED: "Este link aponta para um destino não permitido.",
         REDIRECT_LOOP: "Não conseguimos resolver o link do Mercado Livre — foi detectado um loop de redirecionamento.",
@@ -495,11 +515,11 @@ export async function generateQuickPostAction(
         PRODUCT_ID_MISMATCH: "Incompatibilidade de produto detectada durante o redirecionamento.",
         AFFILIATE_SHOWCASE_NOT_PRODUCT: "O link direciona para uma vitrine com vários produtos. Cole o link de um produto específico.",
       };
-      log("[Express Link Error]", { requestId: operationId, errorCode: resolved.errorCode, stage: "url_resolution" });
-      return { ok: false, status: resolved.errorCode, message: msgMap[resolved.errorCode] || "Erro ao resolver o link do Mercado Livre." };
+      log("[Express Link Error]", { requestId: operationId, errorCode: resolutionOutcome.code, stage: "url_resolution" });
+      return { ok: false, status: resolutionOutcome.code, message: msgMap[resolutionOutcome.code] || "Erro ao resolver o link do Mercado Livre." };
     }
 
-    if (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID") {
+    if (resolutionOutcome.status === "confirmed_identity") {
       log("[Express Fallback]", { requestId: operationId, message: "Produto identificado pela URL original; validação continuada pela API.", originalItemId: resolved.originalItemId });
     }
 
@@ -510,28 +530,47 @@ export async function generateQuickPostAction(
     log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length });
 
     // PASSO 2: Usar o ID selecionado (original ou final)
-    if (resolved.selectedItemId) {
+    if (resolutionOutcome.status === "confirmed_identity") {
+      itemId = resolutionOutcome.itemId;
+    } else if (resolved.selectedItemId) {
       itemId = resolved.selectedItemId;
     }
 
     // PASSO 3: Buscar dados do produto via API ML (com OAuth token do usuário)
     // Se caiu no anti-bot mas temos o ID, podemos montar uma URL válida para a API (a API usa o ID)
-    const urlForApi = (resolved.errorCode === "ANTI_BOT_REDIRECT_WITH_ORIGINAL_ID" && itemId)
-      ? `https://produto.mercadolivre.com.br/${itemId.replace("MLB", "MLB-")}`
-      : resolvedUrl;
+    // Preserve the original catalog URL when anti-bot resolution already
+    // confirmed the item. The catalog id is required by the official
+    // /products/{catalog}/items fallback when /items returns 403.
+    const urlForApi = chooseMLExtractionUrl(
+      inputUrl,
+      resolvedUrl,
+      resolutionOutcome.status === "confirmed_identity",
+      itemId,
+    );
     
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Mercado Livre", itemId, identitySource: resolved.identitySource });
-    const mlData = await fetchMLProductDetails(urlForApi, userId);
+    const mlResult = await fetchMLProductDetailsResult(urlForApi, userId);
 
-    if (mlData) {
-      title = mlData.title;
-      imageUrl = mlData.imageUrl || "";
-      price = mlData.price ?? 0;
-      canonicalUrl = mlData.finalUrl || urlForApi;
-      if (!itemId) {
-        const extractedId = extractMLId(canonicalUrl);
-        if (extractedId) itemId = extractedId.id;
-      }
+    if (!mlResult.ok) {
+      const failureMessages: Record<string, string> = {
+        MARKETPLACE_AUTH_DENIED: "A integração do Mercado Livre precisa ser reconectada para confirmar este produto.",
+        MARKETPLACE_PERMISSION_DENIED: "O Mercado Livre recusou o acesso a este produto para a aplicação. Verifique as permissões da integração.",
+        MARKETPLACE_SOURCE_UNAVAILABLE: "O Mercado Livre não respondeu com dados do produto. Tente novamente em alguns minutos.",
+        INVALID_PRODUCT_ID: "Não foi possível confirmar a identidade do produto do Mercado Livre.",
+      };
+      log("[Express Link Error]", { requestId: operationId, errorCode: mlResult.code, stage: "marketplace_provider" });
+      return { ok: false, status: mlResult.code, message: failureMessages[mlResult.code] };
+    }
+
+    const mlData = mlResult.data;
+
+    title = mlData.title;
+    imageUrl = mlData.imageUrl || "";
+    price = mlData.price ?? 0;
+    canonicalUrl = mlData.finalUrl || urlForApi;
+    if (!itemId) {
+      const extractedId = extractMLId(canonicalUrl);
+      if (extractedId) itemId = extractedId.id;
     }
 
 
@@ -743,6 +782,7 @@ export async function generateQuickPostAction(
   // ─── Validação Progressiva ────────────────────────────────────────────────
   const platform = detectedPlatform;
   log("[Express Validation]", { requestId: operationId, marketplace: platform, itemId, shopId });
+  stage("validation");
 
   const validation = validateExpressProduct({
     title,
@@ -769,6 +809,7 @@ export async function generateQuickPostAction(
   const correlationId = `quick-publication:${operationId}`;
 
   log("[Express Persist Start]", { requestId: operationId, marketplace: platform });
+  stage("persist_offer");
 
   const { data: offer, error: offerError } = await supabase
     .from("offers")
@@ -829,6 +870,8 @@ export async function generateQuickPostAction(
     return { ok: false, status: "AFFILIATE_LINKS_CREATE_FAILED", message: "Não foi possível preparar os links rastreáveis da oferta." };
   }
 
+  stage("generate_ai_copy");
+
   const targetChannels: OfficialAIChannel[] = channel === "omnichannel"
     ? ["telegram", "instagram", "whatsapp"]
     : channel === "telegram" || channel === "instagram" || channel === "whatsapp"
@@ -852,7 +895,9 @@ export async function generateQuickPostAction(
     reason: { code: "GENERATE_OFFICIAL_CONTENT" },
   };
 
-  const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(supabase, userId));
+  // A Official AI executada pela Oracle usa service role. A Expressa precisa
+  // da mesma autoridade para idempotência, auditoria e persistência de drafts.
+  const result = await generateOfficialAI(command, createOfficialAIServiceDependencies(aiClient, userId));
   if (result.status === "rejected") {
     return { ok: false, status: result.code, message: result.message };
   }
@@ -866,6 +911,8 @@ export async function generateQuickPostAction(
   if (postsError || !posts?.length) {
     return { ok: false, status: "DRAFT_READ_FAILED", message: postsError?.message || "A IA respondeu, mas o rascunho não foi localizado." };
   }
+
+  stage("read_generated_posts");
 
   const copies = Object.fromEntries(
     posts.map((post: any) => [post.channel, post.content])
@@ -892,6 +939,30 @@ export async function generateQuickPostAction(
     trackedUrl: firstLink,
     affiliateUrl: generatedAffiliateUrl,
   };
+}
+
+export async function generateQuickPostAction(
+  affiliateUrl: string,
+  channel: Channel | "omnichannel",
+): Promise<QuickPostResult> {
+  const requestId = crypto.randomUUID();
+  const diagnostics = { stage: "start" };
+  try {
+    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "unknown error";
+    log("[Express Unhandled Error]", {
+      requestId,
+      stage: diagnostics.stage,
+      errorType: error instanceof Error ? error.name : typeof error,
+      message: message.slice(0, 240),
+    });
+    return {
+      ok: false,
+      status: "EXPRESS_INTERNAL_ERROR",
+      message: `Não foi possível concluir o processamento deste link. Etapa: ${diagnostics.stage}. Código de diagnóstico: ${requestId}`,
+    };
+  }
 }
 
 // ─── Ações de publicação (stubs — publicação via canais oficiais) ────────────

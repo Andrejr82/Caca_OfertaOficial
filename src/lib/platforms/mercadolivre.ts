@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { LinkMetadata } from "@/lib/publish/quality-gate";
 import { Platform } from "@/types/domain";
 
@@ -45,9 +46,13 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
 
     const data = await response.json();
     const { access_token, refresh_token: newRefreshToken, expires_in, user_id } = data;
+    if (!access_token || !expires_in) {
+      console.error("[ML API] Resposta de renovação sem access_token ou expires_in.");
+      return null;
+    }
     const expiresAt = new Date(Date.now() + expires_in * 1000).toISOString();
 
-    const supabase = await createServerSupabaseClient();
+    const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
     if (!supabase) {
       console.error("[ML API] Supabase client não disponível para salvar novo token.");
       return access_token; // Retorna o token mesmo que falhe em salvar no banco (para uso imediato)
@@ -61,7 +66,7 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
           key: "ml_credentials",
           value: {
             access_token,
-            refresh_token: newRefreshToken,
+             refresh_token: newRefreshToken || refreshToken,
             expires_at: expiresAt,
             ml_user_id: user_id
           },
@@ -128,11 +133,12 @@ export async function getAppMLAccessToken(): Promise<string | null> {
  * Obtém um token de acesso do Mercado Livre válido para o usuário (renovando se necessário)
  */
 export async function getValidMLAccessToken(userId: string): Promise<string | null> {
-  const supabase = await createServerSupabaseClient();
-  if (!supabase) {
-    console.warn("[ML API] Supabase client não disponível ao verificar token.");
-    return null;
-  }
+  try {
+    const supabase = await createServerSupabaseClient();
+    if (!supabase) {
+      console.warn("[ML API] Supabase client não disponível ao verificar token.");
+      return null;
+    }
 
   let credentialsOwnerId = userId;
   let { data, error } = await supabase
@@ -174,10 +180,55 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
     return refreshMLToken(credentialsOwnerId, credentials.refresh_token);
   }
 
-  return credentials.access_token;
+    return credentials.access_token;
+  } catch (error) {
+    console.error("[ML API] Falha inesperada ao carregar credenciais do Mercado Livre; seguindo com token operacional.", {
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return null;
+  }
 }
 
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
+
+async function refreshMLTokenFromEnvironment(): Promise<string | null> {
+  // O Oracle usa o refresh token operacional configurado na Vercel. Como o
+  // Mercado Livre pode rotacioná-lo, também tentamos o valor persistido no
+  // Supabase. Os dois são tentados isoladamente: um token persistido inválido
+  // não pode bloquear o token operacional válido (e vice-versa).
+  const candidates: Array<{ source: "environment" | "supabase"; token: string }> = [];
+  const environmentToken = process.env.MERCADO_LIVRE_REFRESH_TOKEN;
+  if (environmentToken) candidates.push({ source: "environment", token: environmentToken });
+
+  const admin = createSupabaseAdminClient();
+  if (admin) {
+    const { data, error } = await admin
+      .from("app_settings")
+      .select("value")
+      .eq("user_id", SHARED_ML_CREDENTIALS_OWNER)
+      .eq("key", "ml_credentials")
+      .maybeSingle();
+    if (error) {
+      console.warn("[ML API] Não foi possível ler o refresh token operacional persistido; usando bootstrap da Vercel.");
+    } else {
+      const persisted = data?.value as Partial<MLCredentials> | null;
+      if (persisted?.refresh_token && persisted.refresh_token !== environmentToken) {
+        candidates.push({ source: "supabase", token: persisted.refresh_token });
+      }
+    }
+  }
+
+  for (const candidate of candidates) {
+    const accessToken = await refreshMLToken(SHARED_ML_CREDENTIALS_OWNER, candidate.token);
+    if (accessToken) {
+      console.log(`[ML API] Token operacional renovado pela fonte ${candidate.source}.`);
+      return accessToken;
+    }
+    console.warn(`[ML API] Refresh operacional rejeitado pela fonte ${candidate.source}; tentando a próxima fonte.`);
+  }
+
+  return null;
+}
 
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
 async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
@@ -205,6 +256,55 @@ async function forceRefreshMLAccessToken(userId: string): Promise<string | null>
   const credentials = data.value as Partial<MLCredentials>;
   if (!credentials.refresh_token) return null;
   return refreshMLToken(ownerId, credentials.refresh_token);
+}
+
+/**
+ * Reaproveita uma oferta já validada pelo Oracle quando a API de item bloqueia
+ * a consulta direta. O item_id exato evita trocar o anúncio por outro vendedor.
+ */
+async function findStoredOracleOffer(itemId: string): Promise<LinkMetadata | null> {
+  let clients: Array<any> = [];
+  try {
+    clients = [createSupabaseAdminClient(), await createServerSupabaseClient()].filter(Boolean);
+  } catch (error) {
+    console.warn("[ML API] Não foi possível inicializar a leitura da oferta Oracle", {
+      itemId,
+      errorType: error instanceof Error ? error.name : typeof error,
+    });
+    return null;
+  }
+  for (const client of clients) {
+    try {
+      const { data, error } = await client
+        .from("offers")
+        .select("product_name,current_price,old_price,image_url,original_url,rating,updated_at")
+        .eq("platform", "Mercado Livre")
+        .eq("item_id", itemId)
+        .not("product_name", "is", null)
+        .gt("current_price", 0)
+        .order("updated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error || !data) continue;
+
+      return {
+        title: String(data.product_name),
+        platform: "Mercado Livre" as Platform,
+        imageUrl: typeof data.image_url === "string" ? data.image_url : undefined,
+        price: Number(data.current_price),
+        finalUrl: typeof data.original_url === "string" ? data.original_url : undefined,
+        imageSource: "oracle_offer",
+        confidenceScore: 100,
+        extractionDate: data.updated_at || new Date().toISOString(),
+      };
+    } catch (error) {
+      console.warn("[ML API] Falha ao consultar oferta Oracle persistida", {
+        itemId,
+        errorType: error instanceof Error ? error.name : typeof error,
+      });
+    }
+  }
+  return null;
 }
 
 /**
@@ -259,14 +359,36 @@ function extractMLCatalogId(url: string): string | null {
   return match ? match[1].replace("-", "").toUpperCase() : null;
 }
 
+export type MLApiFailureCode =
+  | "MARKETPLACE_AUTH_DENIED"
+  | "MARKETPLACE_PERMISSION_DENIED"
+  | "MARKETPLACE_SOURCE_UNAVAILABLE";
+
+export function classifyMLApiFailure(status: number): MLApiFailureCode {
+  if (status === 401) return "MARKETPLACE_AUTH_DENIED";
+  if (status === 403) return "MARKETPLACE_PERMISSION_DENIED";
+
+  return "MARKETPLACE_SOURCE_UNAVAILABLE";
+}
+
+export type MLProductDetailsResult =
+  | { ok: true; data: LinkMetadata }
+  | { ok: false; code: MLApiFailureCode | "INVALID_PRODUCT_ID" };
+
+class MLApiRequestError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+  }
+}
+
 /**
  * Busca os detalhes do produto do Mercado Livre usando a API oficial
  */
-export async function fetchMLProductDetails(url: string, userId?: string): Promise<LinkMetadata | null> {
+export async function fetchMLProductDetailsResult(url: string, userId?: string): Promise<MLProductDetailsResult> {
   const mlIdInfo = extractMLId(url);
   if (!mlIdInfo) {
     console.warn(`[ML API] Não foi possível extrair um ID do Mercado Livre válido da URL: ${url}`);
-    return null;
+    return { ok: false, code: "INVALID_PRODUCT_ID" };
   }
 
   console.log(`[ML API] ID do Mercado Livre identificado: ${mlIdInfo.id} (${mlIdInfo.type})`);
@@ -298,10 +420,11 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
   }
 
   try {
-    let title = "Oferta Mercado Livre";
+    let title = "";
     let price = 0;
     let originalPrice: number | null = null;
     let imageUrl: string | undefined;
+    let catalogOfferImageUrl: string | undefined;
     let permalink = url;
     let htmlContent: string | null = null;
     let rating: number | undefined = undefined;
@@ -312,6 +435,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       // válidos. O endpoint em lote é o mesmo usado pelo pipeline oficial.
       const itemUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(mlIdInfo.id)}`;
       let response = await fetch(itemUrl, { headers });
+      console.log("[ML API] Consulta de item concluída", { itemId: mlIdInfo.id, status: response.status, endpoint: "items" });
 
       // Tokens podem ser revogados antes do expires_at. Renova uma vez e
       // repete a consulta oficial para evitar o falso "nome não confirmado".
@@ -324,53 +448,97 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
         }
       }
 
-      if (!response.ok) {
-        throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
+      let catalogFallbackApplied = false;
+      if (!response.ok && response.status === 403) {
+        // O Oracle usa o refresh token operacional da Vercel para consultar
+        // produtos de terceiros. Tente esse token antes do fallback de catálogo
+        // quando o OAuth do usuário não tiver permissão para o item.
+        const operationalToken = await refreshMLTokenFromEnvironment();
+        if (operationalToken && operationalToken !== accessToken) {
+          accessToken = operationalToken;
+          headers["Authorization"] = `Bearer ${operationalToken}`;
+          response = await fetch(itemUrl, { headers });
+          console.log("[ML API] Consulta de item após refresh concluída", { itemId: mlIdInfo.id, status: response.status, endpoint: "items" });
+        }
+
+        const catalogId = extractMLCatalogId(url);
+        if (catalogId) {
+          // O endpoint de item pode negar acesso mesmo com OAuth válido.
+          // Reutilizamos o fallback oficial do Oracle: dados de catálogo
+          // continuam trazendo título, preço e imagem da oferta.
+          const catalogItemsResponse = await fetch(
+            `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
+            { headers },
+          );
+          console.log("[ML API] Consulta de ofertas do catálogo concluída", { catalogId, status: catalogItemsResponse.status, endpoint: "products/items" });
+          if (!catalogItemsResponse.ok) {
+            throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
+          }
+          const catalogItems = await catalogItemsResponse.json();
+          const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+          const matchedItem = Array.isArray(catalogResults)
+            ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
+            : null;
+          const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
+          const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
+          apiData = { ...catalogData, ...(matchedItem || {}) };
+          title = matchedItem?.title || catalogData.name || catalogData.title || title;
+          price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
+          originalPrice = matchedItem?.original_price || catalogData.original_price || null;
+          permalink = matchedItem?.permalink || catalogData.permalink || permalink;
+          imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
+            || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
+          catalogFallbackApplied = Boolean(matchedItem || catalogData.name || catalogData.title);
+        }
       }
 
-      const payload = await response.json();
-      const firstResult = Array.isArray(payload) ? payload[0] : null;
-      if (firstResult && Number(firstResult.code) >= 400) {
-        const catalogId = extractMLCatalogId(url);
-        if (!catalogId) {
-          throw new Error(`Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
-        }
+      if (!response.ok && !catalogFallbackApplied) {
+        throw new MLApiRequestError(response.status, `Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
+      }
 
-        // Links de catálogo podem bloquear o item individual. Nesse caso,
-        // usa-se o endpoint oficial do catálogo para localizar a oferta real.
-        const catalogItemsResponse = await fetch(
-          `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
-          { headers },
-        );
-        if (!catalogItemsResponse.ok) {
-          throw new Error(`Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
-        }
-        const catalogItems = await catalogItemsResponse.json();
-        const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
-        const matchedItem = Array.isArray(catalogResults)
-          ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
-          : null;
-        const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
-        const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
-        apiData = { ...catalogData, ...(matchedItem || {}) };
-        title = matchedItem?.title || catalogData.name || catalogData.title || title;
-        price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
-        originalPrice = matchedItem?.original_price || catalogData.original_price || null;
-        permalink = matchedItem?.permalink || catalogData.permalink || permalink;
-        imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
-          || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
-      } else {
-        apiData = firstResult?.body || payload;
-        title = apiData.title || title;
-        price = apiData.price || 0;
-        originalPrice = apiData.original_price || null;
-        permalink = apiData.permalink || permalink;
+      if (!catalogFallbackApplied) {
+        const payload = await response.json();
+        const firstResult = Array.isArray(payload) ? payload[0] : null;
+        if (firstResult && Number(firstResult.code) >= 400) {
+          const catalogId = extractMLCatalogId(url);
+          if (!catalogId) {
+            throw new MLApiRequestError(Number(firstResult.code), `Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
+          }
 
-        if (apiData.pictures && apiData.pictures.length > 0) {
-          // Pega a primeira foto em alta qualidade
-          imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
-        } else if (apiData.thumbnail) {
-          imageUrl = apiData.thumbnail;
+          const catalogItemsResponse = await fetch(
+            `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
+            { headers },
+          );
+          console.log("[ML API] Consulta de ofertas do catálogo concluída", { catalogId, status: catalogItemsResponse.status, endpoint: "products/items" });
+          if (!catalogItemsResponse.ok) {
+            throw new MLApiRequestError(catalogItemsResponse.status, `Erro ao buscar ofertas do catálogo ${catalogId}: ${catalogItemsResponse.status}`);
+          }
+          const catalogItems = await catalogItemsResponse.json();
+          const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+          const matchedItem = Array.isArray(catalogResults)
+            ? catalogResults.find((item: any) => String(item.item_id || item.id).replace("-", "").toUpperCase() === mlIdInfo.id)
+            : null;
+          const catalogResponse = await fetch(`https://api.mercadolibre.com/products/${catalogId}`, { headers });
+          const catalogData = catalogResponse.ok ? await catalogResponse.json() : {};
+          apiData = { ...catalogData, ...(matchedItem || {}) };
+          title = matchedItem?.title || catalogData.name || catalogData.title || title;
+          price = matchedItem?.price || catalogData.buy_box_winner?.price || catalogData.price || 0;
+          originalPrice = matchedItem?.original_price || catalogData.original_price || null;
+          permalink = matchedItem?.permalink || catalogData.permalink || permalink;
+          imageUrl = matchedItem?.thumbnail || matchedItem?.pictures?.[0]?.secure_url
+            || catalogData.pictures?.[0]?.secure_url || catalogData.pictures?.[0]?.url;
+        } else {
+          apiData = firstResult?.body || payload;
+          title = apiData.title || title;
+          price = apiData.price || 0;
+          originalPrice = apiData.original_price || null;
+          permalink = apiData.permalink || permalink;
+
+          if (apiData.pictures && apiData.pictures.length > 0) {
+            imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
+          } else if (apiData.thumbnail) {
+            imageUrl = apiData.thumbnail;
+          }
         }
       }
     } else {
@@ -379,15 +547,51 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       const response = await fetch(productUrl, { headers });
 
       if (!response.ok) {
-        throw new Error(`Erro ao buscar produto de catálogo ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
+        throw new MLApiRequestError(response.status, `Erro ao buscar produto de catálogo ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
       apiData = await response.json();
       title = apiData.name || apiData.title || title;
       permalink = apiData.permalink || permalink;
 
+      // O endpoint /products/{id} descreve o catálogo, mas normalmente não
+      // contém o preço da oferta. O Oracle consulta as ofertas do catálogo
+      // como fonte primária; reproduzimos esse contrato aqui para que um link
+      // /p/MLB... também seja processável sem exigir pdp_filters.
+      try {
+        const catalogItemsResponse = await fetch(
+          `${productUrl}/items?limit=20`,
+          { headers },
+        );
+        if (catalogItemsResponse.ok) {
+          const catalogItems = await catalogItemsResponse.json();
+          const catalogResults = Array.isArray(catalogItems) ? catalogItems : catalogItems?.results;
+          const firstOffer = Array.isArray(catalogResults) ? catalogResults.find((item: any) => Number(item.price) > 0) || catalogResults[0] : null;
+          if (firstOffer) {
+            apiData = { ...apiData, ...firstOffer };
+            permalink = firstOffer.permalink || permalink;
+            catalogOfferImageUrl = firstOffer.thumbnail || firstOffer.pictures?.[0]?.secure_url || firstOffer.pictures?.[0]?.url;
+            imageUrl = catalogOfferImageUrl || imageUrl;
+            price = Number(firstOffer.price) || 0;
+          }
+        } else {
+          console.warn("[ML API] Falha ao buscar ofertas do catálogo", {
+            catalogId: mlIdInfo.id,
+            status: catalogItemsResponse.status,
+            endpoint: "products/items",
+          });
+        }
+      } catch (catalogError) {
+        console.warn("[ML API] Erro ao buscar ofertas do catálogo", {
+          catalogId: mlIdInfo.id,
+          errorType: catalogError instanceof Error ? catalogError.name : typeof catalogError,
+        });
+      }
+
       // Obtém preço do buy box
-      if (apiData.buy_box_winner) {
+      if (price > 0) {
+        // A oferta do catálogo já forneceu o preço atual.
+      } else if (apiData.buy_box_winner) {
         price = apiData.buy_box_winner.price || 0;
       } else if (apiData.price) {
         price = apiData.price;
@@ -415,7 +619,9 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
         }
       }
 
-      if (apiData && apiData.pictures && apiData.pictures.length > 0) {
+      if (catalogOfferImageUrl) {
+        imageUrl = catalogOfferImageUrl;
+      } else if (apiData && apiData.pictures && apiData.pictures.length > 0) {
         imageUrl = apiData.pictures[0].secure_url || apiData.pictures[0].url;
       } else if (apiData && apiData.thumbnail) {
         imageUrl = apiData.thumbnail;
@@ -485,7 +691,7 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
 
     const confidenceScore = price > 0 ? 100 : 70;
 
-    return {
+    return { ok: true, data: {
       title,
       platform: "Mercado Livre" as Platform,
       imageUrl,
@@ -498,11 +704,35 @@ export async function fetchMLProductDetails(url: string, userId?: string): Promi
       official_store_id: apiData ? apiData.official_store_id : undefined,
       available_quantity: apiData ? apiData.available_quantity : undefined,
       rating
-    };
+    }};
   } catch (error) {
-    console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);
-    return null;
+    const storedOffer = await findStoredOracleOffer(mlIdInfo.id);
+    if (storedOffer) {
+      console.log("[ML API] Oferta Oracle reutilizada após falha da API", { itemId: mlIdInfo.id });
+      return { ok: true, data: storedOffer };
+    }
+    if (error instanceof MLApiRequestError) {
+      console.warn("[ML API] Falha HTTP na consulta de produto", {
+        itemId: mlIdInfo.id,
+        status: error.status,
+        endpoint: mlIdInfo.type === "item" ? "items" : "products",
+      });
+    } else {
+      console.error(`[ML API] Erro ao buscar dados na API do Mercado Livre para ${mlIdInfo.id}:`, error);
+    }
+    return {
+      ok: false,
+      code: error instanceof MLApiRequestError
+        ? classifyMLApiFailure(error.status)
+        : "MARKETPLACE_SOURCE_UNAVAILABLE",
+    };
   }
+}
+
+/** Compatibilidade para consumidores que ainda esperam apenas metadados ou null. */
+export async function fetchMLProductDetails(url: string, userId?: string): Promise<LinkMetadata | null> {
+  const result = await fetchMLProductDetailsResult(url, userId);
+  return result.ok ? result.data : null;
 }
 
 /**
