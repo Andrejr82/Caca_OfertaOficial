@@ -9,7 +9,7 @@ const links = [
   { channel: "instagram" as const, trackedUrl: "https://caca-oferta-oficial.vercel.app/go/ig_123e4567-e89b-12d3-a456-426614174000" },
 ];
 
-const candidate = (id: string, price: number, complete = true) => createOfferQualityCandidate({
+const candidate = (id: string, price: number, complete = true, asin = id) => createOfferQualityCandidate({
   marketplace: "Amazon",
   nativeIdentity: id,
   sourceItemId: id,
@@ -18,7 +18,7 @@ const candidate = (id: string, price: number, complete = true) => createOfferQua
   imageUrl: "https://images.example/image.jpg",
   currentPrice: price,
   originalPrice: 100,
-  marketplaceMetrics: { asin: id, rating: 4.8, sales: 1000, shippingFree: true },
+  marketplaceMetrics: { asin, rating: 4.8, sales: 1000, shippingFree: true },
   currentFlowStatus: "pending_manual_review",
   affiliateLinks: complete ? links : links.slice(0, 1),
 });
@@ -27,7 +27,7 @@ describe("common offer quality evaluator", () => {
   it("selects one winner and marks another equivalent candidate duplicate", () => {
     const report = evaluateCandidates([
       candidate("B0ABC12345", 40),
-      candidate("B0ABC12346", 60),
+      candidate("B0ABC12346", 60, true, "B0ABC12345"),
     ], { runId: "test", generatedAt: "2026-07-28T00:00:00Z" });
 
     expect(report.winners).toHaveLength(1);
