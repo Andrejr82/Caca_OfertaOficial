@@ -1143,6 +1143,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
       return discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
+    loadHistory: loadActiveDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1180,6 +1181,7 @@ async function runScrapingCycleCore() {
     requestedAt: new Date().toISOString(),
     discover: (store) => scrapeStore(store, stageLogger),
     loadDeferred: loadDeferredDiscoveryIngestions,
+    loadHistory: loadActiveDiscoveryHistory,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1231,6 +1233,7 @@ async function runShopeeScenarioRecording(scenario) {
         .map((product) => normalizeShopeeCandidate(product, requestedAt));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
+    loadHistory: loadActiveDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1272,6 +1275,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
+    loadHistory: loadActiveDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
