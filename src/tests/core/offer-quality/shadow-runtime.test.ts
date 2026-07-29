@@ -53,4 +53,18 @@ describe("offer quality shadow runtime", () => {
     expect(result.v2Winners).toBe(1);
     expect(result.persistAttempts).toBe(0);
   });
+
+  it("compara somente os vencedores dentro do limite real da fila", () => {
+    const lowerPrice = { ...product, sourceItemId: "124", marketplaceMetrics: { ...product.marketplaceMetrics, itemId: "124" }, currentPrice: 49.99 };
+    const result = evaluateDiscoveryShadow(
+      [product, lowerPrice],
+      { selected: [product], limits: { maxPerMarketplace: 1 } },
+      { runId: "shadow-limit-test", generatedAt: "2026-07-29T12:00:00.000Z" },
+    );
+
+    expect(result.recordCount).toBe(2);
+    expect(result.groups).toBe(2);
+    expect(result.v2Winners).toBe(1);
+    expect(result.persistAttempts).toBe(0);
+  });
 });
