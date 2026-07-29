@@ -152,8 +152,9 @@ function createQualityAdmissionRunner() {
   if (typeof runtime.selectOfferQualityQueueProducts !== 'function') {
     return async () => { throw new Error('Runtime de qualidade active sem adaptador de fila'); };
   }
-  return async (products, marketplace) => runtime.selectOfferQualityQueueProducts(products, {
+  return async (products, marketplace, limits = {}) => runtime.selectOfferQualityQueueProducts(products, {
     marketplace,
+    maxAccepted: limits.maxAccepted,
     monetizationValid: (product) => product?.monetization?.valid === true,
   });
 }
