@@ -5,6 +5,7 @@ const { validateProductTitle } = require('./product-title-quality.cjs');
 const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
+const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
@@ -305,7 +306,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -353,13 +354,16 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const products = await discover(marketplace);
       const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
+      const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];
+      const freshness = filterFreshCandidates(marketplace, products, history);
+      const freshnessRejected = freshness.rejected || [];
       
       const uniqueProductsMap = new Map();
       let duplicatesRejected = 0;
-      let technicalRejections = 0;
+      let technicalRejections = freshnessRejected.length;
       let rejected = 0;
       
-      for (let product of products) {
+      for (let product of freshness.accepted) {
         const sourceItemId = String(product?.sourceItemId || '');
         if (sourceItemId === 'null' || sourceItemId === 'undefined' || !sourceItemId) {
            technicalRejections += 1;
@@ -583,6 +587,8 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         marketplace,
         discovered: products.length,
         duplicatesRejected,
+        freshnessRejected: freshnessRejected.length,
+        freshnessReasons: freshnessRejected.reduce((acc, item) => { acc[item.reason] = (acc[item.reason] || 0) + 1; return acc; }, {}),
         queueSelected: queue.selected.length,
         queueSkipped: queue.skipped.length,
         queueDeferred: queue.deferred?.length || 0,
