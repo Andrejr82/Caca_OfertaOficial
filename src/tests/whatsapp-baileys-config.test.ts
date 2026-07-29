@@ -7,12 +7,22 @@ describe("WhatsApp Baileys connection configuration", () => {
     const options = buildBaileysSocketOptions({ auth: { creds: {} }, logger: { level: "silent" } });
 
     expect(options.version).toEqual(BAILEYS_PROTOCOL_VERSION);
-    expect(options.version).toEqual([2, 3000, 1023223821]);
+    expect(options.version).toEqual([2, 3000, 1043857760]);
   });
 
-  it("uses the macOS desktop browser identity required by WhatsApp handshake", () => {
+  it("uses the WEB_BROWSER identity accepted by WhatsApp handshake", () => {
     const options = buildBaileysSocketOptions({ auth: { creds: {} }, logger: { level: "silent" } });
 
     expect(options.browser).toEqual(["Ubuntu", "Chrome", "22.04.4"]);
+  });
+
+  it("accepts the current WA Web version fetched at runtime", () => {
+    const options = buildBaileysSocketOptions({
+      auth: { creds: {} },
+      logger: { level: "silent" },
+      version: [2, 3000, 999999999],
+    });
+
+    expect(options.version).toEqual([2, 3000, 999999999]);
   });
 });

@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { default: makeWASocket, DisconnectReason } = require('@whiskeysockets/baileys');
+const { default: makeWASocket, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const { buildBaileysSocketOptions } = require('./whatsapp-connection-config.cjs');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
@@ -133,10 +133,19 @@ async function buildProcessedImageBuffer(finalImageUrl) {
 
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
+    let version;
+    try {
+        const latest = await fetchLatestBaileysVersion();
+        version = latest.version;
+        engineLog('INFO', 'Versão WA Web obtida', { version, isLatest: latest.isLatest });
+    } catch (error) {
+        engineLog('WARN', 'Não foi possível obter a versão WA Web; usando fallback', { error: error.message || String(error) });
+    }
 
     sock = makeWASocket(buildBaileysSocketOptions({
         auth: state,
         logger: pino({ level: 'silent' }),
+        version,
     }));
 
     connectionPromise = new Promise((resolve) => {
