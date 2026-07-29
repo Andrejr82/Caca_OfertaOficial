@@ -109,7 +109,7 @@ function buildAffiliateLinkRows(offer, appUrl) {
 
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
-const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
+const { SCENARIOS: MARKETPLACE_SCENARIOS, matchesScenarioProduct } = require('./amazon-scenario-config.cjs');
 const {
   runMercadoLivreNativeTop20,
   writeMercadoLivreNativeTop20Reports,
@@ -695,10 +695,12 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
 async function scrapeStore(store, stageLogger = null) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
-    const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario: getActiveMarketplaceScenario() });
+    const scenario = getActiveMarketplaceScenario();
+    const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario });
     const normalized = result.categories
       .flatMap((category) => category.products)
-      .map((product) => normalizeShopeeCandidate(product, discoveredAt));
+      .map((product) => normalizeShopeeCandidate(product, discoveredAt))
+      .filter((product) => matchesScenarioProduct(scenario, product.title));
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   if (store === 'Mercado Livre') {
@@ -730,11 +732,14 @@ async function scrapeStore(store, stageLogger = null) {
         source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
         }));
       
-      const filteredNovel = await filterNovelNormalizedProducts(store, normalized, stageLogger);
+      const scenarioRelevant = normalized.filter((product) => matchesScenarioProduct(scenario, product.title));
+      const filteredNovel = await filterNovelNormalizedProducts(store, scenarioRelevant, stageLogger);
       if (filteredNovel.length > 0) return filteredNovel;
       
-      // Fallback para fontes amplas se o cenário não trouxer novos candidatos
-      if (stageLogger) stageLogger.info('ML_fallback', intentStageStartedAt, 'Acionando fallback para fontes amplas do ML (ofertas/mais vendidos)');
+      // Não substituir um cenário editorial por ofertas genéricas: isso causava
+      // produtos fora do tema e repetição de catálogo entre ciclos.
+      if (stageLogger) stageLogger.info('ML_scenario_empty', intentStageStartedAt, 'Nenhum candidato novo aderente ao cenário; fallback amplo bloqueado');
+      return [];
     }
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
@@ -775,7 +780,8 @@ async function scrapeStore(store, stageLogger = null) {
     
     const normalized = result.products
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
-      .map((product) => normalizeAmazonCandidate(product, discoveredAt));
+      .map((product) => normalizeAmazonCandidate(product, discoveredAt))
+      .filter((product) => matchesScenarioProduct(scenario, product.title));
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
