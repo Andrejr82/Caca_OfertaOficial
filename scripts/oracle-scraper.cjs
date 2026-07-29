@@ -118,6 +118,7 @@ const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-nati
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
+const { getMarketplaceScenarioContract } = require('./marketplace-scenario-contracts.cjs');
 
 function createQualityShadowRunner() {
   if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'shadow') return null;
@@ -167,10 +168,12 @@ const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
 
-function getActiveMarketplaceScenario() {
-  const scenarioId = CLI_SCENARIO_ID;
-  if (scenarioId) return MARKETPLACE_SCENARIOS[scenarioId] || SHOPEE_SCENARIOS[scenarioId] || null;
-  return getCycleScenario(getCycleStartHour(getSaoPauloHour()), 4);
+function getActiveMarketplaceScenario(marketplace = 'Shopee') {
+  const routed = CLI_SCENARIO_ID
+    ? (MARKETPLACE_SCENARIOS[CLI_SCENARIO_ID] || SHOPEE_SCENARIOS[CLI_SCENARIO_ID])
+    : getCycleScenario(getCycleStartHour(getSaoPauloHour()), 4);
+  const scenarioId = routed?.scenarioId || routed?.id;
+  return getMarketplaceScenarioContract(scenarioId, marketplace) || routed || null;
 }
 
 let supabaseClient;
@@ -718,7 +721,7 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
 async function scrapeStore(store, stageLogger = null) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
-    const scenario = getActiveMarketplaceScenario();
+    const scenario = getActiveMarketplaceScenario('Shopee');
     const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario });
     const normalized = result.categories
       .flatMap((category) => category.products)
@@ -729,7 +732,7 @@ async function scrapeStore(store, stageLogger = null) {
   if (store === 'Mercado Livre') {
     if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
       const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
-      const scenario = getActiveMarketplaceScenario();
+      const scenario = getActiveMarketplaceScenario('Mercado Livre');
       const history = await loadActiveDiscoveryHistory(store);
       const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
       
@@ -785,7 +788,7 @@ async function scrapeStore(store, stageLogger = null) {
   if (store === 'Amazon') {
     const history = await loadActiveDiscoveryHistory(store);
     const knownAsins = new Set(history.flatMap((row) => [row.product_id, row.item_id].filter(Boolean).map(String)));
-    const scenario = getActiveMarketplaceScenario();
+    const scenario = getActiveMarketplaceScenario('Amazon');
     
     let amazonStageStartedAt;
     if (stageLogger) amazonStageStartedAt = stageLogger.start('Amazon_Top20_extraction', scenario?.keywords?.length || 0);
@@ -1140,7 +1143,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     .filter((marketplace) => MARKETPLACES.includes(marketplace)))];
   if (selectedMarketplaces.length === 0) throw new Error('Selecione ao menos um marketplace autorizado');
   const scenarioId = resolveManualScenarioId(category);
-  const scenario = scenarioId ? MARKETPLACE_SCENARIOS[scenarioId] : getActiveMarketplaceScenario();
+  const scenario = scenarioId ? MARKETPLACE_SCENARIOS[scenarioId] : getActiveMarketplaceScenario(selectedMarketplaces[0]);
   if (!scenario?.keywords?.length) throw new Error('A categoria selecionada não possui intenções configuradas');
   const perMarketplace = Math.min(Math.max(Number(limit) || 5, 1), 50);
   const correlationId = crypto.randomUUID();
@@ -1154,18 +1157,19 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     requestedAt,
     marketplaces: selectedMarketplaces,
     discover: async (marketplace) => {
+      const marketplaceScenario = getMarketplaceScenarioContract(scenarioId || scenario.scenarioId || scenario.id, marketplace) || scenario;
       if (marketplace === 'Shopee') {
-        const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId || undefined });
+        const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: marketplaceScenario });
         return discovered.categories.flatMap((group) => group.products)
           .map((product) => normalizeShopeeCandidate(product, requestedAt));
       }
       if (marketplace === 'Amazon') {
-        const discovered = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
+        const discovered = await runAmazonScenarioDryRun({ scenario: marketplaceScenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
         return discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
       }
       const discovered = await runMercadoLivreOfficialIntentCoverage({
         accessToken: mlToken,
-        keywords: scenario.keywords,
+        keywords: marketplaceScenario.keywords,
         maxPerIntent: Math.max(10, Math.min(20, perMarketplace * 2)),
         delayMs: 300,
       });

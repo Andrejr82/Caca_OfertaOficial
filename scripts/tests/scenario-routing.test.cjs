@@ -15,7 +15,7 @@ test('uses six four-hour discovery windows over the canonical 11 editorial windo
   ]);
   assert.equal(SCENARIO_WINDOWS.length, 11);
   assert.equal(getCycleStartHour(21), 20);
-  assert.deepEqual(getCycleScenario(20, 4).scenarioIds, ['moda_masculina', 'enxoval_casamento']);
+  assert.deepEqual(getCycleScenario(20, 4).scenarioIds, ['enxoval_casamento']);
 });
 
 test('publishes the new intent matrix to the marketplace scenario registry', () => {

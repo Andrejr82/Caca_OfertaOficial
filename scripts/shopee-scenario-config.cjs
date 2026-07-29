@@ -206,10 +206,11 @@ SCENARIOS.moda_fitness_beleza_viagem = {
   ],
 };
 
-// 2. Roteamento canônico por Horário
-// A curadoria editorial é definida em janelas de intenção; o Oracle continua
-// executando ciclos de 4 horas e, por isso, cada ciclo recebe as janelas que
-// intersectam seu período (sem voltar a usar cenários genéricos agrupados).
+// 2. Roteamento canônico por horário
+// Cada disparo de 4 horas recebe UM cenário. As janelas editoriais menores
+// continuam disponíveis para execução manual, mas nunca são concatenadas no
+// ciclo automático. Isso impede que palavras-chave de domínios diferentes
+// contaminem a mesma busca.
 const SCENARIO_WINDOWS = Object.freeze([
   { start: 0, end: 4, scenarioId: 'tecnologia_desejo', label: 'Gamer e Tecnologia' },
   { start: 4, end: 7, scenarioId: 'treino_academia', label: 'Treino e Academia' },
@@ -223,6 +224,40 @@ const SCENARIO_WINDOWS = Object.freeze([
   { start: 20, end: 22, scenarioId: 'moda_masculina', label: 'Moda Masculina' },
   { start: 22, end: 24, scenarioId: 'enxoval_casamento', label: 'Enxoval de Casamento' },
 ]);
+
+// O calendário de 4h seleciona a intenção principal do horário. O mapa é
+// configurável por ambiente para permitir rotação editorial sem alterar código.
+const DEFAULT_CYCLE_SCENARIO_ROUTING = Object.freeze({
+  0: 'tecnologia_desejo',
+  4: 'treino_academia',
+  8: 'mae_de_primeira_viagem',
+  12: 'eletrodomesticos_cozinha',
+  16: 'moda_masculina',
+  20: 'enxoval_casamento',
+});
+
+function getCycleScenarioRouting() {
+  const raw = process.env.ORACLE_CYCLE_SCENARIO_ROUTING_JSON;
+  if (!raw) return DEFAULT_CYCLE_SCENARIO_ROUTING;
+  try {
+    const parsed = JSON.parse(raw);
+    const routing = {};
+    for (const hour of [0, 4, 8, 12, 16, 20]) {
+      const id = String(parsed?.[hour] || '').trim();
+      routing[hour] = SCENARIOS[id] ? id : DEFAULT_CYCLE_SCENARIO_ROUTING[hour];
+    }
+    return Object.freeze(routing);
+  } catch {
+    return DEFAULT_CYCLE_SCENARIO_ROUTING;
+  }
+}
+
+const CYCLE_SCENARIO_ROUTING = DEFAULT_CYCLE_SCENARIO_ROUTING;
+
+function getCanonicalCycleScenarioId(startHour) {
+  const hour = getCycleStartHour(startHour);
+  return getCycleScenarioRouting()[hour] || DEFAULT_CYCLE_SCENARIO_ROUTING[hour];
+}
 
 function getScenarioWindow(currentHour) {
   const hour = ((Number(currentHour) % 24) + 24) % 24;
@@ -244,24 +279,18 @@ function getActiveScenario(currentHour) {
 }
 
 function getCycleScenario(startHour, durationHours = 4) {
-  const start = ((Number(startHour) % 24) + 24) % 24;
-  const windows = SCENARIO_WINDOWS.filter((window) => {
-    const distance = (window.start - start + 24) % 24;
-    return distance < durationHours || (start + durationHours > 24 && window.start < (start + durationHours) % 24);
-  });
-  const selected = windows.length ? windows : [getScenarioWindow(start)];
-  const configs = selected.map((window) => ({ ...SCENARIOS[window.scenarioId], name: window.label, schedule: window }));
-  const first = configs[0];
+  const hour = getCycleStartHour(startHour);
+  const scenarioId = getCanonicalCycleScenarioId(hour);
+  const scenario = SCENARIOS[scenarioId];
+  const window = getScenarioWindow(hour);
   return {
-    ...first,
-    id: `cycle_${selected.map((window) => window.scenarioId).join('__')}`,
-    name: selected.map((window) => window.label).join(' + '),
-    scenarioIds: selected.map((window) => window.scenarioId),
-    schedule: selected,
-    keywords: [...new Set(configs.flatMap((config) => config.keywords || []))],
-    apiCategories: [...new Set(configs.flatMap((config) => config.apiCategories || []))],
-    allowedProductTerms: [...new Set(configs.flatMap((config) => config.allowedProductTerms || []))],
-    blockedProductTerms: [...new Set(configs.flatMap((config) => config.blockedProductTerms || []))],
+    ...scenario,
+    id: scenarioId,
+    scenarioId,
+    scenarioIds: [scenarioId],
+    name: scenario.name || window?.label || scenarioId,
+    schedule: window ? [window] : [],
+    routingMode: 'canonical_single',
   };
 }
 
@@ -320,6 +349,8 @@ module.exports = {
   getSaoPauloHour,
   getActiveScenario,
   getCycleScenario,
+  getCanonicalCycleScenarioId,
+  CYCLE_SCENARIO_ROUTING,
   getCycleStartHour,
   getScenarioWindow,
   SCENARIO_WINDOWS,

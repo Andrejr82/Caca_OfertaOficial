@@ -35,6 +35,7 @@ const DEPLOY_FILES = [
   'scripts/family-key-engine.cjs',
   'scripts/curation-policy.cjs',
   'scripts/offer-freshness-gate.cjs',
+  'scripts/marketplace-scenario-contracts.cjs',
   'scripts/offer-quality-shadow-runtime.cjs',
   'scripts/offer-quality-queue-runtime.cjs',
 ];
