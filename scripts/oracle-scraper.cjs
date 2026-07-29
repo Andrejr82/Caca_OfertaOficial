@@ -421,7 +421,7 @@ async function loadActiveDiscoveryHistory(marketplace) {
     const { data, error } = await withTimeout(
       supabase
         .from('offers')
-        .select('item_id, product_id, shopee_item_id, original_url, status')
+        .select('item_id, product_id, shopee_item_id, shopee_shop_id, product_name, original_url, status, created_at, updated_at, current_price, old_price')
         .eq('user_id', ADMIN_USER_ID)
         .eq('platform', marketplace)
         .range(from, from + pageSize - 1),
