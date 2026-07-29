@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const { default: makeWASocket, DisconnectReason } = require('@whiskeysockets/baileys');
+const { buildBaileysSocketOptions } = require('./whatsapp-connection-config.cjs');
 const pino = require('pino');
 const qrcode = require('qrcode-terminal');
 const { useSupabaseAuthState } = require('./supabase-auth-state.cjs');
@@ -133,12 +134,10 @@ async function buildProcessedImageBuffer(finalImageUrl) {
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useSupabaseAuthState(supabase, 'default');
 
-    sock = makeWASocket({
+    sock = makeWASocket(buildBaileysSocketOptions({
         auth: state,
-        printQRInTerminal: false,
         logger: pino({ level: 'silent' }),
-        generateHighQualityLinkPreview: false, // Desligado para evitar cache de preview
-    });
+    }));
 
     connectionPromise = new Promise((resolve) => {
         sock.ev.on('connection.update', (update) => {
