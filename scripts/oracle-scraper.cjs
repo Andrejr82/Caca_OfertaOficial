@@ -1143,7 +1143,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     .filter((marketplace) => MARKETPLACES.includes(marketplace)))];
   if (selectedMarketplaces.length === 0) throw new Error('Selecione ao menos um marketplace autorizado');
   const scenarioId = resolveManualScenarioId(category);
-  const scenario = scenarioId ? MARKETPLACE_SCENARIOS[scenarioId] : getActiveMarketplaceScenario();
+  const scenario = scenarioId ? MARKETPLACE_SCENARIOS[scenarioId] : getActiveMarketplaceScenario(selectedMarketplaces[0]);
   if (!scenario?.keywords?.length) throw new Error('A categoria selecionada não possui intenções configuradas');
   const perMarketplace = Math.min(Math.max(Number(limit) || 5, 1), 50);
   const correlationId = crypto.randomUUID();
@@ -1157,18 +1157,19 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     requestedAt,
     marketplaces: selectedMarketplaces,
     discover: async (marketplace) => {
+      const marketplaceScenario = getMarketplaceScenarioContract(scenarioId || scenario.scenarioId || scenario.id, marketplace) || scenario;
       if (marketplace === 'Shopee') {
-        const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId || undefined });
+        const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: marketplaceScenario });
         return discovered.categories.flatMap((group) => group.products)
           .map((product) => normalizeShopeeCandidate(product, requestedAt));
       }
       if (marketplace === 'Amazon') {
-        const discovered = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
+        const discovered = await runAmazonScenarioDryRun({ scenario: marketplaceScenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
         return discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
       }
       const discovered = await runMercadoLivreOfficialIntentCoverage({
         accessToken: mlToken,
-        keywords: scenario.keywords,
+        keywords: marketplaceScenario.keywords,
         maxPerIntent: Math.max(10, Math.min(20, perMarketplace * 2)),
         delayMs: 300,
       });
