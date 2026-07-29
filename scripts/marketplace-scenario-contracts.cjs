@@ -4,7 +4,7 @@ const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Amazon', 'Mercado Livre']);
-const COMMON_BLOCKED = Object.freeze(['pet', 'cachorro', 'gato', 'ração', 'suplemento', 'celular', 'notebook', 'eletrônico', 'eletronico']);
+const COMMON_BLOCKED = Object.freeze(['pet', 'cachorro', 'gato', 'ração', 'suplemento']);
 
 function contract(terms, categories, allowed, blocked = []) {
   return { terms, categories, allowedProductTerms: allowed, blockedProductTerms: [...COMMON_BLOCKED, ...blocked] };
