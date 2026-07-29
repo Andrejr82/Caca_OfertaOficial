@@ -136,6 +136,7 @@ function createQualityShadowRunner() {
     {
       runId: `shadow-${payload.correlationId}-${payload.marketplace}`,
       generatedAt: new Date().toISOString(),
+      marketplace: payload.marketplace,
     },
   );
 }
