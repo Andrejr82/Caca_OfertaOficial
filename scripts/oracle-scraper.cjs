@@ -438,6 +438,29 @@ async function loadActiveDiscoveryHistory(marketplace) {
   return rows;
 }
 
+async function loadRecentDiscoveryHistory(marketplace) {
+  const supabase = getSupabase();
+  const cutoff = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('offers')
+        .select('item_id, product_id, shopee_item_id, shopee_shop_id, product_name, created_at, updated_at, current_price, old_price')
+        .eq('user_id', ADMIN_USER_ID)
+        .eq('platform', marketplace)
+        .gte('created_at', cutoff)
+        .range(from, from + 999),
+      Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+      `loadRecentDiscoveryHistory_${marketplace}`,
+    );
+    if (error) throw new Error('Freshness ' + marketplace + ': ' + error.message);
+    rows.push(...(data || []));
+    if (!data || data.length < 1000) break;
+  }
+  return rows;
+}
+
 async function loadDeferredDiscoveryIngestions(marketplace) {
   const supabase = getSupabase();
   const pageSize = 1000;
@@ -1149,7 +1172,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
       return discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadActiveDiscoveryHistory,
+    loadHistory: loadRecentDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1187,7 +1210,7 @@ async function runScrapingCycleCore() {
     requestedAt: new Date().toISOString(),
     discover: (store) => scrapeStore(store, stageLogger),
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadActiveDiscoveryHistory,
+    loadHistory: loadRecentDiscoveryHistory,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1239,7 +1262,7 @@ async function runShopeeScenarioRecording(scenario) {
         .map((product) => normalizeShopeeCandidate(product, requestedAt));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadActiveDiscoveryHistory,
+    loadHistory: loadRecentDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1281,7 +1304,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadActiveDiscoveryHistory,
+    loadHistory: loadRecentDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
