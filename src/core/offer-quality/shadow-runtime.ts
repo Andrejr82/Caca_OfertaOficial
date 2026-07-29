@@ -51,8 +51,8 @@ function links(product: DiscoveryProduct) {
   });
 }
 
-function toCandidate(product: DiscoveryProduct): OfferQualityCandidateInput | null {
-  const marketplace = normalizeMarketplace(product.marketplace);
+function toCandidate(product: DiscoveryProduct, cycleMarketplace?: unknown): OfferQualityCandidateInput | null {
+  const marketplace = normalizeMarketplace(product.marketplace ?? cycleMarketplace);
   if (!marketplace) return null;
   const nativeIdentity = identity(product, marketplace);
   if (!nativeIdentity || !text(product.title) || !text(product.sourceUrl) || !text(product.imageUrl)) return null;
@@ -74,9 +74,9 @@ function toCandidate(product: DiscoveryProduct): OfferQualityCandidateInput | nu
 export function evaluateDiscoveryShadow(
   rawProducts: readonly DiscoveryProduct[],
   queue: ShadowQueue,
-  options: { runId: string; generatedAt: string },
+  options: { runId: string; generatedAt: string; marketplace?: string },
 ) {
-  const candidates = rawProducts.map(toCandidate).filter((candidate): candidate is OfferQualityCandidateInput => candidate !== null);
+  const candidates = rawProducts.map((product) => toCandidate(product, options.marketplace)).filter((candidate): candidate is OfferQualityCandidateInput => candidate !== null);
   const report = evaluateCandidates(candidates, options);
   const v1Selected = new Set((queue.selected ?? []).map((product) => text(product.sourceItemId)).filter((id): id is string => Boolean(id)));
   const v2Winners = new Set(report.winners.map((decision) => decision.winnerSourceItemId).filter((id): id is string => Boolean(id)));
