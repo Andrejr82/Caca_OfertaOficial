@@ -38,4 +38,22 @@ describe("offer quality queue adapter", () => {
     expect(result.accepted).toHaveLength(0);
     expect(result.rejected[0]?.reasons).toContain("missing_monetization");
   });
+
+  it("limits admission to the highest V2 scores when requested", () => {
+    const result = selectOfferQualityQueueProducts(
+      [
+        product({ sourceItemId: "MLB1000000001", currentPrice: 49.9, originalPrice: 99.9 }),
+        product({ sourceItemId: "MLB1000000002", currentPrice: 399.9, originalPrice: 449.9 }),
+      ],
+      {
+        marketplace: "Mercado Livre",
+        maxAccepted: 1,
+        monetizationValid: (candidate: any) => candidate.monetization?.valid === true,
+      },
+    );
+
+    expect(result.accepted).toHaveLength(1);
+    expect(result.accepted[0]?.sourceItemId).toBe("MLB1000000001");
+    expect(result.rejected.find((item) => item.sourceItemId === "MLB1000000002")?.reasons).toContain("quality_rank_limit");
+  });
 });

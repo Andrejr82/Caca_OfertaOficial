@@ -470,7 +470,11 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
 
       if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'active' && typeof qualityAdmission === 'function') {
         try {
-          const admission = await qualityAdmission(Object.freeze([...uniqueProducts, ...previouslyDeferred]), marketplace);
+          const admission = await qualityAdmission(
+            Object.freeze([...uniqueProducts, ...previouslyDeferred]),
+            marketplace,
+            { maxAccepted: copyQueueOptions?.maxPerMarketplace ?? 5 },
+          );
           const admitted = Array.isArray(admission?.accepted) ? admission.accepted : [];
           const admittedIds = new Set(admitted.map((product) => String(product?.sourceItemId || '')));
           candidatesToPersist = uniqueProducts.filter((product) => admittedIds.has(String(product.sourceItemId)));
@@ -505,6 +509,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
               selected: Object.freeze([...(queue.selected || [])]),
               skipped: Object.freeze([...(queue.skipped || [])]),
               deferred: Object.freeze([...(queue.deferred || [])]),
+              limits: Object.freeze({ ...(queue.limits || {}) }),
             }),
           }));
           await safeObserve('discovery.quality.shadow.completed', {
