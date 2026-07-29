@@ -1,12 +1,11 @@
 'use strict';
 
-// Baileys 7.0.0-rc13 can receive HTTP 405 when it negotiates its bundled
-// default protocol version. Keep this value explicit and isolated so it can
-// be updated/tested without touching the Supabase auth state.
-const BAILEYS_PROTOCOL_VERSION = Object.freeze([2, 3000, 1034074495]);
-// WhatsApp currently rejects some Baileys 7 handshakes using the default
-// browser identity with HTTP 405. Keep the desktop identity explicit too.
-const BAILEYS_BROWSER = Object.freeze(['Mac OS', 'Desktop', '14.4.1']);
+// Baileys 6.7.23 is the last stable line that still emits a QR with the
+// current WhatsApp handshake. Keep the bundled protocol version explicit.
+const BAILEYS_PROTOCOL_VERSION = Object.freeze([2, 3000, 1023223821]);
+// WEB_BROWSER is accepted by the current server for QR pairing. Desktop
+// identities (WIN32/DARWIN) are currently terminated with HTTP 428.
+const BAILEYS_BROWSER = Object.freeze(['Ubuntu', 'Chrome', '22.04.4']);
 
 function buildBaileysSocketOptions({ auth, logger }) {
     return {

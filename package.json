@@ -17,7 +17,7 @@
     "@remotion/cli": "^4.0.482",
     "@supabase/ssr": "^0.7.0",
     "@supabase/supabase-js": "^2.84.0",
-    "@whiskeysockets/baileys": "^7.0.0-rc13",
+    "@whiskeysockets/baileys": "6.7.23",
     "axios": "^1.18.1",
     "cheerio": "^1.2.0",
     "cloudinary": "^2.10.0",
