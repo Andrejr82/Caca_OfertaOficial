@@ -17,6 +17,7 @@ export interface OfferQualityQueueProduct extends JsonRecord {
 export interface QueueAdmissionOptions {
   marketplace: OfferQualityMarketplace;
   monetizationValid: (product: OfferQualityQueueProduct) => boolean;
+  maxAccepted?: number;
   runId?: string;
   generatedAt?: string;
 }
@@ -91,7 +92,15 @@ export function selectOfferQualityQueueProducts(
     runId: options.runId ?? `queue-admission-${Date.now()}`,
     generatedAt: options.generatedAt ?? new Date().toISOString(),
   });
-  const winnerIds = new Set(report.winners.map((decision) => decision.winnerSourceItemId));
+  const winnerDecisions = [...report.winners].sort((a, b) => {
+    const scoreDiff = (b.score?.total ?? 0) - (a.score?.total ?? 0);
+    return scoreDiff || a.candidate.sourceItemId.localeCompare(b.candidate.sourceItemId);
+  });
+  const limit = options.maxAccepted == null
+    ? winnerDecisions.length
+    : Math.max(0, Math.floor(Number(options.maxAccepted)));
+  const winnerIds = new Set(winnerDecisions.slice(0, limit).map((decision) => decision.winnerSourceItemId));
+  const allWinnerIds = new Set(winnerDecisions.map((decision) => decision.winnerSourceItemId));
   const decisionById = new Map(report.decisions.map((decision) => [decision.candidate.sourceItemId, decision]));
   const accepted = validProducts.filter((product) => winnerIds.has(text(product.sourceItemId)));
 
@@ -99,11 +108,10 @@ export function selectOfferQualityQueueProducts(
     const sourceItemId = text(product.sourceItemId);
     if (winnerIds.has(sourceItemId)) continue;
     const decision = decisionById.get(sourceItemId);
-    rejected.push({
-      product,
-      sourceItemId,
-      reasons: decision?.reasons?.length ? decision.reasons : ["not_selected_by_offer_quality_v2"],
-    });
+    const reasons = allWinnerIds.has(sourceItemId)
+      ? ["quality_rank_limit"]
+      : (decision?.reasons?.length ? decision.reasons : ["not_selected_by_offer_quality_v2"]);
+    rejected.push({ product, sourceItemId, reasons });
   }
 
   return Object.freeze({
