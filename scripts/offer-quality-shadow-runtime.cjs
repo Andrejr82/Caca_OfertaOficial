@@ -217,6 +217,7 @@ var UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{
 var CHANNELS = ["telegram", "whatsapp", "facebook", "instagram"];
 var PREFIXES = { telegram: "tg_", whatsapp: "wp_", facebook: "fb_", instagram: "ig_" };
 function validateMonetization(candidate) {
+  if (candidate.prePersistMonetized === true) return "complete";
   const links2 = candidate.affiliateLinks ?? [];
   const byChannel = new Map(links2.map((link) => [link.channel, link]));
   if (byChannel.size !== 4 || CHANNELS.some((channel) => !byChannel.has(channel))) return "incomplete";
@@ -381,7 +382,8 @@ function toCandidate(product) {
     currentPrice: Number(product.currentPrice),
     originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     marketplaceMetrics: product.marketplaceMetrics ?? {},
-    affiliateLinks: links(product)
+    affiliateLinks: links(product),
+    prePersistMonetized: product.monetization?.valid === true
   };
 }
 function evaluateDiscoveryShadow(rawProducts, queue, options) {

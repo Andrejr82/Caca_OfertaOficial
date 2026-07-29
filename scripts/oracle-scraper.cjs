@@ -1185,6 +1185,11 @@ async function runScrapingCycleCore() {
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 15, maxPerMarketplace: 5, maxPerCategory: 3 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
+    observe: async (event) => {
+      if (event?.eventType === 'discovery.quality.shadow.completed' || event?.eventType === 'discovery.quality.shadow.failed') {
+        console.log(`[Offer Quality Shadow] ${JSON.stringify(event)}`);
+      }
+    },
     stageLogger
   });
   const durationSeconds = Math.round((Date.now() - startedAt) / 1000);

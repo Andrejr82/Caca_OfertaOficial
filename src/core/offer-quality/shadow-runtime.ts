@@ -12,6 +12,7 @@ interface DiscoveryProduct {
   currentPrice?: number | string | null;
   originalPrice?: number | string | null;
   marketplaceMetrics?: JsonRecord | null;
+  monetization?: { valid?: boolean };
   affiliateLinks?: Array<{ channel?: string; trackedUrl?: string; tracked_url?: string; subId?: string | null; sub_id?: string | null }>;
 }
 
@@ -66,6 +67,7 @@ function toCandidate(product: DiscoveryProduct): OfferQualityCandidateInput | nu
     originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     marketplaceMetrics: product.marketplaceMetrics ?? {},
     affiliateLinks: links(product),
+    prePersistMonetized: product.monetization?.valid === true,
   };
 }
 

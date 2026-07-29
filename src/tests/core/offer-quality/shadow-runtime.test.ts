@@ -28,4 +28,16 @@ describe("offer quality shadow runtime", () => {
     expect(result.v2Winners).toBe(1);
     expect(result.persistAttempts).toBe(0);
   });
+
+  it("aceita monetização pré-persistência sem fabricar affiliate_links", () => {
+    const prePersistProduct = { ...product, affiliateLinks: undefined, monetization: { valid: true } };
+    const result = evaluateDiscoveryShadow([prePersistProduct], { selected: [prePersistProduct] }, {
+      runId: "shadow-pre-persist-test",
+      generatedAt: "2026-07-29T12:00:00.000Z",
+    });
+
+    expect(result.v2Winners).toBe(1);
+    expect(result.incompleteMonetization).toBe(0);
+    expect(result.persistAttempts).toBe(0);
+  });
 });
