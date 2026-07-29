@@ -108,8 +108,8 @@ function buildAffiliateLinkRows(offer, appUrl) {
 }
 
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
-const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
-const { SCENARIOS: MARKETPLACE_SCENARIOS, matchesScenarioProduct } = require('./amazon-scenario-config.cjs');
+const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour, matchesScenarioProduct } = require('./shopee-scenario-config.cjs');
+const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const {
   runMercadoLivreNativeTop20,
   writeMercadoLivreNativeTop20Reports,
