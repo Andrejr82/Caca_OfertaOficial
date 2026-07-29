@@ -390,7 +390,14 @@ function evaluateDiscoveryShadow(rawProducts, queue, options) {
   const candidates = rawProducts.map((product) => toCandidate(product, options.marketplace)).filter((candidate) => candidate !== null);
   const report = evaluateCandidates(candidates, options);
   const v1Selected = new Set((queue.selected ?? []).map((product) => text(product.sourceItemId)).filter((id) => Boolean(id)));
-  const v2Winners = new Set(report.winners.map((decision) => decision.winnerSourceItemId).filter((id) => Boolean(id)));
+  const rankedWinners = [...report.winners].sort((a, b) => {
+    const scoreDiff = (b.score?.total ?? 0) - (a.score?.total ?? 0);
+    return scoreDiff || a.candidate.sourceItemId.localeCompare(b.candidate.sourceItemId);
+  });
+  const maxWinners = queue.limits?.maxPerMarketplace == null
+    ? rankedWinners.length
+    : Math.max(0, Math.floor(Number(queue.limits.maxPerMarketplace)));
+  const v2Winners = new Set(rankedWinners.slice(0, maxWinners).map((decision) => decision.winnerSourceItemId).filter((id) => Boolean(id)));
   const v1Only = [...v1Selected].filter((id) => !v2Winners.has(id)).length;
   const v2Only = [...v2Winners].filter((id) => !v1Selected.has(id)).length;
   return Object.freeze({
