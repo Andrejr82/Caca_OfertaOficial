@@ -99,6 +99,13 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
 
       expect(scraperSource).toContain('copyQueueOptions: { maxTotal: 15, maxPerMarketplace: 5, maxPerCategory: 3 }');
     });
+
+    it('registra a comparação shadow no log do ciclo Oracle', () => {
+      const scraperSource = readFileSync(resolve(process.cwd(), 'scripts/oracle-scraper.cjs'), 'utf8');
+      expect(scraperSource).toContain('observe: async (event) =>');
+      expect(scraperSource).toContain("event.eventType === 'discovery.quality.shadow.completed'");
+      expect(scraperSource).toContain('[Offer Quality Shadow]');
+    });
   });
 
   describe('Integration Pipeline', () => {
