@@ -509,6 +509,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
               selected: Object.freeze([...(queue.selected || [])]),
               skipped: Object.freeze([...(queue.skipped || [])]),
               deferred: Object.freeze([...(queue.deferred || [])]),
+              limits: Object.freeze({ ...(queue.limits || {}) }),
             }),
           }));
           await safeObserve('discovery.quality.shadow.completed', {
