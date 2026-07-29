@@ -367,8 +367,8 @@ function links(product) {
     return [{ channel, trackedUrl, subId: text(link.subId) ?? text(link.sub_id) }];
   });
 }
-function toCandidate(product) {
-  const marketplace = normalizeMarketplace(product.marketplace);
+function toCandidate(product, cycleMarketplace) {
+  const marketplace = normalizeMarketplace(product.marketplace ?? cycleMarketplace);
   if (!marketplace) return null;
   const nativeIdentity = identity(product, marketplace);
   if (!nativeIdentity || !text(product.title) || !text(product.sourceUrl) || !text(product.imageUrl)) return null;
@@ -387,7 +387,7 @@ function toCandidate(product) {
   };
 }
 function evaluateDiscoveryShadow(rawProducts, queue, options) {
-  const candidates = rawProducts.map(toCandidate).filter((candidate) => candidate !== null);
+  const candidates = rawProducts.map((product) => toCandidate(product, options.marketplace)).filter((candidate) => candidate !== null);
   const report = evaluateCandidates(candidates, options);
   const v1Selected = new Set((queue.selected ?? []).map((product) => text(product.sourceItemId)).filter((id) => Boolean(id)));
   const v2Winners = new Set(report.winners.map((decision) => decision.winnerSourceItemId).filter((id) => Boolean(id)));
