@@ -381,7 +381,8 @@ function toCandidate(product) {
     currentPrice: Number(product.currentPrice),
     originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     marketplaceMetrics: product.marketplaceMetrics ?? {},
-    affiliateLinks: links(product)
+    affiliateLinks: links(product),
+    prePersistMonetized: product.monetization?.valid === true
   };
 }
 function evaluateDiscoveryShadow(rawProducts, queue, options) {
