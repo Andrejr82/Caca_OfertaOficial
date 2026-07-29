@@ -34,6 +34,7 @@ const DEPLOY_FILES = [
   'scripts/family-variant-selector.cjs',
   'scripts/family-key-engine.cjs',
   'scripts/curation-policy.cjs',
+  'scripts/offer-freshness-gate.cjs',
   'scripts/offer-quality-shadow-runtime.cjs',
   'scripts/offer-quality-queue-runtime.cjs',
 ];
