@@ -43,3 +43,13 @@ test('enxoval rejeita domínios fora de cama, mesa e banho', () => {
     assert.equal(contract.allowedProductTerms.some((term) => /pet|fitness|celular/i.test(term)), false);
   }
 });
+
+test('os seis cenários automáticos possuem contrato nos três marketplaces', () => {
+  for (const id of Object.values(CYCLE_SCENARIO_ROUTING)) {
+    for (const marketplace of MARKETPLACES) {
+      const contract = getMarketplaceScenarioContract(id, marketplace);
+      assert.equal(contract.source, 'explicit_marketplace_contract');
+      assert.ok(contract.terms.length >= 3);
+    }
+  }
+});
