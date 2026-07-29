@@ -6,6 +6,7 @@ const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
 const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
+const { evaluateSearchQuality } = require('./marketplace-search-quality.cjs');
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
@@ -355,7 +356,21 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
       const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];
-      const freshness = filterFreshCandidates(marketplace, products, history);
+      const searchQualityEnabled = process.env.OFFER_SEARCH_QUALITY_V2 === 'active';
+      const searchQuality = searchQualityEnabled
+        ? evaluateSearchQuality(marketplace, products, { cooldownDays: 7 })
+        : { accepted: products, rejected: [], metrics: { marketplace, received: products.length, accepted: products.length, rejected: 0, mode: 'disabled' } };
+      await safeObserve('discovery.search_quality.evaluated', {
+        marketplace,
+        ...searchQuality.metrics,
+        rejectedReasons: searchQuality.rejected.slice(0, 20),
+      });
+      const freshness = filterFreshCandidates(
+        marketplace,
+        searchQuality.accepted,
+        history,
+        searchQualityEnabled ? { cooldownDays: 7 } : {},
+      );
       const freshnessRejected = freshness.rejected || [];
       
       const uniqueProductsMap = new Map();
