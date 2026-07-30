@@ -13,7 +13,8 @@ import { telegramCaption } from "@/core/publication/transports/telegram-caption"
 import { sendTelegramMessage, sendTelegramPhoto } from "@/lib/telegram/client";
 import { whatsappService } from "@/lib/integrations/whatsapp";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
-import { publishToInstagram } from "@/lib/instagram/client";
+import { publishToInstagram, publishVideoToInstagram } from "@/lib/instagram/client";
+import { instagramVideoFingerprint } from "@/lib/instagram/safety";
 import { publishToFacebook } from "@/lib/platforms/facebook";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { OfficialPublicationStateAdapter, SupabaseOfficialPublicationAdapter } from "./supabase-official-publication-adapter";
@@ -82,6 +83,24 @@ function createTransportRegistry() {
     new InstagramPublicationTransport({
       ...receiptDependencies,
       send: async (input) => {
+        const mediaType = input.metadata?.instagramMediaType === "REELS" ? "REELS" : "FEED";
+        if (mediaType === "REELS") {
+          const videoUrl = typeof input.metadata?.instagramVideoUrl === "string" ? input.metadata.instagramVideoUrl : "";
+          if (!videoUrl) throw new Error("Instagram Reels requires a public video URL.");
+          const externalId = await publishVideoToInstagram(videoUrl, input.text, {
+            durationSeconds: typeof input.metadata?.instagramVideoDurationSeconds === "number" ? input.metadata.instagramVideoDurationSeconds : undefined,
+            width: typeof input.metadata?.instagramVideoWidth === "number" ? input.metadata.instagramVideoWidth : undefined,
+            height: typeof input.metadata?.instagramVideoHeight === "number" ? input.metadata.instagramVideoHeight : undefined,
+            sizeBytes: typeof input.metadata?.instagramVideoSizeBytes === "number" ? input.metadata.instagramVideoSizeBytes : undefined,
+            mimeType: typeof input.metadata?.instagramVideoMimeType === "string" ? input.metadata.instagramVideoMimeType : undefined
+          });
+          return {
+            externalId,
+            sentAt: new Date().toISOString(),
+            final: true,
+            metadata: { mediaType: "REELS", instagramVideoFingerprint: instagramVideoFingerprint(videoUrl) }
+          };
+        }
         if (!input.mediaUrl) throw new Error("Instagram publication requires persisted media (image URL)");
         const externalId = await publishToInstagram(input.mediaUrl, input.text);
         return { externalId, sentAt: new Date().toISOString(), final: true };
