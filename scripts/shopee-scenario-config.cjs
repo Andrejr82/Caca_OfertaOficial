@@ -317,10 +317,14 @@ function normalizeProductTitle(value) {
 
 function matchesScenarioProduct(scenario, title) {
   const normalizedTitle = normalizeProductTitle(title);
-  const blocked = (scenario?.blockedProductTerms || []).some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
+  const containsTerm = (term) => {
+    const normalizedTerm = normalizeProductTitle(term).replace(/[^a-z0-9]+/g, ' ').trim();
+    return normalizedTerm && (` ${normalizedTitle.replace(/[^a-z0-9]+/g, ' ')} `).includes(` ${normalizedTerm} `);
+  };
+  const blocked = (scenario?.blockedProductTerms || []).some(containsTerm);
   if (blocked) return false;
   const allowedTerms = scenario?.allowedProductTerms || [];
-  if (allowedTerms.length > 0) return allowedTerms.some((term) => normalizedTitle.includes(normalizeProductTitle(term)));
+  if (allowedTerms.length > 0) return allowedTerms.some(containsTerm);
 
   // Cenários amplos usam categorias API como descoberta, mas o título ainda
   // precisa confirmar a intenção. Exigimos a frase inteira ou pelo menos dois
@@ -330,10 +334,10 @@ function matchesScenarioProduct(scenario, title) {
   return keywords.some((keyword) => {
     const normalizedKeyword = normalizeProductTitle(keyword);
     if (!normalizedKeyword) return false;
-    if (normalizedTitle.includes(normalizedKeyword)) return true;
+    if (containsTerm(normalizedKeyword)) return true;
     const tokens = normalizedKeyword.split(' ').filter((token) => token.length >= 4 && !stopwords.has(token));
     if (!tokens.length) return false;
-    const matches = tokens.filter((token) => normalizedTitle.includes(token)).length;
+    const matches = tokens.filter((token) => containsTerm(token)).length;
     return matches >= Math.min(2, tokens.length);
   });
 }
