@@ -532,7 +532,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           const admission = await qualityAdmission(
             Object.freeze([...candidatesToPersist, ...previouslyDeferred]),
             marketplace,
-            { maxAccepted: copyQueueOptions?.maxPerMarketplace ?? 5 },
+            { maxAccepted: copyQueueOptions?.maxPerMarketplace ?? COPY_QUEUE_DEFAULTS.maxPerMarketplace },
           );
           const admitted = Array.isArray(admission?.accepted) ? admission.accepted : [];
           const admittedIds = new Set(admitted.map((product) => String(product?.sourceItemId || '')));
