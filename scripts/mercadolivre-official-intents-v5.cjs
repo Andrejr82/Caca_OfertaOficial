@@ -197,7 +197,7 @@ function normalizeItems(items, context) {
     category_id: context.category_id,
     category_name: context.category_name,
     item_id: item.id || null,
-    product_id: item.catalog_product_id || null,
+    product_id: item.catalog_product_id || context.product_id || null,
     title: item.title || context.product_name || null,
     current_price: Number.isFinite(Number(item.price)) ? Number(item.price) : null,
     old_price: Number.isFinite(Number(item.original_price)) ? Number(item.original_price) : null,
@@ -306,6 +306,7 @@ async function runMercadoLivreOfficialIntentCoverage({
               const enriched = catalogFallback.map((item) => ({ ...item, ...(detailById.get(item.id) || {}) }));
               intentProducts.push(...normalizeItems(enriched, {
                 intent, domain_id: domain.domain_id, category_id: domain.category_id, category_name: domain.category_name,
+                product_id: productId,
                 product_name: productMeta.name || null,
                 image_url: productMeta.pictures?.[0]?.url || null,
                 product_url: productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`,

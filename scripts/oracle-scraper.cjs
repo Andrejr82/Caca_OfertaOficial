@@ -294,7 +294,7 @@ async function loadActiveDiscoveryHistory(marketplace) {
     const { data, error } = await withTimeout(
       supabase
         .from('offers')
-        .select('item_id, product_id, shopee_item_id, original_url, status')
+        .select('item_id, product_id, shopee_item_id, original_url, product_name, category, status')
         .eq('user_id', ADMIN_USER_ID)
         .eq('platform', marketplace)
         .range(from, from + pageSize - 1),
@@ -309,6 +309,56 @@ async function loadActiveDiscoveryHistory(marketplace) {
   // previously rejected offers. Re-selecting rejected rows was inflating the
   // persisted counter without creating new panel items.
   return rows;
+}
+
+const ML_IDENTITY_STOPWORDS = new Set([
+  'com', 'de', 'da', 'do', 'das', 'dos', 'para', 'por', 'em', 'e', 'a', 'o',
+  'kit', 'novo', 'nova', 'original', 'promocao', 'oferta', 'frete', 'gratis',
+  'preto', 'preta', 'branco', 'branca', 'cinza', 'azul', 'vermelho', 'vermelha'
+]);
+
+function normalizeMercadoLivreIdentityTokens(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/)
+    .filter((token) => token.length >= 2 && !ML_IDENTITY_STOPWORDS.has(token));
+}
+
+function mercadoLivreIdentityKey(product) {
+  const metrics = product?.marketplaceMetrics || product?.marketplace_metrics || {};
+  const raw = product?.rawPayload || product?.raw_payload || {};
+  const category = normalizeMercadoLivreIdentityTokens(product?.category?.name || product?.category || '').join('-');
+  const brand = normalizeMercadoLivreIdentityTokens(metrics.brand || raw.brand || '').join('-');
+  const model = normalizeMercadoLivreIdentityTokens(metrics.model || raw.model || '').join('-');
+  const capacity = normalizeMercadoLivreIdentityTokens(metrics.capacity || raw.capacity || '').join('-');
+  const voltage = normalizeMercadoLivreIdentityTokens(metrics.voltage || raw.voltage || '').join('-');
+  const titleTokens = normalizeMercadoLivreIdentityTokens(product?.title || product?.product_name);
+  const modelTokens = titleTokens.filter((token) => /[a-z]/.test(token) && /\d/.test(token) && token.length >= 3);
+
+  if (model || modelTokens.length || (brand && (capacity || voltage))) {
+    return `ml|${category}|${brand}|${model || modelTokens.sort().join('-')}|${capacity}|${voltage}`;
+  }
+
+  if (titleTokens.length < 5) return null;
+  return `ml|${category}|title:${titleTokens.join('-')}`;
+}
+
+function mercadoLivreTokenSimilarity(left, right) {
+  const a = new Set(normalizeMercadoLivreIdentityTokens(left));
+  const b = new Set(normalizeMercadoLivreIdentityTokens(right));
+  if (a.size < 5 || b.size < 5) return 0;
+  const intersection = [...a].filter((token) => b.has(token)).length;
+  return intersection / Math.max(a.size, b.size);
+}
+
+function isEquivalentMercadoLivreProduct(candidate, existing) {
+  const candidateKey = mercadoLivreIdentityKey(candidate);
+  const existingKey = mercadoLivreIdentityKey(existing);
+  if (candidateKey && existingKey && candidateKey === existingKey) return true;
+  const candidateCategory = normalizeMercadoLivreIdentityTokens(candidate?.category?.name || candidate?.category).join(' ');
+  const existingCategory = normalizeMercadoLivreIdentityTokens(existing?.category?.name || existing?.category).join(' ');
+  return Boolean(candidateCategory && candidateCategory === existingCategory
+    && mercadoLivreTokenSimilarity(candidate?.title, existing?.product_name || existing?.title) >= 0.9);
 }
 
 async function loadDeferredDiscoveryIngestions(marketplace) {
@@ -496,10 +546,13 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
       row.original_url,
     ].filter(Boolean).map(String)));
     
-    const filtered = products.filter((product) => ![
-      product.sourceItemId,
-      product.sourceUrl,
-    ].filter(Boolean).some((key) => known.has(String(key))));
+    const filtered = products.filter((product) => {
+      const hasKnownIdentity = [product.sourceItemId, product.sourceUrl]
+        .filter(Boolean).some((key) => known.has(String(key)));
+      if (hasKnownIdentity) return false;
+      if (marketplace !== 'Mercado Livre') return true;
+      return !history.some((row) => isEquivalentMercadoLivreProduct(product, row));
+    });
 
     if (stageLogger) stageLogger.end('filterNovelNormalizedProducts', stageStartedAt, filtered.length);
     return filtered;
@@ -1189,4 +1242,6 @@ module.exports = {
   generateMLAffiliateLinkWithId,
   processMonetization,
   buildAffiliateLinkRows
+  , mercadoLivreIdentityKey
+  , isEquivalentMercadoLivreProduct
 };
