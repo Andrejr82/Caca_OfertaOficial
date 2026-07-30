@@ -20,6 +20,7 @@ interface GenerateAIRequest {
   requestedAt?: string;
   tenantId?: string;
   copyV2?: boolean;
+  regenerateCopyV2?: boolean;
   autoCurated?: boolean;
 }
 
@@ -161,7 +162,9 @@ export async function POST(request: Request) {
       commandId,
       idempotencyKey: offerId === "ALL_PENDING"
         ? `ai:batch:${body.correlationId || commandId}:v1`
-        : body.copyV2 ? `ai:copy-v2:${offerId}:v1` : `ai:draft:${offerId}:v2`,
+        : body.copyV2
+          ? body.regenerateCopyV2 ? `ai:copy-v2:${offerId}:${Date.now()}` : `ai:copy-v2:${offerId}:v1`
+          : `ai:draft:${offerId}:v2`,
       correlationId: body.correlationId || request.headers.get("x-correlation-id") || commandId,
       causationId: body.causationId ?? request.headers.get("x-causation-id"),
       offerId,
@@ -172,7 +175,11 @@ export async function POST(request: Request) {
       actor: { type: isServiceWorker ? "service" : "user", id: userId, service: "nextjs-ai-route" },
       origin: "api.ai.generate",
       reason: { code: "GENERATE_OFFICIAL_CONTENT" },
-      metadata: body.copyV2 ? { copyV2: true, ...(body.autoCurated ? { copyV2Auto: true } : {}) } : undefined
+      metadata: body.copyV2 ? {
+        copyV2: true,
+        ...(body.regenerateCopyV2 ? { copyV2Regenerate: true } : {}),
+        ...(body.autoCurated ? { copyV2Auto: true } : {})
+      } : undefined
     };
 
     const result = await generateOfficialAI(

@@ -162,6 +162,23 @@ describe("SupabaseOfficialAIAdapter", () => {
     expect(existingPost.insert).not.toHaveBeenCalled();
   });
 
+  it("atualiza somente o conteúdo de draft existente em regeneração Copy V2", async () => {
+    const link = chain({ data: { id: "link-1" }, error: null });
+    const existingPost = chain({ data: { id: "post-1", affiliate_link_id: "link-1", channel: "telegram", status: "draft" }, error: null });
+    const client = { from: vi.fn().mockReturnValueOnce(link).mockReturnValueOnce(existingPost).mockReturnValueOnce(existingPost) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await adapter.persistDrafts({
+      command: { ...command, metadata: { copyV2: true, copyV2Regenerate: true } },
+      offer,
+      content: { ...content, channelCopies: { telegram: "Nova copy verificada" } },
+      channels: ["telegram"]
+    });
+
+    expect(existingPost.update).toHaveBeenCalledWith(expect.objectContaining({ content: "Nova copy verificada\n\n👉 https://cacaoferta.com.br/go/tg_offer-1" }));
+    expect(existingPost.insert).not.toHaveBeenCalled();
+  });
+
   it("persiste auditoria e idempotência no storage existente", async () => {
     const audit = chain({ data: null, error: null });
     const reserve = chain({ data: null, error: null });

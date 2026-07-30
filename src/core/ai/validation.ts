@@ -10,6 +10,7 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
     return "Required command identity is missing";
   }
   if (command.metadata?.copyV2Auto === true && command.metadata.copyV2 !== true) return "Automated Copy V2 requires copyV2 metadata";
+  if (command.metadata?.copyV2Regenerate === true && command.metadata.copyV2 !== true) return "Copy V2 regeneration requires copyV2 metadata";
   // Idempotency key deve ser estável por offer (ADR-014: a IA detecta o modo internamente).
   // Formato v1 (approval e legado): ai:{offerId}:v1
   // Formato v2 (draft batch): ai:draft:{offerId}:v2
@@ -31,9 +32,13 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   } else if (command.offerId !== "ALL_PENDING") {
     const isV1 = command.idempotencyKey === `ai:${command.offerId}:v1`;
     const isV2Draft = command.idempotencyKey === `ai:draft:${command.offerId}:v2`;
-    const isCopyV2 = command.idempotencyKey === `ai:copy-v2:${command.offerId}:v1` && command.metadata?.copyV2 === true;
+    const copyV2Prefix = `ai:copy-v2:${command.offerId}:`;
+    const copyV2Revision = command.idempotencyKey.startsWith(copyV2Prefix)
+      ? command.idempotencyKey.slice(copyV2Prefix.length)
+      : "";
+    const isCopyV2 = command.metadata?.copyV2 === true && /^(?:v1|\d+)$/.test(copyV2Revision);
     if (!isV1 && !isV2Draft && !isCopyV2) {
-      return "AI idempotency key must be ai:{offerId}:v1, ai:draft:{offerId}:v2 or ai:copy-v2:{offerId}:v1";
+      return "AI idempotency key must be ai:{offerId}:v1, ai:draft:{offerId}:v2 or ai:copy-v2:{offerId}:{revision}";
     }
   }
   if (command.offerId === "ALL_PENDING" && !command.idempotencyKey.startsWith("ai:ALL_PENDING:") && !command.idempotencyKey.startsWith("ai:batch:")) {

@@ -58,6 +58,9 @@ export interface OfficialAIOffer {
   currentPrice: number;
   originalPrice: number | null;
   category: string | null;
+  sellerName?: string | null;
+  shippingFree?: boolean | null;
+  marketplaceMetrics?: Record<string, unknown> | null;
   explainability: Record<string, unknown>;
   createdAt: string;
   affiliateLinks?: readonly OfficialAIAffiliateLink[];

@@ -35,6 +35,23 @@ function mapAffiliateLinks(value: unknown) {
     .map((link) => ({ channel: link.channel as any, trackedUrl: link.tracked_url, subId: link.sub_id }));
 }
 
+function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string) {
+  const copy = rawContent.trimEnd();
+  const urls = copy.match(/https?:\/\/\S+/g) ?? [];
+
+  if (channel === "instagram") {
+    if (urls.length > 0) throw new Error("Instagram copy cannot contain a direct URL");
+    return copy;
+  }
+
+  if (urls.length > 0) {
+    if (urls.length === 1 && urls[0] === trackedUrl) return copy;
+    throw new Error(`Copy contains an invalid or duplicate URL for ${channel}`);
+  }
+
+  return copy.endsWith("👉") ? `${copy} ${trackedUrl}` : `${copy}\n\n👉 ${trackedUrl}`;
+}
+
 export function getOfficialAIBatchSize(): number {
   const raw = process.env.OFFICIAL_AI_BATCH_SIZE;
   if (raw === undefined || raw === null || raw.trim() === "") {
@@ -97,7 +114,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
       .eq("id", offerId)
       .eq("user_id", tenantId)
       .maybeSingle();
@@ -115,6 +132,9 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       currentPrice: Number(data.current_price),
       originalPrice: data.old_price == null ? null : Number(data.old_price),
       category: data.category,
+      sellerName: data.seller_name ?? null,
+      shippingFree: data.shipping_free ?? null,
+      marketplaceMetrics: (data.marketplace_metrics ?? null) as Record<string, unknown> | null,
       explainability: (data.explainability ?? {}) as Record<string, unknown>,
       createdAt: data.created_at,
       affiliateLinks: mapAffiliateLinks((data as any).affiliate_links)
@@ -126,7 +146,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     const batchSize = getOfficialAIBatchSize();
     let query = this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
       .eq("user_id", tenantId)
       .eq("status", "pending_manual_review")
       .order("created_at", { ascending: true })
@@ -193,6 +213,9 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       currentPrice: Number(data.current_price),
       originalPrice: data.old_price == null ? null : Number(data.old_price),
       category: data.category,
+      sellerName: data.seller_name ?? null,
+      shippingFree: data.shipping_free ?? null,
+      marketplaceMetrics: (data.marketplace_metrics ?? null) as Record<string, unknown> | null,
       explainability: (data.explainability ?? {}) as Record<string, unknown>,
       createdAt: data.created_at,
       affiliateLinks: mapAffiliateLinks((data as any).affiliate_links)
@@ -244,26 +267,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
             offer_id: input.offer.id,
             affiliate_link_id: link.id,
             channel,
-          content: (() => {
-            const copy = (input.content.channelCopies[channel] || "").trimEnd();
-            const urls = copy.match(/https?:\/\/\S+/g) ?? [];
-
-            if (channel === "instagram") {
-              if (urls.length > 0) {
-                throw new Error("Instagram copy cannot contain a direct URL");
-              }
-              return copy;
-            }
-
-            if (urls.length > 0) {
-              if (urls.length === 1 && urls[0] === trackedUrl) return copy;
-              throw new Error(`Copy contains an invalid or duplicate URL for ${channel}`);
-            }
-
-            // Mantém o CTA e o link na mesma linha quando o template termina
-            // com o indicador de ação (evita o dedo apontar para o vazio).
-            return copy.endsWith("👉") ? `${copy} ${trackedUrl}` : `${copy}\n\n👉 ${trackedUrl}`;
-          })(),
+            content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl),
             status: "draft"
           })
           .select("id,affiliate_link_id,channel,status")
@@ -276,6 +280,15 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
           details: { channel, postId: post.id, affiliateLinkId: post.affiliate_link_id ?? link.id, operation: "insert" }
         });
       } else {
+        if (input.command.metadata?.copyV2Regenerate === true) {
+          const { error: updateError } = await this.client
+            .from("posts")
+            .update({ content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl) })
+            .eq("id", post.id)
+            .eq("user_id", this.tenantId)
+            .eq("status", "draft");
+          if (updateError) throw new Error(`Official AI draft update failed for ${channel}: ${updateError.message}`);
+        }
         await this.emit({
           eventType: "official_ai.persistence.post.idempotent", correlationId: input.command.correlationId,
           offerId: input.offer.id, marketplace: input.offer.marketplace, stage: "draft_persistence", durationMs: Date.now() - startedAt,

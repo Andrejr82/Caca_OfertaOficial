@@ -190,13 +190,14 @@ function mercadoLivreBlocks(offer: Offer, data: ReturnType<typeof extractCommerc
   return blocks;
 }
 
-function buildMercadoLivreCopy(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, channel: "telegram" | "whatsapp") {
+function buildMercadoLivreCopy(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, channel: "telegram" | "whatsapp" | "facebook") {
   if (!link.tracked_url?.trim()) throw new Error("NO_MONETIZED_LINK");
   if (!isMercadoLivreTrackedLink(link.tracked_url)) throw new Error("NO_MONETIZED_LINK");
   const data = extractCommercialData(offer);
   const blocks = mercadoLivreBlocks(offer, data);
   blocks.push("", `✨ Link: ${link.tracked_url}`);
   if (channel === "telegram") blocks.push("", "#anuncio");
+  if (channel === "facebook") blocks.push("", generateHashtags(offer, "facebook"));
   return blocks.join("\\n").replace(/\\n{3,}/g, "\\n\\n");
 }
 
@@ -566,6 +567,7 @@ export function generateTelegramMessage(offer: Offer, link: Pick<AffiliateLink, 
 }
 
 export function generateFacebookMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  if (isMercadoLivreOffer(offer)) return buildMercadoLivreCopy(offer, link, "facebook");
   return processChannel(offer, link, "facebook");
 }
 

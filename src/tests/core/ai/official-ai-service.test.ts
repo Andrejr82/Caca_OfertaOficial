@@ -113,6 +113,38 @@ function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = 
 }
 
 describe("generateOfficialAI", () => {
+  it("encaminha dados comerciais Mercado Livre para a copy determinística", async () => {
+    const mlOffer: OfficialAIOffer = {
+      ...offer,
+      id: "offer-ml",
+      marketplace: "Mercado Livre",
+      productName: "Cooktop Itatiaia Itamaster 5 Bocas",
+      sellerName: "Loja Itatiaia",
+      shippingFree: true,
+      marketplaceMetrics: {
+        official_store_id: 2707,
+        ranking_type: "BEST_SELLER",
+        ranking_entity_type: "PRODUCT",
+        ranking_position: 1,
+        ranking_scope: "CATEGORY"
+      }
+    };
+    const mlCommand: OfficialAICommand = {
+      ...command,
+      offerId: "offer-ml",
+      idempotencyKey: "ai:copy-v2:offer-ml:v1",
+      metadata: { copyV2: true }
+    };
+    const dependencies = createDependencies({ offers: { findById: vi.fn().mockResolvedValue(mlOffer) } });
+
+    await generateOfficialAI(mlCommand, dependencies);
+
+    const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
+    expect(persisted.channelCopies.telegram).toContain("🏷️ Vendido por Loja Itatiaia");
+    expect(persisted.channelCopies.telegram).toContain("🏆 Nº 1 entre os mais vendidos da categoria");
+    expect(persisted.channelCopies.telegram).toContain("🚚 Frete grátis");
+  });
+
   it("usa o construtor O.P.A.C. único e metadado persistido na geração nova", async () => {
     const offerWithAttribute = {
       ...offer,
