@@ -977,12 +977,14 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     discover: async (marketplace) => {
       if (marketplace === 'Shopee') {
         const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId || undefined });
-        return discovered.categories.flatMap((group) => group.products)
+        const normalized = discovered.categories.flatMap((group) => group.products)
           .map((product) => normalizeShopeeCandidate(product, requestedAt));
+        return filterNovelNormalizedProducts(marketplace, normalized);
       }
       if (marketplace === 'Amazon') {
         const discovered = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
-        return discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+        const normalized = discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+        return filterNovelNormalizedProducts(marketplace, normalized);
       }
       const discovered = await runMercadoLivreOfficialIntentCoverage({
         accessToken: mlToken,
@@ -990,7 +992,8 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
         maxPerIntent: Math.max(10, Math.min(20, perMarketplace * 2)),
         delayMs: 300,
       });
-      return discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+      const normalized = discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+      return filterNovelNormalizedProducts(marketplace, normalized);
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     persist: persistDiscoveryIngestionV1,
