@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateTelegramMessage, generateFacebookMessage, generateWhatsAppMessage, deriveOfferSignals, selectPrimaryAngle, selectStableCall, generateAllMessages } from "@/lib/messages/generate";
+import { generateTelegramMessage, generateFacebookMessage, generateWhatsAppMessage, generateInstagramMessage, deriveOfferSignals, selectPrimaryAngle, selectStableCall, generateAllMessages } from "@/lib/messages/generate";
 import type { AffiliateLink, Offer } from "@/types/domain";
 
 const baseOffer: any = {
@@ -51,6 +51,89 @@ const wpLink: AffiliateLink = {
 };
 
 describe("Deterministic Copy Engine Tests", () => {
+
+  describe("Copy comercial verificada do Mercado Livre", () => {
+    const mlOffer: any = {
+      ...baseOffer,
+      platform: "Mercado Livre",
+      product_name: "Panela de Arroz Fast Rice 5 Premium Mondial 400W – NPE-08-5X",
+      current_price: 131,
+      old_price: 244.9,
+      seller_name: "Mercado Livre Eletrônicos",
+      shipping_free: true,
+      original_url: "https://produto.mercadolivre.com.br/MLB-3583906235",
+      marketplace_metrics: {
+        official_store_id: 2707,
+        official_store_name: null,
+        ranking_type: "BEST_SELLER",
+        ranking_entity_type: "PRODUCT",
+        ranking_position: 1,
+        ranking_scope: "CATEGORY"
+      },
+      explainability: { affiliate_url: "https://meli.la/ml-affiliate" }
+    };
+
+    const mlLink: any = { ...link, tracked_url: "https://cacaoferta.com.br/go/tg_ml" };
+    const mlWpLink: any = { ...wpLink, tracked_url: "https://cacaoferta.com.br/go/wp_ml" };
+
+    it("renderiza apenas evidências comerciais confirmadas", () => {
+      const copy = generateTelegramMessage(mlOffer, mlLink);
+      expect(copy).toContain("~de R$ 244,90~");
+      expect(copy).toContain("por R$ 131,00");
+      expect(copy).toContain("🔥 47% de desconto");
+      expect(copy).toContain("🏆 Nº 1 entre os mais vendidos da categoria");
+      expect(copy).toContain("🏪 Loja oficial no Mercado Livre");
+      expect(copy).toContain("🏷️ Vendido por Mercado Livre Eletrônicos");
+      expect(copy).toContain("🚚 Frete grátis");
+      expect(copy).toContain(mlLink.tracked_url);
+      expect(copy).not.toContain(mlOffer.original_url);
+    });
+
+    it("não inventa ranking, loja ou benefícios ausentes", () => {
+      const offer = { ...mlOffer, old_price: null, seller_name: null, shipping_free: null, marketplace_metrics: { official_store_id: null, source_position: 1, score: 99 } };
+      const copy = generateWhatsAppMessage(offer, mlWpLink);
+      expect(copy).toContain("por R$ 131,00");
+      expect(copy).not.toContain("de R$");
+      expect(copy).not.toContain("desconto");
+      expect(copy).not.toContain("🏆");
+      expect(copy).not.toContain("🏪");
+      expect(copy).not.toContain("🏷️");
+      expect(copy).not.toContain("🚚");
+      expect(copy).not.toContain("Pix");
+      expect(copy).not.toContain("parcel");
+      expect(copy).not.toContain("Cupom");
+      expect(copy).not.toContain("source_position");
+    });
+
+    it("formata posições de best seller somente com evidência de produto", () => {
+      const make = (position: number) => generateTelegramMessage({ ...mlOffer, marketplace_metrics: { ...mlOffer.marketplace_metrics, ranking_position: position } }, mlLink);
+      expect(make(5)).toContain("🏆 Nº 5 entre os mais vendidos da categoria");
+      expect(make(11)).toContain("🏆 Entre os mais vendidos da categoria");
+      expect(generateTelegramMessage({ ...mlOffer, marketplace_metrics: { ...mlOffer.marketplace_metrics, ranking_entity_type: "SELLER" } }, mlLink)).not.toContain("🏆");
+    });
+
+    it("exibe nome de loja somente quando campo oficial confirmado e não confunde vendedor", () => {
+      const named = { ...mlOffer, marketplace_metrics: { ...mlOffer.marketplace_metrics, official_store_name: "Mondial Oficial" } };
+      expect(generateTelegramMessage(named, mlLink)).toContain("🏪 Loja Oficial Mondial Oficial");
+      const sameAsSeller = { ...mlOffer, marketplace_metrics: { ...mlOffer.marketplace_metrics, official_store_name: mlOffer.seller_name } };
+      expect(generateTelegramMessage(sameAsSeller, mlLink)).toContain("🏪 Loja oficial no Mercado Livre");
+      expect(generateTelegramMessage(sameAsSeller, mlLink)).not.toContain("🏪 Loja Oficial Mercado Livre Eletrônicos");
+    });
+
+    it("usa somente tracked_url e rejeita ausência de link monetizado", () => {
+      expect(generateTelegramMessage(mlOffer, mlLink)).toContain(mlLink.tracked_url);
+      expect(() => generateTelegramMessage(mlOffer, { tracked_url: "" })).toThrow("NO_MONETIZED_LINK");
+      expect(() => generateTelegramMessage(mlOffer, { tracked_url: mlOffer.original_url })).toThrow("NO_MONETIZED_LINK");
+    });
+
+    it("mantém Instagram sem URL direta, mas com dados comerciais verificados", () => {
+      const copy = generateInstagramMessage(mlOffer, { ...mlLink, channel: "instagram" });
+      expect(copy.feed).toContain("R$ 131,00");
+      expect(copy.feed).toContain("Vendido por Mercado Livre Eletrônicos");
+      expect(copy.feed).toContain("Link na bio");
+      expect(copy.feed).not.toContain(mlOffer.original_url);
+    });
+  });
   
   describe("Prioridade de Ângulos", () => {
     it("cupom vence desconto", () => {

@@ -44,6 +44,11 @@ function normalizeMarketplace(value: string | null | undefined) {
   return marketplace || "Loja parceira";
 }
 
+function isMercadoLivreOffer(offer: Pick<Offer, "platform">) {
+  const platform = String(offer.platform || "").toLowerCase();
+  return platform.includes("mercado livre") || platform.includes("mercadolivre");
+}
+
 function discountPercent(offer: Pick<Offer, "old_price" | "current_price">) {
   if (!offer.old_price || offer.old_price <= offer.current_price) return 0;
   return Math.round(((offer.old_price - offer.current_price) / offer.old_price) * 100);
@@ -95,6 +100,9 @@ export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, 
 export function extractCommercialData(offer: Offer) {
   const e = offer.explainability || {};
   const m = (offer.marketplace_metrics as any) || {};
+  const direct = offer as Offer & Record<string, any>;
+  const nested = (e.commercial_data || e.commercialData || {}) as Record<string, any>;
+  const evidence = (e.discovery_evidence || e.discoveryEvidence || {}) as Record<string, any>;
   
   const isAmazon = (offer.platform || "").toLowerCase().includes("amazon");
   
@@ -112,10 +120,84 @@ export function extractCommercialData(offer: Offer) {
     free_shipping: offer.shipping_free ?? e.free_shipping ?? m.free_shipping,
     seller_name: offer.seller_name || m.seller || e.seller_name,
     official_store: e.official_store ?? m.official_store,
+    official_store_id: direct.official_store_id ?? nested.official_store_id ?? evidence.official_store_id ?? e.official_store_id ?? m.official_store_id,
+    official_store_name: direct.official_store_name ?? nested.official_store_name ?? evidence.official_store_name ?? e.official_store_name ?? m.official_store_name,
+    brand: nested.brand ?? evidence.brand ?? e.brand ?? m.brand,
+    ranking_type: nested.ranking_type ?? evidence.ranking_type ?? e.ranking_type ?? m.ranking_type,
+    ranking_entity_type: nested.ranking_entity_type ?? evidence.ranking_entity_type ?? e.ranking_entity_type ?? m.ranking_entity_type,
+    ranking_position: nested.ranking_position ?? evidence.ranking_position ?? e.ranking_position ?? m.ranking_position,
+    ranking_scope: nested.ranking_scope ?? evidence.ranking_scope ?? e.ranking_scope ?? m.ranking_scope,
     variation_condition: e.variation_condition || m.variation_condition,
     best_seller: e.best_seller ?? m.best_seller,
     flash_sale: e.flash_sale ?? m.flash_sale,
   };
+}
+
+function isMercadoLivreTrackedLink(value: string) {
+  const tracked = value.toLowerCase();
+  return tracked.includes("/go/") || tracked.includes("meli.la/") || (tracked.includes("mercadolivre.") && (tracked.includes("camp=") || tracked.includes("partner_id=") || tracked.includes("afiliado")));
+}
+
+function validSellerName(value: unknown) {
+  const seller = String(value || "").trim();
+  return seller && !["n/a", "na", "null", "unknown", "genérico", "generico", "sem nome"].includes(seller.toLowerCase())
+    ? seller
+    : undefined;
+}
+
+function validPositiveNumber(value: unknown) {
+  const number = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(number) && number > 0 ? number : undefined;
+}
+
+function normalizedMercadoLivreData(offer: Offer, data: ReturnType<typeof extractCommercialData>) {
+  const rankingType = String(data.ranking_type || "").toUpperCase();
+  const rankingEntity = String(data.ranking_entity_type || "").toUpperCase();
+  const rankingPosition = validPositiveNumber(data.ranking_position);
+  const ranking = rankingType === "BEST_SELLER" && rankingEntity === "PRODUCT" && rankingPosition
+    ? { position: rankingPosition, scope: data.ranking_scope }
+    : undefined;
+  const officialStoreId = validPositiveNumber(data.official_store_id);
+  const seller = validSellerName(data.seller_name);
+  const candidateStoreName = validSellerName(data.official_store_name);
+  const storeName = candidateStoreName && candidateStoreName.toLowerCase() !== seller?.toLowerCase() ? candidateStoreName : undefined;
+  const oldPrice = validPositiveNumber(offer.old_price);
+  const currentPrice = validPositiveNumber(offer.current_price);
+  const hasDiscount = !!oldPrice && !!currentPrice && oldPrice > currentPrice;
+  return { currentPrice, oldPrice, hasDiscount, discount: hasDiscount ? Math.round(((oldPrice! - currentPrice!) / oldPrice!) * 100) : undefined, ranking, officialStoreId, storeName, seller, freeShipping: data.free_shipping === true };
+}
+
+function plainCurrency(value: number) {
+  return formatCurrency(value).replace(/\u00a0/g, " ");
+}
+
+function mercadoLivreBlocks(offer: Offer, data: ReturnType<typeof extractCommercialData>) {
+  const normalized = normalizedMercadoLivreData(offer, data);
+  const blocks: string[] = [offer.product_name, ""];
+  if (normalized.oldPrice && normalized.hasDiscount) blocks.push(`~de ${plainCurrency(normalized.oldPrice)}~`);
+  if (normalized.currentPrice) blocks.push(`por ${plainCurrency(normalized.currentPrice)}`);
+  if (normalized.discount) blocks.push(`🔥 ${normalized.discount}% de desconto`);
+  if (normalized.oldPrice || normalized.currentPrice) blocks.push("");
+  if (normalized.ranking) {
+    blocks.push(normalized.ranking.position <= 10
+      ? `🏆 Nº ${normalized.ranking.position} entre os mais vendidos da categoria`
+      : "🏆 Entre os mais vendidos da categoria");
+  }
+  if (normalized.storeName) blocks.push(`🏪 Loja Oficial ${normalized.storeName}`);
+  else if (normalized.officialStoreId) blocks.push("🏪 Loja oficial no Mercado Livre");
+  if (normalized.seller) blocks.push(`🏷️ Vendido por ${normalized.seller}`);
+  if (normalized.freeShipping) blocks.push("🚚 Frete grátis");
+  return blocks;
+}
+
+function buildMercadoLivreCopy(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, channel: "telegram" | "whatsapp") {
+  if (!link.tracked_url?.trim()) throw new Error("NO_MONETIZED_LINK");
+  if (!isMercadoLivreTrackedLink(link.tracked_url)) throw new Error("NO_MONETIZED_LINK");
+  const data = extractCommercialData(offer);
+  const blocks = mercadoLivreBlocks(offer, data);
+  blocks.push("", `✨ Link: ${link.tracked_url}`);
+  if (channel === "telegram") blocks.push("", "#anuncio");
+  return blocks.join("\\n").replace(/\\n{3,}/g, "\\n\\n");
 }
 
 export function deriveOfferSignals(offer: Offer, commercialData: any): OfferSignals {
@@ -479,6 +561,7 @@ function processChannel(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, 
 }
 
 export function generateTelegramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  if (isMercadoLivreOffer(offer)) return buildMercadoLivreCopy(offer, link, "telegram");
   return processChannel(offer, link, "telegram");
 }
 
@@ -487,10 +570,24 @@ export function generateFacebookMessage(offer: Offer, link: Pick<AffiliateLink, 
 }
 
 export function generateWhatsAppMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  if (isMercadoLivreOffer(offer)) return buildMercadoLivreCopy(offer, link, "whatsapp");
   return processChannel(offer, link, "whatsapp");
 }
 
 export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
+  if (isMercadoLivreOffer(offer)) {
+    if (!link.tracked_url?.trim()) throw new Error("NO_MONETIZED_LINK");
+    if (!isMercadoLivreTrackedLink(link.tracked_url)) throw new Error("NO_MONETIZED_LINK");
+    const data = extractCommercialData(offer);
+    const summary = mercadoLivreBlocks(offer, data).join("\\n");
+    const feed = ["🚨 OFERTA EM DESTAQUE", "", summary, "", `✨ Link na bio do @${officialBrand.instagram}`, "", "#anuncio"].join("\\n");
+    return {
+      feed,
+      stories: ["🚨 OFERTA EM DESTAQUE", summary, "👆 Link na bio"],
+      reels: [`GANCHO: ${offer.product_name}`, summary, "CTA: Link na bio"],
+      carousel: [summary, "✨ Link na bio"]
+    };
+  }
   validateLinkMarketplace(offer, link);
   const hasPrice = offer.current_price > 0;
   const discount = discountPercent(offer);
