@@ -20,7 +20,10 @@ test('usa identidade nativa por marketplace', () => {
 test('rejeita preço inválido e não infere benefício de checkout', () => {
   assert.equal(validateOfficialPrice({ currentPrice: 0 }).valid, false);
   assert.equal(validateOfficialPrice({ currentPrice: 80, originalPrice: 100 }).discountPercent, 20);
-  assert.equal(validateOfficialPrice({ currentPrice: 80, originalPrice: 70 }).valid, false);
+  const inconsistent = validateOfficialPrice({ currentPrice: 80, originalPrice: 70 });
+  assert.equal(inconsistent.valid, true);
+  assert.equal(inconsistent.originalPrice, null);
+  assert.deepEqual(inconsistent.warnings, ['preco_anterior_inconsistente']);
 });
 
 test('escolhe o menor preço dentro da mesma equivalência', () => {

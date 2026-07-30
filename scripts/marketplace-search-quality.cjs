@@ -36,14 +36,21 @@ function equivalenceKey(marketplace, product) {
 
 function validateOfficialPrice(product) {
   const current = number(product?.currentPrice);
-  const original = number(product?.originalPrice);
+  let original = number(product?.originalPrice);
   if (!current || current <= 0) return { valid: false, reason: 'preco_atual_invalido' };
-  if (original != null && (original <= 0 || original < current)) return { valid: false, reason: 'preco_anterior_inconsistente' };
+  const warnings = [];
+  if (original != null && (original <= 0 || original < current)) {
+    // Preço anterior é evidência opcional. Quando inconsistente, removemos
+    // somente esse campo; a oferta continua válida pelo preço atual.
+    original = null;
+    warnings.push('preco_anterior_inconsistente');
+  }
   return {
     valid: true,
     currentPrice: current,
     originalPrice: original,
     discountPercent: original && original > current ? Math.round(((original - current) / original) * 100) : null,
+    warnings,
   };
 }
 
