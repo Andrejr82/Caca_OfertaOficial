@@ -63,14 +63,14 @@ function normalizeQueueText(value) {
 
 function queueGroupKey(product) {
   const title = normalizeQueueText(product.title);
-  const type = normalizeQueueText(product.category?.name) || title.split(' ').slice(0, 3).join(' ');
+  const type = normalizeQueueText(product.classification?.productType || product.category?.name) || title.split(' ').slice(0, 3).join(' ');
   const model = title.match(/\b(?:[a-z]{1,5}\s*)?\d{2,5}[a-z0-9-]*\b/i)?.[0] || '';
   const capacity = title.match(/\b\d+(?:[.,]\d+)?\s*(?:l|ml|kg|g|w|xicaras?)\b/i)?.[0] || '';
   return `${type}|${normalizeQueueText(model)}|${normalizeQueueText(capacity)}`;
 }
 
 function queueCategory(product) {
-  return normalizeQueueText(product.category?.name) || 'sem categoria';
+  return normalizeQueueText(product.classification?.productType || product.category?.name) || 'sem categoria';
 }
 
 function queueScore(product) {

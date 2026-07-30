@@ -115,7 +115,7 @@ const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOffic
 const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classifier.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
-const { getMarketplaceScenarioContract } = require('./marketplace-scenario-contracts.cjs');
+const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
 
 function createQualityShadowRunner() {
   if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'shadow') return null;
@@ -1207,7 +1207,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     qualityShadow: createQualityShadowRunner(),
     qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: Math.min(50, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 3 },
+    copyQueueOptions: { maxTotal: Math.min(30, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   return { ...result, category: category || 'Geral', scenarioId: scenarioId || null, requestedMarketplaces: selectedMarketplaces, limit: perMarketplace };
@@ -1245,7 +1245,7 @@ async function runScrapingCycleCore() {
     qualityShadow: createQualityShadowRunner(),
     qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
-    copyQueueOptions: { maxTotal: 15, maxPerMarketplace: 5, maxPerCategory: 3 },
+    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
     observe: async (event) => {
       if (event?.eventType === 'discovery.quality.shadow.completed' || event?.eventType === 'discovery.quality.shadow.failed') {
@@ -1304,7 +1304,7 @@ async function runShopeeScenarioRecording(scenario) {
     qualityShadow: createQualityShadowRunner(),
     qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
+    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
   for (const summary of result.marketplaces || []) {
@@ -1328,16 +1328,25 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     discover: async (marketplace) => {
       if (marketplace === 'Shopee') {
         const result = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId });
-        return result.categories.flatMap((category) => category.products).map((product) => normalizeShopeeCandidate(product, requestedAt));
+        const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
+        return result.categories.flatMap((category) => category.products)
+          .filter((product) => matchesMarketplaceContract(contract, product.productName))
+          .map((product) => normalizeShopeeCandidate(product, requestedAt));
       }
       if (marketplace === 'Amazon') {
         const result = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
-        return result.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+        const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
+        return result.products
+          .filter((product) => matchesMarketplaceContract(contract, product.title))
+          .map((product) => normalizeAmazonCandidate(product, requestedAt));
       }
       // Buscar acima do limite de publicação cria margem para duplicatas,
       // filtros de qualidade e caps da fila (10 por marketplace/categoria).
       const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: 20, delayMs: 300 });
-      return result.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+      const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
+      return result.products
+        .filter((product) => matchesMarketplaceContract(contract, product.title))
+        .map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
@@ -1346,7 +1355,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     qualityShadow: createQualityShadowRunner(),
     qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 11, maxPerMarketplace: 5, maxPerCategory: 3 },
+    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
   });
 }
