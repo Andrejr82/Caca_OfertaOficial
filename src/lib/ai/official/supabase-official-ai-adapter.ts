@@ -35,7 +35,7 @@ function mapAffiliateLinks(value: unknown) {
     .map((link) => ({ channel: link.channel as any, trackedUrl: link.tracked_url, subId: link.sub_id }));
 }
 
-function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string) {
+function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string, options?: { repairInvalidUrl?: boolean }) {
   const copy = rawContent.trimEnd();
   const urls = copy.match(/https?:\/\/\S+/g) ?? [];
 
@@ -46,6 +46,17 @@ function materializeDraftContent(channel: string, rawContent: string, trackedUrl
 
   if (urls.length > 0) {
     if (urls.length === 1 && urls[0] === trackedUrl) return copy;
+    if (options?.repairInvalidUrl) {
+      let firstUrl = true;
+      const repaired = copy.replace(/https?:\/\/\S+/g, () => {
+        if (firstUrl) {
+          firstUrl = false;
+          return trackedUrl;
+        }
+        return "";
+      }).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trimEnd();
+      return repaired;
+    }
     throw new Error(`Copy contains an invalid or duplicate URL for ${channel}`);
   }
 
@@ -283,7 +294,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
         if (input.command.metadata?.copyV2Regenerate === true) {
           const { error: updateError } = await this.client
             .from("posts")
-            .update({ content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl) })
+            .update({ content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl, { repairInvalidUrl: true }) })
             .eq("id", post.id)
             .eq("user_id", this.tenantId)
             .eq("status", "draft");
