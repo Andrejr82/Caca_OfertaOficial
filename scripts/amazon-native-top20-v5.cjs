@@ -275,8 +275,13 @@ async function runAmazonScenarioDryRun({
   let httpCalls = 0;
   const browseNodeIds = [...new Set((scenario.browseNodeIds || scenario.apiCategories || []).map(String).filter((id) => /^\d{6,}$/.test(id)))];
   const keywords = scenario.keywords || [];
-  const querySpecs = browseNodeIds.length
-    ? browseNodeIds.map((browseNodeId, index) => ({ browseNodeId, keyword: keywords[index % Math.max(1, keywords.length)] || '' }))
+  const querySpecs = browseNodeIds.length && keywords.length
+    // Cada alias é consultado pelo menos uma vez; os browse nodes são
+    // distribuídos em round-robin para cobrir toda a intenção sem multiplicar
+    // todas as combinações termo × categoria.
+    ? keywords.map((keyword, index) => ({ browseNodeId: browseNodeIds[index % browseNodeIds.length], keyword }))
+    : browseNodeIds.length
+      ? browseNodeIds.map((browseNodeId) => ({ browseNodeId, keyword: '' }))
     : (scenario.keywords || []).map((keyword) => ({ keyword }));
   for (let index = 0; index < querySpecs.length; index += 1) {
     const { keyword, browseNodeId } = querySpecs[index];

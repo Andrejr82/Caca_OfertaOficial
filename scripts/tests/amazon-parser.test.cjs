@@ -41,7 +41,7 @@ test('todos os cenários Amazon executam consulta categorizada com contrato vál
       minDelayMs: 0,
       maxRetries: 0,
     });
-    assert.ok(requests.length >= 1, `${scenarioId} sem consulta`);
+    assert.equal(requests.length, contract.keywords.length, `${scenarioId} não consultou todos os aliases`);
     assert.ok(requests.every((url) => /(?:rh=n:|rh=n%3A)\d{6,}/.test(url)), `${scenarioId} sem filtro de browse node`);
     assert.equal(result.products.length, 1, `${scenarioId} não deduplicou produto de teste`);
   }

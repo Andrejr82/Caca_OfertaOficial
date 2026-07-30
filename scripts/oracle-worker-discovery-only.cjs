@@ -54,6 +54,13 @@ function validateNativeIdentity(marketplace, product) {
   return false;
 }
 
+function allowsAccessoryByIntent(marketplace, product) {
+  const normalizedMarketplace = String(marketplace || '').toLowerCase();
+  if (!['amazon', 'mercado livre'].includes(normalizedMarketplace)) return false;
+  const intent = String(product?.intent || '').toLowerCase();
+  return ['eletronicos', 'tecnologia_desejo', 'gamer_tecnologia', 'acessorios_relogios'].includes(intent);
+}
+
 
 const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 });
 
@@ -381,21 +388,30 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       let duplicatesRejected = 0;
       let technicalRejections = freshnessRejected.length;
       let rejected = 0;
+      const rejectionReasons = {};
+      const countRejection = (reason, amount = 1) => {
+        const key = String(reason || 'unknown_rejection');
+        rejectionReasons[key] = Number(rejectionReasons[key] || 0) + amount;
+      };
+      for (const item of freshnessRejected) countRejection(item?.reason || 'freshness_rejected');
       
       for (let product of freshness.accepted) {
         const sourceItemId = String(product?.sourceItemId || '');
         if (sourceItemId === 'null' || sourceItemId === 'undefined' || !sourceItemId) {
            technicalRejections += 1;
+           countRejection('missing_native_identity');
            continue;
         }
 
         if (!validateNativeIdentity(marketplace, product)) {
            technicalRejections += 1;
+           countRejection('invalid_native_identity');
            continue;
         }
 
         if (!validateCanonicalUrl(product.sourceUrl)) {
            technicalRejections += 1;
+           countRejection('invalid_canonical_url');
            continue;
         }
 
@@ -404,10 +420,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           preparedProduct = await prepareCandidate(product, marketplace);
           if (!preparedProduct) {
             technicalRejections += 1;
+            countRejection('monetization_prepare_rejected');
             continue;
           }
         }
 
+        preparedProduct = { ...preparedProduct, allowAccessory: allowsAccessoryByIntent(marketplace, preparedProduct) };
         const gate = qualityGate(preparedProduct);
         const titleQuality = validateProductTitle(preparedProduct.title);
         const urlValid = /^https:\/\//i.test(String(preparedProduct.sourceUrl || ''));
@@ -416,6 +434,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         const isPriceInvalid = gate.reasons.includes('PRECO_INVALIDO');
         if (!titleQuality.valid || !urlValid || !imgValid || isPriceInvalid || isAccessory) {
           technicalRejections += 1;
+          if (!titleQuality.valid) countRejection(titleQuality.reason || 'invalid_title');
+          if (!urlValid) countRejection('invalid_source_url');
+          if (!imgValid) countRejection('invalid_image_url');
+          if (isPriceInvalid) countRejection('invalid_price');
+          if (isAccessory) countRejection('accessory_or_consumable');
+          for (const reason of gate.reasons || []) countRejection(reason);
           continue;
         }
 
@@ -469,6 +493,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
              uniqueProductsMap.set(groupKey, product);
            }
            duplicatesRejected += 1;
+           countRejection('duplicate_identity');
         } else {
            uniqueProductsMap.set(groupKey, product);
         }
@@ -482,6 +507,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const classificationCoverage = buildClassificationCoverage(classifiedProducts, marketplace);
       let candidatesToPersist = classifiedProducts.filter((candidate) => candidate.classification.status === 'classified');
       technicalRejections += classifiedProducts.length - candidatesToPersist.length;
+      for (const candidate of classifiedProducts.filter((item) => item.classification.status !== 'classified')) {
+        countRejection(`classification_${candidate.classification.status || 'unknown'}`);
+      }
       let deferredForQueue = previouslyDeferred;
 
       // Active V2 is an explicit opt-in. The default and shadow paths keep the
@@ -507,6 +535,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           candidatesToPersist = uniqueProducts.filter((product) => admittedIds.has(String(product.sourceItemId)));
           deferredForQueue = previouslyDeferred.filter((product) => admittedIds.has(String(product?.sourceItemId || '')));
           technicalRejections += Array.isArray(admission?.rejected) ? admission.rejected.length : 0;
+          for (const item of admission?.rejected || []) for (const reason of item.reasons || ['quality_admission_rejected']) countRejection(reason);
           await safeObserve('discovery.quality.active.completed', {
             marketplace,
             candidates: candidatesToPersist.length,
@@ -523,6 +552,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
 
       const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
+      for (const item of queue.skipped || []) countRejection(item.reason || 'queue_rejected');
 
       // Shadow mode is observational only. It is deliberately opt-in and never
       // changes queue selection or persistence while the flag is not "shadow".
@@ -616,6 +646,17 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         queueSkipped: queue.skipped.length,
         queueDeferred: queue.deferred?.length || 0,
         queueLimits: queue.limits,
+        funnel: {
+          extracted: products.length,
+          searchQualityAccepted: searchQuality.accepted.length,
+          freshnessAccepted: freshness.accepted.length,
+          unique: uniqueProducts.length,
+          classified: classifiedProducts.filter((item) => item.classification.status === 'classified').length,
+          candidatesBeforeQueue: candidatesToPersist.length,
+          queueSelected: queue.selected.length,
+          persisted: Number(persistedAll.accepted || 0),
+          rejectionReasons,
+        },
         rejected: technicalRejections,
         classificationCoverage,
         persisted: Number(persistedAll.accepted || 0),

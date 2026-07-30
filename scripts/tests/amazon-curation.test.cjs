@@ -99,18 +99,26 @@ test('Amazon: URL inválida', () => {
   assert.ok(gate.reasons.includes('LINK_INVALIDO'));
 });
 
-test('Amazon: Dados disponíveis e ausência de vantagem comprovada', () => {
+test('Amazon: Dados disponíveis e ausência de vantagem comprovada é aviso', () => {
   // Discount is 0 (original == current) AND no prime/coupon.
   const prod = amazonProduct({ originalPrice: 2099, currentPrice: 2099 });
   const gate = qualityGate(prod);
-  // Must be rejected by AMAZON_SEM_VANTAGEM_COMPROVADA because data IS available (originalPrice != null).
-  assert.equal(gate.eligible, false);
-  assert.ok(gate.reasons.includes('AMAZON_SEM_VANTAGEM_COMPROVADA'));
+  assert.equal(gate.eligible, true);
+  assert.ok(gate.warnings.includes('AMAZON_SEM_VANTAGEM_COMPROVADA'));
 });
 
-test('Amazon: Alto Valor sem vantagem com dados disponíveis', () => {
+test('Amazon: acessório permitido apenas quando a intenção autoriza', () => {
+  const title = 'Cabo USB-C para carregamento rápido';
+  const blocked = qualityGate(amazonProduct({ title }));
+  const allowed = qualityGate(amazonProduct({ title, allowAccessory: true }));
+  assert.equal(blocked.eligible, false);
+  assert.ok(blocked.reasons.includes('ACESSORIO_OU_CONSUMIVEL'));
+  assert.equal(allowed.eligible, true);
+});
+
+test('Amazon: Alto Valor sem vantagem com dados disponíveis é aviso', () => {
   const prod = amazonProduct({ originalPrice: 2099, currentPrice: 2099 }); // Tier HIGH
   const gate = qualityGate(prod);
-  assert.equal(gate.eligible, false);
-  assert.ok(gate.reasons.includes('ALTO_VALOR_SEM_VANTAGEM'));
+  assert.equal(gate.eligible, true);
+  assert.ok(gate.warnings.includes('ALTO_VALOR_SEM_VANTAGEM'));
 });

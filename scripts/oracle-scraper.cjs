@@ -1293,6 +1293,7 @@ async function runScrapingCycleCore() {
   if (result.marketplaces) {
     for (const summary of result.marketplaces) {
       console.log(`[Oracle Discovery-Only V5] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos (${summary.inserted} novos, ${summary.updated} atualizados)`);
+      console.log(`[Oracle Funnel V5] ${JSON.stringify({ marketplace: summary.marketplace, funnel: summary.funnel, classificationCoverage: summary.classificationCoverage })}`);
     }
   }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);

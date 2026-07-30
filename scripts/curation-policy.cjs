@@ -86,7 +86,8 @@ function qualityGate(product) {
   if (!/^https:\/\//i.test(String(product?.sourceUrl || ''))) reasons.push('LINK_INVALIDO');
   if (!/^https:\/\//i.test(String(product?.imageUrl || ''))) reasons.push('IMAGEM_INVALIDA');
   if (!tier) reasons.push('PRECO_INVALIDO');
-  if (ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
+  const accessoryAllowedByScenario = product?.allowAccessory === true;
+  if (!accessoryAllowedByScenario && ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
 
   if (marketplace === 'shopee') {
     const rating = Number(metrics.rating || 0);
@@ -101,14 +102,14 @@ function qualityGate(product) {
     if (!hasCommercialData) {
       warnings.push('DADOS_COMERCIAIS_INDISPONIVEIS');
     } else if (discount <= 0 && !hasVerifiedCommercialSignal) {
-      reasons.push('AMAZON_SEM_VANTAGEM_COMPROVADA');
+      warnings.push('AMAZON_SEM_VANTAGEM_COMPROVADA');
     }
   }
 
   if (hasCommercialData) {
-    if (tier === PRICE_TIERS.HIGH && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('ALTO_VALOR_SEM_VANTAGEM');
-    if (tier === PRICE_TIERS.MEDIUM && discount < 10 && !hasVerifiedCommercialSignal) reasons.push('VALOR_MEDIO_SEM_VANTAGEM');
-    if (tier === PRICE_TIERS.IMPULSE && discount < 10 && !hasVerifiedCommercialSignal && Number(metrics.sales || 0) < 1000) reasons.push('IMPULSO_SEM_VANTAGEM');
+    if (tier === PRICE_TIERS.HIGH && discount < 10 && !hasVerifiedCommercialSignal) warnings.push('ALTO_VALOR_SEM_VANTAGEM');
+    if (tier === PRICE_TIERS.MEDIUM && discount < 10 && !hasVerifiedCommercialSignal) warnings.push('VALOR_MEDIO_SEM_VANTAGEM');
+    if (tier === PRICE_TIERS.IMPULSE && discount < 10 && !hasVerifiedCommercialSignal && Number(metrics.sales || 0) < 1000) warnings.push('IMPULSO_SEM_VANTAGEM');
   } else {
     warnings.push('AVALIACAO_DE_VANTAGEM_INDISPONIVEL');
   }
