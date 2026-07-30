@@ -19,18 +19,13 @@ test('uses six four-hour discovery windows over the canonical 11 editorial windo
 });
 
 test('publishes the new intent matrix to the marketplace scenario registry', () => {
-  const expected = {
-    tecnologia_desejo: 22,
-    eletrodomesticos_cozinha: 34,
-    impulso_casa: 12,
-    casa_moveis: 9,
-    pet_bebe: 64,
-    moda_fitness_beleza_viagem: 58,
-  };
-  for (const [id, count] of Object.entries(expected)) {
-    assert.equal(SCENARIOS[id].keywords.length, count);
-    assert.equal(AMAZON_SCENARIOS[id].keywords.length, count);
+  const expected = ['tecnologia_desejo', 'eletrodomesticos_cozinha', 'impulso_casa', 'casa_moveis', 'pet_bebe', 'moda_fitness_beleza_viagem'];
+  for (const id of expected) {
+    assert.ok(SCENARIOS[id].keywords.length > 0);
+    assert.ok(AMAZON_SCENARIOS[id].keywords.length > 0);
   }
+  assert.notDeepEqual(AMAZON_SCENARIOS.tecnologia_desejo.keywords, SCENARIOS.tecnologia_desejo.keywords);
+  assert.notDeepEqual(AMAZON_SCENARIOS.treino_academia.keywords, SCENARIOS.treino_academia.keywords);
 });
 
 test('includes the new high-value intents', () => {

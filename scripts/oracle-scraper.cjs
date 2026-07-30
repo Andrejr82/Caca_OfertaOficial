@@ -112,7 +112,7 @@ const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSao
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
-const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classifier.cjs');
+const { classifyCandidate } = require('./classification-coverage.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
@@ -461,6 +461,32 @@ async function loadRecentDiscoveryHistory(marketplace) {
   return rows;
 }
 
+async function runAmazonScenarioDiscovery(scenario, options = {}) {
+  const parts = Array.isArray(scenario?.splitInto) && scenario.splitInto.length
+    ? scenario.splitInto.map((id) => getMarketplaceScenarioContract(id, 'Amazon')).filter(Boolean)
+    : [scenario];
+  const results = [];
+  for (const part of parts) {
+    const result = await runAmazonScenarioDryRun({ scenario: part, ...options });
+    results.push({ part, result });
+  }
+  const seen = new Set();
+  const products = results.flatMap(({ part, result }) => result.products.map((product) => ({ ...product, intent: part.scenarioId || part.id || scenario?.scenarioId || scenario?.id || null }))).filter((product) => {
+    const key = String(product.asin || product.canonical_url || product.title);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return {
+    ...(results[0]?.result || { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario?.label }),
+    products,
+    raw_products: results.reduce((total, entry) => total + Number(entry.result.raw_products || 0), 0),
+    duplicates: results.reduce((total, entry) => total + Number(entry.result.duplicates || 0), 0) + results.reduce((total, entry) => total + entry.result.products.length, 0) - products.length,
+    queries: results.flatMap((entry) => entry.result.queries || []),
+    split_scenarios: parts.map((part) => part.scenarioId || part.id),
+  };
+}
+
 const ML_IDENTITY_STOPWORDS = new Set([
   'com', 'de', 'da', 'do', 'das', 'dos', 'para', 'por', 'em', 'e', 'a', 'o',
   'kit', 'novo', 'nova', 'original', 'promocao', 'oferta', 'frete', 'gratis',
@@ -642,12 +668,21 @@ function normalizeAmazonCandidate(product, discoveredAt, intent = null) {
     imageUrl: product.image,
     currentPrice: product.price,
     originalPrice: product.original_price,
-    category: { id: product.node_id, name: product.subcategory, source: 'Amazon Best Sellers' },
+    category: {
+      id: product.node_id,
+      name: product.subcategory,
+      source: 'Amazon Public Search / Browse Node',
+      browseNodeId: product.node_id,
+      parentBrowseNodeId: product.parent_node_id,
+      evidenceUrl: product.source_url,
+    },
     marketplaceMetrics: {
       sourcePosition: product.rank,
       asin: product.asin,
       nodeId: product.node_id,
       parentNodeId: product.parent_node_id,
+      browseNodeId: product.node_id,
+      browseNodeEvidenceUrl: product.source_url,
       category: product.category,
       subcategory: product.subcategory,
       seller: product.seller,
@@ -735,7 +770,7 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
     for (const product of products) {
       const discoveryItemId = itemByExternal.get(String(product.sourceItemId));
       if (!discoveryItemId) continue;
-      const classification = classifyMercadoLivreProduct({ title: product.title, domainId: product.rawPayload?.domain_id, categoryId: product.rawPayload?.category_id });
+      const classification = classifyCandidate(product, marketplace);
       const productType = classification.productType;
       const groupKey = discoveryGroupKey(product, productType);
       const groupKind = groupKey.includes('||') ? 'family' : 'exact';
@@ -743,7 +778,7 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
       const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
       const classificationStatus = !titleQuality.valid || classification.status !== 'classified' ? 'review_required' : 'classified';
       
-      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v3-mercadolivre-canonical', classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, `classifier:${classification.source}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
+      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: `oracle-worker-v4-${String(marketplace).toLowerCase().replace(/\s+/g, '-')}`, classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, classification: classification.evidence || {}, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, `classifier:${classification.source}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
       await withTimeout(p1, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertClassification`);
       
       const p2 = supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
@@ -816,7 +851,7 @@ async function scrapeStore(store, stageLogger = null) {
     if (stageLogger) amazonStageStartedAt = stageLogger.start('Amazon_Top20_extraction', scenario?.keywords?.length || 0);
     
     const result = scenario?.keywords?.length
-      ? await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 })
+      ? await runAmazonScenarioDiscovery(scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 })
       : await runAmazonNativeTop20({
         fetchImpl: global.fetch,
         knownAsins,
@@ -1187,7 +1222,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
         return filterNovelNormalizedProducts(marketplace, normalized);
       }
       if (marketplace === 'Amazon') {
-        const discovered = await runAmazonScenarioDryRun({ scenario: marketplaceScenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
+        const discovered = await runAmazonScenarioDiscovery(marketplaceScenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
         const normalized = discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
         return filterNovelNormalizedProducts(marketplace, normalized);
       }
@@ -1334,8 +1369,8 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
           .map((product) => normalizeShopeeCandidate(product, requestedAt));
       }
       if (marketplace === 'Amazon') {
-        const result = await runAmazonScenarioDryRun({ scenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
         const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
+        const result = await runAmazonScenarioDiscovery(contract || scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
         return result.products
           .filter((product) => matchesMarketplaceContract(contract, product.title))
           .map((product) => normalizeAmazonCandidate(product, requestedAt));

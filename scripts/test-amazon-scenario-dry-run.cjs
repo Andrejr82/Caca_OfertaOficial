@@ -11,16 +11,16 @@ const html = `
   <img src="https://images.example/2.jpg" alt="Cesto de silicone para Air Fryer"><span class="a-price"><span class="a-offscreen">R$ 29,90</span></span>
 </div>`;
 
-assert.equal(parseSearchPage(html, { keyword: 'air fryer', source_url: 'https://www.amazon.com.br/s?k=air%20fryer', node_id: '900000', parent_node_id: '999999' }).length, 2);
+assert.equal(parseSearchPage(html, { keyword: 'air fryer', category: 'Fixture', subcategory: 'browse_node:17124722011', source_url: 'https://www.amazon.com.br/s?k=air%20fryer&rh=n:17124722011', node_id: '17124722011', parent_node_id: null }).length, 2);
 
-runAmazonScenarioDryRun({ scenario: { label: 'Fixture', keywords: ['air fryer'] }, minDelayMs: 0, retryDelayMs: 0, fetchImpl: async () => new Response(html, { status: 200 }) })
+runAmazonScenarioDryRun({ scenario: { label: 'Fixture', keywords: ['air fryer'], browseNodeIds: ['17124722011'] }, minDelayMs: 0, retryDelayMs: 0, fetchImpl: async () => new Response(html, { status: 200 }) })
   .then((result) => {
     assert.equal(result.products.length, 2);
     assert.equal(result.raw_products, 2);
     assert.equal(result.http_calls, 1);
     let attempts = 0;
     return runAmazonScenarioDryRun({
-      scenario: { label: 'Retry fixture', keywords: ['air fryer'] },
+      scenario: { label: 'Retry fixture', keywords: ['air fryer'], browseNodeIds: ['17124722011'] },
       minDelayMs: 0,
       retryDelayMs: 0,
       maxRetries: 1,

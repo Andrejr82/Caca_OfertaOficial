@@ -2,7 +2,50 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { parseRankingPage, parseSearchPage } = require('../amazon-native-top20-v5.cjs');
+const { parseRankingPage, parseSearchPage, runAmazonScenarioDryRun } = require('../amazon-native-top20-v5.cjs');
+const { SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-scenario-config.cjs');
+const { getMarketplaceScenarioContract } = require('../marketplace-scenario-contracts.cjs');
+
+test('Discovery por browse node usa URL pública e não gera IDs sintéticos', async () => {
+  const requests = [];
+  const html = `
+    <div data-component-type="s-search-result" data-asin="B08F2XQ36M">
+      <h2><a href="/dp/B08F2XQ36M">Cafeteira Elétrica Teste</a></h2>
+      <img src="https://m.media-amazon.com/images/I/teste.jpg" alt="Cafeteira Elétrica Teste" />
+      <span class="a-price"><span class="a-offscreen">R$ 99,90</span></span>
+    </div>`;
+  const result = await runAmazonScenarioDryRun({
+    scenario: { label: 'Eletros de Cozinha', keywords: ['cafeteira'], browseNodeIds: ['17124722011'] },
+    fetchImpl: async (url) => {
+      requests.push(url);
+      return { ok: true, status: 200, text: async () => html };
+    },
+    minDelayMs: 0,
+    maxRetries: 0,
+  });
+  assert.equal(requests[0], 'https://www.amazon.com.br/s?k=cafeteira&rh=n:17124722011');
+  assert.equal(result.products.length, 1);
+  assert.equal(result.products[0].node_id, '17124722011');
+  assert.equal(result.products[0].parent_node_id, null);
+  assert.match(result.products[0].source_url, /rh=n:17124722011/);
+});
+
+test('todos os cenários Amazon executam consulta categorizada com contrato válido', async () => {
+  const html = `<div data-component-type="s-search-result" data-asin="B08F2XQ36M"><h2>Produto Amazon Teste</h2><img src="https://m.media-amazon.com/images/teste.jpg" alt="Produto Amazon Teste" /><span class="a-price"><span class="a-offscreen">R$ 99,90</span></span></div>`;
+  for (const scenarioId of Object.keys(AMAZON_SCENARIOS)) {
+    const contract = getMarketplaceScenarioContract(scenarioId, 'Amazon');
+    const requests = [];
+    const result = await runAmazonScenarioDryRun({
+      scenario: contract,
+      fetchImpl: async (url) => { requests.push(url); return { ok: true, status: 200, text: async () => html }; },
+      minDelayMs: 0,
+      maxRetries: 0,
+    });
+    assert.ok(requests.length >= 1, `${scenarioId} sem consulta`);
+    assert.ok(requests.every((url) => /(?:rh=n:|rh=n%3A)\d{6,}/.test(url)), `${scenarioId} sem filtro de browse node`);
+    assert.equal(result.products.length, 1, `${scenarioId} não deduplicou produto de teste`);
+  }
+});
 
 test('Parser Amazon: HTML com Prime, desconto, rating e coupon', () => {
   const html = `

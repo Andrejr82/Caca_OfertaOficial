@@ -3,6 +3,18 @@
 const catalog = require('./marketplace-classification-catalog.json');
 const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classifier.cjs');
 
+const AMAZON_BROWSE_TYPES = Object.freeze({
+  '16243803011': 'smartphone', '16243794011': 'computers', '24035344011': 'audio', '16243809011': 'tv', '16243802011': 'wearable', '16243799011': 'ereader', '16243796011': 'camera',
+  '16364751011': 'desktop', '16364749011': 'computer_accessory', '16364756011': 'monitor', '16253313011': 'pc_gamer', '16253332011': 'playstation', '20971488011': 'playstation', '16253372011': 'xbox', '20971505011': 'xbox',
+  '17124722011': 'small_appliance', '17124716011': 'coffee_maker', '24417675011': 'cookware', '16745371011': 'stove', '17124786011': 'microwave', '16745366011': 'refrigerator', '16745370011': 'washer', '19821156011': 'dishwasher',
+  '17100532011': 'bedding', '17100528011': 'bath', '17100531011': 'decor', '17100533011': 'organizer', '23783015011': 'kitchen_utility', '17406462011': 'lighting',
+  '17833921011': 'sports_shoes', '17833929011': 'running', '17833934011': 'gym', '17833917011': 'fitness_equipment', '17716665011': 'outdoor', '23577004011': 'sportswear', '17833924011': 'travel_bag', '17681967011': 'luggage',
+  '17540055011': 'baby_feeding', '17540060011': 'baby_hygiene', '17540063011': 'baby_travel', '17681968011': 'baby',
+  '19653951011': 'dog', '19653950011': 'cat', '19653948011': 'fish', '19653949011': 'bird',
+  '17681970011': 'mens_fashion', '17681969011': 'womens_fashion', '17681966011': 'fashion_accessory', '16754345011': 'skin_care', '16754346011': 'hair_care', '16754347011': 'perfume', '16754350011': 'makeup', '16754349011': 'nails',
+  '16209062011': 'electronics', '17100553011': 'kitchen_furniture', '17100552011': 'office_furniture', '17100547011': 'bedroom_furniture', '17100554011': 'living_room_furniture', '17100548011': 'dining_furniture',
+});
+
 const rules = catalog.rules.map(({ type, pattern }) => ({
   type,
   pattern: new RegExp(pattern, 'iu'),
@@ -69,6 +81,14 @@ function classifyCandidate(product, marketplace) {
         confidence: canonical.source.startsWith('domain:') ? 1 : canonical.source.startsWith('category:') ? 0.95 : 0.8,
         evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null },
       };
+    }
+  }
+
+  if (normalizedMarketplace === 'amazon') {
+    const browseNodeId = String(product?.category?.browseNodeId || product?.marketplaceMetrics?.browseNodeId || product?.rawPayload?.node_id || '');
+    const browseType = AMAZON_BROWSE_TYPES[browseNodeId];
+    if (browseType) {
+      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 1, evidence: { browseNodeId } };
     }
   }
 

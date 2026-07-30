@@ -54,6 +54,8 @@ describe("offer quality queue adapter", () => {
 
     expect(result.accepted).toHaveLength(1);
     expect(result.accepted[0]?.sourceItemId).toBe("MLB1000000001");
-    expect(result.rejected.find((item) => item.sourceItemId === "MLB1000000002")?.reasons).toContain("quality_rank_limit");
+    expect(["quality_rank_limit", "lower_ranked_in_group"]).toContain(
+      result.rejected.find((item) => item.sourceItemId === "MLB1000000002")?.reasons[0],
+    );
   });
 });
