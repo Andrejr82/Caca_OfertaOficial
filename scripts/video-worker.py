@@ -48,6 +48,8 @@ REFERENCE_CLEANUP = os.environ.get("VIDEO_REFERENCE_CLEANUP", "1") != "0"
 REFERENCE_SOURCE = os.environ.get("VIDEO_REFERENCE_SOURCE", "video").lower()
 TEMPLATE_PATH = Path(os.environ.get("VIDEO_TEMPLATE_PATH", Path(__file__).with_name("video-templates.json")))
 WORKER_ID = os.environ.get("VIDEO_WORKER_ID", f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}")
+VIDEO_OUTPUT_FPS = 25
+VIDEO_TAIL_PADDING_SECONDS = 60
 
 
 def load_templates() -> dict[str, dict]:
@@ -213,13 +215,13 @@ def make_avatar_motion_video(avatar: Path, audio: Path, output: Path) -> None:
         "pad=720:1280:(ow-iw)/2:(oh-ih)/2:color=black,"
         "zoompan=z='min(zoom+0.00035,1.035)':"
         "x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-        "d=1:s=720x1280:fps=25,format=yuv420p[v]"
+        f"d=1:s=720x1280:fps={VIDEO_OUTPUT_FPS},format=yuv420p[v]"
     )
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error", "-loop", "1", "-i", str(avatar),
             "-i", str(audio), "-filter_complex", filters, "-map", "[v]", "-map", "1:a:0",
-            "-shortest", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
+            "-shortest", "-r", str(VIDEO_OUTPUT_FPS), "-c:v", "libx264", "-preset", "veryfast",
             "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
             str(output),
         ],
@@ -234,13 +236,20 @@ def render_base_for_lipsync(
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg não está instalado.")
     cleanup_filter = reference_cleanup_filter(template, cleanup_card) if cleanup else ""
-    filters = f"[0:v]scale=720:1280{cleanup_filter}[v]"
+    # Não repetir o vídeo-base: o loop brusco fazia o avatar saltar quando o
+    # clipe era menor que a fala. O último quadro é congelado suavemente até
+    # o áudio terminar.
+    filters = (
+        f"[0:v]scale=720:1280{cleanup_filter},"
+        f"tpad=stop_mode=clone:stop_duration={VIDEO_TAIL_PADDING_SECONDS},"
+        f"fps={VIDEO_OUTPUT_FPS},setpts=PTS-STARTPTS[v]"
+    )
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
-            "-stream_loop", "-1", "-i", str(base_video), "-i", str(audio),
+            "-i", str(base_video), "-i", str(audio),
             "-filter_complex", filters, "-map", "[v]", "-map", "1:a:0",
-            "-shortest", "-r", "25", "-c:v", "libx264", "-preset", "veryfast",
+            "-shortest", "-r", str(VIDEO_OUTPUT_FPS), "-c:v", "libx264", "-preset", "veryfast",
             "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
             str(output),
         ],
@@ -404,7 +413,9 @@ def render_from_base_video(
     cleanup_filter = reference_cleanup_filter(template, cleanup_card) if cleanup else ""
     card_config = template["card"]
     filters = (
-        f"[0:v]scale=720:1280{cleanup_filter}[bg];"
+        f"[0:v]scale=720:1280{cleanup_filter},"
+        f"tpad=stop_mode=clone:stop_duration={VIDEO_TAIL_PADDING_SECONDS},"
+        f"fps={VIDEO_OUTPUT_FPS},setpts=PTS-STARTPTS[bg];"
         f"[1:v]format=rgba,scale={card_config['width']}:{card_config['height']}[card];"
         f"[bg][card]overlay=x={card_config['x']}:y={card_config['y']}:enable='gte(t,0)'[scene];"
         "[2:v]format=rgba[badge];[scene][badge]overlay=0:0[v]"
@@ -412,10 +423,10 @@ def render_from_base_video(
     subprocess.run(
         [
             "ffmpeg", "-y", "-loglevel", "error",
-            "-stream_loop", "-1", "-i", str(base_video),
+            "-i", str(base_video),
             "-loop", "1", "-i", str(card), "-loop", "1", "-i", str(badges),
             "-i", str(audio), "-filter_complex", filters,
-            "-map", "[v]", "-map", "3:a:0", "-shortest", "-r", "24",
+            "-map", "[v]", "-map", "3:a:0", "-shortest", "-r", str(VIDEO_OUTPUT_FPS),
             "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
             "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", str(output),
         ],
