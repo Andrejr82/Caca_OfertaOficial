@@ -1,3 +1,5 @@
+import { validateInstagramReelMetadata } from "@/lib/instagram/safety";
+
 const FACEBOOK_GRAPH_API_VERSION = "v19.0";
 const BASE_GRAPH_URL = `https://graph.facebook.com/${FACEBOOK_GRAPH_API_VERSION}`;
 
@@ -254,11 +256,20 @@ export async function publishToInstagram(imageUrl: string, caption: string): Pro
 /**
  * Publica um vídeo (Reels) na conta comercial do Instagram.
  */
-export async function publishVideoToInstagram(videoUrl: string, caption: string): Promise<string> {
+export async function publishVideoToInstagram(videoUrl: string, caption: string, metadata: {
+  durationSeconds?: number;
+  width?: number;
+  height?: number;
+  sizeBytes?: number;
+  mimeType?: string;
+} = {}): Promise<string> {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN;
   if (!token) {
     throw new Error("INSTAGRAM_ACCESS_TOKEN não configurado.");
   }
+  const captionError = validateInstagramReelMetadata(metadata);
+  if (captionError) throw new Error(captionError);
+  if (!/^https:\/\//i.test(videoUrl)) throw new Error("URL do Reel deve ser HTTPS e publicamente acessível.");
 
   let businessAccountId: string;
   try {
@@ -272,8 +283,15 @@ export async function publishVideoToInstagram(videoUrl: string, caption: string)
   // antes que o Instagram tente acessar e dê timeout.
   try {
     console.log(`[Instagram] Pré-aquecendo vídeo no Cloudinary: ${videoUrl}`);
-    await fetch(videoUrl, { method: "HEAD" });
+    const head = await fetch(videoUrl, { method: "HEAD" });
+    if (!head.ok) throw new Error(`URL do vídeo retornou HTTP ${head.status}.`);
+    const contentType = head.headers.get("content-type") || metadata.mimeType;
+    if (contentType && !/^video\/(mp4|quicktime)/i.test(contentType)) throw new Error("URL não retornou um vídeo MP4/MOV.");
+    const contentLength = Number(head.headers.get("content-length"));
+    const sizeError = validateInstagramReelMetadata({ ...metadata, sizeBytes: Number.isFinite(contentLength) && contentLength > 0 ? contentLength : metadata.sizeBytes });
+    if (sizeError) throw new Error(sizeError);
   } catch (e) {
+    if (e instanceof Error && /HTTP|URL do vídeo|URL não retornou|excede o limite/.test(e.message)) throw e;
     console.log("[Instagram] Aviso: falha no pré-aquecimento do vídeo, prosseguindo mesmo assim.");
   }
 
