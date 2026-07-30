@@ -83,9 +83,17 @@ export async function testInstagramConnection(): Promise<InstagramTestResult> {
     }
 
     const infoData = await infoRes.json();
+    const permissionsRes = await fetch(`${BASE_GRAPH_URL}/me/permissions?access_token=${token}`);
+    const permissionsData = await permissionsRes.json().catch(() => ({}));
+    const publishPermission = permissionsData.data?.find(
+      (permission: { permission?: string; status?: string }) => permission.permission === "instagram_content_publish"
+    );
+    if (!permissionsRes.ok || publishPermission?.status !== "granted") {
+      throw new Error("A permissão instagram_content_publish não está concedida ao token atual.");
+    }
     return {
       ok: true,
-      message: `Conexão bem-sucedida! Conta: @${infoData.username} (${infoData.name})`,
+      message: `Conexão bem-sucedida! Conta: @${infoData.username} (${infoData.name}). Permissão de publicação confirmada.`,
       businessAccountId
     };
   } catch (error) {

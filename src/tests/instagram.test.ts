@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { discoverInstagramBusinessId, publishToInstagram } from "@/lib/instagram/client";
+import { discoverInstagramBusinessId, publishToInstagram, testInstagramConnection } from "@/lib/instagram/client";
 
 describe("Instagram Meta Graph API Client", () => {
   beforeEach(() => {
@@ -92,5 +92,24 @@ describe("Instagram Meta Graph API Client", () => {
 
     const postId = await publishToInstagram("https://example.com/product.jpg", "Oferta Incrível!");
     expect(postId).toBe("published-post-777");
+  });
+
+  it("testa conta comercial e permissão de publicação", async () => {
+    process.env.INSTAGRAM_BUSINESS_ACCOUNT_ID = "ig-business-99999";
+    vi.spyOn(global, "fetch").mockImplementation(async (url) => {
+      const urlStr = String(url);
+      if (urlStr.includes("fields=username,name")) {
+        return { ok: true, json: async () => ({ username: "caca.ofertaoficial", name: "Caça Oferta Oficial" }) } as Response;
+      }
+      if (urlStr.includes("/me/permissions")) {
+        return { ok: true, json: async () => ({ data: [{ permission: "instagram_content_publish", status: "granted" }] }) } as Response;
+      }
+      return { ok: false, json: async () => ({}) } as Response;
+    });
+
+    await expect(testInstagramConnection()).resolves.toMatchObject({
+      ok: true,
+      businessAccountId: "ig-business-99999"
+    });
   });
 });
