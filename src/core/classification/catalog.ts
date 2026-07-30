@@ -1,3 +1,13 @@
+import marketplaceCatalog from '../../../scripts/marketplace-classification-catalog.json'
+
+export const MERCADO_LIVRE_PRODUCT_TYPES = marketplaceCatalog.rules.map(({ type, pattern }) => ({
+  type,
+  pattern: new RegExp(pattern, 'i'),
+}))
+
+export const MERCADO_LIVRE_DOMAIN_TYPES = marketplaceCatalog.domains as Record<string, string>
+export const MERCADO_LIVRE_CATEGORY_TYPES = marketplaceCatalog.categories as Record<string, string>
+
 export const KNOWN_BRANDS = [
   'philco', 'mondial', 'oster', 'arno', 'electrolux', 'walita', 'britania',
   'samsung', 'apple', 'xiaomi', 'motorola', 'lg', 'jbl', 'lenovo', 'dell',

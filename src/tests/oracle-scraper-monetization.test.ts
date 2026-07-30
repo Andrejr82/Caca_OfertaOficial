@@ -1,5 +1,4 @@
 import { describe, it, expect } from 'vitest';
-// @ts-ignore
 const scraper = require('../../scripts/oracle-scraper.cjs');
 
 

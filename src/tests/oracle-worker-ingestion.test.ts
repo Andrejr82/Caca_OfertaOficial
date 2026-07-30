@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -103,7 +104,7 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
     it('registra a comparação shadow no log do ciclo Oracle', () => {
       const scraperSource = readFileSync(resolve(process.cwd(), 'scripts/oracle-scraper.cjs'), 'utf8');
       expect(scraperSource).toContain('observe: async (event) =>');
-      expect(scraperSource).toContain("event.eventType === 'discovery.quality.shadow.completed'");
+      expect(scraperSource).toContain("event?.eventType === 'discovery.quality.shadow.completed'");
       expect(scraperSource).toContain('[Offer Quality Shadow]');
     });
   });

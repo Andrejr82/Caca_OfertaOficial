@@ -29,6 +29,8 @@ const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const DEPLOY_FILES = [
   'scripts/oracle-scraper.cjs',
+  'scripts/mercadolivre-canonical-classifier.cjs',
+  'scripts/marketplace-classification-catalog.json',
   'scripts/oracle-worker-discovery-only.cjs',
   'scripts/oracle-resilience.cjs',
   'scripts/family-variant-selector.cjs',

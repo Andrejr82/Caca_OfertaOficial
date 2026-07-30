@@ -112,6 +112,7 @@ const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSao
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
+const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classifier.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract } = require('./marketplace-scenario-contracts.cjs');
@@ -662,17 +663,6 @@ function normalizeAmazonCandidate(product, discoveredAt) {
   };
 }
 
-function classifyDiscoveryTitle(title) {
-  const normalized = String(title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-  const rules = [
-    ['air_fryer', /air fryer|fritadeira sem oleo/], ['cafeteira', /cafeteira/], ['batedeira', /batedeira/],
-    ['liquidificador', /liquidificador/], ['mixer', /mixer/], ['sanduicheira', /sanduicheira|waffle maker/],
-    ['chaleira', /chaleira/], ['panela_eletrica', /panela eletrica|panela de pressao eletrica/],
-    ['processador_alimentos', /processador|multiprocessador/], ['forno_eletrico', /forno eletrico/],
-  ];
-  return rules.find(([, pattern]) => pattern.test(normalized))?.[0] || 'unknown';
-}
-
 function discoveryGroupKey(product, productType) {
   const title = String(product.title || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   const model = title.match(/\b(?:[a-z]{1,5}\s*)?\d{2,5}[a-z0-9-]*\b/i)?.[0] || '';
@@ -742,14 +732,15 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
     for (const product of products) {
       const discoveryItemId = itemByExternal.get(String(product.sourceItemId));
       if (!discoveryItemId) continue;
-      const productType = classifyDiscoveryTitle(product.title);
+      const classification = classifyMercadoLivreProduct({ title: product.title, domainId: product.rawPayload?.domain_id, categoryId: product.rawPayload?.category_id });
+      const productType = classification.productType;
       const groupKey = discoveryGroupKey(product, productType);
       const groupKind = groupKey.includes('||') ? 'family' : 'exact';
       const titleQuality = validateProductTitle(product.title);
       const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
-      const classificationStatus = !titleQuality.valid || productType === 'unknown' ? 'review_required' : 'classified';
+      const classificationStatus = !titleQuality.valid || classification.status !== 'classified' ? 'review_required' : 'classified';
       
-      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v2', classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
+      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: 'oracle-worker-v3-mercadolivre-canonical', classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, `classifier:${classification.source}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
       await withTimeout(p1, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertClassification`);
       
       const p2 = supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
