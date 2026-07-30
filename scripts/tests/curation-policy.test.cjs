@@ -38,15 +38,16 @@ test('classifies the new high-value families', () => {
   assert.equal(classifyProductFamily(product({ title: 'Guarda-Roupa Casal 6 Portas', category: { name: 'Guarda Roupas' } })), 'home_furniture');
 });
 
-test('allows a high-value offer with real savings and blocks weak Amazon offers', () => {
+test('allows a high-value offer with real savings and warns when Amazon commercial data is absent', () => {
   const accepted = qualityGate(product());
   assert.equal(accepted.eligible, true);
   assert.equal(accepted.tier, PRICE_TIERS.HIGH);
   assert.ok(scoreCandidate(product(), accepted) > 0);
 
   const rejected = qualityGate(product({ marketplace: 'Amazon', originalPrice: null, marketplaceMetrics: {} }));
-  assert.equal(rejected.eligible, false);
-  assert.ok(rejected.reasons.includes('AMAZON_SEM_VANTAGEM_COMPROVADA'));
+  assert.equal(rejected.eligible, true);
+  assert.ok(rejected.warnings.includes('DADOS_COMERCIAIS_INDISPONIVEIS'));
+  assert.ok(rejected.warnings.includes('AVALIACAO_DE_VANTAGEM_INDISPONIVEL'));
 });
 
 test('blocks accessory-only products but keeps a main product containing accessory words', () => {

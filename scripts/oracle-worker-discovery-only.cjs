@@ -410,9 +410,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         const imgValid = /^https:\/\//i.test(String(preparedProduct.imageUrl || ''));
         const isAccessory = gate.reasons.includes('ACESSORIO_OU_CONSUMIVEL');
         const isPriceInvalid = gate.reasons.includes('PRECO_INVALIDO');
-        const amazonMissing = gate.warnings && gate.warnings.includes('DADOS_COMERCIAIS_INDISPONIVEIS');
-        
-        if (!titleQuality.valid || !urlValid || !imgValid || isPriceInvalid || isAccessory || amazonMissing) {
+        if (!titleQuality.valid || !urlValid || !imgValid || isPriceInvalid || isAccessory) {
           technicalRejections += 1;
           continue;
         }

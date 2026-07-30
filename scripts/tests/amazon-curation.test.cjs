@@ -30,7 +30,7 @@ test('Amazon: Com desconto real', () => {
 });
 
 test('Amazon: Com preço anterior maior', () => {
-  const prod = amazonProduct({ originalPrice: 2199 });
+  const prod = amazonProduct({ originalPrice: 2400 });
   const gate = qualityGate(prod);
   assert.equal(gate.eligible, true);
   assert.equal(gate.warnings.includes('DADOS_COMERCIAIS_INDISPONIVEIS'), false);

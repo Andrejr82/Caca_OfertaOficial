@@ -206,6 +206,35 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       expect(mockPersist).not.toHaveBeenCalled();
     });
 
+    it('admite Amazon estruturalmente válida sem dados comerciais opcionais', async () => {
+      const amazonCandidate = {
+        marketplace: 'Amazon',
+        title: 'Smart TV Samsung 55 4K',
+        sourceItemId: 'B0ABC12345',
+        sourceUrl: 'https://www.amazon.com.br/dp/B0ABC12345',
+        imageUrl: 'https://images.example/smart-tv.jpg',
+        currentPrice: 2099,
+        originalPrice: null,
+        deterministicScore: 8,
+        discoveredAt: new Date().toISOString(),
+        category: { name: 'Televisores', source: 'Amazon' },
+        marketplaceMetrics: { asin: 'B0ABC12345' },
+      };
+
+      const result = await runDiscoveryOnlyCycle({
+        ...baseContext,
+        marketplaces: ['Amazon'],
+        discover: vi.fn().mockResolvedValue([amazonCandidate]),
+        persist: mockPersist,
+        loadDeferred: vi.fn().mockResolvedValue([]),
+        observe: vi.fn(),
+      });
+
+      expect(result.marketplaces[0].queueSelected).toBe(1);
+      expect(result.marketplaces[0].persisted).toBe(1);
+      expect(mockPersist).toHaveBeenCalledTimes(1);
+    });
+
     it('groups Mercado Livre by catalog and selects only the best', async () => {
       const p1 = {
         ...validCandidateBase,
