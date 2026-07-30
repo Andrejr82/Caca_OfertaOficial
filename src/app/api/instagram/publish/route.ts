@@ -8,6 +8,7 @@ import {
   publicationPayloadReference
 } from "@/lib/publication/official/create-official-publication-service";
 import { createOfficialPublicationApprovalDependencies } from "@/lib/publication/official/create-official-publication-approval";
+import { evaluateInstagramSafety } from "@/lib/instagram/safety";
 
 type PublicationBody = {
   postId?: string; offerId?: string; commandId?: string; idempotencyKey?: string;
@@ -29,6 +30,33 @@ export async function POST(request: Request) {
     if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
+
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const { data: recentPosts, error: recentPostsError } = await client.from("posts")
+      .select("content,posted_at")
+      .eq("user_id", user.id)
+      .eq("channel", "instagram")
+      .eq("status", "published")
+      .gte("posted_at", since)
+      .order("posted_at", { ascending: false })
+      .limit(20);
+    if (recentPostsError) return NextResponse.json({ ok: false, message: "Não foi possível validar a janela de segurança do Instagram." }, { status: 503 });
+
+    const { data: draftPost, error: draftPostError } = await client.from("posts")
+      .select("content")
+      .eq("id", body.postId)
+      .eq("user_id", user.id)
+      .eq("channel", "instagram")
+      .eq("status", "draft")
+      .maybeSingle();
+    if (draftPostError || !draftPost) return NextResponse.json({ ok: false, message: "Draft do Instagram não encontrado." }, { status: 404 });
+
+    const safety = evaluateInstagramSafety({
+      caption: draftPost.content || "",
+      publishedAt: (recentPosts ?? []).map((post) => post.posted_at).filter(Boolean),
+      recentCaptions: (recentPosts ?? []).map((post) => post.content).filter(Boolean)
+    });
+    if (!safety.ok) return NextResponse.json({ ok: false, code: safety.code, message: safety.message }, { status: 429 });
 
     const commandId = body.commandId ?? crypto.randomUUID();
     const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "instagram", commandId);
