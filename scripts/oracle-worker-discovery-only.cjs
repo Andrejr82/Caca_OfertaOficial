@@ -369,7 +369,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];
       const searchQualityEnabled = process.env.OFFER_SEARCH_QUALITY_V2 === 'active';
       const searchQuality = searchQualityEnabled
-        ? evaluateSearchQuality(marketplace, products, { cooldownDays: 7 })
+        ? evaluateSearchQuality(marketplace, products, {
+          cooldownDays: 7,
+          maxPerIntent: Number(process.env.OFFER_SEARCH_QUALITY_MAX_PER_INTENT || 10),
+        })
         : { accepted: products, rejected: [], metrics: { marketplace, received: products.length, accepted: products.length, rejected: 0, mode: 'disabled' } };
       await safeObserve('discovery.search_quality.evaluated', {
         marketplace,
@@ -386,7 +389,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       
       const uniqueProductsMap = new Map();
       let duplicatesRejected = 0;
-      let technicalRejections = freshnessRejected.length;
+      let technicalRejections = freshnessRejected.length + (searchQuality.rejected || []).length;
       let rejected = 0;
       const rejectionReasons = {};
       const countRejection = (reason, amount = 1) => {
@@ -394,6 +397,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         rejectionReasons[key] = Number(rejectionReasons[key] || 0) + amount;
       };
       for (const item of freshnessRejected) countRejection(item?.reason || 'freshness_rejected');
+      for (const item of searchQuality.rejected || []) countRejection(item?.reason || 'search_quality_rejected');
       
       for (let product of freshness.accepted) {
         const sourceItemId = String(product?.sourceItemId || '');

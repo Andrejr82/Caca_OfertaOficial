@@ -43,6 +43,16 @@ test('limita concentração por intenção', () => {
   assert.equal(result.rejected.length, 1);
 });
 
+test('mantém até dez variantes por intenção antes da fila editorial', () => {
+  const result = evaluateSearchQuality('Amazon', Array.from({ length: 10 }, (_, index) => ({
+    sourceItemId: `B0000000${index}`,
+    currentPrice: 20 + index,
+    intentId: 'eletros_cozinha',
+  })));
+  assert.equal(result.accepted.length, 10);
+  assert.equal(result.metrics.diversityRejected, 0);
+});
+
 test('pipeline retorna métricas e cooldown de sete dias', () => {
   const result = evaluateSearchQuality('Mercado Livre', [
     { sourceItemId: '1', currentPrice: 90, originalPrice: 100, intentId: 'casa' },

@@ -2,7 +2,10 @@
 
 const DEFAULT_COOLDOWN_DAYS = 7;
 const MATERIAL_PRICE_DROP = 0.10;
-const DEFAULT_MAX_PER_INTENT = 3;
+// A busca pode trazer várias variantes legítimas da mesma intenção. O limite
+// editorial fica na fila de copy (maxPerCategory); este limite técnico evita
+// enxurradas sem reduzir uma intenção a apenas três itens.
+const DEFAULT_MAX_PER_INTENT = 10;
 
 function number(value) {
   const n = Number(value);
