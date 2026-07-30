@@ -134,6 +134,25 @@ describe("SupabaseOfficialAIAdapter", () => {
     expect(insertedPost.insert).toHaveBeenCalledWith(expect.objectContaining({ content: `Copy\n\n👉 Comprar:\n${trackedUrl}` }));
   });
 
+  it("normaliza URL inválida ao criar o primeiro draft", async () => {
+    const link = chain({ data: { id: "link-wp" }, error: null });
+    const noPost = chain({ data: null, error: null });
+    const insertedPost = chain({ data: { id: "post-wp", affiliate_link_id: "link-wp", channel: "telegram", status: "draft" }, error: null });
+    const client = { from: vi.fn().mockReturnValueOnce(link).mockReturnValueOnce(noPost).mockReturnValueOnce(insertedPost) };
+    const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
+
+    await adapter.persistDrafts({
+      command: { ...command, channels: ["telegram"] },
+      offer,
+      content: { ...content, channelCopies: { telegram: "Oferta\n👉 https://link-antigo.example/item" } },
+      channels: ["telegram"]
+    });
+
+    expect(insertedPost.insert).toHaveBeenCalledWith(expect.objectContaining({
+      content: "Oferta\n👉 https://cacaoferta.com.br/go/tg_offer-1"
+    }));
+  });
+
   it("não adiciona URL direta ao draft do Instagram", async () => {
     const link = chain({ data: { id: "link-ig" }, error: null });
     const noPost = chain({ data: null, error: null });

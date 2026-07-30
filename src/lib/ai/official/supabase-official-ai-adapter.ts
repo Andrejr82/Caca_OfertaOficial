@@ -278,7 +278,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
             offer_id: input.offer.id,
             affiliate_link_id: link.id,
             channel,
-            content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl),
+            content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl, { repairInvalidUrl: true }),
             status: "draft"
           })
           .select("id,affiliate_link_id,channel,status")
