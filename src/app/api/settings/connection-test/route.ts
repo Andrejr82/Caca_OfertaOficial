@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { isInstagramConfigured } from "@/lib/instagram/client";
+import { isInstagramConfigured, testInstagramConnection } from "@/lib/instagram/client";
 import { hasFacebookEnv, hasTelegramEnv } from "@/lib/env";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -22,11 +22,11 @@ export async function POST(request: Request) {
     const now = new Date().toLocaleString("pt-BR");
 
     if (platform === "Instagram") {
-      const configured = isInstagramConfigured();
-      if (!configured) {
+      if (!isInstagramConfigured()) {
         return NextResponse.json({ ok: false, message: "Erro: INSTAGRAM_ACCESS_TOKEN não configurado no .env.local", lastCheck: now });
       }
-      return NextResponse.json({ ok: true, message: "Conectado. API Graph da Meta respondendo com sucesso (Perfil Comercial ativo).", lastCheck: now });
+      const result = await testInstagramConnection();
+      return NextResponse.json({ ...result, lastCheck: now });
     }
 
     if (platform === "Telegram") {
