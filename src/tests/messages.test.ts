@@ -87,6 +87,7 @@ describe("Deterministic Copy Engine Tests", () => {
       expect(copy).toContain("🚚 Frete grátis");
       expect(copy).toContain(mlLink.tracked_url);
       expect(copy).not.toContain(mlOffer.original_url);
+      expect(copy).not.toContain("\\n");
     });
 
     it("não inventa ranking, loja ou benefícios ausentes", () => {
@@ -132,6 +133,7 @@ describe("Deterministic Copy Engine Tests", () => {
       expect(copy.feed).toContain("Vendido por Mercado Livre Eletrônicos");
       expect(copy.feed).toContain("Link na bio");
       expect(copy.feed).not.toContain(mlOffer.original_url);
+      expect(copy.feed).not.toContain("\\n");
     });
   });
   

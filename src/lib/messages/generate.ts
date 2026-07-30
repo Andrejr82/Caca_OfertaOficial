@@ -198,7 +198,7 @@ function buildMercadoLivreCopy(offer: Offer, link: Pick<AffiliateLink, "tracked_
   blocks.push("", `✨ Link: ${link.tracked_url}`);
   if (channel === "telegram") blocks.push("", "#anuncio");
   if (channel === "facebook") blocks.push("", generateHashtags(offer, "facebook"));
-  return blocks.join("\\n").replace(/\\n{3,}/g, "\\n\\n");
+  return blocks.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 export function deriveOfferSignals(offer: Offer, commercialData: any): OfferSignals {
@@ -581,8 +581,8 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
     if (!link.tracked_url?.trim()) throw new Error("NO_MONETIZED_LINK");
     if (!isMercadoLivreTrackedLink(link.tracked_url)) throw new Error("NO_MONETIZED_LINK");
     const data = extractCommercialData(offer);
-    const summary = mercadoLivreBlocks(offer, data).join("\\n");
-    const feed = ["🚨 OFERTA EM DESTAQUE", "", summary, "", `✨ Link na bio do @${officialBrand.instagram}`, "", "#anuncio"].join("\\n");
+    const summary = mercadoLivreBlocks(offer, data).join("\n");
+    const feed = ["🚨 OFERTA EM DESTAQUE", "", summary, "", `✨ Link na bio do @${officialBrand.instagram}`, "", "#anuncio"].join("\n");
     return {
       feed,
       stories: ["🚨 OFERTA EM DESTAQUE", summary, "👆 Link na bio"],
