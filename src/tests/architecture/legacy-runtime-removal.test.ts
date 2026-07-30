@@ -86,11 +86,12 @@ describe("PMAV5-010 legacy runtime removal", () => {
     expect(containsRuntimeFile(path)).toBe(false);
   });
 
-  it("mantém o Oracle Worker apenas com Discovery Native V5", () => {
+  it("mantém o Oracle Worker com Discovery oficial V5 por intenção", () => {
     const worker = source("scripts/oracle-scraper.cjs");
     expect(worker).toContain("runDiscoveryOnlyCycle");
     expect(worker).toContain("executeShopeeNativeDiscoveryV5");
-    expect(worker).toContain("runMercadoLivreNativeTop20");
+    expect(worker).toContain("runMercadoLivreOfficialIntentCoverage");
+    expect(worker).not.toContain("runMercadoLivreNativeTop20");
     expect(worker).toContain("runAmazonNativeTop20");
     expect(worker).not.toMatch(/processTopOffers|pendingDrafts|cleanupOldDrafts|runScrapingCycleLegacy/);
     expect(worker).not.toMatch(/generateOfferAnalysis|callLLM|Groq|Cerebras/);

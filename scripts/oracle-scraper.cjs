@@ -110,10 +110,6 @@ function buildAffiliateLinkRows(offer, appUrl) {
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour, matchesScenarioProduct } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
-const {
-  runMercadoLivreNativeTop20,
-  writeMercadoLivreNativeTop20Reports,
-} = require('./mercadolivre-native-top20-v5.cjs');
 const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
@@ -424,7 +420,7 @@ async function loadActiveDiscoveryHistory(marketplace) {
     const { data, error } = await withTimeout(
       supabase
         .from('offers')
-        .select('item_id, product_id, shopee_item_id, shopee_shop_id, product_name, original_url, status, created_at, updated_at, current_price, old_price')
+        .select('item_id, product_id, shopee_item_id, shopee_shop_id, original_url, product_name, category, status, created_at, updated_at, current_price, old_price')
         .eq('user_id', ADMIN_USER_ID)
         .eq('platform', marketplace)
         .range(from, from + pageSize - 1),
@@ -462,6 +458,56 @@ async function loadRecentDiscoveryHistory(marketplace) {
     if (!data || data.length < 1000) break;
   }
   return rows;
+}
+
+const ML_IDENTITY_STOPWORDS = new Set([
+  'com', 'de', 'da', 'do', 'das', 'dos', 'para', 'por', 'em', 'e', 'a', 'o',
+  'kit', 'novo', 'nova', 'original', 'promocao', 'oferta', 'frete', 'gratis',
+  'preto', 'preta', 'branco', 'branca', 'cinza', 'azul', 'vermelho', 'vermelha'
+]);
+
+function normalizeMercadoLivreIdentityTokens(value) {
+  return String(value || '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/)
+    .filter((token) => token.length >= 2 && !ML_IDENTITY_STOPWORDS.has(token));
+}
+
+function mercadoLivreIdentityKey(product) {
+  const metrics = product?.marketplaceMetrics || product?.marketplace_metrics || {};
+  const raw = product?.rawPayload || product?.raw_payload || {};
+  const category = normalizeMercadoLivreIdentityTokens(product?.category?.name || product?.category || '').join('-');
+  const brand = normalizeMercadoLivreIdentityTokens(metrics.brand || raw.brand || '').join('-');
+  const model = normalizeMercadoLivreIdentityTokens(metrics.model || raw.model || '').join('-');
+  const capacity = normalizeMercadoLivreIdentityTokens(metrics.capacity || raw.capacity || '').join('-');
+  const voltage = normalizeMercadoLivreIdentityTokens(metrics.voltage || raw.voltage || '').join('-');
+  const titleTokens = normalizeMercadoLivreIdentityTokens(product?.title || product?.product_name);
+  const modelTokens = titleTokens.filter((token) => /[a-z]/.test(token) && /\d/.test(token) && token.length >= 3);
+
+  if (model || modelTokens.length || (brand && (capacity || voltage))) {
+    return `ml|${category}|${brand}|${model || modelTokens.sort().join('-')}|${capacity}|${voltage}`;
+  }
+
+  if (titleTokens.length < 5) return null;
+  return `ml|${category}|title:${titleTokens.join('-')}`;
+}
+
+function mercadoLivreTokenSimilarity(left, right) {
+  const a = new Set(normalizeMercadoLivreIdentityTokens(left));
+  const b = new Set(normalizeMercadoLivreIdentityTokens(right));
+  if (a.size < 5 || b.size < 5) return 0;
+  const intersection = [...a].filter((token) => b.has(token)).length;
+  return intersection / Math.max(a.size, b.size);
+}
+
+function isEquivalentMercadoLivreProduct(candidate, existing) {
+  const candidateKey = mercadoLivreIdentityKey(candidate);
+  const existingKey = mercadoLivreIdentityKey(existing);
+  if (candidateKey && existingKey && candidateKey === existingKey) return true;
+  const candidateCategory = normalizeMercadoLivreIdentityTokens(candidate?.category?.name || candidate?.category).join(' ');
+  const existingCategory = normalizeMercadoLivreIdentityTokens(existing?.category?.name || existing?.category).join(' ');
+  return Boolean(candidateCategory && candidateCategory === existingCategory
+    && mercadoLivreTokenSimilarity(candidate?.title, existing?.product_name || existing?.title) >= 0.9);
 }
 
 async function loadDeferredDiscoveryIngestions(marketplace) {
@@ -649,10 +695,13 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
       row.original_url,
     ].filter(Boolean).map(String)));
     
-    const filtered = products.filter((product) => ![
-      product.sourceItemId,
-      product.sourceUrl,
-    ].filter(Boolean).some((key) => known.has(String(key))));
+    const filtered = products.filter((product) => {
+      const hasKnownIdentity = [product.sourceItemId, product.sourceUrl]
+        .filter(Boolean).some((key) => known.has(String(key)));
+      if (hasKnownIdentity) return false;
+      if (marketplace !== 'Mercado Livre') return true;
+      return !history.some((row) => isEquivalentMercadoLivreProduct(product, row));
+    });
 
     if (stageLogger) stageLogger.end('filterNovelNormalizedProducts', stageStartedAt, filtered.length);
     return filtered;
@@ -730,60 +779,39 @@ async function scrapeStore(store, stageLogger = null) {
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   if (store === 'Mercado Livre') {
-    if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
-      const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
-      const scenario = getActiveMarketplaceScenario('Mercado Livre');
-      const history = await loadActiveDiscoveryHistory(store);
-      const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
-      
-      let intentStageStartedAt;
-      if (stageLogger) intentStageStartedAt = stageLogger.start('ML_official_intents', scenario?.keywords?.length || 0);
-      
-      const result = await runMercadoLivreOfficialIntentCoverage({
-        accessToken,
-        keywords: scenario?.keywords,
-        maxPerIntent: 20,
-        delayMs: 500,
-      });
-      
-      if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
-      
-      const normalized = result.products
-        .filter((product) => ![product.item_id, product.product_id, product.product_url]
-          .filter(Boolean)
-          .some((key) => known.has(String(key))))
-        .map((product) => normalizeMercadoLivreCandidate({
-        ...product,
-        discovered_at: result.generated_at,
-        source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
-        }));
-      
-      const scenarioRelevant = normalized.filter((product) => matchesScenarioProduct(scenario, product.title));
-      const filteredNovel = await filterNovelNormalizedProducts(store, scenarioRelevant, stageLogger);
-      if (filteredNovel.length > 0) return filteredNovel;
-      
-      // Não substituir um cenário editorial por ofertas genéricas: isso causava
-      // produtos fora do tema e repetição de catálogo entre ciclos.
-      if (stageLogger) stageLogger.info('ML_scenario_empty', intentStageStartedAt, 'Nenhum candidato novo aderente ao cenário; fallback amplo bloqueado');
-      return [];
-    }
+    const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
+    const scenario = getActiveMarketplaceScenario('Mercado Livre');
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
-    const result = await runMercadoLivreNativeTop20({ 
-      urls: [
-        'https://www.mercadolivre.com.br/ofertas',
-        'https://www.mercadolivre.com.br/mais-vendidos',
-        'https://www.mercadolivre.com.br/mais-vendidos/eletronicos',
-        'https://www.mercadolivre.com.br/mais-vendidos/ferramentas',
-        'https://www.mercadolivre.com.br/mais-vendidos/casa-moveis-decoracao'
-      ]
+
+    let intentStageStartedAt;
+    if (stageLogger) intentStageStartedAt = stageLogger.start('ML_official_intents', scenario?.keywords?.length || 0);
+
+    const result = await runMercadoLivreOfficialIntentCoverage({
+      accessToken,
+      keywords: scenario?.keywords,
+      maxPerIntent: 20,
+      delayMs: 500,
     });
+
+    if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
+
     const normalized = result.products
       .filter((product) => ![product.item_id, product.product_id, product.product_url]
         .filter(Boolean)
         .some((key) => known.has(String(key))))
-      .map(normalizeMercadoLivreCandidate);
-    return filterNovelNormalizedProducts(store, normalized, stageLogger);
+      .map((product) => normalizeMercadoLivreCandidate({
+      ...product,
+      discovered_at: result.generated_at,
+      source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
+      }));
+
+    const scenarioRelevant = normalized.filter((product) => matchesScenarioProduct(scenario, product.title));
+    const filteredNovel = await filterNovelNormalizedProducts(store, scenarioRelevant, stageLogger);
+    if (filteredNovel.length > 0) return filteredNovel;
+
+    if (stageLogger) stageLogger.info('ML_scenario_empty', intentStageStartedAt, 'Nenhum candidato novo aderente ao cenário; fallback amplo bloqueado');
+    return [];
   }
   if (store === 'Amazon') {
     const history = await loadActiveDiscoveryHistory(store);
@@ -1160,12 +1188,14 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
       const marketplaceScenario = getMarketplaceScenarioContract(scenarioId || scenario.scenarioId || scenario.id, marketplace) || scenario;
       if (marketplace === 'Shopee') {
         const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: marketplaceScenario });
-        return discovered.categories.flatMap((group) => group.products)
+        const normalized = discovered.categories.flatMap((group) => group.products)
           .map((product) => normalizeShopeeCandidate(product, requestedAt));
+        return filterNovelNormalizedProducts(marketplace, normalized);
       }
       if (marketplace === 'Amazon') {
         const discovered = await runAmazonScenarioDryRun({ scenario: marketplaceScenario, minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
-        return discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+        const normalized = discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+        return filterNovelNormalizedProducts(marketplace, normalized);
       }
       const discovered = await runMercadoLivreOfficialIntentCoverage({
         accessToken: mlToken,
@@ -1173,7 +1203,8 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
         maxPerIntent: Math.max(10, Math.min(20, perMarketplace * 2)),
         delayMs: 300,
       });
-      return discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+      const normalized = discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
+      return filterNovelNormalizedProducts(marketplace, normalized);
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
@@ -1247,8 +1278,15 @@ async function runScrapingCycle() {
 }
 
 async function runMercadoLivreOfficialDryRun() {
-  const result = await runMercadoLivreNativeTop20();
-  writeMercadoLivreNativeTop20Reports(result);
+  const scenario = getActiveMarketplaceScenario() || MARKETPLACE_SCENARIOS.eletronicos;
+  const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken,
+    keywords: scenario.keywords,
+    maxPerIntent: 20,
+    delayMs: 500,
+  });
+  console.log(`[Mercado Livre Official V5 Dry-Run] cenário=${CLI_SCENARIO_ID || 'ciclo-atual'} intenções=${result.keywords.length} produtos=${result.products.length} duplicatas=${result.duplicates} chamadas=${result.calls}`);
   return result;
 }
 
@@ -1343,7 +1381,7 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
       console.error('[Shopee V5 Catalog] ' + error.message);
       process.exitCode = 1;
     });
-  } else if (process.argv.includes('--mercadolivre-native-top20-dry-run')) {
+  } else if (process.argv.includes('--mercadolivre-official-intents-dry-run') || process.argv.includes('--mercadolivre-native-top20-dry-run')) {
     runMercadoLivreOfficialDryRun().catch((error) => {
       console.error('[Mercado Livre V5 Dry-Run] ' + error.message);
       process.exitCode = 1;
@@ -1381,4 +1419,6 @@ module.exports = {
   processMonetization,
   buildAffiliateLinkRows,
   createQualityAdmissionRunner,
+  mercadoLivreIdentityKey,
+  isEquivalentMercadoLivreProduct,
 };
