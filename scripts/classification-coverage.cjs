@@ -1,0 +1,132 @@
+'use strict';
+
+const catalog = require('./marketplace-classification-catalog.json');
+const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classifier.cjs');
+
+const rules = catalog.rules.map(({ type, pattern }) => ({
+  type,
+  pattern: new RegExp(pattern, 'iu'),
+}));
+
+function text(value) {
+  return String(value || '').trim();
+}
+
+function categoryLabel(value) {
+  return text(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function attributeText(product) {
+  const raw = product?.rawPayload?.attributes || product?.attributes || product?.marketplaceMetrics?.attributes;
+  if (!raw) return '';
+  return Array.isArray(raw)
+    ? raw.map((item) => `${item?.id || ''} ${item?.name || ''} ${item?.value_name || item?.value || ''}`).join(' ')
+    : JSON.stringify(raw);
+}
+
+function ids(product) {
+  const raw = product?.rawPayload || {};
+  const metrics = product?.marketplaceMetrics || {};
+  return {
+    domainId: raw.domain_id || product?.domain_id || metrics.domainId || metrics.domain_id,
+    categoryId: raw.category_id || product?.category_id || product?.category?.id || metrics.categoryId || metrics.category_id,
+  };
+}
+
+function classifyByRules(value, source, confidence) {
+  const matches = rules.filter(({ pattern }) => pattern.test(value));
+  if (!matches.length) return null;
+  const types = [...new Set(matches.map(({ type }) => type))];
+  return {
+    productType: types[0],
+    status: 'classified',
+    source,
+    confidence,
+    evidence: { matchedTypes: types, value: value.slice(0, 240) },
+  };
+}
+
+function markConflict(primary, product) {
+  const values = [attributeText(product), text(product?.title)].filter(Boolean);
+  const types = [...new Set(values.flatMap((value) => rules.filter(({ pattern }) => pattern.test(value)).map(({ type }) => type)))];
+  const conflicts = types.filter((type) => type !== primary.productType);
+  return conflicts.length ? {
+    ...primary,
+    status: 'conflict',
+    evidence: { ...(primary.evidence || {}), conflictingTypes: conflicts },
+  } : primary;
+}
+
+function classifyCandidate(product, marketplace) {
+  const { domainId, categoryId } = ids(product);
+  const normalizedMarketplace = text(marketplace || product?.marketplace).toLowerCase();
+
+  if (normalizedMarketplace === 'mercado livre') {
+    const canonical = classifyMercadoLivreProduct({ title: product?.title, domainId, categoryId });
+    if (canonical.status === 'classified') {
+      return {
+        ...canonical,
+        confidence: canonical.source.startsWith('domain:') ? 1 : canonical.source.startsWith('category:') ? 0.95 : 0.8,
+        evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null },
+      };
+    }
+  }
+
+  const domainType = domainId ? catalog.domains[String(domainId)] : null;
+  if (domainType) return markConflict({ productType: domainType, status: 'classified', source: `domain:${domainId}`, confidence: 1, evidence: { domainId } }, product);
+  const categoryType = categoryId ? catalog.categories[String(categoryId)] : null;
+  if (categoryType) return markConflict({ productType: categoryType, status: 'classified', source: `category:${categoryId}`, confidence: 0.95, evidence: { categoryId } }, product);
+
+  const byAttributes = classifyByRules(attributeText(product), 'attributes', 0.9);
+  if (byAttributes) return byAttributes;
+  const byTitle = classifyByRules(text(product?.title), 'title', 0.8);
+  if (byTitle) return byTitle;
+
+  const categoryName = categoryLabel(product?.category?.name || product?.category_name);
+  if (categoryName) return { productType: categoryName, status: 'classified', source: 'category:label', confidence: 0.7, evidence: { categoryName } };
+
+  return {
+    productType: 'unknown',
+    status: 'review_required',
+    source: 'type:unknown',
+    confidence: 0,
+    evidence: { title: text(product?.title).slice(0, 240), domainId: domainId || null, categoryId: categoryId || null },
+  };
+}
+
+function coverageKey(product) {
+  return text(product?.intent || product?.scenario || product?.rawPayload?.intent || product?.category?.name || 'sem_intencao') || 'sem_intencao';
+}
+
+function buildClassificationCoverage(products, marketplace) {
+  const total = products.length;
+  const classified = products.filter((product) => product.classification?.status === 'classified');
+  const unknown = products.filter((product) => product.classification?.productType === 'unknown');
+  const reviewRequired = products.filter((product) => product.classification?.status === 'review_required');
+  const conflicts = products.filter((product) => product.classification?.status === 'conflict');
+  const byIntent = {};
+  for (const product of products) {
+    const key = coverageKey(product);
+    byIntent[key] ||= { total: 0, classified: 0, unknown: 0, review_required: 0, conflicts: 0, coverage: 0 };
+    byIntent[key].total += 1;
+    if (product.classification?.status === 'classified') byIntent[key].classified += 1;
+    if (product.classification?.productType === 'unknown') byIntent[key].unknown += 1;
+    if (product.classification?.status === 'review_required') byIntent[key].review_required += 1;
+    if (product.classification?.status === 'conflict') byIntent[key].conflicts += 1;
+  }
+  for (const value of Object.values(byIntent)) value.coverage = value.total ? Number((value.classified / value.total).toFixed(4)) : 0;
+  return {
+    marketplace,
+    total_extraidos: total,
+    total_validos: total,
+    total_classificados: classified.length,
+    total_unknown: unknown.length,
+    total_review_required: reviewRequired.length,
+    total_conflitos: conflicts.length,
+    cobertura_classificacao: total ? Number((classified.length / total).toFixed(4)) : 0,
+    cobertura_por_intencao: byIntent,
+    approved_for_publication: total > 0 && classified.length === total && unknown.length === 0 && reviewRequired.length === 0 && conflicts.length === 0,
+  };
+}
+
+module.exports = { classifyCandidate, buildClassificationCoverage, coverageKey };

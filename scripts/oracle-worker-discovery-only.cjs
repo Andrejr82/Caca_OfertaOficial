@@ -7,6 +7,7 @@ const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
 const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
 const { evaluateSearchQuality } = require('./marketplace-search-quality.cjs');
+const { classifyCandidate, buildClassificationCoverage } = require('./classification-coverage.cjs');
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
@@ -471,7 +472,13 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
       
       const uniqueProducts = Array.from(uniqueProductsMap.values());
-      let candidatesToPersist = uniqueProducts;
+      const classifiedProducts = uniqueProducts.map((candidate) => ({
+        ...candidate,
+        classification: classifyCandidate(candidate, marketplace),
+      }));
+      const classificationCoverage = buildClassificationCoverage(classifiedProducts, marketplace);
+      let candidatesToPersist = classifiedProducts.filter((candidate) => candidate.classification.status === 'classified');
+      technicalRejections += classifiedProducts.length - candidatesToPersist.length;
       let deferredForQueue = previouslyDeferred;
 
       // Active V2 is an explicit opt-in. The default and shadow paths keep the
@@ -488,7 +495,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'active' && typeof qualityAdmission === 'function') {
         try {
           const admission = await qualityAdmission(
-            Object.freeze([...uniqueProducts, ...previouslyDeferred]),
+            Object.freeze([...candidatesToPersist, ...previouslyDeferred]),
             marketplace,
             { maxAccepted: copyQueueOptions?.maxPerMarketplace ?? 5 },
           );
@@ -499,7 +506,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           technicalRejections += Array.isArray(admission?.rejected) ? admission.rejected.length : 0;
           await safeObserve('discovery.quality.active.completed', {
             marketplace,
-            candidates: uniqueProducts.length,
+            candidates: candidatesToPersist.length,
             admitted: candidatesToPersist.length,
             rejected: Array.isArray(admission?.rejected) ? admission.rejected.length : 0,
           });
@@ -607,6 +614,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         queueDeferred: queue.deferred?.length || 0,
         queueLimits: queue.limits,
         rejected: technicalRejections,
+        classificationCoverage,
         persisted: Number(persistedAll.accepted || 0),
         inserted: persistedAll.inserted || 0,
         updated: persistedAll.updated || 0,

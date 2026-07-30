@@ -32,6 +32,7 @@ const DEPLOY_FILES = [
   'scripts/mercadolivre-canonical-classifier.cjs',
   'scripts/marketplace-classification-catalog.json',
   'scripts/oracle-worker-discovery-only.cjs',
+  'scripts/classification-coverage.cjs',
   'scripts/oracle-resilience.cjs',
   'scripts/family-variant-selector.cjs',
   'scripts/family-key-engine.cjs',

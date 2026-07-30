@@ -568,8 +568,9 @@ async function loadDeferredDiscoveryIngestions(marketplace) {
   }).filter(r => r.sourceItemId);
 }
 
-function normalizeShopeeCandidate(product, discoveredAt) {
+function normalizeShopeeCandidate(product, discoveredAt, intent = null) {
   return {
+    intent: product.intent || intent,
     sourceItemId: product.itemId,
     sourceUrl: product.offerLink || product.productLink,
     title: product.productName,
@@ -594,7 +595,7 @@ function normalizeShopeeCandidate(product, discoveredAt) {
   };
 }
 
-function normalizeMercadoLivreCandidate(product) {
+function normalizeMercadoLivreCandidate(product, intent = null) {
   const currentPrice = Number(product.current_price);
   const originalPrice = Number(product.old_price) > currentPrice ? Number(product.old_price) : null;
   const score = calculateScoreV1({
@@ -603,6 +604,7 @@ function normalizeMercadoLivreCandidate(product) {
     rating: null,
   });
   return {
+    intent: product.intent || intent,
     sourceItemId: product.item_id || product.product_id || product.product_url,
     sourceUrl: product.product_url,
     title: product.title,
@@ -627,12 +629,13 @@ function normalizeMercadoLivreCandidate(product) {
   };
 }
 
-function normalizeAmazonCandidate(product, discoveredAt) {
+function normalizeAmazonCandidate(product, discoveredAt, intent = null) {
   // product.marketplaceMetrics é gerado por extractProductCommercials no parser.
   // Antes desta correção, prime/coupon/promotion/rating/reviewCount ficavam
   // apenas no rawPayload e nunca chegavam ao qualityGate nem ao scoreCandidate.
   const pm = product.marketplaceMetrics || {};
   return {
+    intent: product.intent || intent,
     sourceItemId: product.asin,
     sourceUrl: product.canonical_url,
     title: product.title,
@@ -765,7 +768,7 @@ async function scrapeStore(store, stageLogger = null) {
     const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario });
     const normalized = result.categories
       .flatMap((category) => category.products)
-      .map((product) => normalizeShopeeCandidate(product, discoveredAt))
+      .map((product) => normalizeShopeeCandidate(product, discoveredAt, scenario?.scenarioId || scenario?.id))
       .filter((product) => matchesScenarioProduct(scenario, product.title));
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
@@ -795,7 +798,7 @@ async function scrapeStore(store, stageLogger = null) {
       ...product,
       discovered_at: result.generated_at,
       source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
-      }));
+      }, scenario?.scenarioId || scenario?.id));
 
     const scenarioRelevant = normalized.filter((product) => matchesScenarioProduct(scenario, product.title));
     const filteredNovel = await filterNovelNormalizedProducts(store, scenarioRelevant, stageLogger);
@@ -825,7 +828,7 @@ async function scrapeStore(store, stageLogger = null) {
     
     const normalized = result.products
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
-      .map((product) => normalizeAmazonCandidate(product, discoveredAt))
+      .map((product) => normalizeAmazonCandidate(product, discoveredAt, scenario?.scenarioId || scenario?.id))
       .filter((product) => matchesScenarioProduct(scenario, product.title));
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
