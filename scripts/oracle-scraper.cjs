@@ -110,10 +110,6 @@ function buildAffiliateLinkRows(offer, appUrl) {
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
-const {
-  runMercadoLivreNativeTop20,
-  writeMercadoLivreNativeTop20Reports,
-} = require('./mercadolivre-native-top20-v5.cjs');
 const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
@@ -579,56 +575,33 @@ async function scrapeStore(store, stageLogger = null) {
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   if (store === 'Mercado Livre') {
-    if (process.env.ML_DISCOVERY_MODE === 'official_intents') {
-      const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
-      const scenario = getActiveMarketplaceScenario();
-      const history = await loadActiveDiscoveryHistory(store);
-      const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
-      
-      let intentStageStartedAt;
-      if (stageLogger) intentStageStartedAt = stageLogger.start('ML_official_intents', scenario?.keywords?.length || 0);
-      
-      const result = await runMercadoLivreOfficialIntentCoverage({
-        accessToken,
-        keywords: scenario?.keywords,
-        maxPerIntent: 20,
-        delayMs: 500,
-      });
-      
-      if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
-      
-      const normalized = result.products
-        .filter((product) => ![product.item_id, product.product_id, product.product_url]
-          .filter(Boolean)
-          .some((key) => known.has(String(key))))
-        .map((product) => normalizeMercadoLivreCandidate({
-        ...product,
-        discovered_at: result.generated_at,
-        source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
-        }));
-      
-      const filteredNovel = await filterNovelNormalizedProducts(store, normalized, stageLogger);
-      if (filteredNovel.length > 0) return filteredNovel;
-      
-      // Fallback para fontes amplas se o cenário não trouxer novos candidatos
-      if (stageLogger) stageLogger.info('ML_fallback', intentStageStartedAt, 'Acionando fallback para fontes amplas do ML (ofertas/mais vendidos)');
-    }
+    const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
+    const scenario = getActiveMarketplaceScenario();
     const history = await loadActiveDiscoveryHistory(store);
     const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
-    const result = await runMercadoLivreNativeTop20({ 
-      urls: [
-        'https://www.mercadolivre.com.br/ofertas',
-        'https://www.mercadolivre.com.br/mais-vendidos',
-        'https://www.mercadolivre.com.br/mais-vendidos/eletronicos',
-        'https://www.mercadolivre.com.br/mais-vendidos/ferramentas',
-        'https://www.mercadolivre.com.br/mais-vendidos/casa-moveis-decoracao'
-      ]
+
+    let intentStageStartedAt;
+    if (stageLogger) intentStageStartedAt = stageLogger.start('ML_official_intents', scenario?.keywords?.length || 0);
+
+    const result = await runMercadoLivreOfficialIntentCoverage({
+      accessToken,
+      keywords: scenario?.keywords,
+      maxPerIntent: 20,
+      delayMs: 500,
     });
+
+    if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
+
     const normalized = result.products
       .filter((product) => ![product.item_id, product.product_id, product.product_url]
         .filter(Boolean)
         .some((key) => known.has(String(key))))
-      .map(normalizeMercadoLivreCandidate);
+      .map((product) => normalizeMercadoLivreCandidate({
+      ...product,
+      discovered_at: result.generated_at,
+      source_categories: [{ category_id: product.category_id, category_name: product.category_name, source_position: product.source_position }]
+      }));
+
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   if (store === 'Amazon') {
@@ -1080,8 +1053,15 @@ async function runScrapingCycle() {
 }
 
 async function runMercadoLivreOfficialDryRun() {
-  const result = await runMercadoLivreNativeTop20();
-  writeMercadoLivreNativeTop20Reports(result);
+  const scenario = getActiveMarketplaceScenario() || MARKETPLACE_SCENARIOS.eletronicos;
+  const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken,
+    keywords: scenario.keywords,
+    maxPerIntent: 20,
+    delayMs: 500,
+  });
+  console.log(`[Mercado Livre Official V5 Dry-Run] cenário=${CLI_SCENARIO_ID || 'ciclo-atual'} intenções=${result.keywords.length} produtos=${result.products.length} duplicatas=${result.duplicates} chamadas=${result.calls}`);
   return result;
 }
 
@@ -1170,7 +1150,7 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
       console.error('[Shopee V5 Catalog] ' + error.message);
       process.exitCode = 1;
     });
-  } else if (process.argv.includes('--mercadolivre-native-top20-dry-run')) {
+  } else if (process.argv.includes('--mercadolivre-official-intents-dry-run') || process.argv.includes('--mercadolivre-native-top20-dry-run')) {
     runMercadoLivreOfficialDryRun().catch((error) => {
       console.error('[Mercado Livre V5 Dry-Run] ' + error.message);
       process.exitCode = 1;
