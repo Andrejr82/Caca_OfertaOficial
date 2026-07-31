@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { importedAssetPath } from "@/lib/videos/import/storage";
 
 const requestSchema = z.object({
   jobId: z.string().uuid(),
-  kind: z.enum(["video", "audio"]),
+  kind: z.enum(["video", "audio", "source", "processed", "instagram", "facebook", "instagram-cover", "facebook-cover", "thumbnail", "reference-frame"]),
   workerId: z.string().trim().min(1).max(120)
 });
 
@@ -22,17 +23,20 @@ export async function POST(request: Request) {
   if (!parsed.success) return NextResponse.json({ error: "Informe um jobId e tipo de arquivo válidos." }, { status: 400 });
 
   const bucket = process.env.VIDEO_STORAGE_BUCKET || "videos";
-  const extension = parsed.data.kind === "video" ? "mp4" : "mp3";
-  const path = `jobs/${parsed.data.jobId}/${parsed.data.kind}.${extension}`;
+  const extension = ["instagram-cover", "facebook-cover", "thumbnail", "reference-frame"].includes(parsed.data.kind) ? "jpg" : parsed.data.kind === "audio" ? "mp3" : "mp4";
 
   const { data: job, error: jobError } = await supabase
     .from("video_jobs")
-    .select("id, status, worker_id")
+    .select("id, status, worker_id, user_id, offer_id, template_id")
     .eq("id", parsed.data.jobId)
     .maybeSingle();
 
   if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 });
   if (!job || job.status !== "processing" || job.worker_id !== parsed.data.workerId) return NextResponse.json({ error: "Job não pertence a este worker." }, { status: 409 });
+
+  const path = job.template_id === "imported-video-v1"
+    ? importedAssetPath(job, parsed.data.kind)
+    : `jobs/${parsed.data.jobId}/${parsed.data.kind}.${extension}`;
 
   const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path, { upsert: true });
   if (error || !data) return NextResponse.json({ error: error?.message ?? "Não foi possível criar URL de upload." }, { status: 503 });

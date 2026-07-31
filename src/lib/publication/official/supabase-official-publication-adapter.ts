@@ -70,6 +70,28 @@ function resolvePublicationImage(
   return Promise.resolve(socialImageUrl(offer));
 }
 
+async function resolvePublicationMedia(
+  client: SupabaseClient,
+  tenantId: string,
+  offerId: string,
+  channel: OfficialPublicationChannel,
+  offer: { id?: string | null; platform?: string | null; image_url?: string | null; coupon?: string | null; product_name?: string | null; notes?: string | null } | null | undefined
+) {
+  const fallback = await resolvePublicationImage(channel, offer);
+  if (channel !== "instagram" && channel !== "facebook") return { url: fallback, imported: false };
+  const { data } = await client.from("video_jobs")
+    .select("video_url,template_id")
+    .eq("user_id", tenantId)
+    .eq("offer_id", offerId)
+    .eq("template_id", "imported-video-v1")
+    .in("status", ["approved", "published"])
+    .not("video_url", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.video_url ? { url: data.video_url, imported: true } : { url: fallback, imported: false };
+}
+
 export class SupabaseOfficialPublicationAdapter implements
   PublicationRepositoryPort,
   PublicationReceiptPort,
@@ -108,6 +130,7 @@ export class SupabaseOfficialPublicationAdapter implements
     const link = Array.isArray(data.affiliate_links) ? data.affiliate_links[0] : data.affiliate_links;
     const channel = data.channel as OfficialPublicationChannel;
     const coupon = isCouponOffer(related);
+    const media = await resolvePublicationMedia(this.client, tenantId, data.offer_id, channel, related);
     return {
       id: data.id,
       tenantId: data.user_id,
@@ -118,9 +141,12 @@ export class SupabaseOfficialPublicationAdapter implements
       content: coupon
         ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
         : data.content,
-      mediaUrl: await resolvePublicationImage(channel, related),
+      mediaUrl: media.url,
       destination: this.destinations[channel] ?? "",
-      metadata: channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}
+      metadata: {
+        ...(channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}),
+        ...(channel === "facebook" && media.imported ? { facebookMediaType: "REELS" } : {})
+      }
     };
   }
 
@@ -136,6 +162,7 @@ export class SupabaseOfficialPublicationAdapter implements
       const link = Array.isArray(item.affiliate_links) ? item.affiliate_links[0] : item.affiliate_links;
       const channel = item.channel as OfficialPublicationChannel;
       const coupon = isCouponOffer(related);
+      const media = await resolvePublicationMedia(this.client, tenantId, item.offer_id, channel, related);
       return {
         id: item.id,
         tenantId: item.user_id,
@@ -146,9 +173,12 @@ export class SupabaseOfficialPublicationAdapter implements
         content: coupon
           ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
           : item.content,
-        mediaUrl: await resolvePublicationImage(channel, related),
+        mediaUrl: media.url,
         destination: this.destinations[channel] ?? "",
-        metadata: (channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}) as Readonly<Record<string, string | number | boolean>>
+        metadata: {
+          ...(channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}),
+          ...(channel === "facebook" && media.imported ? { facebookMediaType: "REELS" } : {})
+        } as Readonly<Record<string, string | number | boolean>>
       };
     }));
   }

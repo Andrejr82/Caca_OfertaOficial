@@ -24,6 +24,7 @@ from textwrap import wrap
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 from video_worker_runtime import build_edge_tts_command, validate_video_template
+from imported_video_worker import process_imported_video
 
 
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
@@ -452,6 +453,9 @@ def signed_upload(job_id: str, kind: str, file_path: Path) -> str:
 def process(job: dict) -> None:
     job_id = job["id"]
     template_id = str(job.get("template_id") or "motion-v1")
+    if template_id == "imported-video-v1":
+        process_imported_video(job)
+        return
     if template_id not in TEMPLATES:
         raise RuntimeError(f"Template de vídeo não encontrado: {template_id}")
     template = TEMPLATES[template_id]

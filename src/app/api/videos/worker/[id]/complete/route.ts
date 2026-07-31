@@ -1,8 +1,19 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { importedStoragePrefix } from "@/lib/videos/import/storage";
 
-const completionSchema = z.object({ videoUrl: z.string().url(), audioUrl: z.string().url().optional(), workerId: z.string().trim().min(1).max(120) });
+const completionSchema = z.object({
+  videoUrl: z.string().url(),
+  audioUrl: z.string().url().optional(),
+  instagramUrl: z.string().url().optional(),
+  facebookUrl: z.string().url().optional(),
+  instagramCoverUrl: z.string().url().optional(),
+  facebookCoverUrl: z.string().url().optional(),
+  thumbnailUrl: z.string().url().optional(),
+  referenceFrameUrl: z.string().url().optional(),
+  workerId: z.string().trim().min(1).max(120)
+});
 
 function authorized(request: Request) {
   const token = process.env.VIDEO_WORKER_TOKEN;
@@ -17,15 +28,31 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!parsed.success) return NextResponse.json({ error: "Informe uma URL de vídeo válida." }, { status: 400 });
   const { id } = await params;
   const bucket = process.env.VIDEO_STORAGE_BUCKET || "videos";
-  const expectedVideoPath = `/storage/v1/object/public/${bucket}/jobs/${id}/video.mp4`;
-  const expectedAudioPath = `/storage/v1/object/public/${bucket}/jobs/${id}/audio.mp3`;
-  if (!parsed.data.videoUrl.includes(expectedVideoPath) || (parsed.data.audioUrl && !parsed.data.audioUrl.includes(expectedAudioPath))) {
-    return NextResponse.json({ error: "As URLs enviadas não pertencem ao storage deste job." }, { status: 400 });
-  }
+  const { data: claimedJob, error: claimedJobError } = await supabase.from("video_jobs").select("id,status,worker_id,template_id,user_id,offer_id,metadata").eq("id", id).maybeSingle();
+  if (claimedJobError || !claimedJob) return NextResponse.json({ error: "Job não encontrado." }, { status: 404 });
+  const expectedPrefix = claimedJob.template_id === "imported-video-v1"
+    ? `/storage/v1/object/public/${bucket}/${importedStoragePrefix(claimedJob)}/`
+    : `/storage/v1/object/public/${bucket}/jobs/${id}/`;
+  const urls = [parsed.data.videoUrl, parsed.data.audioUrl, parsed.data.instagramUrl, parsed.data.facebookUrl, parsed.data.instagramCoverUrl, parsed.data.facebookCoverUrl, parsed.data.thumbnailUrl, parsed.data.referenceFrameUrl].filter(Boolean) as string[];
+  if (urls.some((url) => !url.startsWith("https://") || !url.includes(expectedPrefix))) return NextResponse.json({ error: "As URLs enviadas não pertencem ao storage deste job." }, { status: 400 });
+  const importedMetadata = claimedJob.template_id === "imported-video-v1" ? {
+    importedVideo: {
+      ...((claimedJob.metadata as Record<string, unknown> | null)?.importedVideo as Record<string, unknown> | undefined),
+      assets: {
+        processed: parsed.data.videoUrl,
+        instagram: parsed.data.instagramUrl ?? parsed.data.videoUrl,
+        facebook: parsed.data.facebookUrl ?? parsed.data.videoUrl,
+        instagramCover: parsed.data.instagramCoverUrl ?? null,
+        facebookCover: parsed.data.facebookCoverUrl ?? null,
+        thumbnail: parsed.data.thumbnailUrl ?? null,
+        referenceFrame: parsed.data.referenceFrameUrl ?? null
+      }
+    }
+  } : null;
 
   const { data, error } = await supabase
     .from("video_jobs")
-    .update({ status: "ready", stage: "ready_for_review", video_url: parsed.data.videoUrl, audio_url: parsed.data.audioUrl ?? null, completed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), error_message: null })
+    .update({ status: "ready", stage: claimedJob.template_id === "imported-video-v1" ? "generating_copies" : "ready_for_review", video_url: parsed.data.videoUrl, audio_url: parsed.data.audioUrl ?? null, metadata: importedMetadata ? { ...(claimedJob.metadata || {}), ...importedMetadata } : claimedJob.metadata, completed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), error_message: null })
     .eq("id", id)
     .eq("status", "processing")
     .eq("worker_id", parsed.data.workerId)

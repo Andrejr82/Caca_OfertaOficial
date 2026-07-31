@@ -82,3 +82,39 @@ export async function publishToFacebook(
     };
   }
 }
+
+export async function publishToFacebookReel(videoUrl: string, description: string, trackedUrl?: string): Promise<FacebookPublishResponse> {
+  if (!hasFacebookEnv()) return { success: false, message: "Credenciais do Facebook não configuradas (.env.local)." };
+  const pageToken = process.env.FACEBOOK_ACCESS_TOKEN!;
+  const version = process.env.FACEBOOK_GRAPH_API_VERSION || "v19.0";
+  const graph = `https://graph.facebook.com/${version}`;
+  const auth = { Authorization: `Bearer ${pageToken}` };
+  try {
+    const start = await fetch(`${graph}/me/video_reels?upload_phase=start`, { method: "POST", headers: auth });
+    const startData = await start.json();
+    if (!start.ok || !startData.video_id || !startData.upload_url) return { success: false, message: "Facebook não iniciou o upload do Reel." };
+
+    const upload = await fetch(startData.upload_url, { method: "POST", headers: { Authorization: `OAuth ${pageToken}`, file_url: videoUrl } });
+    const uploadData = await upload.json();
+    if (!upload.ok || uploadData.success !== true) return { success: false, message: "Facebook não aceitou o vídeo hospedado." };
+
+    let ready = false;
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const statusResponse = await fetch(`${graph}/${encodeURIComponent(startData.video_id)}?fields=status`, { headers: auth });
+      const statusData = await statusResponse.json();
+      const videoStatus = statusData.status?.video_status;
+      if (videoStatus === "ready" || videoStatus === "published") { ready = true; break; }
+      if (videoStatus === "error") return { success: false, message: "Facebook falhou ao processar o Reel." };
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    if (!ready) return { success: false, message: "Facebook não concluiu o processamento do Reel." };
+
+    const finalDescription = trackedUrl ? `${description}\n\n${trackedUrl}` : description;
+    const finish = await fetch(`${graph}/me/video_reels?upload_phase=finish&video_id=${encodeURIComponent(startData.video_id)}&video_state=PUBLISHED&description=${encodeURIComponent(finalDescription)}`, { method: "POST", headers: auth });
+    const finishData = await finish.json();
+    if (!finish.ok || finishData.success !== true) return { success: false, message: "Facebook não confirmou a publicação do Reel." };
+    return { success: true, message: "Publicado com sucesso no Facebook.", postId: String(finishData.post_id || finishData.id || startData.video_id) };
+  } catch {
+    return { success: false, message: "Exceção interna ao comunicar com o Facebook." };
+  }
+}

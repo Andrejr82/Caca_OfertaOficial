@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getVideoJobPolicy, quotaMessage } from "@/lib/videos/job-policy";
-import { buildImportIdempotencyKey, validateImportRequest, type ImportChannel } from "@/lib/videos/import/import-job";
+import { buildImportIdempotencyKey, normalizeSourceUrl, validateImportRequest, type ImportChannel } from "@/lib/videos/import/import-job";
 
 function errorStatus(code: string) {
   if (code === "RIGHTS_CONFIRMATION_REQUIRED" || code === "CHANNEL_REQUIRED" || code === "CHANNEL_NOT_ALLOWED") return 400;
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   const metadata = {
     importedVideo: {
       sourceUrl,
-      normalizedSourceUrl: sourceUrl.trim(),
+      normalizedSourceUrl: normalizeSourceUrl(sourceUrl),
       channels,
       rightsConfirmed: true,
       rightsConfirmedAt: new Date().toISOString(),

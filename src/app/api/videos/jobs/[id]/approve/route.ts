@@ -9,6 +9,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   if (!userData.user) return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   const { id } = await params;
 
+  const { data: currentJob, error: currentJobError } = await supabase.from("video_jobs").select("status,template_id,metadata").eq("id", id).eq("user_id", userData.user.id).maybeSingle();
+  if (currentJobError || !currentJob) return NextResponse.json({ error: "Job não encontrado." }, { status: 404 });
+  if (currentJob.template_id === "imported-video-v1") {
+    const drafts = ((currentJob.metadata as Record<string, unknown> | null)?.importedVideo as Record<string, unknown> | undefined)?.drafts;
+    if (!Array.isArray(drafts) || drafts.length === 0) return NextResponse.json({ error: "Gere e revise as copys antes de aprovar o vídeo." }, { status: 409 });
+  }
+
   const { data, error } = await supabase
     .from("video_jobs")
     .update({ status: "approved", approved_at: new Date().toISOString() })

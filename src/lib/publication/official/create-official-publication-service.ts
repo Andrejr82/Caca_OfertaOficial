@@ -15,7 +15,7 @@ import { whatsappService } from "@/lib/integrations/whatsapp";
 import { resolveConfiguredWhatsAppTargetId } from "@/lib/integrations/whatsapp/target";
 import { publishToInstagram, publishVideoToInstagram } from "@/lib/instagram/client";
 import { instagramVideoFingerprint } from "@/lib/instagram/safety";
-import { publishToFacebook } from "@/lib/platforms/facebook";
+import { publishToFacebook, publishToFacebookReel } from "@/lib/platforms/facebook";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { OfficialPublicationStateAdapter, SupabaseOfficialPublicationAdapter } from "./supabase-official-publication-adapter";
 import { createServerObservabilityDependencies, PublicationObservabilityAuditAdapter } from "@/lib/observability";
@@ -109,7 +109,9 @@ function createTransportRegistry() {
     new FacebookPublicationTransport({
       ...receiptDependencies,
       send: async (input) => {
-        const result = await publishToFacebook(input.text, input.mediaUrl);
+        const result = input.metadata.facebookMediaType === "REELS" && input.mediaUrl
+          ? await publishToFacebookReel(input.mediaUrl, input.text)
+          : await publishToFacebook(input.text, input.mediaUrl);
         if (!result.success || !result.postId) throw new Error(result.message || "Facebook did not return a final post id");
         return { externalId: String(result.postId), sentAt: new Date().toISOString() };
       }

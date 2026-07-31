@@ -6,7 +6,7 @@ values (
   'videos',
   true,
   104857600,
-  array['video/mp4', 'audio/mpeg', 'audio/wav']::text[]
+  array['video/mp4', 'audio/mpeg', 'audio/wav', 'image/jpeg']::text[]
 )
 on conflict (id) do update
 set public = excluded.public,
