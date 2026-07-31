@@ -153,6 +153,33 @@ describe("SupabaseOfficialPublicationAdapter", () => {
     expect(reservationInsert.insert).toHaveBeenCalledWith(expect.objectContaining({ key: "pmav5.publication.reservation.post-1.telegram" }));
   });
 
+  it("reopens a completed idempotency record when its previous result was rejected", async () => {
+    const idempotencyInsert = { insert: vi.fn().mockResolvedValue({ data: null, error: { code: "23505", message: "duplicate" } }) };
+    const storedRejected = chain({
+      data: {
+        value: {
+          fingerprint: "fingerprint",
+          status: "completed",
+          result: { status: "rejected", code: "TRANSPORT_FAILED", message: "Falha transitória" }
+        }
+      },
+      error: null
+    });
+    const reservationInsert = chain({ data: null, error: null });
+    const client = {
+      from: vi.fn()
+        .mockReturnValueOnce(idempotencyInsert)
+        .mockReturnValueOnce(storedRejected)
+        .mockReturnValueOnce(reservationInsert)
+    };
+    const adapter = new SupabaseOfficialPublicationAdapter(client as never, "tenant-1", {
+      telegram: "@ofertas", whatsapp: "group@g.us", instagram: "instagram-account", facebook: "facebook-page"
+    });
+
+    await expect(adapter.begin(command.idempotencyKey, "fingerprint", command)).resolves.toEqual({ status: "started" });
+    expect(reservationInsert.insert).toHaveBeenCalled();
+  });
+
   it("writes structured publication audit without content or secrets", async () => {
     const auditInsert = chain({ data: null, error: null });
     const client = { from: vi.fn(() => auditInsert) };

@@ -220,12 +220,16 @@ export class SupabaseOfficialPublicationAdapter implements
       if (idempotencyError.code !== "23505") throw new Error(`Official publication idempotency reservation failed: ${idempotencyError.message}`);
       const stored = await this.readSetting<StoredIdempotency>(idempotencyKeyName);
       if (stored.fingerprint !== fingerprint) return { status: "conflict" as const };
-      if (stored.status === "completed" && stored.result) return { status: "replay" as const, result: stored.result };
+      if (stored.status === "completed" && stored.result?.status === "published") {
+        return { status: "replay" as const, result: stored.result };
+      }
       if (stored.status === "reconciliation_required") {
         this.createPending(idempotencyKey, fingerprint);
         return { status: "resume" as const };
       }
-      return { status: "pending" as const, result: this.waitForResult(idempotencyKeyName, fingerprint) };
+      if (!(stored.status === "completed" && stored.result?.status === "rejected")) {
+        return { status: "pending" as const, result: this.waitForResult(idempotencyKeyName, fingerprint) };
+      }
     }
 
     const reservationKey = reservationSettingKey(command);
