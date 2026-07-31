@@ -9,25 +9,25 @@ const config: Config = {
         sans: ["Inter", "ui-sans-serif", "system-ui", "-apple-system", "sans-serif"]
       },
       colors: {
-        ink: "#f1f5f9",
-        paper: "#060a13",
-        moss: "#10b981",
-        leaf: "#34d399",
-        gold: "#fbbf24",
+        ink: "#f4f7f9",
+        paper: "#06131f",
+        moss: "#13c98b",
+        leaf: "#35e0aa",
+        gold: "#f4b740",
         clay: "#f87171",
-        fog: "#1e293b",
-        surface: "#0c1020",
-        elevated: "#111827",
-        subtle: "#151c2e",
-        "border-glass": "rgba(255, 255, 255, 0.06)",
-        "accent-glow": "rgba(16, 185, 129, 0.15)"
+        fog: "#21617d",
+        surface: "#0b2235",
+        elevated: "#123651",
+        subtle: "#194966",
+        "border-glass": "rgba(180, 220, 235, 0.18)",
+        "accent-glow": "rgba(19, 201, 139, 0.18)"
       },
       boxShadow: {
         panel: "0 4px 24px rgba(0, 0, 0, 0.25)",
-        glass: "0 8px 40px rgba(0, 0, 0, 0.35), 0 0 20px rgba(16, 185, 129, 0.08)",
-        glow: "0 0 20px rgba(16, 185, 129, 0.08)",
-        "glow-hover": "0 0 30px rgba(16, 185, 129, 0.14)",
-        "card-hover": "0 8px 40px rgba(0, 0, 0, 0.35), 0 0 30px rgba(16, 185, 129, 0.14)"
+        glass: "0 8px 40px rgba(0, 0, 0, 0.35), 0 0 20px rgba(19, 201, 139, 0.1)",
+        glow: "0 0 20px rgba(19, 201, 139, 0.1)",
+        "glow-hover": "0 0 30px rgba(19, 201, 139, 0.18)",
+        "card-hover": "0 8px 40px rgba(0, 0, 0, 0.35), 0 0 30px rgba(19, 201, 139, 0.18)"
       },
       animation: {
         fadeIn: "fadeIn 0.4s ease-out both",
@@ -54,8 +54,8 @@ const config: Config = {
           "100%": { backgroundPosition: "200% 0" }
         },
         pulseGlow: {
-          "0%, 100%": { boxShadow: "0 0 4px rgba(16, 185, 129, 0.15)" },
-          "50%": { boxShadow: "0 0 16px rgba(16, 185, 129, 0.3)" }
+          "0%, 100%": { boxShadow: "0 0 4px rgba(19, 201, 139, 0.18)" },
+          "50%": { boxShadow: "0 0 16px rgba(19, 201, 139, 0.34)" }
         }
       }
     }

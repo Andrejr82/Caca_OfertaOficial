@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
   Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
-  PanelLeftOpen, LogOut, Sparkles, Zap, Menu, Activity, TerminalSquare, Film, Compass
+  PanelLeftOpen, LogOut, Zap, Menu, Activity, TerminalSquare, Film, Compass
 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { officialBrand } from "@/lib/env";
@@ -86,8 +87,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       >
         {/* Logo Area */}
         <div className="flex h-16 items-center gap-3 border-b border-white/[0.04] px-4">
-          <span className="grid h-9 w-9 flex-shrink-0 place-items-center rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 text-sm font-black text-white shadow-lg shadow-emerald-500/20">
-            <Sparkles size={18} />
+          <span className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg bg-[#06131f] shadow-lg shadow-emerald-500/20 ring-1 ring-white/10">
+            <Image
+              src="/logo-caca-oferta.png"
+              alt="Logo Caça Oferta Oficial"
+              width={36}
+              height={36}
+              className="h-full w-full object-cover"
+            />
           </span>
           {isOpen && (
             <span className="animate-slideRight overflow-hidden">

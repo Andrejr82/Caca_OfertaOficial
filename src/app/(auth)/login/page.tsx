@@ -1,4 +1,5 @@
 import { AlertCircle, Mail, Lock } from "lucide-react";
+import Image from "next/image";
 import { signInAction } from "@/lib/auth/actions";
 import { officialBrand, hasSupabasePublicEnv } from "@/lib/env";
 import { Button } from "@/components/ui/button";
@@ -55,8 +56,15 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
         <div className="p-8">
           {/* Logo */}
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-xl font-black text-white shadow-xl shadow-emerald-500/25">
-              CO
+            <div className="mx-auto mb-4 h-20 w-20 overflow-hidden rounded-2xl bg-[#06131f] shadow-xl shadow-emerald-500/25 ring-1 ring-white/10">
+              <Image
+                src="/logo-caca-oferta.png"
+                alt="Logo Caça Oferta Oficial"
+                width={80}
+                height={80}
+                className="h-full w-full object-cover"
+                priority
+              />
             </div>
             <h1 className="text-xl font-extrabold tracking-tight text-white">
               {officialBrand.appName}

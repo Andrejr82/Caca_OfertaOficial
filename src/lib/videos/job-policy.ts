@@ -1,7 +1,7 @@
-export type VideoJobPolicy = { dailyLimit: number; queueLimit: number };
-export type VideoQuotaDecision = { allowed: true } | { allowed: false; reason: "daily_limit" | "queue_limit" };
+export type VideoJobPolicy = { dailyLimit: null; queueLimit: number };
+export type VideoQuotaDecision = { allowed: true } | { allowed: false; reason: "queue_limit" };
 
-const MAX_DAILY_LIMIT = 3;
+const DEFAULT_QUEUE_LIMIT = 3;
 
 function positiveInteger(value: string | undefined, fallback: number, maximum: number) {
   const parsed = Number(value);
@@ -11,8 +11,8 @@ function positiveInteger(value: string | undefined, fallback: number, maximum: n
 
 export function getVideoJobPolicy(env: Record<string, string | undefined> = process.env): VideoJobPolicy {
   return {
-    dailyLimit: positiveInteger(env.VIDEO_DAILY_LIMIT, MAX_DAILY_LIMIT, MAX_DAILY_LIMIT),
-    queueLimit: positiveInteger(env.VIDEO_QUEUE_LIMIT, MAX_DAILY_LIMIT, MAX_DAILY_LIMIT)
+    dailyLimit: null,
+    queueLimit: positiveInteger(env.VIDEO_QUEUE_LIMIT, DEFAULT_QUEUE_LIMIT, Number.MAX_SAFE_INTEGER)
   };
 }
 
@@ -20,13 +20,12 @@ export function getVideoQuotaDecision(
   usage: { todayCount: number; activeCount: number },
   policy: VideoJobPolicy
 ): VideoQuotaDecision {
-  if (usage.todayCount >= policy.dailyLimit) return { allowed: false, reason: "daily_limit" };
   if (usage.activeCount >= policy.queueLimit) return { allowed: false, reason: "queue_limit" };
   return { allowed: true };
 }
 
 export function quotaMessage(reason: Exclude<VideoQuotaDecision, { allowed: true }>["reason"], policy: VideoJobPolicy) {
-  return reason === "daily_limit"
-    ? `Limite de ${policy.dailyLimit} vídeos a cada 24 horas atingido.`
-    : `Há ${policy.queueLimit} vídeos aguardando processamento. Aguarde a fila diminuir.`;
+  return reason === "queue_limit"
+    ? `Há ${policy.queueLimit} vídeos aguardando processamento. Aguarde a fila diminuir.`
+    : "Não foi possível adicionar o vídeo.";
 }
