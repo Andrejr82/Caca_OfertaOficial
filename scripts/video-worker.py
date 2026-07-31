@@ -23,7 +23,7 @@ from pathlib import Path
 from textwrap import wrap
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
-from video_worker_runtime import build_edge_tts_command, validate_video_template
+from video_worker_runtime import build_edge_tts_command, validate_video_template, worker_requires_speech_runtime
 from imported_video_worker import process_imported_video
 
 
@@ -285,20 +285,21 @@ def validate_musetalk_runtime() -> Path:
     return python
 
 
-def validate_worker_runtime() -> None:
+def validate_worker_runtime(require_speech_runtime: bool = True) -> None:
     if not shutil.which("ffmpeg"):
         raise SystemExit("Preflight falhou: ffmpeg não está instalado.")
     filters = subprocess.run(["ffmpeg", "-hide_banner", "-filters"], capture_output=True, text=True, timeout=60)
     missing_filters = [name for name in ("drawbox", "overlay") if name not in filters.stdout]
     if missing_filters or filters.returncode != 0:
         raise SystemExit(f"Preflight falhou: filtros FFmpeg ausentes: {', '.join(missing_filters)}.")
-    resolve_edge_tts_python()
-    if RENDER_ENGINE == "reference" and REFERENCE_SOURCE in {"motion", "video"} and not BASE_VIDEO_PATH.exists():
-        raise SystemExit(f"Preflight falhou: vídeo-base não encontrado: {BASE_VIDEO_PATH}")
-    if RENDER_ENGINE == "reference" and REFERENCE_SOURCE == "avatar" and not AVATAR_PATH.exists():
-        raise SystemExit(f"Preflight falhou: avatar não encontrado: {AVATAR_PATH}")
-    if LIP_SYNC_ENGINE == "musetalk":
-        validate_musetalk_runtime()
+    if require_speech_runtime:
+        resolve_edge_tts_python()
+        if RENDER_ENGINE == "reference" and REFERENCE_SOURCE in {"motion", "video"} and not BASE_VIDEO_PATH.exists():
+            raise SystemExit(f"Preflight falhou: vídeo-base não encontrado: {BASE_VIDEO_PATH}")
+        if RENDER_ENGINE == "reference" and REFERENCE_SOURCE == "avatar" and not AVATAR_PATH.exists():
+            raise SystemExit(f"Preflight falhou: avatar não encontrado: {AVATAR_PATH}")
+        if LIP_SYNC_ENGINE == "musetalk":
+            validate_musetalk_runtime()
 
 
 def run_musetalk(video: Path, audio: Path, output: Path, workdir: Path) -> None:
@@ -456,6 +457,8 @@ def process(job: dict) -> None:
     if template_id == "imported-video-v1":
         process_imported_video(job)
         return
+    if worker_requires_speech_runtime(template_id):
+        validate_worker_runtime(require_speech_runtime=True)
     if template_id not in TEMPLATES:
         raise RuntimeError(f"Template de vídeo não encontrado: {template_id}")
     template = TEMPLATES[template_id]
@@ -537,7 +540,7 @@ def main() -> None:
         for path in (MUSETALK_DIR, MUSETALK_CONFIG, MUSETALK_UNET, MUSETALK_UNET_CONFIG)
     ):
         raise SystemExit("MuseTalk requer VIDEO_MUSETALK_DIR, VIDEO_MUSETALK_CONFIG, VIDEO_MUSETALK_UNET e VIDEO_MUSETALK_UNET_CONFIG.")
-    validate_worker_runtime()
+    validate_worker_runtime(require_speech_runtime="--preflight" in sys.argv)
     if "--preflight" in sys.argv:
         print("Preflight concluído: TTS, FFmpeg, template e runtime de vídeo estão prontos.", flush=True)
         return

@@ -3,7 +3,7 @@ import unittest
 import json
 from pathlib import Path
 
-from video_worker_runtime import build_edge_tts_command, validate_video_template
+from video_worker_runtime import build_edge_tts_command, validate_video_template, worker_requires_speech_runtime
 
 
 class VideoWorkerRuntimeTests(unittest.TestCase):
@@ -25,6 +25,10 @@ class VideoWorkerRuntimeTests(unittest.TestCase):
     def test_motion_template_keeps_every_overlay_inside_the_vertical_canvas(self):
         templates = json.loads(Path("scripts/video-templates.json").read_text(encoding="utf-8"))
         validate_video_template("motion-v1", templates["motion-v1"])
+
+    def test_imported_video_does_not_require_speech_runtime(self):
+        self.assertFalse(worker_requires_speech_runtime("imported-video-v1"))
+        self.assertTrue(worker_requires_speech_runtime("motion-v1"))
 
 
 if __name__ == "__main__":

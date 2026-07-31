@@ -3,6 +3,10 @@
 from pathlib import Path
 
 
+def worker_requires_speech_runtime(template_id: str) -> bool:
+    return template_id != "imported-video-v1"
+
+
 def validate_video_template(name: str, template: dict) -> None:
     card = template.get("card", {})
     canvas = template.get("canvas", {})
