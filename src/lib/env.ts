@@ -26,6 +26,6 @@ export function hasAmazonCreatorsEnv() {
 export function hasFacebookEnv() {
   return Boolean(
     process.env.FACEBOOK_PAGE_ID &&
-    process.env.FACEBOOK_ACCESS_TOKEN
+    (process.env.FACEBOOK_PAGE_ACCESS_TOKEN || process.env.FACEBOOK_ACCESS_TOKEN)
   );
 }

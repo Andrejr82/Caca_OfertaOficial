@@ -17,4 +17,18 @@ describe("Facebook Reel client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls.map(([url]) => String(url)).join(" ")).not.toContain("token-secret");
   });
+
+  it("returns the Meta authentication diagnostic when Reel initialization fails", async () => {
+    process.env.FACEBOOK_PAGE_ID = "page-1";
+    process.env.FACEBOOK_ACCESS_TOKEN = "token-secret";
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(new Response(JSON.stringify({
+      error: { message: "The session is invalid because the user logged out.", code: 190, error_subcode: 467 }
+    }), { status: 400 }));
+
+    await expect(publishToFacebookReel("https://storage.example/video.mp4", "Oferta"))
+      .resolves.toMatchObject({
+        success: false,
+        message: "The session is invalid because the user logged out. (Meta 190/467)"
+      });
+  });
 });
