@@ -37,6 +37,13 @@ export default function VideosReelsClient() {
     finally { setBusy(false); }
   }
 
+  async function approve(jobId: string) {
+    const response = await fetch(`/api/videos/jobs/${jobId}/approve`, { method: "POST" });
+    const payload = await response.json();
+    setMessage(response.ok ? "Reel aprovado para publicação." : (payload.error || "Não foi possível aprovar o Reel."));
+    await loadJobs();
+  }
+
   function toggleChannel(channel: string) { setChannels((current) => current.includes(channel) ? current.filter((value) => value !== channel) : [...current, channel]); }
 
   return <main className="mx-auto max-w-6xl space-y-6 p-6">
@@ -50,7 +57,6 @@ export default function VideosReelsClient() {
       {message && <p className="mt-4 rounded-xl bg-slate-800 p-4 text-sm text-cyan-200">{message}</p>}
     </section>
     {drafts.length > 0 && <section className="grid gap-4 md:grid-cols-2">{drafts.map((draft) => <article key={draft.channel} className="rounded-2xl border border-emerald-700/60 bg-slate-900 p-5"><h2 className="font-semibold text-white">Copy — {draft.channel}</h2><pre className="mt-3 whitespace-pre-wrap text-sm text-slate-300">{draft.content}</pre></article>)}</section>}
-    <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-6"><div className="flex items-center justify-between"><div><h2 className="text-xl font-semibold text-white">Fila de Reels</h2><p className="text-sm text-slate-400">Somente jobs `imported-reel-v1`; sem capa, thumbnail ou frame.</p></div><button onClick={() => void loadJobs()} className="text-sm text-cyan-300">Atualizar</button></div><div className="mt-4 space-y-3">{jobs.length === 0 ? <p className="text-sm text-slate-500">Nenhum Reel na fila.</p> : jobs.map((job) => <div key={job.id} className="rounded-xl border border-slate-700 p-4"><div className="flex items-center justify-between gap-4"><strong className="text-white">{job.offers?.product_name || "Produto"}</strong><span className="text-sm text-cyan-300">{statusLabel[job.status] || job.status}</span></div>{job.error_message && <p className="mt-2 text-sm text-red-300">{job.error_message}</p>}{job.video_url && <video controls className="mt-3 max-h-[480px] w-full rounded-lg" src={job.video_url} />}</div>)}</div></section>
+    <section className="rounded-2xl border border-slate-700 bg-slate-900/70 p-6"><div className="flex items-center justify-between"><div><h2 className="text-xl font-semibold text-white">Fila de Reels</h2><p className="text-sm text-slate-400">Somente jobs `imported-reel-v1`; sem capa, thumbnail ou frame.</p></div><button onClick={() => void loadJobs()} className="text-sm text-cyan-300">Atualizar</button></div><div className="mt-4 space-y-3">{jobs.length === 0 ? <p className="text-sm text-slate-500">Nenhum Reel na fila.</p> : jobs.map((job) => <div key={job.id} className="rounded-xl border border-slate-700 p-4"><div className="flex items-center justify-between gap-4"><strong className="text-white">{job.offers?.product_name || "Produto"}</strong><span className="text-sm text-cyan-300">{statusLabel[job.status] || job.status}</span></div>{job.error_message && <p className="mt-2 text-sm text-red-300">{job.error_message}</p>}{job.video_url && <video controls className="mt-3 max-h-[480px] w-full rounded-lg" src={job.video_url} />}{job.status === "ready" && <button onClick={() => void approve(job.id)} className="mt-3 rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-slate-950">Aprovar Reel para publicação</button>}</div>)}</div></section>
   </main>;
 }
-

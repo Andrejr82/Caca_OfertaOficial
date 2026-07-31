@@ -31,6 +31,7 @@ interface PostWithOffer {
     coupon: string | null;
     notes: string | null;
   };
+  video_job?: { id: string; video_url: string | null; template_id: string; status: string } | null;
 }
 
   let draftPosts: PostWithOffer[] = [];
@@ -43,7 +44,11 @@ interface PostWithOffer {
       .eq("status", "draft")
       .order("created_at", { ascending: false });
 
-    draftPosts = drafts || [];
+    const offerIds = (drafts || []).map((post) => post.offer_id).filter(Boolean);
+    const { data: reelJobs } = offerIds.length > 0
+      ? await supabase.from("video_jobs").select("id,offer_id,video_url,template_id,status").in("offer_id", offerIds).eq("template_id", "imported-reel-v1").in("status", ["ready", "approved"])
+      : { data: [] };
+    draftPosts = (drafts || []).map((post) => ({ ...post, video_job: (reelJobs || []).find((job) => job.offer_id === post.offer_id) || null })) as PostWithOffer[];
   }
 
   const historyData = await getPostHistory("instagram");

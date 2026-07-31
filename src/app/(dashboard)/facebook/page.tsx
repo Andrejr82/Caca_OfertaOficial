@@ -17,7 +17,11 @@ export default async function FacebookPage() {
       .eq("channel", "facebook")
       .eq("status", "draft")
       .order("created_at", { ascending: false });
-    draftPosts = data || [];
+    const offerIds = (data || []).map((post) => post.offer_id).filter(Boolean);
+    const { data: reelJobs } = offerIds.length > 0
+      ? await supabase.from("video_jobs").select("id,offer_id,video_url,template_id,status").in("offer_id", offerIds).eq("template_id", "imported-reel-v1").in("status", ["ready", "approved"])
+      : { data: [] };
+    draftPosts = (data || []).map((post) => ({ ...post, video_job: (reelJobs || []).find((job) => job.offer_id === post.offer_id) || null }));
   }
   const historyData = await getPostHistory("facebook");
 

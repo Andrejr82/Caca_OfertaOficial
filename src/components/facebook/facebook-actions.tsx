@@ -21,6 +21,7 @@ interface PostWithOffer {
     coupon: string | null;
     notes: string | null;
   };
+  video_job?: { id: string; video_url: string | null; template_id: string; status: string } | null;
 }
 
 export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
@@ -80,7 +81,9 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
   return (
     <article className="rounded-lg border border-blue-500/15 bg-white p-5 shadow-panel grid gap-4 lg:grid-cols-[200px_1fr] items-start">
       <div className="relative aspect-square w-full rounded-md border border-blue-500/10 bg-paper overflow-hidden flex items-center justify-center">
-        {post.offers.image_url ? (
+        {post.video_job?.video_url ? (
+          <video controls src={post.video_job.video_url} className="object-contain w-full h-full" />
+        ) : post.offers.image_url ? (
           <img src={`/api/images/proxy?url=${encodeURIComponent(post.offers.image_url)}`} referrerPolicy="no-referrer" alt={post.offers.product_name} className="object-contain w-full h-full p-2" />
         ) : (
           <div className="text-ink/40 flex flex-col items-center gap-1"><ImageIcon size={32} /><span className="text-xs">Sem imagem</span></div>
@@ -100,7 +103,8 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
         </div>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Button disabled={loading} onClick={handleApproveAndPublish} type="button" className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Send size={16} /> {loading ? "Enviando..." : "Aprovar e publicar"}</Button>
+            <Button disabled={loading || (!!post.video_job && post.video_job.status !== "approved")} onClick={handleApproveAndPublish} type="button" className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Send size={16} /> {loading ? "Enviando..." : "Aprovar e publicar"}</Button>
+            {post.video_job && post.video_job.status !== "approved" && <span className="text-xs font-semibold text-amber-600">Aprove o Reel em Vídeos Reels antes de publicar.</span>}
             <Button disabled={loading} onClick={handleReject} type="button" variant="glass" className="border-red-300 text-red-600 hover:bg-red-50 gap-2"><Trash2 size={16} /> Excluir rascunho</Button>
           </div>
           {status && <span className={`text-sm ${status.success ? "text-emerald-700" : "text-red-600"}`}>{status.message}</span>}

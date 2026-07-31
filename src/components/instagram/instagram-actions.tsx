@@ -75,6 +75,7 @@ interface PostWithOffer {
     coupon: string | null;
     notes: string | null;
   };
+  video_job?: { id: string; video_url: string | null; template_id: string; status: string } | null;
 }
 
 export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
@@ -189,6 +190,8 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
             className="object-contain w-full h-full p-2"
             onError={() => setCouponImageSrc(couponImage?.fallbackSrc || "/coupon-assets/default-coupon.png")}
           />
+        ) : post.video_job?.video_url ? (
+          <video controls src={post.video_job.video_url} className="object-contain w-full h-full" />
         ) : post.offers.image_url ? (
           <img
             src={`/api/images/proxy?url=${encodeURIComponent(post.offers.image_url)}`}
@@ -256,7 +259,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button
-              disabled={loading || (!couponOffer && !post.offers.image_url)}
+              disabled={loading || (!!post.video_job && post.video_job.status !== "approved") || (!couponOffer && !post.offers.image_url && !post.video_job?.video_url)}
               onClick={handleApproveAndPublish}
               type="button"
               className="bg-moss hover:bg-ink text-white"
@@ -264,6 +267,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
               {loading ? "Processando..." : "Aprovar e Publicar no Instagram"}
               <Send size={14} />
             </Button>
+            {post.video_job && post.video_job.status !== "approved" && <span className="text-xs font-semibold text-amber-600">Aprove o Reel em Vídeos Reels antes de publicar.</span>}
 
             <Button
               disabled={loading}
