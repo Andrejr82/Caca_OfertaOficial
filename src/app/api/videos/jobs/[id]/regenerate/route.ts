@@ -24,11 +24,10 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     _offer_id: source.offer_id,
     _script: source.script,
     _template_id: source.template_id ?? "motion-v1",
-    _daily_limit: policy.dailyLimit,
+    _daily_limit: null,
     _queue_limit: policy.queueLimit
   }).single();
   if (error) {
-    if (error.message.includes("VIDEO_DAILY_LIMIT")) return NextResponse.json({ error: quotaMessage("daily_limit", policy) }, { status: 429 });
     if (error.message.includes("VIDEO_QUEUE_LIMIT")) return NextResponse.json({ error: quotaMessage("queue_limit", policy) }, { status: 429 });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
