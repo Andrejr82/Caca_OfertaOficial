@@ -98,6 +98,10 @@ export async function POST(request: Request) {
         channels: resolveOfficialAIChannels(), requestedAt: body.requestedAt || new Date().toISOString(),
         actor: { type: "service", id: "oracle-worker", service: "oracle-worker" }, origin: "oracle.discovery",
         reason: { code: "GENERATE_OFFICIAL_CONTENT" },
+        // Automatic Oracle cycles must use the same deterministic Copy V2
+        // renderer as manual/Express generation. Without these flags the
+        // service falls back to the legacy copy renderer.
+        metadata: { copyV2: true, copyV2Auto: true },
         batch: { operation: "PROCESS_OFFERS", offerIds: page.offerIds, pageNumber: page.pageNumber, totalPages: page.totalPages }
       };
       const dependencies = createOfficialAIServiceDependencies(supabase, userId);
