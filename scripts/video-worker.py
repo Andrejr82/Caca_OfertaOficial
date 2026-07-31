@@ -25,6 +25,7 @@ from textwrap import wrap
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 from video_worker_runtime import build_edge_tts_command, validate_video_template, worker_requires_speech_runtime
 from imported_video_worker import process_imported_video
+from imported_reel_worker import process_imported_reel
 
 
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
@@ -456,6 +457,9 @@ def process(job: dict) -> None:
     template_id = str(job.get("template_id") or "motion-v1")
     if template_id == "imported-video-v1":
         process_imported_video(job, WORKER_ID)
+        return
+    if template_id == "imported-reel-v1":
+        process_imported_reel(job, WORKER_ID)
         return
     if worker_requires_speech_runtime(template_id):
         validate_worker_runtime(require_speech_runtime=True)

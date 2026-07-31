@@ -34,7 +34,7 @@ export async function POST(request: Request) {
   if (jobError) return NextResponse.json({ error: jobError.message }, { status: 500 });
   if (!job || job.status !== "processing" || job.worker_id !== parsed.data.workerId) return NextResponse.json({ error: "Job não pertence a este worker." }, { status: 409 });
 
-  const path = job.template_id === "imported-video-v1"
+  const path = ["imported-video-v1", "imported-reel-v1"].includes(job.template_id)
     ? importedAssetPath(job, parsed.data.kind)
     : `jobs/${parsed.data.jobId}/${parsed.data.kind}.${extension}`;
 

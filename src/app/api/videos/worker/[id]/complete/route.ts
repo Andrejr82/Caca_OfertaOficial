@@ -30,22 +30,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const bucket = process.env.VIDEO_STORAGE_BUCKET || "videos";
   const { data: claimedJob, error: claimedJobError } = await supabase.from("video_jobs").select("id,status,worker_id,template_id,user_id,offer_id,metadata").eq("id", id).maybeSingle();
   if (claimedJobError || !claimedJob) return NextResponse.json({ error: "Job não encontrado." }, { status: 404 });
-  const expectedPrefix = claimedJob.template_id === "imported-video-v1"
+  const isImportedReel = ["imported-video-v1", "imported-reel-v1"].includes(claimedJob.template_id);
+  const expectedPrefix = isImportedReel
     ? `/storage/v1/object/public/${bucket}/${importedStoragePrefix(claimedJob)}/`
     : `/storage/v1/object/public/${bucket}/jobs/${id}/`;
   const urls = [parsed.data.videoUrl, parsed.data.audioUrl, parsed.data.instagramUrl, parsed.data.facebookUrl, parsed.data.instagramCoverUrl, parsed.data.facebookCoverUrl, parsed.data.thumbnailUrl, parsed.data.referenceFrameUrl].filter(Boolean) as string[];
   if (urls.some((url) => !url.startsWith("https://") || !url.includes(expectedPrefix))) return NextResponse.json({ error: "As URLs enviadas não pertencem ao storage deste job." }, { status: 400 });
-  const importedMetadata = claimedJob.template_id === "imported-video-v1" ? {
+  const importedMetadata = isImportedReel ? {
     importedVideo: {
       ...((claimedJob.metadata as Record<string, unknown> | null)?.importedVideo as Record<string, unknown> | undefined),
       assets: {
         processed: parsed.data.videoUrl,
+        ...(claimedJob.template_id === "imported-reel-v1" ? {} : {
         instagram: parsed.data.instagramUrl ?? parsed.data.videoUrl,
         facebook: parsed.data.facebookUrl ?? parsed.data.videoUrl,
         instagramCover: parsed.data.instagramCoverUrl ?? null,
         facebookCover: parsed.data.facebookCoverUrl ?? null,
         thumbnail: parsed.data.thumbnailUrl ?? null,
         referenceFrame: parsed.data.referenceFrameUrl ?? null
+        }),
       }
     }
   } : null;
