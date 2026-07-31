@@ -8,7 +8,8 @@ import {
   publicationPayloadReference
 } from "@/lib/publication/official/create-official-publication-service";
 import { createOfficialPublicationApprovalDependencies } from "@/lib/publication/official/create-official-publication-approval";
-import { evaluateInstagramSafety, instagramVideoFingerprint, validateInstagramReelMetadata } from "@/lib/instagram/safety";
+import { validateInstagramReelMetadata } from "@/lib/instagram/safety";
+import { loadInstagramPublicationContext, resolveInstagramVideoJobInput } from "@/lib/instagram/publication-input";
 
 type PublicationBody = {
   postId?: string; offerId?: string; videoJobId?: string; commandId?: string; idempotencyKey?: string;
@@ -41,14 +42,12 @@ export async function POST(request: Request) {
       if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
       const { data: { user } } = await client.auth.getUser();
       if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
-      const { data: job } = await client.from("video_jobs").select("id,offer_id,status,video_url").eq("id", body.videoJobId).eq("user_id", user.id).maybeSingle();
-      if (!job || job.status !== "approved" || !job.video_url) return NextResponse.json({ ok: false, message: "O vídeo precisa estar aprovado e pronto para publicação." }, { status: 409 });
-      const { data: draft } = await client.from("posts").select("id,offer_id").eq("offer_id", job.offer_id).eq("user_id", user.id).eq("channel", "instagram").eq("status", "draft").maybeSingle();
-      if (!draft) return NextResponse.json({ ok: false, message: "Nenhum draft do Instagram foi encontrado para esta oferta." }, { status: 404 });
-      postId = draft.id;
-      offerId = job.offer_id;
+      const resolved = await resolveInstagramVideoJobInput(client, user.id, body.videoJobId);
+      if (!resolved.ok) return NextResponse.json({ ok: false, message: resolved.message }, { status: resolved.status });
+      postId = resolved.postId;
+      offerId = resolved.offerId;
       mediaType = "REELS";
-      videoUrl = job.video_url;
+      videoUrl = resolved.videoUrl;
     }
     if (!postId || !offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
     if (mediaType === "REELS") {
@@ -69,47 +68,8 @@ export async function POST(request: Request) {
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-    const { data: recentPosts, error: recentPostsError } = await client.from("posts")
-      .select("content,posted_at")
-      .eq("user_id", user.id)
-      .eq("channel", "instagram")
-      .eq("status", "published")
-      .gte("posted_at", since)
-      .order("posted_at", { ascending: false })
-      .limit(20);
-    if (recentPostsError) return NextResponse.json({ ok: false, message: "Não foi possível validar a janela de segurança do Instagram." }, { status: 503 });
-
-    if (mediaType === "REELS") {
-      const { data: reelReceipts, error: reelReceiptsError } = await client.from("app_settings")
-        .select("value")
-        .eq("user_id", user.id)
-        .like("key", "pmav5.publication.receipt.%")
-        .limit(100);
-      if (reelReceiptsError) return NextResponse.json({ ok: false, message: "Não foi possível validar duplicidade do Reel." }, { status: 503 });
-      const fingerprint = instagramVideoFingerprint(videoUrl as string);
-      const duplicate = (reelReceipts ?? []).some((row) => {
-        const metadata = (row.value as { metadata?: Record<string, unknown> } | null)?.metadata;
-        return metadata?.instagramVideoFingerprint === fingerprint;
-      });
-      if (duplicate) return NextResponse.json({ ok: false, code: "INSTAGRAM_DUPLICATE_VIDEO", message: "Este vídeo já foi publicado no Instagram." }, { status: 409 });
-    }
-
-    const { data: draftPost, error: draftPostError } = await client.from("posts")
-      .select("content")
-      .eq("id", postId)
-      .eq("user_id", user.id)
-      .eq("channel", "instagram")
-      .eq("status", "draft")
-      .maybeSingle();
-    if (draftPostError || !draftPost) return NextResponse.json({ ok: false, message: "Draft do Instagram não encontrado." }, { status: 404 });
-
-    const safety = evaluateInstagramSafety({
-      caption: draftPost.content || "",
-      publishedAt: (recentPosts ?? []).map((post) => post.posted_at).filter(Boolean),
-      recentCaptions: (recentPosts ?? []).map((post) => post.content).filter(Boolean)
-    });
-    if (!safety.ok) return NextResponse.json({ ok: false, code: safety.code, message: safety.message }, { status: 429 });
+    const publicationContext = await loadInstagramPublicationContext(client, user.id, postId, mediaType, videoUrl);
+    if (!publicationContext.ok) return NextResponse.json({ ok: false, code: publicationContext.code, message: publicationContext.message }, { status: publicationContext.status });
 
     const commandId = body.commandId ?? crypto.randomUUID();
     const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(postId, "instagram", commandId);
