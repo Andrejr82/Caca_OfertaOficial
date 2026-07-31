@@ -99,13 +99,15 @@ export async function publishToFacebookReel(videoUrl: string, description: strin
     if (!upload.ok || uploadData.success !== true) return { success: false, message: metaErrorMessage(uploadData, "Facebook não aceitou o vídeo hospedado.") };
 
     let ready = false;
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    const pollAttempts = positiveInteger(process.env.FACEBOOK_REEL_POLL_ATTEMPTS, 60);
+    const pollIntervalMs = positiveInteger(process.env.FACEBOOK_REEL_POLL_INTERVAL_MS, 2_000);
+    for (let attempt = 0; attempt < pollAttempts; attempt += 1) {
       const statusResponse = await fetch(`${graph}/${encodeURIComponent(startData.video_id)}?fields=status`, { headers: auth });
       const statusData = await statusResponse.json();
       const videoStatus = statusData.status?.video_status;
       if (videoStatus === "ready" || videoStatus === "published") { ready = true; break; }
       if (videoStatus === "error") return { success: false, message: metaErrorMessage(statusData, "Facebook falhou ao processar o Reel.") };
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
     }
     if (!ready) return { success: false, message: "Facebook não concluiu o processamento do Reel." };
 
@@ -125,4 +127,9 @@ function metaErrorMessage(payload: any, fallback: string) {
   const code = error.code ?? "?";
   const subcode = error.error_subcode ?? "?";
   return `${error.message} (Meta ${code}/${subcode})`;
+}
+
+function positiveInteger(value: string | undefined, fallback: number) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : fallback;
 }
