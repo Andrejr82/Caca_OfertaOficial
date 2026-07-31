@@ -130,8 +130,12 @@ def worker_headers(worker_id: str) -> dict[str, str]:
 
 def api(method: str, path: str, payload: dict, worker_id: str | None = None) -> dict:
     request = urllib.request.Request(f"{PANEL_URL}{path}", data=json.dumps(payload).encode(), headers=worker_headers(worker_id or WORKER_ID), method=method)
-    with urllib.request.urlopen(request, timeout=60) as response:
-        return json.loads(response.read().decode())
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            return json.loads(response.read().decode())
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise ImportedVideoError(f"API {method} {path} HTTP {error.code}: {detail[:500]}") from error
 
 
 def heartbeat(job_id: str, stage: str, worker_id: str) -> None:
@@ -141,9 +145,13 @@ def heartbeat(job_id: str, stage: str, worker_id: str) -> None:
 def signed_upload(job: dict, kind: str, path: Path, content_type: str, worker_id: str) -> str:
     signed = api("POST", "/api/videos/worker/upload-url", {"jobId": job["id"], "kind": kind, "workerId": worker_id}, worker_id)
     request = urllib.request.Request(signed["signedUrl"], data=path.read_bytes(), headers={"Content-Type": content_type, "x-upsert": "true"}, method="PUT")
-    with urllib.request.urlopen(request, timeout=180) as response:
-        if response.status not in (200, 201):
-            raise ImportedVideoError(f"STORAGE_UPLOAD_{kind}")
+    try:
+        with urllib.request.urlopen(request, timeout=180) as response:
+            if response.status not in (200, 201):
+                raise ImportedVideoError(f"STORAGE_UPLOAD_{kind}_HTTP_{response.status}")
+    except urllib.error.HTTPError as error:
+        detail = error.read().decode("utf-8", errors="replace")
+        raise ImportedVideoError(f"STORAGE_UPLOAD_{kind} HTTP {error.code}: {detail[:500]}") from error
     return signed["publicUrl"]
 
 
