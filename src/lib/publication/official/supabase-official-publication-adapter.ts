@@ -80,14 +80,11 @@ async function resolvePublicationMedia(
   const fallback = await resolvePublicationImage(channel, offer);
   if (channel !== "instagram" && channel !== "facebook") return { url: fallback, imported: false };
   const { data } = await client.from("video_jobs")
-    .select("video_url,template_id")
+    .select("video_url,template_id,status")
     .eq("user_id", tenantId)
     .eq("offer_id", offerId)
     .eq("template_id", "imported-video-v1")
-    .in("status", ["approved", "published"])
-    .not("video_url", "is", null)
-    .order("created_at", { ascending: false })
-    .limit(1)
+    .eq("status", "approved")
     .maybeSingle();
   return data?.video_url ? { url: data.video_url, imported: true } : { url: fallback, imported: false };
 }
