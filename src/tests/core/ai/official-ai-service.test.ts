@@ -137,6 +137,28 @@ describe("generateOfficialAI", () => {
     expect(persisted.channelCopies.telegram).not.toContain("~de");
   });
 
+  it("usa Copy V2 na Expressa, atualiza a revisão e mantém revisão manual", async () => {
+    const expressOffer = { ...offer, id: "offer-express", state: "pending_manual_review" as const };
+    const dependencies = createDependencies({
+      offers: { findById: vi.fn().mockResolvedValue(expressOffer) }
+    });
+
+    const result = await generateOfficialAI({
+      ...command,
+      offerId: expressOffer.id,
+      commandId: "quick-publication:offer-express:copy-v2-2",
+      idempotencyKey: "ai:copy-v2:offer-express:2",
+      origin: "publish.quick-publication",
+      metadata: { copyV2: true, copyV2Express: true, copyV2Regenerate: true }
+    }, dependencies);
+
+    expect(result.status).toBe("drafted");
+    expect(result.offerState).toBe("pending_manual_review");
+    const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
+    expect(persisted.channelCopies.telegram).toContain("Achado na Shopee");
+    expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+  });
+
   it("encaminha dados comerciais Mercado Livre para a copy determinística", async () => {
     const mlOffer: OfficialAIOffer = {
       ...offer,
