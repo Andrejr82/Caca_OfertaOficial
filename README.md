@@ -2,7 +2,7 @@
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
-O runtime operacional atual está descrito em [docs/RELEASE_STATUS_2026-07-28.md](docs/RELEASE_STATUS_2026-07-28.md). Os documentos PMAV5 são registros históricos e contratuais; não substituem a verificação do código e do manifesto de release.
+O runtime operacional atual está descrito em [docs/CURRENT_SYSTEM_STATUS.md](docs/CURRENT_SYSTEM_STATUS.md). A hierarquia documental está em [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md). Os documentos PMAV5 são registros históricos e contratuais; não substituem a verificação do código e do manifesto de release.
 
 ## Arquitetura atual
 
@@ -60,7 +60,7 @@ O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `
 - [Troubleshooting](docs/troubleshooting.md)
 - [Segurança](docs/SECURITY.md)
 - [PMAV5 e contratos](docs/PMAV5/README.md)
-- [Operação de vídeo](docs/VIDEO_WORKER_LIGHTNING.md)
+- [Operação de vídeo](docs/VIDEO_WORKER_CURRENT.md)
 
 ## Desenvolvimento local
 

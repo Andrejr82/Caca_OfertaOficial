@@ -1,10 +1,12 @@
 # Documentação oficial
 
-Esta página define o conjunto oficial de documentação operacional do projeto. A arquitetura implementada é descrita em [architecture-current.md](architecture-current.md), e o estado do release em [RELEASE_STATUS_2026-07-28.md](RELEASE_STATUS_2026-07-28.md); os demais documentos oficiais detalham operação, interfaces e manutenção.
+Esta página define o conjunto oficial de documentação operacional. A hierarquia completa está em [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md), e o estado atual em [CURRENT_SYSTEM_STATUS.md](CURRENT_SYSTEM_STATUS.md). O código e as migrations continuam sendo a autoridade final.
 
 ## Documentos oficiais
 
 - [Arquitetura atual](architecture-current.md)
+- [Índice e hierarquia](DOCUMENTATION_INDEX.md)
+- [Estado atual](CURRENT_SYSTEM_STATUS.md)
 - [Oracle Cloud](oracle.md)
 - [Deploy](deployment.md)
 - [Instalação](installation.md)
@@ -13,7 +15,7 @@ Esta página define o conjunto oficial de documentação operacional do projeto.
 - [Ambiente](ambiente.md)
 - [Configuração](configuration.md)
 - [Fluxos](fluxos.md)
-- [Workflows](workflows.md)
+- [Fluxos](fluxos.md)
 - [Integrações](integracoes.md)
 - [Camada LLM](llm-layer.md)
 - [Scripts](scripts.md)
@@ -21,5 +23,6 @@ Esta página define o conjunto oficial de documentação operacional do projeto.
 - [Segurança](SECURITY.md)
 - [PMAV5](PMAV5/README.md) e [SSOT](PMAV5/SSOT.md)
 - [Oracle Capacity Hunter](../apps/oracle-capacity-hunter/README.md)
+- [Worker de vídeos atual](VIDEO_WORKER_CURRENT.md)
 
 Duplicatas, documentos de projeto, sprints, auditorias, relatórios, especificações e planos históricos estão em `docs/` e `docs/PMAV5/`; eles não definem o runtime atual sem confirmação no código e no release manifesto.

@@ -1,3 +1,3 @@
-# Fluxos operacionais
+# Documento histórico
 
-Documento canônico: [architecture-current.md](architecture-current.md), com operação Oracle em [oracle.md](oracle.md). A versão anterior foi preservada em `../arquivos_Docs/docs/archive/workflows-legacy-2026-07-19.md`.
+Esta versão foi arquivada. Consulte [fluxos.md](fluxos.md) e [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md).
