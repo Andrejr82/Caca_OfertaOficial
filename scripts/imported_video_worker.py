@@ -124,18 +124,22 @@ def run_ffmpeg(command: list[str]) -> None:
     subprocess.run(command, capture_output=True, text=True, timeout=900, check=True)
 
 
-def api(method: str, path: str, payload: dict) -> dict:
-    request = urllib.request.Request(f"{PANEL_URL}{path}", data=json.dumps(payload).encode(), headers={"Authorization": f"Bearer {WORKER_TOKEN}", "X-Video-Worker-Id": WORKER_ID, "Content-Type": "application/json"}, method=method)
+def worker_headers(worker_id: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {WORKER_TOKEN}", "X-Video-Worker-Id": worker_id, "Content-Type": "application/json"}
+
+
+def api(method: str, path: str, payload: dict, worker_id: str | None = None) -> dict:
+    request = urllib.request.Request(f"{PANEL_URL}{path}", data=json.dumps(payload).encode(), headers=worker_headers(worker_id or WORKER_ID), method=method)
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.loads(response.read().decode())
 
 
-def heartbeat(job_id: str, stage: str) -> None:
-    api("POST", f"/api/videos/worker/{job_id}/heartbeat", {"workerId": WORKER_ID, "stage": stage})
+def heartbeat(job_id: str, stage: str, worker_id: str) -> None:
+    api("POST", f"/api/videos/worker/{job_id}/heartbeat", {"workerId": worker_id, "stage": stage}, worker_id)
 
 
-def signed_upload(job: dict, kind: str, path: Path, content_type: str) -> str:
-    signed = api("POST", "/api/videos/worker/upload-url", {"jobId": job["id"], "kind": kind, "workerId": WORKER_ID})
+def signed_upload(job: dict, kind: str, path: Path, content_type: str, worker_id: str) -> str:
+    signed = api("POST", "/api/videos/worker/upload-url", {"jobId": job["id"], "kind": kind, "workerId": worker_id}, worker_id)
     request = urllib.request.Request(signed["signedUrl"], data=path.read_bytes(), headers={"Content-Type": content_type, "x-upsert": "true"}, method="PUT")
     with urllib.request.urlopen(request, timeout=180) as response:
         if response.status not in (200, 201):
@@ -143,7 +147,8 @@ def signed_upload(job: dict, kind: str, path: Path, content_type: str) -> str:
     return signed["publicUrl"]
 
 
-def process_imported_video(job: dict) -> None:
+def process_imported_video(job: dict, worker_id: str | None = None) -> None:
+    active_worker_id = worker_id or WORKER_ID
     metadata = ((job.get("metadata") or {}).get("importedVideo") or {})
     source_url = metadata.get("sourceUrl")
     if not source_url:
@@ -158,12 +163,12 @@ def process_imported_video(job: dict) -> None:
         facebook_cover = root / "facebook-cover.jpg"
         thumbnail = root / "thumbnail.jpg"
         reference = root / "reference-frame.jpg"
-        heartbeat(job["id"], "resolving_source")
+        heartbeat(job["id"], "resolving_source", active_worker_id)
         resolved_page, media_url, redirects = resolve_source(source_url)
-        heartbeat(job["id"], "downloading")
+        heartbeat(job["id"], "downloading", active_worker_id)
         download(media_url, source)
         original_fingerprint = fingerprint_bytes(source.read_bytes())
-        heartbeat(job["id"], "validating")
+        heartbeat(job["id"], "validating", active_worker_id)
         probe = ffprobe(source)
         validation = validate_probe_metadata({**probe.get("format", {}), "streams": probe.get("streams", [])})
         if not validation["valid"]:
@@ -171,21 +176,21 @@ def process_imported_video(job: dict) -> None:
         duration_error = validate_channel_duration(validation["duration"], list(metadata.get("channels") or ["instagram", "facebook"]))
         if duration_error:
             raise ImportedVideoError(duration_error)
-        heartbeat(job["id"], "processing")
+        heartbeat(job["id"], "processing", active_worker_id)
         run_ffmpeg(build_ffmpeg_command(source, processed, validation["width"], validation["height"], 30))
         shutil.copy2(processed, instagram)
         shutil.copy2(processed, facebook)
-        heartbeat(job["id"], "generating_assets")
+        heartbeat(job["id"], "generating_assets", active_worker_id)
         for output, scale in ((instagram_cover, "1080:1920"), (facebook_cover, "1080:1920"), (thumbnail, "360:640"), (reference, "720:1280")):
             run_ffmpeg(["ffmpeg", "-y", "-loglevel", "error", "-ss", "1", "-i", str(processed), "-frames:v", "1", "-vf", f"scale={scale}:force_original_aspect_ratio=decrease,pad={scale}:(ow-iw)/2:(oh-ih)/2", str(output)])
-        heartbeat(job["id"], "uploading_media")
+        heartbeat(job["id"], "uploading_media", active_worker_id)
         urls = {
-            "videoUrl": signed_upload(job, "processed", processed, "video/mp4"),
-            "instagramUrl": signed_upload(job, "instagram", instagram, "video/mp4"),
-            "facebookUrl": signed_upload(job, "facebook", facebook, "video/mp4"),
-            "instagramCoverUrl": signed_upload(job, "instagram-cover", instagram_cover, "image/jpeg"),
-            "facebookCoverUrl": signed_upload(job, "facebook-cover", facebook_cover, "image/jpeg"),
-            "thumbnailUrl": signed_upload(job, "thumbnail", thumbnail, "image/jpeg"),
-            "referenceFrameUrl": signed_upload(job, "reference-frame", reference, "image/jpeg"),
+            "videoUrl": signed_upload(job, "processed", processed, "video/mp4", active_worker_id),
+            "instagramUrl": signed_upload(job, "instagram", instagram, "video/mp4", active_worker_id),
+            "facebookUrl": signed_upload(job, "facebook", facebook, "video/mp4", active_worker_id),
+            "instagramCoverUrl": signed_upload(job, "instagram-cover", instagram_cover, "image/jpeg", active_worker_id),
+            "facebookCoverUrl": signed_upload(job, "facebook-cover", facebook_cover, "image/jpeg", active_worker_id),
+            "thumbnailUrl": signed_upload(job, "thumbnail", thumbnail, "image/jpeg", active_worker_id),
+            "referenceFrameUrl": signed_upload(job, "reference-frame", reference, "image/jpeg", active_worker_id),
         }
-        api("POST", f"/api/videos/worker/{job['id']}/complete", {**urls, "workerId": WORKER_ID})
+        api("POST", f"/api/videos/worker/{job['id']}/complete", {**urls, "workerId": active_worker_id}, active_worker_id)

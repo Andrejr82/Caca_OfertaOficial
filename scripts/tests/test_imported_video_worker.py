@@ -1,6 +1,6 @@
 import unittest
 
-from imported_video_worker import extract_media_url, is_safe_network_address
+from imported_video_worker import extract_media_url, is_safe_network_address, worker_headers
 
 
 class ImportedVideoWorkerTests(unittest.TestCase):
@@ -13,6 +13,10 @@ class ImportedVideoWorkerTests(unittest.TestCase):
         self.assertFalse(is_safe_network_address("127.0.0.1"))
         self.assertFalse(is_safe_network_address("169.254.169.254"))
         self.assertTrue(is_safe_network_address("8.8.8.8"))
+
+    def test_uses_the_parent_worker_id_for_authenticated_requests(self):
+        headers = worker_headers("parent-host-unique-id")
+        self.assertEqual(headers["X-Video-Worker-Id"], "parent-host-unique-id")
 
 
 if __name__ == "__main__":

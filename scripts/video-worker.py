@@ -455,7 +455,7 @@ def process(job: dict) -> None:
     job_id = job["id"]
     template_id = str(job.get("template_id") or "motion-v1")
     if template_id == "imported-video-v1":
-        process_imported_video(job)
+        process_imported_video(job, WORKER_ID)
         return
     if worker_requires_speech_runtime(template_id):
         validate_worker_runtime(require_speech_runtime=True)
