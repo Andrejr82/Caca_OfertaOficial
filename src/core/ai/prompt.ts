@@ -41,6 +41,7 @@ interface CopyV2Facts {
   currentPrice: number;
   originalPrice: number | null;
   evidence?: Record<string, unknown>;
+  freeShipping?: boolean | null;
 }
 
 const ATTRIBUTE_PATTERNS = [
@@ -144,6 +145,10 @@ function hookFor(facts: CopyV2Facts, hook?: string) {
   return template.replace("{price}", formatBRL(facts.currentPrice)).replace("{saving}", saving ?? formatBRL(facts.currentPrice));
 }
 
+function shippingLine(facts: CopyV2Facts) {
+  return facts.freeShipping === true ? "🚚 Frete grátis confirmado" : null;
+}
+
 export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel, hook?: string) {
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const attribute = objectiveAttribute(facts);
@@ -151,14 +156,16 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
   const marketplace = marketplaceLabel(facts.marketplace);
   const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
   const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
+  const freight = shippingLine(facts);
 
   if (channel === "whatsapp") {
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       `${iconLine} ${marketplace.text}`,
+      ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
-      ...(facts.originalPrice ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
+      ...(discount !== null && facts.originalPrice !== null ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
       `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
       `⚠️ Preço e condições podem mudar.`,
       `👉 `
@@ -171,6 +178,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       `${iconLine} ${marketplace.text}`,
+      ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
@@ -186,6 +194,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       hookFor(facts, hook),
       `${humanContext(facts) ?? "Uma opção para sua rotina"}: **${cleanProductName(facts.productName)}**.`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
+      ...(freight ? [freight] : []),
       discount ? `📉 Economia verificada de **${discount}%** sobre o preço anterior.` : `💰 Consulte o preço atual no anúncio.`,
       discount && facts.originalPrice
         ? `💰 **De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}**`
@@ -201,6 +210,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
       `${iconLine} ${marketplace.text}`,
+      ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`

@@ -18,7 +18,7 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // A Official AI determina internamente o fluxo consultando o estado real da oferta.
 // Nenhum parâmetro externo seleciona o modo. A máquina de estados é a autoridade.
 // ---------------------------------------------------------------------------
-type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "approval";
+type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "copy_v2_express" | "approval";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
 async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
@@ -164,8 +164,9 @@ function isValidCursorTimestamp(value: unknown): value is string {
 function resolveMode(
   offer: OfficialAIOffer | null,
   tenantId: string,
-  copyV2 = false
-  , commandIsAuto = false
+  copyV2 = false,
+  commandIsAuto = false,
+  expressValidated = false
 ):
   | { ok: true; mode: InternalMode }
   | { ok: false; code: string; message: string; offerState: "pending_manual_review" | "selected" | "unknown" } {
@@ -178,7 +179,12 @@ function resolveMode(
   }
 
   // A máquina de estados é a única autoridade para determinar o modo.
+  // A Expressa é uma exceção estreita: o produto já passou pelo seu quality
+  // gate e pode receber Copy V2, mas continua aguardando revisão manual.
   if (offer.state === "pending_manual_review") {
+    if (copyV2 && expressValidated) {
+      return { ok: true, mode: "copy_v2_express" };
+    }
     if (copyV2 && commandIsAuto) {
       return { ok: true, mode: "copy_v2_auto" };
     }
@@ -514,7 +520,13 @@ export async function generateOfficialAI(
   const offer = await dependencies.offers.findById(command.offerId, command.tenantId);
 
   // 4. Resolução do modo via máquina de estados.
-  const modeResult = resolveMode(offer, command.tenantId, command.metadata?.copyV2 === true, command.metadata?.copyV2Auto === true && command.actor.type === "service");
+  const modeResult = resolveMode(
+    offer,
+    command.tenantId,
+    command.metadata?.copyV2 === true,
+    command.metadata?.copyV2Auto === true && command.actor.type === "service",
+    command.metadata?.copyV2Express === true && command.origin === "publish.quick-publication"
+  );
   if (!modeResult.ok) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
@@ -529,7 +541,7 @@ export async function generateOfficialAI(
     return rejectAndRecord(
       command, dependencies, fingerprint,
       offerError.code, offerError.message, "preconditions",
-      mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected"
+      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" ? "pending_manual_review" : "selected"
     );
   }
 
@@ -603,7 +615,34 @@ export async function generateOfficialAI(
     );
   }
 
-  const generatedMessages = generateAllMessages(mappedOffer, mappedOffer.affiliate_links);
+  const useCopyV2Renderer = command.metadata?.copyV2 === true || command.metadata?.copyV2Auto === true;
+  const generatedMessages = useCopyV2Renderer ? null : generateAllMessages(mappedOffer, mappedOffer.affiliate_links);
+  const explainability = offer!.explainability ?? {};
+  const explainabilityMetrics = (explainability.marketplace_metrics && typeof explainability.marketplace_metrics === "object")
+    ? explainability.marketplace_metrics as Record<string, unknown>
+    : {};
+  const marketplaceMetrics = (offer!.marketplaceMetrics && typeof offer!.marketplaceMetrics === "object")
+    ? offer!.marketplaceMetrics as Record<string, unknown>
+    : {};
+  const freeShippingValue = [
+    explainability.free_shipping,
+    explainability.shipping_free,
+    marketplaceMetrics.free_shipping,
+    marketplaceMetrics.shipping_free,
+    marketplaceMetrics.shippingFree,
+    explainabilityMetrics.free_shipping,
+    explainabilityMetrics.shipping_free,
+    explainabilityMetrics.shippingFree
+  ].find((value): value is boolean => typeof value === "boolean");
+  const copyV2Facts = {
+    productName: offer!.productName,
+    marketplace: offer!.marketplace,
+    category: offer!.category,
+    currentPrice: offer!.currentPrice,
+    originalPrice: offer!.originalPrice,
+    evidence: { ...explainability, marketplace_metrics: { ...explainabilityMetrics, ...marketplaceMetrics } },
+    freeShipping: freeShippingValue ?? null
+  };
 
   const content = {
     title: offer!.productName,
@@ -616,10 +655,12 @@ export async function generateOfficialAI(
     explanation: "Copy determinística gerada pela engine comercial (generate.ts) sem chamada LLM.",
     channelCopies: Object.fromEntries(command.channels.map((channel) => {
       let text = "";
-      if (channel === "instagram") text = generatedMessages.instagram.feed;
-      else if (channel === "facebook") text = generatedMessages.facebook;
-      else if (channel === "telegram") text = generatedMessages.telegram;
-      else if (channel === "whatsapp") text = generatedMessages.whatsapp;
+      if (useCopyV2Renderer) {
+        text = buildCopyV2ChannelCopy(copyV2Facts, channel);
+      } else if (channel === "instagram") text = generatedMessages!.instagram.feed;
+      else if (channel === "facebook") text = generatedMessages!.facebook;
+      else if (channel === "telegram") text = generatedMessages!.telegram;
+      else if (channel === "whatsapp") text = generatedMessages!.whatsapp;
       return [channel, text];
     }))
   };
@@ -644,7 +685,7 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "DRAFT_PERSISTENCE_FAILURE", error instanceof Error ? error.message : "Draft persistence failed",
       "drafts",
-      mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected",
+      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length
     );
   }
@@ -659,7 +700,7 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "INCOMPLETE_DRAFT_SET", "All requested draft posts must be persisted",
       "drafts",
-      mode === "draft_generation" || mode === "copy_v2_auto" ? "pending_manual_review" : "selected",
+      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length
     );
   }
@@ -667,10 +708,11 @@ export async function generateOfficialAI(
   // ---------------------------------------------------------------------------
   // 10. Bifurcação pelo modo (ADR-014).
   //     Modo 1 — Draft Generation: nenhuma transição de estado, offer permanece pending_manual_review.
+  //     Modo Express Copy V2: mesmo estado pendente, apenas renderer diferente.
   //     Modo 2 — Approval: transição selected → approved (comportamento anterior inalterado).
   // ---------------------------------------------------------------------------
 
-  if (mode === "draft_generation" || mode === "copy_v2" || mode === "copy_v2_auto") {
+  if (mode === "draft_generation" || mode === "copy_v2" || mode === "copy_v2_auto" || mode === "copy_v2_express") {
     const result: OfficialAIDraftedResult = {
       status: "drafted",
       commandId: command.commandId,

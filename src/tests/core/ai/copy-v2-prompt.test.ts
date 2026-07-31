@@ -58,7 +58,15 @@ describe("Official AI O.P.A.C.", () => {
   it("destaca preço sem inventar desconto quando preço anterior não é válido", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: 79.9 }, "whatsapp");
     expect(copy).toContain("✅ *Preço atual: R$ 79,90*");
+    expect(copy).not.toContain("Preço anterior");
     expect(copy).not.toMatch(/📉|% OFF/iu);
+  });
+
+  it("exibe frete grátis somente quando a evidência persistida é verdadeira", () => {
+    const withFreight = buildCopyV2ChannelCopy({ ...offer, freeShipping: true }, "telegram");
+    const withoutFreight = buildCopyV2ChannelCopy({ ...offer, freeShipping: null }, "telegram");
+    expect(withFreight).toContain("🚚 Frete grátis confirmado");
+    expect(withoutFreight).not.toContain("Frete grátis");
   });
 
   it("não inventa urgência, escassez ou variação futura de preço", () => {

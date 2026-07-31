@@ -113,6 +113,30 @@ function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = 
 }
 
 describe("generateOfficialAI", () => {
+  it("usa o renderer Copy V2 para comandos copyV2 e inclui marketplace/frete apenas com evidência", async () => {
+    const dependencies = createDependencies({
+      offers: {
+        findById: vi.fn().mockResolvedValue({
+          ...offer,
+          explainability: {
+            ...offer.explainability,
+            marketplace_metrics: {
+              ...(offer.explainability.marketplace_metrics as Record<string, unknown>),
+              shippingFree: true
+            }
+          }
+        })
+      }
+    });
+
+    await generateOfficialAI({ ...command, metadata: { copyV2: true } }, dependencies);
+
+    const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
+    expect(persisted.channelCopies.telegram).toContain("Achado na Shopee");
+    expect(persisted.channelCopies.telegram).toContain("Frete grátis confirmado");
+    expect(persisted.channelCopies.telegram).not.toContain("~de");
+  });
+
   it("encaminha dados comerciais Mercado Livre para a copy determinística", async () => {
     const mlOffer: OfficialAIOffer = {
       ...offer,
@@ -126,7 +150,8 @@ describe("generateOfficialAI", () => {
         ranking_type: "BEST_SELLER",
         ranking_entity_type: "PRODUCT",
         ranking_position: 1,
-        ranking_scope: "CATEGORY"
+        ranking_scope: "CATEGORY",
+        shippingFree: true
       }
     };
     const mlCommand: OfficialAICommand = {
@@ -140,9 +165,9 @@ describe("generateOfficialAI", () => {
     await generateOfficialAI(mlCommand, dependencies);
 
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("🏷️ Vendido por Loja Itatiaia");
-    expect(persisted.channelCopies.telegram).toContain("🏆 Nº 1 entre os mais vendidos da categoria");
-    expect(persisted.channelCopies.telegram).toContain("🚚 Frete grátis");
+    expect(persisted.channelCopies.telegram).toContain("Achado no Mercado Livre");
+    expect(persisted.channelCopies.telegram).toContain("🚚 Frete grátis confirmado");
+    expect(persisted.channelCopies.telegram).not.toContain("🏷️ Vendido por");
   });
 
   it("usa o construtor O.P.A.C. único e metadado persistido na geração nova", async () => {

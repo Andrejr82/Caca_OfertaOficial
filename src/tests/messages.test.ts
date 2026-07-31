@@ -80,6 +80,7 @@ describe("Deterministic Copy Engine Tests", () => {
       const copy = generateTelegramMessage(mlOffer, mlLink);
       expect(copy).toContain("~de R$ 244,90~");
       expect(copy).toContain("por R$ 131,00");
+      expect(copy).toContain("🏪 Achado no Mercado Livre");
       expect(copy).toContain("🔥 47% de desconto");
       expect(copy).toContain("🏆 Nº 1 entre os mais vendidos da categoria");
       expect(copy).toContain("🏪 Loja oficial no Mercado Livre");
@@ -97,13 +98,25 @@ describe("Deterministic Copy Engine Tests", () => {
       expect(copy).not.toContain("de R$");
       expect(copy).not.toContain("desconto");
       expect(copy).not.toContain("🏆");
-      expect(copy).not.toContain("🏪");
+      expect(copy).toContain("🏪 Achado no Mercado Livre");
+      expect(copy).not.toContain("🏪 Loja");
       expect(copy).not.toContain("🏷️");
       expect(copy).not.toContain("🚚");
       expect(copy).not.toContain("Pix");
       expect(copy).not.toContain("parcel");
       expect(copy).not.toContain("Cupom");
       expect(copy).not.toContain("source_position");
+    });
+
+    it("insere o marketplace e remove apenas ruído numérico do título", () => {
+      const noisy = {
+        ...mlOffer,
+        product_name: "Cobertor Manta Solteiro Jolitex Disney Plus Minie (2) Desenho Do Tecido Fun Peso 550 G"
+      };
+      const copy = generateTelegramMessage(noisy, mlLink);
+      expect(copy).toContain("Cobertor Manta Solteiro Jolitex Disney Plus Minie Desenho Do Tecido Fun Peso 550 G");
+      expect(copy).not.toContain("Minie (2)");
+      expect(copy).toContain("🏪 Achado no Mercado Livre");
     });
 
     it("formata posições de best seller somente com evidência de produto", () => {

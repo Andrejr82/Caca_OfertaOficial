@@ -171,9 +171,23 @@ function plainCurrency(value: number) {
   return formatCurrency(value).replace(/\u00a0/g, " ");
 }
 
+/**
+ * Removes only the title noise that is known to be introduced by marketplace
+ * extraction (for example a duplicate-count suffix such as "(2)").  Product
+ * attributes are intentionally preserved so the copy remains faithful to the
+ * source listing.
+ */
+function cleanMercadoLivreProductTitle(value: unknown) {
+  return String(value || "")
+    .replace(/\s+\(\d+\)(?=\s|$)/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
 function mercadoLivreBlocks(offer: Offer, data: ReturnType<typeof extractCommercialData>) {
   const normalized = normalizedMercadoLivreData(offer, data);
-  const blocks: string[] = [offer.product_name, ""];
+  const title = cleanMercadoLivreProductTitle(offer.product_name);
+  const blocks: string[] = [title || "Oferta do Mercado Livre", "", "🏪 Achado no Mercado Livre"];
   if (normalized.oldPrice && normalized.hasDiscount) blocks.push(`~de ${plainCurrency(normalized.oldPrice)}~`);
   if (normalized.currentPrice) blocks.push(`por ${plainCurrency(normalized.currentPrice)}`);
   if (normalized.discount) blocks.push(`🔥 ${normalized.discount}% de desconto`);

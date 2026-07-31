@@ -936,11 +936,11 @@ async function generateQuickPostActionInternal(
       ? [channel]
       : ["telegram"];
 
-  const commandId = `quick-publication:${offer.id}:v1`;
+  const commandId = `quick-publication:${offer.id}:copy-v2`;
   const command: OfficialAICommand = {
     contractVersion: "pmav5.ai/v1",
     commandId,
-    idempotencyKey: `ai:draft:${offer.id}:v2`,
+    idempotencyKey: `ai:copy-v2:${offer.id}:express-v1`,
     correlationId,
     causationId: null,
     offerId: offer.id,
@@ -951,6 +951,7 @@ async function generateQuickPostActionInternal(
     actor: { type: "user", id: userId, service: "quick-publication" },
     origin: "publish.quick-publication",
     reason: { code: "GENERATE_OFFICIAL_CONTENT" },
+    metadata: { copyV2: true, copyV2Express: true },
   };
 
   // A Official AI executada pela Oracle usa service role. A Expressa precisa
