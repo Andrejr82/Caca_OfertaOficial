@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       links.push(result.data);
     }
     const offerWithLinks = { ...offer, affiliate_links: links };
-    const contents = parsed.data.channels.map((channel) => ({ channel, content: channel === "instagram" ? (() => { const value = generateInstagramMessage(offerWithLinks as any, { tracked_url: links.find((item) => item.channel === channel)!.tracked_url }); return typeof value === "string" ? value : value.reels.join("\n"); })() : generateFacebookMessage(offerWithLinks as any, { tracked_url: links.find((item) => item.channel === channel)!.tracked_url }) }));
+    const contents = parsed.data.channels.map((channel) => ({ channel, content: channel === "instagram" ? (() => { const value = generateInstagramMessage(offerWithLinks as any, { tracked_url: links.find((item) => item.channel === channel)!.tracked_url }); return typeof value === "string" ? value : value.feed; })() : generateFacebookMessage(offerWithLinks as any, { tracked_url: links.find((item) => item.channel === channel)!.tracked_url }) }));
     for (const item of contents) {
       const link = links.find((candidate) => candidate.channel === item.channel)!;
       const current = await client.from("posts").select("id").eq("offer_id", offer.id).eq("user_id", userData.user.id).eq("channel", item.channel).eq("status", "draft").maybeSingle();

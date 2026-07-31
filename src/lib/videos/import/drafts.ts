@@ -18,7 +18,7 @@ function contentFor(offer: OfferWithLinks, channel: ImportedDraftChannel, tracke
   const link = { tracked_url: trackedUrl };
   if (channel === "instagram") {
     const generated = generateInstagramMessage(offer as any, link);
-    return typeof generated === "string" ? generated : generated.reels.join("\n");
+    return typeof generated === "string" ? generated : generated.feed;
   }
   return generateFacebookMessage(offer as any, link);
 }

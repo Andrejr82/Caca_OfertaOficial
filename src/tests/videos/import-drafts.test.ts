@@ -28,6 +28,13 @@ describe("imported video drafts", () => {
     expect(drafts.every((draft) => !draft.content.includes("br.shp.ee"))).toBe(true);
   });
 
+  it("uses the Instagram publication caption instead of the internal Reel script", () => {
+    const [instagram] = buildImportedDrafts(offer, ["instagram"]);
+    expect(instagram.content).toContain("Link na bio");
+    expect(instagram.content).not.toContain("GANCHO (0-3s)");
+    expect(instagram.content).not.toContain("CONTEÚDO (4-20s)");
+  });
+
   it("rejects a channel without a monetized link", () => {
     expect(() => buildImportedDrafts({ ...offer, affiliate_links: [{ channel: "instagram", tracked_url: "" }] }, ["instagram"]))
       .toThrow("NO_MONETIZED_LINK");
