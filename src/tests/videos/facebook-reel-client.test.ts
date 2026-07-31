@@ -14,10 +14,10 @@ describe("Facebook Reel client", () => {
     const fetchMock = vi.spyOn(globalThis, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ video_id: "video-1", upload_url: "https://rupload.facebook.com/video-upload/v19.0/video-1" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ status: { video_status: "ready" } }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, post_id: "post-1" }), { status: 200 }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ status: { video_status: "published" } }), { status: 200 }));
 
-    await expect(publishToFacebookReel("https://storage.example/video.mp4", "Oferta", "https://shopee.com.br/track")).resolves.toMatchObject({ success: true, postId: "post-1" });
+    await expect(publishToFacebookReel("https://storage.example/video.mp4", "Oferta", "https://shopee.com.br/track")).resolves.toMatchObject({ success: true, postId: "video-1" });
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(fetchMock.mock.calls.map(([url]) => String(url)).join(" ")).not.toContain("token-secret");
   });
@@ -44,14 +44,14 @@ describe("Facebook Reel client", () => {
     const responses = [
       new Response(JSON.stringify({ video_id: "video-2", upload_url: "https://rupload.facebook.com/video-upload/v19.0/video-2" }), { status: 200 }),
       new Response(JSON.stringify({ success: true }), { status: 200 }),
+      new Response(JSON.stringify({ success: true }), { status: 200 }),
       ...Array.from({ length: 12 }, () => new Response(JSON.stringify({ status: { video_status: "processing" } }), { status: 200 })),
-      new Response(JSON.stringify({ status: { video_status: "ready" } }), { status: 200 }),
-      new Response(JSON.stringify({ success: true, post_id: "post-2" }), { status: 200 })
+      new Response(JSON.stringify({ status: { video_status: "published" } }), { status: 200 })
     ];
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async () => responses.shift()!);
 
     await expect(publishToFacebookReel("https://storage.example/video.mp4", "Oferta"))
-      .resolves.toMatchObject({ success: true, postId: "post-2" });
+      .resolves.toMatchObject({ success: true, postId: "video-2" });
     expect(fetchMock).toHaveBeenCalledTimes(16);
   });
 });
