@@ -71,7 +71,7 @@ export async function GET(request: Request) {
                 padding: '40px 40px 0 40px',
               }}
             >
-              {/* Platform Badge */}
+              {/* Neutral offer badge. Marketplace stays in the copy, not in the product image. */}
               <div
                 style={{
                   display: 'flex',
@@ -86,7 +86,7 @@ export async function GET(request: Request) {
                   border: '2px solid #e5e7eb',
                 }}
               >
-                🛒 Na {platform}
+                🛍️ OFERTA
               </div>
 
               {/* Top Badge */}

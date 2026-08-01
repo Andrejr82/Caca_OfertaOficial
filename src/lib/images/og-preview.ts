@@ -51,17 +51,17 @@ const PREVIEW_CONFIG: Record<PreviewVariant, PreviewVariantConfig> = {
   },
 };
 
-const MARKETPLACE_COLORS: Record<string, { bg: string; accent: string; label: string }> = {
-  amazon: { bg: "#232f3e", accent: "#ff9900", label: "AMAZON" },
-  "mercado livre": { bg: "#fff159", accent: "#3483fa", label: "MERCADO LIVRE" },
-  mercadolivre: { bg: "#fff159", accent: "#3483fa", label: "MERCADO LIVRE" },
-  shopee: { bg: "#ee4d2d", accent: "#ffffff", label: "SHOPEE" },
-  magalu: { bg: "#0086ff", accent: "#ffffff", label: "MAGALU" },
-  aliexpress: { bg: "#d71920", accent: "#ffffff", label: "ALIEXPRESS" },
-  "casas bahia": { bg: "#0046be", accent: "#ffffff", label: "CASAS BAHIA" },
-  casasbahia: { bg: "#0046be", accent: "#ffffff", label: "CASAS BAHIA" },
-  shein: { bg: "#111111", accent: "#ffffff", label: "SHEIN" },
-  netshoes: { bg: "#5a2d82", accent: "#ffffff", label: "NETSHOES" },
+const MARKETPLACE_COLORS: Record<string, { bg: string; accent: string }> = {
+  amazon: { bg: "#232f3e", accent: "#ff9900" },
+  "mercado livre": { bg: "#fff159", accent: "#3483fa" },
+  mercadolivre: { bg: "#fff159", accent: "#3483fa" },
+  shopee: { bg: "#ee4d2d", accent: "#ffffff" },
+  magalu: { bg: "#0086ff", accent: "#ffffff" },
+  aliexpress: { bg: "#d71920", accent: "#ffffff" },
+  "casas bahia": { bg: "#0046be", accent: "#ffffff" },
+  casasbahia: { bg: "#0046be", accent: "#ffffff" },
+  shein: { bg: "#111111", accent: "#ffffff" },
+  netshoes: { bg: "#5a2d82", accent: "#ffffff" },
 };
 
 function normalizeText(value: string | null | undefined) {
@@ -107,7 +107,12 @@ function cleanOfferTitle(value: string | null | undefined) {
 
 function getMarketplaceTheme(offer: OfferForPreview) {
   const key = normalizePlatform(offer.platform);
-  return MARKETPLACE_COLORS[key] || { bg: "#f8fafc", accent: "#059669", label: normalizeText(offer.platform) || "OFERTA" };
+  return MARKETPLACE_COLORS[key] || { bg: "#f8fafc", accent: "#059669" };
+}
+
+/** Marketplace remains in copy metadata, never as a product-image badge. */
+export function resolvePreviewBadgeLabel(templateLabel: string | null) {
+  return templateLabel || "OFERTA";
 }
 
 type VisualTemplate = "default" | "coupon" | "prime_day" | "black_friday" | "flash_sale" | "free_shipping" | "cashback" | "official_store" | "exclusive";
@@ -143,7 +148,7 @@ function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
   const template = VISUAL_TEMPLATES[templateKey];
 
   const badgeBg = template.accent || theme.accent;
-  const badgeLabel = template.label || theme.label;
+  const badgeLabel = resolvePreviewBadgeLabel(template.label);
 
   const config = PREVIEW_CONFIG[variant];
   const coupon = isCouponOffer(offer);
