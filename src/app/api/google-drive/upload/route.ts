@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { fetchAndNormalizeDriveImage } from "@/lib/images/drive-upload";
 
 const DEFAULT_FOLDER_ID = "1tj6S-Gr7hxt5RNRIAd7BkpR8_2tuGaFB";
 
@@ -33,19 +34,16 @@ export async function POST(request: Request) {
 
     const body = await request.json() as { imageUrl?: string; fileName?: string };
     if (!body.imageUrl || !/^https?:\/\//i.test(body.imageUrl)) return NextResponse.json({ ok: false, message: "Imagem inválida." }, { status: 400 });
-    const imageResponse = await fetch(body.imageUrl, { cache: "no-store", headers: { "User-Agent": "Mozilla/5.0", Accept: "image/*" } });
-    if (!imageResponse.ok) return NextResponse.json({ ok: false, message: "Não foi possível obter a imagem do produto." }, { status: 502 });
-    const image = await imageResponse.arrayBuffer();
-    if (image.byteLength > 10 * 1024 * 1024) return NextResponse.json({ ok: false, message: "A imagem excede o limite de 10 MB." }, { status: 413 });
-
-    const fileName = safeFilename(body.fileName || "produto.jpg");
+    const image = await fetchAndNormalizeDriveImage(body.imageUrl);
+    const requestedName = safeFilename(body.fileName || "produto.jpg");
+    const fileName = requestedName.replace(/\.[a-z0-9]+$/i, "") + image.extension;
     const form = new FormData();
     form.append("metadata", new Blob([JSON.stringify({ name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID || DEFAULT_FOLDER_ID] })], { type: "application/json" }));
-    form.append("file", new Blob([image], { type: imageResponse.headers.get("content-type")?.split(";")[0] || "image/jpeg" }), fileName);
+    form.append("file", new Blob([image.buffer], { type: image.contentType }), fileName);
     const upload = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,mimeType,size", { method: "POST", headers: { Authorization: `Bearer ${await getAccessToken()}` }, body: form, cache: "no-store" });
     const data = await upload.json() as { id?: string; name?: string; webViewLink?: string; error?: { message?: string } };
     if (!upload.ok || !data.id) return NextResponse.json({ ok: false, message: data.error?.message || "Google Drive recusou o upload." }, { status: 502 });
-    return NextResponse.json({ ok: true, file: { id: data.id, name: data.name, webViewLink: data.webViewLink } });
+    return NextResponse.json({ ok: true, file: { id: data.id, name: data.name, webViewLink: data.webViewLink, mimeType: image.contentType, width: image.width, height: image.height } });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Falha ao salvar no Google Drive." }, { status: 500 });
   }
