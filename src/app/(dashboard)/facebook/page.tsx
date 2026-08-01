@@ -13,14 +13,17 @@ export default async function FacebookPage() {
   if (supabase) {
     const [{ data }, { data: videoJobs }] = await Promise.all([
       supabase.from("posts").select("*, offers(*), affiliate_links(tracked_url)").eq("channel", "facebook").eq("status", "draft").order("created_at", { ascending: false }),
-      supabase.from("video_jobs").select("id,status,video_url,metadata").in("status", ["ready", "approved"])
+      supabase.from("video_jobs").select("id,status,video_url,offer_id,metadata").in("status", ["ready", "approved"])
     ]);
     const jobsByDraftId = new Map<string, { id: string; status: string; video_url: string | null }>();
+    const jobsByOfferId = new Map<string, { id: string; status: string; video_url: string | null }>();
     for (const job of videoJobs ?? []) {
+      const normalizedJob = { id: job.id, status: job.status, video_url: (job as { video_url?: string | null }).video_url ?? null };
       const draftId = (job.metadata as { draftIds?: { facebook?: string } } | null)?.draftIds?.facebook;
-      if (draftId) jobsByDraftId.set(draftId, { id: job.id, status: job.status, video_url: (job as { video_url?: string | null }).video_url ?? null });
+      if (draftId) jobsByDraftId.set(draftId, normalizedJob);
+      if (job.offer_id) jobsByOfferId.set(job.offer_id, normalizedJob);
     }
-    draftPosts = (data ?? []).map((post) => ({ ...post, _videoJob: jobsByDraftId.get(post.id) }))
+    draftPosts = (data ?? []).map((post) => ({ ...post, _videoJob: jobsByDraftId.get(post.id) ?? jobsByOfferId.get(post.offer_id) }))
       .filter((post) => !post._videoJob || post._videoJob.status === "approved")
       .map(({ _videoJob, ...post }) => ({ ...post, videoJobId: _videoJob?.id ?? null, videoUrl: _videoJob?.video_url ?? null }));
   }
