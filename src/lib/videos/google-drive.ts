@@ -7,6 +7,8 @@ type DriveFile = {
   videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string };
 };
 
+const DEFAULT_FOLDER_ID = "1tj6S-Gr7hxt5RNRIAd7BkpR8_2tuGaFB";
+
 function required(name: string) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`GOOGLE_DRIVE_CONFIG_MISSING:${name}`);
@@ -37,7 +39,7 @@ async function driveFetch(path: string, init?: RequestInit) {
 }
 
 export async function listDriveVideos(): Promise<DriveFile[]> {
-  const folderId = required("GOOGLE_DRIVE_FOLDER_ID");
+  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID || DEFAULT_FOLDER_ID;
   const query = encodeURIComponent(`'${folderId}' in parents and trashed = false and mimeType contains 'video/'`);
   const fields = encodeURIComponent("files(id,name,mimeType,size,webViewLink,videoMediaMetadata(width,height,durationMillis)),nextPageToken");
   const response = await driveFetch(`files?q=${query}&pageSize=100&orderBy=modifiedTime%20desc&fields=${fields}`);
