@@ -62,13 +62,14 @@ export async function publishToFacebook(
       body: JSON.stringify(payload),
     });
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
-      logger.error("Falha ao publicar no Facebook", { data });
+      const graphMessage = data?.error?.message || "Erro na API do Facebook.";
+      logger.error("Falha ao publicar no Facebook", { endpoint, status: response.status, data });
       return {
         success: false,
-        message: data.error?.message || "Erro na API do Facebook.",
+        message: `Facebook Graph API (${response.status}): ${graphMessage}`,
         error: data,
       };
     }
