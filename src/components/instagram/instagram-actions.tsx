@@ -58,6 +58,7 @@ export function InstagramTestButton({ hasToken }: { hasToken: boolean }) {
 
 interface PostWithOffer {
   id: string;
+  videoJobId?: string | null;
   content: string;
   status: string;
   created_at: string;
@@ -107,6 +108,7 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
         body: JSON.stringify({
           postId: post.id,
           offerId: post.offers.id,
+          ...(post.videoJobId ? { videoJobId: post.videoJobId } : {}),
           requestSource: "instagram-dashboard"
         })
       });

@@ -12,6 +12,7 @@ import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions
 // Tipagem base que cobre os campos comuns que os Cards precisam
 interface PostWithOffer {
   id: string;
+  videoJobId?: string | null;
   content: string;
   status: string;
   external_id: string | null;

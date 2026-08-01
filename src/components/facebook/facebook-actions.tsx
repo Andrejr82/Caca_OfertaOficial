@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 interface PostWithOffer {
   id: string;
+  videoJobId?: string | null;
   content: string;
   status: string;
   created_at: string;
@@ -37,7 +38,7 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
       const response = await fetch("/api/facebook/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: post.id, offerId: post.offers.id, requestSource: "facebook-dashboard" })
+        body: JSON.stringify({ postId: post.id, offerId: post.offers.id, ...(post.videoJobId ? { videoJobId: post.videoJobId } : {}), requestSource: "facebook-dashboard" })
       });
       const data = await response.json();
       if (response.ok && data.ok) {

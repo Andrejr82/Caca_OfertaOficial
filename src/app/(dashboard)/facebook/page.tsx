@@ -11,13 +11,18 @@ export default async function FacebookPage() {
   const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   let draftPosts: any[] = [];
   if (supabase) {
-    const { data } = await supabase
-      .from("posts")
-      .select("*, offers(*), affiliate_links(tracked_url)")
-      .eq("channel", "facebook")
-      .eq("status", "draft")
-      .order("created_at", { ascending: false });
-    draftPosts = data || [];
+    const [{ data }, { data: videoJobs }] = await Promise.all([
+      supabase.from("posts").select("*, offers(*), affiliate_links(tracked_url)").eq("channel", "facebook").eq("status", "draft").order("created_at", { ascending: false }),
+      supabase.from("video_jobs").select("id,status,metadata").in("status", ["ready", "approved"])
+    ]);
+    const jobsByDraftId = new Map<string, { id: string; status: string }>();
+    for (const job of videoJobs ?? []) {
+      const draftId = (job.metadata as { draftIds?: { facebook?: string } } | null)?.draftIds?.facebook;
+      if (draftId) jobsByDraftId.set(draftId, { id: job.id, status: job.status });
+    }
+    draftPosts = (data ?? []).map((post) => ({ ...post, _videoJob: jobsByDraftId.get(post.id) }))
+      .filter((post) => !post._videoJob || post._videoJob.status === "approved")
+      .map(({ _videoJob, ...post }) => ({ ...post, videoJobId: _videoJob?.id ?? null }));
   }
   const historyData = await getPostHistory("facebook");
 

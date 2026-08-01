@@ -10,6 +10,7 @@ export default async function InstagramDashboardPage() {
   const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
 interface PostWithOffer {
   id: string;
+  videoJobId?: string | null;
   content: string;
   status: string;
   external_id: string | null;
@@ -36,14 +37,18 @@ interface PostWithOffer {
   let draftPosts: PostWithOffer[] = [];
 
   if (supabase) {
-    const { data: drafts } = await supabase
-      .from("posts")
-      .select("*, offers(*), affiliate_links(tracked_url)")
-      .eq("channel", "instagram")
-      .eq("status", "draft")
-      .order("created_at", { ascending: false });
-
-    draftPosts = drafts || [];
+    const [{ data: drafts }, { data: videoJobs }] = await Promise.all([
+      supabase.from("posts").select("*, offers(*), affiliate_links(tracked_url)").eq("channel", "instagram").eq("status", "draft").order("created_at", { ascending: false }),
+      supabase.from("video_jobs").select("id,status,metadata").in("status", ["ready", "approved"])
+    ]);
+    const jobsByDraftId = new Map<string, { id: string; status: string }>();
+    for (const job of videoJobs ?? []) {
+      const draftId = (job.metadata as { draftIds?: { instagram?: string } } | null)?.draftIds?.instagram;
+      if (draftId) jobsByDraftId.set(draftId, { id: job.id, status: job.status });
+    }
+    draftPosts = (drafts ?? []).map((post) => ({ ...post, _videoJob: jobsByDraftId.get(post.id) }))
+      .filter((post) => !post._videoJob || post._videoJob.status === "approved")
+      .map(({ _videoJob, ...post }) => ({ ...post, videoJobId: _videoJob?.id ?? null }));
   }
 
   const historyData = await getPostHistory("instagram");
