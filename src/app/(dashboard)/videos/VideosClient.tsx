@@ -10,6 +10,13 @@ type Job = { id: string; status: string; stage?: string; script: string; video_u
 
 function formatBytes(value?: string) { const bytes = Number(value ?? 0); if (!bytes) return "tamanho indisponível"; return `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
 function formatDuration(value?: string) { const seconds = Math.round(Number(value ?? 0) / 1000); return seconds ? `${seconds}s` : "duração pendente"; }
+async function fetchPublication(url: string, body: Record<string, string>) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 45_000);
+  try {
+    return await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
+  } finally { window.clearTimeout(timeout); }
+}
 
 export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initialJobs: Job[] }) {
   const [selectedOfferId, setSelectedOfferId] = useState(offers[0]?.id ?? "");
@@ -22,7 +29,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   const [copied, setCopied] = useState(false);
 
   async function loadDrive() {
-    setBusy(true); setMessage(null);
+    setBusy(true); setMessage({ text: "Enviando vídeo ao Instagram…" });
     const response = await fetch("/api/videos/drive", { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) setMessage({ text: data.error ?? "Não foi possível acessar o Google Drive.", error: true });
@@ -73,25 +80,25 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   }
 
   async function publishInstagram(job: Job) {
-    setBusy(true); setMessage(null);
+    setBusy(true); setMessage({ text: "Enviando vídeo ao Instagram…" });
     try {
-      const response = await fetch("/api/instagram/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoJobId: job.id, requestSource: "videos-gemini-drive" }) });
+      const response = await fetchPublication("/api/instagram/publish", { videoJobId: job.id, requestSource: "videos-gemini-drive" });
       const data = await response.json().catch(() => ({}));
       setMessage({ text: response.ok ? "Reel enviado ao Instagram." : (data.message ?? "Falha ao publicar no Instagram."), error: !response.ok });
     } catch (error) {
-      setMessage({ text: error instanceof Error ? error.message : "Não foi possível comunicar com o Instagram.", error: true });
+      setMessage({ text: error instanceof DOMException && error.name === "AbortError" ? "Instagram não respondeu em 45 segundos." : error instanceof Error ? error.message : "Não foi possível comunicar com o Instagram.", error: true });
     } finally { setBusy(false); }
   }
 
   async function publishFacebook(job: Job) {
     if (!job.offers) return setMessage({ text: "Oferta do vídeo não encontrada.", error: true });
-    setBusy(true); setMessage(null);
+    setBusy(true); setMessage({ text: "Enviando vídeo ao Facebook…" });
     try {
-      const response = await fetch("/api/facebook/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoJobId: job.id, requestSource: "videos-gemini-drive" }) });
+      const response = await fetchPublication("/api/facebook/publish", { videoJobId: job.id, requestSource: "videos-gemini-drive" });
       const data = await response.json().catch(() => ({}));
       setMessage({ text: response.ok ? "Vídeo enviado ao Facebook." : (data.message ?? "Falha ao publicar no Facebook."), error: !response.ok });
     } catch (error) {
-      setMessage({ text: error instanceof Error ? error.message : "Não foi possível comunicar com o Facebook.", error: true });
+      setMessage({ text: error instanceof DOMException && error.name === "AbortError" ? "Facebook não respondeu em 45 segundos." : error instanceof Error ? error.message : "Não foi possível comunicar com o Facebook.", error: true });
     } finally { setBusy(false); }
   }
 
