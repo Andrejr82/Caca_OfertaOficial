@@ -21,7 +21,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   const [copied, setCopied] = useState(false);
 
   async function loadDrive() {
-    setBusy(true); setMessage({ text: "Enviando vídeo ao Instagram…" });
+    setBusy(true); setMessage({ text: "Carregando vídeos do Google Drive…" });
     const response = await fetch("/api/videos/drive", { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) setMessage({ text: data.error ?? "Não foi possível acessar o Google Drive.", error: true });
