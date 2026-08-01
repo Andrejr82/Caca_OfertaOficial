@@ -37,7 +37,6 @@ describe("Official AI O.P.A.C.", () => {
       "🎧 Achado na Shopee",
       "✨ Bluetooth 5.3",
       "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
-      "⚠️ Preço e condições podem mudar.",
       "👉 "
     ].join("\n\n"));
   });
@@ -52,7 +51,7 @@ describe("Official AI O.P.A.C.", () => {
     expect(copy).toContain("🛍️ SSD NVMe 1 TB PCIe 4.0");
     expect(copy).toContain("✨ 1 TB PCIe 4.0");
     expect(copy).toContain("💰 *R$ 79,90*");
-    expect(copy).toContain("⚠️ Preço e condições podem mudar.");
+    expect(copy).not.toContain("Preço e condições podem mudar");
   });
 
   it("destaca preço sem inventar desconto quando preço anterior não é válido", () => {
@@ -72,7 +71,14 @@ describe("Official AI O.P.A.C.", () => {
   it("não inventa urgência, escassez ou variação futura de preço", () => {
     const copy = ["whatsapp", "telegram", "instagram"].map((channel) => buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, channel as "whatsapp" | "telegram" | "instagram")).join("\n");
     expect(copy).not.toMatch(/estoque|só agora|corre que|antes que o preço suba|relâmpago|baixou muito/iu);
+    expect(copy).not.toContain("Preço e condições podem mudar");
     expect(copy).toContain("Preço atual");
+  });
+
+  it.each(["whatsapp", "telegram", "facebook"] as const)("não adiciona aviso genérico de preço no Copy V2 de %s", (channel) => {
+    const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: 59.9, currentPrice: 56.9 }, channel);
+    expect(copy).not.toContain("Preço e condições podem mudar");
+    expect(copy).not.toContain("~de ");
   });
 
   it("calcula desconto somente quando preço anterior é maior", () => {
@@ -109,7 +115,7 @@ describe("Official AI O.P.A.C.", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, "whatsapp");
     expect(copy.split("\n\n")).toContain("🛍️ Tênis Casual Feminino");
     expect(copy).toContain("✅ *Preço atual: R$ 79,90*");
-    expect(copy).toContain("⚠️ Preço e condições podem mudar.");
+    expect(copy).not.toContain("Preço e condições podem mudar");
     expect(copy).not.toMatch(/excelente|incrível|alta performance|ideal para você|durabilidade|premium/iu);
   });
 

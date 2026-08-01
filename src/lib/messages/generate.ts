@@ -188,7 +188,10 @@ function mercadoLivreBlocks(offer: Offer, data: ReturnType<typeof extractCommerc
   const normalized = normalizedMercadoLivreData(offer, data);
   const title = cleanMercadoLivreProductTitle(offer.product_name);
   const blocks: string[] = [title || "Oferta do Mercado Livre", "", "🏪 Achado no Mercado Livre"];
-  if (normalized.oldPrice && normalized.hasDiscount) blocks.push(`~de ${plainCurrency(normalized.oldPrice)}~`);
+  // Markdown strike-through is not rendered consistently across Telegram,
+  // WhatsApp and Facebook. Keep the verified reference price factual and
+  // portable across channels.
+  if (normalized.oldPrice && normalized.hasDiscount) blocks.push(`De ${plainCurrency(normalized.oldPrice)}`);
   if (normalized.currentPrice) blocks.push(`por ${plainCurrency(normalized.currentPrice)}`);
   if (normalized.discount) blocks.push(`🔥 ${normalized.discount}% de desconto`);
   if (normalized.oldPrice || normalized.currentPrice) blocks.push("");

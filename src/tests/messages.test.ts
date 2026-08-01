@@ -78,7 +78,8 @@ describe("Deterministic Copy Engine Tests", () => {
 
     it("renderiza apenas evidências comerciais confirmadas", () => {
       const copy = generateTelegramMessage(mlOffer, mlLink);
-      expect(copy).toContain("~de R$ 244,90~");
+      expect(copy).toContain("De R$ 244,90");
+      expect(copy).not.toContain("~de ");
       expect(copy).toContain("por R$ 131,00");
       expect(copy).toContain("🏪 Achado no Mercado Livre");
       expect(copy).toContain("🔥 47% de desconto");
@@ -89,6 +90,16 @@ describe("Deterministic Copy Engine Tests", () => {
       expect(copy).toContain(mlLink.tracked_url);
       expect(copy).not.toContain(mlOffer.original_url);
       expect(copy).not.toContain("\\n");
+    });
+
+    it.each([
+      ["telegram", generateTelegramMessage],
+      ["whatsapp", generateWhatsAppMessage],
+      ["facebook", generateFacebookMessage],
+    ] as const)("não usa markdown de tachado no Mercado Livre em %s", (_channel, renderer) => {
+      const rendered = renderer(mlOffer, _channel === "telegram" ? mlLink : _channel === "whatsapp" ? mlWpLink : { ...mlLink, tracked_url: "https://cacaoferta.com.br/go/fb_ml" });
+      expect(rendered).toContain("De R$ 244,90");
+      expect(rendered).not.toMatch(/~de|~R\$/iu);
     });
 
     it("não inventa ranking, loja ou benefícios ausentes", () => {
