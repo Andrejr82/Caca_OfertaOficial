@@ -15,6 +15,7 @@ import { createOfficialPublicationApprovalDependencies } from "@/lib/publication
 
 type PublicationBody = {
   postId?: string; offerId?: string; commandId?: string; idempotencyKey?: string;
+  videoJobId?: string;
   correlationId?: string; causationId?: string | null; requestedAt?: string; requestSource?: string;
 };
 
@@ -28,11 +29,22 @@ function rejectionStatus(code: string) {
 export async function POST(request: Request) {
   try {
     const body = await request.json() as PublicationBody;
-    if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
     const client = await createServerSupabaseClient();
     if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
+
+    let videoUrl: string | undefined;
+    if (body.videoJobId) {
+      const { data: job } = await client.from("video_jobs").select("id,offer_id,status,video_url").eq("id", body.videoJobId).eq("user_id", user.id).maybeSingle();
+      if (!job || job.status !== "approved" || !job.video_url) return NextResponse.json({ ok: false, message: "O vídeo precisa estar aprovado e pronto para publicação." }, { status: 409 });
+      const { data: draft } = await client.from("posts").select("id,offer_id").eq("offer_id", job.offer_id).eq("user_id", user.id).eq("channel", "facebook").eq("status", "draft").maybeSingle();
+      if (!draft) return NextResponse.json({ ok: false, message: "Nenhum draft do Facebook foi encontrado para esta oferta." }, { status: 404 });
+      body.postId = draft.id;
+      body.offerId = job.offer_id;
+      videoUrl = job.video_url;
+    }
+    if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
 
     const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "facebook");
     const commandId = body.commandId ?? crypto.randomUUID();
@@ -63,7 +75,10 @@ export async function POST(request: Request) {
       requestedAt: body.requestedAt ?? new Date().toISOString(),
       actor: { type: "user", id: user.id, service: "nextjs-publication-route" },
       origin: "publication.facebook.route", reason: { code: "USER_REQUESTED_PUBLICATION" },
-      metadata: { requestSource: body.requestSource ?? "facebook-dashboard" }
+      metadata: {
+        requestSource: body.requestSource ?? "facebook-dashboard",
+        ...(videoUrl ? { facebookMediaType: "VIDEO", facebookVideoUrl: videoUrl } : {})
+      }
     };
     const result = await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, user.id));
     return result.status === "published"

@@ -14,7 +14,8 @@ export interface FacebookPublishResponse {
  */
 export async function publishToFacebook(
   message: string,
-  imageUrl?: string | null
+  imageUrl?: string | null,
+  videoUrl?: string | null
 ): Promise<FacebookPublishResponse> {
   logger.info("Iniciando publicação no Facebook...");
 
@@ -44,7 +45,12 @@ export async function publishToFacebook(
       access_token: token,
     };
 
-    if (imageUrl) {
+    if (videoUrl) {
+      endpoint = `https://graph.facebook.com/v19.0/${pageId}/videos`;
+      payload.file_url = videoUrl;
+      payload.description = message;
+      delete payload.message;
+    } else if (imageUrl) {
       // Se houver imagem, publica como Foto
       endpoint = `https://graph.facebook.com/v19.0/${pageId}/photos`;
       payload.url = imageUrl;

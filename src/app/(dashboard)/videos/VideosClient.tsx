@@ -73,14 +73,26 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
   }
 
   async function publishInstagram(job: Job) {
-    setBusy(true); const response = await fetch("/api/instagram/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoJobId: job.id, requestSource: "videos-gemini-drive" }) }); const data = await response.json();
-    setMessage({ text: response.ok ? "Reel enviado ao Instagram." : (data.message ?? "Falha ao publicar no Instagram."), error: !response.ok }); setBusy(false);
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch("/api/instagram/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoJobId: job.id, requestSource: "videos-gemini-drive" }) });
+      const data = await response.json().catch(() => ({}));
+      setMessage({ text: response.ok ? "Reel enviado ao Instagram." : (data.message ?? "Falha ao publicar no Instagram."), error: !response.ok });
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : "Não foi possível comunicar com o Instagram.", error: true });
+    } finally { setBusy(false); }
   }
 
   async function publishFacebook(job: Job) {
-    const postId = job.metadata?.draftIds?.facebook; if (!postId || !job.offers) return setMessage({ text: "Draft do Facebook não encontrado.", error: true });
-    setBusy(true); const response = await fetch("/api/facebook/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ postId, offerId: job.offers.id, requestSource: "videos-gemini-drive" }) }); const data = await response.json();
-    setMessage({ text: response.ok ? "Publicação enviada ao Facebook." : (data.message ?? "Falha ao publicar no Facebook."), error: !response.ok }); setBusy(false);
+    if (!job.offers) return setMessage({ text: "Oferta do vídeo não encontrada.", error: true });
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch("/api/facebook/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ videoJobId: job.id, requestSource: "videos-gemini-drive" }) });
+      const data = await response.json().catch(() => ({}));
+      setMessage({ text: response.ok ? "Vídeo enviado ao Facebook." : (data.message ?? "Falha ao publicar no Facebook."), error: !response.ok });
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : "Não foi possível comunicar com o Facebook.", error: true });
+    } finally { setBusy(false); }
   }
 
   return <div className="mx-auto max-w-7xl space-y-8">
