@@ -46,8 +46,11 @@ export async function POST(request: Request) {
     }
     if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
 
-    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "facebook", body.videoJobId ?? body.commandId);
     const commandId = body.commandId ?? crypto.randomUUID();
+    // A videoJobId identifies the media, not a publication attempt. Reusing it
+    // here replayed stale failures forever instead of retrying with current
+    // credentials. Keep idempotency per explicit client command or request.
+    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "facebook", commandId);
     const approvalCommand: OfficialPublicationApprovalCommand = {
       commandId,
       correlationId: body.correlationId ?? commandId,
