@@ -167,7 +167,6 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(discount !== null && facts.originalPrice !== null ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
       `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
-      `⚠️ Preço e condições podem mudar.`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -183,7 +182,6 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : `💰 *${formatBRL(facts.currentPrice)}*`,
-      `⚠️ Preço e condições podem mudar.`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -215,7 +213,6 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice
         ? `📉 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
         : `💰 ${formatBRL(facts.currentPrice)}`,
-      `⚠️ Preço e condições podem mudar.`,
       `👉 `
     ];
     return blocks.join("\n\n");
