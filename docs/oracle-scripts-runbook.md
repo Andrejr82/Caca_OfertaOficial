@@ -6,9 +6,9 @@ Guia operacional para a VPS Oracle (`ubuntu@193.122.242.178`). Não coloque toke
 
 ```powershell
 $key = "C:\Projetos_GitHub\Caca_Oferta_V5\keys\ssh-key-2026-06-25.key"
-$host = "ubuntu@193.122.242.178"
-ssh -i $key $host "pm2 jlist"
-ssh -i $key $host "pm2 status"
+$oracleTarget = "ubuntu@193.122.242.178"
+ssh -i $key $oracleTarget "pm2 jlist"
+ssh -i $key $oracleTarget "pm2 status"
 ```
 
 Processos esperados:
@@ -22,10 +22,10 @@ Processos esperados:
 ## 2. Logs e diagnóstico
 
 ```powershell
-ssh -i $key $host "pm2 logs oracle-scraper --raw --lines 100 --nostream"
-ssh -i $key $host "pm2 logs oracle-api --raw --lines 100 --nostream"
-ssh -i $key $host "pm2 logs whatsapp-bot --raw --lines 100 --nostream"
-ssh -i $key $host "pm2 monit"
+ssh -i $key $oracleTarget "pm2 logs oracle-scraper --raw --lines 100 --nostream"
+ssh -i $key $oracleTarget "pm2 logs oracle-api --raw --lines 100 --nostream"
+ssh -i $key $oracleTarget "pm2 logs whatsapp-bot --raw --lines 100 --nostream"
+ssh -i $key $oracleTarget "pm2 monit"
 ```
 
 Monitorar um ciclo completo localmente, sem interromper o processo:
@@ -45,11 +45,11 @@ Monitorar um ciclo completo localmente, sem interromper o processo:
 Executar no diretório remoto:
 
 ```powershell
-ssh -i $key $host "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --shopee-native-top20-dry-run --scenario eletros_cozinha"
-ssh -i $key $host "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --shopee-native-top20-record --scenario eletros_cozinha"
-ssh -i $key $host "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --multi-marketplace-scenario-record --scenario eletros_cozinha"
-ssh -i $key $host "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --mercadolivre-official-intents-dry-run --scenario enxoval_casamento"
-ssh -i $key $host "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --refresh-shopee-native-catalog"
+ssh -i $key $oracleTarget "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --shopee-native-top20-dry-run --scenario eletros_cozinha"
+ssh -i $key $oracleTarget "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --shopee-native-top20-record --scenario eletros_cozinha"
+ssh -i $key $oracleTarget "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --multi-marketplace-scenario-record --scenario eletros_cozinha"
+ssh -i $key $oracleTarget "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --mercadolivre-official-intents-dry-run --scenario enxoval_casamento"
+ssh -i $key $oracleTarget "cd /home/ubuntu/Caca_OfertaOficial; node scripts/oracle-scraper.cjs --refresh-shopee-native-catalog"
 ```
 
 | Ação | Grava banco? | IA/publicação? |
@@ -77,13 +77,13 @@ Antes de executar, confirme que a chave existe e que o checkout local contém ex
 Reiniciar o processo (não envia mensagens por si só):
 
 ```powershell
-ssh -i $key $host "pm2 restart whatsapp-bot"
+ssh -i $key $oracleTarget "pm2 restart whatsapp-bot"
 ```
 
 Obter o QR exibido pelo Baileys:
 
 ```powershell
-ssh -i $key $host "pm2 logs whatsapp-bot --raw --lines 80 --nostream"
+ssh -i $key $oracleTarget "pm2 logs whatsapp-bot --raw --lines 80 --nostream"
 ```
 
 Leia imediatamente em **WhatsApp → Aparelhos conectados → Conectar aparelho**. A confirmação deve aparecer nos logs como `Conexão aberta`/`Motor WhatsApp conectado`.
@@ -91,8 +91,8 @@ Leia imediatamente em **WhatsApp → Aparelhos conectados → Conectar aparelho*
 Limpar sessão Baileys é uma operação excepcional e exige nova leitura de QR. Execute apenas quando houver conflito de sessão ou credencial inválida:
 
 ```powershell
-ssh -i $key $host "cd /home/ubuntu/Caca_OfertaOficial; node scripts/clear-whatsapp-session.cjs"
-ssh -i $key $host "pm2 restart whatsapp-bot"
+ssh -i $key $oracleTarget "cd /home/ubuntu/Caca_OfertaOficial; node scripts/clear-whatsapp-session.cjs"
+ssh -i $key $oracleTarget "pm2 restart whatsapp-bot"
 ```
 
 Não usar `npm run whatsapp` na VPS: o processo oficial é supervisionado pelo PM2.
@@ -100,8 +100,8 @@ Não usar `npm run whatsapp` na VPS: o processo oficial é supervisionado pelo P
 ## 6. API Oracle
 
 ```powershell
-ssh -i $key $host "pm2 restart oracle-api"
-ssh -i $key $host "pm2 logs oracle-api --raw --lines 80 --nostream"
+ssh -i $key $oracleTarget "pm2 restart oracle-api"
+ssh -i $key $oracleTarget "pm2 logs oracle-api --raw --lines 80 --nostream"
 ```
 
 As rotas exigem `ORACLE_API_KEY`; nunca inclua a chave no histórico do terminal ou neste documento.
