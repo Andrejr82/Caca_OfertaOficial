@@ -57,7 +57,7 @@ function speechScript(offer: GeminiPromptOffer, current: string, old: string | n
     ? `de ${old} por ${current}, com ${percentage}% de desconto verificado`
     : `por ${current}`;
 
-  return `"Olha este achado${marketplace}! Este é o ${offer.product_name}, ${priceLine}.${category}. Gostou? Toque na publicação para conhecer."`;
+  return `"Olha este achado${marketplace}! Este é o ${offer.product_name}, ${priceLine}.${category}. Gostou? Veja os detalhes desta oferta na publicação."`;
 }
 
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
@@ -107,6 +107,7 @@ Regras da fala e da estratégia de marketing:
 - Não diga “confira as condições”, “link divulgado”, “link abaixo”, “acesse o link”, URL, código de rastreio ou qualquer instrução de link.
 - Não mencionar preço sujeito a mudança, urgência, escassez, estoque, garantia ou benefício não comprovado.
 - Não criar características, resultados, comparações ou promessas ausentes nos dados fornecidos.
-- O CTA deve ser apenas “Toque na publicação para conhecer” ou equivalente neutro, sem referência a link.
+- O CTA falado deve ser neutro e funcionar nos dois canais: “Veja os detalhes desta oferta na publicação”, sem referência a link.
+- A legenda será adaptada pelo sistema: Instagram direciona para a vitrine da bio; Facebook usa o link clicável da publicação.
 - Não exibir preço diferente do informado. Não inserir texto aleatório, marcas d'água ou logotipos adicionais.`;
 }
