@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     const upload = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,mimeType,size", { method: "POST", headers: { Authorization: `Bearer ${await getAccessToken()}` }, body: form, cache: "no-store" });
     const data = await upload.json() as { id?: string; name?: string; webViewLink?: string; error?: { message?: string } };
     if (!upload.ok || !data.id) return NextResponse.json({ ok: false, message: data.error?.message || "Google Drive recusou o upload." }, { status: 502 });
-    return NextResponse.json({ ok: true, file: { id: data.id, name: data.name, webViewLink: data.webViewLink, mimeType: image.contentType, width: image.width, height: image.height } });
+    return NextResponse.json({ ok: true, file: { id: data.id, name: data.name, webViewLink: data.webViewLink, mimeType: image.contentType } });
   } catch (error) {
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Falha ao salvar no Google Drive." }, { status: 500 });
   }

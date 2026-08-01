@@ -1,16 +1,20 @@
-import sharp from "sharp";
-
 const MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 
 export type NormalizedDriveImage = {
   buffer: Buffer;
-  contentType: "image/jpeg";
-  extension: ".jpg";
-  width: number;
-  height: number;
+  contentType: "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+  extension: ".jpg" | ".png" | ".webp" | ".gif";
 };
 
-/** Fetches a marketplace image and rewrites it as a real JPEG before Drive upload. */
+function detectImageType(buffer: Buffer) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return { contentType: "image/jpeg" as const, extension: ".jpg" as const };
+  if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) return { contentType: "image/png" as const, extension: ".png" as const };
+  if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return { contentType: "image/webp" as const, extension: ".webp" as const };
+  if (buffer.length >= 6 && ["GIF87a", "GIF89a"].includes(buffer.subarray(0, 6).toString("ascii"))) return { contentType: "image/gif" as const, extension: ".gif" as const };
+  return null;
+}
+
+/** Fetches a marketplace image and verifies its binary signature before Drive upload. */
 export async function fetchAndNormalizeDriveImage(imageUrl: string): Promise<NormalizedDriveImage> {
   const response = await fetch(imageUrl, {
     cache: "no-store",
@@ -26,19 +30,7 @@ export async function fetchAndNormalizeDriveImage(imageUrl: string): Promise<Nor
   if (!source.length) throw new Error("A origem da imagem retornou um arquivo vazio.");
   if (source.length > MAX_SOURCE_BYTES) throw new Error("A imagem excede o limite de 10 MB.");
 
-  try {
-    const normalized = await sharp(source).rotate().jpeg({ quality: 95, mozjpeg: true }).toBuffer({ resolveWithObject: true });
-    if (!normalized.data.length || !normalized.info.width || !normalized.info.height) {
-      throw new Error("A imagem não possui dimensões válidas.");
-    }
-    return {
-      buffer: normalized.data,
-      contentType: "image/jpeg",
-      extension: ".jpg",
-      width: normalized.info.width,
-      height: normalized.info.height,
-    };
-  } catch {
-    throw new Error("A resposta recebida não é uma imagem válida.");
-  }
+  const type = detectImageType(source);
+  if (!type) throw new Error("A resposta recebida não é uma imagem válida.");
+  return { buffer: source, ...type };
 }
