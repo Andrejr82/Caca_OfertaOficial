@@ -2,6 +2,7 @@ import { NextResponse, NextRequest } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 import { inngest } from "@/lib/inngest/client";
+import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -142,7 +143,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const canonicalUrl = new URL(`/go/${encodeURIComponent(subId)}`, appUrl).toString();
     const imageVersion = link.offers?.id ? buildDeterministicImageVersion(link.offers) : null;
     const image = link.offers?.id
-      ? new URL(`/api/images/og-test?offerId=${encodeURIComponent(link.offers.id)}&v=${encodeURIComponent(imageVersion || "fallback")}`, appUrl).toString()
+      ? new URL(`/api/images/og-test?offerId=${encodeURIComponent(link.offers.id)}&v=${PRODUCT_IMAGE_RENDER_VERSION}-${encodeURIComponent(imageVersion || "fallback")}`, appUrl).toString()
       : new URL("/og-image.jpg", appUrl).toString();
     const favicon = new URL("/icons/whatsapp.svg", appUrl).toString();
     const escapedTitle = escapeHtml(title);

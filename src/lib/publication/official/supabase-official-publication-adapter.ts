@@ -16,6 +16,7 @@ import type {
 import type { StateServiceDependencies } from "@/core/state";
 import { offerStateVersion, postStateVersion, transitionOfficialOfferState, transitionOfficialPostState } from "@/lib/state/official-state-service";
 import { buildCouponSocialMessage, isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
 
 const IDEMPOTENCY_PREFIX = "pmav5.publication.idempotency.";
 const RESERVATION_PREFIX = "pmav5.publication.reservation.";
@@ -58,7 +59,7 @@ function socialImageUrl(offer: {
   if (!offer.id) return offer.image_url ?? null;
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
-  return `${baseUrl.replace(/\/$/, "")}/api/images/whatsapp-premium?offerId=${encodeURIComponent(offer.id)}`;
+  return `${baseUrl.replace(/\/$/, "")}/api/images/whatsapp-premium?offerId=${encodeURIComponent(offer.id)}&v=${PRODUCT_IMAGE_RENDER_VERSION}`;
 }
 
 function resolvePublicationImage(

@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Image from "next/image";
 import { generateQuickPostAction, publishToTelegramAction, publishToInstagramAction, publishToWhatsAppAction } from "@/lib/publish/actions";
+import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
 import { channels, type Channel } from "@/types/domain";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,7 @@ function PremiumImagePreview({ offerId, productName }: { offerId?: string; produ
         </div>
       )}
       <img
-        src={`/api/images/whatsapp-premium?offerId=${encodeURIComponent(offerId)}`}
+        src={`/api/images/whatsapp-premium?offerId=${encodeURIComponent(offerId)}&v=${PRODUCT_IMAGE_RENDER_VERSION}`}
         alt={productName}
         className={`object-contain w-full h-full transition-opacity duration-500 ${loading ? 'opacity-0' : 'opacity-100'}`}
         onLoad={() => setLoading(false)}
