@@ -50,6 +50,16 @@ AÇÕES ESPECÍFICAS DO PRODUTO:
 - Preserve a mesma empunhadura, orientação, escala, cor e contato entre mãos e produto do início ao fim.`;
 }
 
+function speechScript(offer: GeminiPromptOffer, current: string, old: string | null, percentage: number | null) {
+  const marketplace = offer.platform ? ` no ${offer.platform}` : "";
+  const category = offer.category ? ` para quem pesquisa ${offer.category}` : "";
+  const priceLine = old && percentage
+    ? `de ${old} por ${current}, com ${percentage}% de desconto verificado`
+    : `por ${current}`;
+
+  return `"Olha este achado${marketplace}! Este é o ${offer.product_name}, ${priceLine}.${category}. Gostou? Toque na publicação para conhecer."`;
+}
+
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
   const current = price(offer.current_price) ?? "preço não informado";
   const old = price(offer.old_price);
@@ -89,7 +99,14 @@ Copy/roteiro exato:
 ${copy}
 
 Fala sugerida:
-"Olha este achado! ${offer.product_name} por ${current}. Confira as condições da oferta no link indicado pela publicação."
+${speechScript(offer, current, old, percentage)}
 
-Regras: não exibir preço diferente do informado, não afirmar urgência, estoque, garantia ou benefícios que não estejam na copy. Não inserir texto aleatório, marcas d'água ou logotipos adicionais.`;
+Regras da fala e da estratégia de marketing:
+- Use a sequência gancho → produto → preço verificado → contexto da categoria → CTA suave.
+- Fale de forma natural, clara e curta; não leia emojis, hashtags ou formatação.
+- Não diga “confira as condições”, “link divulgado”, “link abaixo”, “acesse o link”, URL, código de rastreio ou qualquer instrução de link.
+- Não mencionar preço sujeito a mudança, urgência, escassez, estoque, garantia ou benefício não comprovado.
+- Não criar características, resultados, comparações ou promessas ausentes nos dados fornecidos.
+- O CTA deve ser apenas “Toque na publicação para conhecer” ou equivalente neutro, sem referência a link.
+- Não exibir preço diferente do informado. Não inserir texto aleatório, marcas d'água ou logotipos adicionais.`;
 }
