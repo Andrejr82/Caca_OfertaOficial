@@ -10,7 +10,7 @@ type Job = { id: string; status: string; stage?: string; script: string; video_u
 
 function formatBytes(value?: string) { const bytes = Number(value ?? 0); if (!bytes) return "tamanho indisponível"; return `${(bytes / 1024 / 1024).toFixed(1)} MB`; }
 function formatDuration(value?: string) { const seconds = Math.round(Number(value ?? 0) / 1000); return seconds ? `${seconds}s` : "duração pendente"; }
-export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initialJobs: Job[] }) {
+export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[]; initialJobs: Job[]; cutoff: string }) {
   const [selectedOfferId, setSelectedOfferId] = useState(offers[0]?.id ?? "");
   const selectedOffer = useMemo(() => offers.find((offer) => offer.id === selectedOfferId), [offers, selectedOfferId]);
   const [prompt, setPrompt] = useState(() => selectedOffer ? buildGeminiVideoPrompt(selectedOffer) : "");
@@ -25,7 +25,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     const response = await fetch("/api/videos/drive", { cache: "no-store" });
     const data = await response.json();
     if (!response.ok) setMessage({ text: data.error ?? "Não foi possível acessar o Google Drive.", error: true });
-    else setFiles(data.files ?? []);
+    else { setFiles(data.files ?? []); setMessage(null); }
     setBusy(false);
   }
 
@@ -77,6 +77,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
       <div className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
         <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/35">Oferta existente</label>
+        <p className="mb-3 text-xs text-white/40">Somente ofertas extraídas desde {new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" }).format(new Date(cutoff))} (ciclo das 04h de Brasília).</p>
         <select value={selectedOfferId} onChange={(event) => setSelectedOfferId(event.target.value)} className="w-full rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm text-white"><option value="">Selecione uma oferta</option>{offers.map((offer) => <option key={offer.id} value={offer.id}>{offer.product_name} — R$ {Number(offer.current_price).toFixed(2).replace(".", ",")}</option>)}</select>
         {selectedOffer && <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/20 p-3"><div className="flex items-center gap-3"><img src={selectedOffer.image_url ? `/api/images/proxy?url=${encodeURIComponent(selectedOffer.image_url)}` : ""} alt="" className="h-20 w-20 rounded-lg object-contain" /><div><p className="text-sm font-semibold text-white">{selectedOffer.product_name}</p><p className="text-xs text-emerald-300">{selectedOffer.platform} · R$ {Number(selectedOffer.current_price).toFixed(2).replace(".", ",")}</p></div></div><div className="mt-3 flex flex-wrap gap-2"><button onClick={downloadImage} disabled={!selectedOffer.image_url || busy} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-40"><Download size={14} /> Baixar imagem</button><button onClick={saveImageToDrive} disabled={!selectedOffer.image_url || busy} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-200 hover:bg-sky-500/20 disabled:opacity-40"><CloudUpload size={14} /> Salvar no Drive</button></div></div>}
       </div>
