@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Clock3, Download, Film, Loader2, Play, RefreshCw, Send, Sparkles, XCircle, Link2, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock3, Download, Film, Loader2, Play, RefreshCw, Send, Sparkles, XCircle, Link2, ShieldCheck, CloudUpload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
 
@@ -173,6 +173,31 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     }
   }
 
+  async function saveSelectedOfferImageToDrive() {
+    if (!selectedOffer?.image_url) {
+      setMessage({ text: "Esta oferta não possui imagem disponível.", error: true });
+      return;
+    }
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch("/api/google-drive/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          imageUrl: selectedOffer.image_url,
+          fileName: productImageFilename(selectedOffer.product_name, "image/jpeg")
+        })
+      });
+      const payload = await response.json() as { ok?: boolean; message?: string; file?: { name?: string; webViewLink?: string } };
+      if (!response.ok || !payload.ok) throw new Error(payload.message || "Não foi possível salvar no Google Drive.");
+      setMessage({ text: `Imagem salva no Google Drive: ${payload.file?.name || "arquivo"}.` });
+    } catch (error) {
+      setMessage({ text: error instanceof Error ? error.message : "Não foi possível salvar no Google Drive.", error: true });
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-7xl space-y-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
@@ -208,7 +233,7 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
           {selectedOffer && <div className="mb-5 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-black/20 p-3"><div className="h-14 w-14 overflow-hidden rounded-lg bg-white/5">{selectedOffer.image_url && <img src={selectedOffer.image_url} alt="" className="h-full w-full object-contain" />}</div><div><p className="text-sm font-semibold text-white">{selectedOffer.product_name}</p><p className="text-xs text-emerald-300">R$ {Number(selectedOffer.current_price).toFixed(2).replace(".", ",")}</p></div></div>}
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/35">Prompt estruturado</label>
           <textarea value={geminiPrompt} readOnly rows={15} placeholder="Selecione uma oferta para gerar o prompt." className="w-full resize-none rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-emerald-400/60" />
-          <div className="mt-4 flex items-center justify-between gap-4"><span className="text-xs text-white/35">Inclui avatar padrão, produto, ação e copy verificada.</span><div className="flex flex-wrap justify-end gap-2"><button onClick={copyGeminiPrompt} disabled={!geminiPrompt || busy} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">Copiar prompt</button><button onClick={downloadSelectedOfferImage} disabled={!selectedOffer?.image_url || busy} className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"><Download size={16} /> Baixar imagem</button></div></div>
+          <div className="mt-4 flex items-center justify-between gap-4"><span className="text-xs text-white/35">Inclui avatar padrão, produto, ação e copy verificada.</span><div className="flex flex-wrap justify-end gap-2"><button onClick={copyGeminiPrompt} disabled={!geminiPrompt || busy} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">Copiar prompt</button><button onClick={downloadSelectedOfferImage} disabled={!selectedOffer?.image_url || busy} className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"><Download size={16} /> Baixar imagem</button><button onClick={saveSelectedOfferImageToDrive} disabled={!selectedOffer?.image_url || busy} className="inline-flex items-center gap-2 rounded-xl border border-sky-400/40 bg-sky-500/10 px-4 py-3 text-sm font-bold text-sky-200 transition hover:bg-sky-500/20 disabled:cursor-not-allowed disabled:opacity-40"><CloudUpload size={16} /> Salvar no Drive</button></div></div>
           {message && <p className={`mt-4 rounded-lg border px-3 py-2 text-xs ${message.error ? "border-red-400/20 bg-red-400/10 text-red-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>{message.text}</p>}
         </section>
         {jobs.some((job) => job.status === "approved" && job.video_url) && <section className="rounded-2xl border border-pink-400/20 bg-pink-500/[0.04] p-5"><h2 className="font-bold text-pink-100">Reels prontos para publicação</h2><p className="mt-1 text-xs text-white/45">A publicação passa pelo fluxo oficial, cooldown, limite diário e deduplicação.</p><div className="mt-4 flex flex-wrap gap-2">{jobs.filter((job) => job.status === "approved" && job.video_url).map((job) => <button key={job.id} onClick={() => publishReel(job.id)} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-pink-500/15 px-3 py-2 text-xs font-bold text-pink-100 hover:bg-pink-500/25 disabled:opacity-50"><Send size={14} /> Publicar: {job.offers?.product_name ?? "oferta"}</button>)}</div></section>}
