@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { publishToFacebookReel } from "@/lib/platforms/facebook";
+import { publishToFacebook, publishToFacebookReel } from "@/lib/platforms/facebook";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -53,5 +53,25 @@ describe("Facebook Reel client", () => {
     await expect(publishToFacebookReel("https://storage.example/video.mp4", "Oferta"))
       .resolves.toMatchObject({ success: true, postId: "video-2" });
     expect(fetchMock).toHaveBeenCalledTimes(16);
+  });
+});
+
+describe("Facebook Page publication", () => {
+  it("publishes directly with the validated Page token without a token lookup request", async () => {
+    process.env.FACEBOOK_PAGE_ID = "page-1";
+    process.env.FACEBOOK_ACCESS_TOKEN = "token-secret";
+    process.env.FACEBOOK_GRAPH_API_VERSION = "v19.0";
+    const fetchMock = vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "post-1" }), { status: 200 }));
+
+    await expect(publishToFacebook("Oferta", "https://cdn.example/image.jpg"))
+      .resolves.toMatchObject({ success: true, postId: "post-1" });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(String(fetchMock.mock.calls[0][0])).toBe("https://graph.facebook.com/v19.0/page-1/photos");
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(String(init.body)).toContain('"message":"Oferta"');
+    expect(String(init.body)).toContain('"url":"https://cdn.example/image.jpg"');
+    expect(String(init.body)).toContain('"access_token":"token-secret"');
   });
 });

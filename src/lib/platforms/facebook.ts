@@ -26,19 +26,15 @@ export async function publishToFacebook(
   }
 
   const pageId = process.env.FACEBOOK_PAGE_ID;
-  let token = process.env.FACEBOOK_ACCESS_TOKEN;
+  const token = process.env.FACEBOOK_ACCESS_TOKEN;
+  const version = process.env.FACEBOOK_GRAPH_API_VERSION || "v19.0";
 
   try {
-    // Tentar obter o token da página caso o token fornecido seja um User Token
-    const pageTokenRes = await fetch(`https://graph.facebook.com/v19.0/${pageId}?fields=access_token&access_token=${token}`);
-    if (pageTokenRes.ok) {
-      const pageTokenData = await pageTokenRes.json();
-      if (pageTokenData.access_token) {
-        token = pageTokenData.access_token;
-      }
-    }
-
-    let endpoint = `https://graph.facebook.com/v19.0/${pageId}/feed`;
+    // FACEBOOK_ACCESS_TOKEN deve ser o Page Access Token validado.
+    // Não consultar /{pageId}?fields=access_token: além de ser uma chamada
+    // desnecessária, esse campo pode ser rejeitado pela Graph API e impedir
+    // uma publicação válida antes mesmo do POST /feed ou /photos.
+    let endpoint = `https://graph.facebook.com/${version}/${pageId}/feed`;
     const payload: any = {
       message,
       access_token: token,
@@ -46,7 +42,7 @@ export async function publishToFacebook(
 
     if (imageUrl) {
       // Se houver imagem, publica como Foto
-      endpoint = `https://graph.facebook.com/v19.0/${pageId}/photos`;
+      endpoint = `https://graph.facebook.com/${version}/${pageId}/photos`;
       payload.url = imageUrl;
     }
 
