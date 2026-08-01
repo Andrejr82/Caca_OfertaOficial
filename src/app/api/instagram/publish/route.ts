@@ -44,7 +44,10 @@ export async function POST(request: Request) {
       const { data: job } = await client.from("video_jobs").select("id,offer_id,status,video_url").eq("id", body.videoJobId).eq("user_id", user.id).maybeSingle();
       if (!job || job.status !== "approved" || !job.video_url) return NextResponse.json({ ok: false, message: "O vídeo precisa estar aprovado e pronto para publicação." }, { status: 409 });
       const { data: draft } = await client.from("posts").select("id,offer_id").eq("offer_id", job.offer_id).eq("user_id", user.id).eq("channel", "instagram").eq("status", "draft").maybeSingle();
-      if (!draft) return NextResponse.json({ ok: false, message: "Nenhum draft do Instagram foi encontrado para esta oferta." }, { status: 404 });
+      if (!draft) {
+        const { data: published } = await client.from("posts").select("id").eq("offer_id", job.offer_id).eq("user_id", user.id).eq("channel", "instagram").eq("status", "published").limit(1).maybeSingle();
+        return NextResponse.json({ ok: false, code: published ? "INSTAGRAM_ALREADY_PUBLISHED" : "INSTAGRAM_DRAFT_NOT_FOUND", message: published ? "Este vídeo já foi publicado no Instagram para esta oferta." : "Nenhum draft do Instagram foi encontrado para esta oferta." }, { status: published ? 409 : 404 });
+      }
       postId = draft.id;
       offerId = job.offer_id;
       mediaType = "REELS";

@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     }
     if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
 
-    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "facebook");
+    const idempotencyKey = body.idempotencyKey ?? publicationIdempotencyKey(body.postId, "facebook", body.videoJobId ?? body.commandId);
     const commandId = body.commandId ?? crypto.randomUUID();
     const approvalCommand: OfficialPublicationApprovalCommand = {
       commandId,
