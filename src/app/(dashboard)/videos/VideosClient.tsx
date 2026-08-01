@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Clock3, Download, Film, Loader2, Play, RefreshCw, Send, Sparkles, XCircle, Link2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
 
-type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string };
+type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string; category?: string | null; shipping_free?: boolean | null; coupon?: string | null; original_url?: string | null };
 type Job = { id: string; status: string; stage?: string; attempt_count?: number; script: string; video_url: string | null; audio_url?: string | null; created_at: string; error_message: string | null; template_id?: string; metadata?: { importedVideo?: { assets?: Record<string, string | null>; drafts?: Array<{ channel: string; content: string; trackedUrl: string; postId?: string | null }> } }; offers?: Offer };
 
 const statusCopy: Record<string, { label: string; tone: string }> = {
@@ -26,15 +27,22 @@ const stageCopy: Record<string, string> = {
   uploading_media: "Enviando mídia", ready_for_review: "Pronto para revisão", failed: "Falhou", cancelled: "Cancelado"
 };
 
-function defaultScript(offer?: Offer) {
-  if (!offer) return "Olha essa oferta verificada agora! Corre porque o preço pode mudar e essa oportunidade pode acabar rápido.";
-  return `Olha essa oferta verificada agora! ${offer.product_name} está por apenas R$ ${Number(offer.current_price).toFixed(2).replace(".", ",")}. Corre porque esse preço pode mudar e a oferta pode acabar rápido!`;
+function productImageFilename(productName: string, contentType: string) {
+  const slug = productName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "produto";
+  const extension = contentType.includes("png") ? "png" : contentType.includes("webp") ? "webp" : "jpg";
+  return `${slug}.${extension}`;
 }
 
 export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initialJobs: Job[] }) {
   const router = useRouter();
   const [selectedOfferId, setSelectedOfferId] = useState(offers[0]?.id ?? "");
-  const [script, setScript] = useState(defaultScript(offers[0]));
+  const [geminiPrompt, setGeminiPrompt] = useState(() => offers[0] ? buildGeminiVideoPrompt(offers[0]) : "");
   const [jobs, setJobs] = useState(initialJobs);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -53,15 +61,6 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     }, 15000);
     return () => window.clearInterval(interval);
   }, [jobs]);
-
-  async function createJob() {
-    setBusy(true); setMessage(null);
-    const response = await fetch("/api/videos/jobs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ offerId: selectedOfferId, script }) });
-    const payload = await response.json();
-    if (!response.ok) setMessage({ text: payload.error ?? "Não foi possível criar o vídeo.", error: true });
-    else { setMessage({ text: "Vídeo colocado na fila. O worker GPU poderá processá-lo." }); setJobs((current) => [payload.job, ...current]); }
-    setBusy(false);
-  }
 
   async function importVideo() {
     setBusy(true); setMessage(null);
@@ -138,7 +137,40 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
 
   function selectOffer(id: string) {
     setSelectedOfferId(id);
-    setScript(defaultScript(offers.find((offer) => offer.id === id)));
+    const offer = offers.find((item) => item.id === id);
+    setGeminiPrompt(offer ? buildGeminiVideoPrompt(offer) : "");
+  }
+
+  async function copyGeminiPrompt() {
+    if (!geminiPrompt) return;
+    await navigator.clipboard.writeText(geminiPrompt);
+    setMessage({ text: "Prompt copiado. No Gemini, anexe Avatar_Anuncio.png e a imagem do produto selecionado." });
+  }
+
+  async function downloadSelectedOfferImage() {
+    if (!selectedOffer?.image_url) {
+      setMessage({ text: "Esta oferta não possui imagem disponível.", error: true });
+      return;
+    }
+    setBusy(true); setMessage(null);
+    try {
+      const response = await fetch(`/api/images/proxy?url=${encodeURIComponent(selectedOffer.image_url)}`, { cache: "no-store" });
+      if (!response.ok) throw new Error("image-download-failed");
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = objectUrl;
+      anchor.download = productImageFilename(selectedOffer.product_name, response.headers.get("content-type") || blob.type);
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(objectUrl);
+      setMessage({ text: "Imagem do produto baixada. Anexe-a no Gemini junto com o prompt." });
+    } catch {
+      setMessage({ text: "Não foi possível baixar a imagem desta oferta.", error: true });
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -168,15 +200,15 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
         <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5 shadow-2xl shadow-black/10">
-          <div className="mb-5 flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><Sparkles size={18} /></span><div><h2 className="font-bold text-white">Novo vídeo</h2><p className="text-xs text-white/35">Escolha uma oferta e edite a fala.</p></div></div>
+          <div className="mb-5 flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-xl bg-emerald-500/10 text-emerald-400"><Sparkles size={18} /></span><div><h2 className="font-bold text-white">Prompt para Gemini</h2><p className="text-xs text-white/35">Selecione uma oferta e gere um roteiro estruturado para criar o vídeo no Gemini.</p></div></div>
           <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/35">Oferta</label>
           <select value={selectedOfferId} onChange={(event) => selectOffer(event.target.value)} className="mb-5 w-full rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm text-white outline-none focus:border-emerald-400/60">
             <option value="">Selecione uma oferta</option>{offers.map((offer) => <option key={offer.id} value={offer.id}>{offer.product_name} — R$ {Number(offer.current_price).toFixed(2).replace(".", ",")}</option>)}
           </select>
           {selectedOffer && <div className="mb-5 flex items-center gap-3 rounded-xl border border-white/[0.06] bg-black/20 p-3"><div className="h-14 w-14 overflow-hidden rounded-lg bg-white/5">{selectedOffer.image_url && <img src={selectedOffer.image_url} alt="" className="h-full w-full object-contain" />}</div><div><p className="text-sm font-semibold text-white">{selectedOffer.product_name}</p><p className="text-xs text-emerald-300">R$ {Number(selectedOffer.current_price).toFixed(2).replace(".", ",")}</p></div></div>}
-          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/35">Roteiro da fala</label>
-          <textarea value={script} onChange={(event) => setScript(event.target.value)} rows={6} className="w-full resize-none rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-emerald-400/60" />
-          <div className="mt-4 flex items-center justify-between gap-4"><span className="text-xs text-white/30">{script.length}/500 caracteres</span><button onClick={createJob} disabled={busy || !selectedOfferId || script.length < 20} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">{busy ? <Loader2 size={16} className="animate-spin" /> : <Film size={16} />} Colocar na fila</button></div>
+          <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-white/35">Prompt estruturado</label>
+          <textarea value={geminiPrompt} readOnly rows={15} placeholder="Selecione uma oferta para gerar o prompt." className="w-full resize-none rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm leading-6 text-white outline-none focus:border-emerald-400/60" />
+          <div className="mt-4 flex items-center justify-between gap-4"><span className="text-xs text-white/35">Inclui avatar padrão, produto, ação e copy verificada.</span><div className="flex flex-wrap justify-end gap-2"><button onClick={copyGeminiPrompt} disabled={!geminiPrompt || busy} className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-bold text-slate-950 transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-40">Copiar prompt</button><button onClick={downloadSelectedOfferImage} disabled={!selectedOffer?.image_url || busy} className="inline-flex items-center gap-2 rounded-xl border border-emerald-400/40 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200 transition hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-40"><Download size={16} /> Baixar imagem</button></div></div>
           {message && <p className={`mt-4 rounded-lg border px-3 py-2 text-xs ${message.error ? "border-red-400/20 bg-red-400/10 text-red-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>{message.text}</p>}
         </section>
         {jobs.some((job) => job.status === "approved" && job.video_url) && <section className="rounded-2xl border border-pink-400/20 bg-pink-500/[0.04] p-5"><h2 className="font-bold text-pink-100">Reels prontos para publicação</h2><p className="mt-1 text-xs text-white/45">A publicação passa pelo fluxo oficial, cooldown, limite diário e deduplicação.</p><div className="mt-4 flex flex-wrap gap-2">{jobs.filter((job) => job.status === "approved" && job.video_url).map((job) => <button key={job.id} onClick={() => publishReel(job.id)} disabled={busy} className="inline-flex items-center gap-2 rounded-lg bg-pink-500/15 px-3 py-2 text-xs font-bold text-pink-100 hover:bg-pink-500/25 disabled:opacity-50"><Send size={14} /> Publicar: {job.offers?.product_name ?? "oferta"}</button>)}</div></section>}
