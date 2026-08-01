@@ -7,6 +7,8 @@ Atualizado em 31/07/2026. Este índice separa documentação operacional atual, 
 1. Código executável, migrations e configurações versionadas: `src/`, `scripts/`, `supabase/`, `vercel.json`, `.env.example`.
 2. Runtime atual: `CURRENT_SYSTEM_STATUS.md`, `architecture-current.md`, `official.md`.
 3. Operação: `api.md`, `ambiente.md`, `configuration.md`, `deployment.md`, `oracle.md`, `scripts.md`, `troubleshooting.md`, `SECURITY.md`, `rollback.md`.
+
+Runbook operacional consolidado: [oracle-scripts-runbook.md](oracle-scripts-runbook.md).
 4. Contratos e regras de marketplace: `Contrato_*.md`, `MATRIZ_INTENCOES_MERCADO_LIVRE.md`, `scenario-router-marketplace-contracts.md`, `marketplace-search-quality.md`.
 5. Estratégia e futuras capacidades: `RELATORIO_ESTRATEGICO_PUBLICACAO_2026.md`, `ARQUITETURA_TELEGRAM_BOT_ASSISTENTE_COMPRAS.md`.
 6. Auditorias, releases e decisões históricas: `PMAV5/`, `RELEASE/`, `certifications/`, `specs/`, `superpowers/`, `archive/`.
