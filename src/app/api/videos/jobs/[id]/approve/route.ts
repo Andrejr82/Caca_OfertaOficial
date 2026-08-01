@@ -32,11 +32,14 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   const job = { ...current, ...(data ?? {}) };
+  let syncedDraftIds: Record<string, string> = {};
   const admin = createSupabaseAdminClient();
+  if (!admin) return NextResponse.json({ error: "Não foi possível sincronizar os drafts: SUPABASE_SERVICE_ROLE_KEY ausente na Vercel." }, { status: 503 });
   const offer = Array.isArray(job.offers) ? job.offers[0] : job.offers;
   if (admin && offer) {
     const metadata = (job.metadata ?? {}) as Record<string, any>;
     const draftIds: Record<string, string> = { ...(metadata.draftIds ?? {}) };
+    syncedDraftIds = draftIds;
     const channelCopies: Record<string, string> = { ...(metadata.channelCopies ?? {}) };
     const facts = {
       productName: offer.product_name, marketplace: offer.platform, category: offer.category ?? null,
@@ -50,7 +53,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         { user_id: userData.user.id, offer_id: offer.id, channel, original_url: offer.original_url, tracked_url: trackedUrl, sub_id: subId },
         { onConflict: "offer_id,channel" }
       ).select("id").single();
-      if (linkError || !link) continue;
+      if (linkError || !link) return NextResponse.json({ error: `Falha ao preparar o link do canal ${channel}: ${linkError?.message ?? "registro ausente"}` }, { status: 502 });
       const rawCopy = buildCopyV2ChannelCopy(facts, channel);
       const content = channel === "facebook" ? `${rawCopy}${trackedUrl}` : rawCopy;
       channelCopies[channel] = content;
@@ -61,11 +64,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         const { data: published } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "published").limit(1).maybeSingle();
         if (!published) {
           const { data: created } = await admin.from("posts").insert({ user_id: userData.user.id, offer_id: offer.id, affiliate_link_id: link.id, channel, content, status: "draft" }).select("id").single();
-          if (created) draftIds[channel] = created.id;
+          if (!created) return NextResponse.json({ error: `Falha ao criar o draft do canal ${channel}.` }, { status: 502 });
+          draftIds[channel] = created.id;
         }
       }
     }
-    await admin.from("video_jobs").update({ metadata: { ...metadata, draftIds, channelCopies } }).eq("id", job.id).eq("user_id", userData.user.id);
+    const { error: metadataError } = await admin.from("video_jobs").update({ metadata: { ...metadata, draftIds, channelCopies } }).eq("id", job.id).eq("user_id", userData.user.id);
+    if (metadataError) return NextResponse.json({ error: `Falha ao vincular os drafts ao vídeo: ${metadataError.message}` }, { status: 502 });
   }
-  return NextResponse.json({ job, drafts: (job.metadata as any)?.draftIds ?? {} });
+  return NextResponse.json({ job, drafts: syncedDraftIds });
 }

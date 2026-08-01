@@ -68,7 +68,8 @@ export function VideosClient({ offers, initialJobs }: { offers: Offer[]; initial
     const response = await fetch(`/api/videos/jobs/${id}/approve`, { method: "POST" }); const data = await response.json();
     if (!response.ok) return setMessage({ text: data.error ?? "Não foi possível aprovar.", error: true });
     setJobs((current) => current.map((job) => job.id === id ? { ...job, status: "approved" } : job));
-    setMessage({ text: "Vídeo aprovado e drafts sociais sincronizados. Publique pelas abas Facebook e Instagram." });
+    const synced = data.drafts ? Object.keys(data.drafts).join(" e ") : "";
+    setMessage({ text: synced ? `Vídeo aprovado. Drafts sincronizados: ${synced}. Abra as abas sociais e selecione Todos.` : "Vídeo aprovado, mas nenhum draft foi retornado.", error: !synced });
   }
 
   return <div className="mx-auto max-w-7xl space-y-8">
