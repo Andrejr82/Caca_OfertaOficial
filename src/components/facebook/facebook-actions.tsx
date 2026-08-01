@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 interface PostWithOffer {
   id: string;
   videoJobId?: string | null;
+  videoUrl?: string | null;
   content: string;
   status: string;
   created_at: string;
@@ -81,7 +82,9 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
   return (
     <article className="rounded-lg border border-blue-500/15 bg-white p-5 shadow-panel grid gap-4 lg:grid-cols-[200px_1fr] items-start">
       <div className="relative aspect-square w-full rounded-md border border-blue-500/10 bg-paper overflow-hidden flex items-center justify-center">
-        {post.offers.image_url ? (
+        {post.videoUrl ? (
+          <video controls playsInline src={post.videoUrl} className="h-full w-full rounded-md bg-black object-contain" />
+        ) : post.offers.image_url ? (
           <img src={`/api/images/proxy?url=${encodeURIComponent(post.offers.image_url)}`} referrerPolicy="no-referrer" alt={post.offers.product_name} className="object-contain w-full h-full p-2" />
         ) : (
           <div className="text-ink/40 flex flex-col items-center gap-1"><ImageIcon size={32} /><span className="text-xs">Sem imagem</span></div>

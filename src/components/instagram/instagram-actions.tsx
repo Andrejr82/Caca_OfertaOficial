@@ -59,6 +59,7 @@ export function InstagramTestButton({ hasToken }: { hasToken: boolean }) {
 interface PostWithOffer {
   id: string;
   videoJobId?: string | null;
+  videoUrl?: string | null;
   content: string;
   status: string;
   created_at: string;
@@ -191,6 +192,8 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
             className="object-contain w-full h-full p-2"
             onError={() => setCouponImageSrc(couponImage?.fallbackSrc || "/coupon-assets/default-coupon.png")}
           />
+        ) : post.videoUrl ? (
+          <video controls playsInline src={post.videoUrl} className="object-contain w-full h-full bg-black" />
         ) : post.offers.image_url ? (
           <img
             src={`/api/images/proxy?url=${encodeURIComponent(post.offers.image_url)}`}

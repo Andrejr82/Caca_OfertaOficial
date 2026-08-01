@@ -66,7 +66,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
           const { data: created } = await admin.from("posts").insert({ user_id: userData.user.id, offer_id: offer.id, affiliate_link_id: link.id, channel, content, status: "draft" }).select("id").single();
           if (!created) return NextResponse.json({ error: `Falha ao criar o draft do canal ${channel}.` }, { status: 502 });
           draftIds[channel] = created.id;
-        }
+        } else delete draftIds[channel];
       }
     }
     const { error: metadataError } = await admin.from("video_jobs").update({ metadata: { ...metadata, draftIds, channelCopies } }).eq("id", job.id).eq("user_id", userData.user.id);

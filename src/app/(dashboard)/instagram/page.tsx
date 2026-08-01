@@ -39,16 +39,16 @@ interface PostWithOffer {
   if (supabase) {
     const [{ data: drafts }, { data: videoJobs }] = await Promise.all([
       supabase.from("posts").select("*, offers(*), affiliate_links(tracked_url)").eq("channel", "instagram").eq("status", "draft").order("created_at", { ascending: false }),
-      supabase.from("video_jobs").select("id,status,metadata").in("status", ["ready", "approved"])
+      supabase.from("video_jobs").select("id,status,video_url,metadata").in("status", ["ready", "approved"])
     ]);
-    const jobsByDraftId = new Map<string, { id: string; status: string }>();
+    const jobsByDraftId = new Map<string, { id: string; status: string; video_url: string | null }>();
     for (const job of videoJobs ?? []) {
       const draftId = (job.metadata as { draftIds?: { instagram?: string } } | null)?.draftIds?.instagram;
-      if (draftId) jobsByDraftId.set(draftId, { id: job.id, status: job.status });
+      if (draftId) jobsByDraftId.set(draftId, { id: job.id, status: job.status, video_url: (job as { video_url?: string | null }).video_url ?? null });
     }
     draftPosts = (drafts ?? []).map((post) => ({ ...post, _videoJob: jobsByDraftId.get(post.id) }))
       .filter((post) => !post._videoJob || post._videoJob.status === "approved")
-      .map(({ _videoJob, ...post }) => ({ ...post, videoJobId: _videoJob?.id ?? null }));
+      .map(({ _videoJob, ...post }) => ({ ...post, videoJobId: _videoJob?.id ?? null, videoUrl: _videoJob?.video_url ?? null }));
   }
 
   const historyData = await getPostHistory("instagram");
