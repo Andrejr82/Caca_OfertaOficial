@@ -13,7 +13,8 @@ describe("Gemini video prompt", () => {
 
     expect(prompt).toContain("gancho → produto → preço verificado → contexto da categoria → CTA suave");
     expect(prompt).toContain("por R$ 56,90, com 5% de desconto verificado");
-    expect(prompt).toContain("Toque na publicação para conhecer");
+    expect(prompt).toContain("Veja os detalhes desta oferta na publicação");
+    expect(prompt).toContain("Instagram direciona para a vitrine da bio; Facebook usa o link clicável");
     expect(prompt).not.toContain("Confira as condições da oferta no link");
     expect(prompt).toContain("Não diga “confira as condições”");
     expect(prompt).toContain("Não criar características, resultados, comparações ou promessas");
