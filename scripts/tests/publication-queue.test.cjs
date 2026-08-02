@@ -4,12 +4,12 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { buildDailyPublicationSlots, planPublicationQueue } = require('../publication-queue.cjs');
 
-test('creates 42 slots every 20 minutes from 08:00 to 21:40', () => {
+test('creates 48 slots every 20 minutes from 07:00 to 22:40', () => {
   const slots = buildDailyPublicationSlots(new Date(2026, 6, 24));
-  assert.equal(slots.length, 42);
-  assert.equal(slots[0].localTime, '2026-07-24 08:00');
-  assert.equal(slots[1].localTime, '2026-07-24 08:20');
-  assert.equal(slots.at(-1).localTime, '2026-07-24 21:40');
+  assert.equal(slots.length, 48);
+  assert.equal(slots[0].localTime, '2026-07-24 07:00');
+  assert.equal(slots[1].localTime, '2026-07-24 07:20');
+  assert.equal(slots.at(-1).localTime, '2026-07-24 22:40');
 });
 
 test('interleaves family and marketplace when alternatives exist', () => {
@@ -28,8 +28,8 @@ test('interleaves family and marketplace when alternatives exist', () => {
 });
 
 test('does not invent slots beyond the daily window', () => {
-  const planned = planPublicationQueue(Array.from({ length: 43 }, (_, index) => ({ id: String(index), curation: { family: String(index), tier: 'medium' }, curationScore: 1 })));
-  assert.equal(planned.length, 43);
-  assert.equal(planned[41].publicationSlot.localTime.includes('21:40'), true);
-  assert.equal(planned[42].publicationSlot, null);
+  const planned = planPublicationQueue(Array.from({ length: 49 }, (_, index) => ({ id: String(index), curation: { family: String(index), tier: 'medium' }, curationScore: 1 })));
+  assert.equal(planned.length, 49);
+  assert.equal(planned[47].publicationSlot.localTime.includes('22:40'), true);
+  assert.equal(planned[48].publicationSlot, null);
 });

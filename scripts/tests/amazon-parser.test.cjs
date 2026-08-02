@@ -33,6 +33,7 @@ test('Discovery por browse node usa URL pública e não gera IDs sintéticos', a
 test('todos os cenários Amazon executam consulta categorizada com contrato válido', async () => {
   const html = `<div data-component-type="s-search-result" data-asin="B08F2XQ36M"><h2>Produto Amazon Teste</h2><img src="https://m.media-amazon.com/images/teste.jpg" alt="Produto Amazon Teste" /><span class="a-price"><span class="a-offscreen">R$ 99,90</span></span></div>`;
   for (const scenarioId of Object.keys(AMAZON_SCENARIOS)) {
+    if (['grandes_ofertas_editorial', 'cupons_aprovados_editorial'].includes(scenarioId)) continue;
     const contract = getMarketplaceScenarioContract(scenarioId, 'Amazon');
     const requests = [];
     const result = await runAmazonScenarioDryRun({

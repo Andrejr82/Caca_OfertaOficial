@@ -206,34 +206,33 @@ SCENARIOS.moda_fitness_beleza_viagem = {
   ],
 };
 
-// 2. Roteamento canônico por horário
-// Cada disparo de 4 horas recebe UM cenário. As janelas editoriais menores
-// continuam disponíveis para execução manual, mas nunca são concatenadas no
-// ciclo automático. Isso impede que palavras-chave de domínios diferentes
-// contaminem a mesma busca.
-const SCENARIO_WINDOWS = Object.freeze([
-  { start: 0, end: 4, scenarioId: 'tecnologia_desejo', label: 'Gamer e Tecnologia' },
-  { start: 4, end: 7, scenarioId: 'treino_academia', label: 'Treino e Academia' },
-  { start: 7, end: 9, scenarioId: 'mae_de_primeira_viagem', label: 'Mãe de Primeira Viagem' },
-  { start: 9, end: 12, scenarioId: 'viagem_aventura', label: 'Viagem e Aventura' },
-  { start: 12, end: 13, scenarioId: 'beleza_autocuidado', label: 'Beleza e Autocuidado' },
-  { start: 13, end: 14, scenarioId: 'eletrodomesticos_cozinha', label: 'Eletrodomésticos de Alto Valor' },
-  { start: 14, end: 16, scenarioId: 'dono_de_pet', label: 'Dono de Pet' },
-  { start: 16, end: 18, scenarioId: 'acessorios_relogios', label: 'Acessórios e Relógios' },
-  { start: 18, end: 20, scenarioId: 'morando_sozinho', label: 'Morando Sozinho' },
-  { start: 20, end: 22, scenarioId: 'moda_masculina', label: 'Moda Masculina' },
-  { start: 22, end: 24, scenarioId: 'enxoval_casamento', label: 'Enxoval de Casamento' },
-]);
+// 2. Roteamento editorial único. Os contratos legados acima são mantidos
+// somente para leitura histórica; nenhum ciclo ativo os utiliza.
+const {
+  EDITORIAL_SCENARIOS,
+  EDITORIAL_SCENARIO_IDS,
+  QUEUE_BY_HOUR,
+  getEditorialScenarioById,
+  getEditorialScenarioForHour,
+  getEditorialScenarioForDiscoveryHour,
+} = require('./editorial-scenario-config.cjs');
+for (const id of Object.keys(SCENARIOS)) delete SCENARIOS[id];
+Object.assign(SCENARIOS, EDITORIAL_SCENARIOS);
 
-// O calendário de 4h seleciona a intenção principal do horário. O mapa é
-// configurável por ambiente para permitir rotação editorial sem alterar código.
+const SCENARIO_WINDOWS = Object.freeze(EDITORIAL_SCENARIO_IDS.map((id) => ({
+  start: EDITORIAL_SCENARIOS[id].queueHour,
+  end: EDITORIAL_SCENARIOS[id].queueHour + 1,
+  scenarioId: id,
+  label: EDITORIAL_SCENARIOS[id].name,
+})));
+
 const DEFAULT_CYCLE_SCENARIO_ROUTING = Object.freeze({
-  0: 'tecnologia_desejo',
-  4: 'treino_academia',
-  8: 'mae_de_primeira_viagem',
-  12: 'eletrodomesticos_cozinha',
-  16: 'moda_masculina',
-  20: 'enxoval_casamento',
+  0: 'casa_cozinha_editorial',
+  4: 'ferramentas_editorial',
+  8: 'informatica_editorial',
+  12: 'beleza_editorial',
+  16: 'games_editorial',
+  20: 'grandes_ofertas_editorial',
 });
 
 function getCycleScenarioRouting() {
@@ -244,7 +243,7 @@ function getCycleScenarioRouting() {
     const routing = {};
     for (const hour of [0, 4, 8, 12, 16, 20]) {
       const id = String(parsed?.[hour] || '').trim();
-      routing[hour] = SCENARIOS[id] ? id : DEFAULT_CYCLE_SCENARIO_ROUTING[hour];
+      routing[hour] = getEditorialScenarioById(id) ? id : DEFAULT_CYCLE_SCENARIO_ROUTING[hour];
     }
     return Object.freeze(routing);
   } catch {
@@ -252,16 +251,23 @@ function getCycleScenarioRouting() {
   }
 }
 
-const CYCLE_SCENARIO_ROUTING = DEFAULT_CYCLE_SCENARIO_ROUTING;
+const CYCLE_SCENARIO_ROUTING = Object.freeze({
+  0: 'casa_cozinha_editorial',
+  4: 'casa_cozinha_editorial',
+  8: 'ferramentas_editorial',
+  12: 'beleza_editorial',
+  16: 'games_editorial',
+  20: 'grandes_ofertas_editorial',
+});
 
 function getCanonicalCycleScenarioId(startHour) {
-  const hour = getCycleStartHour(startHour);
-  return getCycleScenarioRouting()[hour] || DEFAULT_CYCLE_SCENARIO_ROUTING[hour];
+  return getEditorialScenarioForDiscoveryHour(startHour).id;
 }
 
 function getScenarioWindow(currentHour) {
   const hour = ((Number(currentHour) % 24) + 24) % 24;
-  return SCENARIO_WINDOWS.find((window) => hour >= window.start && hour < window.end);
+  return SCENARIO_WINDOWS.find((window) => hour >= window.start && hour < window.end)
+    || { start: hour, end: hour + 1, scenarioId: getEditorialScenarioForHour(hour).id, label: getEditorialScenarioForHour(hour).name };
 }
 
 function getSaoPauloHour(date = new Date()) {
@@ -279,10 +285,10 @@ function getActiveScenario(currentHour) {
 }
 
 function getCycleScenario(startHour, durationHours = 4) {
-  const hour = getCycleStartHour(startHour);
-  const scenarioId = getCanonicalCycleScenarioId(hour);
-  const scenario = SCENARIOS[scenarioId];
-  const window = getScenarioWindow(hour);
+  const hour = ((Number(startHour) % 24) + 24) % 24;
+  const scenario = getEditorialScenarioForDiscoveryHour(hour);
+  const scenarioId = scenario.id;
+  const window = getScenarioWindow(scenario.queueHour);
   return {
     ...scenario,
     id: scenarioId,
@@ -290,7 +296,9 @@ function getCycleScenario(startHour, durationHours = 4) {
     scenarioIds: [scenarioId],
     name: scenario.name || window?.label || scenarioId,
     schedule: window ? [window] : [],
-    routingMode: 'canonical_single',
+    routingMode: 'editorial_queue',
+    discoveryHour: hour,
+    publicationHour: scenario.queueHour,
   };
 }
 

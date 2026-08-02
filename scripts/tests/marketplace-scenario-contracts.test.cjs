@@ -24,21 +24,23 @@ test('todos cenários possuem contrato por marketplace', () => {
 
 test('Amazon usa browse nodes públicos reais por cenário', () => {
   for (const scenarioId of Object.keys(AMAZON_SCENARIOS)) {
+    if (['grandes_ofertas_editorial', 'cupons_aprovados_editorial'].includes(scenarioId)) continue;
     const contract = getMarketplaceScenarioContract(scenarioId, 'Amazon');
     assert.ok(contract.categories.length > 0, `Amazon/${scenarioId} sem browse node`);
     assert.ok(contract.categories.every((id) => /^\d+$/.test(String(id))), `Amazon/${scenarioId} com browse node inválido`);
   }
-  assert.ok(getMarketplaceScenarioContract('tecnologia_desejo', 'Amazon').categories.includes('16243803011'));
-  assert.ok(getMarketplaceScenarioContract('eletros_cozinha', 'Amazon').categories.includes('17124722011'));
+  assert.ok(getMarketplaceScenarioContract('informatica_editorial', 'Amazon').categories.includes('16243803011'));
+  assert.ok(getMarketplaceScenarioContract('casa_cozinha_editorial', 'Amazon').categories.includes('17124722011'));
 });
 
-test('cenários compostos Amazon declaram filas independentes', () => {
-  assert.deepEqual(getMarketplaceScenarioContract('pet_bebe', 'Amazon').splitInto, ['dono_de_pet', 'mae_de_primeira_viagem']);
-  assert.deepEqual(getMarketplaceScenarioContract('moda_fitness_beleza_viagem', 'Amazon').splitInto, ['moda_masculina', 'treino_academia', 'beleza_autocuidado', 'viagem_aventura']);
+test('as filas editoriais são atômicas e não reintroduzem cenários compostos', () => {
+  assert.deepEqual(getMarketplaceScenarioContract('pet_editorial', 'Amazon').splitInto, []);
+  assert.deepEqual(getMarketplaceScenarioContract('moda_editorial', 'Amazon').splitInto, []);
 });
 
 test('contrato Amazon declara tipos, atributos e prioridade comercial', () => {
   for (const scenarioId of Object.keys(AMAZON_SCENARIOS)) {
+    if (['grandes_ofertas_editorial', 'cupons_aprovados_editorial'].includes(scenarioId)) continue;
     const intelligence = getMarketplaceScenarioContract(scenarioId, 'Amazon').amazonIntelligence;
     assert.ok(intelligence.productTypes.length > 0, `${scenarioId} sem tipos`);
     assert.ok(intelligence.attributes.length > 0, `${scenarioId} sem atributos`);
@@ -55,11 +57,11 @@ test('classificador Amazon usa evidência de browse node antes do título', () =
   assert.equal(classified.status, 'classified');
   assert.equal(classified.productType, 'coffee_maker');
   assert.equal(classified.confidence, 1);
-  assert.equal(buildClassificationCoverage([{ classification: classified, intent: 'eletros_cozinha' }], 'Amazon').cobertura_classificacao, 1);
+  assert.equal(buildClassificationCoverage([{ classification: classified, intent: 'casa_cozinha_editorial' }], 'Amazon').cobertura_classificacao, 1);
 });
 
 test('contrato de treino aceita fitness e bloqueia calçado casual/social', () => {
-  const contract = getMarketplaceScenarioContract('treino_academia', 'Mercado Livre');
+  const contract = getMarketplaceScenarioContract('esporte_editorial', 'Mercado Livre');
   assert.equal(matchesMarketplaceContract(contract, 'Whey Protein 100% Concentrado'), true);
   assert.equal(matchesMarketplaceContract(contract, 'Tapete Yoga 6mm'), true);
   assert.equal(matchesMarketplaceContract(contract, 'Tênis Casual Feminino Confortável'), false);
@@ -67,6 +69,6 @@ test('contrato de treino aceita fitness e bloqueia calçado casual/social', () =
 });
 
 test('bloqueio por palavra não rejeita falso positivo em tapete', () => {
-  const contract = getMarketplaceScenarioContract('treino_academia', 'Mercado Livre');
+  const contract = getMarketplaceScenarioContract('esporte_editorial', 'Mercado Livre');
   assert.equal(matchesMarketplaceContract(contract, 'Tapete de Yoga em EVA'), true);
 });

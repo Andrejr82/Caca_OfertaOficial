@@ -27,6 +27,7 @@ Quando houver divergência, prevalecem o código e o manifesto de release valida
 | Deploy | [deployment.md](deployment.md) |
 | Copy V2/IA | [llm-layer.md](llm-layer.md) e `src/core/ai/official-ai-service.ts` |
 | Marketplaces | [scenario-router-marketplace-contracts.md](scenario-router-marketplace-contracts.md) |
+| Filas editoriais V1 | [editorial-scenario-contracts-v1.md](editorial-scenario-contracts-v1.md) |
 | Vídeos | [VIDEO_WORKER_CURRENT.md](VIDEO_WORKER_CURRENT.md) |
 | Assistente Telegram | [ARQUITETURA_TELEGRAM_BOT_ASSISTENTE_COMPRAS.md](ARQUITETURA_TELEGRAM_BOT_ASSISTENTE_COMPRAS.md) |
 

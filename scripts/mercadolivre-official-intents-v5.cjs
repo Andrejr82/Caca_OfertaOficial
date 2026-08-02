@@ -213,7 +213,7 @@ function normalizeItems(items, context) {
 }
 
 async function runMercadoLivreOfficialIntentCoverage({
-  keywords = SCENARIOS.eletronicos.keywords,
+  keywords = SCENARIOS.informatica_editorial.keywords,
   accessToken,
   fetchImpl = global.fetch,
   maxPerIntent = 20,
@@ -340,7 +340,7 @@ async function runMercadoLivreOfficialIntentCoverage({
 async function main() {
   require('dotenv').config({ path: '.env.local' });
   const scenarioArgIndex = process.argv.indexOf('--scenario');
-  const scenarioId = scenarioArgIndex >= 0 ? process.argv[scenarioArgIndex + 1] : 'eletronicos';
+  const scenarioId = scenarioArgIndex >= 0 ? process.argv[scenarioArgIndex + 1] : 'informatica_editorial';
   const scenario = SCENARIOS[scenarioId];
   if (!scenario) throw new Error(`Cenário Mercado Livre não encontrado: ${scenarioId}`);
   const accessToken = await refreshAccessToken();

@@ -3,8 +3,8 @@
 const { PRICE_TIERS } = require('./curation-policy.cjs');
 
 const PUBLICATION_WINDOW = Object.freeze({
-  startHour: 8,
-  endHour: 22,
+  startHour: 7,
+  endHour: 23,
   intervalMinutes: 20,
 });
 

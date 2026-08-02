@@ -158,9 +158,9 @@ function createQualityAdmissionRunner() {
 }
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-// Executa ciclos de 4 horas. O roteador transforma cada ciclo em um bundle
-// determinístico das janelas editoriais que ele atravessa.
-const CRON_SCHEDULE = '0 0,4,8,12,16,20 * * *';
+// Executa uma descoberta por hora antes de cada fila editorial (06h–20h).
+// A fila de cupons das 22h permanece manual e não dispara busca de produtos.
+const CRON_SCHEDULE = '0 6-20 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
@@ -168,7 +168,7 @@ const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
 function getActiveMarketplaceScenario(marketplace = 'Shopee') {
   const routed = CLI_SCENARIO_ID
     ? (MARKETPLACE_SCENARIOS[CLI_SCENARIO_ID] || SHOPEE_SCENARIOS[CLI_SCENARIO_ID])
-    : getCycleScenario(getCycleStartHour(getSaoPauloHour()), 4);
+    : getCycleScenario(getSaoPauloHour(), 1);
   const scenarioId = routed?.scenarioId || routed?.id;
   return getMarketplaceScenarioContract(scenarioId, marketplace) || routed || null;
 }
@@ -462,6 +462,9 @@ async function loadRecentDiscoveryHistory(marketplace) {
 }
 
 async function runAmazonScenarioDiscovery(scenario, options = {}) {
+  if (scenario?.discoveryMode === 'manual_only') {
+    return { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario.label, products: [], raw_products: 0, duplicates: 0, queries: [], split_scenarios: [] };
+  }
   const parts = Array.isArray(scenario?.splitInto) && scenario.splitInto.length
     ? scenario.splitInto.map((id) => getMarketplaceScenarioContract(id, 'Amazon')).filter(Boolean)
     : [scenario];
@@ -1177,18 +1180,14 @@ function resolveManualScenarioId(category) {
   const byLabel = scenarioEntries.find(([, scenario]) => normalizeManualScenarioValue(scenario.label || scenario.name) === requested);
   if (byLabel) return byLabel[0];
   const aliases = new Map([
-    ['eletronicos', 'tecnologia_desejo'],
-    ['informatica', 'tecnologia_desejo'],
-    ['televisao', 'tecnologia_desejo'],
-    ['eletrodomesticos', 'eletrodomesticos_cozinha'],
-    ['eletroportateis', 'eletrodomesticos_cozinha'],
-    ['moveis_e_decoracao', 'casa_moveis'],
-    ['utilidades_domesticas', 'impulso_casa'],
-    ['cama_mesa_e_banho', 'impulso_casa'],
-    ['moda_beleza_e_perfumaria', 'moda_fitness_beleza_viagem'],
-    ['esporte_e_lazer', 'treino_academia'],
-    ['petshop', 'dono_de_pet'],
-    ['criancas_e_bebes', 'mae_de_primeira_viagem'],
+    ['casa_e_cozinha', 'casa_cozinha_editorial'], ['organizacao', 'organizacao_editorial'],
+    ['ferramentas', 'ferramentas_editorial'], ['informatica', 'informatica_editorial'],
+    ['celulares', 'celulares_editorial'], ['beleza', 'beleza_editorial'],
+    ['moda', 'moda_editorial'], ['esporte', 'esporte_editorial'],
+    ['petshop', 'pet_editorial'], ['automotivo', 'automotivo_editorial'],
+    ['games', 'games_editorial'], ['tv_e_audio', 'tv_audio_editorial'],
+    ['eletrodomesticos', 'eletrodomesticos_editorial'], ['moveis', 'moveis_editorial'],
+    ['grandes_ofertas', 'grandes_ofertas_editorial'], ['cupons', 'cupons_aprovados_editorial'],
   ]);
   return aliases.get(requested) || null;
 }
@@ -1308,7 +1307,7 @@ async function runScrapingCycle() {
 }
 
 async function runMercadoLivreOfficialDryRun() {
-  const scenario = getActiveMarketplaceScenario() || MARKETPLACE_SCENARIOS.eletronicos;
+  const scenario = getActiveMarketplaceScenario() || MARKETPLACE_SCENARIOS.informatica_editorial;
   const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
   const result = await runMercadoLivreOfficialIntentCoverage({
     accessToken,

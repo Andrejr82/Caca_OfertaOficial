@@ -133,10 +133,18 @@ for (const [scenarioId, scenario] of Object.entries(AMAZON_SCENARIOS)) {
   const allowed = [...new Set([...(scenario.allowedProductTerms || []), ...(existing?.allowedProductTerms || []), ...terms])];
   EXPLICIT.Amazon[scenarioId] = contract(
     terms,
-    AMAZON_BROWSE_NODES[scenarioId] || existing?.categories || [],
+    AMAZON_BROWSE_NODES[scenarioId] || scenario.browseNodeIds || scenario.apiCategories || existing?.categories || [],
     allowed,
     AMAZON_BLOCKED_BY_SCENARIO[scenarioId] || scenario.blockedProductTerms || existing?.blockedProductTerms || [],
   );
+}
+
+// Remove contratos legados do registro público: somente as filas editoriais
+// atuais podem ser resolvidas pelo roteador ou por consumidores externos.
+for (const marketplace of MARKETPLACES) {
+  for (const scenarioId of Object.keys(EXPLICIT[marketplace])) {
+    if (!Object.prototype.hasOwnProperty.call(SHOPEE_SCENARIOS, scenarioId)) delete EXPLICIT[marketplace][scenarioId];
+  }
 }
 
 function getMarketplaceScenarioContract(scenarioId, marketplace) {
@@ -149,9 +157,13 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
   return {
     ...base, id: scenarioId, scenarioId, marketplace,
     source: 'explicit_marketplace_contract',
-    splitInto: marketplace === 'Amazon' ? [...(AMAZON_SCENARIO_SPLITS[scenarioId] || [])] : [],
+    splitInto: [],
     amazonIntelligence: marketplace === 'Amazon'
-      ? (AMAZON_ATTRIBUTES_BY_SCENARIO[scenarioId] || { productTypes: [], attributes: [], priority: 'medium' })
+      ? (AMAZON_ATTRIBUTES_BY_SCENARIO[scenarioId] || {
+        productTypes: [...(base.allowedProductTerms || [])].slice(0, 8),
+        attributes: [...(base.attributes || [])],
+        priority: base.priority || 'medium',
+      })
       : null,
     terms: [...new Set(terms)], keywords: [...new Set(terms)],
     categories: [...(explicit?.categories || base.apiCategories || [])],
@@ -164,6 +176,11 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
       : [],
     allowedProductTerms: [...new Set([...(base.allowedProductTerms || []), ...(explicit?.allowedProductTerms || []), ...(base.keywords || [])])],
     blockedProductTerms: [...new Set(explicit?.blockedProductTerms || base.blockedProductTerms || [])],
+    queueHour: Number(base.queueHour),
+    maxAgeHours: Number(base.maxAgeHours || 4),
+    priority: base.priority || 'medium',
+    discoveryMode: base.discoveryMode || 'api_search',
+    attributes: [...new Set(base.attributes || [])],
   };
 }
 
