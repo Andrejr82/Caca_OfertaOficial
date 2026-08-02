@@ -31,7 +31,8 @@ export async function GET() {
 
     const defaultSettings = {
       cron_scraping_enabled: false,
-      notifications_enabled: false
+      notifications_enabled: false,
+      telegram_automation_enabled: false
     };
 
     return NextResponse.json({
@@ -60,15 +61,16 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { cron_scraping_enabled, notifications_enabled } = body;
+    const { cron_scraping_enabled, notifications_enabled, telegram_automation_enabled } = body;
 
-    if (typeof cron_scraping_enabled !== "boolean" || typeof notifications_enabled !== "boolean") {
+    if (typeof cron_scraping_enabled !== "boolean" || typeof notifications_enabled !== "boolean" || typeof telegram_automation_enabled !== "boolean") {
       return NextResponse.json({ ok: false, message: "Parâmetros inválidos." }, { status: 400 });
     }
 
     const configValue = {
       cron_scraping_enabled,
-      notifications_enabled
+      notifications_enabled,
+      telegram_automation_enabled
     };
 
     // Usar upsert para inserir ou atualizar a configuração baseada em (user_id, key)
@@ -94,7 +96,7 @@ export async function POST(request: Request) {
     // Registrar log de auditoria
     await logAuditAction(
       "update_general_settings",
-      `Cron de Scraping: ${cron_scraping_enabled ? "Ativo" : "Inativo"} | Notificações Realtime: ${notifications_enabled ? "Ativo" : "Inativo"}`
+      `Cron de Scraping: ${cron_scraping_enabled ? "Ativo" : "Inativo"} | Notificações Realtime: ${notifications_enabled ? "Ativo" : "Inativo"} | Automação Telegram: ${telegram_automation_enabled ? "Ativo" : "Inativo"}`
     );
 
     return NextResponse.json({

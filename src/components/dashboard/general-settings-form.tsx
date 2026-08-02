@@ -7,12 +7,14 @@ import { Loader2, Save } from "lucide-react";
 interface GeneralSettings {
   cron_scraping_enabled: boolean;
   notifications_enabled: boolean;
+  telegram_automation_enabled: boolean;
 }
 
 export function GeneralSettingsForm({ initialSettings }: { initialSettings: GeneralSettings }) {
   const { showToast } = useToast();
   const [cronEnabled, setCronEnabled] = useState(initialSettings.cron_scraping_enabled);
   const [notificationsEnabled, setNotificationsEnabled] = useState(initialSettings.notifications_enabled);
+  const [telegramEnabled, setTelegramEnabled] = useState(initialSettings.telegram_automation_enabled);
   const [saving, setSaving] = useState(false);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -27,7 +29,8 @@ export function GeneralSettingsForm({ initialSettings }: { initialSettings: Gene
         },
         body: JSON.stringify({
           cron_scraping_enabled: cronEnabled,
-          notifications_enabled: notificationsEnabled
+          notifications_enabled: notificationsEnabled,
+          telegram_automation_enabled: telegramEnabled
         })
       });
 
@@ -47,7 +50,8 @@ export function GeneralSettingsForm({ initialSettings }: { initialSettings: Gene
         const updateEvent = new CustomEvent("settings-updated", {
           detail: {
             cron_scraping_enabled: cronEnabled,
-            notifications_enabled: notificationsEnabled
+            notifications_enabled: notificationsEnabled,
+            telegram_automation_enabled: telegramEnabled
           }
         });
         window.dispatchEvent(updateEvent);
@@ -121,6 +125,34 @@ export function GeneralSettingsForm({ initialSettings }: { initialSettings: Gene
               aria-hidden="true"
               className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
                 notificationsEnabled ? "translate-x-5" : "translate-x-0"
+              }`}
+            />
+          </button>
+        </div>
+
+        <hr className="border-white/[0.04]" />
+
+        {/* Toggle 3: Automação de Disparo Telegram */}
+        <div className="flex items-center justify-between gap-4 py-2">
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-white/70">Disparo Automático no Telegram</h3>
+            <p className="text-[11px] text-white/30">
+              Permite que os posts aprovados (Draft) sejam despachados automaticamente para o Telegram em segundo plano.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setTelegramEnabled(!telegramEnabled)}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:ring-offset-2 focus:ring-offset-[#060a13] ${
+              telegramEnabled ? "bg-emerald-500" : "bg-white/10"
+            }`}
+            role="switch"
+            aria-checked={telegramEnabled}
+          >
+            <span
+              aria-hidden="true"
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                telegramEnabled ? "translate-x-5" : "translate-x-0"
               }`}
             />
           </button>

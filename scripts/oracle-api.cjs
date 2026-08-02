@@ -12,6 +12,8 @@ const {
 const app = express();
 app.use(express.json());
 
+const { startTelegramAutomation } = require('./telegram-auto-publisher.cjs');
+
 const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
 const LEGACY_ENDPOINT_DISABLED = 'LEGACY_ENDPOINT_DISABLED: Oracle API is a technical gateway; Discovery belongs to the Oracle Worker';
@@ -198,4 +200,7 @@ app.post('/api/manual/trends', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Micro-API Oracle rodando firme e forte na porta ${PORT}`);
+  
+  // Inicia o motor de disparo do Telegram
+  startTelegramAutomation(60000); // Roda a cada 60s
 });
