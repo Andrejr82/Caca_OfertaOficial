@@ -11,7 +11,8 @@ export default async function SettingsPage() {
   const supabase = await createServerSupabaseClient();
   let initialSettings = {
     cron_scraping_enabled: false,
-    notifications_enabled: false
+    notifications_enabled: false,
+    telegram_automation_enabled: false
   };
 
   if (supabase) {
@@ -30,7 +31,8 @@ export default async function SettingsPage() {
       if (data?.value) {
         initialSettings = {
           cron_scraping_enabled: !!data.value.cron_scraping_enabled,
-          notifications_enabled: !!data.value.notifications_enabled
+          notifications_enabled: !!data.value.notifications_enabled,
+          telegram_automation_enabled: !!data.value.telegram_automation_enabled
         };
       }
     }
