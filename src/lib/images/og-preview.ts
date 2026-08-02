@@ -167,11 +167,6 @@ function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
   <rect width="${config.width}" height="${config.height}" fill="#f3f4f6"/>
   <rect x="36" y="36" width="${config.width - 72}" height="${config.height - 72}" rx="54" fill="#ffffff"/>
   <rect x="78" y="78" width="310" height="64" rx="32" fill="${badgeBg}"/>
-  <text x="233" y="120" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="800" fill="${badgeBg === "#ffffff" ? "#111827" : "#ffffff"}">${escapeXml(badgeLabel)}</text>
-  <text x="${config.width - 76}" y="86" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="#000000" opacity="0.85">Caça Oferta Oficial</text>
-  <text x="${config.width / 2}" y="420" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#111827">${escapeXml(title)}</text>
-  <text x="${config.width / 2}" y="510" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="700" fill="#4b5563">${escapeXml(subtitle.slice(0, 44))}</text>
-  <text x="${config.width / 2}" y="646" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="900" fill="#059669">${escapeXml(price)}</text>
 </svg>`);
   }
 
@@ -181,11 +176,6 @@ function buildFallbackSvg(offer: OfferForPreview, variant: PreviewVariant) {
   <rect x="54" y="54" width="${config.width - 108}" height="${config.height - 108}" rx="42" fill="#ffffff" opacity="0.96"/>
   <circle cx="${config.width - 168}" cy="130" r="96" fill="${badgeBg}" opacity="0.18"/>
   <circle cx="160" cy="${config.height - 128}" r="128" fill="${badgeBg}" opacity="0.12"/>
-  <text x="90" y="128" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="800" fill="${badgeBg}">${escapeXml(badgeLabel)}</text>
-  <text x="90" y="244" font-family="Arial, Helvetica, sans-serif" font-size="72" font-weight="900" fill="#111827">${escapeXml(title)}</text>
-  <text x="90" y="322" font-family="Arial, Helvetica, sans-serif" font-size="38" font-weight="700" fill="#374151">${escapeXml(subtitle.slice(0, 52))}</text>
-  <text x="90" y="438" font-family="Arial, Helvetica, sans-serif" font-size="66" font-weight="900" fill="#059669">${escapeXml(price)}</text>
-  <text x="90" y="520" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" fill="#111827">Caça Oferta Oficial</text>
 </svg>`);
 }
 
@@ -262,14 +252,9 @@ function buildBaseBackground(width: number, height: number) {
 function buildWhatsAppOverlay(offer: OfferForPreview) {
   const config = PREVIEW_CONFIG.whatsapp;
 
-  const title = cleanOfferTitle(offer.product_name) || "Oferta";
-  const shortTitle = title.length > 40 ? `${title.slice(0, 37).trimEnd()}...` : title;
-
   return Buffer.from(`
 <svg width="${config.width}" height="${config.height}" viewBox="0 0 ${config.width} ${config.height}" xmlns="http://www.w3.org/2000/svg">
   <rect x="26" y="26" width="${config.width - 52}" height="${config.height - 52}" rx="58" fill="none" stroke="#e5e7eb" stroke-width="4"/>
-  <text x="${config.width - 56}" y="76" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="600" fill="#000000" opacity="0.85">Caça Oferta Oficial</text>
-  <text x="${config.width / 2}" y="${config.height - 78}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="32" font-weight="700" fill="#4b5563">${escapeXml(shortTitle)}</text>
 </svg>`);
 }
 
