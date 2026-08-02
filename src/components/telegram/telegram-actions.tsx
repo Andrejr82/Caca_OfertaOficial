@@ -77,6 +77,15 @@ export function TelegramPostApprovalCard({ post }: { post: PostWithOffer }) {
     setStatus(null);
 
     try {
+      const saveResponse = await fetch("/api/posts/update-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id, channel: "telegram", content: caption })
+      });
+      if (!saveResponse.ok) {
+        const saveData = await saveResponse.json().catch(() => ({}));
+        throw new Error(saveData.message || "Não foi possível salvar a mensagem editada.");
+      }
       const response = await fetch("/api/telegram/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

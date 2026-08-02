@@ -13,7 +13,7 @@ const COUPON_FALLBACKS: Record<string, string> = {
   // Marketplace icons antigos tinham 16–48px e ficavam pixelados nos cards.
   // Use o card neutro de maior resolução até existir imagem real válida.
   amazon: "/coupon-assets/default-coupon.png",
-  shopee: "/coupon-assets/default-coupon.png",
+  shopee: "/coupon-assets/shopee-coupon.webp",
   magalu: "/coupon-assets/default-coupon.png",
   "mercado livre": "/coupon-assets/mercadolivre-coupon.png",
   mercadolivre: "/coupon-assets/mercadolivre-coupon.png",
@@ -39,8 +39,22 @@ function normalizeText(value: string | null | undefined) {
   return String(value || "").trim();
 }
 
+function normalizeCouponRules(value: string) {
+  // Corrige apenas o artefato conhecido gerado no cadastro antigo; não altera
+  // outras regras fornecidas pelo operador.
+  return value.replace(/R\$\s*hundert/gi, "R$ 100");
+}
+
 function normalizePlatform(value: string | null | undefined) {
   return normalizeText(value).toLowerCase();
+}
+
+function getCouponRedemptionLabel(platform: string) {
+  const normalized = normalizePlatform(platform);
+  if (normalized === "amazon") return "🏪 Resgate na Amazon";
+  if (normalized === "mercado livre" || normalized === "mercadolivre") return "🏪 Resgate no Mercado Livre";
+  if (normalized === "shopee") return "🛍️ Resgate na Shopee";
+  return "🏪 Resgate no marketplace";
 }
 
 export function isCouponOffer(offer: Partial<CouponOfferLike> | null | undefined) {
@@ -133,6 +147,19 @@ function getCouponBenefit(offer: Partial<CouponOfferLike> | null | undefined) {
   return normalizeText(title.split(/\s+-\s+/, 1)[0]) || "Cupom disponível";
 }
 
+function normalizeCouponCode(value: string) {
+  if (/^https?:\/\//i.test(value)) return "";
+  const prefix = value.startsWith("#") ? "#" : "";
+  const body = value.replace(/^#/, "");
+  if (body.length > 2 && body.length % 2 === 0) {
+    const half = body.length / 2;
+    if (body.slice(0, half).toUpperCase() === body.slice(half).toUpperCase()) {
+      return `${prefix}${body.slice(0, half)}`;
+    }
+  }
+  return value;
+}
+
 export function buildCouponSocialMessage(
   offer: Partial<CouponOfferLike> | null | undefined,
   affiliateLink: string
@@ -140,19 +167,27 @@ export function buildCouponSocialMessage(
   const marketplace = normalizeText(offer?.platform) || "Marketplace parceiro";
   const benefit = getCouponBenefit(offer);
   const product = extractCouponProduct(offer?.notes) || extractCouponProduct(offer?.product_name);
-  const coupon = normalizeText(offer?.coupon);
+  const coupon = normalizeCouponCode(normalizeText(offer?.coupon));
   const codeLine = coupon
-    ? `🎟️ *Código:* ${coupon}`
+    ? `🎟️ Código: ${coupon}`
     : "🎟️ Resgate direto no marketplace";
-  const productLine = product ? `🛍️ *${product}*\n` : "";
+  const productLine = product ? `🛍️ ${product}\n` : "";
+  const details = parseCouponDetails(offer?.notes);
+  const rules = normalizeCouponRules(details.description)
+    .replace(/\s*\|\s*Validade:.*$/i, "")
+    .replace(/^Cupom público disponível no marketplace\.$/i, "")
+    .trim();
+  const rulesLine = rules ? `📌 Regras: ${rules}` : "";
+  const validityLine = details.validity ? `📅 Validade: ${details.validity}` : "";
 
   return [
-    `🎫 *${benefit}*`,
+    `🎫 ${benefit}`,
     productLine.trimEnd(),
-    `🏪 ${marketplace}`,
+    getCouponRedemptionLabel(marketplace),
     codeLine,
     `🔗 ${affiliateLink}`,
-    "ℹ️ Consulte condições e validade no marketplace."
+    rulesLine,
+    validityLine
   ].filter(Boolean).join("\n");
 }
 
@@ -170,12 +205,15 @@ export function parseCouponDetails(notes: string | null | undefined) {
     .replace(/^Plataforma original:\s*[^.]+\.\s*/i, "")
     .replace(/^Importado automaticamente via Robô de Cupons \([^)]+\)\.\s*/i, "");
 
-  const validityMatch = description.match(
-    /(válid[oa]\s+até[^.]*|vence\s+em[^.]*|expira\s+em[^.]*|até\s+\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i
-  );
+  const explicitValidity = description.match(/(?:^|\|\s*)Validade:\s*([^|]+)/i)?.[1]?.trim();
+  const inferredValidity = explicitValidity
+    ? null
+    : description.match(
+      /(válid[oa]\s+até[^.]*|vence\s+em[^.]*|expira\s+em[^.]*|até\s+\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?)/i
+    );
 
   return {
     description: description || "Cupom público disponível no marketplace.",
-    validity: validityMatch ? validityMatch[1].trim() : null
+    validity: explicitValidity || (inferredValidity ? inferredValidity[1].trim() : null)
   };
 }

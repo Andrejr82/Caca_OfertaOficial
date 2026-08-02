@@ -103,6 +103,15 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
     setStatus(null);
 
     try {
+      const saveResponse = await fetch("/api/posts/update-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id, channel: "instagram", content: caption })
+      });
+      if (!saveResponse.ok) {
+        const saveData = await saveResponse.json().catch(() => ({}));
+        throw new Error(saveData.message || "Não foi possível salvar a legenda editada.");
+      }
       const response = await fetch("/api/instagram/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { fetchMarketplaceCoupons, type ScrapedCoupon } from "@/lib/affiliates/coupon-scraper";
+import { fetchMarketplaceCoupons, getCouponSourceStatus, type ScrapedCoupon } from "@/lib/affiliates/coupon-scraper";
 import { persistCouponDrafts } from "@/lib/coupons/persist-coupon-drafts";
 
 const SUPPORTED_MARKETPLACES = new Set(["shopee", "mercado livre", "amazon"]);
@@ -49,7 +49,9 @@ export async function POST(request: Request) {
       marketplace: group.marketplace,
       count: group.offers.length,
       status: group.error ? "error" : group.offers.length > 0 ? "found" : "empty",
-      message: group.error || (group.offers.length > 0 ? `${group.offers.length} encontrado(s)` : "Nenhum ativo encontrado")
+      message: group.error || (group.offers.length > 0
+        ? `${group.offers.length} encontrado(s)`
+        : getCouponSourceStatus(group.marketplace).message)
     }));
 
     return NextResponse.json({

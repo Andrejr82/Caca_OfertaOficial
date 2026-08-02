@@ -54,6 +54,16 @@ const couponAvailability = {
 const mercadolivreCouponTooltip =
   "Os cupons públicos do Mercado Livre não possuem uma fonte oficial estável para este módulo.\n\nA busca de PRODUTOS continua funcionando normalmente.";
 
+const emptyManualCoupon = {
+  marketplace: "Mercado Livre",
+  code: "",
+  discount: "",
+  rules: "",
+  validity: "",
+  link: "",
+  imageUrl: ""
+};
+
 export function TrendsAction() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -62,6 +72,9 @@ export function TrendsAction() {
   const [result, setResult] = useState<{ success: boolean; message: string } | null>(null);
   const [mode, setMode] = useState<"products" | "coupons">("products");
   const [offers, setOffers] = useState<any[]>([]);
+  const [manualCoupon, setManualCoupon] = useState(emptyManualCoupon);
+  const [manualLoading, setManualLoading] = useState(false);
+  const [manualResult, setManualResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     try {
@@ -212,6 +225,33 @@ export function TrendsAction() {
     }
   }
 
+  async function handleManualCouponSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setManualLoading(true);
+    setManualResult(null);
+    try {
+      const response = await fetch("/api/coupons/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(manualCoupon)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.ok) {
+        const errors = Array.isArray(data.errors) ? data.errors.join(" ") : data.message;
+        setManualResult({ success: false, message: errors || "Não foi possível cadastrar o cupom." });
+        return;
+      }
+      setManualResult({ success: true, message: "Cupom cadastrado. O rascunho foi persistido com o resgate no marketplace." });
+      setManualCoupon(emptyManualCoupon);
+      router.refresh();
+    } catch (error) {
+      console.error("[MANUAL-COUPON] Erro no cadastro:", error);
+      setManualResult({ success: false, message: "Erro de rede ao cadastrar o cupom." });
+    } finally {
+      setManualLoading(false);
+    }
+  }
+
   return (
     <div className="glass-card p-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between border-b border-white/[0.05] pb-4 mb-4">
@@ -240,7 +280,7 @@ export function TrendsAction() {
           <p className="text-xs text-white/35 mt-1">
             {mode === "products" 
               ? "Varre os itens mais vendidos das plataformas selecionadas, extrai dados de produtos e gera rascunhos com IA."
-              : "Busca cupons públicos disponíveis através de fontes oficiais suportadas."}
+              : "Cadastre manualmente cupons da Central de Afiliados. A busca pública só é usada quando houver fonte oficial disponível."}
           </p>
           <div className="mt-3 flex flex-wrap gap-4">
             {(Object.keys(sourceLabels) as Array<keyof typeof sourceLabels>).map((key) => {
@@ -285,8 +325,38 @@ export function TrendsAction() {
           </div>
           {mode === "coupons" ? (
             <p className="mt-2 text-[11px] text-white/45">
-              Alguns marketplaces podem não disponibilizar cupons públicos de forma oficial.
+              Mercado Livre, Shopee e Amazon exigem código, regras, validade e link copiados da área oficial de afiliados.
             </p>
+          ) : null}
+          {mode === "coupons" ? (
+            <form onSubmit={handleManualCouponSubmit} className="mt-4 rounded-lg border border-blue-500/20 bg-blue-500/5 p-4">
+              <h3 className="text-sm font-bold text-blue-200">Cadastrar cupom manualmente</h3>
+              <p className="mt-1 text-[11px] text-white/50">Cole os dados exibidos na Central de Afiliados. O sistema não consulta nem inventa cupons.</p>
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <select
+                  required
+                  value={manualCoupon.marketplace}
+                  onChange={(e) => setManualCoupon((prev) => ({ ...prev, marketplace: e.target.value }))}
+                  className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark]"
+                >
+                  <option>Mercado Livre</option>
+                  <option>Shopee</option>
+                  <option>Amazon</option>
+                </select>
+                <input required value={manualCoupon.code} onChange={(e) => setManualCoupon((prev) => ({ ...prev, code: e.target.value }))} placeholder="Código ou RESGATE DIRETO" className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark]" />
+                <input required value={manualCoupon.discount} onChange={(e) => setManualCoupon((prev) => ({ ...prev, discount: e.target.value }))} placeholder="Benefício (ex.: R$ 20 OFF)" className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark]" />
+                <input required value={manualCoupon.validity} onChange={(e) => setManualCoupon((prev) => ({ ...prev, validity: e.target.value }))} placeholder="Validade (ex.: até 31/08/2026)" className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark]" />
+                <input required type="url" value={manualCoupon.link} onChange={(e) => setManualCoupon((prev) => ({ ...prev, link: e.target.value }))} placeholder="Link oficial/afiliado que gera comissão" title="Use aqui o link de afiliado do produto ou cupom" className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark] md:col-span-2" />
+                <input type="url" value={manualCoupon.imageUrl} onChange={(e) => setManualCoupon((prev) => ({ ...prev, imageUrl: e.target.value }))} placeholder="URL direta da imagem (opcional; não use link Shopee/afiliado)" title="Cole o endereço direto do arquivo JPG, PNG ou WebP" className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark] md:col-span-2" />
+                <textarea required value={manualCoupon.rules} onChange={(e) => setManualCoupon((prev) => ({ ...prev, rules: e.target.value }))} placeholder="Regras de uso (mínimo, categoria, canal etc.)" rows={2} className="bg-[#08131f] border border-moss/20 rounded-md text-sm text-white placeholder:text-white/40 px-3 py-2 outline-none [color-scheme:dark] md:col-span-2" />
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <Button type="submit" disabled={manualLoading} className="bg-blue-600 hover:bg-blue-700 text-white">
+                  {manualLoading ? <><Loader2 className="animate-spin" size={16} /> Cadastrando...</> : "Cadastrar cupom"}
+                </Button>
+                {manualResult ? <span className={`text-xs ${manualResult.success ? "text-emerald-300" : "text-red-300"}`}>{manualResult.message}</span> : null}
+              </div>
+            </form>
           ) : null}
           <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center">
             {mode === "products" && (

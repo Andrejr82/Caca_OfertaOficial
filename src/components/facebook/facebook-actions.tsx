@@ -36,6 +36,15 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
     setLoading(true);
     setStatus(null);
     try {
+      const saveResponse = await fetch("/api/posts/update-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ postId: post.id, channel: "facebook", content: caption })
+      });
+      if (!saveResponse.ok) {
+        const saveData = await saveResponse.json().catch(() => ({}));
+        throw new Error(saveData.message || "Não foi possível salvar o texto editado.");
+      }
       const response = await fetch("/api/facebook/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
