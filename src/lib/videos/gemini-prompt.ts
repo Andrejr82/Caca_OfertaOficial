@@ -57,7 +57,7 @@ function speechScript(offer: GeminiPromptOffer, current: string, old: string | n
     ? `de ${old} por ${current}, com ${percentage}% de desconto verificado`
     : `por ${current}`;
 
-  return `"Olha este achado${marketplace}! Este é o ${offer.product_name}, ${priceLine}.${category}. Gostou? Veja os detalhes desta oferta na publicação."`;
+  return `"Olha este achado${marketplace}! Este é o ${offer.product_name}, ${priceLine},${category}. Gostou? Veja os detalhes desta oferta na publicação."`;
 }
 
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
@@ -89,30 +89,26 @@ export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
   return `Crie um vídeo vertical realista para Reel/Short, usando obrigatoriamente os dois arquivos anexados:
 
 1. Avatar padrão: Avatar_Silvia.png. Preserve exatamente o rosto, identidade, aparência feminina, cabelo, camiseta, logotipo, iluminação, cenário e proporções do avatar.
-2. Produto: imagem do produto selecionado. Reproduza fielmente o formato, cor, textura, escala e detalhes visíveis do produto; não invente características.
+2. Produto (OBJECT LOCK - OBRIGATÓRIO): A imagem do produto anexada é um ativo bloqueado (locked asset).
 
 Produto: ${offer.product_name}
-Categoria: ${category}
-Marketplace: ${marketplace}
+Categoria: ${offer.category || "Ofertas em Geral"}
+Marketplace: ${offer.platform}
 
-Direção obrigatória do vídeo:
-- Trate a imagem do produto como referência visual bloqueada (product lock): não redesenhe, substitua ou combine o produto com outro.
-- Use uma única tomada contínua de 8 a 12 segundos, sem cortes, transições, mudanças de câmera ou salto temporal.
-- Planeje três momentos na mesma tomada: 0–2s apresentar parado; 2–8s executar a ação; 8–12s retornar à pose inicial e mostrar o produto.
-- A pose final deve preservar a mesma mão dominante, empunhadura, orientação e escala do primeiro quadro.
-- Mantenha as duas mãos anatomicamente corretas, com cinco dedos, contato físico consistente e oclusão natural; nunca crie mãos extras, dedos deformados, objetos flutuantes ou troca de empunhadura sem animação intermediária.
-- Preserve rosto, identidade, camiseta, logotipo, iluminação e cenário do avatar; não adicione pessoas, objetos ou textos na cena.
-- Use enquadramento vertical 9:16, câmera estável, iluminação de estúdio e movimentos lentos e coordenados.
-${actionGuidance(offer)}
-- Inclua a fala em português do Brasil abaixo, com sincronização labial clara. A fala não autoriza inventar características do produto.
+DIRETRIZES DE OBJECT LOCK (PROIBIÇÕES ABSOLUTAS):
+- É expressamente PROIBIDO redesenhar o produto, alterar formato, recriar embalagem, alterar proporções, cores, textos ou remover/adicionar elementos.
+- Zero redesign, zero reinterpretation, zero stylization.
+- Pixel-level fidelity whenever possible. O vídeo deve manter identidade visual idêntica à foto anexada.
 
-Copy/roteiro exato:
-${copy}
+DIREÇÃO DE CENA E AÇÃO:
+- O produto deve aparecer como um gráfico flutuante (picture-in-picture) ou posicionado de forma estática no cenário ao lado do avatar.
+- O avatar NÃO DEVE tocar, segurar (empunhar) ou interagir fisicamente com o produto. O avatar deve apenas apontar, gesticular em direção ao produto e sorrir de forma natural.
+- Use uma única tomada contínua de 8 a 10 segundos, sem cortes, transições, mudanças de câmera ou salto temporal.
+- Preserve rosto, identidade, camiseta, logotipo, iluminação e cenário do avatar original. Não adicione pessoas, objetos extras ou textos flutuantes (exceto o próprio produto).
+- Enquadramento vertical 9:16, câmera estável, iluminação de estúdio e movimentos lentos e coordenados.
 
-Fala sugerida:
-${speechScript(offer, current, old, percentage)}
-
-voz feminina adulta, natural, clara e acolhedora, em português do Brasil. Mantenha a mesma voz feminina durante todo o vídeo, sem alternância de voz masculina. Faça sincronização labial precisa.
+FALA E SINCRONIZAÇÃO LABIAL:
+Inclua a fala em português do Brasil abaixo, com sincronização labial precisa. A voz deve ser feminina adulta, natural, clara e acolhedora. Mantenha a mesma voz durante todo o vídeo, sem alternância de voz masculina. Faça sincronização labial precisa.
 
 Regras da fala e da estratégia de marketing:
 - Use a sequência gancho → produto → preço verificado → contexto da categoria → CTA suave.

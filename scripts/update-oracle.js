@@ -59,6 +59,7 @@ if (!/^\/[A-Za-z0-9._/-]+$/.test(PROJECT_DIR)) throw new Error('ORACLE_PROJECT_D
 const ssh = (command) => execFileSync('ssh', [
   '-i', SSH_KEY_PATH,
   '-o', 'BatchMode=yes',
+  '-o', 'StrictHostKeyChecking=no',
   '-o', 'ConnectTimeout=15',
   TARGET,
   command,
@@ -67,6 +68,7 @@ const ssh = (command) => execFileSync('ssh', [
 const scp = (localFile, remoteFile) => execFileSync('scp', [
   '-i', SSH_KEY_PATH,
   '-o', 'BatchMode=yes',
+  '-o', 'StrictHostKeyChecking=no',
   '-o', 'ConnectTimeout=15',
   localFile,
   `${TARGET}:${remoteFile}`,
