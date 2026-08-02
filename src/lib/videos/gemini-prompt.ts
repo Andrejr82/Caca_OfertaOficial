@@ -66,6 +66,15 @@ export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
   const percentage = discount(offer.current_price, offer.old_price);
   const marketplace = offer.platform || "marketplace não informado";
   const category = offer.category || "categoria não informada";
+
+  const hashtags = [
+    "#oferta",
+    "#achadinhos",
+    "#promocao",
+    offer.platform ? `#${offer.platform.replace(/\s+/g, '').toLowerCase()}` : null,
+    offer.category ? `#${offer.category.replace(/\s+/g, '').toLowerCase()}` : null
+  ].filter(Boolean).join(" ");
+
   const copy = [
     `🚨 OFERTA EM DESTAQUE`,
     `🛍️ ${offer.product_name}`,
@@ -73,11 +82,13 @@ export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
     offer.shipping_free ? "🚚 Frete grátis" : null,
     offer.coupon ? `🎟️ Cupom: ${offer.coupon}` : null,
     `🏪 Achado no ${marketplace}`,
+    ``,
+    hashtags
   ].filter(Boolean).join("\n");
 
   return `Crie um vídeo vertical realista para Reel/Short, usando obrigatoriamente os dois arquivos anexados:
 
-1. Avatar padrão: Avatar_Anuncio.png. Preserve exatamente o rosto, identidade visual, camiseta, logotipo e proporções do avatar.
+1. Avatar padrão: Avatar_Silvia.png. Preserve exatamente o rosto, identidade, aparência feminina, cabelo, camiseta, logotipo, iluminação, cenário e proporções do avatar.
 2. Produto: imagem do produto selecionado. Reproduza fielmente o formato, cor, textura, escala e detalhes visíveis do produto; não invente características.
 
 Produto: ${offer.product_name}
@@ -100,6 +111,8 @@ ${copy}
 
 Fala sugerida:
 ${speechScript(offer, current, old, percentage)}
+
+voz feminina adulta, natural, clara e acolhedora, em português do Brasil. Mantenha a mesma voz feminina durante todo o vídeo, sem alternância de voz masculina. Faça sincronização labial precisa.
 
 Regras da fala e da estratégia de marketing:
 - Use a sequência gancho → produto → preço verificado → contexto da categoria → CTA suave.

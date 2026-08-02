@@ -45,6 +45,8 @@ const DEPLOY_FILES = [
   'scripts/marketplace-scenario-contracts.cjs',
   'scripts/offer-quality-shadow-runtime.cjs',
   'scripts/offer-quality-queue-runtime.cjs',
+  'scripts/oracle-api.cjs',
+  'scripts/telegram-auto-publisher.cjs',
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
@@ -166,7 +168,7 @@ try {
   }
 
   // ─── Passo 7: restart PM2 (somente após upload do manifesto) ─────────────
-  ssh(`set -eu; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null`);
+  ssh(`set -eu; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null; pm2 restart '${PM2_API_NAME}'; pm2 describe '${PM2_API_NAME}' >/dev/null`);
 
   // ─── Passo 8: limpeza do stage temporário ────────────────────────────────
   ssh(`rm -rf '${remoteStage}'`);
