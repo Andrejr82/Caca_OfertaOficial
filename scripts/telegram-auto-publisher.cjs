@@ -118,7 +118,20 @@ async function processTelegramQueue() {
       console.log(`[Telegram Auto] Publicando post ${post.id}...`);
       try {
         const text = post.content || '';
-        const mediaUrl = post.media_url || (post.offers && post.offers.image_url) || '';
+        let mediaUrl = post.media_url || (post.offers && post.offers.image_url) || '';
+
+        // Se temos um offer_id e não é um cupom, usamos o gerador de imagem premium
+        // Isso garante o fundo texturizado com a imagem perfeitamente enquadrada no centro
+        if (post.offer_id && post.offers) {
+           const isCoupon = String(post.offers.product_name || '').startsWith('[CUPOM]') || 
+                            String(post.offers.notes || '').includes('Robô de Cupons');
+           
+           if (!isCoupon) {
+              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
+              const cleanBaseUrl = baseUrl.replace(/\/$/, "");
+              mediaUrl = `${cleanBaseUrl}/api/images/whatsapp-premium?offerId=${encodeURIComponent(post.offer_id)}&v=1`;
+           }
+        }
         
         if (mediaUrl) {
           await sendTelegramPhoto(text, mediaUrl);
@@ -127,15 +140,19 @@ async function processTelegramQueue() {
           console.warn(`[Telegram Auto] Post ${post.id} não possui media_url, ignorando.`);
         }
         
-        await supabase
+        const { error: updateError } = await supabase
           .from('posts')
           .update({ 
              status: 'published', 
-             published_at: new Date().toISOString() 
+             posted_at: new Date().toISOString() 
           })
           .eq('id', post.id);
 
-        console.log(`[Telegram Auto] Post ${post.id} publicado com sucesso.`);
+        if (updateError) {
+          console.error(`[Telegram Auto] Falha ao atualizar status do post ${post.id}:`, updateError.message);
+        } else {
+          console.log(`[Telegram Auto] Post ${post.id} publicado com sucesso.`);
+        }
 
         // Sleep para evitar rate limit (3s)
         await new Promise(r => setTimeout(r, 3000));

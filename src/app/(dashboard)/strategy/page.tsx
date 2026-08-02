@@ -1,12 +1,22 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Compass, MessageCircle, ShieldCheck, Target } from "lucide-react";
 
 const schedule = [
-  { time: "07h–09h", channels: "WhatsApp · Status · Stories", focus: "Cupom simples, casa, utilidades e reposição", marketplaces: "Shopee · Amazon · Mercado Livre" },
-  { time: "11h–13h", channels: "WhatsApp · Stories", focus: "Eletrônicos acessíveis, air fryer, fones e escritório", marketplaces: "Amazon · Mercado Livre · Shopee" },
-  { time: "14h–16h", channels: "Instagram Reel · Stories", focus: "Produto demonstrável: organização, casa, beleza e gadgets", marketplaces: "Shopee · Amazon" },
-  { time: "17h–19h", channels: "WhatsApp · Status · Telegram", focus: "Melhor oferta do dia, cupom e queda real de preço", marketplaces: "Mercado Livre · Shopee" },
-  { time: "20h–22h", channels: "Instagram Reel · Feed · WhatsApp", focus: "Comparativos e ticket médio/alto: TV, notebook, celular e eletro", marketplaces: "Amazon · Mercado Livre" },
-  { time: "22h–00h", channels: "WhatsApp · Stories", focus: "Seleção curta de cupons e achadinhos", marketplaces: "Shopee · Mercado Livre" }
+  { time: "07h", channels: "Automação", focus: "Cama, mesa, banho, utensílios, cafeteiras, air fryers", marketplaces: "casa_cozinha_editorial" },
+  { time: "08h", channels: "Automação", focus: "Organizadores, caixas, cestos, cabides, limpeza", marketplaces: "organizacao_editorial" },
+  { time: "09h", channels: "Automação", focus: "Furadeiras, parafusadeiras, manuais, kits", marketplaces: "ferramentas_editorial" },
+  { time: "10h", channels: "Automação", focus: "Notebooks, computadores, monitores, impressoras", marketplaces: "informatica_editorial" },
+  { time: "11h", channels: "Automação", focus: "Smartphones, celulares, capas, carregadores", marketplaces: "celulares_editorial" },
+  { time: "12h", channels: "Automação", focus: "Skincare, maquiagem, perfumes, cabelo e autocuidado", marketplaces: "beleza_editorial" },
+  { time: "13h", channels: "Automação", focus: "Roupas, calçados, bolsas, relógios e acessórios", marketplaces: "moda_editorial" },
+  { time: "14h", channels: "Automação", focus: "Academia, corrida, yoga, fitness e esportes", marketplaces: "esporte_editorial" },
+  { time: "15h", channels: "Automação", focus: "Ração, brinquedos, camas, higiene e transporte pet", marketplaces: "pet_editorial" },
+  { time: "16h", channels: "Automação", focus: "Acessórios, ferramentas automotivas, som e manutenção", marketplaces: "automotivo_editorial" },
+  { time: "17h", channels: "Automação", focus: "Consoles, jogos, controles, cadeiras e acessórios", marketplaces: "games_editorial" },
+  { time: "18h", channels: "Automação", focus: "TVs, soundbars, caixas de som, fones", marketplaces: "tv_audio_editorial" },
+  { time: "19h", channels: "Automação", focus: "Geladeiras, fogões, micro-ondas, lavadoras", marketplaces: "eletrodomesticos_editorial" },
+  { time: "20h", channels: "Automação", focus: "Camas, sofás, mesas, cadeiras, racks, escritórios", marketplaces: "moveis_editorial" },
+  { time: "21h", channels: "Automação", focus: "Ofertas de qualquer categoria com maior desconto", marketplaces: "grandes_ofertas_editorial" },
+  { time: "22h", channels: "Automação", focus: "Apenas cupons cadastrados, aprovados manualmente", marketplaces: "cupons_aprovados_editorial" }
 ];
 
 const channelPlan = [
