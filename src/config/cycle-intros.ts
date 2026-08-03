@@ -1,34 +1,33 @@
 export const TELEGRAM_CYCLE_INTROS: Record<number, string> = {
-  7: `Bom dia! ☀️ 
-Já preparou o café? Porque a nossa seleção de ofertas para Casa e Cozinha acabou de sair do forno! 🍳 
-
-Panelas, utensílios e tudo para deixar sua casa ainda mais aconchegante com preços surreais.
-👉 Conhece alguém que tá montando a casa nova ou ama cozinhar? Já envia essa mensagem pra ela não perder!
-
-📲 Acompanhe o Caça Oferta Oficial onde preferir:
-✈️ Telegram: https://t.me/caca_ofertaoficial
-💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0
-📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  7: `Bom dia! ☀️ \nJá preparou o café? Porque a nossa seleção de ofertas para Casa e Cozinha acabou de sair do forno! 🍳 \n\nPanelas, utensílios e tudo para deixar sua casa ainda mais aconchegante com preços surreais.\n👉 Conhece alguém que tá montando a casa nova ou ama cozinhar? Já envia essa mensagem pra ela não perder!\n\n📲 Acompanhe o Caça Oferta Oficial onde preferir:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
   
-  10: `Bom dia! ☕ 
-Já está no trabalho ou estudando? Dá uma pausa rápida porque a seleção de Informática está no ar! 💻 
-
-Notebooks, mouses, teclados e acessórios com aquele preço de Black Friday que a gente ama.
-👉 Se o notebook daquele seu amigo já tá pedindo socorro, manda esse post pra ele agora mesmo!
-
-📲 Faça parte da nossa comunidade oficial:
-✈️ Telegram: https://t.me/caca_ofertaoficial
-💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0
-📸 Instagram: https://instagram.com/caca.ofertaoficial`,
-
-  21: `Boa noite, caçadores de oferta! 🌟 
-É agora ou nunca! Chegou o bloco das Grandes Ofertas do Dia! 💥 
-
-Aqui entram as promoções MAIS AGRESSIVAS, erros de preço e descontos relâmpago que esgotam em minutos.
-👉 Oferta boa é oferta compartilhada. Envia rápido no grupo da família e dos amigos, porque esses estoques vão voar!
-
-📲 Ative as notificações nos nossos canais:
-✈️ Telegram: https://t.me/caca_ofertaoficial
-💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0
-📸 Instagram: https://instagram.com/caca.ofertaoficial`
+  8: `Bom dia! 💅 \nHora de cuidar de você! Nossa seleção de Beleza e Cuidado Pessoal acabou de chegar. ✨ \n\nSecadores, perfumes, skincare e muito autocuidado com aquele descontão que a gente adora.\n👉 Manda no grupo das amigas que também amam um spa day em casa!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  9: `Bom dia! 📱 \nAquela troca de celular tão aguardada chegou! Seleção de Smartphones e Acessórios no ar! 🔋 \n\nAparelhos novos, fones, capinhas e tudo pro seu celular ficar turbinado.\n👉 Se o celular do seu amigo tá com a tela trincada, envia essas ofertas pra ele urgente!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  10: `Bom dia! ☕ \nJá está no trabalho ou estudando? Dá uma pausa rápida porque a seleção de Informática está no ar! 💻 \n\nNotebooks, mouses, teclados e acessórios com aquele preço de Black Friday que a gente ama.\n👉 Se o notebook daquele seu amigo já tá pedindo socorro, manda esse post pra ele agora mesmo!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  11: `Bom dia! 💡 \nQue tal modernizar sua casa? A seleção de Casa Inteligente e Automação está liberada! 🤖 \n\nLâmpadas smart, assistentes virtuais, fechaduras digitais e muito mais com preços imperdíveis.\n👉 Conhece quem ama tecnologia e quer ter a casa do futuro? Manda pra ele!\n\n📲 Acompanhe o Caça Oferta Oficial onde preferir:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  12: `Boa tarde! 🍽️ \nHora do almoço também é hora de economizar! Nossa seleção de Mercado e Bebidas está na mesa. 🍷 \n\nOfertas pra abastecer a despensa, bebidas pra comemorar e mantimentos com preço de atacado.\n👉 Compartilha no grupo da família pra ninguém pagar caro no supermercado!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  13: `Boa tarde! 🎮 \nControles a postos! A seleção de Games e Consoles acaba de entrar em campo! 🕹️ \n\nJogos, consoles, periféricos gamers e tudo pra você dar o play com o menor preço.\n👉 Manda agora pro seu player 2 pra ele aproveitar esses descontos junto com você!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  14: `Boa tarde! 🧊 \nA hora é agora pra trocar os aparelhos de casa! Seleção de Eletrodomésticos no ar. 🧺 \n\nGeladeiras, Air Fryers, máquinas de lavar e muito mais pra equipar seu lar.\n👉 Compartilha com quem tá de casa nova ou precisando de um upgrade na cozinha!\n\n📲 Acompanhe o Caça Oferta Oficial onde preferir:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  15: `Boa tarde! 👗 \nEstilo e economia andam juntos! Seleção de Moda e Acessórios liberada. ⌚ \n\nTênis, roupas, relógios e malas pra você renovar o visual sem pesar no bolso.\n👉 Envia pro grupo de amigos que adora estar na moda gastando pouco!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  16: `Boa tarde! 🚴 \nHora de movimentar o corpo! Nossa seleção de Esporte e Lazer tá correndo solta. 🏋️ \n\nSuplementos, roupas de academia, bicicletas e equipamentos esportivos com preços imbatíveis.\n👉 Manda pro seu parceiro de treino não ficar de fora dessas ofertas!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  17: `Boa tarde! 🧸 \nDiversão garantida com muita economia! Seleção de Brinquedos e Infantil no ar. 🍼 \n\nFraldas, carrinhos, jogos e presentes pra criançada fazer a festa.\n👉 Conhece alguma mamãe ou papai que tá precisando de estoque de fraldas? Manda pra eles!\n\n📲 Acompanhe o Caça Oferta Oficial onde preferir:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  18: `Boa noite! 🔧 \nHora de colocar a mão na massa! Seleção de Ferramentas e Automotivo pronta pra uso. 🚗 \n\nFuradeiras, caixas de ferramentas, pneus e acessórios pro seu carro ficarem novos de novo.\n👉 Compartilha com quem adora consertar tudo em casa ou cuidar da caranga!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  19: `Boa noite! 🐾 \nPorque eles também merecem! Nossa seleção de Pet Shop acaba de morder um descontão. 🐕 \n\nRação, caminhas, petiscos e brinquedos pro seu melhor amigo.\n👉 Se você conhece alguém que mima muito o pet, já sabe pra quem mandar!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  20: `Boa noite! 📺 \nPrepara a pipoca! Seleção de Áudio e Vídeo transmitindo as melhores ofertas. 🎧 \n\nTVs 4K, Home Theaters, Soundbars e fones Bluetooth pra você curtir em alta qualidade.\n👉 Manda pra quem tá precisando de uma tela gigante nova pra ver o jogo de hoje!\n\n📲 Acompanhe o Caça Oferta Oficial onde preferir:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  21: `Boa noite, caçadores de oferta! 🌟 \nÉ agora ou nunca! Chegou o bloco das Grandes Ofertas do Dia! 💥 \n\nAqui entram as promoções MAIS AGRESSIVAS, erros de preço e descontos relâmpago que esgotam em minutos.\n👉 Oferta boa é oferta compartilhada. Envia rápido no grupo da família e dos amigos, porque esses estoques vão voar!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
+  
+  22: `Boa noite! 🌙 \nÚltima chance do dia! O bloco das Ofertas da Madrugada acabou de despertar. 🦉 \n\nÚltima rodada de descontos imperdíveis pra fechar a noite com o carrinho cheio.\n👉 Tem sempre alguém acordado caçando preço bom. Compartilha com a coruja da sua turma!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`
 };
