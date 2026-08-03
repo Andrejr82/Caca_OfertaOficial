@@ -77,6 +77,7 @@ export interface OfficialAIContent {
   description: string;
   shortCopy: string;
   longCopy: string;
+  shortName?: string;
   hashtags: string[];
   callToAction: string;
   highlights: string[];

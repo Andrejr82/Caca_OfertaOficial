@@ -7,6 +7,7 @@ export type GeminiPromptOffer = {
   shipping_free?: boolean | null;
   coupon?: string | null;
   original_url?: string | null;
+  short_name?: string | null;
 };
 
 // --- FUNÇÕES DE PREÇO POR EXTENSO ---
@@ -69,7 +70,7 @@ function speechScript(offer: GeminiPromptOffer) {
   
   const maxNameLength = 127 - (prefix.length + suffix.length);
   
-  let shortName = offer.product_name;
+  let shortName = offer.short_name ? offer.short_name.trim() : offer.product_name;
   if (maxNameLength > 0 && shortName.length > maxNameLength) {
     shortName = shortName.substring(0, maxNameLength).trim();
     // Corta no último espaço para não deixar palavras pela metade

@@ -644,11 +644,62 @@ export async function generateOfficialAI(
     freeShipping: freeShippingValue ?? null
   };
 
+  // Extração inteligente do shortName via LLM
+  let shortName = offer!.productName;
+  let shortNameInference = null;
+  try {
+    const aiProvider = dependencies.providers.resolve(command.providerPreference);
+    const shortNamePrompt = {
+      system: `Você é um extrator de essência de produtos. Sua única tarefa é encurtar o nome do produto, preservando apenas a estrutura [TIPO DE PRODUTO] + [MARCA] + [LINHA/MODELO].
+REGRAS RÍGIDAS:
+1. NUNCA inclua peso (ex: 1kg), volume (ex: 500ml), voltagem (110v/220v) ou cores.
+2. NUNCA inclua palavras-chave de SEO (ex: "Moda Praia Básico", "Promoção", "Original").
+3. Retorne APENAS um objeto JSON com a chave "shortName" e o valor sendo o nome curto, sem explicações.
+4. O resultado deve ter no máximo 45 caracteres.
+
+EXEMPLOS:
+Entrada: Kit com 4 Short Linho Masculino Bermuda Mauricinho Masculina Moda Praia Básico acima do joelho Loja Intro
+Saída: {"shortName": "Kit 4 Shorts Linho Masculino"}
+
+Entrada: PremieR Pet Golden Seleção Natural Ração Seca para Gatos Castrados Sabor Frango com Batata Doce 1kg
+Saída: {"shortName": "Ração PremieR Pet Golden"}`,
+      user: `Entrada: ${offer!.productName}\nSaída:`
+    };
+    const inferenceStart = Date.now();
+    const shortNameResponse = await aiProvider.generate({
+      prompt: shortNamePrompt,
+      correlationId: command.correlationId,
+      timeoutMs: 15000,
+      temperature: 0.1,
+      maxTokens: 50,
+      metadata: { stage: "short_name_extraction", offerId: command.offerId }
+    });
+    
+    let extracted = "";
+    if (shortNameResponse.content && typeof shortNameResponse.content === "object") {
+      extracted = (shortNameResponse.content as any).shortName || "";
+    }
+
+    if (extracted && extracted.length > 0 && extracted.length <= 55) {
+      shortName = extracted;
+    }
+    shortNameInference = { provider: shortNameResponse.provider, model: shortNameResponse.model, latencyMs: shortNameResponse.latencyMs };
+  } catch (error) {
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.inference.failed",
+      correlationId: command.correlationId,
+      offerId: command.offerId,
+      stage: "short_name_extraction",
+      details: exceptionDetails(error)
+    });
+  }
+
   const content = {
     title: offer!.productName,
     description: `Oferta ${offer!.marketplace}`,
     shortCopy: `Oferta por ${offer!.currentPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
     longCopy: `Oferta de ${offer!.productName}.`,
+    shortName,
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: ["Preço atual"],
