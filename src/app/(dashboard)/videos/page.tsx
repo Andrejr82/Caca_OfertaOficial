@@ -18,7 +18,7 @@ export default async function VideosPage() {
         .limit(500),
       supabase
       .from("video_jobs")
-      .select("*, offers(id, product_name, image_url, current_price, old_price, platform)")
+      .select("*, offers(id, product_name, image_url, current_price, old_price, platform, short_name)")
       .order("created_at", { ascending: false })
       .limit(30)
     ]);

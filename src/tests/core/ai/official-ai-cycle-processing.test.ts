@@ -57,7 +57,7 @@ function dependencies(rows: OfficialAIOffer[]): OfficialAIServiceDependencies {
   const byId = new Map(rows.map((row) => [row.id, row]));
   return {
     offers: {
-      findById: vi.fn(async (id: string, tenantId: string) => {
+      updateShortName: vi.fn(), findById: vi.fn(async (id: string, tenantId: string) => {
         const row = byId.get(id);
         return row?.tenantId === tenantId ? row : null;
       }),

@@ -110,7 +110,7 @@ function createDependencies(
   offerOverride: OfficialAIOffer | null = pendingOffer
 ) {
   const dependencies: OfficialAIServiceDependencies = {
-    offers: { findById: vi.fn().mockResolvedValue(offerOverride) },
+    offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offerOverride) },
     providers: {
       resolve: vi.fn().mockReturnValue({
         name: "groq",

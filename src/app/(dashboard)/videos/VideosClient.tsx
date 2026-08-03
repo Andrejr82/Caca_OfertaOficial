@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, CloudUpload, Copy, Download, FileVideo, RefreshCw, ShieldCheck } from "lucide-react";
 import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
 
-type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string; category?: string | null; shipping_free?: boolean | null; coupon?: string | null; original_url?: string };
+type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string; category?: string | null; shipping_free?: boolean | null; coupon?: string | null; original_url?: string; short_name?: string | null };
 type DriveFile = { id: string; name: string; mimeType: string; size?: string; webViewLink?: string; videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string } };
 type Job = { id: string; status: string; stage?: string; script: string; video_url: string | null; created_at: string; error_message: string | null; metadata?: Record<string, any>; offers?: Offer };
 

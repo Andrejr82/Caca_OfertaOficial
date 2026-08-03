@@ -72,7 +72,7 @@ const DRAFT_CONTENT: OfficialAIContent = {
 
 function createDeps(overrides: Partial<OfficialAIServiceDependencies> = {}): OfficialAIServiceDependencies {
   return {
-    offers: { findById: vi.fn().mockResolvedValue(null) },
+    offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(null) },
     providers: {
       resolve: vi.fn().mockReturnValue({
         name: "groq" as const,
@@ -102,7 +102,7 @@ describe("Fingerprint canonico (F9.1/F9.2)", () => {
   it("mesma oferta, commandId/correlationId/requestedAt diferentes -> mesmo fingerprint", async () => {
     const fps: string[] = [];
     const deps = createDeps({
-      offers: { findById: vi.fn().mockResolvedValue(makeOffer("offer-fp")), findPendingWithoutDrafts: undefined },
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(makeOffer("offer-fp")), findPendingWithoutDrafts: undefined },
       idempotency: {
         begin: vi.fn().mockImplementation(async (_k: string, fp: string) => { fps.push(fp); return { status: "started" }; }),
         complete: vi.fn().mockResolvedValue(undefined)
@@ -118,7 +118,7 @@ describe("Fingerprint canonico (F9.1/F9.2)", () => {
   it("offerId diferente -> fingerprint diferente", async () => {
     const fps: string[] = [];
     const deps = createDeps({
-      offers: { findById: vi.fn().mockImplementation(async (id: string) => makeOffer(id)), findPendingWithoutDrafts: undefined },
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => makeOffer(id)), findPendingWithoutDrafts: undefined },
       idempotency: {
         begin: vi.fn().mockImplementation(async (_k: string, fp: string) => { fps.push(fp); return { status: "started" }; }),
         complete: vi.fn().mockResolvedValue(undefined)
@@ -132,7 +132,7 @@ describe("Fingerprint canonico (F9.1/F9.2)", () => {
   it("channels em ordem diferente -> mesmo fingerprint", async () => {
     const fps: string[] = [];
     const deps = createDeps({
-      offers: { findById: vi.fn().mockResolvedValue(makeOffer("offer-ch")), findPendingWithoutDrafts: undefined },
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(makeOffer("offer-ch")), findPendingWithoutDrafts: undefined },
       idempotency: {
         begin: vi.fn().mockImplementation(async (_k: string, fp: string) => { fps.push(fp); return { status: "started" }; }),
         complete: vi.fn().mockResolvedValue(undefined)
@@ -151,7 +151,7 @@ describe("Chave v2 no sub-command (F9.3)", () => {
     const keys: string[] = [];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockResolvedValue(offer1),
+        updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offer1),
         findPendingWithoutDrafts: vi.fn().mockResolvedValueOnce([offer1]).mockResolvedValue([])
       },
       idempotency: {
@@ -170,7 +170,7 @@ describe("Registros v1 nao interferem com v2 (F9.4)", () => {
     const offer1 = makeOffer("offer-legacy");
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockResolvedValue(offer1),
+        updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offer1),
         findPendingWithoutDrafts: vi.fn().mockResolvedValueOnce([offer1]).mockResolvedValue([])
       },
       idempotency: {
@@ -195,7 +195,7 @@ describe("50 invalidas + 10 validas (F9.5)", () => {
     const pages = [invalidas, validas, []];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => {
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => {
           return [...invalidas, ...validas].find((o) => o.id === id) ?? null;
         }),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = pages[call] ?? []; call++; return p; })
@@ -219,7 +219,7 @@ describe("200 invalidas + 150 validas (F9.6)", () => {
     let offset = 0;
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => todas.find((o) => o.id === id) ?? null),
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => todas.find((o) => o.id === id) ?? null),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = todas.slice(offset, offset + 50); offset += 50; return p; })
       }
     });
@@ -238,7 +238,7 @@ describe("Fila totalmente invalida (F9.7)", () => {
     const pages = [invalidas.slice(0, 15), invalidas.slice(15), []];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => invalidas.find((o) => o.id === id) ?? null),
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => invalidas.find((o) => o.id === id) ?? null),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = pages[call] ?? []; call++; return p; })
       }
     });
@@ -259,7 +259,7 @@ describe("Replay rejected nao bloqueia (F9.8)", () => {
     const pages = [[offer1, offer2], []];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => id === "ok-offer" ? offer2 : null),
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => id === "ok-offer" ? offer2 : null),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = pages[call] ?? []; call++; return p; })
       },
       idempotency: {
@@ -289,7 +289,7 @@ describe("Replay drafted nao duplica (F9.9)", () => {
     const pages = [[offer1], []];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockResolvedValue(offer1),
+        updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offer1),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = pages[call] ?? []; call++; return p; })
       },
       idempotency: {
@@ -313,7 +313,7 @@ describe("Cursor stall (F9.13)", () => {
     const stuckPage = [offer1];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockResolvedValue(offer1),
+        updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offer1),
         findPendingWithoutDrafts: vi.fn().mockResolvedValue(stuckPage)
       }
     });
@@ -333,7 +333,7 @@ describe("Metricas corretas (F9.14)", () => {
     const pages = [[invalida, valida], []];
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => id === "inv-m" ? invalida : valida),
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => id === "inv-m" ? invalida : valida),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = pages[call] ?? []; call++; return p; })
       }
     });
@@ -351,7 +351,7 @@ describe("Batch size e execucao multipaginas (F9.15)", () => {
     let offset = 0;
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => todas.find((o) => o.id === id) ?? null),
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => todas.find((o) => o.id === id) ?? null),
         findPendingWithoutDrafts: vi.fn().mockImplementation(async () => { const p = todas.slice(offset, offset + 50); offset += p.length; return p; })
       }
     });
@@ -370,7 +370,7 @@ describe("Cursor Errors", () => {
     offer.createdAt = offer.id; // UUID as timestamp
     const deps = createDeps({
       offers: {
-        findById: vi.fn().mockResolvedValue(offer),
+        updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offer),
         findPendingWithoutDrafts: vi.fn().mockResolvedValue([offer])
       }
     });
@@ -383,7 +383,7 @@ describe("Cursor Errors", () => {
   it("BATCH_PAGE_READ_FAILED: erro no adapter retorna rejected", async () => {
     const deps = createDeps({
       offers: {
-        findById: vi.fn(),
+        updateShortName: vi.fn(), findById: vi.fn(),
         findPendingWithoutDrafts: vi.fn().mockRejectedValue(new Error("Supabase timeout"))
       }
     });

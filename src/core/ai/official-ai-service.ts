@@ -683,6 +683,7 @@ Saída: {"shortName": "Ração PremieR Pet Golden"}`,
     if (extracted && extracted.length > 0 && extracted.length <= 55) {
       shortName = extracted;
     }
+    await dependencies.offers.updateShortName(command.offerId, command.tenantId, shortName);
     shortNameInference = { provider: shortNameResponse.provider, model: shortNameResponse.model, latencyMs: shortNameResponse.latencyMs };
   } catch (error) {
     await emitTelemetry(dependencies, {

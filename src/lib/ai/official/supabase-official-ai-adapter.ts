@@ -121,6 +121,15 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     await emitOfficialAITelemetrySafely(this.telemetry, event);
   }
 
+  async updateShortName(offerId: string, tenantId: string, shortName: string): Promise<void> {
+    const { error } = await this.client
+      .from("offers")
+      .update({ short_name: shortName })
+      .eq("id", offerId)
+      .eq("user_id", tenantId);
+    if (error) throw new Error(`Official AI offer shortName update failed: ${error.message}`);
+  }
+
   async findById(offerId: string, tenantId: string): Promise<OfficialAIOffer | null> {
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client

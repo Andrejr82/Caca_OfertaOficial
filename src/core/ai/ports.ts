@@ -84,6 +84,7 @@ export interface AIProviderRegistryPort {
 export interface OfficialAIOfferPort {
   findById(offerId: string, tenantId: string): Promise<OfficialAIOffer | null>;
   findPendingWithoutDrafts?(tenantId: string, cursor?: BatchCursor): Promise<readonly OfficialAIOffer[]>;
+  updateShortName(offerId: string, tenantId: string, shortName: string): Promise<void>;
 }
 
 export interface OfficialAIContentPort {

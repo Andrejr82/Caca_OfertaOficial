@@ -72,7 +72,7 @@ const content: OfficialAIContent = {
 
 function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = {}) {
   const dependencies: OfficialAIServiceDependencies = {
-    offers: { findById: vi.fn().mockResolvedValue(offer) },
+    offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offer) },
     providers: {
       resolve: vi.fn().mockReturnValue({
         name: "groq",
@@ -116,7 +116,7 @@ describe("generateOfficialAI", () => {
   it("usa o renderer Copy V2 para comandos copyV2 e inclui marketplace/frete apenas com evidência", async () => {
     const dependencies = createDependencies({
       offers: {
-        findById: vi.fn().mockResolvedValue({
+        updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue({
           ...offer,
           explainability: {
             ...offer.explainability,
@@ -140,7 +140,7 @@ describe("generateOfficialAI", () => {
   it("usa Copy V2 na Expressa, atualiza a revisão e mantém revisão manual", async () => {
     const expressOffer = { ...offer, id: "offer-express", state: "pending_manual_review" as const };
     const dependencies = createDependencies({
-      offers: { findById: vi.fn().mockResolvedValue(expressOffer) }
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(expressOffer) }
     });
 
     const result = await generateOfficialAI({
@@ -182,7 +182,7 @@ describe("generateOfficialAI", () => {
       idempotencyKey: "ai:copy-v2:offer-ml:v1",
       metadata: { copyV2: true }
     };
-    const dependencies = createDependencies({ offers: { findById: vi.fn().mockResolvedValue(mlOffer) } });
+    const dependencies = createDependencies({ offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(mlOffer) } });
 
     await generateOfficialAI(mlCommand, dependencies);
 
@@ -202,7 +202,7 @@ describe("generateOfficialAI", () => {
       }
     };
     const dependencies = createDependencies({
-      offers: { findById: vi.fn().mockResolvedValue(offerWithAttribute) }
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offerWithAttribute) }
     });
 
     await generateOfficialAI(command, dependencies);
@@ -273,7 +273,7 @@ describe("generateOfficialAI", () => {
     "rejeita estado %s antes do provider",
     async (state) => {
       const dependencies = createDependencies({
-        offers: { findById: vi.fn().mockResolvedValue({ ...offer, state, version: state === "approved" ? 2 : 3 }) }
+        offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue({ ...offer, state, version: state === "approved" ? 2 : 3 }) }
       });
 
       const result = await generateOfficialAI(command, dependencies);
@@ -292,7 +292,7 @@ describe("generateOfficialAI", () => {
     ["INVALID_CANDIDATE_CONTRACT", { ...offer, explainability: { ...offer.explainability, contract_version: "legacy" } }]
   ])("falha com %s sem inferência ou persistência", async (code, foundOffer) => {
     const dependencies = createDependencies({
-      offers: { findById: vi.fn().mockResolvedValue(foundOffer) }
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(foundOffer) }
     });
 
     const result = await generateOfficialAI(command, dependencies);
@@ -325,7 +325,7 @@ describe("generateOfficialAI", () => {
 
   it("gera fallback determinístico quando a oferta pendente não consegue acessar o provider", async () => {
     const dependencies = createDependencies({
-      offers: { findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) }
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) }
     });
     vi.mocked(dependencies.providers.resolve("groq").generate).mockRejectedValue(new Error("provider down"));
 
@@ -340,7 +340,7 @@ describe("generateOfficialAI", () => {
 
   it("continua gerando draft quando telemetry.emit rejeita", async () => {
     const dependencies = createDependencies({
-      offers: { findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) },
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue({ ...offer, state: "pending_manual_review" }) },
       telemetry: { emit: async () => { throw new Error("telemetry offline"); } }
     });
     const result = await generateOfficialAI(command, dependencies);
@@ -428,7 +428,7 @@ describe("generateOfficialAI", () => {
     const batchCommand = { ...command, offerId: "ALL_PENDING", idempotencyKey: "ai:ALL_PENDING:batch:v1" };
     const dependencies = createDependencies({
       offers: {
-        findById: vi.fn().mockImplementation(async (id: string) => id === "offer-1" ? offer1 : offer2),
+        updateShortName: vi.fn(), findById: vi.fn().mockImplementation(async (id: string) => id === "offer-1" ? offer1 : offer2),
         // Paginacao: primeira chamada retorna as 2 ofertas, segunda retorna [] encerrando o loop
         findPendingWithoutDrafts: vi.fn()
           .mockResolvedValueOnce([offer1, offer2])
@@ -454,7 +454,7 @@ describe("generateOfficialAI", () => {
       affiliateLinks: []
     };
     const dependencies = createDependencies({
-      offers: { findById: vi.fn().mockResolvedValue(offerWithoutLink) }
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(offerWithoutLink) }
     });
 
     const result = await generateOfficialAI(command, dependencies);
