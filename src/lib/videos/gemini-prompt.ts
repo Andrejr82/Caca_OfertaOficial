@@ -64,7 +64,24 @@ function speechScript(offer: GeminiPromptOffer) {
   const marketplace = offer.platform ? ` na ${offer.platform}` : "";
   const extenso = precoPorExtenso(offer.current_price);
   
-  return `"Olha este achado${marketplace}! Este é o ${offer.product_name}. Só ${extenso}. Os detalhes estão na publicação!"`;
+  const prefix = `"Olha este achado${marketplace}! Este é o `;
+  const suffix = `. Só ${extenso}. Os detalhes estão na publicação!"`;
+  
+  const maxNameLength = 127 - (prefix.length + suffix.length);
+  
+  let shortName = offer.product_name;
+  if (maxNameLength > 0 && shortName.length > maxNameLength) {
+    shortName = shortName.substring(0, maxNameLength).trim();
+    // Corta no último espaço para não deixar palavras pela metade
+    const lastSpace = shortName.lastIndexOf(' ');
+    if (lastSpace > 0) {
+      shortName = shortName.substring(0, lastSpace);
+    }
+  } else if (maxNameLength <= 0) {
+    shortName = ""; // Fallback caso o preço por extenso seja gigante
+  }
+  
+  return `${prefix}${shortName}${suffix}`;
 }
 
 // 3. MONTAGEM DO PROMPT MESTRE
