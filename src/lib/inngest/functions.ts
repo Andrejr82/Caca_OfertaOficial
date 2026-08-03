@@ -4,6 +4,8 @@ import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-of
 import { createOfficialPublicationServiceDependencies } from "@/lib/publication/official/create-official-publication-service";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { inngest } from "./client";
+import { TELEGRAM_CYCLE_INTROS } from "@/config/cycle-intros";
+import { sendTelegramMessage } from "@/lib/telegram/client";
 
 const PARALLEL_COMPONENT_DISABLED = "PARALLEL_COMPONENT_DISABLED: submit a command to an official service";
 
@@ -52,6 +54,24 @@ export const runUserScrapingBackground = inngest.createFunction(
 export const instagramPollingBackground = inngest.createFunction(
   { id: "instagram-polling", retries: 0, triggers: [{ cron: "*/5 * * * *" }] },
   disabledJob
+);
+
+export const sendTelegramCycleIntro = inngest.createFunction(
+  { 
+    id: "send-telegram-cycle-intro", 
+    triggers: [{ cron: "0 7-22 * * *", tz: "America/Sao_Paulo" }] 
+  },
+  async ({ step }: any) => {
+    return step.run("send-intro-message", async () => {
+      const currentHour = new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
+      const message = TELEGRAM_CYCLE_INTROS[Number(currentHour)];
+      if (message) {
+        await sendTelegramMessage(message);
+        return { success: true, hour: currentHour };
+      }
+      return { success: false, reason: "No message configured for this hour", hour: currentHour };
+    });
+  }
 );
 
 export * from "./tracking";
