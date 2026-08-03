@@ -134,7 +134,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
+      .select("id,user_id,status,platform,product_name,short_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
       .eq("id", offerId)
       .eq("user_id", tenantId)
       .maybeSingle();
@@ -157,7 +157,8 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       marketplaceMetrics: (data.marketplace_metrics ?? null) as Record<string, unknown> | null,
       explainability: (data.explainability ?? {}) as Record<string, unknown>,
       createdAt: data.created_at,
-      affiliateLinks: mapAffiliateLinks((data as any).affiliate_links)
+      affiliateLinks: mapAffiliateLinks((data as any).affiliate_links),
+      shortName: (data as any).short_name ?? null
     };
   }
 

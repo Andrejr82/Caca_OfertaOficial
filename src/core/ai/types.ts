@@ -64,6 +64,7 @@ export interface OfficialAIOffer {
   explainability: Record<string, unknown>;
   createdAt: string;
   affiliateLinks?: readonly OfficialAIAffiliateLink[];
+  shortName?: string | null;
 }
 
 export interface OfficialAIAffiliateLink {
