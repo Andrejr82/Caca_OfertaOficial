@@ -115,9 +115,9 @@ const EDITORIAL_SCENARIOS = Object.freeze({
 
   grandes_ofertas_editorial: scenario('grandes_ofertas_editorial', 'Grandes Ofertas', 21,
     ['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis'],
-    [],
+    ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'lavadora', 'ar condicionado', 'monitor', 'caixa de som', 'console', 'fritadeira', 'micro-ondas', 'aspirador', 'liquidificador', 'fone', 'iphone', 'galaxy'],
     ['cupom sem aprovação', 'usado', 'recondicionado', 'serviço', 'servico'],
-    ['price', 'old_price', 'discount', 'seller', 'shipping'], { priority: 'critical', maxAgeHours: 2, apiCategories: [] }),
+    ['price', 'old_price', 'discount', 'seller', 'shipping'], { priority: 'critical', maxAgeHours: 2, apiCategories: [100013, 100644, 100636], amazonBrowseNodes: ['16243809011', '16243803011', '16243794011', '17100532011'] }),
 
   cupons_aprovados_editorial: {
     id: 'cupons_aprovados_editorial', name: 'Cupons', queueHour: 22, marketplaces: [...MARKETPLACES],
