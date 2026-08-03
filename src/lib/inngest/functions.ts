@@ -59,7 +59,7 @@ export const instagramPollingBackground = inngest.createFunction(
 export const sendTelegramCycleIntro = inngest.createFunction(
   { 
     id: "send-telegram-cycle-intro", 
-    triggers: [{ cron: "0 7-22 * * *", tz: "America/Sao_Paulo" }] 
+    triggers: [{ cron: "0 6-21 * * *", tz: "America/Sao_Paulo" }] 
   },
   async ({ step }: any) => {
     return step.run("send-intro-message", async () => {
