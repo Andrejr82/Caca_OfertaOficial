@@ -69,6 +69,10 @@ function createStageLogger(cycleId) {
     error: (stage, startedAt, errorMsg) => {
       const durationMs = Date.now() - startedAt;
       console.error(`[Stage Error] cycle=${cycleId} stage=${stage} durationMs=${durationMs} error=${errorMsg}`);
+    },
+    info: (stage, startedAt, msg) => {
+      const durationMs = Date.now() - startedAt;
+      console.log(`[Stage Info] cycle=${cycleId} stage=${stage} durationMs=${durationMs} msg=${msg}`);
     }
   };
 }
