@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const scenarioConfig = require('./shopee-scenario-config.cjs');
+const trendsMiner = require('./shopee-trends-miner.cjs');
 
 const CATALOG_PATH = path.join(__dirname, 'shopee-native-categories.json');
 const DEFAULT_PAGE_SIZE = 20;
@@ -26,7 +27,7 @@ function loadCertifiedCatalog(catalogPath = CATALOG_PATH) {
 }
 
 function productFields() {
-  return 'itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds';
+  return 'itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds shopType';
 }
 
 function buildProductOfferPayload(keyword = null, productCatId = null, page = 1, limit = DEFAULT_PAGE_SIZE) {
@@ -57,6 +58,11 @@ function normalizeUrl(value) {
 function sanitizeProduct(node, category) {
   const price = number(node?.priceMin) || number(node?.priceMax);
   if (!node?.itemId || !String(node?.productName || '').trim() || !node?.productLink || price <= 0) return null;
+
+  // Filtro: Lojas Oficiais (3 = Mall) ou Indicadas (2, 1)
+  const isOfficial = Array.isArray(node.shopType) && (node.shopType.includes(3) || node.shopType.includes(2) || node.shopType.includes(1));
+  if (!isOfficial) return null; // Aborta processamento de vendedores comuns
+
   return {
     itemId: String(node.itemId),
     shopId: node.shopId == null ? null : String(node.shopId),
@@ -73,6 +79,8 @@ function sanitizeProduct(node, category) {
     sellerCommissionRate: number(node.sellerCommissionRate),
     shopeeCommissionRate: number(node.shopeeCommissionRate),
     seller: node.shopName || null,
+    isOfficialShop: isOfficial,
+    shopTypeTags: node.shopType,
     productCatIds: Array.isArray(node.productCatIds) ? node.productCatIds.map(String) : [],
     productCatId: category.productCatId,
     category: category.name,
@@ -182,6 +190,26 @@ async function runNativeDiscovery({
   const apiCategories = activeScenario.apiCategories || [];
   const keywords = activeScenario.keywords || [];
   
+  let dynamicKeywords = [];
+  if (activeScenario.discoveryMode === 'dynamic_trends' && apiCategories.length > 0) {
+    console.log(`[Shopee V5] Modo Dynamic Trends ATIVO. Minerando top 50 de ${apiCategories[0]}...`);
+    try {
+      const ts = Math.floor(Date.now() / 1000);
+      const payload = buildProductOfferPayload(null, apiCategories[0], 1, 50, 2); // sortType: 2
+      const sig = crypto.createHash('sha256').update(process.env.SHOPEE_APP_ID + ts + JSON.stringify(payload) + process.env.SHOPEE_APP_SECRET).digest('hex');
+      const resp = await axios.post('https://open-api.affiliate.shopee.com.br/graphql', payload, {
+        headers: { 'Content-Type': 'application/json', Authorization: `SHA256 Credential=${process.env.SHOPEE_APP_ID}, Timestamp=${ts}, Signature=${sig}` }
+      });
+      const nodes = resp.data?.data?.productOfferV2?.nodes || [];
+      const officialNodes = nodes.filter(n => Array.isArray(n.shopType) && (n.shopType.includes(3) || n.shopType.includes(2) || n.shopType.includes(1)));
+      const titles = officialNodes.map(n => n.productName);
+      dynamicKeywords = trendsMiner.mineTopTrends(titles, 5);
+      console.log(`[Shopee V5] Trios descobertos: ${dynamicKeywords.join(', ') || 'Nenhum'}`);
+    } catch (e) {
+      console.error(`[Shopee V5] Erro minerando trends: ${e.message}`);
+    }
+  }
+
   const explicitCategories = Array.isArray(categories) && categories.length > 0 ? categories : null;
   const categoryIds = explicitCategories ? explicitCategories.map((category) => category.productCatId) : apiCategories;
   const queries = [];
@@ -189,8 +217,8 @@ async function runNativeDiscovery({
   const keywordsToFetch = explicitCategories
     ? []
     : activeScenario.keywordSelection === 'all'
-      ? [...keywords]
-      : scenarioConfig.getRandomItems(keywords, 10);
+      ? [...keywords, ...dynamicKeywords]
+      : [...scenarioConfig.getRandomItems(keywords, 10), ...dynamicKeywords];
   keywordsToFetch.forEach(kw => queries.push({ type: 'keyword', value: kw }));
 
   console.log(`[Shopee V5] Cenário ativo para ${currentHour}h: ${activeScenario.name}`);

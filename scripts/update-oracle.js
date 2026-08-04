@@ -33,6 +33,8 @@ const DEPLOY_FILES = [
   'scripts/amazon-native-top20-v5.cjs',
   'scripts/amazon-scenario-config.cjs',
   'scripts/shopee-scenario-config.cjs',
+  'scripts/shopee-native-discovery-v5.cjs',
+  'scripts/shopee-trends-miner.cjs',
   'scripts/mercadolivre-official-intents-v5.cjs',
   'scripts/publication-queue.cjs',
   'scripts/mercadolivre-canonical-classifier.cjs',

@@ -607,6 +607,8 @@ function normalizeShopeeCandidate(product, discoveredAt, intent = null) {
     currentPrice: product.price,
     originalPrice: product.originalPrice,
     category: { id: product.productCatId, name: product.category, source: 'Shopee Affiliate Open API' },
+    is_official_shop: product.isOfficialShop,
+    shop_type_tags: product.shopTypeTags,
     marketplaceMetrics: {
       sourcePosition: product.position,
       itemId: product.itemId,

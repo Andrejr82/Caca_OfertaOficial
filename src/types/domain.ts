@@ -37,6 +37,8 @@ export interface Offer {
   shopee_product_cat_id?: string | null;
   native_category_order?: number | null;
   native_category_position?: number | null;
+  is_official_shop?: boolean | null;
+  shop_type_tags?: number[] | null;
   marketplace_metrics?: {
     sales?: number;
     discount?: number;

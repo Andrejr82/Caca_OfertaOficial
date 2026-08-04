@@ -125,6 +125,38 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     blockedProductTerms: ['produto_sem_cupom', 'cupom_expirado'], attributes: ['code', 'rules', 'valid_until', 'marketplace'], maxAgeHours: 24,
     priority: 'high', discoveryMode: 'manual_only', apiCategories: [], amazonBrowseNodes: [], aliases: [],
   },
+
+  bebidas_editorial: scenario('bebidas_editorial', 'Bebidas', 23,
+    ['vinho', 'whisky', 'cerveja artesanal', 'licor', 'gin', 'vodka', 'café em grãos', 'chá', 'energético'],
+    ['vinho', 'whisky', 'cerveja', 'licor', 'gin', 'vodka', 'café', 'chá', 'energético'],
+    ['infantil', 'pet', 'automotivo'],
+    ['brand', 'volume', 'type'], { apiCategories: [100001, 100636], amazonBrowseNodes: ['16754344011', '16754348011'] }),
+
+  // --- INÍCIO DA ZONA DE LOJAS OFICIAIS (ALTO TICKET / DYNAMIC TRENDS) ---
+
+  suplementacao_oficial: scenario('suplementacao_oficial', 'Suplementação e Saúde (Oficial)', 19,
+    ['whey protein 100% puro', 'whey protein isolado', 'creatina monohidratada pura', 'pré treino', 'bcaa em pó', 'glutamina', 'colágeno hidrolisado'],
+    ['whey', 'creatina', 'pré treino', 'bcaa', 'glutamina', 'colágeno'],
+    ['infantil', 'usado', 'veicular'],
+    ['brand', 'weight', 'flavor'], { apiCategories: [100001, 100637], discoveryMode: 'dynamic_trends' }),
+
+  perfumaria_premium: scenario('perfumaria_premium', 'Perfumaria e Make Premium', 20,
+    ['perfume importado', 'eau de parfum', 'base líquida matte', 'sérum anti-idade', 'kit cronograma capilar', 'máscara de hidratação profissional'],
+    ['perfume importado', 'eau de parfum', 'base líquida', 'sérum', 'cronograma capilar'],
+    ['pet', 'automotivo'],
+    ['brand', 'volume'], { apiCategories: [100630, 100001], discoveryMode: 'dynamic_trends' }),
+
+  calcados_premium: scenario('calcados_premium', 'Calçados Premium', 21,
+    ['tênis de corrida original', 'sapato social couro', 'bota tratorada couro', 'chuteira society original', 'sandália salto bloco', 'sapatênis casual'],
+    ['tênis de corrida', 'sapato social', 'bota', 'chuteira', 'sandália', 'sapatênis'],
+    ['infantil', 'usado', 'réplica'],
+    ['brand', 'size', 'color'], { apiCategories: [100012, 100011, 100009], discoveryMode: 'dynamic_trends' }),
+
+  eletronicos_highticket: scenario('eletronicos_highticket', 'Eletrônicos Premium', 22,
+    ['smartphone 5g', 'iphone apple', 'galaxy s', 'notebook gamer', 'macbook', 'ipad', 'smart tv oled'],
+    ['smartphone', 'iphone', 'galaxy', 'notebook', 'macbook', 'ipad', 'smart tv'],
+    ['cabo', 'capa', 'película', 'suporte', 'carregador'],
+    ['brand', 'model', 'memory'], { apiCategories: [100013, 100644], discoveryMode: 'dynamic_trends' }),
 });
 
 const EDITORIAL_SCENARIO_IDS = Object.freeze(Object.keys(EDITORIAL_SCENARIOS));
