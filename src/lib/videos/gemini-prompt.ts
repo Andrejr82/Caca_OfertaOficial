@@ -75,53 +75,24 @@ function speechScript(offer: GeminiPromptOffer) {
 
 // 3. MONTAGEM DO PROMPT MESTRE
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
-  return `# PAPEL E MODO
-Você é um Diretor de Fotografia premiado. Ative o modo Image-to-Video de altíssima fidelidade.
+  return `**[Sujeito e Ação]**
+A apresentadora Avatar_Silvia (usando a imagem de referência fornecida como quadro inicial absoluto) mantém sua pose estática original apontando para a direita, realizando movimentos micro-faciais hiper-realistas apenas de respiração, piscar de olhos e sincronização labial perfeita. Os braços e o tronco devem permanecer estritos e imóveis.
 
-==================================================
-TRAVA DE AVATAR E ESTÚDIO (PRIORIDADE MÁXIMA)
-==================================================
-• Quadro Inicial: Utilize a imagem anexada da apresentadora como o QUADRO INICIAL ABSOLUTO.
-• Fundo Principal: Mantenha o estúdio azul, as luzes e os ícones de neon originais ao redor da apresentadora.
-• Identidade: Preserve 100% do rosto da Avatar_Silvia, seu cabelo e a nitidez do logotipo "Caça Oferta" na camisa.
-• Movimento Restrito: A modelo deve apenas piscar, respirar e fazer sincronia labial.
-• Pose: Ela já está apontando para a direita. Mantenha essa pose estática. É estritamente PROIBIDO mexer os braços dela.
-
-==================================================
-CENÁRIO E CONTEXTUALIZAÇÃO DO PRODUTO
-==================================================
-• Posição: Na área à direita (para onde a Avatar está apontando), crie um micro-cenário dinâmico e contextualizado que sirva de fundo exclusivo para o produto (${offer.product_name}).
-• Adaptação Temática: O cenário dessa área deve se adaptar perfeitamente ao produto. 
+**[Ambiente e Cenário]**
+O cenário é dividido em duas zonas perfeitamente integradas: à esquerda, o estúdio original da apresentadora com fundo azul escuro e ícones neon preservados; à direita (na direção do apontamento), um micro-cenário elegante e neutro consistindo em uma base de exibição limpa revelando o produto (${offer.product_name}).
 ${scenarioGuidance(offer)}
-• Integração: A iluminação deste micro-cenário deve interagir volumetricamente com a luz azul do estúdio principal, garantindo uma fusão visual realista e sem cortes abruptos.
 
-==================================================
-PROMPT NEGATIVO
-==================================================
-É estritamente proibido:
-  • Modificar a Avatar_Silvia.
-  • Modificar, recriar, estilizar ou substituir o produto.
-  • Cortar a Avatar_Silvia ou o produto do quadro.
-  • Gerar outra apresentadora ou trocar as roupas.
-  • Alterar características faciais.
-  • Adicionar objetos ou artefatos aleatórios.
-  • Adicionar textos, letras, números, preços, legendas automáticas ou marcas d'água.
-  • Criar logotipos extras.
-  • Criar transições de câmera.
-  • Exagerar nos gestos, gerar movimentos irreais ou expressões artificiais.
+**[Câmera e Movimento]**
+Plano médio estático absoluto (Locked-off shot). Sem pan, sem zoom, sem transições de câmera. O enquadramento deve garantir que a apresentadora e o produto permaneçam perfeitamente visíveis durante toda a tomada, sem cortes.
 
-==================================================
-TEXTOS E ELEMENTOS (PROIBIÇÃO ABSOLUTA)
-==================================================
-• NENHUM TEXTO. 
-• O vídeo deve ser 100% limpo. Não gere qualquer caractere escrito na tela.
+**[Iluminação e Clima]**
+Iluminação cinematográfica de estúdio. A luz suave e direcional focada no produto interage volumetricamente com o brilho da luz azul neon do estúdio principal, garantindo uma fusão visual realista, de altíssima fidelidade e sem recortes abruptos.
 
-==================================================
-VOZ E ROTEIRO (LIPSYNC)
-==================================================
-• Sincronização labial realista. 
-• Voz: Feminina adulta, natural e amigável (Português do Brasil).
-• Roteiro exato: 
-  ${speechScript(offer)}
-`;
+**[Estilo e Gênero]**
+Modo Image-to-Video fotorrealista em 4K. Estética publicitária premium. Preservação 100% fiel da identidade facial da modelo, textura do cabelo, nitidez do logotipo "Caça Oferta" na camisa e do design original do produto. É estritamente proibido gerar outra apresentadora, trocar roupas, alterar características faciais, gerar movimentos irreais, recriar, estilizar ou substituir o produto, bem como adicionar objetos ou artefatos aleatórios.
+
+**[Detalhes Extras e Áudio]**
+O vídeo deve ser 100% limpo: sem absolutamente nenhum texto escrito, letra, número, preço, marca d'água, legendas automáticas ou logotipos extras criados na tela. NENHUM TEXTO.
+**Áudio (Lipsync):** Sincronização labial realista com voz feminina adulta, natural e amigável (Português do Brasil) falando exatamente a seguinte frase:
+${speechScript(offer)}`;
 }
