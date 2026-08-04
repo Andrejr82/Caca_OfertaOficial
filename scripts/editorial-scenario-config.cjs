@@ -25,6 +25,8 @@ function scenario(id, name, queueHour, keywords, allowedProductTerms, blockedPro
     apiCategories: options.apiCategories || [],
     amazonBrowseNodes: options.amazonBrowseNodes || [],
     aliases: options.aliases || [],
+    productCatId: options.productCatId || null,
+    maxPriceThreshold: options.maxPriceThreshold || null,
   };
 }
 
@@ -134,29 +136,49 @@ const EDITORIAL_SCENARIOS = Object.freeze({
 
   // --- INÍCIO DA ZONA DE LOJAS OFICIAIS (ALTO TICKET / DYNAMIC TRENDS) ---
 
-  suplementacao_oficial: scenario('suplementacao_oficial', 'Suplementação e Saúde (Oficial)', 19,
-    ['whey protein 100% puro', 'whey protein isolado', 'creatina monohidratada pura', 'pré treino', 'bcaa em pó', 'glutamina', 'colágeno hidrolisado'],
-    ['whey', 'creatina', 'pré treino', 'bcaa', 'glutamina', 'colágeno'],
-    ['infantil', 'usado', 'veicular'],
-    ['brand', 'weight', 'flavor'], { apiCategories: [100001, 100637], discoveryMode: 'dynamic_trends' }),
+  suplementacao_oficial: scenario('suplementacao_oficial', 'Suplementação Premium', 19,
+    ['whey protein', 'creatina', 'colágeno', 'pré treino'],
+    ['whey', 'creatina', 'colágeno', 'pré treino'],
+    ['infantil', 'usado', 'vazio'],
+    ['brand', 'weight', 'flavor'], 
+    { 
+      apiCategories: [100001, 100637], 
+      discoveryMode: 'dynamic_trends',
+      maxPriceThreshold: 90.00 
+    }),
 
-  perfumaria_premium: scenario('perfumaria_premium', 'Perfumaria e Make Premium', 20,
-    ['perfume importado', 'eau de parfum', 'base líquida matte', 'sérum anti-idade', 'kit cronograma capilar', 'máscara de hidratação profissional'],
-    ['perfume importado', 'eau de parfum', 'base líquida', 'sérum', 'cronograma capilar'],
-    ['pet', 'automotivo'],
-    ['brand', 'volume'], { apiCategories: [100630, 100001], discoveryMode: 'dynamic_trends' }),
+  perfumaria_premium: scenario('perfumaria_premium', 'Perfumaria e Cosméticos', 20,
+    ['perfume importado', 'kit maquiagem', 'skincare', 'base líquida', 'sérum facial'],
+    ['perfume', 'maquiagem', 'skincare', 'base', 'sérum'],
+    ['amostra', 'decant', 'vazio'],
+    ['brand', 'volume', 'skin_type'], 
+    { 
+      apiCategories: [100630, 100001], 
+      discoveryMode: 'dynamic_trends',
+      maxPriceThreshold: 90.00 
+    }),
 
-  calcados_premium: scenario('calcados_premium', 'Calçados Premium', 21,
-    ['tênis de corrida original', 'sapato social couro', 'bota tratorada couro', 'chuteira society original', 'sandália salto bloco', 'sapatênis casual'],
-    ['tênis de corrida', 'sapato social', 'bota', 'chuteira', 'sandália', 'sapatênis'],
-    ['infantil', 'usado', 'réplica'],
-    ['brand', 'size', 'color'], { apiCategories: [100012, 100011, 100009], discoveryMode: 'dynamic_trends' }),
+  calcados_premium: scenario('calcados_premium', 'Calçados e Tênis', 21,
+    ['tênis esportivo', 'bota tratorada', 'sapato social', 'tênis casual', 'sandália'],
+    ['tênis', 'bota', 'sapato', 'sandália'],
+    ['usado', 'infantil', 'cadarço'],
+    ['brand', 'size', 'color', 'gender'], 
+    { 
+      apiCategories: [100012, 100011, 100009], 
+      discoveryMode: 'dynamic_trends',
+      maxPriceThreshold: 90.00 
+    }),
 
-  eletronicos_highticket: scenario('eletronicos_highticket', 'Eletrônicos Premium', 22,
-    ['smartphone 5g', 'iphone apple', 'galaxy s', 'notebook gamer', 'macbook', 'ipad', 'smart tv oled'],
-    ['smartphone', 'iphone', 'galaxy', 'notebook', 'macbook', 'ipad', 'smart tv'],
-    ['cabo', 'capa', 'película', 'suporte', 'carregador'],
-    ['brand', 'model', 'memory'], { apiCategories: [100013, 100644], discoveryMode: 'dynamic_trends' }),
+  achadinhos_beleza_oficial: scenario('achadinhos_beleza_oficial', 'Achadinhos de Beleza', 22,
+    ['escova secadora', 'modelador de cachos', 'kit pincel maquiagem', 'esponja elétrica facial', 'depilador elétrico'],
+    ['escova secadora', 'modelador', 'pincel', 'esponja facial', 'depilador'],
+    ['usado', 'conserto', 'peça'],
+    ['brand', 'voltage', 'color'], 
+    { 
+      apiCategories: [100001, 100630], 
+      discoveryMode: 'dynamic_trends',
+      maxPriceThreshold: 90.00 
+    }),
 });
 
 const EDITORIAL_SCENARIO_IDS = Object.freeze(Object.keys(EDITORIAL_SCENARIOS));

@@ -2,6 +2,8 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('crypto');
+const axios = require('axios');
 const scenarioConfig = require('./shopee-scenario-config.cjs');
 const trendsMiner = require('./shopee-trends-miner.cjs');
 
@@ -304,7 +306,12 @@ async function runNativeDiscovery({
     await new Promise(r => setTimeout(r, minRequestDelayMs));
   }
 
-  const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category)).filter(Boolean);
+  const sanitized = raw.map(({ node, category }) => sanitizeProduct(node, category))
+    .filter(Boolean)
+    .filter((product) => {
+      if (activeScenario.maxPriceThreshold && product.price > activeScenario.maxPriceThreshold) return false;
+      return true;
+    });
   const deduplicated = dedupeGlobally(sanitized);
   const scoped = deduplicated.filter((product) => scenarioConfig.matchesScenarioProduct(activeScenario, product.productName));
   const novel = applyNovelty(scoped, isNovel).map((product) => ({ ...product, score: calculateObjectiveScore(product) }));
