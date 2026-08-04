@@ -86,6 +86,50 @@ function sendFacebookPost(message, imageUrl) {
   });
 }
 
+function sendFacebookComment(postId, message) {
+  if (!process.env.FACEBOOK_ACCESS_TOKEN) {
+    return Promise.reject(new Error("Facebook não configurado (Falta Access Token)."));
+  }
+  return new Promise((resolve, reject) => {
+    const endpoint = `/v19.0/${postId}/comments`;
+    const payloadData = {
+      message: message || '',
+      access_token: process.env.FACEBOOK_ACCESS_TOKEN
+    };
+    const payload = JSON.stringify(payloadData);
+    const options = {
+      hostname: 'graph.facebook.com',
+      port: 443,
+      path: endpoint,
+      method: 'POST',
+      family: 4,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(payload)
+      }
+    };
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        try {
+          const result = JSON.parse(data);
+          if (result.error) {
+             reject(new Error(result.error.message || "Falha ao comentar."));
+          } else {
+            resolve(result.id);
+          }
+        } catch (e) {
+          reject(new Error("Resposta inválida da API do Facebook."));
+        }
+      });
+    });
+    req.on('error', (e) => reject(new Error(`Erro de Conexão: ${e.message}`)));
+    req.write(payload);
+    req.end();
+  });
+}
+
 async function processFacebookQueue() {
   try {
     // Verifica flag de automação em general_settings
@@ -110,7 +154,7 @@ async function processFacebookQueue() {
       .eq('status', 'draft')
       .eq('channel', 'facebook') // Filtrado apenas para o Facebook
       .order('created_at', { ascending: true })
-      .limit(5);
+      .limit(1);
 
     if (error) {
       console.error('Erro buscando posts pendentes (Facebook):', error);
@@ -143,7 +187,23 @@ async function processFacebookQueue() {
            }
         }
         
-        await sendFacebookPost(text, mediaUrl);
+        let cleanText = text;
+        let linkToComment = '';
+        const urlRegex = /(https?:\/\/[^\s]+)/;
+        const match = text.match(urlRegex);
+        
+        if (match && match[0]) {
+           linkToComment = match[0];
+           cleanText = text.replace(linkToComment, '').trim();
+           cleanText += '\n\n👉 Link de compra no primeiro comentário! 👇';
+        }
+
+        const postId = await sendFacebookPost(cleanText, mediaUrl);
+        
+        if (postId && linkToComment) {
+           await sendFacebookComment(postId, `🛒 Compre aqui: ${linkToComment}`);
+           console.log(`[Facebook Auto] Comentário com link adicionado no post ${postId}.`);
+        }
         
         const { error: updateError } = await supabase
           .from('posts')
@@ -178,7 +238,7 @@ async function processFacebookQueue() {
 
 let intervalTimer = null;
 
-function startFacebookAutomation(intervalMs = 90000) { // A cada 1.5 minutos
+function startFacebookAutomation(intervalMs = 1200000) { // A cada 20 minutos
   if (intervalTimer) return;
   console.log('[Facebook Auto] Iniciando loop de automação (intervalo:', intervalMs, 'ms)');
   
