@@ -676,14 +676,25 @@ Saída: {"shortName": "Ração PremieR Pet Golden"}`,
     });
     
     let extracted = "";
-    if (shortNameResponse.content && typeof shortNameResponse.content === "object") {
-      extracted = (shortNameResponse.content as any).shortName || "";
+    const rawContent = shortNameResponse.content;
+    // O http-provider parseia o JSON e retorna como objeto.
+    // Suportamos também o caso de string JSON por segurança.
+    if (rawContent && typeof rawContent === "object") {
+      extracted = (rawContent as Record<string, unknown>).shortName as string || "";
+    } else if (typeof rawContent === "string") {
+      try {
+        const parsed = JSON.parse(rawContent) as Record<string, unknown>;
+        extracted = typeof parsed.shortName === "string" ? parsed.shortName : "";
+      } catch {
+        // resposta não é JSON válido — mantém nome original
+      }
     }
 
     if (extracted && extracted.length > 0 && extracted.length <= 55) {
       shortName = extracted;
+      // Só persiste no banco se o LLM realmente encurtou o nome
+      await dependencies.offers.updateShortName(command.offerId, command.tenantId, shortName);
     }
-    await dependencies.offers.updateShortName(command.offerId, command.tenantId, shortName);
     shortNameInference = { provider: shortNameResponse.provider, model: shortNameResponse.model, latencyMs: shortNameResponse.latencyMs };
   } catch (error) {
     await emitTelemetry(dependencies, {
