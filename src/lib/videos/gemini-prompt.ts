@@ -41,26 +41,48 @@ function precoPorExtenso(valor: number | string | null | undefined): string {
 }
 // ------------------------------------
 
-// 1. GERAÇÃO DINÂMICA DO MICRO-CENÁRIO (formato fluido, validado no Google Flow)
-function scenarioGuidance(offer: GeminiPromptOffer): string {
+// 1. INTERAÇÃO DINÂMICA DA AVATAR COM O PRODUTO (por categoria)
+function productInteraction(offer: GeminiPromptOffer): string {
   const searchable = `${offer.product_name} ${offer.category ?? ""}`.toLowerCase();
 
-  if (/(roteador|celular|smartphone|notebook|pc|gamer|wi-fi|tecnologia|eletrônico)/i.test(searchable)) {
-    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre um expositor tecnológico com superfície preta refletiva e leves feixes de luz neon azul. O estúdio ao fundo tem uma estética gamer premium: ambiente escuro com ondas digitais sutis e iluminação RGB, transmitindo velocidade e conectividade.`;
+  if (/(cadeira|poltrona|sofa|sofá|banco\s*gamer)/i.test(searchable)) {
+    return `sentada confortavelmente no produto da imagem de referência, mantendo perfeitamente seu design e cores originais. O produto está apoiado no chão do estúdio`;
   }
-  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|cozinha)/i.test(searchable)) {
-    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre uma bancada de granito iluminada com luz quente e aconchegante. O estúdio ao fundo tem uma estética de cozinha moderna premium: tons quentes com madeira e metal escovado, transmitindo praticidade e sofisticação.`;
+  if (/(tênis|tenis|calçado|calcado|sapato|sandalia|bota)/i.test(searchable)) {
+    return `ao lado do produto da imagem de referência, exibido sobre um expositor minimalista ao chão`;
   }
-  if (/(shampoo|máscara|kit|beleza|maquiagem|cabelo|pele)/i.test(searchable)) {
-    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre uma base de mármore claro com iluminação difusa e suave. O estúdio ao fundo tem uma estética de spa e beleza premium: tons rosados e dourados suaves, transmitindo autocuidado e luxo.`;
+  if (/(celular|smartphone|controle|gamepad|headset|fone|notebook|tablet)/i.test(searchable)) {
+    return `segurando o produto da imagem de referência com as mãos, exibindo-o para a câmera, mantendo perfeitamente seu design e cores originais`;
   }
-  if (/(tênis|tenis|roupa|moda|vestuário|calcado|calçado|sapato|sandalia|bota)/i.test(searchable)) {
-    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre um expositor minimalista estilo vitrine esportiva, com piso refletivo escuro e iluminação direcional que destaca as cores do calçado. O estúdio ao fundo tem uma estética esportiva premium: paredes escuras com detalhes de luz neon laranja e cinza suaves, transmitindo a energia de uma loja de artigos esportivos de alto padrão.`;
+  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer)/i.test(searchable)) {
+    return `ao lado do produto da imagem de referência sobre uma bancada, com a mão gesticulando em direção a ele`;
   }
-  return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre uma base de exibição elegante com iluminação suave e direcional. O estúdio ao fundo tem uma estética publicitária premium: fundo escuro neutro com iluminação volumétrica suave, transmitindo qualidade e exclusividade.`;
+  if (/(shampoo|máscara|kit|beleza|maquiagem|perfume|creme|cabelo|pele)/i.test(searchable)) {
+    return `segurando o produto da imagem de referência com as mãos, exibindo-o para a câmera`;
+  }
+  return `ao lado do produto da imagem de referência, gestualizando em direção a ele`;
 }
 
-// 2. GERAÇÃO DINÂMICA DA FALA
+// 2. ESTÚDIO TEMÁTICO DINÂMICO (por categoria)
+function studioBackground(offer: GeminiPromptOffer): string {
+  const searchable = `${offer.product_name} ${offer.category ?? ""}`.toLowerCase();
+
+  if (/(roteador|celular|smartphone|notebook|pc|gamer|wi-fi|tecnologia|eletrônico|controle|gamepad|headset|cadeira\s*gamer)/i.test(searchable)) {
+    return `estúdio escuro com luzes suaves de neon azul e roxo, estética gamer premium`;
+  }
+  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|cozinha)/i.test(searchable)) {
+    return `estúdio com bancada de cozinha moderna, luz quente e aconchegante, tons de madeira e metal escovado`;
+  }
+  if (/(shampoo|máscara|kit|beleza|maquiagem|cabelo|pele)/i.test(searchable)) {
+    return `estúdio clean com tons rosados e dourados suaves, iluminação difusa de spa premium`;
+  }
+  if (/(tênis|tenis|roupa|moda|vestuário|calcado|calçado|sapato|sandalia|bota)/i.test(searchable)) {
+    return `estúdio esportivo premium com paredes escuras e detalhes de luz neon laranja e cinza`;
+  }
+  return `estúdio escuro com iluminação volumétrica suave e elegante, estética publicitária premium`;
+}
+
+// 3. GERAÇÃO DINÂMICA DA FALA
 function speechScript(offer: GeminiPromptOffer) {
   const marketplace = offer.platform ? ` na ${offer.platform}` : "";
   const extenso = precoPorExtenso(offer.current_price);
@@ -68,13 +90,12 @@ function speechScript(offer: GeminiPromptOffer) {
   const prefix = `"Olha este achado${marketplace}! Este é o `;
   const suffix = `. Só ${extenso}. Os detalhes estão na publicação!"`;
   
-  let shortName = offer.short_name ? offer.short_name.trim() : offer.product_name;
+  const shortName = offer.short_name ? offer.short_name.trim() : offer.product_name;
   
   return `${prefix}${shortName}${suffix}`;
 }
 
-// 3. MONTAGEM DO PROMPT MESTRE (formato fluido validado no Google Flow)
+// 4. MONTAGEM DO PROMPT MESTRE (formato fluido validado no Google Flow)
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
-  return `Avatar_Silvia fala diretamente para a câmera com expressão entusiasmada e natural, com leves acenos de cabeça, piscadas e gestos suaves com as mãos. ${scenarioGuidance(offer)} A câmera mantém plano médio fixo sem cortes, sem zoom. Iluminação cinematográfica focada no produto interagindo volumetricamente com o ambiente ao fundo. Imagem fotorrealista em 4K, estética publicitária premium, vídeo completamente limpo sem nenhum texto, número, legenda ou marca d'água na tela. Lipsync: ${speechScript(offer)}`;
+  return `Plano médio da exata mesma mulher da imagem Avatar_Silvia. Preserve rigorosamente sua identidade facial, pele morena, cabelo escuro liso na altura dos ombros, a camiseta azul-marinho e a calça jeans escura. Ela está ${productInteraction(offer)}. Ela fala diretamente para a câmera com expressão entusiasmada e natural, com leves acenos de cabeça e gestos suaves com as mãos. O fundo é um ${studioBackground(offer)}. Câmera fixa em plano médio sem cortes, sem zoom. Fotorrealista em 4K. Vídeo completamente limpo sem texto, número, legenda ou marca d'água na tela. Lipsync: ${speechScript(offer)}`;
 }
-
