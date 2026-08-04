@@ -13,7 +13,7 @@ const app = express();
 app.use(express.json());
 
 const { startTelegramAutomation } = require('./telegram-auto-publisher.cjs');
-
+const { startFacebookAutomation } = require('./facebook-auto-publisher.cjs');
 const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
 const LEGACY_ENDPOINT_DISABLED = 'LEGACY_ENDPOINT_DISABLED: Oracle API is a technical gateway; Discovery belongs to the Oracle Worker';
@@ -203,4 +203,7 @@ app.listen(PORT, () => {
   
   // Inicia o motor de disparo do Telegram
   startTelegramAutomation(60000); // Roda a cada 60s
+  
+  // Inicia o motor de disparo do Facebook
+  startFacebookAutomation(90000); // Roda a cada 90s
 });
