@@ -41,23 +41,23 @@ function precoPorExtenso(valor: number | string | null | undefined): string {
 }
 // ------------------------------------
 
-// 1. GERAÇÃO DINÂMICA DO MICRO-CENÁRIO
-function scenarioGuidance(offer: GeminiPromptOffer) {
+// 1. GERAÇÃO DINÂMICA DO MICRO-CENÁRIO (formato fluido, validado no Google Flow)
+function scenarioGuidance(offer: GeminiPromptOffer): string {
   const searchable = `${offer.product_name} ${offer.category ?? ""}`.toLowerCase();
-  
-  let thematicBackground = "Crie um fundo temático elegante e neutro ao redor do produto (ex: uma base de exibição limpa com iluminação suave), transmitindo a ideia de qualidade e destaque.";
-  
-  if (/(roteador|celular|smartphone|notebook|pc|gamer|wi-fi|tecnologia|eletrônico)/i.test(searchable)) {
-    thematicBackground = "Crie um fundo temático tecnológico ao redor do produto (ex: uma mesa gamer moderna e escura, com leves feixes de luz neon azul ou ondas digitais sutis flutuando ao fundo, transmitindo a ideia de velocidade e conexão).";
-  } else if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|cozinha)/i.test(searchable)) {
-    thematicBackground = "Crie um fundo temático de cozinha moderna ao redor do produto (ex: uma bancada de granito ou mármore limpa, com luzes quentes e acolhedoras, transmitindo a ideia de praticidade no lar).";
-  } else if (/(shampoo|máscara|kit|beleza|maquiagem|cabelo|pele)/i.test(searchable)) {
-    thematicBackground = "Crie um fundo temático de beleza e spa ao redor do produto (ex: uma base de mármore claro com pétalas de rosa suaves ou reflexos de água, transmitindo a ideia de autocuidado e luxo).";
-  } else if (/(tênis|roupa|moda|vestuário|calçado)/i.test(searchable)) {
-    thematicBackground = "Crie um fundo temático fashion ao redor do produto (ex: um expositor minimalista de vitrine de grife com iluminação direcionada, transmitindo a ideia de estilo e exclusividade).";
-  }
 
-  return `  - [Variável Atual - ${offer.product_name}]: ${thematicBackground}`;
+  if (/(roteador|celular|smartphone|notebook|pc|gamer|wi-fi|tecnologia|eletrônico)/i.test(searchable)) {
+    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre um expositor tecnológico com superfície preta refletiva e leves feixes de luz neon azul. O estúdio ao fundo tem uma estética gamer premium: ambiente escuro com ondas digitais sutis e iluminação RGB, transmitindo velocidade e conectividade.`;
+  }
+  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|cozinha)/i.test(searchable)) {
+    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre uma bancada de granito iluminada com luz quente e aconchegante. O estúdio ao fundo tem uma estética de cozinha moderna premium: tons quentes com madeira e metal escovado, transmitindo praticidade e sofisticação.`;
+  }
+  if (/(shampoo|máscara|kit|beleza|maquiagem|cabelo|pele)/i.test(searchable)) {
+    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre uma base de mármore claro com iluminação difusa e suave. O estúdio ao fundo tem uma estética de spa e beleza premium: tons rosados e dourados suaves, transmitindo autocuidado e luxo.`;
+  }
+  if (/(tênis|tenis|roupa|moda|vestuário|calcado|calçado|sapato|sandalia|bota)/i.test(searchable)) {
+    return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre um expositor minimalista estilo vitrine esportiva, com piso refletivo escuro e iluminação direcional que destaca as cores do calçado. O estúdio ao fundo tem uma estética esportiva premium: paredes escuras com detalhes de luz neon laranja e cinza suaves, transmitindo a energia de uma loja de artigos esportivos de alto padrão.`;
+  }
+  return `À direita dela, exiba exatamente um único exemplar do produto da imagem de referência sobre uma base de exibição elegante com iluminação suave e direcional. O estúdio ao fundo tem uma estética publicitária premium: fundo escuro neutro com iluminação volumétrica suave, transmitindo qualidade e exclusividade.`;
 }
 
 // 2. GERAÇÃO DINÂMICA DA FALA
@@ -73,26 +73,8 @@ function speechScript(offer: GeminiPromptOffer) {
   return `${prefix}${shortName}${suffix}`;
 }
 
-// 3. MONTAGEM DO PROMPT MESTRE
+// 3. MONTAGEM DO PROMPT MESTRE (formato fluido validado no Google Flow)
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
-  return `**[Sujeito e Ação]**
-A apresentadora Avatar_Silvia (usando a imagem de referência fornecida como quadro inicial absoluto) mantém sua pose estática original apontando para a direita, realizando movimentos micro-faciais hiper-realistas apenas de respiração, piscar de olhos e sincronização labial perfeita. Os braços e o tronco devem permanecer estritos e imóveis.
-
-**[Ambiente e Cenário]**
-O cenário é dividido em duas zonas perfeitamente integradas: à esquerda, o estúdio original da apresentadora com fundo azul escuro e ícones neon preservados; à direita (na direção do apontamento), um micro-cenário elegante e neutro consistindo em uma base de exibição limpa revelando o produto (${offer.product_name}).
-${scenarioGuidance(offer)}
-
-**[Câmera e Movimento]**
-Plano médio estático absoluto (Locked-off shot). Sem pan, sem zoom, sem transições de câmera. O enquadramento deve garantir que a apresentadora e o produto permaneçam perfeitamente visíveis durante toda a tomada, sem cortes.
-
-**[Iluminação e Clima]**
-Iluminação cinematográfica de estúdio. A luz suave e direcional focada no produto interage volumetricamente com o brilho da luz azul neon do estúdio principal, garantindo uma fusão visual realista, de altíssima fidelidade e sem recortes abruptos.
-
-**[Estilo e Gênero]**
-Modo Image-to-Video fotorrealista em 4K. Estética publicitária premium. Preservação 100% fiel da identidade facial da modelo, textura do cabelo, nitidez do logotipo "Caça Oferta" na camisa e do design original do produto. É estritamente proibido gerar outra apresentadora, trocar roupas, alterar características faciais, gerar movimentos irreais, recriar, estilizar ou substituir o produto, bem como adicionar objetos ou artefatos aleatórios.
-
-**[Detalhes Extras e Áudio]**
-O vídeo deve ser 100% limpo: sem absolutamente nenhum texto escrito, letra, número, preço, marca d'água, legendas automáticas ou logotipos extras criados na tela. NENHUM TEXTO.
-**Áudio (Lipsync):** Sincronização labial realista com voz feminina adulta, natural e amigável (Português do Brasil) falando exatamente a seguinte frase:
-${speechScript(offer)}`;
+  return `Avatar_Silvia fala diretamente para a câmera com expressão entusiasmada e natural, com leves acenos de cabeça, piscadas e gestos suaves com as mãos. ${scenarioGuidance(offer)} A câmera mantém plano médio fixo sem cortes, sem zoom. Iluminação cinematográfica focada no produto interagindo volumetricamente com o ambiente ao fundo. Imagem fotorrealista em 4K, estética publicitária premium, vídeo completamente limpo sem nenhum texto, número, legenda ou marca d'água na tela. Lipsync: ${speechScript(offer)}`;
 }
+
