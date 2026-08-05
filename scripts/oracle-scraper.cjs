@@ -327,20 +327,29 @@ async function lookupShopeeAffiliateProduct(shopId, itemId, keyword = '') {
     }
   }
 
-  const query = 'query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId } } }';
+  const queryKeyword = 'query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId shopType } } }';
+  const queryItemId = `{ productOfferV2(itemId: ${normalizedItemId}, page: 1, limit: 20) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId shopType } } }`;
+
   const normalizedKeyword = String(keyword || '').trim().replace(/\s+/g, ' ').slice(0, 100);
-  const keywords = [
-    `https://shopee.com.br/product/${normalizedShopId}/${normalizedItemId}`,
-    normalizedItemId,
-    ...(normalizedKeyword ? [normalizedKeyword] : []),
+  const strategies = [
+    { type: 'itemId', payload: JSON.stringify({ query: queryItemId }) },
+    { type: 'keyword', keyword: `https://shopee.com.br/product/${normalizedShopId}/${normalizedItemId}` },
+    { type: 'keyword', keyword: normalizedItemId },
+    ...(normalizedKeyword ? [{ type: 'keyword', keyword: normalizedKeyword }] : []),
   ];
 
-  for (const keyword of keywords) {
-    const payload = JSON.stringify({
-      operationName: 'ShopeePromotionOffers',
-      query,
-      variables: { keyword, productCatId: null, page: 1, limit: normalizedKeyword === keyword ? 50 : 20, sortType: 2, isAMSOffer: true },
-    });
+  for (const strategy of strategies) {
+    let payload;
+    if (strategy.type === 'itemId') {
+      payload = strategy.payload;
+    } else {
+      payload = JSON.stringify({
+        operationName: 'ShopeePromotionOffers',
+        query: queryKeyword,
+        variables: { keyword: strategy.keyword, productCatId: null, page: 1, limit: normalizedKeyword === strategy.keyword ? 50 : 20, sortType: 2, isAMSOffer: true },
+      });
+    }
+
     const response = await callShopeeAffiliateApi(payload);
     if (!response || response.status !== 200 || (response.data?.errors || []).length) continue;
     const nodes = response.data?.data?.productOfferV2?.nodes || [];
