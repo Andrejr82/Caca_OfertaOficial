@@ -28,6 +28,7 @@ const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
 const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const DEPLOY_FILES = [
+  'scripts/shopee-feed-sync.cjs',
   'scripts/oracle-scraper.cjs',
   'scripts/oracle-scraper_remote.cjs',
   'scripts/editorial-scenario-config.cjs',

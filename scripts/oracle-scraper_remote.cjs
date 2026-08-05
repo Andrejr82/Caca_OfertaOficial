@@ -325,8 +325,8 @@ async function lookupShopeeAffiliateProduct(shopId, itemId, keyword = '') {
     }
   }
 
-  const queryKeyword = 'query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId shopType } } }';
-  const queryItemId = `{ productOfferV2(itemId: ${normalizedItemId}, page: 1, limit: 20) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId shopType } } }`;
+  const queryKeyword = 'query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId shopType ratingStar sales commissionRate sellerCommissionRate priceDiscountRate } } }';
+  const queryItemId = `{ productOfferV2(itemId: ${normalizedItemId}, page: 1, limit: 20) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink shopId shopType ratingStar sales commissionRate sellerCommissionRate priceDiscountRate } } }`;
 
   const normalizedKeyword = String(keyword || '').trim().replace(/\s+/g, ' ').slice(0, 100);
   const strategies = [
