@@ -29,6 +29,7 @@ const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const DEPLOY_FILES = [
   'scripts/oracle-scraper.cjs',
+  'scripts/oracle-scraper_remote.cjs',
   'scripts/editorial-scenario-config.cjs',
   'scripts/amazon-native-top20-v5.cjs',
   'scripts/amazon-scenario-config.cjs',
