@@ -600,9 +600,11 @@ export async function generateOfficialAI(
     }))
   };
 
-  const requiredChannels = ["telegram", "whatsapp", "facebook", "instagram"] as const;
+  const requiredChannels = (command.channels && command.channels.length > 0) 
+    ? command.channels 
+    : ["telegram", "whatsapp"];
   const availableChannels = new Set((mappedOffer.affiliate_links as Array<{ channel: string }>).map((link) => link.channel));
-  const missingChannels = requiredChannels.filter((channel) => !availableChannels.has(channel));
+  const missingChannels = requiredChannels.filter((channel) => !availableChannels.has(channel as string));
   if (missingChannels.length > 0) {
     return rejectAndRecord(
       command,
@@ -720,8 +722,8 @@ Saída: {"shortName": "Ração PremieR Pet Golden"}`,
       let text = "";
       if (useCopyV2Renderer) {
         text = buildCopyV2ChannelCopy(copyV2Facts, channel);
-      } else if (channel === "instagram") text = generatedMessages!.instagram.feed;
-      else if (channel === "facebook") text = generatedMessages!.facebook;
+      } else if (channel === "instagram") text = generatedMessages?.instagram?.feed || "";
+      else if (channel === "facebook") text = generatedMessages?.facebook || "";
       else if (channel === "telegram") text = generatedMessages!.telegram;
       else if (channel === "whatsapp") text = generatedMessages!.whatsapp;
       return [channel, text];

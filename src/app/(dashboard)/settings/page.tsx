@@ -12,7 +12,8 @@ export default async function SettingsPage() {
   let initialSettings = {
     cron_scraping_enabled: false,
     notifications_enabled: false,
-    telegram_automation_enabled: false
+    telegram_automation_enabled: false,
+    facebook_automation_enabled: false
   };
 
   if (supabase) {
@@ -32,7 +33,8 @@ export default async function SettingsPage() {
         initialSettings = {
           cron_scraping_enabled: !!data.value.cron_scraping_enabled,
           notifications_enabled: !!data.value.notifications_enabled,
-          telegram_automation_enabled: !!data.value.telegram_automation_enabled
+          telegram_automation_enabled: !!data.value.telegram_automation_enabled,
+          facebook_automation_enabled: !!data.value.facebook_automation_enabled
         };
       }
     }

@@ -42,7 +42,7 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
     const offerLinks = links.filter((item) => item.offer_id === offer.id);
     if (offerLinks.length > 0) {
       const generated = generateAllMessages(offer, offerLinks);
-      const instagram = [
+      const instagram = generated.instagram ? [
         generated.instagram.feed,
         "",
         "=== STORIES SUGERIDOS ===",
@@ -53,7 +53,7 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
         "",
         "=== CARROSSEL SUGERIDO ===",
         ...generated.instagram.carousel.map((c) => `- ${c}`)
-      ].join("\n");
+      ].join("\n") : "Sem link do Instagram disponível.";
 
       messages = {
         telegram: generated.telegram,

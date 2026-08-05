@@ -676,25 +676,32 @@ export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink,
 }
 
 export function generateAllMessages(offer: Offer, linksArray: AffiliateLink[]) {
-  const requiredChannels = ["telegram", "whatsapp", "facebook", "instagram"];
+  const requiredChannels = ["telegram", "whatsapp"]; // Apenas os essenciais exigidos
   const safeLinks = Array.isArray(linksArray) ? linksArray : [];
   const missingChannels = requiredChannels.filter((channel) => !safeLinks.some((link) => link.channel === channel));
   if (missingChannels.length > 0) {
-    throw new Error(`affiliate_links ausentes para os canais: ${missingChannels.join(", ")}`);
+    throw new Error(`affiliate_links ausentes para os canais essenciais: ${missingChannels.join(", ")}`);
   }
 
   (offer as any).affiliate_links = safeLinks;
 
   const getLinkForChannel = (channel: string) => {
-    const link = safeLinks.find((candidate) => candidate.channel === channel);
-    if (!link) throw new Error(`affiliate_links ausentes para o canal: ${channel}`);
-    return link;
+    return safeLinks.find((candidate) => candidate.channel === channel);
   };
 
+  const telegramLink = getLinkForChannel("telegram");
+  const whatsappLink = getLinkForChannel("whatsapp");
+  const facebookLink = getLinkForChannel("facebook");
+  const instagramLink = getLinkForChannel("instagram");
+
+  if (!telegramLink || !whatsappLink) {
+    throw new Error(`affiliate_links ausentes para os canais essenciais (telegram/whatsapp)`);
+  }
+
   return {
-    telegram: generateTelegramMessage(offer, getLinkForChannel("telegram")),
-    facebook: generateFacebookMessage(offer, getLinkForChannel("facebook")),
-    instagram: generateInstagramMessage(offer, getLinkForChannel("instagram")),
-    whatsapp: generateWhatsAppMessage(offer, getLinkForChannel("whatsapp")),
+    telegram: generateTelegramMessage(offer, telegramLink),
+    whatsapp: generateWhatsAppMessage(offer, whatsappLink),
+    ...(facebookLink ? { facebook: generateFacebookMessage(offer, facebookLink) } : {}),
+    ...(instagramLink ? { instagram: generateInstagramMessage(offer, instagramLink) } : {}),
   };
 }

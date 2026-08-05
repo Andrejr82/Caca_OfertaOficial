@@ -326,12 +326,12 @@ describe("Deterministic Copy Engine Tests", () => {
   });
 
   describe("Geração com múltiplos links (4 canais)", () => {
-    it("deve rejeitar geração sem links nativos para todos os canais", () => {
+    it("deve rejeitar geração sem links nativos para todos os canais essenciais", () => {
       const offer = { ...baseOffer };
       const telegramOnly = { channel: "telegram", tracked_url: "https://app.com/go/tg_full" } as any;
 
-      expect(() => generateAllMessages(offer, telegramOnly)).toThrow(
-        "affiliate_links ausentes para os canais: telegram, whatsapp, facebook, instagram"
+      expect(() => generateAllMessages(offer, [telegramOnly])).toThrow(
+        "affiliate_links ausentes para os canais essenciais"
       );
     });
 
@@ -366,8 +366,8 @@ describe("Deterministic Copy Engine Tests", () => {
       expect(msgs.facebook).not.toContain(`wp_${fullUUID}`);
 
       // Instagram não deve conter URL do go/
-      expect(msgs.instagram.feed).not.toContain(`ig_${fullUUID}`);
-      expect(msgs.instagram.feed).toContain("Link na bio");
+      expect(msgs.instagram!.feed).not.toContain(`ig_${fullUUID}`);
+      expect(msgs.instagram!.feed).toContain("Link na bio");
     });
   });
 });
