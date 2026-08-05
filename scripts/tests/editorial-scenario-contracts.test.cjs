@@ -15,9 +15,10 @@ const {
 const expected = [
   'casa_cozinha_editorial', 'organizacao_editorial', 'ferramentas_editorial',
   'informatica_editorial', 'celulares_editorial', 'beleza_editorial',
-  'moda_editorial', 'esporte_editorial', 'pet_editorial', 'automotivo_editorial',
-  'games_editorial', 'tv_audio_editorial', 'eletrodomesticos_editorial',
-  'moveis_editorial', 'grandes_ofertas_editorial', 'cupons_aprovados_editorial',
+  'moda_editorial', 'esporte_editorial', 'pet_editorial', 'games_editorial',
+  'tv_audio_editorial', 'eletrodomesticos_editorial', 'moveis_editorial',
+  'grandes_ofertas_editorial', 'cupons_aprovados_editorial',
+  'suplementacao_oficial', 'perfumaria_premium', 'calcados_premium', 'achadinhos_beleza_oficial'
 ];
 
 assert.deepEqual(EDITORIAL_SCENARIO_IDS, expected);
@@ -32,10 +33,18 @@ for (const id of expected) {
   if (id !== 'cupons_aprovados_editorial') assert.ok(scenario.marketplaces.length === 3, `${id} sem marketplaces`);
 }
 
+const expectedHourMap = [
+  'casa_cozinha_editorial', 'organizacao_editorial', 'ferramentas_editorial',
+  'informatica_editorial', 'celulares_editorial', 'beleza_editorial',
+  'moda_editorial', 'esporte_editorial', 'pet_editorial', 'achadinhos_beleza_oficial',
+  'games_editorial', 'tv_audio_editorial', 'suplementacao_oficial',
+  'perfumaria_premium', 'calcados_premium', 'cupons_aprovados_editorial',
+];
+
 assert.deepEqual(
   [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
     .map((hour) => getEditorialScenarioForHour(hour).id),
-  expected,
+  expectedHourMap,
 );
 
 for (const marketplace of ['Shopee', 'Amazon', 'Mercado Livre']) {
