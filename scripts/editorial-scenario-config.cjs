@@ -85,11 +85,6 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['bebê', 'bebe', 'humano', 'automotivo'],
     ['species', 'size', 'weight', 'material', 'flavor'], { apiCategories: [100631], amazonBrowseNodes: ['19653951011', '19653950011', '19653948011'] }),
 
-  automotivo_editorial: scenario('automotivo_editorial', 'Automotivo', 16,
-    ['acessório automotivo', 'tapete carro', 'capa banco carro', 'lâmpada automotiva', 'som automotivo', 'ferramenta automotiva', 'carregador veicular', 'compressor carro'],
-    ['automotivo', 'carro', 'veicular', 'moto', 'pneu', 'lâmpada carro', 'som automotivo', 'compressor'],
-    ['brinquedo', 'pet', 'bebê', 'bebe', 'peça incompatível'],
-    ['brand', 'model', 'voltage', 'compatibility', 'vehicle'], { apiCategories: [100636], amazonBrowseNodes: ['156901011', '157069011'] }),
 
   games_editorial: scenario('games_editorial', 'Games', 17,
     ['console', 'playstation', 'xbox', 'nintendo switch', 'controle gamer', 'jogo ps5', 'jogo xbox', 'cadeira gamer', 'headset gamer'],
@@ -128,11 +123,6 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     priority: 'high', discoveryMode: 'manual_only', apiCategories: [], amazonBrowseNodes: [], aliases: [],
   },
 
-  bebidas_editorial: scenario('bebidas_editorial', 'Bebidas', 23,
-    ['vinho', 'whisky', 'cerveja artesanal', 'licor', 'gin', 'vodka', 'café em grãos', 'chá', 'energético'],
-    ['vinho', 'whisky', 'cerveja', 'licor', 'gin', 'vodka', 'café', 'chá', 'energético'],
-    ['infantil', 'pet', 'automotivo'],
-    ['brand', 'volume', 'type'], { apiCategories: [100001, 100636], amazonBrowseNodes: ['16754344011', '16754348011'] }),
 
   // --- INÍCIO DA ZONA DE LOJAS OFICIAIS (ALTO TICKET / DYNAMIC TRENDS) ---
 
@@ -169,7 +159,7 @@ const EDITORIAL_SCENARIOS = Object.freeze({
       maxPriceThreshold: 90.00 
     }),
 
-  achadinhos_beleza_oficial: scenario('achadinhos_beleza_oficial', 'Achadinhos de Beleza', 22,
+  achadinhos_beleza_oficial: scenario('achadinhos_beleza_oficial', 'Achadinhos de Beleza', 16,
     ['escova secadora', 'modelador de cachos', 'kit pincel maquiagem', 'esponja elétrica facial', 'depilador elétrico'],
     ['escova secadora', 'modelador', 'pincel', 'esponja facial', 'depilador'],
     ['usado', 'conserto', 'peça'],
