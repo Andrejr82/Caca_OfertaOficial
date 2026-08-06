@@ -59,7 +59,7 @@ document.getElementById('dubBtn').addEventListener('click', async () => {
     dubBtn.innerText = "Dublando...";
 
     try {
-      const response = await fetch('http://localhost:3002/api/shopee/dub-video', {
+      const response = await fetch('http://193.122.242.178:3002/api/shopee/dub-video', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -82,9 +82,9 @@ document.getElementById('dubBtn').addEventListener('click', async () => {
       } else {
         statusEl.innerText = `Erro Oracle: ${data.error}`;
       }
-    } catch (err) {
-      statusEl.innerText = `Falha na conexão: O servidor Oracle (localhost:3002) está rodando?`;
-      console.error(err);
+    } catch (error) {
+      statusEl.innerText = `Falha na conexão: O servidor Oracle remoto (193.122.242.178) está rodando?`;
+      dubBtn.disabled = false;
     } finally {
       dubBtn.disabled = false;
       dubBtn.innerText = "Dublar e Enviar (Oracle)";
