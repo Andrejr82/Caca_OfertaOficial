@@ -110,7 +110,8 @@ function createTransportRegistry() {
       ...receiptDependencies,
       send: async (input) => {
         const videoUrl = typeof input.metadata?.facebookVideoUrl === "string" ? input.metadata.facebookVideoUrl : null;
-        const result = await publishToFacebook(input.text, input.mediaUrl, videoUrl);
+        const affiliateLink = typeof input.metadata?.affiliateLink === "string" ? input.metadata.affiliateLink : null;
+        const result = await publishToFacebook(input.text, input.mediaUrl, videoUrl, affiliateLink);
         if (!result.success || !result.postId) throw new Error(result.message || "Facebook did not return a final post id");
         return { externalId: String(result.postId), sentAt: new Date().toISOString() };
       }

@@ -45,6 +45,9 @@ export async function POST(request: Request) {
       videoUrl = job.video_url;
     }
     if (!body.postId || !body.offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
+    
+    // Fetch tracked url from DB to pass along for commenting
+    const { data: affiliateLink } = await client.from("affiliate_links").select("tracked_url").eq("offer_id", body.offerId).eq("channel", "facebook").maybeSingle();
 
     const commandId = body.commandId ?? crypto.randomUUID();
     // A videoJobId identifies the media, not a publication attempt. Reusing it
@@ -80,7 +83,8 @@ export async function POST(request: Request) {
       origin: "publication.facebook.route", reason: { code: "USER_REQUESTED_PUBLICATION" },
       metadata: {
         requestSource: body.requestSource ?? "facebook-dashboard",
-        ...(videoUrl ? { facebookMediaType: "VIDEO", facebookVideoUrl: videoUrl } : {})
+        ...(videoUrl ? { facebookMediaType: "VIDEO", facebookVideoUrl: videoUrl } : {}),
+        ...(affiliateLink ? { affiliateLink: affiliateLink.tracked_url } : {})
       }
     };
     const result = await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, user.id));

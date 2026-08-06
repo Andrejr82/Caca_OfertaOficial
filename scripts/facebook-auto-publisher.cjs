@@ -150,7 +150,7 @@ async function processFacebookQueue() {
     console.log('Buscando posts com status draft para o Facebook...');
     const { data: posts, error } = await supabase
       .from('posts')
-      .select('*, offers(image_url)')
+      .select('*, offers(image_url), affiliate_links(tracked_url)')
       .eq('status', 'draft')
       .eq('channel', 'facebook') // Filtrado apenas para o Facebook
       .order('created_at', { ascending: true })
@@ -188,16 +188,11 @@ async function processFacebookQueue() {
         }
         
         let cleanText = text;
-        let linkToComment = '';
-        const urlRegex = /(https?:\/\/[^\s]+)/;
-        const match = text.match(urlRegex);
+        let linkToComment = post.affiliate_links ? post.affiliate_links.tracked_url : '';
         
-        if (match && match[0]) {
-           linkToComment = match[0];
-           cleanText = text.replace(linkToComment, '').trim();
-           cleanText += '\n\n👉 Link de compra no primeiro comentário! 👇';
-        }
-
+        // Remove the instruction text from the body if needed, or leave it since it's correctly placed.
+        // The text already has the 👉 Link de compra no primeiro comentário! 👇 from buildCopyV2ChannelCopy
+        
         const postId = await sendFacebookPost(cleanText, mediaUrl);
         
         if (postId && linkToComment) {

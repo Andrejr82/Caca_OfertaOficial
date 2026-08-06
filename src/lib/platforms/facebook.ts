@@ -15,7 +15,8 @@ export interface FacebookPublishResponse {
 export async function publishToFacebook(
   message: string,
   imageUrl?: string | null,
-  videoUrl?: string | null
+  videoUrl?: string | null,
+  affiliateLink?: string | null
 ): Promise<FacebookPublishResponse> {
   logger.info("Iniciando publicação no Facebook...");
 
@@ -75,6 +76,24 @@ export async function publishToFacebook(
     }
 
     logger.info("Publicação no Facebook concluída", { id: data.id });
+    
+    // Se existir affiliateLink, publica no primeiro comentário da postagem
+    if (affiliateLink) {
+      try {
+        await fetch(`https://graph.facebook.com/v19.0/${data.id}/comments`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: `🛒 Compre aqui: ${affiliateLink}`,
+            access_token: token
+          })
+        });
+        logger.info("Comentário com link adicionado no Facebook", { postId: data.id });
+      } catch (err: any) {
+        logger.error("Falha ao adicionar comentário no Facebook", { error: err.message });
+      }
+    }
+    
     return {
       success: true,
       message: "Publicado com sucesso no Facebook.",
