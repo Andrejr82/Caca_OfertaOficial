@@ -121,12 +121,13 @@ export default async function BioPage({
                   {/* Imagem do Produto */}
                   <div className="relative w-full aspect-square bg-white flex items-center justify-center p-4">
                     {offer.image_url ? (
-                      /* Usamos tag img nativa para não ter problema com domínios externos do next/image não configurados */
+                      /* Proxy WSVR.NL para burlar bloqueio de CDN da Shopee e afins */
                       <img
-                        src={offer.image_url}
+                        src={offer.image_url.includes('shopee') || offer.image_url.includes('shopeesz') ? `https://wsrv.nl/?url=${encodeURIComponent(offer.image_url)}` : offer.image_url}
                         alt={offer.product_name}
                         className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <span className="text-gray-300">Sem Imagem</span>
@@ -147,14 +148,22 @@ export default async function BioPage({
                     </h2>
                     
                     <div className="flex flex-col gap-1 mb-4">
-                      {offer.old_price && offer.old_price > offer.current_price && (
-                        <span className="text-xs text-gray-500 line-through">
-                          R$ {offer.old_price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      {offer.current_price > 0 ? (
+                        <>
+                          {offer.old_price && offer.old_price > offer.current_price && (
+                            <span className="text-xs text-gray-500 line-through">
+                              R$ {offer.old_price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </span>
+                          )}
+                          <span className="text-lg font-bold text-moss">
+                            R$ {offer.current_price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-md font-bold text-moss">
+                          Ver preço no site
                         </span>
                       )}
-                      <span className="text-lg font-bold text-moss">
-                        R$ {offer.current_price.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
-                      </span>
                     </div>
 
                     <button className="w-full bg-moss/10 hover:bg-moss text-moss hover:text-white border border-moss/50 font-semibold py-2.5 rounded-xl transition-colors duration-300">
