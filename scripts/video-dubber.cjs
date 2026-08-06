@@ -47,8 +47,10 @@ function generateTTS(text, outputPath) {
   return new Promise((resolve, reject) => {
     const tmpTxtFile = outputPath.replace('.mp3', '.txt');
     fs.writeFileSync(tmpTxtFile, text, 'utf8');
-    
-    const cmd = `cmd /c "${EDGE_TTS_BIN} -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural --write-media "${outputPath}""`;
+    const isWin = process.platform === 'win32';
+    const cmd = isWin 
+      ? `cmd /c "${EDGE_TTS_BIN} -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural --write-media "${outputPath}""`
+      : `/home/ubuntu/.local/bin/edge-tts -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural --write-media "${outputPath}"`;
     
     exec(cmd, (error, stdout, stderr) => {
       try { fs.unlinkSync(tmpTxtFile); } catch(e) {}
