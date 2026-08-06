@@ -8,12 +8,14 @@ const ffmpeg = require('fluent-ffmpeg');
 // Se o edge-tts não estiver no PATH global do sistema, usaremos este atalho validado:
 const EDGE_TTS_BIN = 'C:\\Users\\Andr\u00E9\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\edge-tts.exe';
 
-async function generateDubbingCopy(title, price) {
+async function generateDubbingCopy(title, price, durationSecs = 15) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
+  const maxWords = Math.floor(durationSecs * 2.5); // Aproximadamente 2.5 palavras por segundo de fala
   const prompt = `Você é um copywriter de vídeos curtos hiper-persuasivos (estilo TikTok/Reels de Achadinhos).
-Sua missão é escrever um ROTEIRO FALADO vibrante, envolvente e focado em venda (com até 20 segundos de locução) para narrar um vídeo da Shopee.
+Sua missão é escrever um ROTEIRO FALADO vibrante, envolvente e focado em venda para narrar um vídeo da Shopee.
+IMPORTANTE: O vídeo tem exatamente ${durationSecs} segundos. Escreva um roteiro cuja locução dure aproximadamente esse tempo (tamanho alvo: em torno de ${maxWords} palavras).
 
 DADOS ORIGINAIS DO PRODUTO:
 Título completo da loja: ${title}
@@ -95,6 +97,17 @@ function mergeAudioVideo(videoPath, audioPath, outputPath) {
   });
 }
 
+function getVideoDuration(videoPath) {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(videoPath, (err, metadata) => {
+      if (err || !metadata || !metadata.format || !metadata.format.duration) {
+        return resolve(15); // Fallback seguro
+      }
+      resolve(Math.floor(metadata.format.duration));
+    });
+  });
+}
+
 /**
  * Processa a dublagem de um vídeo da Shopee
  * @param {string} videoUrl - URL do MP4 extraído pela extensão
@@ -117,9 +130,16 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     console.log(`[Job ${jobId}] Baixando vídeo original...`);
     await downloadVideo(videoUrl, rawVideoPath);
 
-    // 2. Gerar a Copy (LLM)
-    console.log(`[Job ${jobId}] Gerando roteiro com LLM...`);
-    let copy = await generateDubbingCopy(title, price);
+    // 1.5. Descobre a duração exata do vídeo baixado
+    let durationSecs = 15;
+    try {
+      durationSecs = await getVideoDuration(rawVideoPath);
+    } catch(e) {}
+    console.log(`[Job ${jobId}] Duração do vídeo identificada: ${durationSecs} segundos.`);
+
+    // 2. Gerar a Copy (LLM) adaptada ao tamanho do vídeo
+    console.log(`[Job ${jobId}] Gerando roteiro com LLM (alvo: ${durationSecs}s)...`);
+    let copy = await generateDubbingCopy(title, price, durationSecs);
     console.log(`[Job ${jobId}] Roteiro gerado:\n${copy}`);
 
     // 3. Gerar o Áudio (Edge-TTS)
