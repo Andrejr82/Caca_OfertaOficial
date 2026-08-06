@@ -121,16 +121,18 @@ export default async function BioPage({
                   {/* Imagem do Produto */}
                   <div className="relative w-full aspect-square bg-white flex items-center justify-center p-4">
                     {offer.image_url ? (
-                      /* Proxy WSVR.NL para burlar bloqueio de CDN da Shopee e afins */
+                      /* Referrer policy no-referrer para burlar bloqueio de hotlink (CDN) */
                       <img
-                        src={offer.image_url.includes('shopee') || offer.image_url.includes('shopeesz') ? `https://wsrv.nl/?url=${encodeURIComponent(offer.image_url)}` : offer.image_url}
+                        src={offer.image_url}
                         alt={offer.product_name}
-                        className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-500"
+                        className="object-cover w-full h-full transform group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
                         referrerPolicy="no-referrer"
                       />
                     ) : (
-                      <span className="text-gray-300">Sem Imagem</span>
+                      <div className="flex items-center justify-center w-full h-full bg-gray-100">
+                        <span className="text-gray-300">Sem Imagem</span>
+                      </div>
                     )}
                     
                     {/* Badge de Desconto */}
