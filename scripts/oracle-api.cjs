@@ -269,7 +269,17 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     if (existingOffers && existingOffers.length > 0) {
       offerId = existingOffers[0].id;
       productName = existingOffers[0].product_name || title;
-      console.log(`[Oracle Dubber] Oferta encontrada no banco: ${offerId}`);
+      console.log(`[Oracle Dubber] Oferta encontrada no banco: ${offerId}. Atualizando preço e imagem...`);
+      
+      // Atualiza a oferta existente com os dados frescos da extração (corrige fotos antigas que eram mp4)
+      await supabaseAdmin
+        .from('offers')
+        .update({
+          image_url: imageUrl || null,
+          current_price: parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.')) || 0
+        })
+        .eq('id', offerId);
+        
     } else {
       // Cria a oferta automaticamente (Fluxo Magalu)
       console.log(`[Oracle Dubber] Oferta não encontrada. Criando nova oferta no banco...`);
