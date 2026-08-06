@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Extrator de Vídeo Shopee",
+  "version": "1.0",
+  "description": "Extrai a URL do vídeo de produtos da Shopee burlando o bloqueio anti-bot.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Extrair Vídeo"
+  },
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads"
+  ],
+  "host_permissions": [
+    "https://shopee.com.br/*",
+    "http://localhost:3002/*"
+  ]
+}

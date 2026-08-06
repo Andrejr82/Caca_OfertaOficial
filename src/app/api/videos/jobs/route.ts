@@ -112,8 +112,7 @@ export async function POST(request: Request) {
       const trackedUrl = createTrackedUrl(offer.original_url, subId);
       const { data: link, error: linkError } = await admin.from("affiliate_links").upsert({ user_id: userData.user.id, offer_id: offer.id, channel, original_url: offer.original_url, tracked_url: trackedUrl, sub_id: subId }, { onConflict: "offer_id,channel" }).select("id").single();
       if (linkError || !link) throw new Error(`Falha no link ${channel}: ${linkError?.message ?? "linha ausente"}`);
-      const rawCopy = buildCopyV2ChannelCopy(facts, channel);
-      const content = channel === "facebook" ? `${rawCopy}${trackedUrl}` : rawCopy;
+      const content = buildCopyV2ChannelCopy(facts, channel);
       channelCopies[channel] = content;
       const { data: existing } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "draft").maybeSingle();
       if (existing) {

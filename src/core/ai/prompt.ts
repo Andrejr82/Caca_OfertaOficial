@@ -115,6 +115,7 @@ function humanContext(facts: CopyV2Facts) {
   const text = `${facts.category ?? ""} ${facts.productName}`.toLocaleLowerCase("pt-BR");
   if (/tv|televis|geladeira|lavadora|lava e seca|micro-ondas|cooktop|forno|fogão|ar-condicionado|aspirador/iu.test(text)) return "🏠 Para equipar a casa";
   if (/sofá|guarda-roupa|cama|colchão|mesa|escrivaninha|cadeira|rack|cômoda/iu.test(text)) return "🏠 Para a casa";
+  if (/torneira|pia|cozinha|panela|fritadeira|liquidificador|batedeira|airfryer/iu.test(text)) return "🍳 Para equipar a sua cozinha";
   if (/celular|notebook|tablet|monitor|console|fone|headset|tecnologia/iu.test(text)) return "📱 Para quem gosta de tecnologia";
   if (/cachorro|gato|pet|bebê|maternidade|fralda/iu.test(text)) return "🐾 Para a rotina da família";
   return null;
@@ -136,6 +137,14 @@ function hookFor(facts: CopyV2Facts, hook?: string) {
   const value = hook ? sanitizeOfficialAIHook(hook.replace(/\s+/gu, " ")) : "";
   const isGenericLegacyHook = /^(?:🔥\s*)?(?:preço baixou|achado do dia)$/iu.test(value);
   if (value && !isGenericLegacyHook && value.length <= 90 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
+  
+  if (!facts.currentPrice || facts.currentPrice <= 0) {
+    const market = facts.marketplace || 'Shopee';
+    const isFeminine = /shopee|amazon|shein/i.test(market);
+    const inMarket = isFeminine ? "na" : "no";
+    return `✨ Achado incrível ${inMarket} ${market}`;
+  }
+
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const saving = facts.originalPrice && facts.originalPrice > facts.currentPrice
     ? formatBRL(facts.originalPrice - facts.currentPrice)
@@ -158,6 +167,24 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
   const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
   const freight = shippingLine(facts);
 
+  if (channel === "facebook") {
+    const isFeminine = /shopee|amazon|shein/i.test(facts.marketplace);
+    const inMarket = isFeminine ? "na" : "no";
+    
+    const blocks = [
+      hookFor(facts, hook),
+      `🛍️ ${cleanProductName(facts.productName)}`,
+      `${iconLine} Achado ${inMarket} ${facts.marketplace}`,
+      ...(freight ? [freight] : []),
+      ...(attribute ? [`✨ ${attribute.text}`] : []),
+      discount && facts.originalPrice && facts.currentPrice > 0
+        ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
+        : (facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : `💰 Consulte o preço atual no link!`),
+      `👉 Link de compra no primeiro comentário! 👇`
+    ];
+    return blocks.join("\n\n");
+  }
+
   if (channel === "whatsapp") {
     const blocks = [
       hookFor(facts, hook),
@@ -165,8 +192,8 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       `${iconLine} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
-      ...(discount !== null && facts.originalPrice !== null ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
-      `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim(),
+      ...(discount !== null && facts.originalPrice !== null && facts.currentPrice > 0 ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
+      facts.currentPrice > 0 ? `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim() : `✅ Consulte o preço atual no link!`,
       `👉 `
     ];
     return blocks.join("\n\n");
@@ -179,27 +206,32 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       `${iconLine} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
-      discount && facts.originalPrice
+      discount && facts.originalPrice && facts.currentPrice > 0
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
-        : `💰 *${formatBRL(facts.currentPrice)}*`,
+        : (facts.currentPrice > 0 ? `💰 *${formatBRL(facts.currentPrice)}*` : `💰 Consulte o preço atual no link!`),
       `👉 `
     ];
     return blocks.join("\n\n");
   }
 
   if (channel === "instagram") {
+    const hasPrice = facts.currentPrice && facts.currentPrice > 0;
     const blocks = [
       hookFor(facts, hook),
       `${humanContext(facts) ?? "Uma opção para sua rotina"}: **${cleanProductName(facts.productName)}**.`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(freight ? [freight] : []),
-      discount ? `📉 Economia verificada de **${discount}%** sobre o preço anterior.` : `💰 Consulte o preço atual no anúncio.`,
-      discount && facts.originalPrice
-        ? `💰 **De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}**`
-        : `💰 **Apenas ${formatBRL(facts.currentPrice)}**`,
+      hasPrice
+        ? (discount ? `📉 Economia verificada de **${discount}%** sobre o preço anterior.` : null)
+        : `💰 Consulte o preço atual no anúncio.`,
+      hasPrice
+        ? (discount && facts.originalPrice
+            ? `💰 **De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}**`
+            : `💰 **Apenas ${formatBRL(facts.currentPrice)}**`)
+        : null,
       `🔎 **Link na bio ou nos Stories para consultar a oferta.** 👇`,
       `#oferta #${marketplaceTag}`
-    ];
+    ].filter(Boolean);
     return blocks.join("\n\n");
   }
 

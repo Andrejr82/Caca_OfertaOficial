@@ -54,11 +54,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         { onConflict: "offer_id,channel" }
       ).select("id").single();
       if (linkError || !link) return NextResponse.json({ error: `Falha ao preparar o link do canal ${channel}: ${linkError?.message ?? "registro ausente"}` }, { status: 502 });
-      const rawCopy = buildCopyV2ChannelCopy(facts, channel);
-      const content = channel === "facebook" ? `${rawCopy}${trackedUrl}` : rawCopy;
+      const content = buildCopyV2ChannelCopy(facts, channel);
       channelCopies[channel] = content;
       const { data: draft } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "draft").maybeSingle();
       if (draft) {
+        // Atualiza o draft existente com a nova copy
+        await admin.from("posts").update({ content }).eq("id", draft.id);
         draftIds[channel] = draft.id;
       } else {
         const { data: published } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "published").limit(1).maybeSingle();

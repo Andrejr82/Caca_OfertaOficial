@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Shopee Video Extractor</title>
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+      width: 300px;
+      padding: 15px;
+      margin: 0;
+      background: #f8f9fa;
+      color: #333;
+    }
+    h2 {
+      font-size: 16px;
+      margin-top: 0;
+      color: #ee4d2d; /* Shopee color */
+    }
+    button {
+      width: 100%;
+      background: #ee4d2d;
+      color: white;
+      border: none;
+      padding: 10px;
+      font-weight: bold;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+    button:hover {
+      background: #d73a1c;
+    }
+    button:disabled {
+      background: #ccc;
+      cursor: not-allowed;
+    }
+    #result {
+      margin-top: 15px;
+      font-size: 13px;
+      word-wrap: break-word;
+      background: #e9ecef;
+      padding: 8px;
+      border-radius: 4px;
+      display: none;
+    }
+    #dubBtn {
+      background: #28a745;
+      display: none;
+    }
+    #dubBtn:hover {
+      background: #218838;
+    }
+  </style>
+</head>
+<body>
+  <h2>Shopee Extrator</h2>
+  <p id="status">Clique abaixo para capturar o vídeo da página atual.</p>
+  
+  <button id="extractBtn">Extrair Vídeo Agora</button>
+  
+  <div id="result"></div>
+  <button id="dubBtn">Dublar e Enviar (Oracle)</button>
+
+  <script src="popup.js"></script>
+</body>
+</html>

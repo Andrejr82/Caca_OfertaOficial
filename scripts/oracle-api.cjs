@@ -8,9 +8,49 @@ const {
   normalizeProductContentForLLM,
   createLLMInputFromNormalizedContent
 } = require('../src/lib/token-optimization.js');
+const { createClient } = require('@supabase/supabase-js');
+
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  { 
+    auth: { autoRefreshToken: false, persistSession: false },
+    realtime: { transport: require('ws') }
+  }
+);
+
+const fs = require('fs');
+const util = require('util');
+const logFile = fs.createWriteStream('oracle-debug.log', { flags: 'a' });
+const logStdout = process.stdout;
+
+console.log = function() {
+  logFile.write(util.format.apply(null, arguments) + '\n');
+  logStdout.write(util.format.apply(null, arguments) + '\n');
+};
+console.error = function() {
+  logFile.write(util.format.apply(null, arguments) + '\n');
+  process.stderr.write(util.format.apply(null, arguments) + '\n');
+};
 
 const app = express();
 app.use(express.json());
+
+// CORS para extensão Chrome
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// Rota de diagnóstico
+app.get('/ping', (req, res) => {
+  const msg = '[PING] Oracle v2 respondendo - ' + new Date().toISOString();
+  console.log(msg);
+  res.json({ ok: true, version: 'oracle-v2', ts: Date.now() });
+});
 
 const { startTelegramAutomation } = require('./telegram-auto-publisher.cjs');
 const { startFacebookAutomation } = require('./facebook-auto-publisher.cjs');
@@ -195,6 +235,222 @@ app.post('/api/manual/trends', async (req, res) => {
   } catch (error) {
     console.error(`[API] Busca manual falhou: ${error.message || String(error)}`);
     return res.status(502).json({ ok: false, code: 'MANUAL_DISCOVERY_FAILED', message: error.message || 'Falha na busca manual.' });
+  }
+});
+
+app.post('/api/shopee/dub-video', async (req, res) => {
+  const { token, videoUrl, title, price, originalUrl, tenantId } = req.body || {};
+
+  if (!isAuthorized(token)) {
+    return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
+  }
+
+  if (!videoUrl || !title || !originalUrl || !tenantId) {
+    return res.status(400).json({ error: 'Faltam parâmetros obrigatórios (videoUrl, title, originalUrl, tenantId).' });
+  }
+
+  try {
+    // 1. Verifica se a oferta já existe no banco
+    let offerId = null;
+    let productName = title;
+    
+    // Busca oferta pela URL original
+    const { data: existingOffers } = await supabaseAdmin
+      .from('offers')
+      .select('id, product_name')
+      .eq('original_url', originalUrl)
+      .eq('user_id', tenantId)
+      .limit(1);
+      
+    if (existingOffers && existingOffers.length > 0) {
+      offerId = existingOffers[0].id;
+      productName = existingOffers[0].product_name || title;
+      console.log(`[Oracle Dubber] Oferta encontrada no banco: ${offerId}`);
+    } else {
+      // Cria a oferta automaticamente (Fluxo Magalu)
+      console.log(`[Oracle Dubber] Oferta não encontrada. Criando nova oferta no banco...`);
+      const { data: newOffer, error: offerError } = await supabaseAdmin
+        .from('offers')
+        .insert({
+          user_id: tenantId,
+          product_name: title,
+          original_url: originalUrl,
+          current_price: parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.')) || 0,
+          platform: 'Shopee',
+          status: 'pending_manual_review'
+        })
+        .select('id')
+        .single();
+        
+      if (offerError || !newOffer) {
+        throw new Error(`Erro ao criar oferta no banco: ${offerError?.message}`);
+      }
+      offerId = newOffer.id;
+      console.log(`[Oracle Dubber] Nova oferta criada: ${offerId}`);
+    }
+    console.log(`[DEBUG] O valor final de offerId antes de seguir:`, offerId);
+
+    if (!offerId) {
+      throw new Error(`CRÍTICO: offerId ficou ${offerId} após checar ou criar a oferta! A coluna id existe na tabela offers?`);
+    }
+
+    // 2. Dubla o vídeo localmente
+    const { processShopeeVideoDubbing } = require('./video-dubber.cjs');
+    const result = await processShopeeVideoDubbing(videoUrl, title, price || 'Não informado');
+
+    if (!result.success) {
+      return res.status(500).json({ error: result.error });
+    }
+
+    // 3. Faz o upload para o Supabase Storage
+    const fs = require('fs');
+    const path = require('path');
+    const videoBuffer = fs.readFileSync(result.finalVideoPath);
+    
+    const jobId = require('crypto').randomUUID();
+    const storagePath = `${tenantId}/${jobId}.mp4`;
+    
+    console.log(`[Oracle Dubber] Fazendo upload do vídeo para o Storage...`);
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('videos')
+      .upload(storagePath, videoBuffer, { contentType: 'video/mp4', upsert: true });
+      
+    if (uploadError) {
+      throw new Error(`Erro no upload para o Supabase: ${uploadError.message}`);
+    }
+    
+    const { data: publicData } = supabaseAdmin.storage.from('videos').getPublicUrl(storagePath);
+    const uploadedVideoUrl = publicData.publicUrl;
+
+    // 3b. Atualiza image_url da oferta com o video_url para desbloquear Instagram
+    await supabaseAdmin
+      .from('offers')
+      .update({ image_url: uploadedVideoUrl })
+      .eq('id', offerId);
+    console.log(`[Oracle Dubber] image_url da oferta atualizada com video.`);
+
+    // 4. Cria o Video Job
+    console.log(`[Oracle Dubber] Criando Video Job...`);
+    const { error: jobError } = await supabaseAdmin
+      .from('video_jobs')
+      .insert({
+        id: jobId,
+        user_id: tenantId,
+        offer_id: offerId,
+        status: 'ready',
+        stage: 'ready_for_review',
+        script: result.copy || '',
+        video_url: uploadedVideoUrl,
+        metadata: {
+          source: 'oracle-extension',
+          prompt: result.copy
+        },
+        completed_at: new Date().toISOString()
+      });
+      
+    if (jobError) {
+      throw new Error(`Erro ao criar video_job: ${jobError.message}`);
+    }
+    
+    // 5. Cria links e posts (rascunhos) para Facebook e Instagram
+    console.log(`[Oracle Dubber] Criando drafts para Facebook e Instagram...`);
+    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://caca-oferta-oficial.vercel.app';
+    const channels = [
+      { name: 'facebook', prefix: 'fb_' },
+      { name: 'instagram', prefix: 'ig_' }
+    ];
+    
+    for (const channel of channels) {
+      const subId = `${channel.prefix}${offerId}`;
+      const trackedUrl = `${baseUrl.replace(/\/$/, '')}/go/${subId}`;
+      
+      const { data: link, error: linkError } = await supabaseAdmin
+        .from('affiliate_links')
+        .upsert({ 
+          user_id: tenantId, 
+          offer_id: offerId, 
+          channel: channel.name, 
+          original_url: originalUrl, 
+          tracked_url: trackedUrl, 
+          sub_id: subId 
+        }, { onConflict: 'offer_id,channel' })
+        .select('id')
+        .single();
+        
+      if (!linkError && link) {
+        const priceNum = parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.'));
+        const priceStr = priceNum && priceNum > 0 ? `R$ ${priceNum.toFixed(2).replace('.', ',')}` : null;
+        
+        const hook = priceStr ? `✨ Encontramos este por ${priceStr}` : `✨ Achado incrível na Shopee`;
+        
+        let finalCopy;
+        if (channel.name === 'facebook') {
+          finalCopy = [
+            hook,
+            '',
+            `🛍️ ${productName}`,
+            '',
+            `🧴 Achado na Shopee`,
+            '',
+            priceStr ? `💰 ${priceStr}` : `💰 Consulte o preço atual no link!`,
+            '',
+            `👉 Link de compra no primeiro comentário! 👇`
+          ].filter(line => line !== null).join('\n');
+        } else {
+          finalCopy = [
+            hook,
+            '',
+            `Uma opção para sua rotina: **${productName}**.`,
+            '',
+            priceStr ? `💰 **Apenas ${priceStr}**` : `💰 **Consulte no site**`,
+            '',
+            `🔎 **Link na bio ou nos Stories para consultar a oferta.** 👇`,
+            '',
+            `#oferta #shopee`
+          ].filter(line => line !== null).join('\n');
+        }
+        
+        const { error: postError } = await supabaseAdmin
+          .from('posts')
+          .insert({ 
+            user_id: tenantId, 
+            offer_id: offerId, 
+            affiliate_link_id: link.id, 
+            channel: channel.name, 
+            content: finalCopy, 
+            status: 'draft' 
+          });
+        
+        if (postError) {
+          console.error(`[Oracle Dubber] Falha ao criar draft ${channel.name}: ${postError.message}`);
+        } else {
+          console.log(`[Oracle Dubber] Draft ${channel.name} criado com sucesso!`);
+        }
+      }
+    }
+    
+    // 6. Apaga o arquivo local
+    try {
+      fs.unlinkSync(result.finalVideoPath);
+      console.log(`[Oracle Dubber] Arquivo temporário local apagado.`);
+    } catch(e) {
+      console.warn(`[Oracle Dubber] Não foi possível apagar arquivo temporário: ${e.message}`);
+    }
+
+    const payload = {
+      success: true,
+      message: 'Vídeo dublado e salvo no Painel com sucesso',
+      data: {
+        jobId,
+        videoUrl: uploadedVideoUrl,
+        offerId
+      }
+    };
+    console.log(`[Oracle Dubber] Respondendo para a extensão:`, payload);
+    return res.json(payload);
+  } catch (error) {
+    console.error(`[API] Erro no endpoint dub-video: ${error.message}`);
+    return res.status(500).json({ error: 'Erro interno ao processar a dublagem e salvar no banco' });
   }
 });
 
