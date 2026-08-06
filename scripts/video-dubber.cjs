@@ -25,9 +25,9 @@ REGRAS OBRIGATÓRIAS PARA O ROTEIRO:
 1. NOME CURTO E COMERCIAL: O "Título completo" tem muito lixo de SEO. Crie e use apenas um nome curto (Ex: de "Coturno Militar Feminino..." para "Bota Militar").
 2. PERSUASÃO E DESEJO: Crie urgência, destaque o benefício de forma energética estilo TikTok, e faça a pessoa querer comprar na hora! Use palavras de emoção.
 3. CONCORDÂNCIA GRAMATICAL DE GÊNERO: Se o produto for masculino (O triturador, O copo), use adjetivos masculinos (seu novo aliado, perfeito, prático). Se for feminino (A panela, A vassoura), use adjetivos femininos (sua nova aliada, perfeita, prática). Nunca erre o gênero!
-4. PREÇO POR EXTENSO (MUITO IMPORTANTE): Escreva o valor EXATAMENTE como ele deve ser LIDO PELA VOZ. Nunca use vírgula para separar centavos no texto. Em vez de "R$ 135,76", você OBRIGATORIAMENTE deve escrever "cento e trinta e cinco reais e setenta e seis centavos". Se for "R$ 17,99", escreva "dezessete reais e noventa e nove centavos".
+4. NÃO CITE O PREÇO: Nunca fale o preço no áudio. O preço será colocado na tela em texto, então o áudio não deve mencionar nenhum valor financeiro.
 5. REVISÃO DE PORTUGUÊS E PRONÚNCIA: Escreva a palavra "Shopee" exatamente como "Chopí" para a voz sintética ler corretamente.
-6. FORMATO E ENCERRAMENTO: Não use emojis ou aspas. Finalize dizendo enérgico: "O link está nos comentários!".`;
+6. FORMATO E ENCERRAMENTO: Não use emojis ou aspas. Finalize dizendo enérgico: "Acesse o link na publicação!".`;
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
