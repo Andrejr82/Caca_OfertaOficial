@@ -17,7 +17,7 @@ async function classifyProductGender(title, apiKey) {
         model: 'llama-3.3-70b-versatile',
         messages: [{
           role: 'user',
-          content: `Você é um especialista em gramática portuguesa. Analise o título abaixo e identifique o SUBSTANTIVO PRINCIPAL do produto (a palavra que nomeia o objeto em si, ignorando adjetivos, marcas e especificações técnicas).\nDepois, responda APENAS com uma palavra: MASCULINO ou FEMININO, de acordo com o gênero gramatical desse substantivo principal em português.\nExemplos: "Torneira Elétrica Slim" → substantivo: torneira → FEMININO. "Copo Stanley 900ml" → substantivo: copo → MASCULINO.\nTítulo: ${title}`
+          content: `Você é um especialista em gramática portuguesa. Analise o título abaixo e identifique o SUBSTANTIVO PRINCIPAL do produto (a palavra que nomeia o objeto em si, ignorando adjetivos, marcas e especificações técnicas).\nDepois, responda APENAS com uma palavra: MASCULINO ou FEMININO, de acordo com o gênero gramatical desse substantivo principal em português.\nExemplos: "Torneira Elétrica Slim" → substantivo: torneira → FEMININO. "Copo Stanley 900ml" → substantivo: copo → MASCULINO. "Panela de Pressão" → substantivo: panela → FEMININO. "Aspirador Robô" → substantivo: aspirador → MASCULINO.\nTítulo: ${title}`
         }],
         max_tokens: 10,
         temperature: 0,
@@ -31,45 +31,45 @@ async function classifyProductGender(title, apiKey) {
   }
 }
 
-// --- ETAPA 1: Gerar roteiro com gênero e duração explícitos ---
-async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO', adjustment = null) {
+// --- ETAPA 1: Gerar roteiro persuasivo com gênero correto ---
+async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO') {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
-  // Francisca fala ~3.2 palavras/segundo em pt-BR (calibrado para não cortar antes do fim)
-  const targetWords = Math.round(durationSecs * 3.2);
-  // max_tokens dinâmico: ~2 tokens por palavra + margem de segurança
-  const dynamicMaxTokens = Math.max(300, targetWords * 2 + 80);
+  // Alvo: ~3.5 palavras/segundo (midpoint), sem preocupar exatamente — o rate do TTS vai ajustar depois
+  const targetWords = Math.round(durationSecs * 3.5);
+  // max_tokens dinâmico: ~2.5 tokens por palavra + margem de segurança generosa
+  const dynamicMaxTokens = Math.max(350, Math.round(targetWords * 2.5) + 100);
 
   const genderInstruction = gender === 'FEMININO'
-    ? `GÊNERO DO PRODUTO: FEMININO. Use OBRIGATORIAMENTE artigos e pronomes femininos: "A [produto]", "esta [produto]", "sua nova aliada", "incrível", "perfeita", "prática", etc.`
-    : `GÊNERO DO PRODUTO: MASCULINO. Use OBRIGATORIAMENTE artigos e pronomes masculinos: "O [produto]", "este [produto]", "seu novo aliado", "incrível", "perfeito", "prático", etc.`;
-
-  let adjustmentInstruction = '';
-  if (adjustment === 'ENCURTAR') {
-    adjustmentInstruction = ` ATENÇÃO: O roteiro anterior ficou LONGO demais. Reduza para EXATAMENTE aproximadamente ${targetWords} palavras. Corte partes menos importantes mas mantenha a energia e a CTA final.`;
-  } else if (adjustment === 'EXPANDIR') {
-    adjustmentInstruction = ` ATENÇÃO: O roteiro anterior ficou CURTO demais. Expanda para EXATAMENTE aproximadamente ${targetWords} palavras. Adicione mais benefícios, detalhes ou emoção.`;
-  }
+    ? `GÊNERO DO PRODUTO: FEMININO. Use OBRIGATORIAMENTE artigos e pronomes femininos: "A [produto]", "esta [produto]", "sua nova aliada", "ela é", "perfeita", "incrível", "prática". NUNCA use "o", "este", "seu" para referir ao produto.`
+    : `GÊNERO DO PRODUTO: MASCULINO. Use OBRIGATORIAMENTE artigos e pronomes masculinos: "O [produto]", "este [produto]", "seu novo aliado", "ele é", "perfeito", "incrível", "prático". NUNCA use "a", "esta", "sua" para referir ao produto.`;
 
   const prompt = `Você é um dos melhores copywriters de vídeos curtos do Brasil, especialista em Reels e TikTok de Achadinhos.
-Sua missão é criar um ROTEIRO FALADO que faça o espectador PARAR de rolar o feed, SENTIR desejo imediato pelo produto e CLICAR para comprar.
-IMPORTANTE: O vídeo tem exatamente ${durationSecs} segundos. Escreva um roteiro com EXATAMENTE aproximadamente ${targetWords} palavras — nem mais, nem menos.${adjustmentInstruction}
+Sua missão é criar um ROTEIRO FALADO que faça o espectador PARAR de rolar o feed, SENTIR desejo imediato e CLICAR para comprar na Shopee.
 
 DADOS DO PRODUTO:
 Título completo: ${title}
 Preço: ${price}
+Duração do vídeo: ${durationSecs} segundos
+Tamanho alvo do roteiro: aproximadamente ${targetWords} palavras
 
 ${genderInstruction}
 
-REGRAS OBRIGATÓRIAS:
-1. NOME CURTO: Crie um nome comercial curto e impactante. Ignore o lixo de SEO do título original (ex: "Torneira Elétrica Aquecida 5500W Premium" → "torneira quente").
-2. GANCHO INICIAL PODEROSO: Comece com uma frase de impacto que desperte curiosidade ou desejo imediato. Ex: "Sabe aquela [produto] dos seus sonhos?", "Isso vai transformar sua [rotina/cozinha/banheiro]!".
-3. BENEFÍCIOS COM EMOÇÃO: Apresente 2-3 benefícios reais de forma apaixonada. Use verbos de ação e transformação: "elimina", "transforma", "resolve", "chega de...", "imagina...".
-4. URGÊNCIA E ESCASSEZ: Crie senso de urgência. Ex: "Tá com preço absurdo agora!", "Corre que vai acabar!", "Só hoje na Chopí!".
-5. NÃO CITE O PREÇO: Nunca mencione valores financeiros. O preço aparece na tela.
-6. PRONÚNCIA: Escreva "Shopee" como "Chopí" para a voz sintética pronunciar corretamente.
-7. ENCERRAMENTO: Finalize com energia máxima: "Acesse o link na publicação!". Sem emojis, sem aspas.`;
+ESTRUTURA OBRIGATÓRIA DO ROTEIRO (siga essa ordem):
+1. GANCHO (2-3 segundos): Frase de impacto que para o scroll. Ex: "Isso mudou minha vida!", "Chega de sofrer com [problema]!", "Esse [produto] é um absurdo!".
+2. APRESENTAÇÃO (rápida): Diga o nome curto e comercial do produto. Ignore lixo de SEO do título — crie um nome simples.
+3. BENEFÍCIOS (maior parte): 2-3 benefícios reais ditos com paixão. Use "imagina...", "chega de...", "você vai...", "transforma...".
+4. URGÊNCIA: Uma frase criando pressa. Ex: "Tá com preço incrível agora na Chopí!", "Corre que pode acabar!".
+5. CTA FINAL: Obrigatório e com energia máxima: "Acesse o link na publicação!".
+
+REGRAS:
+- Roteiro com aproximadamente ${targetWords} palavras — seja preciso.
+- NUNCA mencione preço, valores ou porcentagem de desconto. O preço aparece na tela.
+- Escreva "Shopee" como "Chopí" para a voz sintética pronunciar corretamente.
+- Sem emojis, sem aspas, sem títulos ou numeração no texto final.
+- O texto deve soar natural e entusiasmado quando lido em voz alta.
+- Retorne APENAS o texto do roteiro, sem explicações.`;
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
@@ -77,7 +77,7 @@ REGRAS OBRIGATÓRIAS:
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
       max_tokens: dynamicMaxTokens,
-      temperature: 0.7,
+      temperature: 0.75,
     },
     { headers: { Authorization: `Bearer ${apiKey}` } }
   );
@@ -85,18 +85,26 @@ REGRAS OBRIGATÓRIAS:
   return response.data.choices[0].message.content.trim();
 }
 
-function generateTTS(text, outputPath) {
+// --- ETAPA 2: Gerar TTS com parâmetros de rate e pitch ---
+// rate: string como "+10%", "-5%", "+0%" — ajusta velocidade da fala
+// pitch: string como "+5Hz" — deixa voz mais animada/entusiasta
+function generateTTS(text, outputPath, rate = '+0%', pitch = '+5Hz') {
   return new Promise((resolve, reject) => {
     const tmpTxtFile = outputPath.replace('.mp3', '.txt');
     fs.writeFileSync(tmpTxtFile, text, 'utf8');
     const isWin = process.platform === 'win32';
-    const cmd = isWin 
-      ? `cmd /c "${EDGE_TTS_BIN} -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural --write-media "${outputPath}""`
-      : `/home/ubuntu/.local/bin/edge-tts -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural --write-media "${outputPath}"`;
     
+    // Formata rate/pitch para o CLI — valores negativos precisam de = para não serem interpretados como flags
+    const rateArg = rate.startsWith('-') ? `--rate=${rate}` : `--rate ${rate}`;
+    const pitchArg = pitch.startsWith('-') ? `--pitch=${pitch}` : `--pitch ${pitch}`;
+
+    const cmd = isWin
+      ? `cmd /c "${EDGE_TTS_BIN} -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural ${rateArg} ${pitchArg} --write-media "${outputPath}""`
+      : `/home/ubuntu/.local/bin/edge-tts -f "${tmpTxtFile}" --voice pt-BR-FranciscaNeural ${rateArg} ${pitchArg} --write-media "${outputPath}"`;
+
     exec(cmd, (error, stdout, stderr) => {
       try { fs.unlinkSync(tmpTxtFile); } catch(e) {}
-      
+
       if (error) {
         console.error('Erro no Edge-TTS:', stderr);
         return reject(error);
@@ -162,6 +170,22 @@ function getVideoDuration(videoPath) {
 }
 
 /**
+ * Calcula o rate% necessário para o áudio durar exatamente o tempo do vídeo.
+ * rate > 0 → fala mais rápido (áudio estava longo)
+ * rate < 0 → fala mais devagar (áudio estava curto)
+ * Limitado entre -30% e +50% para manter qualidade natural da voz.
+ */
+function calculateRateAdjustment(audioDuration, videoDuration) {
+  // rate% = (audioDuration/videoDuration - 1) * 100
+  // Ex: áudio=50s, vídeo=40s → rate = (50/40 - 1)*100 = +25% (falar mais rápido)
+  // Ex: áudio=30s, vídeo=40s → rate = (30/40 - 1)*100 = -25% (falar mais devagar)
+  let rate = (audioDuration / videoDuration - 1) * 100;
+  rate = Math.max(-30, Math.min(50, rate)); // limita range seguro
+  const sign = rate >= 0 ? '+' : '';
+  return `${sign}${rate.toFixed(0)}%`;
+}
+
+/**
  * Processa a dublagem de um vídeo da Shopee
  * @param {string} videoUrl - URL do MP4 extraído pela extensão
  * @param {string} title - Título extraído
@@ -176,72 +200,66 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
   const audioPath = path.join(workDir, `${jobId}_audio.mp3`);
   const finalVideoPath = path.join(workDir, `${jobId}_final.mp4`);
 
-  console.log(`[Job ${jobId}] Iniciando processo de dublagem para: ${title}`);
+  console.log(`[Job ${jobId}] Iniciando dublagem: ${title}`);
 
   try {
-    // 1. Download do MP4 original
-    console.log(`[Job ${jobId}] Baixando vídeo original...`);
+    // 1. Download
+    console.log(`[Job ${jobId}] Baixando vídeo...`);
     await downloadVideo(videoUrl, rawVideoPath);
 
     // 2. Duração exata do vídeo
     const durationSecs = await getVideoDuration(rawVideoPath);
     console.log(`[Job ${jobId}] Duração do vídeo: ${durationSecs}s`);
 
-    // 3. Classificar gênero do produto
+    // 3. Gênero do produto
     const apiKey = process.env.GROQ_API_KEY;
     const gender = await classifyProductGender(title, apiKey);
-    console.log(`[Job ${jobId}] Gênero detectado: ${gender}`);
+    console.log(`[Job ${jobId}] Gênero: ${gender}`);
 
-    // 4. Loop de geração de roteiro + áudio até encaixar no tempo (máx 3 tentativas)
-    let copy = '';
-    let adjustment = null;
-    const MAX_ATTEMPTS = 3;
-    const TOLERANCE = 0.10; // 10% de tolerância
+    // 4. Gerar roteiro
+    console.log(`[Job ${jobId}] Gerando roteiro...`);
+    let copy = await generateDubbingCopy(title, price, durationSecs, gender);
+    console.log(`[Job ${jobId}] Roteiro:\n${copy}`);
 
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-      console.log(`[Job ${jobId}] Tentativa ${attempt}: gerando roteiro (ajuste: ${adjustment || 'nenhum'})...`);
-      copy = await generateDubbingCopy(title, price, durationSecs, gender, adjustment);
-      console.log(`[Job ${jobId}] Roteiro:\n${copy}`);
+    // 5. Gerar áudio inicial (sem ajuste de rate) com pitch +5Hz para entusiasmo
+    const PITCH = '+5Hz';
+    console.log(`[Job ${jobId}] Gerando áudio TTS inicial (pitch: ${PITCH})...`);
+    await generateTTS(copy, audioPath, '+0%', PITCH);
 
-      console.log(`[Job ${jobId}] Gerando áudio TTS...`);
-      await generateTTS(copy, audioPath);
+    // 6. Medir duração do áudio gerado
+    const audioDuration = await getAudioDuration(audioPath);
+    console.log(`[Job ${jobId}] Áudio inicial: ${audioDuration ? audioDuration.toFixed(1) : '?'}s | Vídeo: ${durationSecs}s`);
 
-      const audioDuration = await getAudioDuration(audioPath);
-      if (audioDuration === null) {
-        console.log(`[Job ${jobId}] Não foi possível medir áudio. Usando como está.`);
-        break;
-      }
+    // 7. Se temos a duração, calcular rate exato e regenerar
+    if (audioDuration !== null) {
+      const diffRatio = Math.abs(audioDuration - durationSecs) / durationSecs;
 
-      const diff = audioDuration - durationSecs;
-      const diffRatio = Math.abs(diff) / durationSecs;
-      console.log(`[Job ${jobId}] Áudio: ${audioDuration.toFixed(1)}s | Vídeo: ${durationSecs}s | Diferença: ${diff > 0 ? '+' : ''}${diff.toFixed(1)}s (${(diffRatio * 100).toFixed(0)}%)`);
+      if (diffRatio > 0.05) { // só ajusta se diferença > 5%
+        const rate = calculateRateAdjustment(audioDuration, durationSecs);
+        console.log(`[Job ${jobId}] Diferença: ${((audioDuration - durationSecs) > 0 ? '+' : '')}${(audioDuration - durationSecs).toFixed(1)}s. Ajustando rate para: ${rate}`);
 
-      if (diffRatio <= TOLERANCE) {
-        console.log(`[Job ${jobId}] ✅ Sincronizado! Diferença dentro da tolerância.`);
-        break;
-      }
-
-      if (attempt < MAX_ATTEMPTS) {
-        adjustment = diff > 0 ? 'ENCURTAR' : 'EXPANDIR';
-        console.log(`[Job ${jobId}] ⚠️ Fora do tempo. Ajuste: ${adjustment}.`);
         try { fs.unlinkSync(audioPath); } catch(e) {}
+        await generateTTS(copy, audioPath, rate, PITCH);
+
+        const finalAudioDuration = await getAudioDuration(audioPath);
+        console.log(`[Job ${jobId}] ✅ Áudio ajustado: ${finalAudioDuration ? finalAudioDuration.toFixed(1) : '?'}s (rate: ${rate})`);
       } else {
-        console.log(`[Job ${jobId}] Máx tentativas atingidas. Usando melhor resultado disponível.`);
+        console.log(`[Job ${jobId}] ✅ Áudio já dentro da tolerância (${(diffRatio * 100).toFixed(0)}%). Sem ajuste de rate necessário.`);
       }
     }
 
-    // 5. Merge vídeo + áudio
+    // 8. Merge vídeo + áudio
     console.log(`[Job ${jobId}] Mesclando vídeo e áudio...`);
     await mergeAudioVideo(rawVideoPath, audioPath, finalVideoPath);
 
-    // 6. Cleanup
+    // 9. Cleanup
     fs.unlinkSync(rawVideoPath);
     fs.unlinkSync(audioPath);
 
-    // Reverter "Chopí" para "Shopee" na copy do banco/frontend
+    // Reverter "Chopí" → "Shopee" na copy para banco/frontend
     copy = copy.replace(/Chopí/gi, 'Shopee');
 
-    console.log(`[Job ${jobId}] Concluído! Arquivo final: ${finalVideoPath}`);
+    console.log(`[Job ${jobId}] Concluído! Arquivo: ${finalVideoPath}`);
     return {
       success: true,
       jobId,
