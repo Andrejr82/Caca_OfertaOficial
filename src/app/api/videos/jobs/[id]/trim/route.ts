@@ -43,11 +43,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const outputPath = path.join(tmpDir, `trim_output_${id}.mp4`);
     fs.writeFileSync(inputPath, videoBuffer);
 
-    // 2. Executa o corte via ffmpeg (dinâmico para Vercel serverless)
+    // 2. Executa o corte via ffmpeg (usa ffmpeg-static para Vercel serverless)
     const duration = trimEnd - trimStart;
     await new Promise<void>((resolve, reject) => {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const ffmpeg = require("fluent-ffmpeg");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const ffmpegPath = require("ffmpeg-static");
+      ffmpeg.setFfmpegPath(ffmpegPath);
       ffmpeg(inputPath)
         .setStartTime(trimStart)
         .setDuration(duration)
