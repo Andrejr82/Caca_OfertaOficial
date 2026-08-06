@@ -77,43 +77,10 @@ export async function publishToFacebook(
 
     logger.info("Publicação no Facebook concluída", { id: data.id });
     
-    // Se existir affiliateLink, publica no primeiro comentário da postagem
-    if (affiliateLink) {
-      try {
-        let commentSuccess = false;
-        // Tenta postar o comentário até 3 vezes (15s total), pois vídeos demoram a processar
-        for (let attempt = 1; attempt <= 3; attempt++) {
-          const commentRes = await fetch(`https://graph.facebook.com/v19.0/${data.id}/comments`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              message: `🛒 Compre aqui: ${affiliateLink}`,
-              access_token: token
-            })
-          });
-          
-          if (commentRes.ok) {
-            commentSuccess = true;
-            logger.info("Comentário com link adicionado no Facebook", { postId: data.id, attempt });
-            break;
-          } else {
-            const errData = await commentRes.json().catch(() => ({}));
-            logger.warn(`Falha ao adicionar comentário no Facebook (Tentativa ${attempt})`, { error: errData });
-          }
-          
-          if (attempt < 3) {
-            // Aguarda 5 segundos antes de tentar novamente
-            await new Promise(res => setTimeout(res, 5000));
-          }
-        }
-        
-        if (!commentSuccess) {
-          logger.error("Falha definitiva ao adicionar comentário no Facebook após retentativas.", { postId: data.id });
-        }
-      } catch (err: any) {
-        logger.error("Exceção ao adicionar comentário no Facebook", { error: err.message });
-      }
-    }
+    // O comentário com link de afiliado foi delegado ao Webhook de Feed da Meta.
+    // Assim que a Meta terminar de processar o vídeo/foto e publicar no feed,
+    // o Webhook (src/app/api/webhooks/facebook) será acionado e fará o comentário 100% seguro.
+    logger.info("Deixando comentário a cargo do Webhook do Facebook.", { postId: data.id });
     
     return {
       success: true,
