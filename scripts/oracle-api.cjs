@@ -249,6 +249,10 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     return res.status(400).json({ error: 'Faltam parâmetros obrigatórios (videoUrl, title, originalUrl, tenantId).' });
   }
 
+  if (price <= 0) {
+    return res.status(400).json({ error: 'O preço capturado foi R$ 0,00. A extração falhou. Tente novamente.' });
+  }
+
   try {
     // 1. Verifica se a oferta já existe no banco
     let offerId = null;

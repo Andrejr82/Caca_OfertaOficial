@@ -26,11 +26,11 @@ export async function POST(request: Request) {
   try {
     const body = await request.json() as ExtensionAIRequest;
     
-    if (!body.title || !body.price || !body.finalUrl) {
+    if (!body.title || typeof body.price !== "number" || body.price <= 0 || !body.finalUrl) {
       return NextResponse.json({
         ok: false,
         code: "INVALID_EXTENSION_PAYLOAD",
-        message: "Dados do produto incompletos."
+        message: "Dados do produto incompletos ou preço inválido (R$ 0,00). Atualize a página do produto e tente novamente."
       }, { status: 400, headers: corsHeaders });
     }
 
