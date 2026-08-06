@@ -20,11 +20,11 @@ Título completo da loja: ${title}
 Preço: ${price}
 
 REGRAS OBRIGATÓRIAS PARA O ROTEIRO:
-1. NOME CURTO E COMERCIAL: O "Título completo" acima tem muito lixo de SEO. No seu roteiro, NUNCA leia o título completo. Crie e use apenas um nome curto (Ex: de "Coturno Militar Feminino Tratorado..." para "Bota Militar"; de "Torneira cozinha parede preta..." para "Torneira Flexível").
+1. NOME CURTO E COMERCIAL: O "Título completo" tem muito lixo de SEO. Crie e use apenas um nome curto (Ex: de "Coturno Militar Feminino..." para "Bota Militar").
 2. PERSUASÃO E DESEJO: Crie urgência, destaque o benefício de forma energética estilo TikTok, e faça a pessoa querer comprar na hora! Use palavras de emoção.
-3. CONCORDÂNCIA GRAMATICAL E GÊNERO: Preste muita atenção ao GÊNERO da palavra (A Torneira, A Bota, O Coturno). NUNCA mude a palavra para forçar o gênero (NÃO invente "torneiro" se for torneira). Diga "Esta é a torneira", "Este é o coturno".
-4. REVISÃO DE PORTUGUÊS: Escreva em português perfeito. Cuidado com erros de digitação (use "conforto" e não "conforte").
-5. PRONÚNCIA: Sempre escreva a palavra "Shopee" exatamente como "Chopí" para a voz sintética pronunciar certo.
+3. CONCORDÂNCIA GRAMATICAL DE GÊNERO: Se o produto for masculino (O triturador, O copo), use adjetivos masculinos (seu novo aliado, perfeito, prático). Se for feminino (A panela, A vassoura), use adjetivos femininos (sua nova aliada, perfeita, prática). Nunca erre o gênero!
+4. PREÇO POR EXTENSO (MUITO IMPORTANTE): Escreva o valor EXATAMENTE como ele deve ser LIDO PELA VOZ. Nunca use vírgula para separar centavos no texto. Em vez de "R$ 135,76", você OBRIGATORIAMENTE deve escrever "cento e trinta e cinco reais e setenta e seis centavos". Se for "R$ 17,99", escreva "dezessete reais e noventa e nove centavos".
+5. REVISÃO DE PORTUGUÊS E PRONÚNCIA: Escreva a palavra "Shopee" exatamente como "Chopí" para a voz sintética ler corretamente.
 6. FORMATO E ENCERRAMENTO: Não use emojis ou aspas. Finalize dizendo enérgico: "O link está nos comentários!".`;
 
   const response = await axios.post(
