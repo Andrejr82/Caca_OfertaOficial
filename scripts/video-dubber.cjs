@@ -177,10 +177,11 @@ function getVideoDuration(videoPath) {
  */
 function calculateRateAdjustment(audioDuration, videoDuration) {
   // rate% = (audioDuration/videoDuration - 1) * 100
-  // Ex: áudio=50s, vídeo=40s → rate = (50/40 - 1)*100 = +25% (falar mais rápido)
-  // Ex: áudio=30s, vídeo=40s → rate = (30/40 - 1)*100 = -25% (falar mais devagar)
+  // Ex: áudio=50s, vídeo=40s → rate = +25% (falar mais rápido)
+  // NUNCA usamos rate negativo (voz fica cansada/arrastada)
   let rate = (audioDuration / videoDuration - 1) * 100;
-  rate = Math.max(-30, Math.min(50, rate)); // limita range seguro
+  if (rate < 0) rate = 0;         // Não desacelera: preferível terminar um pouco antes
+  rate = Math.min(30, rate);      // Máximo +30% para não soar acelerado demais
   const sign = rate >= 0 ? '+' : '';
   return `${sign}${rate.toFixed(0)}%`;
 }
@@ -222,7 +223,7 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     console.log(`[Job ${jobId}] Roteiro:\n${copy}`);
 
     // 5. Gerar áudio inicial (sem ajuste de rate) com pitch +5Hz para entusiasmo
-    const PITCH = '+5Hz';
+    const PITCH = '+10Hz';
     console.log(`[Job ${jobId}] Gerando áudio TTS inicial (pitch: ${PITCH})...`);
     await generateTTS(copy, audioPath, '+0%', PITCH);
 
