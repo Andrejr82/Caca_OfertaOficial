@@ -80,22 +80,45 @@ async function downloadVideo(url, outputPath) {
   });
 }
 
-function mergeAudioVideo(videoPath, audioPath, outputPath) {
+function mergeAudioVideo(videoPath, audioPath, outputPath, videoDurationSecs) {
   return new Promise((resolve, reject) => {
-    ffmpeg()
-      .input(videoPath)
-      .input(audioPath)
-      // Substitui a faixa de áudio original (0:v = vídeo original, 1:a = novo áudio)
-      .outputOptions([
+    ffmpeg.ffprobe(audioPath, (err, metadata) => {
+      let atempoFilter = null;
+      
+      if (!err && metadata && metadata.format && metadata.format.duration && videoDurationSecs) {
+        const audioDuration = metadata.format.duration;
+        let tempo = audioDuration / videoDurationSecs;
+        
+        // Limita o tempo entre 0.5 (metade da velocidade) e 2.0 (dobro da velocidade) para evitar erro no FFmpeg
+        if (tempo > 2.0) tempo = 2.0;
+        if (tempo < 0.5) tempo = 0.5;
+
+        // Só aplica o filtro se houver uma diferença razoável (mais de 5%)
+        if (tempo > 1.05 || tempo < 0.95) {
+          atempoFilter = `atempo=${tempo.toFixed(2)}`;
+        }
+      }
+
+      const outputOpts = [
         '-map 0:v',
         '-map 1:a',
-        '-c:v copy', // Copia o vídeo sem re-encodar (rápido)
+        '-c:v copy',
         '-c:a aac'
-        // Removido o -shortest: o vídeo original rodará até o final, e se a voz passar do tempo, ela também rodará até terminar.
-      ])
-      .save(outputPath)
-      .on('end', resolve)
-      .on('error', reject);
+      ];
+      
+      if (atempoFilter) {
+        outputOpts.push(`-filter:a`);
+        outputOpts.push(atempoFilter);
+      }
+
+      ffmpeg()
+        .input(videoPath)
+        .input(audioPath)
+        .outputOptions(outputOpts)
+        .save(outputPath)
+        .on('end', resolve)
+        .on('error', reject);
+    });
   });
 }
 
@@ -148,9 +171,9 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     console.log(`[Job ${jobId}] Gerando áudio sintético (Francisca)...`);
     await generateTTS(copy, audioPath);
 
-    // 4. Merge Vídeo e Áudio (FFmpeg)
-    console.log(`[Job ${jobId}] Mesclando áudio e vídeo com FFmpeg...`);
-    await mergeAudioVideo(rawVideoPath, audioPath, finalVideoPath);
+    // 4. Merge Vídeo e Áudio (FFmpeg) com ajuste de velocidade para caber no tempo exato!
+    console.log(`[Job ${jobId}] Mesclando áudio e vídeo e ajustando duração...`);
+    await mergeAudioVideo(rawVideoPath, audioPath, finalVideoPath, durationSecs);
 
     // 5. Cleanup
     fs.unlinkSync(rawVideoPath);
