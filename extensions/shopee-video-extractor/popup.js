@@ -30,8 +30,10 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
       currentVideoUrl = data.videoUrl;
       currentTitle = data.title || "Shopee_Video";
       currentOriginalUrl = data.originalUrl || "";
+      window.currentImageUrl = data.imageUrl || "";
+      window.currentPrice = data.price || "0";
       
-      document.getElementById('status').innerText = `Vídeo encontrado!\nProduto: ${currentTitle}`;
+      document.getElementById('status').innerText = `Vídeo encontrado!\nProduto: ${currentTitle}\nPreço: R$ ${window.currentPrice}`;
       
       const resultDiv = document.getElementById('result');
       resultDiv.style.display = 'block';
@@ -66,8 +68,9 @@ document.getElementById('dubBtn').addEventListener('click', async () => {
           token: 'oracle-sec-v2-inhouse-2026',
           videoUrl: currentVideoUrl,
           title: currentTitle,
-          price: "R$ ???", // O preço será melhor extraído num futuro, vamos deixar mockado por hora
+          price: window.currentPrice,
           originalUrl: currentOriginalUrl,
+          imageUrl: window.currentImageUrl,
           tenantId: "7a9ca7b7-f464-46e0-a9de-9b322c73628a" // ID do usuário administrador para aparecer no painel
         })
       });

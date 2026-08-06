@@ -1,5 +1,7 @@
 function extractVideoAndTitle() {
   let videoUrl = null;
+  let imageUrl = null;
+  let price = "0";
   let title = document.title.replace(' | Shopee Brasil', '').replace(/[\\/:*?"<>|]/g, '').trim();
 
   // Tenta pegar o título puro do elemento de nome do produto se possível
@@ -57,8 +59,34 @@ function extractVideoAndTitle() {
       }
     }
   }
+  // 3. Pescar Imagem Principal (Instantâneo)
+  const ogImage = document.querySelector('meta[property="og:image"]');
+  if (ogImage && ogImage.content) {
+    imageUrl = ogImage.content;
+  } else {
+    // Fallback: tentar achar a primeira imagem grande
+    const firstImg = document.querySelector('div[class*="product-image"] img, img.ApG0zU');
+    if (firstImg && firstImg.src) imageUrl = firstImg.src;
+  }
 
-  return { videoUrl, title, originalUrl: window.location.href };
+  // 4. Pescar Preço (Instantâneo)
+  // Shopee tem várias classes, o mais seguro é pegar o conteúdo de uma tag com "R$" 
+  // que esteja na div principal de resumo do produto
+  try {
+    const priceElements = Array.from(document.querySelectorAll('div, span')).filter(el => 
+      el.innerText && el.innerText.includes('R$') && el.innerText.length < 20
+    );
+    if (priceElements.length > 0) {
+      // Pega o primeiro que parece ser o preço principal do topo
+      const priceText = priceElements[0].innerText;
+      const match = priceText.match(/R\$\s*(\d+[.,]\d{2})/);
+      if (match) {
+        price = match[1]; // Ex: 39,90
+      }
+    }
+  } catch(e) {}
+
+  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price };
 }
 
 extractVideoAndTitle();

@@ -239,7 +239,7 @@ app.post('/api/manual/trends', async (req, res) => {
 });
 
 app.post('/api/shopee/dub-video', async (req, res) => {
-  const { token, videoUrl, title, price, originalUrl, tenantId } = req.body || {};
+  const { token, videoUrl, title, price, originalUrl, imageUrl, tenantId } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
@@ -279,6 +279,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
           user_id: tenantId,
           product_name: title,
           original_url: originalUrl,
+          image_url: imageUrl || null,
           current_price: parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.')) || 0,
           platform: 'Shopee',
           status: 'pending_manual_review'
@@ -326,12 +327,8 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     const { data: publicData } = supabaseAdmin.storage.from('videos').getPublicUrl(storagePath);
     const uploadedVideoUrl = publicData.publicUrl;
 
-    // 3b. Atualiza image_url da oferta com o video_url para desbloquear Instagram
-    await supabaseAdmin
-      .from('offers')
-      .update({ image_url: uploadedVideoUrl })
-      .eq('id', offerId);
-    console.log(`[Oracle Dubber] image_url da oferta atualizada com video.`);
+    // 3b. (Removido) Não sobrescrever mais a image_url com video_url. 
+    // A image_url real já foi extraída via extensão.
 
     // 4. Cria o Video Job
     console.log(`[Oracle Dubber] Criando Video Job...`);
