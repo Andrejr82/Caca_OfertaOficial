@@ -15,27 +15,32 @@ const supabase = createClient(
   }
 );
 
-function sendFacebookPost(message, imageUrl) {
+function sendFacebookPost(message, mediaUrl) {
   if (!process.env.FACEBOOK_ACCESS_TOKEN || !process.env.FACEBOOK_PAGE_ID) {
     return Promise.reject(new Error("Facebook não configurado (Falta Access Token ou Page ID)."));
   }
 
   return new Promise((resolve, reject) => {
-    // A documentação do Facebook Graph API para publicação de foto com link
-    // https://graph.facebook.com/v19.0/{page_id}/photos
     const pageId = process.env.FACEBOOK_PAGE_ID;
+    const isVideo = mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4');
     
-    // Se não houver imagem, postamos no feed /feed
-    // Se houver, postamos em /photos
-    const endpoint = imageUrl ? `/v19.0/${pageId}/photos` : `/v19.0/${pageId}/feed`;
+    let endpoint = `/v19.0/${pageId}/feed`;
+    if (mediaUrl) {
+       endpoint = isVideo ? `/v19.0/${pageId}/videos` : `/v19.0/${pageId}/photos`;
+    }
     
     const payloadData = {
-      message: message || '',
       access_token: process.env.FACEBOOK_ACCESS_TOKEN
     };
     
-    if (imageUrl) {
-      payloadData.url = imageUrl;
+    if (isVideo) {
+      payloadData.description = message || '';
+      payloadData.file_url = mediaUrl;
+    } else if (mediaUrl) {
+      payloadData.message = message || '';
+      payloadData.url = mediaUrl;
+    } else {
+      payloadData.message = message || '';
     }
 
     // Convert to query string for form-urlencoded or JSON
@@ -69,7 +74,9 @@ function sendFacebookPost(message, imageUrl) {
                reject(new Error(result.error.message || "Falha ao publicar no Facebook."));
              }
           } else {
-            resolve(result.id);
+            // Em fotos, retorna result.id e as vezes result.post_id. O post_id é mais seguro para comentários,
+            // mas o video_id (result.id) também aceita comentários nativamente.
+            resolve(result.post_id || result.id);
           }
         } catch (e) {
           reject(new Error("Resposta inválida da API do Facebook."));
@@ -174,12 +181,15 @@ async function processFacebookQueue() {
         const text = post.content || '';
         let mediaUrl = post.media_url || (post.offers && post.offers.image_url) || '';
 
-        // Se temos um offer_id e não é um cupom, usamos o gerador de imagem premium do WhatsApp/OG
+        // Verifica se é vídeo para não sobrescrever com imagem
+        const isVideo = mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4');
+
+        // Se temos um offer_id e não é um cupom, e NÃO É UM VÍDEO, usamos o gerador de imagem premium do WhatsApp/OG
         if (post.offer_id && post.offers) {
            const isCoupon = String(post.offers.product_name || '').startsWith('[CUPOM]') || 
                             String(post.offers.notes || '').includes('Robô de Cupons');
            
-           if (!isCoupon) {
+           if (!isCoupon && !isVideo) {
               const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
               const cleanBaseUrl = baseUrl.replace(/\/$/, "");
               // O OG preview do WhatsApp serve muito bem para o feed quadrado do FB/IG
