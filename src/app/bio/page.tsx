@@ -121,13 +121,12 @@ export default async function BioPage({
                   {/* Imagem do Produto */}
                   <div className="relative w-full aspect-square bg-white flex items-center justify-center p-4">
                     {offer.image_url ? (
-                      /* Usamos tag img nativa e o proxy interno para não ter problema de hotlinking e domínios externos */
+                      /* Usamos tag img nativa para não ter problema com domínios externos do next/image não configurados */
                       <img
-                        src={`/api/images/proxy?url=${encodeURIComponent(offer.image_url)}`}
+                        src={offer.image_url}
                         alt={offer.product_name}
                         className="object-contain w-full h-full group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
-                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <span className="text-gray-300">Sem Imagem</span>
