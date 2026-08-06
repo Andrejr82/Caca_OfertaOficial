@@ -55,6 +55,7 @@ const DEPLOY_FILES = [
   'scripts/oracle-api.cjs',
   'scripts/telegram-auto-publisher.cjs',
   'scripts/facebook-auto-publisher.cjs',
+  'scripts/video-dubber.cjs',
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
