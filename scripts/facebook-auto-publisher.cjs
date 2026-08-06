@@ -206,14 +206,19 @@ async function processFacebookQueue() {
         const postId = await sendFacebookPost(cleanText, mediaUrl);
         
         if (postId && linkToComment) {
-           await sendFacebookComment(postId, `🛒 Compre aqui: ${linkToComment}`);
-           console.log(`[Facebook Auto] Comentário com link adicionado no post ${postId}.`);
+           if (isVideo) {
+             console.log(`[Facebook Auto] Vídeo ${postId} enviado! Aguardando processamento da Meta. O Webhook inserirá o comentário.`);
+           } else {
+             await sendFacebookComment(postId, `🛒 Compre aqui: ${linkToComment}`);
+             console.log(`[Facebook Auto] Comentário com link adicionado no post ${postId}.`);
+           }
         }
         
         const { error: updateError } = await supabase
           .from('posts')
           .update({ 
              status: 'published', 
+             external_id: postId,
              posted_at: new Date().toISOString() 
           })
           .eq('id', post.id);
