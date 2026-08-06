@@ -6,35 +6,73 @@ const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
 
 // Se o edge-tts não estiver no PATH global do sistema, usaremos este atalho validado:
-const EDGE_TTS_BIN = 'C:\\Users\\Andr\u00E9\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\edge-tts.exe';
+const EDGE_TTS_BIN = 'C:\\Users\\André\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\edge-tts.exe';
 
-async function generateDubbingCopy(title, price, durationSecs = 15) {
+// --- ETAPA 0: Classificar gênero do produto ---
+async function classifyProductGender(title, apiKey) {
+  try {
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'llama-3.3-70b-versatile',
+        messages: [{
+          role: 'user',
+          content: `Qual é o gênero gramatical em português deste produto? Responda APENAS com uma palavra: MASCULINO ou FEMININO.\nProduto: ${title}`
+        }],
+        max_tokens: 10,
+        temperature: 0,
+      },
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
+    const answer = response.data.choices[0].message.content.trim().toUpperCase();
+    return answer.includes('FEMININO') ? 'FEMININO' : 'MASCULINO';
+  } catch(e) {
+    return 'MASCULINO'; // fallback seguro
+  }
+}
+
+// --- ETAPA 1: Gerar roteiro com gênero e duração explícitos ---
+async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO', adjustment = null) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
-  const maxWords = Math.floor(durationSecs * 2.5); // Aproximadamente 2.5 palavras por segundo de fala
+  // Francisca fala ~3.7 palavras/segundo em pt-BR
+  const targetWords = Math.round(durationSecs * 3.7);
+
+  const genderInstruction = gender === 'FEMININO'
+    ? `GÊNERO DO PRODUTO: FEMININO. Use OBRIGATORIAMENTE artigos e pronomes femininos: "A [produto]", "esta [produto]", "sua nova aliada", "incrível", "perfeita", "prática", etc.`
+    : `GÊNERO DO PRODUTO: MASCULINO. Use OBRIGATORIAMENTE artigos e pronomes masculinos: "O [produto]", "este [produto]", "seu novo aliado", "incrível", "perfeito", "prático", etc.`;
+
+  let adjustmentInstruction = '';
+  if (adjustment === 'ENCURTAR') {
+    adjustmentInstruction = `\nATENÇÃO: O roteiro anterior ficou LONGO demais. Escreva MENOS palavras — reduza para aproximadamente ${targetWords} palavras. Corte partes menos importantes mas mantenha a energia e a CTA final.`;
+  } else if (adjustment === 'EXPANDIR') {
+    adjustmentInstruction = `\nATENÇÃO: O roteiro anterior ficou CURTO demais. Escreva MAIS palavras — expanda para aproximadamente ${targetWords} palavras. Adicione mais benefícios, detalhes ou emoção.`;
+  }
+
   const prompt = `Você é um copywriter de vídeos curtos hiper-persuasivos (estilo TikTok/Reels de Achadinhos).
 Sua missão é escrever um ROTEIRO FALADO vibrante, envolvente e focado em venda para narrar um vídeo da Shopee.
-IMPORTANTE: O vídeo tem exatamente ${durationSecs} segundos. Escreva um roteiro cuja locução dure aproximadamente esse tempo (tamanho alvo: em torno de ${maxWords} palavras).
+IMPORTANTE: O vídeo tem exatamente ${durationSecs} segundos. Escreva um roteiro com aproximadamente ${targetWords} palavras (isso fará a locução durar o tempo certo).${adjustmentInstruction}
 
 DADOS ORIGINAIS DO PRODUTO:
 Título completo da loja: ${title}
 Preço: ${price}
 
+${genderInstruction}
+
 REGRAS OBRIGATÓRIAS PARA O ROTEIRO:
 1. NOME CURTO E COMERCIAL: O "Título completo" tem muito lixo de SEO. Crie e use apenas um nome curto (Ex: de "Coturno Militar Feminino..." para "Bota Militar").
 2. PERSUASÃO E DESEJO: Crie urgência, destaque o benefício de forma energética estilo TikTok, e faça a pessoa querer comprar na hora! Use palavras de emoção.
-3. CONCORDÂNCIA GRAMATICAL DE GÊNERO: Se o produto for masculino (O triturador, O copo), use adjetivos masculinos (seu novo aliado, perfeito, prático). Se for feminino (A panela, A vassoura), use adjetivos femininos (sua nova aliada, perfeita, prática). Nunca erre o gênero!
-4. NÃO CITE O PREÇO: Nunca fale o preço no áudio. O preço será colocado na tela em texto, então o áudio não deve mencionar nenhum valor financeiro.
-5. REVISÃO DE PORTUGUÊS E PRONÚNCIA: Escreva a palavra "Shopee" exatamente como "Chopí" para a voz sintética ler corretamente.
-6. FORMATO E ENCERRAMENTO: Não use emojis ou aspas. Finalize dizendo enérgico: "Acesse o link na publicação!".`;
+3. NÃO CITE O PREÇO: Nunca fale o preço no áudio. O preço será colocado na tela em texto, então o áudio não deve mencionar nenhum valor financeiro.
+4. REVISÃO DE PORTUGUÊS E PRONÚNCIA: Escreva a palavra "Shopee" exatamente como "Chopí" para a voz sintética ler corretamente.
+5. FORMATO E ENCERRAMENTO: Não use emojis ou aspas. Finalize dizendo enérgico: "Acesse o link na publicação!".`;
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 150,
+      max_tokens: 300,
       temperature: 0.7,
     },
     { headers: { Authorization: `Bearer ${apiKey}` } }
@@ -85,17 +123,26 @@ function mergeAudioVideo(videoPath, audioPath, outputPath) {
     ffmpeg()
       .input(videoPath)
       .input(audioPath)
-      // Substitui a faixa de áudio original (0:v = vídeo original, 1:a = novo áudio)
       .outputOptions([
         '-map 0:v',
         '-map 1:a',
-        '-c:v copy', // Copia o vídeo sem re-encodar (rápido)
+        '-c:v copy',
         '-c:a aac'
-        // Removido o -shortest: o vídeo original rodará até o final, e se a voz passar do tempo, ela também rodará até terminar.
       ])
       .save(outputPath)
       .on('end', resolve)
       .on('error', reject);
+  });
+}
+
+function getAudioDuration(audioPath) {
+  return new Promise((resolve) => {
+    ffmpeg.ffprobe(audioPath, (err, metadata) => {
+      if (err || !metadata || !metadata.format || !metadata.format.duration) {
+        return resolve(null);
+      }
+      resolve(metadata.format.duration);
+    });
   });
 }
 
@@ -110,12 +157,6 @@ function getVideoDuration(videoPath) {
   });
 }
 
-/**
- * Processa a dublagem de um vídeo da Shopee
- * @param {string} videoUrl - URL do MP4 extraído pela extensão
- * @param {string} title - Título extraído
- * @param {string} price - Preço extraído
- */
 async function processShopeeVideoDubbing(videoUrl, title, price) {
   const jobId = crypto.randomUUID();
   const workDir = path.join(__dirname, '..', 'videos_processados');
@@ -132,31 +173,63 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     console.log(`[Job ${jobId}] Baixando vídeo original...`);
     await downloadVideo(videoUrl, rawVideoPath);
 
-    // 1.5. Descobre a duração exata do vídeo baixado
-    let durationSecs = 15;
-    try {
-      durationSecs = await getVideoDuration(rawVideoPath);
-    } catch(e) {}
-    console.log(`[Job ${jobId}] Duração do vídeo identificada: ${durationSecs} segundos.`);
+    // 2. Duração exata do vídeo
+    const durationSecs = await getVideoDuration(rawVideoPath);
+    console.log(`[Job ${jobId}] Duração do vídeo: ${durationSecs}s`);
 
-    // 2. Gerar a Copy (LLM) adaptada ao tamanho do vídeo
-    console.log(`[Job ${jobId}] Gerando roteiro com LLM (alvo: ${durationSecs}s)...`);
-    let copy = await generateDubbingCopy(title, price, durationSecs);
-    console.log(`[Job ${jobId}] Roteiro gerado:\n${copy}`);
+    // 3. Classificar gênero do produto
+    const apiKey = process.env.GROQ_API_KEY;
+    const gender = await classifyProductGender(title, apiKey);
+    console.log(`[Job ${jobId}] Gênero detectado: ${gender}`);
 
-    // 3. Gerar o Áudio (Edge-TTS)
-    console.log(`[Job ${jobId}] Gerando áudio sintético (Francisca)...`);
-    await generateTTS(copy, audioPath);
+    // 4. Loop de geração de roteiro + áudio até encaixar no tempo (máx 3 tentativas)
+    let copy = '';
+    let adjustment = null;
+    const MAX_ATTEMPTS = 3;
+    const TOLERANCE = 0.10; // 10% de tolerância
 
-    // 4. Merge Vídeo e Áudio (FFmpeg)
-    console.log(`[Job ${jobId}] Mesclando áudio e vídeo com FFmpeg...`);
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      console.log(`[Job ${jobId}] Tentativa ${attempt}: gerando roteiro (ajuste: ${adjustment || 'nenhum'})...`);
+      copy = await generateDubbingCopy(title, price, durationSecs, gender, adjustment);
+      console.log(`[Job ${jobId}] Roteiro:\n${copy}`);
+
+      console.log(`[Job ${jobId}] Gerando áudio TTS...`);
+      await generateTTS(copy, audioPath);
+
+      const audioDuration = await getAudioDuration(audioPath);
+      if (audioDuration === null) {
+        console.log(`[Job ${jobId}] Não foi possível medir áudio. Usando como está.`);
+        break;
+      }
+
+      const diff = audioDuration - durationSecs;
+      const diffRatio = Math.abs(diff) / durationSecs;
+      console.log(`[Job ${jobId}] Áudio: ${audioDuration.toFixed(1)}s | Vídeo: ${durationSecs}s | Diferença: ${diff > 0 ? '+' : ''}${diff.toFixed(1)}s (${(diffRatio * 100).toFixed(0)}%)`);
+
+      if (diffRatio <= TOLERANCE) {
+        console.log(`[Job ${jobId}] ✅ Sincronizado! Diferença dentro da tolerância.`);
+        break;
+      }
+
+      if (attempt < MAX_ATTEMPTS) {
+        adjustment = diff > 0 ? 'ENCURTAR' : 'EXPANDIR';
+        console.log(`[Job ${jobId}] ⚠️ Fora do tempo. Ajuste: ${adjustment}.`);
+        // Apaga áudio anterior antes de gerar novo
+        try { fs.unlinkSync(audioPath); } catch(e) {}
+      } else {
+        console.log(`[Job ${jobId}] Máx tentativas atingidas. Usando melhor resultado disponível.`);
+      }
+    }
+
+    // 5. Merge vídeo + áudio
+    console.log(`[Job ${jobId}] Mesclando vídeo e áudio...`);
     await mergeAudioVideo(rawVideoPath, audioPath, finalVideoPath);
 
-    // 5. Cleanup
+    // 6. Cleanup
     fs.unlinkSync(rawVideoPath);
     fs.unlinkSync(audioPath);
 
-    // Reverter "Chopí" para "Shopee" na copy que vai pro banco/frontend, para não postar escrito "Chopí"
+    // Reverter "Chopí" para "Shopee" na copy do banco/frontend
     copy = copy.replace(/Chopí/gi, 'Shopee');
 
     console.log(`[Job ${jobId}] Concluído! Arquivo final: ${finalVideoPath}`);
