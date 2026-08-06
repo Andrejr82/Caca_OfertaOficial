@@ -465,6 +465,65 @@ app.post('/api/shopee/dub-video', async (req, res) => {
   }
 });
 
+// ─── TRIM VIDEO ─────────────────────────────────────────────────────────────
+app.post('/api/trim-video', async (req, res) => {
+  const { token, videoUrl, trimStart, trimEnd, storagePath } = req.body || {};
+
+  if (!isAuthorized(token)) return res.status(401).json({ error: 'Unauthorized.' });
+  if (!videoUrl || trimEnd == null || trimStart == null || trimEnd <= trimStart) {
+    return res.status(400).json({ error: 'Parâmetros inválidos: videoUrl, trimStart, trimEnd obrigatórios.' });
+  }
+
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const ffmpeg = require('fluent-ffmpeg');
+  const crypto = require('crypto');
+  const tmpId = crypto.randomUUID();
+  const inputPath = path.join(os.tmpdir(), `trim_in_${tmpId}.mp4`);
+  const outputPath = path.join(os.tmpdir(), `trim_out_${tmpId}.mp4`);
+
+  try {
+    // 1. Baixa o vídeo original
+    const axios = require('axios');
+    const resp = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 60000 });
+    fs.writeFileSync(inputPath, Buffer.from(resp.data));
+
+    // 2. Corta com ffmpeg (copy stream — sem re-encode)
+    await new Promise((resolve, reject) => {
+      ffmpeg(inputPath)
+        .setStartTime(trimStart)
+        .setDuration(trimEnd - trimStart)
+        .output(outputPath)
+        .outputOptions(['-c copy'])
+        .on('end', resolve)
+        .on('error', reject)
+        .run();
+    });
+
+    // 3. Upload para Supabase Storage (substitui o original)
+    const trimmedBuffer = fs.readFileSync(outputPath);
+    const uploadPath = storagePath || `trim/${tmpId}.mp4`;
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('videos')
+      .upload(uploadPath, trimmedBuffer, { contentType: 'video/mp4', upsert: true });
+
+    if (uploadError) throw new Error(`Upload falhou: ${uploadError.message}`);
+
+    const { data: publicData } = supabaseAdmin.storage.from('videos').getPublicUrl(uploadPath);
+    const newUrl = `${publicData.publicUrl}?t=${Date.now()}`;
+
+    console.log(`[TrimVideo] Recorte concluído: ${trimStart}s → ${trimEnd}s | ${uploadPath}`);
+    return res.json({ success: true, video_url: newUrl });
+  } catch (err) {
+    console.error(`[TrimVideo] Erro: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  } finally {
+    try { fs.unlinkSync(inputPath); } catch {}
+    try { fs.unlinkSync(outputPath); } catch {}
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Micro-API Oracle rodando firme e forte na porta ${PORT}`);
   

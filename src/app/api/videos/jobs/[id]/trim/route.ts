@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import path from "path";
-import os from "os";
-import fs from "fs";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createServerSupabaseClient();
@@ -32,65 +29,34 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!job) return NextResponse.json({ error: "Job não encontrado." }, { status: 404 });
   if (!job.video_url) return NextResponse.json({ error: "Sem vídeo no job." }, { status: 400 });
 
-  try {
-    // 1. Baixa o vídeo original para um arquivo temporário
-    const videoRes = await fetch(job.video_url);
-    if (!videoRes.ok) throw new Error("Não foi possível baixar o vídeo original.");
-    const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+  const oracleUrl = process.env.ORACLE_API_URL;
+  const oracleKey = process.env.ORACLE_API_KEY;
+  if (!oracleUrl || !oracleKey) {
+    return NextResponse.json({ error: "Oracle API não configurada (ORACLE_API_URL / ORACLE_API_KEY)." }, { status: 503 });
+  }
 
-    const tmpDir = os.tmpdir();
-    const inputPath = path.join(tmpDir, `trim_input_${id}.mp4`);
-    const outputPath = path.join(tmpDir, `trim_output_${id}.mp4`);
-    fs.writeFileSync(inputPath, videoBuffer);
+  // Delega o corte para o Oracle VPS que tem ffmpeg real instalado
+  const storagePath = `${userData.user.id}/${id}.mp4`;
+  const oracleRes = await fetch(`${oracleUrl}/api/trim-video`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token: oracleKey, videoUrl: job.video_url, trimStart, trimEnd, storagePath }),
+  });
 
-    // 2. Executa o corte via ffmpeg (usa ffmpeg-static para Vercel serverless)
-    const duration = trimEnd - trimStart;
-    await new Promise<void>((resolve, reject) => {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const ffmpeg = require("fluent-ffmpeg");
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const ffmpegPath = require("ffmpeg-static");
-      ffmpeg.setFfmpegPath(ffmpegPath);
-      ffmpeg(inputPath)
-        .setStartTime(trimStart)
-        .setDuration(duration)
-        .output(outputPath)
-        .outputOptions(["-c copy"]) // ultrafast copy — sem re-encode
-        .on("end", () => resolve())
-        .on("error", (err: Error) => reject(err))
-        .run();
-    });
+  const oracleData = await oracleRes.json();
+  if (!oracleRes.ok) {
+    return NextResponse.json({ error: oracleData.error ?? "Erro no Oracle ao recortar." }, { status: 502 });
+  }
 
-    // 3. Faz upload da versão cortada por cima da original no Supabase Storage
-    const admin = createSupabaseAdminClient();
-    if (!admin) throw new Error("Admin client indisponível.");
+  const newUrl: string = oracleData.video_url;
 
-    const trimmedBuffer = fs.readFileSync(outputPath);
-    const storagePath = `${userData.user.id}/${id}.mp4`;
-
-    const { error: uploadError } = await admin.storage
-      .from("videos")
-      .upload(storagePath, trimmedBuffer, { contentType: "video/mp4", upsert: true });
-
-    if (uploadError) throw new Error(`Upload falhou: ${uploadError.message}`);
-
-    // 4. Pega a nova URL pública
-    const { data: publicData } = admin.storage.from("videos").getPublicUrl(storagePath);
-    const newUrl = `${publicData.publicUrl}?t=${Date.now()}`;
-
-    // 5. Atualiza o video_url no banco e salva os tempos no metadata
+  // Atualiza o video_url e metadata no Supabase
+  const admin = createSupabaseAdminClient();
+  if (admin) {
     const { data: currentJob } = await admin.from("video_jobs").select("metadata").eq("id", id).maybeSingle();
     const metadata = { ...(currentJob?.metadata ?? {}), trimStart, trimEnd };
-
     await admin.from("video_jobs").update({ video_url: newUrl, metadata }).eq("id", id);
-
-    // 6. Limpa arquivos temporários
-    try { fs.unlinkSync(inputPath); } catch { /* noop */ }
-    try { fs.unlinkSync(outputPath); } catch { /* noop */ }
-
-    return NextResponse.json({ success: true, video_url: newUrl });
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: msg }, { status: 500 });
   }
+
+  return NextResponse.json({ success: true, video_url: newUrl });
 }
