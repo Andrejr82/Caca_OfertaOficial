@@ -7,24 +7,21 @@ require('dotenv').config({ path: '.env.local' });
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { 
+  {
     auth: { autoRefreshToken: false, persistSession: false },
-    realtime: {
-      transport: require('ws')
-    }
+    realtime: { transport: require('ws') }
   }
 );
 
 function sendTelegramPhoto(text, photoUrl) {
   if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHANNEL_ID) {
-    return Promise.reject(new Error("Telegram não configurado."));
+    return Promise.reject(new Error('Telegram não configurado.'));
   }
 
-  const isAmazonImage = photoUrl.includes("amazon.com") || photoUrl.includes("media-amazon.com");
-  const isNetshoesImage = photoUrl.includes("netshoes.com.br") || photoUrl.includes("zattini.com.br");
-
-  const finalPhotoUrl = (isAmazonImage || isNetshoesImage) 
-    ? `https://wsrv.nl/?url=${encodeURIComponent(photoUrl)}` 
+  const isAmazonImage = photoUrl.includes('amazon.com') || photoUrl.includes('media-amazon.com');
+  const isNetshoesImage = photoUrl.includes('netshoes.com.br') || photoUrl.includes('zattini.com.br');
+  const finalPhotoUrl = (isAmazonImage || isNetshoesImage)
+    ? `https://wsrv.nl/?url=${encodeURIComponent(photoUrl)}`
     : photoUrl;
 
   return new Promise((resolve, reject) => {
@@ -33,19 +30,14 @@ function sendTelegramPhoto(text, photoUrl) {
       photo: finalPhotoUrl,
       caption: text
     });
-
     const options = {
       hostname: 'api.telegram.org',
       port: 443,
       path: `/bot${process.env.TELEGRAM_BOT_TOKEN}/sendPhoto`,
       method: 'POST',
-      family: 4, 
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(payload)
-      }
+      family: 4,
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) }
     };
-
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
@@ -53,137 +45,225 @@ function sendTelegramPhoto(text, photoUrl) {
         try {
           const result = JSON.parse(data);
           if (!result.ok) {
-             if (result.error_code === 429) {
-               reject(new Error(`RATE_LIMIT:${result.parameters?.retry_after || 60}`));
-             } else {
-               reject(new Error(result.description || "Falha ao publicar foto."));
-             }
-          } else {
-            resolve(result.result);
-          }
-        } catch (e) {
-          reject(new Error("Resposta inválida da API do Telegram."));
+            if (result.error_code === 429) reject(new Error(`RATE_LIMIT:${result.parameters?.retry_after || 60}`));
+            else reject(new Error(result.description || 'Falha ao publicar foto.'));
+          } else resolve(result.result);
+        } catch (_) {
+          reject(new Error('Resposta inválida da API do Telegram.'));
         }
       });
     });
-
-    req.on('error', (e) => {
-      reject(new Error(`Erro de Conexão HTTPS com o Telegram: ${e.message}`));
-    });
-
+    req.on('error', (error) => reject(new Error(`Erro de Conexão HTTPS com o Telegram: ${error.message}`)));
     req.write(payload);
     req.end();
   });
 }
 
-async function processTelegramQueue() {
-  try {
-    // Verifica flag de automação em general_settings
-    const { data: setting } = await supabase
-      .from('app_settings')
-      .select('value')
-      .eq('key', 'general_settings')
-      .limit(1);
-    
-    // Pega a configuração do primeiro usuário (como é um tenant)
-    const generalSettings = setting && setting.length > 0 ? setting[0].value : null;
-
-    if (!generalSettings || generalSettings.telegram_automation_enabled !== true) {
-      console.log('Automacao do Telegram esta desativada ou configuracao ausente. Abortando.');
-      return;
-    }
-
-    console.log('Buscando posts com status draft para o Telegram...');
-    const { data: posts, error } = await supabase
-      .from('posts')
-      .select('*, offers(image_url)')
-      .eq('status', 'draft')
-      .eq('channel', 'telegram')
-      .order('created_at', { ascending: true })
-      .limit(5);
-
-    if (error) {
-      console.error('Erro buscando posts pendentes:', error);
-      return;
-    }
-
-    if (!posts || posts.length === 0) {
-      console.log('Nenhum post em draft encontrado na fila.');
-      return;
-    }
-    
-    console.log(`Encontrados ${posts.length} posts em draft para disparar...`);
-
-    for (const post of posts) {
-      console.log(`[Telegram Auto] Publicando post ${post.id}...`);
-      try {
-        const text = post.content || '';
-        let mediaUrl = post.media_url || (post.offers && post.offers.image_url) || '';
-
-        // Se temos um offer_id e não é um cupom, usamos o gerador de imagem premium
-        // Isso garante o fundo texturizado com a imagem perfeitamente enquadrada no centro
-        if (post.offer_id && post.offers) {
-           const isCoupon = String(post.offers.product_name || '').startsWith('[CUPOM]') || 
-                            String(post.offers.notes || '').includes('Robô de Cupons');
-           
-           if (!isCoupon) {
-              const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
-              const cleanBaseUrl = baseUrl.replace(/\/$/, "");
-              mediaUrl = `${cleanBaseUrl}/api/images/whatsapp-premium?offerId=${encodeURIComponent(post.offer_id)}&v=1`;
-           }
-        }
-        
-        if (mediaUrl) {
-          await sendTelegramPhoto(text, mediaUrl);
-        } else {
-          // Se não houver imagem, ignorar por agora (poderíamos fazer sendTelegramMessage)
-          console.warn(`[Telegram Auto] Post ${post.id} não possui media_url, ignorando.`);
-        }
-        
-        const { error: updateError } = await supabase
-          .from('posts')
-          .update({ 
-             status: 'published', 
-             posted_at: new Date().toISOString() 
-          })
-          .eq('id', post.id);
-
-        if (updateError) {
-          console.error(`[Telegram Auto] Falha ao atualizar status do post ${post.id}:`, updateError.message);
-        } else {
-          console.log(`[Telegram Auto] Post ${post.id} publicado com sucesso.`);
-        }
-
-        // Sleep para evitar rate limit (3s)
-        await new Promise(r => setTimeout(r, 3000));
-      } catch (err) {
-        if (err.message.startsWith('RATE_LIMIT:')) {
-           const retryAfter = parseInt(err.message.split(':')[1], 10);
-           console.warn(`[Telegram Auto] Rate limit! Aguardando ${retryAfter}s...`);
-           await new Promise(r => setTimeout(r, retryAfter * 1000));
-           break; // Interrompe o processamento atual e tenta de novo no próximo ciclo
-        }
-        console.error(`[Telegram Auto] Erro ao publicar post ${post.id}:`, err.message);
-      }
-    }
-  } catch (err) {
-    console.error('[Telegram Auto] Falha no ciclo:', err.message);
-  }
+function telegramIdempotencyKey(postId) {
+  return `telegram:post:${postId}`;
 }
 
+function createTelegramPublisher(options = {}) {
+  const database = options.supabase || supabase;
+  const sendPhoto = options.sendPhoto || sendTelegramPhoto;
+  const logger = options.logger || console;
+  const now = options.now || (() => new Date().toISOString());
+  const sleep = options.sleep || ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+  const pid = options.pid || process.pid;
+  let cycleInFlight = false;
+
+  function log(level, entry) {
+    const target = typeof logger[level] === 'function' ? logger[level] : logger.log;
+    target.call(logger, { component: 'telegram-auto-publisher', pid, ...entry });
+  }
+
+  async function claimPost(post) {
+    const idempotencyKey = telegramIdempotencyKey(post.id);
+    const { data, error } = await database
+      .from('posts')
+      .update({
+        status: 'publishing',
+        publishing_started_at: now(),
+        publishing_idempotency_key: idempotencyKey,
+        publishing_error: null
+      })
+      .eq('id', post.id)
+      .eq('status', 'draft')
+      .eq('channel', 'telegram')
+      .select('id')
+      .maybeSingle();
+
+    if (error) throw error;
+    return { data, idempotencyKey };
+  }
+
+  async function markPublished(post, idempotencyKey, externalId) {
+    return database
+      .from('posts')
+      .update({
+        status: 'published',
+        posted_at: now(),
+        external_id: externalId,
+        publishing_error: null
+      })
+      .eq('id', post.id)
+      .eq('status', 'publishing')
+      .eq('publishing_idempotency_key', idempotencyKey)
+      .select('id')
+      .maybeSingle();
+  }
+
+  async function markFailed(post, idempotencyKey, message) {
+    return database
+      .from('posts')
+      .update({ publishing_error: message })
+      .eq('id', post.id)
+      .eq('status', 'publishing')
+      .eq('publishing_idempotency_key', idempotencyKey)
+      .select('id')
+      .maybeSingle();
+  }
+
+  function mediaFor(post) {
+    let mediaUrl = post.media_url || post.offers?.image_url || '';
+    if (post.offer_id && post.offers) {
+      const isCoupon = String(post.offers.product_name || '').startsWith('[CUPOM]')
+        || String(post.offers.notes || '').includes('Robô de Cupons');
+      if (!isCoupon) {
+        const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://caca-oferta-oficial.vercel.app';
+        mediaUrl = `${baseUrl.replace(/\/$/, '')}/api/images/whatsapp-premium?offerId=${encodeURIComponent(post.offer_id)}&v=1`;
+      }
+    }
+    return mediaUrl;
+  }
+
+  async function processQueue() {
+    if (cycleInFlight) {
+      log('log', { event: 'poll_skipped', result: 'overlap' });
+      return { result: 'overlap' };
+    }
+    cycleInFlight = true;
+    try {
+      const { data: setting, error: settingError } = await database
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'general_settings')
+        .limit(1);
+      if (settingError) throw settingError;
+      const generalSettings = setting?.[0]?.value;
+      if (!generalSettings || generalSettings.telegram_automation_enabled !== true) {
+        log('log', { event: 'poll_skipped', result: 'disabled' });
+        return { result: 'disabled' };
+      }
+
+      const { data: posts, error } = await database
+        .from('posts')
+        .select('id, offer_id, content, channel, status, offers(image_url, product_name, notes)')
+        .eq('status', 'draft')
+        .eq('channel', 'telegram')
+        .order('created_at', { ascending: true })
+        .limit(5);
+      if (error) throw error;
+      if (!posts?.length) {
+        log('log', { event: 'poll_completed', result: 'empty' });
+        return { result: 'empty' };
+      }
+
+      for (const post of posts) {
+        const idempotencyKey = telegramIdempotencyKey(post.id);
+        let claim;
+        try {
+          claim = await claimPost(post);
+        } catch (error) {
+          log('error', { event: 'claim_failed', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'error', error: error.message });
+          continue;
+        }
+        if (!claim.data) {
+          log('log', { event: 'claim_finished', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'claim_lost' });
+          continue;
+        }
+
+        const claimedPost = post;
+        const mediaUrl = mediaFor(claimedPost);
+        if (!mediaUrl) {
+          await markFailed(claimedPost, idempotencyKey, 'Telegram publication requires media_url.');
+          log('warn', { event: 'publication_finished', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'missing_media' });
+          continue;
+        }
+
+        try {
+          log('log', { event: 'publication_started', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'claimed' });
+          const telegramResult = await sendPhoto(claimedPost.content || '', mediaUrl, {
+            postId: post.id,
+            offerId: post.offer_id,
+            idempotencyKey,
+            pid
+          });
+          const externalId = telegramResult?.message_id ?? telegramResult?.id;
+          if (externalId === undefined || externalId === null) {
+            log('error', { event: 'publication_reconciliation_required', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'send_without_external_id' });
+            continue;
+          }
+
+          const { data: published, error: updateError } = await markPublished(claimedPost, idempotencyKey, String(externalId));
+          if (updateError || !published) {
+            log('error', { event: 'publication_reconciliation_required', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, external_id: String(externalId), result: 'send_confirmed_persistence_failed', error: updateError?.message || 'claim finalization returned no row' });
+            continue;
+          }
+          log('log', { event: 'publication_finished', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, external_id: String(externalId), result: 'published' });
+          await sleep(3000);
+        } catch (error) {
+          try {
+            await markFailed(claimedPost, idempotencyKey, error.message);
+          } catch (persistenceError) {
+            log('error', { event: 'publication_reconciliation_required', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'send_failed_error_persistence_failed', error: persistenceError.message });
+          }
+          if (error.message.startsWith('RATE_LIMIT:')) {
+            const retryAfter = parseInt(error.message.split(':')[1], 10);
+            log('warn', { event: 'publication_finished', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'rate_limited', retry_after_seconds: retryAfter });
+            await sleep(retryAfter * 1000);
+            break;
+          }
+          log('error', { event: 'publication_finished', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'send_failed', error: error.message });
+        }
+      }
+      return { result: 'completed' };
+    } catch (error) {
+      log('error', { event: 'poll_failed', result: 'error', error: error.message });
+      return { result: 'error' };
+    } finally {
+      cycleInFlight = false;
+    }
+  }
+
+  return { processQueue };
+}
+
+const defaultPublisher = createTelegramPublisher();
 let intervalTimer = null;
+
+function processTelegramQueue() {
+  return defaultPublisher.processQueue();
+}
 
 function startTelegramAutomation(intervalMs = 60000) {
   if (intervalTimer) return;
   console.log('[Telegram Auto] Iniciando loop de automação (intervalo:', intervalMs, 'ms)');
-  
-  // Executa imediatamente e depois agenda
   processTelegramQueue();
   intervalTimer = setInterval(processTelegramQueue, intervalMs);
 }
 
+function stopTelegramAutomation() {
+  if (!intervalTimer) return;
+  clearInterval(intervalTimer);
+  intervalTimer = null;
+}
+
 module.exports = {
+  createTelegramPublisher,
+  telegramIdempotencyKey,
   startTelegramAutomation,
+  stopTelegramAutomation,
   processTelegramQueue,
   sendTelegramPhoto
 };
