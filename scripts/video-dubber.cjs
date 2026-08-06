@@ -17,7 +17,7 @@ async function classifyProductGender(title, apiKey) {
         model: 'llama-3.3-70b-versatile',
         messages: [{
           role: 'user',
-          content: `Qual é o gênero gramatical em português deste produto? Responda APENAS com uma palavra: MASCULINO ou FEMININO.\nProduto: ${title}`
+          content: `Você é um especialista em gramática portuguesa. Analise o título abaixo e identifique o SUBSTANTIVO PRINCIPAL do produto (a palavra que nomeia o objeto em si, ignorando adjetivos, marcas e especificações técnicas).\nDepois, responda APENAS com uma palavra: MASCULINO ou FEMININO, de acordo com o gênero gramatical desse substantivo principal em português.\nExemplos: "Torneira Elétrica Slim" → substantivo: torneira → FEMININO. "Copo Stanley 900ml" → substantivo: copo → MASCULINO.\nTítulo: ${title}`
         }],
         max_tokens: 10,
         temperature: 0,
@@ -36,8 +36,10 @@ async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MA
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
-  // Francisca fala ~3.7 palavras/segundo em pt-BR
-  const targetWords = Math.round(durationSecs * 3.7);
+  // Francisca fala ~3.2 palavras/segundo em pt-BR (calibrado para não cortar antes do fim)
+  const targetWords = Math.round(durationSecs * 3.2);
+  // max_tokens dinâmico: ~2 tokens por palavra + margem de segurança
+  const dynamicMaxTokens = Math.max(300, targetWords * 2 + 80);
 
   const genderInstruction = gender === 'FEMININO'
     ? `GÊNERO DO PRODUTO: FEMININO. Use OBRIGATORIAMENTE artigos e pronomes femininos: "A [produto]", "esta [produto]", "sua nova aliada", "incrível", "perfeita", "prática", etc.`
@@ -45,34 +47,36 @@ async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MA
 
   let adjustmentInstruction = '';
   if (adjustment === 'ENCURTAR') {
-    adjustmentInstruction = `\nATENÇÃO: O roteiro anterior ficou LONGO demais. Escreva MENOS palavras — reduza para aproximadamente ${targetWords} palavras. Corte partes menos importantes mas mantenha a energia e a CTA final.`;
+    adjustmentInstruction = ` ATENÇÃO: O roteiro anterior ficou LONGO demais. Reduza para EXATAMENTE aproximadamente ${targetWords} palavras. Corte partes menos importantes mas mantenha a energia e a CTA final.`;
   } else if (adjustment === 'EXPANDIR') {
-    adjustmentInstruction = `\nATENÇÃO: O roteiro anterior ficou CURTO demais. Escreva MAIS palavras — expanda para aproximadamente ${targetWords} palavras. Adicione mais benefícios, detalhes ou emoção.`;
+    adjustmentInstruction = ` ATENÇÃO: O roteiro anterior ficou CURTO demais. Expanda para EXATAMENTE aproximadamente ${targetWords} palavras. Adicione mais benefícios, detalhes ou emoção.`;
   }
 
-  const prompt = `Você é um copywriter de vídeos curtos hiper-persuasivos (estilo TikTok/Reels de Achadinhos).
-Sua missão é escrever um ROTEIRO FALADO vibrante, envolvente e focado em venda para narrar um vídeo da Shopee.
-IMPORTANTE: O vídeo tem exatamente ${durationSecs} segundos. Escreva um roteiro com aproximadamente ${targetWords} palavras (isso fará a locução durar o tempo certo).${adjustmentInstruction}
+  const prompt = `Você é um dos melhores copywriters de vídeos curtos do Brasil, especialista em Reels e TikTok de Achadinhos.
+Sua missão é criar um ROTEIRO FALADO que faça o espectador PARAR de rolar o feed, SENTIR desejo imediato pelo produto e CLICAR para comprar.
+IMPORTANTE: O vídeo tem exatamente ${durationSecs} segundos. Escreva um roteiro com EXATAMENTE aproximadamente ${targetWords} palavras — nem mais, nem menos.${adjustmentInstruction}
 
-DADOS ORIGINAIS DO PRODUTO:
-Título completo da loja: ${title}
+DADOS DO PRODUTO:
+Título completo: ${title}
 Preço: ${price}
 
 ${genderInstruction}
 
-REGRAS OBRIGATÓRIAS PARA O ROTEIRO:
-1. NOME CURTO E COMERCIAL: O "Título completo" tem muito lixo de SEO. Crie e use apenas um nome curto (Ex: de "Coturno Militar Feminino..." para "Bota Militar").
-2. PERSUASÃO E DESEJO: Crie urgência, destaque o benefício de forma energética estilo TikTok, e faça a pessoa querer comprar na hora! Use palavras de emoção.
-3. NÃO CITE O PREÇO: Nunca fale o preço no áudio. O preço será colocado na tela em texto, então o áudio não deve mencionar nenhum valor financeiro.
-4. REVISÃO DE PORTUGUÊS E PRONÚNCIA: Escreva a palavra "Shopee" exatamente como "Chopí" para a voz sintética ler corretamente.
-5. FORMATO E ENCERRAMENTO: Não use emojis ou aspas. Finalize dizendo enérgico: "Acesse o link na publicação!".`;
+REGRAS OBRIGATÓRIAS:
+1. NOME CURTO: Crie um nome comercial curto e impactante. Ignore o lixo de SEO do título original (ex: "Torneira Elétrica Aquecida 5500W Premium" → "torneira quente").
+2. GANCHO INICIAL PODEROSO: Comece com uma frase de impacto que desperte curiosidade ou desejo imediato. Ex: "Sabe aquela [produto] dos seus sonhos?", "Isso vai transformar sua [rotina/cozinha/banheiro]!".
+3. BENEFÍCIOS COM EMOÇÃO: Apresente 2-3 benefícios reais de forma apaixonada. Use verbos de ação e transformação: "elimina", "transforma", "resolve", "chega de...", "imagina...".
+4. URGÊNCIA E ESCASSEZ: Crie senso de urgência. Ex: "Tá com preço absurdo agora!", "Corre que vai acabar!", "Só hoje na Chopí!".
+5. NÃO CITE O PREÇO: Nunca mencione valores financeiros. O preço aparece na tela.
+6. PRONÚNCIA: Escreva "Shopee" como "Chopí" para a voz sintética pronunciar corretamente.
+7. ENCERRAMENTO: Finalize com energia máxima: "Acesse o link na publicação!". Sem emojis, sem aspas.`;
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
       model: 'llama-3.3-70b-versatile',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: 300,
+      max_tokens: dynamicMaxTokens,
       temperature: 0.7,
     },
     { headers: { Authorization: `Bearer ${apiKey}` } }
@@ -157,6 +161,12 @@ function getVideoDuration(videoPath) {
   });
 }
 
+/**
+ * Processa a dublagem de um vídeo da Shopee
+ * @param {string} videoUrl - URL do MP4 extraído pela extensão
+ * @param {string} title - Título extraído
+ * @param {string} price - Preço extraído
+ */
 async function processShopeeVideoDubbing(videoUrl, title, price) {
   const jobId = crypto.randomUUID();
   const workDir = path.join(__dirname, '..', 'videos_processados');
@@ -214,7 +224,6 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
       if (attempt < MAX_ATTEMPTS) {
         adjustment = diff > 0 ? 'ENCURTAR' : 'EXPANDIR';
         console.log(`[Job ${jobId}] ⚠️ Fora do tempo. Ajuste: ${adjustment}.`);
-        // Apaga áudio anterior antes de gerar novo
         try { fs.unlinkSync(audioPath); } catch(e) {}
       } else {
         console.log(`[Job ${jobId}] Máx tentativas atingidas. Usando melhor resultado disponível.`);
