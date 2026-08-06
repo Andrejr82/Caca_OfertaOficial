@@ -13,7 +13,7 @@ async function generateDubbingCopy(title, price) {
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
   const prompt = `Você é um copywriter de vídeos curtos hiper-persuasivos (estilo TikTok/Reels de Achadinhos).
-Sua missão é escrever um ROTEIRO FALADO vibrante, envolvente e focado em venda (MUITO CURTO, no máximo 10 a 12 segundos de locução, ou seja, MÁXIMO ABSOLUTO DE 25 PALAVRAS) para narrar um vídeo da Shopee.
+Sua missão é escrever um ROTEIRO FALADO vibrante, envolvente e focado em venda (com até 20 segundos de locução) para narrar um vídeo da Shopee.
 
 DADOS ORIGINAIS DO PRODUTO:
 Título completo da loja: ${title}
@@ -79,7 +79,6 @@ async function downloadVideo(url, outputPath) {
 function mergeAudioVideo(videoPath, audioPath, outputPath) {
   return new Promise((resolve, reject) => {
     ffmpeg()
-      .addInputOption('-stream_loop', '-1') // Faz o vídeo repetir infinitamente
       .input(videoPath)
       .input(audioPath)
       // Substitui a faixa de áudio original (0:v = vídeo original, 1:a = novo áudio)
@@ -87,8 +86,8 @@ function mergeAudioVideo(videoPath, audioPath, outputPath) {
         '-map 0:v',
         '-map 1:a',
         '-c:v copy', // Copia o vídeo sem re-encodar (rápido)
-        '-c:a aac',
-        '-shortest' // Corta a exportação assim que o ÁUDIO acabar (já que o vídeo é infinito)
+        '-c:a aac'
+        // Removido o -shortest: o vídeo original rodará até o final, e se a voz passar do tempo, ela também rodará até terminar.
       ])
       .save(outputPath)
       .on('end', resolve)
