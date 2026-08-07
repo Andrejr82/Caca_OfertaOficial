@@ -74,6 +74,10 @@ function repository(input: {
       calls.push("posts:whatsapp");
       return posts;
     },
+    async listHistoricalOffers() {
+      calls.push("offers:historical");
+      return [];
+    },
     async createAffiliateLink(input) {
       writes.push({ type: "affiliate_link", offerId: input.offerId });
       if (input.offerId === "link-fails") throw new Error("affiliate unavailable");
@@ -159,6 +163,37 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     expect(result.skippedAlreadyApproved).toBe(1);
     expect(result.created).toBe(2);
     expect(repo.writes.filter((write) => write.type === "draft").every((write) => !posts.some((item) => item.offer_id === write.offerId))).toBe(true);
+  });
+
+  it("blocks rejected and deferred offers before commercial routing", async () => {
+    const today = [
+      offer("rejected", "2026-08-07T10:00:00.000Z", { status: "rejected" }),
+      offer("deferred", "2026-08-07T10:00:00.000Z", { status: "deferred" }),
+      offer("eligible", "2026-08-07T10:00:00.000Z"),
+    ];
+    const repo = repository({ today, fallback: [] });
+
+    await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(repo.writes.filter((write) => write.type === "draft").map((write) => write.offerId)).toEqual(["eligible"]);
+  });
+
+  it("blocks a deleted post and a republished product with a new offer id", async () => {
+    const today = [
+      offer("new-offer-id", "2026-08-07T10:00:00.000Z", { shopee_item_id: "same-item" }),
+      offer("new-product", "2026-08-07T10:00:00.000Z", { shopee_item_id: "fresh-item" }),
+    ];
+    const posts = [post("old-offer-id", "deleted", "2026-08-07T09:00:00.000Z")];
+    const repo = repository({ today, fallback: [], posts });
+    repo.listHistoricalOffers = async () => [
+      { id: "old-offer-id", platform: "Shopee", shopee_item_id: "same-item", item_id: null, product_id: null, shopee_shop_id: null, original_url: "https://shopee.test/same-item" },
+      { id: "new-offer-id", platform: "Shopee", shopee_item_id: "same-item", item_id: null, product_id: null, shopee_shop_id: null, original_url: "https://shopee.test/same-item" },
+      { id: "new-product", platform: "Shopee", shopee_item_id: "fresh-item", item_id: null, product_id: null, shopee_shop_id: null, original_url: "https://shopee.test/fresh-item" },
+    ];
+
+    await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(repo.writes.filter((write) => write.type === "draft").map((write) => write.offerId)).toEqual(["new-product"]);
   });
 
   it("does not duplicate an offer already seen today and prioritizes the latest discovery correlation", async () => {

@@ -20,6 +20,7 @@ export default async function WhatsappDashboardPage() {
     posted_at: string | null;
     external_id: string | null;
     created_at: string;
+    deleted_at?: string | null;
     affiliate_links?: {
       tracked_url: string;
     } | null;
@@ -52,7 +53,10 @@ export default async function WhatsappDashboardPage() {
       .gte("created_at", todayStart.toISOString())
       .order("created_at", { ascending: false });
 
-    draftPosts = (drafts || []).filter((post) => post.offers?.status !== "posted" && post.offers?.status !== "approved" && post.offers?.created_at >= todayStart.toISOString() && !post.posted_at && !post.external_id);
+    draftPosts = (drafts || []).filter((post) => {
+      const offerStatus = post.offers?.status;
+      return post.status === "draft" && !post.deleted_at && !post.posted_at && !post.external_id && Boolean(post.offers?.created_at && post.offers.created_at >= todayStart.toISOString()) && !["posted", "approved", "rejected", "deferred"].includes(offerStatus);
+    });
   }
 
   const historyData = await getPostHistory("whatsapp");
