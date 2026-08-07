@@ -72,8 +72,8 @@ Nenhuma publicação, envio ou chamada de bot foi executada. A mudança é puram
 
 ## 8. Commit/push
 
-- Commit: será criado após a verificação final.
-- Push: será tentado após o commit, se o remoto/credenciais estiverem disponíveis.
+- Commit de código: `22665e8` (`fix: refine commercial legacy draft copy`).
+- Push: concluído com sucesso para `origin/main`.
 
 ## 9. Deploy Vercel
 
