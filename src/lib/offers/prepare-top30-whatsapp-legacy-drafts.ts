@@ -42,7 +42,7 @@ export interface Top30WhatsappRepository {
   listOffersBetween(start: Date, end: Date): Promise<Offer[]>;
   listAffiliateLinks(): Promise<AffiliateLinkRow[]>;
   listWhatsappPosts(): Promise<WhatsappPostRow[]>;
-  listHistoricalOffers?: () => Promise<HistoricalOfferIdentityRow[]>;
+  listHistoricalOffers: () => Promise<HistoricalOfferIdentityRow[]>;
   createAffiliateLink(input: { userId: string; offerId: string; originalUrl: string; trackedUrl: string; subId: string }): Promise<{ id: string; tracked_url: string }>;
   insertDraft(input: { userId: string; offerId: string; affiliateLinkId: string; content: string }): Promise<{ id: string; status: "draft"; channel: typeof WHATSAPP_CHANNEL }>;
 }
@@ -70,7 +70,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     repository.listOffersBetween(todayStart, now),
     repository.listAffiliateLinks(),
     repository.listWhatsappPosts(),
-    repository.listHistoricalOffers ? repository.listHistoricalOffers() : Promise.resolve([]),
+    repository.listHistoricalOffers(),
   ]);
   const links = new Map(linksRows.map((row) => [row.offer_id, row]));
   const reasons: Record<string, number> = { telegram_blocked: 1 };

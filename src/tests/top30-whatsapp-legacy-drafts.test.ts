@@ -74,6 +74,10 @@ function repository(input: {
       calls.push("posts:whatsapp");
       return posts;
     },
+    async listHistoricalOffers() {
+      calls.push("offers:historical");
+      return [];
+    },
     async createAffiliateLink(input) {
       writes.push({ type: "affiliate_link", offerId: input.offerId });
       if (input.offerId === "link-fails") throw new Error("affiliate unavailable");
