@@ -58,4 +58,6 @@ offerId/entityId: 89e888a3-6eaf-4ff4-b598-52c1ac23ad53
 
 ## Commit/push e deploy
 
-Será preenchido após commit/push. A confirmação de Vercel depende das credenciais disponíveis no ambiente.
+Commit `ac41da4` (`fix: ignore posted offers in whatsapp approval`) enviado para `origin/main`.
+
+A Vercel CLI está instalada, mas não há credenciais disponíveis (`No existing credentials found`), portanto não foi possível confirmar `READY` ou alias público. Recomenda-se verificar o deployment do commit `ac41da4` no painel Vercel ou executar redeploy manual. Nenhuma publicação foi executada.
