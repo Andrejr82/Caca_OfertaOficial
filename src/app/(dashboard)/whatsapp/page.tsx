@@ -4,6 +4,7 @@ import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
+import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,7 @@ export default async function WhatsappDashboardPage() {
           <h1 className="text-2xl font-extrabold tracking-tight text-white">WhatsApp</h1>
           <p className="text-xs text-white/35">{officialBrand.whatsappName} - Aprovação de envios e histórico de grupos/canais.</p>
         </div>
+        <WhatsappTop30Action />
       </header>
 
       <SocialChannelPostsView
