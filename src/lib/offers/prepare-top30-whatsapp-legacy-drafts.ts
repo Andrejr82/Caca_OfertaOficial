@@ -81,6 +81,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const oldDraftIds = new Set<string>();
   const todayDraftIds = new Set<string>();
   const protectedIdentities = new Set<string>();
+  const protectedHistoricalOffers: HistoricalOfferIdentityRow[] = [];
 
   const historicalOffersById = new Map(historicalOffers.map((offer) => [offer.id, offer]));
 
@@ -98,7 +99,10 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     if (post.status === "deleted") protectedPostIds.add(post.offer_id);
     if (post.status === "deleted" || isPosted) {
       const historicalOffer = historicalOffersById.get(post.offer_id);
-      if (historicalOffer) protectedIdentities.add(offerIdentity(historicalOffer));
+      if (historicalOffer) {
+        protectedIdentities.add(offerIdentity(historicalOffer));
+        protectedHistoricalOffers.push(historicalOffer);
+      }
     }
     if (isApproved) {
       protectedPostIds.add(post.offer_id);
@@ -119,7 +123,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
       }
       return true;
     });
-    return filterAndRoute(fresh, { protectedPostIds, protectedIdentities, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
+    return filterAndRoute(fresh, { protectedPostIds, protectedIdentities, protectedHistoricalOffers, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
   };
 
   const todayCandidates = classifyFreshOffers(todayOffers, todayStart);
@@ -209,6 +213,7 @@ function filterAndRoute(
   context: {
     protectedPostIds: Set<string>;
     protectedIdentities: Set<string>;
+    protectedHistoricalOffers: HistoricalOfferIdentityRow[];
     postedOfferIds: Set<string>;
     approvedOfferIds: Set<string>;
     seenTodayIds: Set<string>;
@@ -228,7 +233,7 @@ function filterAndRoute(
     }
     if (offer.status === "rejected" || offer.status === "deferred") return false;
     if (context.protectedPostIds.has(offer.id)) return false;
-    if (context.protectedIdentities.has(offerIdentity(offer))) return false;
+    if (context.protectedIdentities.has(offerIdentity(offer)) || context.protectedHistoricalOffers.some((historicalOffer) => sameOfferIdentity(historicalOffer, offer))) return false;
     if (context.oldDraftIds.has(offer.id)) return false;
     if (context.seenTodayIds.has(offer.id) && !context.todayDraftIds.has(offer.id)) return false;
     return true;
@@ -276,6 +281,13 @@ function offerIdentity(offer: Pick<Offer, "platform" | "item_id" | "product_id" 
     if (offer.original_url) return `mercadolivre:url:${canonicalUrl(offer.original_url)}`;
   }
   return `${platform}:url:${canonicalUrl(offer.original_url)}`;
+}
+
+function sameOfferIdentity(
+  left: Pick<Offer, "platform" | "item_id" | "product_id" | "shopee_item_id" | "shopee_shop_id" | "original_url">,
+  right: Pick<Offer, "platform" | "item_id" | "product_id" | "shopee_item_id" | "shopee_shop_id" | "original_url">,
+) {
+  return offerIdentity(left) === offerIdentity(right);
 }
 
 function canonicalUrl(value: string) {
