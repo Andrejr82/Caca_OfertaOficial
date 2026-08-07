@@ -7,9 +7,9 @@ const item = (overrides: any = {}) => ({ id: "1", platform: "Shopee", product_na
 describe("CommercialChannelQueue", () => {
   it("keeps counts aligned with marketplace/category filters and empty state", () => {
     render(<CommercialChannelQueue candidates={[item(), item({ id: "2", platform: "Mercado Livre", category: "Tech" })]} targetQueue="manual_whatsapp" title="WhatsApp" />);
-    expect(screen.getByText("2 itens")).toBeTruthy();
+    expect(screen.getByText("Mostrando 2 de 2 candidatos")).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Filtro marketplace"), { target: { value: "Mercado Livre" } });
-    expect(screen.getByText("1 itens")).toBeTruthy();
+    expect(screen.getByText("Mostrando 1 de 1 candidatos")).toBeTruthy();
     expect(screen.getByText("Produto")).toBeTruthy();
   });
 });

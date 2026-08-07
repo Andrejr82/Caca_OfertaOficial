@@ -40,3 +40,22 @@ export function routeCommercialCandidate(candidate: CommercialQueueCandidate): R
 export function routeCommercialCandidates(candidates: CommercialQueueCandidate[]) {
   return candidates.map(routeCommercialCandidate).sort((a, b) => b.priority - a.priority);
 }
+
+export function selectOperationalTopCandidates(candidates: RoutedCommercialCandidate[], options: { limit?: number; channel: Exclude<CommercialTargetQueue, "panel_only">; diversity?: boolean } ) {
+  const limit = options.limit || 30;
+  const pool = candidates.filter((candidate) => candidate.targetQueue === options.channel).sort((a, b) => b.priority - a.priority || b.achadinhoScore - a.achadinhoScore);
+  if (options.diversity === false) return pool.slice(0, limit);
+  const selected: RoutedCommercialCandidate[] = [];
+  const families = new Set<string>(); const categories = new Map<string, number>(); const sellers = new Map<string, number>();
+  const familyOf = (candidate: RoutedCommercialCandidate) => String(candidate.product_name || "").toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/\s+/).filter((word) => word.length > 3 && !["para", "com", "kit", "preto", "branco"].includes(word)).slice(0, 3).join(" ");
+  for (const candidate of pool) {
+    const family = familyOf(candidate); const category = String(candidate.category || "Sem categoria"); const seller = String(candidate.seller_name || "");
+    if (family && families.has(family) && selected.length < limit - 5) continue;
+    if ((categories.get(category) || 0) >= 4 && selected.length < limit - 3) continue;
+    if (seller && (sellers.get(seller) || 0) >= 3 && selected.length < limit - 2) continue;
+    selected.push(candidate); if (family) families.add(family); categories.set(category, (categories.get(category) || 0) + 1); if (seller) sellers.set(seller, (sellers.get(seller) || 0) + 1);
+    if (selected.length >= limit) break;
+  }
+  if (selected.length < limit) for (const candidate of pool) { if (!selected.some((item) => item.id === candidate.id)) selected.push(candidate); if (selected.length >= limit) break; }
+  return selected;
+}
