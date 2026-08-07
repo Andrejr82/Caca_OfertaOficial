@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { CommercialCurationPanel } from "@/components/offers/commercial-curation-panel";
 
 const candidate: any = {
@@ -21,5 +21,8 @@ describe("CommercialCurationPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copiar copy" }));
     expect(writeText).toHaveBeenCalledWith(candidate.suggestedCopy);
     expect(screen.getByRole("link", { name: "Ver oferta" }).getAttribute("href")).toBe(candidate.original_url);
+    window.confirm = () => false;
+    fireEvent.click(screen.getByRole("button", { name: "Criar draft" }));
+    expect(screen.getByLabelText("Canal do draft Organizador de gaveta")).toBeTruthy();
   });
 });
