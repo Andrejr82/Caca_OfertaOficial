@@ -38,6 +38,9 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
   const [filterOfferType, setFilterOfferType] = useState<string>("");
   const [filterAudience, setFilterAudience] = useState<string>("");
   const [filterPostingProfile, setFilterPostingProfile] = useState<string>("");
+  const [filterCommercialIntent, setFilterCommercialIntent] = useState<string>("");
+  const [filterCommercialMode, setFilterCommercialMode] = useState<string>("");
+  const [minCommercialScore, setMinCommercialScore] = useState<string>("");
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const [sortBy, setSortBy] = useState<string>("date");
   const [selectedOfferIds, setSelectedOfferIds] = useState<Set<string>>(new Set());
@@ -97,6 +100,11 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
     if (filterOfferType && !editorial.types.includes(filterOfferType)) return false;
     if (filterAudience && editorial.audience !== filterAudience) return false;
     if (filterPostingProfile && !editorial.profiles.includes(filterPostingProfile)) return false;
+    const commercial = expl.commercialCuration;
+    if (filterCommercialIntent && commercial?.commercialIntent !== filterCommercialIntent) return false;
+    if (filterCommercialMode === "automatic" && commercial?.automaticEligible !== true) return false;
+    if (filterCommercialMode === "manual" && commercial?.manualReviewRequired !== true) return false;
+    if (minCommercialScore && Number(commercial?.achadinhoScore || 0) < Number(minCommercialScore)) return false;
     if (filterStatus && offer.status !== filterStatus) return false;
 
     if (minPrice && offer.current_price < Number(minPrice)) return false;
@@ -156,6 +164,9 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
       const scoreA = curationById.get(a.id)?.curationScore || 0;
       const scoreB = curationById.get(b.id)?.curationScore || 0;
       return scoreB - scoreA;
+    }
+    if (sortBy === "commercial-v1") {
+      return Number(explB.commercialCuration?.achadinhoScore || 0) - Number(explA.commercialCuration?.achadinhoScore || 0);
     }
     // date (default)
     const timeA = new Date(a.updated_at || a.created_at).getTime();
@@ -259,6 +270,14 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <option value="Mercado Livre">Mercado Livre</option>
           <option value="Magalu">Magalu</option>
         </select>
+        <select className="rounded bg-black/20 p-2 text-sm text-white" value={filterCommercialIntent} onChange={(event) => setFilterCommercialIntent(event.target.value)}>
+          <option value="">Todas intenções V1</option>
+          {Array.from(new Set(initialOffers.map((offer) => offer.explainability?.commercialCuration?.commercialIntent).filter(Boolean))).sort().map((intent) => <option key={intent} value={intent}>{intent}</option>)}
+        </select>
+        <select className="rounded bg-black/20 p-2 text-sm text-white" value={filterCommercialMode} onChange={(event) => setFilterCommercialMode(event.target.value)}>
+          <option value="">Todos os modos V1</option><option value="automatic">Automático</option><option value="manual">Manual-first</option>
+        </select>
+        <input className="rounded bg-black/20 p-2 text-sm text-white" type="number" min="0" max="100" placeholder="AchadinhoScore mínimo" value={minCommercialScore} onChange={(event) => setMinCommercialScore(event.target.value)} />
 
         <select
           className="rounded bg-black/20 p-2 text-sm text-white"
@@ -343,6 +362,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
           <option value="priority">Ordernar: Priority Score</option>
           <option value="commercial">Ordernar: Commercial Score</option>
           <option value="curation">Ordenar: Curadoria V2</option>
+          <option value="commercial-v1">Ordenar: AchadinhoScore V1</option>
           <option value="price">Ordernar: Preço</option>
           <option value="tier">Ordernar: Tier</option>
         </select>
@@ -396,6 +416,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
             const draftCount = offer.draft_count || 0;
             const hasDraftsReady = (offer.status === "pending_manual_review" || offer.status === "selected") && draftCount > 0;
             const curation = curationById.get(offer.id);
+            const commercial = expl.commercialCuration;
 
             const tierColor =
               tier === "S" ? "text-emerald-500 bg-emerald-500/10 border-emerald-500/20" :
@@ -427,6 +448,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                           Curadoria {curation.curationScore} · {curation.decision}
                         </span>
                       )}
+                      {commercial && <span className={`text-xs font-bold px-2 py-0.5 rounded border ${commercial.automaticEligible ? "text-emerald-300 border-emerald-500/20 bg-emerald-500/10" : "text-amber-300 border-amber-500/20 bg-amber-500/10"}`}>V1 {commercial.achadinhoScore} · {commercial.commercialIntent} · {commercial.automaticEligible ? "auto" : "manual-first"}</span>}
                       {hasDraftsReady && (
                         <span className="text-xs font-bold px-2 py-0.5 rounded border text-violet-300 bg-violet-500/10 border-violet-500/20">
                           ✦ {draftCount} draft{draftCount !== 1 ? "s" : ""} prontos
@@ -462,6 +484,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                         Grupo: {curation.groupKeys[0] || "sem grupo seguro"} • Confiança: {curation.marketplaceScore.trustScore}/50 • Oferta: {curation.marketplaceScore.offerScore}/40
                       </p>
                     )}
+                    {commercial && <div className="mt-1 text-[11px] text-white/55">{(commercial.commercialReasons || []).slice(0, 3).join(" · ")} {(commercial.commercialRiskFlags || []).length ? `· riscos: ${commercial.commercialRiskFlags.join(", ")}` : ""}</div>}
                   </div>
                   <div className="text-right">
                     <div className="text-xs text-white/40 mb-1">Official Policy / Commercial Policy</div>
@@ -489,6 +512,7 @@ export function OffersClient({ initialOffers }: { initialOffers: OfferWithDraftC
                 <div className="text-xs text-white/50 bg-black/20 p-2 rounded">
                   <span className="font-semibold">Reason:</span> {reason}
                 </div>
+                {commercial?.suggestedCopy && <details className="rounded border border-violet-400/10 bg-violet-500/5 p-2 text-xs text-white/70"><summary className="cursor-pointer font-semibold text-violet-200">Copy Comercial V1 (shadow)</summary><pre className="mt-2 whitespace-pre-wrap font-sans">{commercial.suggestedCopy}</pre></details>}
 
                 {nativeShopee && (offer.status === "selected" || offer.status === "pending_manual_review") && (
                   <div className="flex gap-2 flex-wrap items-center">
