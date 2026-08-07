@@ -4,6 +4,10 @@ import { officialBrand } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
+import { listOffersWithDraftStatus } from "@/lib/offers/queries";
+import { buildCommercialQueue } from "@/lib/offers/commercial-curation-queue";
+import { routeCommercialCandidates } from "@/lib/offers/commercial-channel-router";
+import { CommercialChannelQueue } from "@/components/offers/commercial-channel-queue";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +53,7 @@ export default async function WhatsappDashboardPage() {
   }
 
   const historyData = await getPostHistory("whatsapp");
+  const routedCandidates = routeCommercialCandidates(buildCommercialQueue(await listOffersWithDraftStatus()));
 
   return (
     <div className="grid gap-6 animate-fadeIn">
@@ -62,6 +67,8 @@ export default async function WhatsappDashboardPage() {
           <p className="text-xs text-white/35">{officialBrand.whatsappName} - Aprovação de envios e histórico de grupos/canais.</p>
         </div>
       </header>
+
+      <CommercialChannelQueue candidates={routedCandidates} targetQueue="manual_whatsapp" title="Fila Comercial · WhatsApp manual" />
 
       <SocialChannelPostsView
         channel="whatsapp"
