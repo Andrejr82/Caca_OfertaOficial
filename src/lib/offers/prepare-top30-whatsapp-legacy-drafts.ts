@@ -36,10 +36,13 @@ type WhatsappPostRow = {
   external_id: string | null;
 };
 
+type HistoricalOfferIdentityRow = Pick<Offer, "id" | "platform" | "item_id" | "product_id" | "shopee_item_id" | "shopee_shop_id" | "original_url">;
+
 export interface Top30WhatsappRepository {
   listOffersBetween(start: Date, end: Date): Promise<Offer[]>;
   listAffiliateLinks(): Promise<AffiliateLinkRow[]>;
   listWhatsappPosts(): Promise<WhatsappPostRow[]>;
+  listHistoricalOffers?: () => Promise<HistoricalOfferIdentityRow[]>;
   createAffiliateLink(input: { userId: string; offerId: string; originalUrl: string; trackedUrl: string; subId: string }): Promise<{ id: string; tracked_url: string }>;
   insertDraft(input: { userId: string; offerId: string; affiliateLinkId: string; content: string }): Promise<{ id: string; status: "draft"; channel: typeof WHATSAPP_CHANNEL }>;
 }
@@ -63,10 +66,11 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const now = options.now ?? new Date();
   const todayStart = getTodayBrtStart(now);
   const fallbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const [todayOffers, linksRows, postRows] = await Promise.all([
+  const [todayOffers, linksRows, postRows, historicalOffers] = await Promise.all([
     repository.listOffersBetween(todayStart, now),
     repository.listAffiliateLinks(),
     repository.listWhatsappPosts(),
+    repository.listHistoricalOffers ? repository.listHistoricalOffers() : Promise.resolve([]),
   ]);
   const links = new Map(linksRows.map((row) => [row.offer_id, row]));
   const reasons: Record<string, number> = { telegram_blocked: 1 };
@@ -76,6 +80,9 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const seenTodayIds = new Set<string>();
   const oldDraftIds = new Set<string>();
   const todayDraftIds = new Set<string>();
+  const protectedIdentities = new Set<string>();
+
+  const historicalOffersById = new Map(historicalOffers.map((offer) => [offer.id, offer]));
 
   for (const post of postRows) {
     const createdAt = new Date(post.created_at).getTime();
@@ -87,6 +94,11 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     if (isPosted) {
       protectedPostIds.add(post.offer_id);
       if (post.status === "posted" || post.status === "published" || hasPublicationEvidence) postedOfferIds.add(post.offer_id);
+    }
+    if (post.status === "deleted") protectedPostIds.add(post.offer_id);
+    if (post.status === "deleted" || isPosted) {
+      const historicalOffer = historicalOffersById.get(post.offer_id);
+      if (historicalOffer) protectedIdentities.add(offerIdentity(historicalOffer));
     }
     if (isApproved) {
       protectedPostIds.add(post.offer_id);
@@ -107,7 +119,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
       }
       return true;
     });
-    return filterAndRoute(fresh, { protectedPostIds, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
+    return filterAndRoute(fresh, { protectedPostIds, protectedIdentities, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
   };
 
   const todayCandidates = classifyFreshOffers(todayOffers, todayStart);
@@ -196,6 +208,7 @@ function filterAndRoute(
   offers: Offer[],
   context: {
     protectedPostIds: Set<string>;
+    protectedIdentities: Set<string>;
     postedOfferIds: Set<string>;
     approvedOfferIds: Set<string>;
     seenTodayIds: Set<string>;
@@ -213,7 +226,9 @@ function filterAndRoute(
       context.approvedOfferIds.add(offer.id);
       return false;
     }
+    if (offer.status === "rejected" || offer.status === "deferred") return false;
     if (context.protectedPostIds.has(offer.id)) return false;
+    if (context.protectedIdentities.has(offerIdentity(offer))) return false;
     if (context.oldDraftIds.has(offer.id)) return false;
     if (context.seenTodayIds.has(offer.id) && !context.todayDraftIds.has(offer.id)) return false;
     return true;
@@ -248,6 +263,32 @@ function routeWhatsappCandidates(candidates: CommercialQueueCandidate[]) {
     .filter((candidate) => candidate.targetQueue === "manual_whatsapp");
 }
 
+function offerIdentity(offer: Pick<Offer, "platform" | "item_id" | "product_id" | "shopee_item_id" | "shopee_shop_id" | "original_url">) {
+  const platform = String(offer.platform || "").toLowerCase();
+  if (platform === "shopee") {
+    const item = offer.shopee_item_id || offer.item_id;
+    if (item) return `shopee:item:${String(item).trim()}`;
+    if (offer.original_url) return `shopee:url:${canonicalUrl(offer.original_url)}`;
+  }
+  if (platform === "mercado livre") {
+    if (offer.item_id) return `mercadolivre:item:${String(offer.item_id).replace(/-/g, "").toUpperCase()}`;
+    if (offer.product_id) return `mercadolivre:product:${String(offer.product_id).toUpperCase()}`;
+    if (offer.original_url) return `mercadolivre:url:${canonicalUrl(offer.original_url)}`;
+  }
+  return `${platform}:url:${canonicalUrl(offer.original_url)}`;
+}
+
+function canonicalUrl(value: string) {
+  try {
+    const url = new URL(value);
+    url.hash = "";
+    for (const key of [...url.searchParams.keys()]) if (/^(utm_|matt_|sid|wid|action|sp_atk)/i.test(key)) url.searchParams.delete(key);
+    return `${url.hostname.toLowerCase()}${url.pathname.replace(/\/+$/, "")}${url.search}`.toLowerCase();
+  } catch {
+    return value.trim().toLowerCase().replace(/\/+$/, "");
+  }
+}
+
 function materializeDraftContent(copy: string, trackedUrl: string) {
   const cleanCopy = copy.trimEnd();
   const urls = cleanCopy.match(/https?:\/\/\S+/g) ?? [];
@@ -279,9 +320,15 @@ export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository 
   }
 
   async listWhatsappPosts() {
-    const { data, error } = await this.client.from("posts").select("id,offer_id,channel,status,created_at,posted_at,external_id").eq("user_id", this.userId).eq("channel", WHATSAPP_CHANNEL).neq("status", "deleted");
+    const { data, error } = await this.client.from("posts").select("id,offer_id,channel,status,created_at,posted_at,external_id").eq("user_id", this.userId).eq("channel", WHATSAPP_CHANNEL);
     if (error) throw new Error(error.message);
     return (data ?? []) as WhatsappPostRow[];
+  }
+
+  async listHistoricalOffers() {
+    const { data, error } = await this.client.from("offers").select("id,platform,item_id,product_id,shopee_item_id,shopee_shop_id,original_url").eq("user_id", this.userId);
+    if (error) throw new Error(error.message);
+    return (data ?? []) as HistoricalOfferIdentityRow[];
   }
 
   async createAffiliateLink(input: { userId: string; offerId: string; originalUrl: string; trackedUrl: string; subId: string }) {
