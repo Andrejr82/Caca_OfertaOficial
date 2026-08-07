@@ -82,6 +82,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const todayDraftIds = new Set<string>();
   const protectedIdentities = new Set<string>();
   const protectedHistoricalOffers: HistoricalOfferIdentityRow[] = [];
+  const protectedHistoricalOfferIds = new Set<string>();
 
   const historicalOffersById = new Map(historicalOffers.map((offer) => [offer.id, offer]));
 
@@ -100,8 +101,12 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     if (post.status === "deleted" || isPosted) {
       const historicalOffer = historicalOffersById.get(post.offer_id);
       if (historicalOffer) {
-        protectedIdentities.add(offerIdentity(historicalOffer));
+        const identity = offerIdentity(historicalOffer);
+        protectedIdentities.add(identity);
         protectedHistoricalOffers.push(historicalOffer);
+        for (const candidate of historicalOffers) {
+          if (offerIdentity(candidate) === identity) protectedHistoricalOfferIds.add(candidate.id);
+        }
       }
     }
     if (isApproved) {
@@ -123,7 +128,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
       }
       return true;
     });
-    return filterAndRoute(fresh, { protectedPostIds, protectedIdentities, protectedHistoricalOffers, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
+    return filterAndRoute(fresh, { protectedPostIds, protectedIdentities, protectedHistoricalOffers, protectedHistoricalOfferIds, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
   };
 
   const todayCandidates = classifyFreshOffers(todayOffers, todayStart);
@@ -214,6 +219,7 @@ function filterAndRoute(
     protectedPostIds: Set<string>;
     protectedIdentities: Set<string>;
     protectedHistoricalOffers: HistoricalOfferIdentityRow[];
+    protectedHistoricalOfferIds: Set<string>;
     postedOfferIds: Set<string>;
     approvedOfferIds: Set<string>;
     seenTodayIds: Set<string>;
@@ -233,7 +239,7 @@ function filterAndRoute(
     }
     if (offer.status === "rejected" || offer.status === "deferred") return false;
     if (context.protectedPostIds.has(offer.id)) return false;
-    if (context.protectedIdentities.has(offerIdentity(offer)) || context.protectedHistoricalOffers.some((historicalOffer) => sameOfferIdentity(historicalOffer, offer))) return false;
+    if (context.protectedHistoricalOfferIds.has(offer.id) || context.protectedIdentities.has(offerIdentity(offer)) || context.protectedHistoricalOffers.some((historicalOffer) => sameOfferIdentity(historicalOffer, offer))) return false;
     if (context.oldDraftIds.has(offer.id)) return false;
     if (context.seenTodayIds.has(offer.id) && !context.todayDraftIds.has(offer.id)) return false;
     return true;
