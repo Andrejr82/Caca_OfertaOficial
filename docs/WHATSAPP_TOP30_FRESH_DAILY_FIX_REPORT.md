@@ -62,11 +62,11 @@ O retorno agora informa `windowUsed`, `created`, `reusedTodayDrafts`, `skippedAl
 
 ## 10. Commit/push
 
-Pendente até a conclusão deste relatório.
+Commit `cfdeab1` (`fix: use fresh daily offers for whatsapp top30`) enviado para `origin/main`.
 
 ## 11. Deploy Vercel
 
-Pendente após push. A confirmação depende de credenciais Vercel disponíveis no ambiente.
+A Vercel CLI está instalada, mas não há credenciais disponíveis (`No existing credentials found`), portanto não foi possível confirmar `READY` ou alias público. Recomenda-se verificar o deployment de `cfdeab1` no projeto Vercel ou executar redeploy manual.
 
 ## 12. Escopo preservado
 
