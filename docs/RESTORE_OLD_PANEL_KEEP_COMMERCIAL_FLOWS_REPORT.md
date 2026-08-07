@@ -57,16 +57,16 @@ Nenhum publisher novo foi criado. Preparar aprovação somente cria/recupera dra
 
 ## 11. Commit/push
 
-Branch criada: `fix/restore-old-channel-panels`. O worktree já continha alterações não relacionadas de Oracle/Discovery/Shopee; elas não devem ser incluídas no commit desta correção. Commit e push devem incluir somente os arquivos listados nesta mudança e este relatório.
+Branch criada: `fix/restore-old-channel-panels`. O commit seletivo publicado é `0c0ebacabd7b20a108c4be6305980a1895951921` (`fix: restore legacy channel panels`). O worktree continua contendo alterações não relacionadas de Oracle/Discovery/Shopee; elas ficaram fora do commit.
 
 ## 12. Build Vercel
 
-O `next build` local passou após a cirurgia. A validação do deployment Vercel deve usar o commit deste branch/rollout; deployment anterior não deve ser considerado evidência.
+O `next build` local passou após a cirurgia. O deployment do commit `0c0ebac` compilou com sucesso no Vercel.
 
 ## 13. Deploy READY
 
-Pendente até o push seletivo e a confirmação no Vercel do deployment correspondente ao novo commit.
+Deployment Preview: `dpl_C5TikHH3XnD79upBPcXtp22bg9fa`, READY. Deployment Production promovido: `dpl_C2D4VXoPdbgwHtZST2WNhBN9QnvS`, READY.
 
 ## 14. Validação visual em produção
 
-Pendente de deployment READY e sessão autenticada. A validação deve confirmar `/telegram`, `/whatsapp` e `/videos` com o layout legado, sem “Fila Comercial” e sem “Copiar copy”; `/offers` continua como fonte de Curadoria e preparação de drafts.
+Alias público: `https://caca-oferta-oficial.vercel.app`, apontando para `dpl_C2D4VXoPdbgwHtZST2WNhBN9QnvS`. Sem sessão autenticada disponível no ambiente de validação, a inspeção visual autenticada não pôde ser executada; a confirmação de código/deployment mostra que `/telegram`, `/whatsapp` e `/videos` renderizam os componentes legados e `/offers` mantém a Curadoria como fonte de preparação de drafts. A validação manual autenticada restante deve confirmar as telas sem “Fila Comercial” e sem “Copiar copy”.
