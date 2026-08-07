@@ -99,7 +99,7 @@ describe("approveOfficialOfferForPublication", () => {
     expect(result).toMatchObject({ status: "rejected", code: "STATE_CONFLICT", failureStage: "approval" });
   });
 
-  it("reconciles a prematurely posted offer when another active post is draft", async () => {
+  it("rejects a posted offer without attempting the forbidden posted-to-approved transition", async () => {
     const deps = dependencies("posted");
     deps.repository.findPostsByOffer = vi.fn(async () => [
       { id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "telegram", state: "draft", version: 0, content: "content", mediaUrl: null, destination: "@offers" },
@@ -108,7 +108,7 @@ describe("approveOfficialOfferForPublication", () => {
 
     const result = await approveOfficialOfferForPublication(command, deps);
 
-    expect(result).toMatchObject({ status: "approved", offerState: "approved" });
-    expect(deps.reconciliation.reconcile).toHaveBeenCalledTimes(1);
+    expect(result).toMatchObject({ status: "rejected", code: "OFFER_ALREADY_POSTED", failureStage: "offer_state" });
+    expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
   });
 });

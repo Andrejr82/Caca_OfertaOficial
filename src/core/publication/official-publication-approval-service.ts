@@ -106,13 +106,7 @@ export async function approveOfficialOfferForPublication(
   }
 
   if (offerState === "posted") {
-    const relatedPosts = await dependencies.repository.findPostsByOffer(command.offerId, command.tenantId);
-    if (!relatedPosts.some((relatedPost) => relatedPost.state === "draft")) {
-      return rejected(command, "OFFER_STATE_MISMATCH", "Official approval cannot reconcile posted offer without a safe active draft", "offer_reconciliation");
-    }
-    const reconciliation = await dependencies.reconciliation.reconcile(command);
-    if (reconciliation.status === "rejected") return rejected(command, reconciliation.code, reconciliation.message, "offer_reconciliation");
-    offerState = "approved";
+    return rejected(command, "OFFER_ALREADY_POSTED", "Esta oferta já foi publicada e não pode ser aprovada novamente.", "offer_state");
   }
 
   if (offerState !== "approved") {

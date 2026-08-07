@@ -18,7 +18,7 @@ export type Top30WhatsappResult = {
 
 type AffiliateLinkRow = { offer_id: string; channel: typeof WHATSAPP_CHANNEL; id: string; tracked_url: string };
 type DraftRow = { offer_id: string; channel: typeof WHATSAPP_CHANNEL; id: string; status: "draft" };
-type PublishedRow = { offer_id: string; channel: typeof WHATSAPP_CHANNEL; id: string; status: "published" };
+type PublishedRow = { offer_id: string; channel: typeof WHATSAPP_CHANNEL; id: string; status: "published" | "posted" };
 
 export interface Top30WhatsappRepository {
   listOffersSince(since: Date): Promise<Offer[]>;
@@ -42,24 +42,31 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   ]);
   const links = new Map(linksRows.map((row) => [row.offer_id, row]));
   const drafts = new Map(draftRows.map((row) => [row.offer_id, row]));
-  const published = new Set(publishedRows.map((row) => row.offer_id));
+  const protectedPosts = new Map(publishedRows.map((row) => [row.offer_id, row.status] as const));
   const reasons: Record<string, number> = { telegram_blocked: 1 };
   let selected: RoutedCommercialCandidate[] = [];
   let windowUsed: "48h" | "72h" = "48h";
   let publishedProtected = 0;
+  const postedProtectedIds = new Set<string>();
+  const offerPostedIds = new Set<string>();
 
   for (const hours of [48, 72] as const) {
     const since = new Date(now.getTime() - hours * 60 * 60 * 1000);
     const offers = await repository.listOffersSince(since);
-    const routed = routeWhatsappCandidates(buildCommercialQueue(offers, { limit: offers.length }));
-    publishedProtected = routed.filter((candidate) => published.has(candidate.id)).length;
-    const safePool = routed.filter((candidate) => !published.has(candidate.id));
+    const queue = buildCommercialQueue(offers, { limit: offers.length });
+    queue.filter((candidate) => candidate.status === "posted").forEach((candidate) => offerPostedIds.add(candidate.id));
+    const routed = routeWhatsappCandidates(queue);
+    publishedProtected = routed.filter((candidate) => protectedPosts.get(candidate.id) === "published").length;
+    routed.filter((candidate) => protectedPosts.get(candidate.id) === "posted").forEach((candidate) => postedProtectedIds.add(candidate.id));
+    const safePool = routed.filter((candidate) => !protectedPosts.has(candidate.id));
     selected = selectOperationalTopCandidates(safePool, { channel: "manual_whatsapp", limit: TOP30_LIMIT, diversity: true });
     windowUsed = hours === 72 && selected.length < TOP30_LIMIT ? "72h" : hours === 72 ? "72h" : "48h";
     if (selected.length >= TOP30_LIMIT || hours === 72) break;
   }
 
   if (publishedProtected > 0) reasons.published_protected = publishedProtected;
+  if (postedProtectedIds.size > 0) reasons.posted_protected = postedProtectedIds.size;
+  if (offerPostedIds.size > 0) reasons.offer_posted = offerPostedIds.size;
   let created = 0;
   let reused = 0;
   let skipped = 0;
@@ -108,7 +115,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
 }
 
 function routeWhatsappCandidates(candidates: CommercialQueueCandidate[]) {
-  return routeCommercialCandidates(candidates.filter((candidate) => !candidate.rejected && Boolean(candidate.image_url)))
+  return routeCommercialCandidates(candidates.filter((candidate) => candidate.status !== "posted" && !candidate.rejected && Boolean(candidate.image_url)))
     .filter((candidate) => candidate.targetQueue === "manual_whatsapp");
 }
 
@@ -120,8 +127,8 @@ function materializeDraftContent(copy: string, trackedUrl: string) {
     : `${cleanCopy}\n\n👉 ${trackedUrl}`;
 }
 
-function increment(reasons: Record<string, number>, reason: string) {
-  reasons[reason] = (reasons[reason] ?? 0) + 1;
+function increment(reasons: Record<string, number>, reason: string, amount = 1) {
+  reasons[reason] = (reasons[reason] ?? 0) + amount;
 }
 
 function isDuplicateError(error: unknown) {
@@ -151,7 +158,7 @@ export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository 
   }
 
   async listPublished() {
-    const { data, error } = await this.client.from("posts").select("offer_id,channel,id,status").eq("user_id", this.userId).eq("channel", WHATSAPP_CHANNEL).eq("status", "published");
+    const { data, error } = await this.client.from("posts").select("offer_id,channel,id,status").eq("user_id", this.userId).eq("channel", WHATSAPP_CHANNEL).in("status", ["published", "posted"]);
     if (error) throw new Error(error.message);
     return (data ?? []) as PublishedRow[];
   }

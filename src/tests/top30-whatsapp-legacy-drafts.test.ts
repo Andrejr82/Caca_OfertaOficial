@@ -33,12 +33,13 @@ function offer(id: string, createdAt: string, overrides: Partial<Offer> = {}): O
   };
 }
 
-function repository(input: { recent: Offer[]; fallback: Offer[]; published?: Set<string>; links?: Map<string, { id: string; tracked_url: string }>; drafts?: Map<string, { id: string; status: "draft" }> }) {
+function repository(input: { recent: Offer[]; fallback: Offer[]; published?: Set<string>; posted?: Set<string>; links?: Map<string, { id: string; tracked_url: string }>; drafts?: Map<string, { id: string; status: "draft" }> }) {
   const calls: string[] = [];
   const writes: Array<{ type: string; offerId: string; content?: string }> = [];
   const links = input.links ?? new Map();
   const drafts = input.drafts ?? new Map();
   const published = input.published ?? new Set<string>();
+  const posted = input.posted ?? new Set<string>();
   const repo: Top30WhatsappRepository & { calls: string[]; writes: typeof writes } = {
     calls,
     writes,
@@ -56,8 +57,11 @@ function repository(input: { recent: Offer[]; fallback: Offer[]; published?: Set
       return [...drafts.entries()].map(([offerId, draft]) => ({ offer_id: offerId, channel: "whatsapp" as const, ...draft }));
     },
     async listPublished() {
-      calls.push("published:whatsapp");
-      return [...published].map((offerId) => ({ offer_id: offerId, channel: "whatsapp" as const, id: `published-${offerId}`, status: "published" }));
+      calls.push("protected_posts:whatsapp");
+      return [
+        ...[...published].map((offerId) => ({ offer_id: offerId, channel: "whatsapp" as const, id: `published-${offerId}`, status: "published" as const })),
+        ...[...posted].map((offerId) => ({ offer_id: offerId, channel: "whatsapp" as const, id: `posted-${offerId}`, status: "posted" as const })),
+      ];
     },
     async createAffiliateLink(input) {
       writes.push({ type: "affiliate_link", offerId: input.offerId });
@@ -119,6 +123,17 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     expect(first.reasons.published_protected).toBe(1);
     expect(second.reused).toBe(29);
     expect(repo.writes.length).toBe(writesAfterFirst);
+  });
+
+  it("ignores posted WhatsApp posts and never reuses or creates a draft for them", async () => {
+    const offers = Array.from({ length: 30 }, (_, index) => offer(`offer-${index}`, "2026-08-07T10:00:00.000Z"));
+    const repo = repository({ recent: offers, fallback: [], posted: new Set(["offer-0"]) });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(result.reasons.posted_protected).toBe(1);
+    expect(repo.writes.some((write) => write.type === "draft" && write.offerId === "offer-0")).toBe(false);
+    expect(repo.writes.filter((write) => write.type === "draft").every((write) => write.offerId !== "offer-0")).toBe(true);
   });
 
   it("skips an item when affiliate link creation fails and does not create a raw-link draft", async () => {
