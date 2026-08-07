@@ -90,6 +90,7 @@ Nenhum botão de envio foi acionado.
 
 - `2771ceb feat: prepare top30 whatsapp legacy drafts` — enviado para `origin/main`.
 - `51ec7dd fix: reuse whatsapp affiliate links on upsert` — enviado para `origin/main`.
+- `6c8a329 fix: handle unavailable whatsapp action client` — enviado para `origin/main`.
 - Este relatório será enviado em commit documental separado.
 
 ## 12. Deploy Vercel READY
