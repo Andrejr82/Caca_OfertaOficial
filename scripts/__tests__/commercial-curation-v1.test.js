@@ -117,6 +117,32 @@ describe('Commercial Curation V1', () => {
     expect(classifyCommercialIntent({ title: 'Kit óculos festa fantasia', category: 'Festa' })).toBe('look_sem_erro');
   });
 
+  it('classifies home fitness products as movimento_em_casa and uses exercise copy', () => {
+    const product = base({
+      title: 'Kit Elásticos Extensores 11 Peças para Treino Funcional em Casa Academia Musculação Fitness Resistência Exercícios Braços Pernas Glúteos Alongamento',
+      category: 'Esportes e Fitness',
+    });
+
+    expect(classifyCommercialIntent(product)).toBe('movimento_em_casa');
+    const copy = buildCommercialCopy(product);
+    expect(copy).toMatch(/Movimento em casa|Treino prático em casa|treino em casa/);
+    expect(copy).toMatch(/Ajuda no treino em casa|Acessório útil para exercícios e alongamento/);
+    expect(copy).not.toMatch(/rotina da casa|tarefa da casa/i);
+  });
+
+  it.each([
+    'Acessório para treino funcional em casa',
+    'Kit para academia e musculação',
+    'Elástico extensor para exercícios e alongamento',
+  ])('does not classify fitness product "%s" as a home intent', (title) => {
+    const product = base({ title, category: 'Esportes' });
+    const copy = buildCommercialCopy(product);
+    expect(classifyCommercialIntent(product)).toBe('movimento_em_casa');
+    expect(classifyCommercialIntent(product)).not.toMatch(/utilidade_casa|casa_organizada|casa_escritorio|eletro_validado/);
+    expect(copy).not.toMatch(/rotina da casa|tarefa da casa/i);
+    expect(copy).toMatch(/Movimento em casa|Treino prático em casa|treino em casa/);
+  });
+
   it('separates manual-first products from automatic candidates', () => {
     const products = rankCommercialOffers([
       base({ title: 'Caixa de som portátil', price: 49 }),

@@ -9,7 +9,7 @@ const COMMERCIAL_INTENTS = Object.freeze([
   'autocuidado_que_resolve', 'pet_recorrente_e_util', 'carro_pratico',
   'faca_voce_mesmo_leve', 'lazer_gamer_acessorio', 'audio_e_gadget_visual',
   'eletro_validado_para_casa', 'casa_escritorio_comparado', 'oferta_real_do_dia',
-  'cupons_verificados_manual'
+  'cupons_verificados_manual', 'movimento_em_casa'
 ]);
 
 const INTENT_CONFIG = Object.freeze(Object.fromEntries(Object.entries({
@@ -28,6 +28,7 @@ const INTENT_CONFIG = Object.freeze(Object.fromEntries(Object.entries({
   casa_escritorio_comparado: { range: [30, 500], positive: /m[oó]vel|cadeira|mesa|estante|escrit[oó]rio|lumin[aá]ria|c[aâ]mera ip|sensor de movimento|alarme|vigil[aâ]ncia|seguran[cç]a/i, risk: /sof[aá]|guarda roupa|arm[aá]rio grande|rack grande|c[aâ]mera ip|sensor de movimento|alarme|vigil[aâ]ncia|seguran[cç]a/i, preferred: 'mercadolivre', mode: 'manual-first', required: ['price', 'affiliateUrl', 'imageUrl'], hook: 'Boa opção para casa ou escritório' },
   oferta_real_do_dia: { range: [15, 500], positive: /oferta|promo[cç][aã]o|desconto/i, risk: /milagre|imperd[ií]vel|urgente/i, preferred: 'shopee', mode: 'automatic', required: ['price', 'affiliateUrl'], hook: 'Oferta forte para olhar agora' },
   cupons_verificados_manual: { range: [15, 500], positive: /cupom/i, risk: /sem condi[cç][aã]o|expirado/i, preferred: 'mercadolivre', mode: 'manual-first', required: ['price', 'affiliateUrl'], hook: 'Cupom verificado para aproveitar' },
+  movimento_em_casa: { range: [15, 500], positive: /treino|fitness|muscula[cç][aã]o|academia|funcional|exerc[ií]cio|alongamento|resist[eê]ncia|el[aá]stico|extensor|yoga|pilates|gl[uú]teos|bra[cç]os|pernas|abd[oô]men|bike|corrida|esporte|esportivo/i, risk: /suplement|medicamento|emagrec|cura|trata|doen[cç]a/i, preferred: 'shopee', mode: 'manual-first', required: ['price', 'affiliateUrl'], hook: 'Movimento em casa' },
 }).map(([intent, config]) => [intent, {
   ...config,
   copyAllowed: ['intent_hook', 'price', 'category_when_present', 'marketplace_proof_when_present'],
@@ -39,15 +40,17 @@ function percent(value) { const parsed = number(value); return parsed != null &&
 function text(product) { return `${product?.title || ''} ${product?.category || ''} ${product?.categoryName || ''}`.toLocaleLowerCase('pt-BR'); }
 function clean(value) { return String(value || '').replace(/[|\n\r]+/g, ' ').trim(); }
 function money(value) { return `R$ ${number(value)?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '—'}`; }
+const MOVEMENT_IN_HOME_TERMS = /treino|fitness|muscula[cç][aã]o|academia|funcional|exerc[ií]cio|alongamento|resist[eê]ncia|el[aá]stico|extensor|yoga|pilates|gl[uú]teos|bra[cç]os|pernas|abd[oô]men|bike|corrida|esporte|esportivo/i;
 function classifyCommercialIntent(product = {}) {
   const value = text(product);
+  if (MOVEMENT_IN_HOME_TERMS.test(value)) return 'movimento_em_casa';
   if (/c[aâ]mera ip|c[aâ]mera de seguran[cç]a|sensor de movimento|alarme|vigil[aâ]ncia|seguran[cç]a/i.test(value)) return 'casa_escritorio_comparado';
   if (/varal|mop|lixeira|sapateira|organizador|organiza[cç][aã]o|cesto|prateleira/i.test(value)) return 'casa_organizada_antes_depois';
   if (/[oó]culos.*(festa|brinde|evento)|(?:festa|brinde|evento).*[oó]culos/i.test(value)) return 'look_sem_erro';
   if (/papel adesivo|adesivo de parede|decora[cç][aã]o|sala|quarto|lavanderia/i.test(value)) return 'casa_organizada_antes_depois';
   if (/bermuda|gestante|modeladora|shorts|cal[cç]a|legging|bota|t[eê]nis|sapato|vestido|moda|roupa/i.test(value)) return 'look_sem_erro';
   if (/sensor pneu|v[aá]lvula|motocicleta|carro|automotivo|ve[ií]culo/i.test(value)) return 'carro_pratico';
-  const classificationOrder = ['audio_e_gadget_visual', 'lazer_gamer_acessorio', 'upgrade_trabalho_estudo', 'tech_de_bolso', 'eletro_validado_para_casa', 'carro_pratico', 'pet_recorrente_e_util', 'autocuidado_que_resolve', 'faca_voce_mesmo_leve', 'casa_escritorio_comparado', 'casa_organizada_antes_depois', 'utilidade_casa_essencial', 'oferta_real_do_dia', 'cupons_verificados_manual'];
+  const classificationOrder = ['movimento_em_casa', 'audio_e_gadget_visual', 'lazer_gamer_acessorio', 'upgrade_trabalho_estudo', 'tech_de_bolso', 'eletro_validado_para_casa', 'carro_pratico', 'pet_recorrente_e_util', 'autocuidado_que_resolve', 'faca_voce_mesmo_leve', 'casa_escritorio_comparado', 'casa_organizada_antes_depois', 'utilidade_casa_essencial', 'oferta_real_do_dia', 'cupons_verificados_manual'];
   const match = classificationOrder.find((intent) => INTENT_CONFIG[intent].positive.test(value));
   return match || 'oferta_real_do_dia';
 }
@@ -124,7 +127,7 @@ function rankCommercialOffers(products = [], options = {}) {
 function getHook(product, intent) { return INTENT_CONFIG[intent]?.hook || 'Produto prático para o dia a dia'; }
 function buildCommercialCopy(product = {}, options = {}) {
   const intent = product.commercialIntent || classifyCommercialIntent(product); const marketplace = product.marketplace;
-  const reasonByIntent = { utilidade_casa_essencial: 'Ajuda a resolver uma tarefa da casa', casa_organizada_antes_depois: 'Ajuda a aproveitar melhor o espaço', tech_de_bolso: 'Acessório simples para o uso diário', upgrade_trabalho_estudo: 'Pode melhorar a rotina de trabalho ou estudo', autocuidado_que_resolve: 'Prático para a rotina de autocuidado', pet_recorrente_e_util: 'Útil para uma necessidade recorrente do pet', carro_pratico: 'Ajuda em uma tarefa prática do carro', faca_voce_mesmo_leve: 'Útil para pequenos reparos em casa', lazer_gamer_acessorio: 'Acessório para complementar o lazer', audio_e_gadget_visual: 'Gadget visual para usar no dia a dia', eletro_validado_para_casa: 'Pode facilitar uma tarefa da casa', casa_escritorio_comparado: 'Opção para comparar conforme sua necessidade', look_sem_erro: 'Peça para compor o look do dia a dia', oferta_real_do_dia: 'Preço e condições para conferir', cupons_verificados_manual: 'Condição para conferência manual' };
+  const reasonByIntent = { utilidade_casa_essencial: 'Ajuda a resolver uma tarefa da casa', casa_organizada_antes_depois: 'Ajuda a aproveitar melhor o espaço', tech_de_bolso: 'Acessório simples para o uso diário', upgrade_trabalho_estudo: 'Pode melhorar a rotina de trabalho ou estudo', autocuidado_que_resolve: 'Prático para a rotina de autocuidado', pet_recorrente_e_util: 'Útil para uma necessidade recorrente do pet', carro_pratico: 'Ajuda em uma tarefa prática do carro', faca_voce_mesmo_leve: 'Útil para pequenos reparos em casa', lazer_gamer_acessorio: 'Acessório para complementar o lazer', audio_e_gadget_visual: 'Gadget visual para usar no dia a dia', eletro_validado_para_casa: 'Pode facilitar uma tarefa da casa', casa_escritorio_comparado: 'Opção para comparar conforme sua necessidade', look_sem_erro: 'Peça para compor o look do dia a dia', oferta_real_do_dia: 'Preço e condições para conferir', cupons_verificados_manual: 'Condição para conferência manual', movimento_em_casa: 'Ajuda no treino em casa' };
   const bullets = [`✅ ${reasonByIntent[intent] || 'Produto prático para o dia a dia'}`];
   if (marketplace === 'Shopee' && number(product.rating) >= 0.1) bullets.push(`✅ Avaliação ${number(product.rating).toFixed(1)}`);
   if (marketplace === 'Shopee' && number(product.sales) >= 1) bullets.push(`✅ ${Math.round(number(product.sales)).toLocaleString('pt-BR')} vendas informadas`);
