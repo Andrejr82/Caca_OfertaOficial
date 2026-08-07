@@ -157,12 +157,10 @@ export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository 
   }
 
   async createAffiliateLink(input: { userId: string; offerId: string; originalUrl: string; trackedUrl: string; subId: string }) {
-    const { data, error } = await this.client.from("affiliate_links").upsert({ user_id: input.userId, offer_id: input.offerId, channel: WHATSAPP_CHANNEL, original_url: input.originalUrl, tracked_url: input.trackedUrl, sub_id: input.subId }, { onConflict: "offer_id,channel", ignoreDuplicates: true }).select("id,tracked_url").maybeSingle();
+    const { data, error } = await this.client.from("affiliate_links").upsert({ user_id: input.userId, offer_id: input.offerId, channel: WHATSAPP_CHANNEL, original_url: input.originalUrl, tracked_url: input.trackedUrl, sub_id: input.subId }, { onConflict: "offer_id,channel" }).select("id,tracked_url").single();
     if (error) throw new Error(error.message);
-    if (data) return data;
-    const existing = (await this.listAffiliateLinks()).find((link) => link.offer_id === input.offerId);
-    if (!existing) throw new Error("affiliate link unavailable after upsert");
-    return { id: existing.id, tracked_url: existing.tracked_url };
+    if (!data) throw new Error("affiliate link unavailable after upsert");
+    return data;
   }
 
   async insertDraft(input: { userId: string; offerId: string; affiliateLinkId: string; content: string }) {
