@@ -1,9 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getBrazilVideoOfferCutoff } from "@/lib/videos/offer-window";
 import { VideosClient } from "./VideosClient";
-import { buildCommercialQueue } from "@/lib/offers/commercial-curation-queue";
-import { routeCommercialCandidates } from "@/lib/offers/commercial-channel-router";
-import { CommercialChannelQueue } from "@/components/offers/commercial-channel-queue";
 
 export default async function VideosPage() {
   const supabase = await createServerSupabaseClient();
@@ -29,6 +26,5 @@ export default async function VideosPage() {
     jobs = jobData ?? [];
   }
 
-  const routedCandidates = routeCommercialCandidates(buildCommercialQueue(offers as any[]));
-  return <div className="grid gap-6"><CommercialChannelQueue candidates={routedCandidates} targetQueue="reels_manual" title="Fila Comercial · Vídeos/Reels manual" /><VideosClient offers={offers as any[]} initialJobs={jobs as any[]} cutoff={cutoff.toISOString()} /></div>;
+  return <VideosClient offers={offers as any[]} initialJobs={jobs as any[]} cutoff={cutoff.toISOString()} />;
 }

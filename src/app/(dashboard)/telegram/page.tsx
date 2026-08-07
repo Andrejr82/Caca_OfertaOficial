@@ -4,10 +4,6 @@ import { officialBrand, hasTelegramEnv } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { Bot, AlertTriangle } from "lucide-react";
-import { listOffersWithDraftStatus } from "@/lib/offers/queries";
-import { buildCommercialQueue } from "@/lib/offers/commercial-curation-queue";
-import { routeCommercialCandidates } from "@/lib/offers/commercial-channel-router";
-import { CommercialChannelQueue } from "@/components/offers/commercial-channel-queue";
 
 export const dynamic = "force-dynamic";
 
@@ -54,8 +50,6 @@ export default async function TelegramDashboardPage() {
   }
 
   const historyData = await getPostHistory("telegram");
-  const routedCandidates = routeCommercialCandidates(buildCommercialQueue(await listOffersWithDraftStatus()));
-
   return (
     <div className="grid gap-6 animate-fadeIn">
       {/* Header */}
@@ -68,8 +62,6 @@ export default async function TelegramDashboardPage() {
           <p className="text-xs text-white/35">{officialBrand.telegramName} - Aprovação de mensagens e histórico de envios.</p>
         </div>
       </header>
-
-      <CommercialChannelQueue candidates={routedCandidates} targetQueue="telegram" title="Fila Comercial · Telegram" />
 
       {!configured && (
         <div className="rounded-md bg-yellow-500/10 border border-yellow-500/20 p-4 flex items-center gap-3 text-yellow-500">
