@@ -8,7 +8,7 @@ import { prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository, type
 export type Top30WhatsappActionResult = Top30WhatsappResult & { ok: boolean; message?: string };
 
 function failed(message: string): Top30WhatsappActionResult {
-  return { ok: false, windowUsed: "48h", created: 0, reused: 0, skipped: 0, reasons: { preparation_failed: 1 }, message };
+  return { ok: false, windowUsed: "today_brt", created: 0, reusedTodayDrafts: 0, reused: 0, skippedAlreadyPosted: 0, skippedAlreadyApproved: 0, skippedAlreadySeenToday: 0, skippedOldDraft: 0, skippedNotFresh: 0, skippedAffiliateFailed: 0, skipped: 0, reasons: { preparation_failed: 1 }, message };
 }
 
 export async function prepareTop30WhatsappLegacyDraftsAction(): Promise<Top30WhatsappActionResult> {

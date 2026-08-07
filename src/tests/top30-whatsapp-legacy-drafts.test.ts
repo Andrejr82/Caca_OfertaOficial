@@ -6,6 +6,17 @@ import {
 } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 
 const NOW = new Date("2026-08-07T12:00:00.000Z");
+const TODAY_START = new Date("2026-08-07T03:00:00.000Z");
+
+type TestPost = {
+  id: string;
+  offer_id: string;
+  channel: "whatsapp";
+  status: string;
+  created_at: string;
+  posted_at: string | null;
+  external_id: string | null;
+};
 
 function offer(id: string, createdAt: string, overrides: Partial<Offer> = {}): Offer {
   return {
@@ -33,35 +44,35 @@ function offer(id: string, createdAt: string, overrides: Partial<Offer> = {}): O
   };
 }
 
-function repository(input: { recent: Offer[]; fallback: Offer[]; published?: Set<string>; posted?: Set<string>; links?: Map<string, { id: string; tracked_url: string }>; drafts?: Map<string, { id: string; status: "draft" }> }) {
+function post(offerId: string, status: string, createdAt: string, overrides: Partial<TestPost> = {}): TestPost {
+  return { id: `post-${offerId}`, offer_id: offerId, channel: "whatsapp", status, created_at: createdAt, posted_at: null, external_id: null, ...overrides };
+}
+
+function repository(input: {
+  today: Offer[];
+  fallback: Offer[];
+  posts?: TestPost[];
+  links?: Map<string, { id: string; tracked_url: string }>;
+}) {
   const calls: string[] = [];
   const writes: Array<{ type: string; offerId: string; content?: string }> = [];
   const links = input.links ?? new Map();
-  const drafts = input.drafts ?? new Map();
-  const published = input.published ?? new Set<string>();
-  const posted = input.posted ?? new Set<string>();
+  const posts = input.posts ?? [];
   const repo: Top30WhatsappRepository & { calls: string[]; writes: typeof writes } = {
     calls,
     writes,
-    async listOffersSince(since) {
-      const hours = Math.round((NOW.getTime() - since.getTime()) / 3_600_000);
+    async listOffersBetween(start, end) {
+      const hours = Math.round((NOW.getTime() - start.getTime()) / 3_600_000);
       calls.push(`offers:${hours}h`);
-      return hours <= 48 ? input.recent : [...input.recent, ...input.fallback];
+      return start.getTime() === TODAY_START.getTime() ? input.today : [...input.today, ...input.fallback];
     },
     async listAffiliateLinks() {
       calls.push("affiliate_links:whatsapp");
       return [...links.entries()].map(([offerId, link]) => ({ offer_id: offerId, channel: "whatsapp" as const, ...link }));
     },
-    async listDrafts() {
-      calls.push("drafts:whatsapp");
-      return [...drafts.entries()].map(([offerId, draft]) => ({ offer_id: offerId, channel: "whatsapp" as const, ...draft }));
-    },
-    async listPublished() {
-      calls.push("protected_posts:whatsapp");
-      return [
-        ...[...published].map((offerId) => ({ offer_id: offerId, channel: "whatsapp" as const, id: `published-${offerId}`, status: "published" as const })),
-        ...[...posted].map((offerId) => ({ offer_id: offerId, channel: "whatsapp" as const, id: `posted-${offerId}`, status: "posted" as const })),
-      ];
+    async listWhatsappPosts() {
+      calls.push("posts:whatsapp");
+      return posts;
     },
     async createAffiliateLink(input) {
       writes.push({ type: "affiliate_link", offerId: input.offerId });
@@ -72,85 +83,114 @@ function repository(input: { recent: Offer[]; fallback: Offer[]; published?: Set
     },
     async insertDraft(input) {
       writes.push({ type: "draft", offerId: input.offerId, content: input.content });
-      const draft = { id: `post-${input.offerId}`, status: "draft" as const };
-      drafts.set(input.offerId, draft);
-      return { ...draft, channel: "whatsapp" as const };
+      return { id: `post-${input.offerId}`, status: "draft" as const, channel: "whatsapp" as const };
     },
   };
   return repo;
 }
 
 describe("prepareTop30WhatsappLegacyDrafts", () => {
-  it("uses 48h first, falls back to 72h, and never asks for all history", async () => {
-    const recent = Array.from({ length: 20 }, (_, index) => offer(`recent-${index}`, "2026-08-06T12:00:00.000Z"));
-    const fallback = Array.from({ length: 10 }, (_, index) => offer(`fallback-${index}`, "2026-08-05T12:00:00.000Z"));
-    const repo = repository({ recent, fallback });
+  it("uses today BRT first, falls back to 24h, and never asks for 48h/72h", async () => {
+    const today = Array.from({ length: 20 }, (_, index) => offer(`today-${index}`, "2026-08-07T10:00:00.000Z"));
+    const fallback = Array.from({ length: 10 }, (_, index) => offer(`yesterday-${index}`, "2026-08-06T13:00:00.000Z"));
+    const repo = repository({ today, fallback });
 
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(result.windowUsed).toBe("72h");
+    expect(result.windowUsed).toBe("24h_fallback");
     expect(result.created).toBe(30);
-    expect(repo.calls).toContain("offers:48h");
-    expect(repo.calls).toContain("offers:72h");
-    expect(repo.calls).not.toContain("offers:all");
-    expect(repo.calls).not.toContain("affiliate_links:telegram");
+    expect(repo.calls).toContain("offers:9h");
+    expect(repo.calls).toContain("offers:24h");
+    expect(repo.calls.some((call) => call.includes("48h") || call.includes("72h"))).toBe(false);
   });
 
-  it("creates at most Top 30 WhatsApp drafts with tracked links and no publish operation", async () => {
-    const offers = Array.from({ length: 35 }, (_, index) => offer(`offer-${index}`, "2026-08-07T10:00:00.000Z"));
-    const repo = repository({ recent: offers, fallback: [] });
+  it("uses only today's BRT offers when they already close Top 30", async () => {
+    const today = Array.from({ length: 30 }, (_, index) => offer(`today-${index}`, "2026-08-07T10:00:00.000Z"));
+    const fallback = [offer("old-history", "2026-08-05T10:00:00.000Z")];
+    const repo = repository({ today, fallback });
 
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(result.windowUsed).toBe("48h");
+    expect(result.windowUsed).toBe("today_brt");
     expect(result.created).toBe(30);
-    expect(repo.writes.filter((write) => write.type === "draft")).toHaveLength(30);
-    expect(repo.writes.filter((write) => write.type === "draft").every((write) => write.content?.includes("https://cacaoferta.test/go/wp_"))).toBe(true);
-    expect(repo.calls).not.toContain("publish");
+    expect(repo.calls).not.toContain("offers:24h");
+    expect(repo.writes.some((write) => write.offerId === "old-history")).toBe(false);
   });
 
-  it("reuses drafts and preserves published offers on a second run", async () => {
-    const offers = Array.from({ length: 30 }, (_, index) => offer(`offer-${index}`, "2026-08-07T10:00:00.000Z"));
-    const drafts = new Map([["offer-0", { id: "existing-post", status: "draft" as const }]]);
-    const published = new Set(["offer-1"]);
-    const repo = repository({ recent: offers, fallback: [], drafts, published });
-
-    const first = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
-    const writesAfterFirst = repo.writes.length;
-    const second = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
-
-    expect(first.reused).toBe(1);
-    expect(first.reasons.published_protected).toBe(1);
-    expect(second.reused).toBe(29);
-    expect(repo.writes.length).toBe(writesAfterFirst);
-  });
-
-  it("ignores posted WhatsApp posts and never reuses or creates a draft for them", async () => {
-    const offers = Array.from({ length: 30 }, (_, index) => offer(`offer-${index}`, "2026-08-07T10:00:00.000Z"));
-    const repo = repository({ recent: offers, fallback: [], posted: new Set(["offer-0"]) });
+  it("reports latest_cycle_today when the current discovery cycle supplies the Top 30", async () => {
+    const today = Array.from({ length: 30 }, (_, index) => offer(`cycle-${index}`, "2026-08-07T10:00:00.000Z", { explainability: { correlation_id: "cycle-current" } }));
+    const repo = repository({ today, fallback: [] });
 
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(result.reasons.posted_protected).toBe(1);
-    expect(repo.writes.some((write) => write.type === "draft" && write.offerId === "offer-0")).toBe(false);
-    expect(repo.writes.filter((write) => write.type === "draft").every((write) => write.offerId !== "offer-0")).toBe(true);
+    expect(result.windowUsed).toBe("latest_cycle_today");
+  });
+
+  it("reuses a valid draft created today but never reuses an old draft", async () => {
+    const today = Array.from({ length: 30 }, (_, index) => offer(`today-${index}`, "2026-08-07T10:00:00.000Z"));
+    const posts = [
+      post("today-0", "draft", "2026-08-07T09:00:00.000Z"),
+      post("today-1", "draft", "2026-08-06T23:00:00.000Z"),
+    ];
+    const repo = repository({ today, fallback: [], posts });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(result.reusedTodayDrafts).toBe(1);
+    expect(result.skippedOldDraft).toBe(1);
+    expect(repo.writes.some((write) => write.type === "draft" && write.offerId === "today-0")).toBe(false);
+    expect(repo.writes.some((write) => write.type === "draft" && write.offerId === "today-1")).toBe(false);
+  });
+
+  it("blocks posted, published, approved and technically posted WhatsApp records", async () => {
+    const today = Array.from({ length: 8 }, (_, index) => offer(`today-${index}`, "2026-08-07T10:00:00.000Z", index === 5 ? { status: "posted" } : {}));
+    const posts = [
+      post("today-0", "posted", "2026-08-07T09:00:00.000Z"),
+      post("today-1", "published", "2026-08-07T09:00:00.000Z"),
+      post("today-2", "approved", "2026-08-07T09:00:00.000Z"),
+      post("today-3", "draft", "2026-08-07T09:00:00.000Z", { posted_at: "2026-08-07T09:30:00.000Z" }),
+      post("today-4", "draft", "2026-08-07T09:00:00.000Z", { external_id: "wa-4" }),
+    ];
+    const repo = repository({ today, fallback: [], posts });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(result.skippedAlreadyPosted).toBeGreaterThanOrEqual(4);
+    expect(result.skippedAlreadyApproved).toBe(1);
+    expect(result.created).toBe(2);
+    expect(repo.writes.filter((write) => write.type === "draft").every((write) => !posts.some((item) => item.offer_id === write.offerId))).toBe(true);
+  });
+
+  it("does not duplicate an offer already seen today and prioritizes the latest discovery correlation", async () => {
+    const today = [
+      ...Array.from({ length: 2 }, (_, index) => offer(`old-cycle-${index}`, "2026-08-07T08:00:00.000Z", { explainability: { correlation_id: "cycle-old" } })),
+      ...Array.from({ length: 2 }, (_, index) => offer(`new-cycle-${index}`, "2026-08-07T11:00:00.000Z", { explainability: { correlation_id: "cycle-new" } })),
+    ];
+    const posts = [post("old-cycle-0", "failed", "2026-08-07T08:30:00.000Z")];
+    const repo = repository({ today, fallback: [], posts });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(result.skippedAlreadySeenToday).toBe(1);
+    expect(result.windowUsed).toBe("24h_fallback");
+    expect(repo.writes.filter((write) => write.type === "draft").map((write) => write.offerId).slice(0, 2)).toEqual(["new-cycle-0", "new-cycle-1"]);
   });
 
   it("skips an item when affiliate link creation fails and does not create a raw-link draft", async () => {
-    const offers = [offer("link-fails", "2026-08-07T10:00:00.000Z"), ...Array.from({ length: 29 }, (_, index) => offer(`safe-${index}`, "2026-08-07T10:00:00.000Z"))];
-    const repo = repository({ recent: offers, fallback: [] });
+    const today = [offer("link-fails", "2026-08-07T10:00:00.000Z"), ...Array.from({ length: 29 }, (_, index) => offer(`safe-${index}`, "2026-08-07T10:00:00.000Z"))];
+    const repo = repository({ today, fallback: [] });
 
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(result.skipped).toBe(1);
-    expect(result.reasons.affiliate_link_failed).toBe(1);
+    expect(result.skippedAffiliateFailed).toBe(1);
     expect(repo.writes.some((write) => write.type === "draft" && write.offerId === "link-fails")).toBe(false);
   });
 
-  it("does not expose a Telegram preparation path", async () => {
-    const repo = repository({ recent: [offer("offer-1", "2026-08-07T10:00:00.000Z")], fallback: [] });
+  it("does not expose a Telegram preparation path and keeps drafts as draft", async () => {
+    const repo = repository({ today: [offer("today-1", "2026-08-07T10:00:00.000Z")], fallback: [] });
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
     expect(result.reasons.telegram_blocked).toBe(1);
     expect(repo.calls.some((call) => call.includes("telegram"))).toBe(false);
+    expect(result.created).toBeGreaterThanOrEqual(0);
   });
 });

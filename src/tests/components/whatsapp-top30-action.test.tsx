@@ -18,9 +18,16 @@ describe("WhatsappTop30Action", () => {
   it("prepara apenas drafts WhatsApp, mostra o resumo e atualiza a lista antiga", async () => {
     vi.mocked(prepareTop30WhatsappLegacyDraftsAction).mockResolvedValue({
       ok: true,
-      windowUsed: "48h",
+      windowUsed: "today_brt",
       created: 30,
+      reusedTodayDrafts: 0,
       reused: 0,
+      skippedAlreadyPosted: 0,
+      skippedAlreadyApproved: 0,
+      skippedAlreadySeenToday: 0,
+      skippedOldDraft: 0,
+      skippedNotFresh: 0,
+      skippedAffiliateFailed: 0,
       skipped: 0,
       reasons: { telegram_blocked: 1 },
     });
@@ -29,7 +36,7 @@ describe("WhatsappTop30Action", () => {
     fireEvent.click(screen.getByRole("button", { name: "Atualizar melhores ofertas" }));
 
     await waitFor(() => expect(screen.getByText(/30 criados/)).toBeTruthy());
-    expect(screen.getByText(/48h/)).toBeTruthy();
+    expect(screen.getByText(/today_brt/)).toBeTruthy();
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Telegram|Vídeos|Reels/i)).toBeNull();
   });

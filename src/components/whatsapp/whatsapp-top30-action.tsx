@@ -24,7 +24,7 @@ export function WhatsappTop30Action() {
       </button>
       {result && (
         <span role="status" className={result.ok ? "text-xs text-emerald-200" : "text-xs text-red-200"}>
-          {result.ok ? `${result.created} criados · ${result.reused} reutilizados · ${result.skipped} pulados · ${result.windowUsed}` : result.message}
+          {result.ok ? `${result.created} criados · ${result.reusedTodayDrafts} drafts de hoje reutilizados · ${result.skipped} pulados · ${result.windowUsed}` : result.message}
         </span>
       )}
     </div>
