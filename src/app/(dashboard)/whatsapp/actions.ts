@@ -13,6 +13,7 @@ function failed(message: string): Top30WhatsappActionResult {
 
 export async function prepareTop30WhatsappLegacyDraftsAction(): Promise<Top30WhatsappActionResult> {
   const authClient = await createServerSupabaseClient();
+  if (!authClient) return failed("Supabase indisponível para preparar os drafts.");
   const { data: auth } = await authClient.auth.getUser();
   const userId = auth.user?.id;
   if (!userId) return failed("Faça login para atualizar as melhores ofertas.");
