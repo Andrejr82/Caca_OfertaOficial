@@ -2,7 +2,8 @@
 
 import { useMemo, useState, useTransition } from "react";
 import type { CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
-import { createCommercialCurationDraft, type CommercialDraftChannel } from "@/lib/offers/create-commercial-curation-draft";
+import { createCommercialCurationDraft } from "@/lib/offers/create-commercial-curation-draft";
+import type { CommercialDraftChannel } from "@/lib/offers/commercial-draft-validation";
 
 export function CommercialCurationPanel({ candidates }: { candidates: CommercialQueueCandidate[] }) {
   const [marketplace, setMarketplace] = useState("");

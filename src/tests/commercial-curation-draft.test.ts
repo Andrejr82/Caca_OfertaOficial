@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COMMERCIAL_DRAFT_CHANNELS, validateCommercialDraftRequest } from "@/lib/offers/create-commercial-curation-draft";
+import { COMMERCIAL_DRAFT_CHANNELS, validateCommercialDraftRequest } from "@/lib/offers/commercial-draft-validation";
 
 describe("commercial draft action", () => {
   it("requires an explicit channel", () => {
