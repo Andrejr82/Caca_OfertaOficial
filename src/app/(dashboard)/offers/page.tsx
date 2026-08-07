@@ -3,11 +3,14 @@ import { OfferForm } from "@/components/offers/offer-form";
 import { listOffersWithDraftStatus } from "@/lib/offers/queries";
 import { ShoppingBag } from "lucide-react";
 import { OffersClient } from "./OffersClient";
+import { buildCommercialQueue } from "@/lib/offers/commercial-curation-queue";
+import { CommercialCurationPanel } from "@/components/offers/commercial-curation-panel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export default async function OffersPage() {
   const offers = await listOffersWithDraftStatus();
+  const commercialCandidates = buildCommercialQueue(offers);
 
   return (
     <div className="grid gap-6 animate-fadeIn">
@@ -29,6 +32,8 @@ export default async function OffersPage() {
 
       {/* Form */}
       <OfferForm />
+
+      <CommercialCurationPanel candidates={commercialCandidates} />
 
       {/* Offers List */}
       <OffersClient initialOffers={offers} />
