@@ -50,8 +50,8 @@ Nenhum arquivo de layout, painel, Telegram, Vídeos/Reels, afiliação, persist�
 
 ## 6. Commit/push
 
-Será preenchido após o commit e push deste ajuste.
+Implementação commitada em `9a0c6f4` (`fix: classify fitness products for commercial copy`) e enviada para `origin/main`.
 
 ## 7. Deploy Vercel
 
-Será confirmado após o push. Nenhuma ação de publicação foi executada pelo código ou pelos testes.
+Não foi possível confirmar o deployment automaticamente: a Vercel CLI está instalada, mas não há credenciais disponíveis (`No existing credentials found`). Recomenda-se verificar o deployment da `main` no projeto Vercel ou executar redeploy manual. Nenhuma ação de publicação foi executada pelo código ou pelos testes.
