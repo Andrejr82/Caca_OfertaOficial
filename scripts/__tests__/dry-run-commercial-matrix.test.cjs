@@ -26,7 +26,7 @@ test('classifies a practical home product and scores Shopee evidence without inv
   const result = scoreCommercialOffer(product, 'Shopee', 'casa_organizada_antes_depois');
   assert.ok(result.score >= 60);
   assert.ok(result.reasons.some((reason) => /avaliação|vendas/i.test(reason)));
-  assert.match(generateSafeCopy(product, 'Shopee', result).telegram, /Preço pode mudar a qualquer momento/);
+  assert.match(generateSafeCopy(product, 'Shopee', result).telegram, /Preço e estoque podem mudar a qualquer momento/);
 });
 
 test('keeps Mercado Livre copy conservative when runtime has no proof of freight, ratings, or sales', () => {

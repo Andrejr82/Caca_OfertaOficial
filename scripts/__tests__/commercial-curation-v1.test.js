@@ -61,8 +61,29 @@ describe('Commercial Curation V1', () => {
     expect(shopeeCopy).toMatch(/Avaliação 4\.8/);
     expect(shopeeCopy).toMatch(/1\.200 vendas informadas/);
     const mlCopy = buildCommercialCopy(base({ marketplace: 'Mercado Livre', title: 'Varal dobrável', category: 'Varais', rating: null, sales: null, marketplaceMetrics: {}, shippingFree: true }));
-    expect(mlCopy).toMatch(/Frete informado como grátis/);
+    expect(mlCopy).toMatch(/Frete grátis informado/);
+    expect(mlCopy).toMatch(/20% OFF informado/);
     expect(mlCopy).not.toMatch(/Avaliação|vendas informadas/);
+  });
+
+  it('uses the concise dynamic discount wording and omits untrusted discounts', () => {
+    expect(buildCommercialCopy(base({ discountPercent: 64 }))).toMatch(/✅ 64% OFF informado/);
+    expect(buildCommercialCopy(base({ discountPercent: 10 }))).toMatch(/✅ 10% OFF informado/);
+    expect(buildCommercialCopy(base({ discountPercent: null, discount: null, marketplaceMetrics: {} }))).not.toMatch(/OFF informado/);
+  });
+
+  it('shows freight only when the runtime explicitly confirms free shipping', () => {
+    const mercadoLivre = { marketplace: 'Mercado Livre', title: 'Varal dobrável', category: 'Varais', rating: null, sales: null, marketplaceMetrics: {} };
+    expect(buildCommercialCopy({ ...base(), ...mercadoLivre, shippingFree: true })).toMatch(/✅ Frete grátis informado/);
+    expect(buildCommercialCopy({ ...base(), ...mercadoLivre, shippingFree: false })).not.toMatch(/Frete grátis informado/);
+    expect(buildCommercialCopy({ ...base(), ...mercadoLivre, shippingFree: undefined })).not.toMatch(/Frete grátis informado/);
+  });
+
+  it('uses the final price and stock warning while preserving the offer structure', () => {
+    const copy = buildCommercialCopy(base({ title: 'Produto com título completo' }));
+    expect(copy).toMatch(/^🔥 .+\n\nProduto com título completo\n💰 R\$ /);
+    expect(copy).toContain('🔗 Ver oferta');
+    expect(copy).toContain('⚠️ Preço e estoque podem mudar a qualquer momento');
   });
 
   it('exposes gates, metadata, risks, and channel without publishing', () => {

@@ -128,10 +128,10 @@ function buildCommercialCopy(product = {}, options = {}) {
   const bullets = [`✅ ${reasonByIntent[intent] || 'Produto prático para o dia a dia'}`];
   if (marketplace === 'Shopee' && number(product.rating) >= 0.1) bullets.push(`✅ Avaliação ${number(product.rating).toFixed(1)}`);
   if (marketplace === 'Shopee' && number(product.sales) >= 1) bullets.push(`✅ ${Math.round(number(product.sales)).toLocaleString('pt-BR')} vendas informadas`);
-  if (product.discountPercent != null && number(product.discountPercent) > 0) bullets.push(`✅ Desconto informado de ${Math.round(number(product.discountPercent))}%`);
+  if (product.discountPercent != null && number(product.discountPercent) > 0) bullets.push(`✅ ${Math.round(number(product.discountPercent))}% OFF informado`);
   if (marketplace === 'Mercado Livre' && product.category) bullets.push(`✅ Categoria: ${clean(product.category)}`);
-  if (product.shippingFree === true) bullets.push('✅ Frete informado como grátis');
-  const lines = [`🔥 ${options.hook || getHook(product, intent)}`, '', clean(product.title) || 'Produto sem título', `💰 ${money(product.price)}`, '', ...bullets.slice(0, 4), '', '🔗 Ver oferta', '⚠️ Preço pode mudar a qualquer momento'];
+  if (product.shippingFree === true) bullets.push('✅ Frete grátis informado');
+  const lines = [`🔥 ${options.hook || getHook(product, intent)}`, '', clean(product.title) || 'Produto sem título', `💰 ${money(product.price)}`, '', ...bullets.slice(0, 4), '', '🔗 Ver oferta', '⚠️ Preço e estoque podem mudar a qualquer momento'];
   return lines.join('\n');
 }
 
