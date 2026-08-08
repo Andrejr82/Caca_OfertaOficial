@@ -145,11 +145,11 @@ describe("Official AI O.P.A.C.", () => {
     expect(copy).toContain("Bluetooth 5.3");
     if (channel === "whatsapp") expect(copy).toContain("✅ *Valor confirmado: R$ 79,90* (20% OFF)");
     else expect(copy).toContain("💰");
-    if (channel === "instagram") expect(copy).toContain("#oferta #shopee");
+    if (channel === "instagram") expect(copy).toContain("#Shopee");
     else expect(copy).toMatch(/👉 $/mu);
     expect(copy.match(/\p{Extended_Pictographic}/gu)?.length ?? 0).toBeLessThanOrEqual(10);
     expect(copy).not.toMatch(/Olá|\[link\]|https?:\/\//iu);
-    if (channel === "instagram") expect(copy).toMatch(/#oferta\s+#shopee/iu);
+    if (channel === "instagram") expect(copy).toMatch(/#Shopee/iu);
     else expect(copy).not.toContain("#");
   });
 

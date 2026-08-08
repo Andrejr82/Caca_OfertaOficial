@@ -1,5 +1,6 @@
 import type { OfficialAIChannel, OfficialAIDraftForRegeneration, OfficialAIOffer } from "./types";
 import { marketplaceLabel, selectOfferIcons } from "./icon-catalog";
+import { renderSocialHashtags } from "./social-hashtags";
 
 const SYSTEM_PROMPT = `Você é o copywriter de ofertas da Official AI do Caça Oferta.
 Você não conversa, não introduz a mensagem e não escreve parágrafos. Produza somente copy comercial curta no framework O.P.A.C.: Oferta, Produto, Atributo e Conversão.
@@ -164,13 +165,9 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
   const icons = selectOfferIcons(facts.category, facts.productName);
   const marketplace = marketplaceLabel(facts.marketplace);
   const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
-  const marketplaceTag = facts.marketplace.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").replace(/[^a-z0-9]/giu, "").toLocaleLowerCase("pt-BR");
   const freight = shippingLine(facts);
 
   if (channel === "facebook") {
-    const isFeminine = /shopee|amazon|shein/i.test(facts.marketplace);
-    const inMarket = isFeminine ? "na" : "no";
-    
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
@@ -180,7 +177,8 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice && facts.currentPrice > 0
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : (facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : `💰 Consulte o preço atual no link!`),
-      `👉 Link de compra no primeiro comentário! 👇`
+      `👉 Link de compra no primeiro comentário! 👇`,
+      renderSocialHashtags(facts, "facebook")
     ];
     return blocks.join("\n\n");
   }
@@ -230,7 +228,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
             : `💰 **Apenas ${formatBRL(facts.currentPrice)}**`)
         : null,
       `🔎 **Link na bio ou nos Stories para consultar a oferta.** 👇`,
-      `#oferta #${marketplaceTag}`
+      renderSocialHashtags(facts, "instagram")
     ].filter(Boolean);
     return blocks.join("\n\n");
   }
