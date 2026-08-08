@@ -52,7 +52,7 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
   if (isOne(env.DRY_RUN)) return { enabled: false, reason: 'dry_run_enabled' };
   if (isOne(env.NO_DB_WRITE)) return { enabled: false, reason: 'no_db_write_enabled' };
 
-  if (!isOne(env.NO_POSTS) || !isOne(env.NO_PUBLISH)) {
+  if (!isOne(env.NO_PUBLISH)) {
     return { enabled: false, reason: 'publish_flags_required' };
   }
 

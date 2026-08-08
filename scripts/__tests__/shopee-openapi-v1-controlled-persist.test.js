@@ -70,11 +70,13 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     expect(getControlledPersistDecision('casa_cozinha_editorial', { ...baseEnv, NO_DB_WRITE: '1' }))
       .toMatchObject({ enabled: false, reason: 'no_db_write_enabled' });
 
-    expect(getControlledPersistDecision('casa_cozinha_editorial', { ...baseEnv, NO_POSTS: '0' }))
-      .toMatchObject({ enabled: false, reason: 'publish_flags_required' });
-
     expect(getControlledPersistDecision('casa_cozinha_editorial', { ...baseEnv, NO_PUBLISH: '0' }))
       .toMatchObject({ enabled: false, reason: 'publish_flags_required' });
+  });
+
+  it('allows posts generation with NO_POSTS=0 while publication remains blocked', () => {
+    expect(getControlledPersistDecision('casa_cozinha_editorial', { ...baseEnv, NO_POSTS: '0' }))
+      .toMatchObject({ enabled: true, mode: 'controlled-persist' });
   });
 
   it('builds at most five traceable V1 ingestions', () => {
