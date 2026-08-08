@@ -1,0 +1,27 @@
+{
+  "version": "shopee-intent-labeled-sample/v1",
+  "source": "SHOPEE_DISCOVERY_ROOT_CAUSE_AUDIT_REPORT.md",
+  "cases": [
+    { "scenario": "beleza_editorial", "label": "falso_positivo_grave", "title": "Varal retrátil para lavanderia" },
+    { "scenario": "beleza_editorial", "label": "falso_positivo_grave", "title": "Suporte de shampoo para banheiro" },
+    { "scenario": "beleza_editorial", "label": "falso_positivo_grave", "title": "Centrífuga de salada inox" },
+    { "scenario": "informatica_editorial", "label": "falso_positivo_grave", "title": "Monitor de pressão arterial digital" },
+    { "scenario": "informatica_editorial", "label": "ambiguous", "title": "Smartwatch monitor de saúde e notificações" },
+    { "scenario": "moda_editorial", "label": "duplicidade_familia", "title": "Mochila Romantic Crown feminina escolar preta" },
+    { "scenario": "moda_editorial", "label": "duplicidade_familia", "title": "Mochila Romantic Crown feminina escolar rosa" },
+    { "scenario": "casa_cozinha_editorial", "label": "aprovado_correto", "title": "Liquidificador 1000W com 12 velocidades" },
+    { "scenario": "beleza_editorial", "label": "aprovado_correto", "title": "Karseell máscara de hidratação capilar" },
+    { "scenario": "informatica_editorial", "label": "aprovado_correto", "title": "Teclado e mouse sem fio para computador" },
+    { "scenario": "tv_audio_editorial", "label": "aprovado_correto", "title": "Smart TV 4K 55 polegadas" },
+    { "scenario": "tv_audio_editorial", "label": "aprovado_correto", "title": "Soundbar Bluetooth 2.1 com subwoofer" },
+    { "scenario": "tv_audio_editorial", "label": "falso_positivo_grave", "title": "Kit teclado e mouse Bluetooth compatível com TV" },
+    { "scenario": "grandes_ofertas_editorial", "label": "aprovado_correto", "title": "Smartphone 5G 256GB em oferta" },
+    { "scenario": "grandes_ofertas_editorial", "label": "falso_positivo_grave", "title": "Caneta 3D com refil escolar" },
+    { "scenario": "eletrodomesticos_editorial", "label": "falso_positivo_grave", "title": "Chave T para máquina de lavar" },
+    { "scenario": "eletrodomesticos_editorial", "label": "falso_positivo_grave", "title": "Tapete protetor para cooktop" },
+    { "scenario": "moda_editorial", "label": "falso_positivo_grave", "title": "Broche decorativo para mochila" },
+    { "scenario": "informatica_editorial", "label": "ambiguous", "title": "Mesa dobrável para notebook" },
+    { "scenario": "casa_cozinha_editorial", "label": "falso_positivo_grave", "title": "Brinquedo pet para cachorro" },
+    { "scenario": "informatica_editorial", "label": "falso_positivo_grave", "title": "Capa automotiva para banco de carro" }
+  ]
+}

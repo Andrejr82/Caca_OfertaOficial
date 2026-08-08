@@ -8,6 +8,17 @@ const { selectBestVariants } = require('./family-variant-selector.cjs');
 const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
 const { evaluateSearchQuality } = require('./marketplace-search-quality.cjs');
 const { classifyCandidate, buildClassificationCoverage } = require('./classification-coverage.cjs');
+const {
+  computeAllKeys,
+  extractBaselineTokens,
+  extractProductTypeSlug,
+} = require('./family-key-engine.cjs');
+const {
+  createDiscoveryFunnel,
+  canonicalRejectionReason,
+  readDiscoveryFunnelMeta,
+  deriveMarketplaceTerminalStatus,
+} = require('./discovery-funnel-contract.cjs');
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
@@ -82,6 +93,189 @@ function queueCategory(product) {
 
 function queueScore(product) {
   return scoreCandidate(product);
+}
+
+const SHOPEE_GROUP_KEY_VERSION = 'shopee-family-v1';
+
+function shopeeNativeCategory(product) {
+  const metrics = product?.marketplaceMetrics || {};
+  return String(product?.category?.id || metrics.productCatId || metrics.product_cat_id || 'unknown');
+}
+
+function shopeeGender(product) {
+  const title = normalizeQueueText(product?.title);
+  if (/\b(feminina|feminino|mulher|menina)\b/.test(title)) return 'feminino';
+  if (/\b(masculina|masculino|homem|menino)\b/.test(title)) return 'masculino';
+  return 'unisex';
+}
+
+function canonicalizeShopeeFamilyKey(familyKey) {
+  const parts = String(familyKey || '').split('|');
+  if (parts.length !== 5 || !parts[3]) return String(familyKey || '');
+  parts[3] = parts[3].split('-').filter(Boolean).sort().join('-');
+  return parts.join('|');
+}
+
+function buildShopeeQueueGroupKey(product) {
+  const family = computeAllKeys({
+    ...product,
+    marketplace: 'Shopee',
+  });
+  const nativeCategory = shopeeNativeCategory(product);
+  if (family.canGroup && family.family_key) {
+    return `shopee|native:${nativeCategory}|family:${canonicalizeShopeeFamilyKey(family.family_key)}`;
+  }
+
+  const type = extractProductTypeSlug(product);
+  const baseline = extractBaselineTokens(product);
+  const gender = shopeeGender(product);
+  if (type || baseline) {
+    return `shopee|native:${nativeCategory}|semantic:${type || 'unknown'}|gender:${gender}|line:${baseline || 'unknown'}`;
+  }
+
+  return queueGroupKey(product);
+}
+
+function groupKeyForProduct(product, marketplace) {
+  return String(marketplace || product?.marketplace || '').toLowerCase() === 'shopee'
+    ? buildShopeeQueueGroupKey(product)
+    : queueGroupKey(product);
+}
+
+function groupKeyVersionForMarketplace(marketplace) {
+  return String(marketplace || '').toLowerCase() === 'shopee' ? SHOPEE_GROUP_KEY_VERSION : 'legacy-v1';
+}
+
+function queueTraceItem(product, { decision, reason = null, rank = null, group = null, currentGroup = null, proposedGroup = null, groupKeyVersion = 'legacy-v1', familyKey = null } = {}) {
+  const candidate = product || {};
+  return {
+    decision,
+    reason: reason ? canonicalRejectionReason(reason) : null,
+    sourceItemId: candidate.sourceItemId ? String(candidate.sourceItemId) : null,
+    marketplace: candidate.marketplace || null,
+    category: queueCategory(candidate),
+    score: Number.isFinite(Number(candidate.curationScore))
+      ? Number(candidate.curationScore)
+      : Number(queueScore(candidate).toFixed(4)),
+    rank,
+    groupKey: group || null,
+    currentGroupKey: currentGroup || group || null,
+    proposedGroupKey: proposedGroup || group || null,
+    groupKeyVersion,
+    familyKey: familyKey || candidate._familyKey || candidate.familyKey || null,
+  };
+}
+
+function cloneQueueState(cycleState) {
+  return {
+    selectedCount: Number(cycleState?.selectedCount || 0),
+    marketplaceCounts: new Map(cycleState?.marketplaceCounts || []),
+    categoryCounts: new Map(cycleState?.categoryCounts || []),
+    groups: new Set(cycleState?.groups || []),
+  };
+}
+
+function simulateQueueByGroup(products, limits, cycleState, groupKeyResolver) {
+  const state = cloneQueueState(cycleState);
+  const selected = [];
+  const decisions = new Map();
+  for (const product of products) {
+    const marketplace = String(product.marketplace || limits.marketplace || '').toLowerCase();
+    const category = queueCategory(product);
+    const group = groupKeyResolver(product, marketplace);
+    let reason = null;
+    if (state.groups.has(group)) reason = 'grupo_ja_representado';
+    else if ((state.marketplaceCounts.get(marketplace) || 0) >= limits.maxPerMarketplace) reason = 'limite_marketplace';
+    else if ((state.categoryCounts.get(category) || 0) >= limits.maxPerCategory) reason = 'limite_categoria';
+    else if (state.selectedCount >= limits.maxTotal) reason = 'limite_total';
+
+    if (reason) {
+      decisions.set(String(product.sourceItemId), { decision: 'rejected', reason });
+      continue;
+    }
+    selected.push(product);
+    decisions.set(String(product.sourceItemId), { decision: 'selected', reason: null });
+    state.groups.add(group);
+    state.marketplaceCounts.set(marketplace, (state.marketplaceCounts.get(marketplace) || 0) + 1);
+    state.categoryCounts.set(category, (state.categoryCounts.get(category) || 0) + 1);
+    state.selectedCount += 1;
+  }
+  return { selected, decisions };
+}
+
+function buildQueueSelectionTelemetry({ products, allCandidates, ranked, selected, skipped, familyDeferred, postFamilySelected, limits, cycleState, marketplace }) {
+  const rankBySourceItemId = new Map(ranked.map((entry, index) => [String(entry.product.sourceItemId), index + 1]));
+  const candidateBySourceItemId = new Map([
+    ...Array.from(allCandidates.values()),
+    ...postFamilySelected,
+  ].map((candidate) => [String(candidate.sourceItemId), candidate]));
+  const rejectionReasons = {};
+  const items = [];
+  const groupKeyVersion = groupKeyVersionForMarketplace(marketplace);
+  const currentSimulation = simulateQueueByGroup(postFamilySelected, limits, cycleState, (product) => queueGroupKey(product));
+  const proposedSimulation = simulateQueueByGroup(postFamilySelected, limits, cycleState, (product, currentMarketplace) => groupKeyForProduct(product, currentMarketplace));
+  const currentDecisions = currentSimulation.decisions;
+  const proposedDecisions = proposedSimulation.decisions;
+  const changedRejections = [];
+  const addItem = (product, detail) => {
+    const candidate = product || {};
+    const currentGroup = queueGroupKey(candidate);
+    const proposedGroup = groupKeyForProduct(candidate, marketplace);
+    const item = queueTraceItem(candidate, {
+      ...detail,
+      rank: detail.rank ?? rankBySourceItemId.get(String(candidate.sourceItemId)) ?? null,
+      currentGroup,
+      proposedGroup,
+      groupKeyVersion,
+    });
+    if (item.reason) rejectionReasons[item.reason] = Number(rejectionReasons[item.reason] || 0) + 1;
+    items.push(item);
+  };
+
+  for (const product of selected) addItem(product, { decision: 'selected', group: groupKeyForProduct(product, marketplace) });
+  for (const skippedItem of skipped) {
+    const product = candidateBySourceItemId.get(String(skippedItem.sourceItemId)) || skippedItem;
+    addItem(product, { decision: 'rejected', reason: skippedItem.reason || 'queue_rejected', group: groupKeyForProduct(product, marketplace) });
+  }
+  for (const deferredProduct of familyDeferred) {
+    addItem(deferredProduct, {
+      decision: 'rejected',
+      reason: deferredProduct._deferralReason || deferredProduct.finalReason || 'family_active',
+      group: groupKeyForProduct(deferredProduct, marketplace),
+      familyKey: deferredProduct._familyKey,
+    });
+  }
+
+  for (const product of postFamilySelected) {
+    const sourceItemId = String(product.sourceItemId);
+    const currentDecision = currentDecisions.get(sourceItemId);
+    const proposedDecision = proposedDecisions.get(sourceItemId);
+    if (currentDecision?.decision === 'rejected' && proposedDecision?.decision === 'selected') {
+      changedRejections.push({
+        sourceItemId,
+        currentReason: currentDecision.reason,
+        proposedReason: proposedDecision.reason,
+        currentGroupKey: queueGroupKey(product),
+        proposedGroupKey: groupKeyForProduct(product, marketplace),
+        title: String(product.title || '').slice(0, 180),
+      });
+    }
+  }
+
+  return {
+    groupKeyVersion,
+    candidatesReceived: Math.max(products.length, allCandidates.size),
+    candidatesSelected: selected.length,
+    candidatesRejected: skipped.length + familyDeferred.length,
+    currentSelectedCount: currentSimulation.selected.length,
+    proposedSelectedCount: proposedSimulation.selected.length,
+    currentRejectedCount: postFamilySelected.length - currentSimulation.selected.length,
+    proposedRejectedCount: postFamilySelected.length - proposedSimulation.selected.length,
+    changedRejections,
+    rejectionReasons,
+    items,
+    limits: { maxTotal: limits.maxTotal, maxPerMarketplace: limits.maxPerMarketplace, maxPerCategory: limits.maxPerCategory },
+  };
 }
 
 function selectCopyQueue(products, options = {}, cycleState = null, previouslyDeferred = [], stageLogger = null) {
@@ -318,7 +512,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, shadowDiscovery = null, persistShadow = null, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null, scenarioResolver = null, scenarioRuntimeResolver = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -359,11 +553,37 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     .map((marketplace) => String(marketplace || '').trim())
     .filter((marketplace) => MARKETPLACES.includes(marketplace)))];
   if (requestedMarketplaces.length === 0) throw new Error('Nenhum marketplace autorizado foi selecionado');
+  let activeFunnel = null;
   try {
     for (const marketplace of requestedMarketplaces) {
       const marketplaceStartedAt = Date.now();
       await safeObserve('discovery.marketplace.started', { marketplace });
       const products = await discover(marketplace);
+      const discoveryMeta = readDiscoveryFunnelMeta(products);
+      const scenario = typeof scenarioResolver === 'function'
+        ? scenarioResolver(marketplace, products, discoveryMeta)
+        : products?.[0]?.intent || discoveryMeta.scenario || 'unknown';
+      let scenarioRuntime = null;
+      if (typeof scenarioRuntimeResolver === 'function') {
+        try {
+          scenarioRuntime = scenarioRuntimeResolver(marketplace, products, discoveryMeta, scenario) || null;
+        } catch (runtimeError) {
+          await safeObserve('discovery.scenario_runtime.failed', {
+            marketplace,
+            error: runtimeError?.message || String(runtimeError),
+          });
+        }
+      }
+      const funnel = createDiscoveryFunnel({ marketplace, scenario, correlationId, startedAt: new Date(marketplaceStartedAt).toISOString(), scenarioRuntime });
+      activeFunnel = funnel;
+      funnel.setFinalByCategory(discoveryMeta.finalByCategory);
+      funnel.count('extracted', discoveryMeta.extracted ?? products?.length ?? 0);
+      funnel.count('afterParse', discoveryMeta.afterParse ?? products?.length ?? 0);
+      funnel.count('afterRelevance', discoveryMeta.afterRelevance ?? products?.length ?? 0);
+      funnel.count('afterNovelty', discoveryMeta.afterNovelty ?? products?.length ?? 0);
+      funnel.reject('known_identity', discoveryMeta.knownIdentityRejected || 0);
+      funnel.reject('scenario_mismatch', discoveryMeta.scenarioMismatchRejected || 0);
+      if (discoveryMeta.sourceStatus) funnel.setSourceStatus(discoveryMeta.sourceStatus);
       const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
       const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];
@@ -395,6 +615,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const countRejection = (reason, amount = 1) => {
         const key = String(reason || 'unknown_rejection');
         rejectionReasons[key] = Number(rejectionReasons[key] || 0) + amount;
+        funnel.reject(key, amount);
       };
       for (const item of freshnessRejected) countRejection(item?.reason || 'freshness_rejected');
       for (const item of searchQuality.rejected || []) countRejection(item?.reason || 'search_quality_rejected');
@@ -504,12 +725,15 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
       
       const uniqueProducts = Array.from(uniqueProductsMap.values());
+      funnel.count('afterIdentityDedup', uniqueProducts.length);
       const classifiedProducts = uniqueProducts.map((candidate) => ({
         ...candidate,
         classification: classifyCandidate(candidate, marketplace),
       }));
       const classificationCoverage = buildClassificationCoverage(classifiedProducts, marketplace);
       let candidatesToPersist = classifiedProducts.filter((candidate) => candidate.classification.status === 'classified');
+      funnel.count('afterQualityGate', uniqueProducts.length);
+      funnel.count('afterClassification', candidatesToPersist.length);
       technicalRejections += classifiedProducts.length - candidatesToPersist.length;
       for (const candidate of classifiedProducts.filter((item) => item.classification.status !== 'classified')) {
         countRejection(`classification_${candidate.classification.status || 'unknown'}`);
@@ -556,6 +780,8 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
 
       const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
+      funnel.count('queueSelected', queue.selected.length);
+      funnel.recordQueueSelection(queue.selectionTelemetry);
       for (const item of queue.skipped || []) countRejection(item.reason || 'queue_rejected');
 
       // Shadow mode is observational only. It is deliberately opt-in and never
@@ -587,14 +813,48 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           });
         }
       }
-      
-      if (typeof persistV2Metadata === 'function') {
-        await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: candidatesToPersist, queue });
+
+      let shopeeOpenApiShadow = undefined;
+      if (marketplace === 'Shopee' && typeof shadowDiscovery === 'function') {
+        try {
+          shopeeOpenApiShadow = await shadowDiscovery(Object.freeze({
+            marketplace,
+            scenario,
+            correlationId,
+            requestedAt,
+            products: Object.freeze([...products]),
+          }));
+          await safeObserve('discovery.shopee_openapi_v1.shadow.completed', {
+            marketplace,
+            scenarioId: scenario,
+            metadata: shopeeOpenApiShadow && typeof shopeeOpenApiShadow === 'object' ? shopeeOpenApiShadow : {},
+          });
+        } catch (shadowError) {
+          shopeeOpenApiShadow = {
+            engine: 'shopee_openapi_v1',
+            mode: 'shadow',
+            scenarioId: scenario,
+            decision: 'shadow_error',
+            error: shadowError?.message || String(shadowError),
+          };
+          await safeObserve('discovery.shopee_openapi_v1.shadow.failed', {
+            marketplace,
+            scenarioId: scenario,
+            metadata: shopeeOpenApiShadow,
+          });
+        }
       }
 
       let persistedAll = { accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] };
 
-      if (queue.selected.length > 0) {
+      if (typeof persistShadow === 'function' && ['shadow', 'official'].includes(shopeeOpenApiShadow?.decision)) {
+        persistedAll = await persistShadow({ shadow: shopeeOpenApiShadow, marketplace, scenario, tenantId, correlationId, requestedAt });
+        funnel.count('rpcSent', persistedAll?.accepted || 0);
+        funnel.mergeRpc(persistedAll || {});
+        for (const offerId of persistedAll?.offerIds || []) {
+          if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
+        }
+      } else if (queue.selected.length > 0) {
         const selectedIngestions = [];
         for (const product of queue.selected) {
           try {
@@ -611,7 +871,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         }
         
         persistedAll = await persist(selectedIngestions, marketplace, FINAL_STATE);
-        if (persistedAll?.state !== FINAL_STATE) {
+        funnel.count('rpcSent', selectedIngestions.length);
+        funnel.mergeRpc(persistedAll);
+        if (persistedAll?.state !== FINAL_STATE && persistedAll?.state !== 'partial_success') {
           throw new Error(`Oracle Worker só pode encerrar em ${FINAL_STATE}`);
         }
         
@@ -619,6 +881,14 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
         }
         technicalRejections += rejected;
+      }
+
+      funnel.setTerminalStatus(deriveMarketplaceTerminalStatus({
+        counters: funnel.snapshot().counters,
+        sourceStatus: discoveryMeta.sourceStatus,
+      }));
+      if (typeof persistV2Metadata === 'function') {
+        await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: candidatesToPersist, queue, funnel: funnel.snapshot() });
       }
 
       let amazonTelemetry = undefined;
@@ -660,6 +930,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           queueSelected: queue.selected.length,
           persisted: Number(persistedAll.accepted || 0),
           rejectionReasons,
+          contractVersion: funnel.snapshot().contractVersion,
+          status: funnel.snapshot().status,
+          counters: funnel.snapshot().counters,
+          rejectionCounts: funnel.snapshot().rejectionReasons,
         },
         rejected: technicalRejections,
         classificationCoverage,
@@ -667,17 +941,28 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         inserted: persistedAll.inserted || 0,
         updated: persistedAll.updated || 0,
         state: FINAL_STATE,
+        funnelContract: funnel.snapshot(),
         ...(amazonTelemetry ? { amazonTelemetry } : {})
+        ,...(shopeeOpenApiShadow ? { shadow: shopeeOpenApiShadow } : {})
       });
       summaries.push(summary);
       await safeObserve('discovery.marketplace.completed', {
         marketplace,
         finalState: FINAL_STATE,
+        funnelStatus: summary.funnelContract.status,
         durationMs: Date.now() - marketplaceStartedAt,
         metadata: summary,
       });
     }
   } catch (error) {
+    if (activeFunnel) {
+      activeFunnel.count('failed').setFailed();
+      await safeObserve('discovery.marketplace.failed', {
+        marketplace: activeFunnel.marketplace,
+        funnel: activeFunnel.snapshot(),
+        error: error?.message || String(error),
+      });
+    }
     await safeObserve('discovery.failed', {
       result: 'failed',
       severity: 'ERROR',
@@ -695,10 +980,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     marketplaces: Object.freeze(summaries),
     offerIds: Object.freeze([...materializedOfferIds]),
     finalState: FINAL_STATE,
+    status: summaries.some((summary) => summary.funnelContract?.status === 'partial') ? 'partial' : 'completed',
   });
   await safeObserve('discovery.completed', {
-    result: 'success',
+    result: result.status === 'partial' ? 'partial' : 'success',
     finalState: FINAL_STATE,
+    funnelStatus: result.status,
     durationMs: Date.now() - startedAt,
   });
 
@@ -721,6 +1008,9 @@ module.exports = {
   MARKETPLACES,
   createCandidateV1,
   createIngestionV1,
+  buildShopeeQueueGroupKey,
+  groupKeyForProduct,
+  queueGroupKey,
   selectCopyQueue,
   runDiscoveryOnlyCycle,
   validateCanonicalUrl,
