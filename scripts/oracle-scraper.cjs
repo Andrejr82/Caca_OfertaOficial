@@ -958,6 +958,18 @@ async function scrapeStore(store, stageLogger = null) {
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
 }
 
+async function selectByIdsInChunks(table, columns, ids, { chunkSize = 100, idColumn = 'id' } = {}) {
+  const uniqueIds = [...new Set((Array.isArray(ids) ? ids : []).filter(Boolean).map(String))];
+  const rows = [];
+  for (let offset = 0; offset < uniqueIds.length; offset += chunkSize) {
+    const chunk = uniqueIds.slice(offset, offset + chunkSize);
+    const { data, error } = await getSupabase().from(table).select(columns).in(idColumn, chunk);
+    if (error) throw error;
+    rows.push(...(data || []));
+  }
+  return rows;
+}
+
 async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE, stageLogger = null, persistenceContext = null) {
   let stageStartedAt;
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryIngestionV1', ingestions.length);
@@ -1080,12 +1092,12 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     const offerIds = data?.offer_ids || [];
     let affiliateLinkWrites = 0;
     if (offerIds.length > 0) {
-      const { data: offersData, error: selectErr } = await getSupabase()
-        .from('offers')
-        .select('id, user_id, original_url, explainability')
-        .in('id', offerIds);
-        
-      if (selectErr) throw new Error(`Falha ao consultar ofertas persistidas: ${selectErr.message}`);
+      let offersData;
+      try {
+        offersData = await selectByIdsInChunks('offers', 'id, user_id, original_url, explainability', offerIds);
+      } catch (selectErr) {
+        throw new Error(`Falha ao consultar ofertas persistidas: ${selectErr.message}`);
+      }
       if (offersData) {
         const linksToInsert = [];
         const updatesToExplainability = [];
@@ -1112,10 +1124,13 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
             .upsert(linksToInsert, { onConflict: 'offer_id, channel' });
           if (linksError) throw new Error(`Falha ao persistir affiliate_links: ${linksError.message}`);
 
-          const { data: persistedLinks, error: verifyError } = await getSupabase()
-            .from('affiliate_links')
-            .select('offer_id, channel, tracked_url, sub_id')
-            .in('offer_id', offersData.map((offer) => offer.id));
+          let persistedLinks;
+          let verifyError;
+          try {
+            persistedLinks = await selectByIdsInChunks('affiliate_links', 'offer_id, channel, tracked_url, sub_id', offersData.map((offer) => offer.id), { idColumn: 'offer_id' });
+          } catch (error) {
+            verifyError = error;
+          }
           if (verifyError) throw new Error(`Falha ao verificar affiliate_links: ${verifyError.message}`);
 
           const linksByOffer = new Map();
