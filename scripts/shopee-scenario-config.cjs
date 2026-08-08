@@ -36,14 +36,14 @@ const SCENARIOS = {
     name: 'Mãe de Primeira Viagem',
     apiCategories: [100632, 100633], // Mom & Baby, Baby & Kids Fashion
     keywords: [
-      'fralda descartável atacado', 'lenço umedecido atacado', 'pomada assadura', 'mamadeira anti cólica', 
-      'babá eletrônica', 'bolsa maternidade', 'ninho redutor de berço', 'kit higiene bebê', 
-      'banheira bebê', 'termômetro digital', 'extrator de leite', 'toalha de banho com capuz', 
-      'cadeirinha de alimentação', 'mordedor silicone', 'roupinhas de bebê kit', 'absorvente seios', 
-      'travesseiro antissufocante bebê', 'berço portátil desmontável', 'tapete atividades bebê', 
-      'móbile berço musical', 'cadeira descanso bebê', 'aspirador nasal bebê', 'kit cortador unha bebê', 
-      'sabonete líquido recém nascido', 'óleo massagem bebê', 'fralda pano algodão', 'cueiro bebê flanelado', 
-      'body bebê manga longa', 'mijãozinho bebê atacado', 'meia bebê antiderrapante', 'protetor quina móvel', 
+      'fralda descartável atacado', 'lenço umedecido atacado', 'pomada assadura', 'mamadeira anti cólica',
+      'babá eletrônica', 'bolsa maternidade', 'ninho redutor de berço', 'kit higiene bebê',
+      'banheira bebê', 'termômetro digital', 'extrator de leite', 'toalha de banho com capuz',
+      'cadeirinha de alimentação', 'mordedor silicone', 'roupinhas de bebê kit', 'absorvente seios',
+      'travesseiro antissufocante bebê', 'berço portátil desmontável', 'tapete atividades bebê',
+      'móbile berço musical', 'cadeira descanso bebê', 'aspirador nasal bebê', 'kit cortador unha bebê',
+      'sabonete líquido recém nascido', 'óleo massagem bebê', 'fralda pano algodão', 'cueiro bebê flanelado',
+      'body bebê manga longa', 'mijãozinho bebê atacado', 'meia bebê antiderrapante', 'protetor quina móvel',
       'trava gaveta segurança', 'cadeirinha carro bebê', 'canguru ergonômico bebê', 'sling tecido recém nascido'
     ]
   },
@@ -52,12 +52,12 @@ const SCENARIOS = {
     name: 'Dono de Pet',
     apiCategories: [100631], // Pets
     keywords: [
-      'tapete higiênico cachorro', 'ração premium', 'tira pelos pet', 'bebedouro fonte gato', 
-      'brinquedo pet interativo', 'caminha para cachorro', 'areia higiênica gato', 'arranhador gato', 
-      'coleira peitoral', 'shampoo pet', 'escova rasqueadeira', 'bolsa de transporte pet', 
-      'comedouro lento cachorro', 'pazinha areia gato', 'caixa de areia fechada gato', 
-      'casinha cachorro plástico', 'roupinha pet inverno', 'cinto segurança cachorro carro', 
-      'capa banco carro pet', 'petisco cachorro natural', 'sachê gato atacado', 'cortador unha pet', 
+      'tapete higiênico cachorro', 'ração premium', 'tira pelos pet', 'bebedouro fonte gato',
+      'brinquedo pet interativo', 'caminha para cachorro', 'areia higiênica gato', 'arranhador gato',
+      'coleira peitoral', 'shampoo pet', 'escova rasqueadeira', 'bolsa de transporte pet',
+      'comedouro lento cachorro', 'pazinha areia gato', 'caixa de areia fechada gato',
+      'casinha cachorro plástico', 'roupinha pet inverno', 'cinto segurança cachorro carro',
+      'capa banco carro pet', 'petisco cachorro natural', 'sachê gato atacado', 'cortador unha pet',
       'toalha banho pet super absorvente', 'brinquedo corda cachorro', 'erva de gato catnip',
       'fonte água gato', 'cama pet', 'tapete cachorro', 'brinquedo mordedor cachorro'
     ]
@@ -67,13 +67,13 @@ const SCENARIOS = {
     name: 'Morando Sozinho',
     apiCategories: [100010, 100636], // Home Appliances, Home & Construction
     keywords: [
-      'air fryer', 'mop giratório', 'sanduicheira elétrica', 'chaleira elétrica', 'forro de papel airfryer', 
-      'esfregão de limpeza', 'varal de chão', 'tábua de passar', 'ferro de passar', 'kit ferramentas básico', 
-      'abridor de vinho elétrico', 'filtro de água barro', 'lixeira inox pedal', 'jogo de copos vidro', 
-      'mixer triturador', 'panela elétrica arroz', 'escorredor pratos plástico', 'organizador sapatos', 
-      'cabides veludo kit', 'balança digital cozinha', 'extensão elétrica', 'lâmpada led inteligente', 
-      'cesto roupa suja flexível', 'pregadores roupa madeira', 'pano microfibra limpeza', 'rodo mágico abs', 
-      'limpa vidros magnético', 'dispenser creme dental', 'organizador cabos', 'miniprocessador manual alho', 
+      'air fryer', 'mop giratório', 'sanduicheira elétrica', 'chaleira elétrica', 'forro de papel airfryer',
+      'esfregão de limpeza', 'varal de chão', 'tábua de passar', 'ferro de passar', 'kit ferramentas básico',
+      'abridor de vinho elétrico', 'filtro de água barro', 'lixeira inox pedal', 'jogo de copos vidro',
+      'mixer triturador', 'panela elétrica arroz', 'escorredor pratos plástico', 'organizador sapatos',
+      'cabides veludo kit', 'balança digital cozinha', 'extensão elétrica', 'lâmpada led inteligente',
+      'cesto roupa suja flexível', 'pregadores roupa madeira', 'pano microfibra limpeza', 'rodo mágico abs',
+      'limpa vidros magnético', 'dispenser creme dental', 'organizador cabos', 'miniprocessador manual alho',
       'ventilador mesa', 'aquecedor portátil', 'jogo lençol microfibra', 'toalha banho avulsa', 'vasilha plástico kit',
       'aspirador vertical', 'cafeteira compacta', 'organizador cozinha', 'luminária mesa'
     ]
@@ -83,15 +83,15 @@ const SCENARIOS = {
     name: 'Enxoval de Casamento',
     apiCategories: [100010, 100636], // Home Appliances, Home & Construction
     keywords: [
-      'jogo de panelas antiaderente', 'jogo de lençol algodão', 'faqueiro aço inox', 'aparelho de jantar porcelana', 
-      'jogo de taças', 'toalha de banho fio penteado', 'liquidificador turbo', 'escorredor de louça inox', 
-      'panela de pressão', 'jogo de potes herméticos', 'conjunto de xícaras café', 'tábua de corte bambu', 
-      'pano de prato kit', 'edredom casal', 'tapete para banheiro', 'jogo de toalhas de rosto', 
-      'kit utensílios silicone', 'travesseiro antialérgico', 'garrafa térmica café', 'batedeira planetária', 
-      'jogo de sobremesa vidro', 'assadeira antiaderente', 'frigideira cerâmica', 'espatula silicone', 
-      'jogo de copos vidro', 'dispenser detergente', 'lixeira inox pedal', 'suporte papel toalha', 
-      'toalha de mesa impermeável', 'jogo americano bambu', 'bandeja espelhada lavabo', 'kit organizador gavetas', 
-      'capa protetora colchão', 'cortina blackout sala', 'tapete felpudo sala', 'cobre leito matelassê', 
+      'jogo de panelas antiaderente', 'jogo de lençol algodão', 'faqueiro aço inox', 'aparelho de jantar porcelana',
+      'jogo de taças', 'toalha de banho fio penteado', 'liquidificador turbo', 'escorredor de louça inox',
+      'panela de pressão', 'jogo de potes herméticos', 'conjunto de xícaras café', 'tábua de corte bambu',
+      'pano de prato kit', 'edredom casal', 'tapete para banheiro', 'jogo de toalhas de rosto',
+      'kit utensílios silicone', 'travesseiro antialérgico', 'garrafa térmica café', 'batedeira planetária',
+      'jogo de sobremesa vidro', 'assadeira antiaderente', 'frigideira cerâmica', 'espatula silicone',
+      'jogo de copos vidro', 'dispenser detergente', 'lixeira inox pedal', 'suporte papel toalha',
+      'toalha de mesa impermeável', 'jogo americano bambu', 'bandeja espelhada lavabo', 'kit organizador gavetas',
+      'capa protetora colchão', 'cortina blackout sala', 'tapete felpudo sala', 'cobre leito matelassê',
       'conjunto mantimentos', 'boleira vidro', 'cafeteira elétrica', 'ferro a vapor',
       'jogo de cama casal', 'kit cozinha', 'pote organizador cozinha', 'panela elétrica arroz'
     ]
@@ -101,8 +101,8 @@ const SCENARIOS = {
     name: 'Moda Masculina',
     apiCategories: [100011, 100012, 100009], // Men Clothes, Men Shoes, Fashion Accessories
     keywords: [
-      'sapatos masculinos', 'tênis casual masculino', 'relógio masculino de pulso', 
-      'jaqueta de couro masculina', 'cinto de couro social', 'carteira masculina couro', 
+      'sapatos masculinos', 'tênis casual masculino', 'relógio masculino de pulso',
+      'jaqueta de couro masculina', 'cinto de couro social', 'carteira masculina couro',
       'mochila executiva masculina', 'óculos de sol masculino', 'camisa polo masculina', 'calça jeans masculina',
       'camiseta masculina', 'bermuda masculina', 'tênis esportivo masculino', 'moletom masculino'
     ],
@@ -113,8 +113,8 @@ const SCENARIOS = {
     name: 'Gamer e Tecnologia',
     apiCategories: [100644, 100013, 100634], // Computers, Mobile & Gadgets, Gaming
     keywords: [
-      'mouse gamer rgb', 'teclado mecânico switch', 'fone bluetooth sem fio', 
-      'cadeira gamer ergonômica', 'smartwatch relógio inteligente', 'suporte notebook alumínio', 
+      'mouse gamer rgb', 'teclado mecânico switch', 'fone bluetooth sem fio',
+      'cadeira gamer ergonômica', 'smartwatch relógio inteligente', 'suporte notebook alumínio',
       'carregador turbo', 'cabo iphone', 'ring light', 'tripé celular',
       'headset gamer', 'mouse sem fio', 'teclado gamer', 'suporte celular mesa', 'webcam gamer'
     ]
@@ -124,7 +124,7 @@ const SCENARIOS = {
     name: 'Beleza e Autocuidado',
     apiCategories: [100630, 100001], // Beauty, Health
     keywords: [
-      'skincare rosto', 'protetor solar facial', 'secador de cabelo profissional', 
+      'skincare rosto', 'protetor solar facial', 'secador de cabelo profissional',
       'chapinha alisadora', 'perfume importado', 'kit pincéis maquiagem',
       'escova secadora', 'sérum vitamina c', 'creme hidratante corporal', 'kit maquiagem completo',
       'hidratante facial', 'modelador de cachos', 'óleo capilar', 'base maquiagem'
@@ -135,7 +135,7 @@ const SCENARIOS = {
     name: 'Treino e Academia',
     apiCategories: [100637, 100001], // Sports & Outdoors, Health
     keywords: [
-      'whey protein', 'creatina pura', 'garrafa térmica inox', 
+      'whey protein', 'creatina pura', 'garrafa térmica inox',
       'roupa de academia fitness', 'tapete yoga pilates', 'tênis de corrida',
       'corda de pular', 'faixa elástica mini band', 'halter emborrachado', 'suplemento pré treino',
       'legging fitness', 'camiseta dry fit', 'barra musculação', 'luva academia'
@@ -146,8 +146,8 @@ const SCENARIOS = {
     name: 'Acessórios e Relógios',
     apiCategories: [100009, 100534], // Fashion Accessories, Watches
     keywords: [
-      'relógio smartwatch', 'óculos de sol polarizado', 'colar prata 925', 
-      'pulseira magnética', 'anel de compromisso', 'boné aba curva', 
+      'relógio smartwatch', 'óculos de sol polarizado', 'colar prata 925',
+      'pulseira magnética', 'anel de compromisso', 'boné aba curva',
       'mochila transversal', 'carteira couro fina', 'brinco argola',
       'relógio g-shock', 'corrente masculina', 'tiara de cabelo',
       'relógio digital', 'pulseira smartwatch', 'necessaire feminina', 'porta-cartão'
@@ -158,8 +158,8 @@ const SCENARIOS = {
     name: 'Viagem e Aventura',
     apiCategories: [100015, 100637], // Travel & Luggage, Sports & Outdoors
     keywords: [
-      'mala de bordo 10kg', 'kit organizador mala', 'travesseiro de pescoço', 
-      'barraca camping 4 pessoas', 'garrafa térmica inox', 'lanterna tática recarregável', 
+      'mala de bordo 10kg', 'kit organizador mala', 'travesseiro de pescoço',
+      'barraca camping 4 pessoas', 'garrafa térmica inox', 'lanterna tática recarregável',
       'mochila trilha', 'capa chuva impermeável', 'cadeira de praia dobrável',
       'saco de dormir', 'canivete suíço', 'balança digital bagagem',
       'mala média viagem', 'mochila viagem', 'organizador compressão mala', 'capa mala'

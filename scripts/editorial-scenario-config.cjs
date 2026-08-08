@@ -130,44 +130,44 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['whey protein', 'creatina', 'colágeno', 'pré treino'],
     ['whey', 'creatina', 'colágeno', 'pré treino'],
     ['infantil', 'usado', 'vazio'],
-    ['brand', 'weight', 'flavor'], 
-    { 
-      apiCategories: [100001, 100637], 
+    ['brand', 'weight', 'flavor'],
+    {
+      apiCategories: [100001, 100637],
       discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00 
+      maxPriceThreshold: 90.00
     }),
 
   perfumaria_premium: scenario('perfumaria_premium', 'Perfumaria e Cosméticos', 20,
     ['perfume importado', 'kit maquiagem', 'skincare', 'base líquida', 'sérum facial'],
     ['perfume', 'maquiagem', 'skincare', 'base', 'sérum'],
     ['amostra', 'decant', 'vazio'],
-    ['brand', 'volume', 'skin_type'], 
-    { 
-      apiCategories: [100630, 100001], 
+    ['brand', 'volume', 'skin_type'],
+    {
+      apiCategories: [100630, 100001],
       discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00 
+      maxPriceThreshold: 90.00
     }),
 
   calcados_premium: scenario('calcados_premium', 'Calçados e Tênis', 21,
     ['tênis esportivo', 'bota tratorada', 'sapato social', 'tênis casual', 'sandália'],
     ['tênis', 'bota', 'sapato', 'sandália'],
     ['usado', 'infantil', 'cadarço'],
-    ['brand', 'size', 'color', 'gender'], 
-    { 
-      apiCategories: [100012, 100011, 100009], 
+    ['brand', 'size', 'color', 'gender'],
+    {
+      apiCategories: [100012, 100011, 100009],
       discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00 
+      maxPriceThreshold: 90.00
     }),
 
   achadinhos_beleza_oficial: scenario('achadinhos_beleza_oficial', 'Achadinhos de Beleza', 16,
     ['escova secadora', 'modelador de cachos', 'kit pincel maquiagem', 'esponja elétrica facial', 'depilador elétrico'],
     ['escova secadora', 'modelador', 'pincel', 'esponja facial', 'depilador'],
     ['usado', 'conserto', 'peça'],
-    ['brand', 'voltage', 'color'], 
-    { 
-      apiCategories: [100001, 100630], 
+    ['brand', 'voltage', 'color'],
+    {
+      apiCategories: [100001, 100630],
       discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00 
+      maxPriceThreshold: 90.00
     }),
 });
 

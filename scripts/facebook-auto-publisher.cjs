@@ -7,7 +7,7 @@ require('dotenv').config({ path: '.env.local' });
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { 
+  {
     auth: { autoRefreshToken: false, persistSession: false },
     realtime: {
       transport: require('ws')
@@ -23,16 +23,16 @@ function sendFacebookPost(message, mediaUrl) {
   return new Promise((resolve, reject) => {
     const pageId = process.env.FACEBOOK_PAGE_ID;
     const isVideo = mediaUrl && mediaUrl.toLowerCase().endsWith('.mp4');
-    
+
     let endpoint = `/v19.0/${pageId}/feed`;
     if (mediaUrl) {
        endpoint = isVideo ? `/v19.0/${pageId}/videos` : `/v19.0/${pageId}/photos`;
     }
-    
+
     const payloadData = {
       access_token: process.env.FACEBOOK_ACCESS_TOKEN
     };
-    
+
     if (isVideo) {
       payloadData.description = message || '';
       payloadData.file_url = mediaUrl;
@@ -52,7 +52,7 @@ function sendFacebookPost(message, mediaUrl) {
       port: 443,
       path: endpoint,
       method: 'POST',
-      family: 4, 
+      family: 4,
       headers: {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(payload)
@@ -147,7 +147,7 @@ async function processFacebookQueue() {
       .select('value')
       .eq('key', 'general_settings')
       .limit(1);
-    
+
     // Pega a configuração do primeiro usuário
     const generalSettings = setting && setting.length > 0 ? setting[0].value : null;
 
@@ -174,7 +174,7 @@ async function processFacebookQueue() {
       console.log('Nenhum post em draft encontrado na fila do Facebook.');
       return;
     }
-    
+
     console.log(`Encontrados ${posts.length} posts em draft para disparar no Facebook...`);
 
     for (const post of posts) {
@@ -188,9 +188,9 @@ async function processFacebookQueue() {
 
         // Se temos um offer_id e não é um cupom, e NÃO É UM VÍDEO, usamos o gerador de imagem premium do WhatsApp/OG
         if (post.offer_id && post.offers) {
-           const isCoupon = String(post.offers.product_name || '').startsWith('[CUPOM]') || 
+           const isCoupon = String(post.offers.product_name || '').startsWith('[CUPOM]') ||
                             String(post.offers.notes || '').includes('Robô de Cupons');
-           
+
            if (!isCoupon && !isVideo) {
               const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || "https://caca-oferta-oficial.vercel.app";
               const cleanBaseUrl = baseUrl.replace(/\/$/, "");
@@ -198,15 +198,15 @@ async function processFacebookQueue() {
               mediaUrl = `${cleanBaseUrl}/api/images/whatsapp-premium?offerId=${encodeURIComponent(post.offer_id)}&v=1`;
            }
         }
-        
+
         let cleanText = text;
         let linkToComment = post.affiliate_links ? post.affiliate_links.tracked_url : '';
-        
+
         // Remove the instruction text from the body if needed, or leave it since it's correctly placed.
         // The text already has the 👉 Link de compra no primeiro comentário! 👇 from buildCopyV2ChannelCopy
-        
+
         const postId = await sendFacebookPost(cleanText, mediaUrl);
-        
+
         if (postId && linkToComment) {
            if (isVideo) {
              console.log(`[Facebook Auto] Vídeo ${postId} enviado! Aguardando processamento da Meta. O Webhook inserirá o comentário.`);
@@ -215,13 +215,13 @@ async function processFacebookQueue() {
              console.log(`[Facebook Auto] Comentário com link adicionado no post ${postId}.`);
            }
         }
-        
+
         const { error: updateError } = await supabase
           .from('posts')
-          .update({ 
-             status: 'published', 
+          .update({
+             status: 'published',
              external_id: postId,
-             posted_at: new Date().toISOString() 
+             posted_at: new Date().toISOString()
           })
           .eq('id', post.id);
 

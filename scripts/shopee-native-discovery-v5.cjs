@@ -187,11 +187,11 @@ async function runNativeDiscovery({
   const currentHour = scenarioConfig.getSaoPauloHour();
   const activeScenario = scenario || scenarioConfig.getActiveScenario(currentHour);
   const pagesPerKeyword = maxPagesPerKeyword ?? activeScenario.maxPagesPerKeyword ?? DEFAULT_MAX_PAGES_PER_KEYWORD;
-  
+
   // Combina as chamadas de categoria e chamadas de keyword
   const apiCategories = activeScenario.apiCategories || [];
   const keywords = activeScenario.keywords || [];
-  
+
   let dynamicKeywords = [];
   if (activeScenario.discoveryMode === 'dynamic_trends' && apiCategories.length > 0) {
     console.log(`[Shopee V5] Modo Dynamic Trends ATIVO. Minerando top 50 de ${apiCategories[0]}...`);
@@ -264,31 +264,31 @@ async function runNativeDiscovery({
       const catArg = q.type === 'category' ? q.value : null;
       let payload;
       let currentCatId = activeScenario.productCatId || apiCategories[0] || 0;
-      
+
       if (q.type === 'category') {
         currentCatId = q.value;
         payload = buildProductOfferPayload(null, q.value, page, 20);
       } else {
         payload = buildProductOfferPayload(q.value, null, page, 20);
       }
-      
+
       const dynamicCategoryMock = {
         productCatId: currentCatId,
         name: activeScenario.name,
         order: 1,
         active: true
       };
-      
+
       console.log(`[Shopee V5] Buscando... type=${q.type}, value=${q.value}, page=${page}`);
       calls++;
       requestCount++;
       pagesFetched++;
-      
+
       const startTime = Date.now();
       const response = await fetchProducts(dynamicCategoryMock, payload);
       const elapsed = Date.now() - startTime;
       console.log(`[Shopee V5] Retornou em ${elapsed}ms com HTTP ${response.http} | itens: ${Array.isArray(response.nodes) ? response.nodes.length : 0}`);
-      
+
       if (response.http === 429) {
         categoryResults[0].error = { http: 429, retryAfter: response.retryAfter || null };
         rateLimited = true;
@@ -315,7 +315,7 @@ async function runNativeDiscovery({
   const deduplicated = dedupeGlobally(sanitized);
   const scoped = deduplicated.filter((product) => scenarioConfig.matchesScenarioProduct(activeScenario, product.productName));
   const novel = applyNovelty(scoped, isNovel).map((product) => ({ ...product, score: calculateObjectiveScore(product) }));
-  
+
   // Opcional: penalizar levemente itens muito repetidos se houver, mas a API já retornou o top de cada keyword.
   const ranked = rankTop20ByCategory(novel, categoryResults, maxFinalists);
   const finalists = ranked
@@ -323,7 +323,7 @@ async function runNativeDiscovery({
     .sort(compareProducts)
     .slice(0, maxFinalists)
     .map((product, index) => ({ ...product, position: index + 1 }));
-  
+
   if (!dryRun && typeof persistFinalists === 'function') {
     await persistFinalists(finalists);
   }

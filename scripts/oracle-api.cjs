@@ -13,7 +13,7 @@ const { createClient } = require('@supabase/supabase-js');
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY,
-  { 
+  {
     auth: { autoRefreshToken: false, persistSession: false },
     realtime: { transport: require('ws') }
   }
@@ -127,7 +127,7 @@ app.post('/api/scrape', async (req, res) => {
         if (srcset) src = srcset.split(' ')[0];
       }
       if (!src) src = $(el).attr('src');
-      
+
       if (src && !src.startsWith('data:image') && !src.includes('base64') && !src.includes('svg') && !src.includes('placeholder')) {
         $(el).replaceWith(` [IMG:${src}] `);
       } else {
@@ -254,7 +254,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
   try {
     // 1. Verifica se a oferta já existe no banco
     let offerId = null;
-    
+
     // Busca oferta pela URL original
     const { data: existingOffers } = await supabaseAdmin
       .from('offers')
@@ -262,11 +262,11 @@ app.post('/api/shopee/dub-video', async (req, res) => {
       .eq('original_url', originalUrl)
       .eq('user_id', tenantId)
       .limit(1);
-      
+
     if (existingOffers && existingOffers.length > 0) {
       offerId = existingOffers[0].id;
       console.log(`[Oracle Dubber] Oferta encontrada no banco: ${offerId}. Atualizando preço e imagem...`);
-      
+
       // Atualiza a oferta existente com os dados frescos da extração (corrige fotos antigas que eram mp4)
       await supabaseAdmin
         .from('offers')
@@ -275,7 +275,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
           current_price: parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.')) || 0
         })
         .eq('id', offerId);
-        
+
     } else {
       // Cria a oferta automaticamente (Fluxo Magalu)
       console.log(`[Oracle Dubber] Oferta não encontrada. Criando nova oferta no banco...`);
@@ -292,7 +292,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
         })
         .select('id')
         .single();
-        
+
       if (offerError || !newOffer) {
         throw new Error(`Erro ao criar oferta no banco: ${offerError?.message}`);
       }
@@ -317,23 +317,23 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     const fs = require('fs');
     const path = require('path');
     const videoBuffer = fs.readFileSync(result.finalVideoPath);
-    
+
     const jobId = require('crypto').randomUUID();
     const storagePath = `${tenantId}/${jobId}.mp4`;
-    
+
     console.log(`[Oracle Dubber] Fazendo upload do vídeo para o Storage...`);
     const { error: uploadError } = await supabaseAdmin.storage
       .from('videos')
       .upload(storagePath, videoBuffer, { contentType: 'video/mp4', upsert: true });
-      
+
     if (uploadError) {
       throw new Error(`Erro no upload para o Supabase: ${uploadError.message}`);
     }
-    
+
     const { data: publicData } = supabaseAdmin.storage.from('videos').getPublicUrl(storagePath);
     const uploadedVideoUrl = publicData.publicUrl;
 
-    // 3b. (Removido) Não sobrescrever mais a image_url com video_url. 
+    // 3b. (Removido) Não sobrescrever mais a image_url com video_url.
     // A image_url real já foi extraída via extensão.
 
     // 4. Cria o Video Job
@@ -354,13 +354,13 @@ app.post('/api/shopee/dub-video', async (req, res) => {
         },
         completed_at: new Date().toISOString()
       });
-      
+
     if (jobError) {
       throw new Error(`Erro ao criar video_job: ${jobError.message}`);
     }
-    
+
     // Social drafts and copy are created only by the Official AI/editorial flow.
-    
+
     // 6. Apaga o arquivo local
     try {
       fs.unlinkSync(result.finalVideoPath);
@@ -447,5 +447,5 @@ app.post('/api/trim-video', async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Micro-API Oracle rodando firme e forte na porta ${PORT}`);
-  
+
 });
