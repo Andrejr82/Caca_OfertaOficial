@@ -243,14 +243,11 @@ const defaultPublisher = createTelegramPublisher();
 let intervalTimer = null;
 
 function processTelegramQueue() {
-  return defaultPublisher.processQueue();
+  return Promise.resolve({ result: 'disabled', reason: 'Official Publication Service is the only publisher' });
 }
 
-function startTelegramAutomation(intervalMs = 60000) {
-  if (intervalTimer) return;
-  console.log('[Telegram Auto] Iniciando loop de automação (intervalo:', intervalMs, 'ms)');
-  processTelegramQueue();
-  intervalTimer = setInterval(processTelegramQueue, intervalMs);
+function startTelegramAutomation(_intervalMs = 60000) {
+  console.log('[Telegram Auto] Desativado: publicação deve passar pelo Official Publication Service.');
 }
 
 function stopTelegramAutomation() {

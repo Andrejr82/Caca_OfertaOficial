@@ -1,7 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildCommercialQueue, type CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
 import { routeCommercialCandidates, selectOperationalTopCandidates, type RoutedCommercialCandidate } from "@/lib/offers/commercial-channel-router";
-import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import type { Offer } from "@/types/domain";
 
 const TOP30_LIMIT = 30;
@@ -66,13 +65,11 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const now = options.now ?? new Date();
   const todayStart = getTodayBrtStart(now);
   const fallbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const [todayOffers, linksRows, postRows, historicalOffers] = await Promise.all([
+  const [todayOffers, postRows, historicalOffers] = await Promise.all([
     repository.listOffersBetween(todayStart, now),
-    repository.listAffiliateLinks(),
     repository.listWhatsappPosts(),
     repository.listHistoricalOffers(),
   ]);
-  const links = new Map(linksRows.map((row) => [row.offer_id, row]));
   const reasons: Record<string, number> = { telegram_blocked: 1 };
   const postedOfferIds = new Set<string>();
   const approvedOfferIds = new Set<string>();
@@ -159,36 +156,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
       reusedTodayDrafts += 1;
       continue;
     }
-    const offer = candidate as Offer;
-    let link = links.get(candidate.id);
-    if (!link) {
-      try {
-        const subId = createSubId(WHATSAPP_CHANNEL, offer.product_name, offer.id);
-        const trackedUrl = createTrackedUrl(offer.original_url, subId);
-        const createdLink = await repository.createAffiliateLink({ userId: offer.user_id, offerId: offer.id, originalUrl: offer.original_url, trackedUrl, subId });
-        link = { offer_id: offer.id, channel: WHATSAPP_CHANNEL, ...createdLink };
-      } catch {
-        skippedAffiliateFailed += 1;
-        increment(reasons, "affiliate_link_failed");
-        continue;
-      }
-    }
-    if (!link.tracked_url || link.tracked_url === offer.original_url) {
-      skippedAffiliateFailed += 1;
-      increment(reasons, "affiliate_link_failed");
-      continue;
-    }
-    try {
-      await repository.insertDraft({ userId: offer.user_id, offerId: offer.id, affiliateLinkId: link.id, content: materializeDraftContent(candidate.suggestedCopy, link.tracked_url) });
-      created += 1;
-    } catch (error) {
-      if (isDuplicateError(error)) {
-        reusedTodayDrafts += 1;
-        continue;
-      }
-      skippedCreateFailed += 1;
-      increment(reasons, "draft_create_failed");
-    }
+    increment(reasons, "legacy_copy_generation_disabled");
   }
 
   const skippedAlreadyPosted = postedOfferIds.size;
@@ -196,7 +164,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const skippedAlreadySeenToday = seenOnlyIds.length;
   const skippedOldDraft = oldDraftIds.size;
   const skippedNotFresh = reasons.not_fresh ?? 0;
-  const skipped = skippedAlreadyPosted + skippedAlreadyApproved + skippedAlreadySeenToday + skippedOldDraft + skippedNotFresh + skippedAffiliateFailed + skippedCreateFailed;
+  const skipped = skippedAlreadyPosted + skippedAlreadyApproved + skippedAlreadySeenToday + skippedOldDraft + skippedNotFresh + skippedAffiliateFailed + skippedCreateFailed + (reasons.legacy_copy_generation_disabled ?? 0);
   return {
     windowUsed,
     created,
@@ -307,19 +275,8 @@ function canonicalUrl(value: string) {
   }
 }
 
-function materializeDraftContent(copy: string, trackedUrl: string) {
-  const cleanCopy = copy.trimEnd();
-  const urls = cleanCopy.match(/https?:\/\/\S+/g) ?? [];
-  return urls.length > 0 ? cleanCopy.replace(/https?:\/\/\S+/g, trackedUrl).trimEnd() : `${cleanCopy}\n\n👉 ${trackedUrl}`;
-}
-
 function increment(reasons: Record<string, number>, reason: string, amount = 1) {
   reasons[reason] = (reasons[reason] ?? 0) + amount;
-}
-
-function isDuplicateError(error: unknown) {
-  const message = String(error).toLowerCase();
-  return message.includes("duplicate key") || message.includes("unique constraint");
 }
 
 export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository {

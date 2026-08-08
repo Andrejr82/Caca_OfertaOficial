@@ -138,6 +138,8 @@ function sendFacebookComment(postId, message) {
 }
 
 async function processFacebookQueue() {
+  return { result: 'disabled', reason: 'Official Publication Service is the only publisher' };
+  /*
   try {
     // Verifica flag de automação em general_settings
     const { data: setting } = await supabase
@@ -244,17 +246,13 @@ async function processFacebookQueue() {
   } catch (err) {
     console.error('[Facebook Auto] Falha no ciclo:', err.message);
   }
+  */
 }
 
 let intervalTimer = null;
 
-function startFacebookAutomation(intervalMs = 1200000) { // A cada 20 minutos
-  if (intervalTimer) return;
-  console.log('[Facebook Auto] Iniciando loop de automação (intervalo:', intervalMs, 'ms)');
-  
-  // Executa imediatamente e depois agenda
-  processFacebookQueue();
-  intervalTimer = setInterval(processFacebookQueue, intervalMs);
+function startFacebookAutomation(_intervalMs = 1200000) { // A cada 20 minutos
+  console.log('[Facebook Auto] Desativado: publicação deve passar pelo Official Publication Service.');
 }
 
 module.exports = {
