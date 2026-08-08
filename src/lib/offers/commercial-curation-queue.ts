@@ -1,4 +1,5 @@
 import type { Offer } from "@/types/domain";
+import { deduplicateCommercialOffers } from "@/lib/offers/catalog-grouping";
 
 // The curation engine is intentionally server-only: it reads current offer rows and never mutates them.
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -40,9 +41,10 @@ function normalizeOffer(offer: Offer) {
 }
 
 export function buildCommercialQueue(offers: Offer[], options: { limit?: number } = {}): CommercialQueueCandidate[] {
-  const ranked = curation.rankCommercialOffers(offers.filter((offer) => offer.platform === "Shopee" || offer.platform === "Mercado Livre").map(normalizeOffer), { includeRejected: true, limit: options.limit || offers.length });
+  const displayOffers = deduplicateCommercialOffers(offers);
+  const ranked = curation.rankCommercialOffers(displayOffers.filter((offer) => offer.platform === "Shopee" || offer.platform === "Mercado Livre").map(normalizeOffer), { includeRejected: true, limit: options.limit || displayOffers.length });
   return ranked.map((candidate: any) => {
-    const source = offers.find((offer) => offer.id === candidate.id || offer.id === candidate.sourceOfferId);
+    const source = displayOffers.find((offer) => offer.id === candidate.id || offer.id === candidate.sourceOfferId);
     const metadata = curation.buildCommercialMetadata(candidate);
     return {
       ...(source || {}),

@@ -5,11 +5,12 @@ import { ShoppingBag } from "lucide-react";
 import { OffersClient } from "./OffersClient";
 import { buildCommercialQueue } from "@/lib/offers/commercial-curation-queue";
 import { CommercialCurationPanel } from "@/components/offers/commercial-curation-panel";
+import { deduplicateCommercialOffers } from "@/lib/offers/catalog-grouping";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export default async function OffersPage() {
-  const offers = await listOffersWithDraftStatus();
+  const offers = deduplicateCommercialOffers(await listOffersWithDraftStatus());
   const commercialCandidates = buildCommercialQueue(offers);
 
   return (

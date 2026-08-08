@@ -41,4 +41,13 @@ describe("Commercial Curation panel queue", () => {
     expect(filterCommercialQueue(queue, { mode: "automatic" }).every((candidate) => candidate.automaticEligible)).toBe(true);
     expect(filterCommercialQueue(queue, { minScore: 0 }).length).toBeGreaterThan(0);
   });
+
+  it("receives one candidate per commercial identity", () => {
+    const queue = buildCommercialQueue([
+      offer({ id: "old", shopee_item_id: "same", score: 10 }),
+      offer({ id: "new", shopee_item_id: "same", score: 20 }),
+    ] as any);
+    expect(queue).toHaveLength(1);
+    expect(queue[0].id).toBe("new");
+  });
 });

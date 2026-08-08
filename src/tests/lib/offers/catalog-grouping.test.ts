@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getMarketplaceCatalogKey, selectCatalogWinner } from "../../../lib/offers/catalog-grouping";
+import { deduplicateCommercialOffers, getCommercialProductIdentity, getMarketplaceCatalogKey, selectCatalogWinner } from "../../../lib/offers/catalog-grouping";
 import type { Offer } from "@/types/domain";
 
 describe("catalog-grouping", () => {
@@ -11,7 +11,7 @@ describe("catalog-grouping", () => {
       const key1 = getMarketplaceCatalogKey(offer1);
       const key2 = getMarketplaceCatalogKey(offer2);
 
-      expect(key1).toBe("ml:catalog:MLB34722310");
+      expect(key1).toBe("mercado-livre:catalog:MLB34722310");
       expect(key1).toBe(key2);
     });
 
@@ -24,20 +24,88 @@ describe("catalog-grouping", () => {
 
     it("deve usar item_id para ML sem URL de catalogo", () => {
       const offer = { id: "1", platform: "Mercado Livre", item_id: "MLB12345", original_url: "https://produto.mercadolivre.com.br/MLB-12345-produto" } as Offer;
-      expect(getMarketplaceCatalogKey(offer)).toBe("ml:item:MLB12345");
+      expect(getMarketplaceCatalogKey(offer)).toBe("mercado-livre:item:MLB12345");
     });
 
-    it("nao deve agrupar Amazon ou Shopee", () => {
-      const offerAmz = { id: "amz1", platform: "Amazon", item_id: "B0001" } as Offer;
-      const offerShp = { id: "shp1", platform: "Shopee", item_id: "S0001" } as Offer;
+    it("usa identidade nativa de Shopee e Amazon", () => {
+      expect(getCommercialProductIdentity({ id: "shp-1", platform: "Shopee", shopee_item_id: "S0001" } as Offer)).toBe("shopee:item:S0001");
+      expect(getCommercialProductIdentity({ id: "amz-1", platform: "Amazon", product_id: "B000123456" } as Offer)).toBe("amazon:asin:B000123456");
+    });
 
-      expect(getMarketplaceCatalogKey(offerAmz)).toBe("other:amz1");
-      expect(getMarketplaceCatalogKey(offerShp)).toBe("other:shp1");
+    it("extrai identidade de Shopee e ASIN da URL quando o native id falta", () => {
+      expect(getCommercialProductIdentity({ id: "shp-1", platform: "Shopee", original_url: "https://shopee.com.br/produto-i.77.888?af=1" } as Offer)).toBe("shopee:item:888");
+      expect(getCommercialProductIdentity({ id: "amz-1", platform: "Amazon", original_url: "https://www.amazon.com.br/gp/product/B000123456?tag=x" } as Offer)).toBe("amazon:asin:B000123456");
+    });
+
+    it("prioriza product_id de catálogo no ML", () => {
+      expect(getCommercialProductIdentity({ id: "ml-1", platform: "Mercado Livre", product_id: "MLB999", item_id: "MLB111", original_url: "https://mercadolivre.com.br/p/MLB222" } as Offer)).toBe("mercado-livre:catalog:MLB999");
     });
 
     it("deve retornar fallback se item_id estiver ausente para fallback type", () => {
       const offer = { id: "123", platform: "Mercado Livre" } as Offer;
-      expect(getMarketplaceCatalogKey(offer)).toBe("other:123");
+      expect(getMarketplaceCatalogKey(offer)).toBe("mercado-livre:offer:123");
+    });
+  });
+
+  describe("identidade comercial e deduplicação", () => {
+    it("deduplica ML catálogo mesmo com item_ids diferentes", () => {
+      const offers = [
+        { id: "ml-1", platform: "Mercado Livre", product_id: null, item_id: "MLB-1", original_url: "https://mercadolivre.com.br/p/MLB123?x=1", score: 10 },
+        { id: "ml-2", platform: "Mercado Livre", product_id: null, item_id: "MLB-2", original_url: "https://mercadolivre.com.br/p/MLB123?x=2", score: 20 },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)).toHaveLength(1);
+      expect(deduplicateCommercialOffers(offers)[0].id).toBe("ml-2");
+    });
+
+    it("deduplica Amazon pelo mesmo ASIN/product_id", () => {
+      const offers = [
+        { id: "amz-1", platform: "Amazon", product_id: "B000123456", original_url: "https://amazon.com.br/dp/B000123456", score: 10 },
+        { id: "amz-2", platform: "Amazon", product_id: "B000123456", original_url: "https://amazon.com.br/dp/B000123456?tag=updated", score: 20 },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)).toHaveLength(1);
+      expect(deduplicateCommercialOffers(offers)[0].id).toBe("amz-2");
+    });
+
+    it("mantém ML item_ids distintos sem catálogo", () => {
+      const offers = [
+        { id: "ml-1", platform: "Mercado Livre", item_id: "MLB-1", original_url: "https://produto.mercadolivre.com.br/MLB-1" },
+        { id: "ml-2", platform: "Mercado Livre", item_id: "MLB-2", original_url: "https://produto.mercadolivre.com.br/MLB-2" },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)).toHaveLength(2);
+    });
+
+    it("não colapsa o mesmo ID textual entre marketplaces", () => {
+      const offers = [
+        { id: "shp", platform: "Shopee", shopee_item_id: "123", original_url: "https://shopee.com.br/product/1/123" },
+        { id: "amz", platform: "Amazon", product_id: "123", original_url: "https://amazon.com.br/dp/1234567890" },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)).toHaveLength(2);
+    });
+
+    it("agrupa URL canônica apesar de preço atualizado e query diferente", () => {
+      const offers = [
+        { id: "old", platform: "Amazon", original_url: "https://www.amazon.com.br/produto?tag=old", current_price: 100, score: 10 },
+        { id: "new", platform: "Amazon", original_url: "https://www.amazon.com.br/produto?tag=new", current_price: 90, score: 20 },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)).toHaveLength(1);
+      expect(getCommercialProductIdentity(offers[0])).toBe(getCommercialProductIdentity(offers[1]));
+    });
+
+    it("mantém produtos realmente diferentes separados", () => {
+      const offers = [
+        { id: "a", platform: "Shopee", shopee_item_id: "1", original_url: "https://shopee.com.br/product/1/1" },
+        { id: "b", platform: "Shopee", shopee_item_id: "2", original_url: "https://shopee.com.br/product/1/2" },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)).toHaveLength(2);
+    });
+
+    it("não apaga rows e escolhe vencedor determinístico", () => {
+      const offers = [
+        { id: "b", platform: "Shopee", shopee_item_id: "1", score: 50, original_url: "https://shopee.com.br/product/1/1" },
+        { id: "a", platform: "Shopee", shopee_item_id: "1", score: 50, original_url: "https://shopee.com.br/product/1/1" },
+      ] as Offer[];
+      expect(deduplicateCommercialOffers(offers)[0].id).toBe("a");
+      expect(offers).toHaveLength(2);
     });
   });
 
