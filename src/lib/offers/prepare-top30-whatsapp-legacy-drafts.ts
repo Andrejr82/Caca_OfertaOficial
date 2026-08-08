@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { buildCommercialQueue, identifyLatestDiscoveryCohort, type CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
-import { routeCommercialCandidates, selectOperationalTopCandidates, type RoutedCommercialCandidate } from "@/lib/offers/commercial-channel-router";
+import { isManualExpressOffer, routeCommercialCandidates, selectOperationalTopCandidates, type RoutedCommercialCandidate } from "@/lib/offers/commercial-channel-router";
 import type { Offer } from "@/types/domain";
 
 const TOP30_LIMIT = 30;
@@ -119,6 +119,10 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
 
   const classifyFreshOffers = (offers: Offer[], minimumCreatedAt: Date) => {
     const fresh = offers.filter((offer) => {
+      if (isManualExpressOffer(offer)) {
+        increment(reasons, "manual_express_excluded_from_editorial", 1);
+        return false;
+      }
       const createdAt = new Date(offer.created_at).getTime();
       if (!Number.isFinite(createdAt) || createdAt < minimumCreatedAt.getTime() || createdAt > now.getTime()) {
         increment(reasons, "not_fresh");

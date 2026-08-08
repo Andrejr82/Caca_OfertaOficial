@@ -4,6 +4,10 @@ import { officialBrand, hasTelegramEnv } from "@/lib/env";
 import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { Bot, AlertTriangle } from "lucide-react";
+import { selectEditorialTop30 } from "@/lib/offers/commercial-channel-router";
+import { getTodayBrtStart } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
+import { mergePanelDrafts } from "@/lib/offers/panel-draft-selection";
+import type { Offer } from "@/types/domain";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +37,7 @@ export default async function TelegramDashboardPage() {
       original_url: string;
       coupon: string | null;
       notes: string | null;
+      explainability?: Record<string, unknown> | null;
     };
   }
 
@@ -46,7 +51,12 @@ export default async function TelegramDashboardPage() {
       .eq("status", "draft")
       .order("created_at", { ascending: false });
 
-    draftPosts = drafts || [];
+    const rawDrafts = drafts || [];
+    const editorialOffers = rawDrafts
+      .map((post) => post.offers as Offer | null)
+      .filter((offer): offer is Offer => Boolean(offer));
+    const editorialOfferIds = new Set(selectEditorialTop30(editorialOffers).map((offer) => offer.id));
+    draftPosts = mergePanelDrafts(rawDrafts as any, editorialOfferIds, getTodayBrtStart()) as unknown as PostWithOffer[];
   }
 
   const historyData = await getPostHistory("telegram");
