@@ -1146,13 +1146,18 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     if (stageLogger) stageLogger.end('RPC_upsert_discovery_offers_v2', rpcStartedAt, data.inserted + data.updated);
     if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, data.inserted + data.updated);
     
+    const resolvedOfferIds = await resolvePersistedOfferIds({
+      marketplace,
+      rows,
+      rpcOfferIds: Array.isArray(data.offer_ids) ? data.offer_ids : [],
+    });
     const rpcOutcome = normalizeRpcOutcome({
       accepted: data.inserted + data.updated,
       inserted: data.inserted,
       updated: data.updated,
       ignored: data.ignored,
       failed: data.failed,
-      offerIds: [...new Set(Array.isArray(data.offer_ids) ? data.offer_ids : [])],
+      offerIds: resolvedOfferIds,
       state: FINAL_STATE,
     });
     if (rpcOutcome.partialSuccess) {
@@ -1174,6 +1179,35 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     if (stageLogger) stageLogger.error('persistDiscoveryIngestionV1', stageStartedAt, err.message);
     throw err;
   }
+}
+
+async function resolvePersistedOfferIds({ marketplace, rows, rpcOfferIds = [], supabase = getSupabase() }) {
+  const ids = [...new Set((Array.isArray(rpcOfferIds) ? rpcOfferIds : []).filter(Boolean).map(String))];
+  const identityColumns = marketplace === 'Shopee'
+    ? ['shopee_item_id']
+    : marketplace === 'Amazon'
+      ? ['product_id']
+      : marketplace === 'Mercado Livre'
+        ? ['item_id', 'product_id']
+        : [];
+
+  for (const row of Array.isArray(rows) ? rows : []) {
+    for (const column of identityColumns) {
+      const identity = row?.[column];
+      if (!identity) continue;
+      const query = await supabase
+        .from('offers')
+        .select('id')
+        .eq('user_id', row.user_id)
+        .eq('platform', marketplace)
+        .eq(column, identity)
+        .maybeSingle();
+      if (query.error) throw new Error(`Falha ao recuperar offer persistida (${marketplace}/${column}): ${query.error.message}`);
+      if (query.data?.id && !ids.includes(String(query.data.id))) ids.push(String(query.data.id));
+      if (query.data?.id) break;
+    }
+  }
+  return ids;
 }
 
 function validateOfficialAIUrl(url) {
@@ -1662,6 +1696,7 @@ module.exports = {
   fetchMercadoLivreViaScrapedo: fetchAmazonHtmlViaScrapedo,
   notifyWorkPendingToOfficialAI,
   persistDiscoveryIngestionV1,
+  resolvePersistedOfferIds,
   resolveOfficialAITriggerEndpoint,
   refreshShopeeNativeCatalog,
   lookupShopeeAffiliateProduct,
