@@ -112,7 +112,9 @@ export async function publishOfficialPost(
   const invalid = validatePublicationCommand(command);
   if (invalid) return auditRejection(command, dependencies, rejected(command, invalid.code, invalid.message, "command", startedAt), audit);
 
-  if (process.env.NO_PUBLISH === "1") {
+  const oraclePublicationDisabled = command.origin === "oracle.discovery"
+    && command.actor.service === "oracle-worker";
+  if (process.env.NO_PUBLISH === "1" || command.metadata?.noPublish === true || oraclePublicationDisabled) {
     return auditRejection(
       command,
       dependencies,

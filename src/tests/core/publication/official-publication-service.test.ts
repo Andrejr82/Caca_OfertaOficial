@@ -215,6 +215,25 @@ describe("publishOfficialPost", () => {
     }
   });
 
+  it("fails closed for Oracle-triggered publication even when the app env is unset", async () => {
+    const previous = process.env.NO_PUBLISH;
+    delete process.env.NO_PUBLISH;
+    try {
+      const test = fixture();
+      const result = await publishOfficialPost(command({
+        origin: "oracle.discovery",
+        actor: { type: "service", id: "oracle-worker", service: "oracle-worker" },
+        metadata: { noPublish: true },
+      }), test.dependencies);
+
+      expect(result).toMatchObject({ status: "rejected", code: "PUBLICATION_DISABLED", failureStage: "guard" });
+      expect(test.counts()).toEqual({ transportCalls: 0, postTransitions: 0, offerTransitions: 0 });
+    } finally {
+      if (previous === undefined) delete process.env.NO_PUBLISH;
+      else process.env.NO_PUBLISH = previous;
+    }
+  });
+
   it("publishes persisted content, stores the receipt, then transitions post and offer", async () => {
     const test = fixture();
 

@@ -1248,6 +1248,7 @@ async function notifyWorkPendingToOfficialAI(cycleResult) {
           command: 'PROCESS_OFFERS', offerIds, correlationId: cycleResult.correlationId,
           commandId: `ai:cycle:${cycleResult.correlationId}:v1`, tenantId: cycleResult.tenantId || ADMIN_USER_ID,
           requestedAt: cycleResult.requestedAt || new Date().toISOString(),
+          noPublish: process.env.NO_PUBLISH === '1',
         },
         {
           headers: {
