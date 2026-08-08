@@ -36,7 +36,7 @@ function parseOverlay(source) {
   }
 
   for (const key of REQUIRED_KEYS) {
-    if (parsed[key] !== ORACLE_RUNTIME_FLAGS[key]) {
+    if (!Object.hasOwn(parsed, key)) {
       throw new Error(`Oracle runtime overlay is missing required key: ${key}`);
     }
   }
