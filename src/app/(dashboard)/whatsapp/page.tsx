@@ -5,12 +5,14 @@ import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
 import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
-import { getTodayBrtStart } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
+import { getTodayBrtStart, prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 
 export const dynamic = "force-dynamic";
 
 export default async function WhatsappDashboardPage() {
-  const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
+  const authClient = await createServerSupabaseClient();
+  const supabase = createSupabaseAdminClient() || authClient;
+  const { data: { user } } = authClient ? await authClient.auth.getUser() : { data: { user: null } };
   
   interface PostWithOffer {
     id: string;
@@ -43,13 +45,25 @@ export default async function WhatsappDashboardPage() {
 
   let draftPosts: PostWithOffer[] = [];
 
-  if (supabase) {
+  let selectedOfferIds = new Set<string>();
+  if (supabase && user?.id) {
+    try {
+      const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
+      selectedOfferIds = new Set(top30.selectedOfferIds);
+    } catch {
+      // Fail closed: a preparation read failure must not render the raw draft cohort.
+      selectedOfferIds = new Set();
+    }
+  }
+
+  if (supabase && selectedOfferIds.size > 0) {
     const todayStart = getTodayBrtStart();
     const { data: drafts } = await supabase
       .from("posts")
       .select("*, offers(*), affiliate_links(tracked_url)")
       .eq("channel", "whatsapp")
       .eq("status", "draft")
+      .in("offer_id", [...selectedOfferIds])
       .gte("created_at", todayStart.toISOString())
       .order("created_at", { ascending: false });
 

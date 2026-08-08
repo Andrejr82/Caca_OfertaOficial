@@ -94,6 +94,27 @@ function repository(input: {
 }
 
 describe("prepareTop30WhatsappLegacyDrafts", () => {
+  it("selects only the latest-cycle Top30 from 582 raw offers and keeps the database rows untouched", async () => {
+    const discovery = { correlation_id: "cycle-real", discovery_evidence: { discoveredAt: "2026-08-07T10:00:00.000Z" } };
+    const rawOffers = [
+      ...Array.from({ length: 572 }, (_, index) => offer(`shopee-${index}`, "2026-08-07T10:00:01.000Z", { platform: "Shopee", shopee_item_id: `item-${index}`, explainability: discovery })),
+      ...Array.from({ length: 8 }, (_, index) => offer(`amazon-${index}`, "2026-08-07T10:00:01.000Z", { platform: "Amazon", product_id: `ASIN-${index}`, explainability: discovery })),
+      offer("mercado-livre-1", "2026-08-07T10:00:01.000Z", { platform: "Mercado Livre", item_id: "ML-1", explainability: discovery }),
+      offer("old-updated", "2026-08-07T09:00:00.000Z", { platform: "Shopee", shopee_item_id: "old-item", updated_at: "2026-08-07T10:00:02.000Z", explainability: discovery }),
+    ];
+    const repo = repository({ today: rawOffers, fallback: [] });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(rawOffers).toHaveLength(582);
+    expect(result.selectedOfferIds).toHaveLength(30);
+    expect(new Set(result.selectedOfferIds).size).toBe(30);
+    expect(result.selectedOfferIds.filter((id) => id.startsWith("shopee-")).length).toBeLessThanOrEqual(30);
+    expect(result.selectedOfferIds.some((id) => id.startsWith("amazon-"))).toBe(false);
+    expect(result.selectedOfferIds).not.toContain("old-updated");
+    expect(repo.writes).toHaveLength(0);
+  });
+
   it("uses today BRT first, falls back to 24h, and never asks for 48h/72h", async () => {
     const today = Array.from({ length: 20 }, (_, index) => offer(`today-${index}`, "2026-08-07T10:00:00.000Z"));
     const fallback = Array.from({ length: 10 }, (_, index) => offer(`yesterday-${index}`, "2026-08-06T13:00:00.000Z"));

@@ -164,13 +164,15 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
       });
     }
 
-    for (const post of historyData) {
-      if (!uniquePosts.has(post.id)) {
-        uniquePosts.set(post.id, {
-          platform: post.platform,
-          marketplace: post.marketplace,
-          category: post.category,
-        });
+    if (channel !== "whatsapp") {
+      for (const post of historyData) {
+        if (!uniquePosts.has(post.id)) {
+          uniquePosts.set(post.id, {
+            platform: post.platform,
+            marketplace: post.marketplace,
+            category: post.category,
+          });
+        }
       }
     }
 
@@ -180,7 +182,7 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
       ).length;
       return acc;
     }, {} as Record<MarketplaceFilterKey, number>);
-  }, [draftPosts, historyData]);
+  }, [channel, draftPosts, historyData]);
 
   const filteredDraftPosts = useMemo(
     () =>

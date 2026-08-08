@@ -30,6 +30,7 @@ describe("WhatsappTop30Action", () => {
       skippedAffiliateFailed: 0,
       skipped: 0,
       reasons: { telegram_blocked: 1 },
+      selectedOfferIds: Array.from({ length: 30 }, (_, index) => `offer-${index}`),
     });
 
     render(<WhatsappTop30Action />);
