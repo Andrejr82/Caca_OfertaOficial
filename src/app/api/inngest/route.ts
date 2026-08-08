@@ -7,7 +7,8 @@ import {
   runUserScrapingBackground,
   processClickBackground,
   instagramPollingBackground,
-  sendTelegramCycleIntro
+  sendTelegramCycleIntro,
+  publishTelegramEditorialTop30
 } from "@/lib/inngest/functions";
 
 export const { GET, POST, PUT } = serve({
@@ -19,6 +20,7 @@ export const { GET, POST, PUT } = serve({
     runUserScrapingBackground,
     processClickBackground,
     instagramPollingBackground,
-    sendTelegramCycleIntro
+    sendTelegramCycleIntro,
+    publishTelegramEditorialTop30
   ],
 });

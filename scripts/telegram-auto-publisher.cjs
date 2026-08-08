@@ -14,7 +14,7 @@ const supabase = createClient(
 );
 
 function sendTelegramPhoto(text, photoUrl) {
-  if (process.env.NO_PUBLISH === '1') {
+  if (process.env.NO_PUBLISH === '1' && process.env.TELEGRAM_AUTO_PUBLISH !== '1') {
     return Promise.reject(new Error('Telegram publication disabled by NO_PUBLISH=1.'));
   }
   if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHANNEL_ID) {
@@ -140,8 +140,13 @@ function createTelegramPublisher(options = {}) {
     return mediaUrl;
   }
 
-  async function processQueue() {
-    if (process.env.NO_PUBLISH === '1') {
+  async function processQueue(options = {}) {
+    const hasEditorialSelection = Array.isArray(options.selectedEditorialTop30OfferIds);
+    if (!hasEditorialSelection) {
+      log('log', { event: 'poll_skipped', result: 'editorial_selection_missing' });
+      return { result: 'disabled', reason: 'editorial_selection_missing' };
+    }
+    if (process.env.NO_PUBLISH === '1' && process.env.TELEGRAM_AUTO_PUBLISH !== '1') {
       log('log', { event: 'poll_skipped', result: 'no_publish' });
       return { result: 'disabled', reason: 'NO_PUBLISH=1' };
     }
@@ -162,21 +167,30 @@ function createTelegramPublisher(options = {}) {
         log('log', { event: 'poll_skipped', result: 'disabled' });
         return { result: 'disabled' };
       }
+      const selectedOfferIds = [...new Set(options.selectedEditorialTop30OfferIds.map(String).filter(Boolean))].slice(0, 30);
+      if (selectedOfferIds.length === 0) {
+        log('log', { event: 'poll_completed', result: 'empty', selection: 'editorial_top30' });
+        return { result: 'empty' };
+      }
 
       const { data: posts, error } = await database
         .from('posts')
-        .select('id, offer_id, content, channel, status, offers(image_url, product_name, notes)')
+        .select('id, offer_id, content, channel, status, offers(image_url, product_name, notes, explainability)')
         .eq('status', 'draft')
         .eq('channel', 'telegram')
+        .in('offer_id', selectedOfferIds)
         .order('created_at', { ascending: true })
-        .limit(5);
+        .limit(30);
       if (error) throw error;
-      if (!posts?.length) {
+      const uniquePosts = [...new Map((posts || [])
+        .filter((post) => post.offers?.explainability?.manual_source !== true)
+        .map((post) => [post.offer_id, post])).values()];
+      if (!uniquePosts.length) {
         log('log', { event: 'poll_completed', result: 'empty' });
         return { result: 'empty' };
       }
 
-      for (const post of posts) {
+      for (const post of uniquePosts) {
         const idempotencyKey = telegramIdempotencyKey(post.id);
         let claim;
         try {
@@ -249,8 +263,8 @@ function createTelegramPublisher(options = {}) {
 const defaultPublisher = createTelegramPublisher();
 let intervalTimer = null;
 
-function processTelegramQueue() {
-  return Promise.resolve({ result: 'disabled', reason: 'Official Publication Service is the only publisher' });
+function processTelegramQueue(options = {}) {
+  return defaultPublisher.processQueue(options);
 }
 
 function startTelegramAutomation(_intervalMs = 60000) {
