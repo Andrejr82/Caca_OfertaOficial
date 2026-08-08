@@ -907,7 +907,7 @@ async function generateQuickPostActionInternal(
         ingestion_id: ingestionId,
         manual_source: true,
         manual_resolution: {
-          source: "quick-publication",
+          source: platform === "Shein" ? "quick-publication-shein" : "quick-publication",
           resolved_url: resolvedUrl,        // URL após resolução de redirects
           canonical_url: canonicalUrl,      // URL canônica do produto
           affiliate_url: generatedAffiliateUrl, // URL com parâmetros de afiliado

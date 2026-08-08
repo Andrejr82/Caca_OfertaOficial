@@ -5,6 +5,11 @@ import Image from "next/image";
 import { generateQuickPostAction, publishToTelegramAction, publishToInstagramAction, publishToWhatsAppAction } from "@/lib/publish/actions";
 import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
 import { channels, type Channel } from "@/types/domain";
+import {
+  buildSheinAssistedPayload,
+  validateSheinAssistedConfirmation,
+  type SheinAssistedFormValue,
+} from "@/lib/publish/shein-assisted-fallback";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select } from "@/components/ui/field";
@@ -28,6 +33,13 @@ interface PreparedPost {
   offerId?: string;
   targetChannels: string[];
   platform?: string;
+}
+
+interface SheinAssistedRequest extends SheinAssistedFormValue {
+  id: string;
+  error: string;
+  submitting: boolean;
+  message: string;
 }
 
 // ─── Subcomponents ───
@@ -66,6 +78,30 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
   // Queue of prepared posts
   const [posts, setPosts] = useState<PreparedPost[]>([]);
+  const [sheinAssistedRequests, setSheinAssistedRequests] = useState<SheinAssistedRequest[]>([]);
+
+  function preparedPostFromResult(
+    link: string,
+    result: Awaited<ReturnType<typeof generateQuickPostAction>>,
+    index: number,
+  ): PreparedPost | null {
+    if (!result.ok || !result.copy || !result.offer) return null;
+    return {
+      id: `post-${Date.now()}-${index}`,
+      url: link,
+      productName: result.offer.product_name || "Produto",
+      imageUrl: result.offer.image_url || "",
+      trackedUrl: result.trackedUrl || result.affiliateUrl || "",
+      copy: result.copy,
+      copies: result.copies,
+      targetChannels: channel === "omnichannel" ? ["telegram", "whatsapp", "facebook", "instagram"] : [channel],
+      status: "ready",
+      publishMessage: "",
+      expanded: index === 0,
+      offerId: result.offer.id,
+      platform: result.offer.platform,
+    };
+  }
 
   // ─── Parse links from textarea ───
   function parseLinks(text: string): string[] {
@@ -86,10 +122,12 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
     setProcessProgress({ current: 0, total: links.length });
     setProcessErrors([]);
     setProcessSummary(null);
+    setSheinAssistedRequests([]);
 
     // Reservar posições na ordem original
     const newPosts: (PreparedPost | null)[] = new Array(links.length).fill(null);
     const errors: string[] = [];
+    const assisted: SheinAssistedRequest[] = [];
     let completed = 0;
 
     // Processar em lotes de MAX_CONCURRENCY — falha de um não cancela os demais
@@ -110,22 +148,20 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
         if (settled.status === "fulfilled") {
           const { res, index } = settled.value;
-          if (res.ok && res.copy && res.offer) {
-            newPosts[index] = {
-              id: `post-${Date.now()}-${index}`,
-              url: links[index],
-              productName: res.offer?.product_name || "Produto",
-              imageUrl: res.offer?.image_url || "",
-              trackedUrl: res.trackedUrl || (res as any).affiliateUrl || "",
-              copy: res.copy,
-              copies: res.copies,
-              targetChannels: channel === "omnichannel" ? ["telegram", "whatsapp", "facebook", "instagram"] : [channel],
-              status: "ready",
-              publishMessage: "",
-              expanded: index === 0,
-              offerId: res.offer.id,
-              platform: res.offer?.platform,
-            };
+          const prepared = preparedPostFromResult(links[index], res, index);
+          if (prepared) {
+            newPosts[index] = prepared;
+          } else if (res.status === "SHEIN_IDENTITY_AMBIGUOUS" || res.status === "SHEIN_PRICE_AMBIGUOUS") {
+            assisted.push({
+              id: `shein-assisted-${Date.now()}-${index}`,
+              originalUrl: links[index],
+              title: "",
+              price: "",
+              imageUrl: "",
+              error: res.message,
+              submitting: false,
+              message: "",
+            });
           } else {
             errors.push(`Link ${globalIndex + 1}: ${res.message || "Erro desconhecido"}`);
           }
@@ -139,10 +175,60 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
     const validPosts = newPosts.filter(Boolean) as PreparedPost[];
     setPosts((prev) => [...validPosts, ...prev]);
+    setSheinAssistedRequests((prev) => [...assisted, ...prev]);
     setProcessErrors(errors);
-    setProcessSummary({ total: links.length, success: validPosts.length, failed: errors.length });
+    setProcessSummary({ total: links.length, success: validPosts.length, failed: errors.length + assisted.length });
     setIsProcessing(false);
     if (validPosts.length > 0) setLinksInput("");
+  }
+
+  function updateSheinAssistedRequest(id: string, field: keyof SheinAssistedFormValue, value: string) {
+    setSheinAssistedRequests((prev) => prev.map((request) => (
+      request.id === id ? { ...request, [field]: value, message: "" } : request
+    )));
+  }
+
+  async function confirmSheinAssistedRequest(request: SheinAssistedRequest) {
+    const validation = validateSheinAssistedConfirmation(request);
+    if (!validation.ok) {
+      setSheinAssistedRequests((prev) => prev.map((item) => (
+        item.id === request.id ? { ...item, message: validation.errors.join("; ") } : item
+      )));
+      return;
+    }
+
+    setSheinAssistedRequests((prev) => prev.map((item) => (
+      item.id === request.id ? { ...item, submitting: true, message: "" } : item
+    )));
+
+    try {
+      const payload = buildSheinAssistedPayload(request.originalUrl, validation.confirmation);
+      const result = await generateQuickPostAction(request.originalUrl, channel, {
+        sheinManualConfirmation: {
+          title: payload.title,
+          price: payload.price,
+          imageUrl: payload.imageUrl,
+        },
+      });
+      const prepared = preparedPostFromResult(request.originalUrl, result, posts.length);
+      if (!prepared) {
+        setSheinAssistedRequests((prev) => prev.map((item) => (
+          item.id === request.id ? { ...item, submitting: false, message: result.message || "Não foi possível confirmar o produto." } : item
+        )));
+        return;
+      }
+      setPosts((prev) => [prepared, ...prev]);
+      setSheinAssistedRequests((prev) => prev.filter((item) => item.id !== request.id));
+      setProcessSummary((summary) => summary ? {
+        ...summary,
+        success: summary.success + 1,
+        failed: Math.max(0, summary.failed - 1),
+      } : summary);
+    } catch (error) {
+      setSheinAssistedRequests((prev) => prev.map((item) => (
+        item.id === request.id ? { ...item, submitting: false, message: error instanceof Error ? error.message : "Erro ao confirmar SHEIN." } : item
+      )));
+    }
   }
 
   // ─── Publish single post ───
@@ -338,6 +424,81 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             {processErrors.map((err, i) => (
               <p key={i} className="text-xs text-red-400/70 pl-5">• {err}</p>
             ))}
+          </div>
+        )}
+
+        {sheinAssistedRequests.length > 0 && (
+          <div className="space-y-3">
+            {sheinAssistedRequests.map((request) => {
+              const validation = validateSheinAssistedConfirmation(request);
+              return (
+                <div key={request.id} className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4 space-y-3">
+                  <div className="flex items-start gap-2 text-amber-300">
+                    <AlertCircle size={18} className="mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="font-semibold">Confirmação manual SHEIN necessária</p>
+                      <p className="text-xs text-amber-200/70 mt-1">{request.error}</p>
+                      <p className="text-xs text-white/50 mt-1">A IA não define preço e nenhum produto será pesquisado pelo título.</p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <div className="md:col-span-2">
+                      <label className="text-xs text-white/50">URL original</label>
+                      <input value={request.originalUrl} readOnly className="glass-input mt-1 w-full rounded-lg p-2.5 text-xs font-mono text-white/60" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/70">Título confirmado *</label>
+                      <input
+                        value={request.title}
+                        onChange={(e) => updateSheinAssistedRequest(request.id, "title", e.target.value)}
+                        placeholder="Nome confirmado no app/site SHEIN"
+                        className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm"
+                        disabled={request.submitting}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/70">Preço confirmado *</label>
+                      <input
+                        value={request.price}
+                        onChange={(e) => updateSheinAssistedRequest(request.id, "price", e.target.value)}
+                        placeholder="R$ 0,00"
+                        inputMode="decimal"
+                        className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm"
+                        disabled={request.submitting}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-xs text-white/70">Imagem confirmada (URL) *</label>
+                      <input
+                        value={request.imageUrl}
+                        onChange={(e) => updateSheinAssistedRequest(request.id, "imageUrl", e.target.value)}
+                        placeholder="https://.../imagem-do-produto.jpg"
+                        type="url"
+                        className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm"
+                        disabled={request.submitting}
+                      />
+                    </div>
+                  </div>
+
+                  {!validation.ok && (
+                    <p className="text-xs text-red-300">Preencha título, preço positivo e uma URL de imagem HTTP(S).</p>
+                  )}
+                  {request.message && <p className="text-xs text-red-300">{request.message}</p>}
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="primary"
+                      disabled={request.submitting || !validation.ok}
+                      onClick={() => void confirmSheinAssistedRequest(request)}
+                      className="bg-amber-600 hover:bg-amber-500 border-0 text-xs"
+                    >
+                      {request.submitting ? <><Loader2 size={14} className="animate-spin" /> Confirmando...</> : <><CheckCircle2 size={14} /> Confirmar dados e gerar drafts</>}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </form>
