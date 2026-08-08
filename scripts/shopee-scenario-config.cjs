@@ -211,11 +211,11 @@ SCENARIOS.moda_fitness_beleza_viagem = {
 const {
   EDITORIAL_SCENARIOS,
   EDITORIAL_SCENARIO_IDS,
-  QUEUE_BY_HOUR,
-  getEditorialScenarioById,
   getEditorialScenarioForHour,
   getEditorialScenarioForDiscoveryHour,
+  assertEditorialScheduleValid,
 } = require('./editorial-scenario-config.cjs');
+assertEditorialScheduleValid();
 for (const id of Object.keys(SCENARIOS)) delete SCENARIOS[id];
 Object.assign(SCENARIOS, EDITORIAL_SCENARIOS);
 
@@ -225,40 +225,6 @@ const SCENARIO_WINDOWS = Object.freeze(EDITORIAL_SCENARIO_IDS.map((id) => ({
   scenarioId: id,
   label: EDITORIAL_SCENARIOS[id].name,
 })));
-
-const DEFAULT_CYCLE_SCENARIO_ROUTING = Object.freeze({
-  0: 'casa_cozinha_editorial',
-  4: 'ferramentas_editorial',
-  8: 'informatica_editorial',
-  12: 'beleza_editorial',
-  16: 'games_editorial',
-  20: 'grandes_ofertas_editorial',
-});
-
-function getCycleScenarioRouting() {
-  const raw = process.env.ORACLE_CYCLE_SCENARIO_ROUTING_JSON;
-  if (!raw) return DEFAULT_CYCLE_SCENARIO_ROUTING;
-  try {
-    const parsed = JSON.parse(raw);
-    const routing = {};
-    for (const hour of [0, 4, 8, 12, 16, 20]) {
-      const id = String(parsed?.[hour] || '').trim();
-      routing[hour] = getEditorialScenarioById(id) ? id : DEFAULT_CYCLE_SCENARIO_ROUTING[hour];
-    }
-    return Object.freeze(routing);
-  } catch {
-    return DEFAULT_CYCLE_SCENARIO_ROUTING;
-  }
-}
-
-const CYCLE_SCENARIO_ROUTING = Object.freeze({
-  0: 'casa_cozinha_editorial',
-  4: 'casa_cozinha_editorial',
-  8: 'ferramentas_editorial',
-  12: 'beleza_editorial',
-  16: 'games_editorial',
-  20: 'grandes_ofertas_editorial',
-});
 
 function getCanonicalCycleScenarioId(startHour) {
   return getEditorialScenarioForDiscoveryHour(startHour).id;
@@ -362,7 +328,6 @@ module.exports = {
   getActiveScenario,
   getCycleScenario,
   getCanonicalCycleScenarioId,
-  CYCLE_SCENARIO_ROUTING,
   getCycleStartHour,
   getScenarioWindow,
   SCENARIO_WINDOWS,

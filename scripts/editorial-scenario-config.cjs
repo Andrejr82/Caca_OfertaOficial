@@ -86,6 +86,12 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['bebê', 'bebe', 'humano', 'automotivo'],
     ['species', 'size', 'weight', 'material', 'flavor'], { apiCategories: [100631], amazonBrowseNodes: ['19653951011', '19653950011', '19653948011'] }),
 
+  automotivo_editorial: scenario('automotivo_editorial', 'Automotivo', 16,
+    ['acessórios automotivos', 'ferramenta automotiva', 'som automotivo', 'manutenção carro', 'limpeza automotiva', 'organizador carro', 'capacete', 'pneu', 'compressor automotivo'],
+    ['automotivo', 'carro', 'veículo', 'veiculo', 'moto', 'motocicleta', 'capacete', 'pneu', 'compressor', 'ferramenta automotiva', 'som automotivo', 'limpeza automotiva'],
+    ['bebê', 'bebe', 'pet', 'infantil', 'brinquedo'],
+    ['brand', 'model', 'compatibility', 'voltage', 'material'], { apiCategories: [100011, 100636], amazonBrowseNodes: ['15706940011', '15706941011', '15706942011'] }),
+
 
   games_editorial: scenario('games_editorial', 'Games', 17,
     ['console', 'playstation', 'xbox', 'nintendo switch', 'controle gamer', 'jogo ps5', 'jogo xbox', 'cadeira gamer', 'headset gamer'],
@@ -125,55 +131,69 @@ const EDITORIAL_SCENARIOS = Object.freeze({
   },
 
 
-  // --- INÍCIO DA ZONA DE LOJAS OFICIAIS (ALTO TICKET / DYNAMIC TRENDS) ---
-
-  suplementacao_oficial: scenario('suplementacao_oficial', 'Suplementação Premium', 19,
-    ['whey protein', 'creatina', 'colágeno', 'pré treino'],
-    ['whey', 'creatina', 'colágeno', 'pré treino'],
-    ['infantil', 'usado', 'vazio'],
-    ['brand', 'weight', 'flavor'],
-    {
-      apiCategories: [100001, 100637],
-      discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00
-    }),
-
-  perfumaria_premium: scenario('perfumaria_premium', 'Perfumaria e Cosméticos', 20,
-    ['perfume importado', 'kit maquiagem', 'skincare', 'base líquida', 'sérum facial'],
-    ['perfume', 'maquiagem', 'skincare', 'base', 'sérum'],
-    ['amostra', 'decant', 'vazio'],
-    ['brand', 'volume', 'skin_type'],
-    {
-      apiCategories: [100630, 100001],
-      discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00
-    }),
-
-  calcados_premium: scenario('calcados_premium', 'Calçados e Tênis', 21,
-    ['tênis esportivo', 'bota tratorada', 'sapato social', 'tênis casual', 'sandália'],
-    ['tênis', 'bota', 'sapato', 'sandália'],
-    ['usado', 'infantil', 'cadarço'],
-    ['brand', 'size', 'color', 'gender'],
-    {
-      apiCategories: [100012, 100011, 100009],
-      discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00
-    }),
-
-  achadinhos_beleza_oficial: scenario('achadinhos_beleza_oficial', 'Achadinhos de Beleza', 16,
-    ['escova secadora', 'modelador de cachos', 'kit pincel maquiagem', 'esponja elétrica facial', 'depilador elétrico'],
-    ['escova secadora', 'modelador', 'pincel', 'esponja facial', 'depilador'],
-    ['usado', 'conserto', 'peça'],
-    ['brand', 'voltage', 'color'],
-    {
-      apiCategories: [100001, 100630],
-      discoveryMode: 'dynamic_trends',
-      maxPriceThreshold: 90.00
-    }),
 });
 
 const EDITORIAL_SCENARIO_IDS = Object.freeze(Object.keys(EDITORIAL_SCENARIOS));
-const QUEUE_BY_HOUR = Object.freeze(Object.fromEntries(EDITORIAL_SCENARIO_IDS.map((id) => [EDITORIAL_SCENARIOS[id].queueHour, id])));
+const EXPECTED_PUBLICATION_HOURS = Object.freeze([...Array(16)].map((_, index) => index + 7));
+const EXPECTED_DISCOVERY_HOURS = Object.freeze([...Array(15)].map((_, index) => index + 6));
+function buildQueueByHour(scenarios) {
+  const queue = {};
+  for (const id of EDITORIAL_SCENARIO_IDS) {
+    const hour = Number(scenarios[id]?.queueHour);
+    if (Object.prototype.hasOwnProperty.call(queue, hour)) {
+      throw new Error(`CONFIGURAÇÃO INVÁLIDA\nduplicate queueHour=${hour}`);
+    }
+    queue[hour] = id;
+  }
+  return Object.freeze(queue);
+}
+const QUEUE_BY_HOUR = buildQueueByHour(EDITORIAL_SCENARIOS);
+
+function validateEditorialSchedule(scenarios = EDITORIAL_SCENARIOS) {
+  const entries = Object.values(scenarios || {});
+  const errors = [];
+  const ids = entries.map((entry) => entry?.id);
+  const queueHours = entries.map((entry) => Number(entry?.queueHour));
+  const expectedIds = EDITORIAL_SCENARIO_IDS;
+  const expectedIdSet = new Set(expectedIds);
+  const actualIdSet = new Set(ids);
+
+  if (entries.length !== expectedIds.length) errors.push(`active scenario count=${entries.length}, expected=${expectedIds.length}`);
+  for (const id of expectedIds) if (!actualIdSet.has(id)) errors.push(`missing active scenario=${id}`);
+  for (const id of ids) if (!expectedIdSet.has(id)) errors.push(`extra active scenario=${id}`);
+
+  const seenHours = new Set();
+  for (const hour of queueHours) {
+    if (seenHours.has(hour)) errors.push(`duplicate queueHour=${hour}`);
+    seenHours.add(hour);
+  }
+  if (queueHours.some((hour) => !Number.isInteger(hour) || hour < 7 || hour > 22)) errors.push('queueHour outside 07-22');
+  if (seenHours.size !== EXPECTED_PUBLICATION_HOURS.length || EXPECTED_PUBLICATION_HOURS.some((hour) => !seenHours.has(hour))) {
+    errors.push('publication hours must be exactly 07-22');
+  }
+
+  for (let index = 0; index < expectedIds.length; index += 1) {
+    const entry = scenarios[expectedIds[index]];
+    if (!entry || Number(entry.queueHour) !== EXPECTED_PUBLICATION_HOURS[index]) {
+      errors.push(`queueHour mismatch for ${expectedIds[index]}`);
+    }
+  }
+  for (const hour of EXPECTED_DISCOVERY_HOURS) {
+    const publication = getEditorialScenarioForDiscoveryHour(hour);
+    const expected = scenarios[QUEUE_BY_HOUR[hour + 1]];
+    if (!publication || !expected || publication.id !== expected.id) errors.push(`discovery mapping mismatch=${hour}`);
+  }
+  const coupons = scenarios.cupons_aprovados_editorial;
+  if (!coupons || coupons.discoveryMode !== 'manual_only') errors.push('cupons_aprovados_editorial must be manual_only');
+  if (getEditorialScenarioForDiscoveryHour(21)?.id === coupons?.id) errors.push('coupon hour 22 must not trigger product discovery');
+  return { valid: errors.length === 0, errors };
+}
+
+function assertEditorialScheduleValid(scenarios = EDITORIAL_SCENARIOS) {
+  const result = validateEditorialSchedule(scenarios);
+  if (!result.valid) throw new Error(`CONFIGURAÇÃO INVÁLIDA\n${result.errors.join('\n')}`);
+  return result;
+}
 
 function getEditorialScenarioById(id) {
   return EDITORIAL_SCENARIOS[String(id || '').trim()] || null;
@@ -225,4 +245,8 @@ module.exports = {
   getEditorialScenarioForHour,
   getEditorialScenarioForDiscoveryHour,
   getScenarioScheduleAudit,
+  EXPECTED_PUBLICATION_HOURS,
+  EXPECTED_DISCOVERY_HOURS,
+  validateEditorialSchedule,
+  assertEditorialScheduleValid,
 };

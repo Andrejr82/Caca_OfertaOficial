@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const { SCENARIOS, getActiveScenario, getCycleScenario, SCENARIO_WINDOWS } = require('../shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-scenario-config.cjs');
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
-const { CRON_SCHEDULE } = require('../oracle-scraper.cjs');
+const { CRON_SCHEDULE, parseScenarioArg, startOracleScraper } = require('../oracle-scraper.cjs');
 
 test('usa descoberta horária para as filas de 07h a 21h', () => {
   assert.equal(CRON_SCHEDULE, '0 6-20 * * *');
@@ -13,6 +13,7 @@ test('usa descoberta horária para as filas de 07h a 21h', () => {
     .map((hour) => getActiveScenario(hour).id), Object.keys(SCENARIOS));
   assert.equal(SCENARIO_WINDOWS.length, 16);
   assert.equal(getCycleScenario(6, 1).publicationHour, 7);
+  assert.equal(getCycleScenario(15, 1).id, 'automotivo_editorial');
 });
 
 test('publica os contratos editoriais nos marketplaces', () => {
@@ -20,4 +21,12 @@ test('publica os contratos editoriais nos marketplaces', () => {
     assert.ok(SCENARIOS[id].keywords.length > 0);
     assert.ok(AMAZON_SCENARIOS[id].keywords.length > 0);
   }
+});
+
+test('scheduler tem uma fonte de verdade e CLI continua override explícito', () => {
+  assert.equal(parseScenarioArg(['node', 'oracle-scraper.cjs', '--scenario=games_editorial']), 'games_editorial');
+  assert.equal(parseScenarioArg(['node', 'oracle-scraper.cjs', '--scenario', 'games_editorial']), 'games_editorial');
+  let scheduled = 0;
+  startOracleScraper({ argv: ['node', 'oracle-scraper.cjs'], cycle: async () => {}, schedule: () => { scheduled += 1; } });
+  assert.equal(scheduled, 1);
 });

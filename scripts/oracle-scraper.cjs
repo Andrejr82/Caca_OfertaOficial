@@ -124,6 +124,7 @@ const { attachDiscoveryFunnelMeta, normalizeRpcOutcome, readDiscoveryFunnelMeta 
 const { createDiscoveryScenarioRuntimeContract } = require('./scenario-runtime-contract.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
+const { assertEditorialScheduleValid } = require('./editorial-scenario-config.cjs');
 const { createShopeeOpenApiV1DiscoveryShadow } = require('./shopee-openapi-v1-discovery-shadow.cjs');
 const {
   getControlledPersistDecision,
@@ -1359,7 +1360,7 @@ function resolveManualScenarioId(category) {
     ['ferramentas', 'ferramentas_editorial'], ['informatica', 'informatica_editorial'],
     ['celulares', 'celulares_editorial'], ['beleza', 'beleza_editorial'],
     ['moda', 'moda_editorial'], ['esporte', 'esporte_editorial'],
-    ['petshop', 'pet_editorial'], ['achadinhos_beleza', 'achadinhos_beleza_oficial'],
+    ['petshop', 'pet_editorial'], ['automotivo', 'automotivo_editorial'],
     ['games', 'games_editorial'], ['tv_e_audio', 'tv_audio_editorial'],
     ['eletrodomesticos', 'eletrodomesticos_editorial'], ['moveis', 'moveis_editorial'],
     ['grandes_ofertas', 'grandes_ofertas_editorial'], ['cupons', 'cupons_aprovados_editorial'],
@@ -1486,6 +1487,7 @@ function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger
 }
 
 async function runScrapingCycleCore() {
+  assertEditorialScheduleValid();
   const startedAt = Date.now();
   const correlationId = crypto.randomUUID();
   const stageLogger = createStageLogger(correlationId);
@@ -1678,6 +1680,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
 }
 
 function startOracleScraper({ argv = process.argv, cycle = runScrapingCycle, schedule = cron.schedule } = {}) {
+  assertEditorialScheduleValid();
   const run = () => Promise.resolve(cycle()).catch((error) => {
     console.error('[Oracle Discovery-Only V5] ' + error.message);
   });

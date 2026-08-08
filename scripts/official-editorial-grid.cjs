@@ -2,6 +2,7 @@
 
 const OFFICIAL_EDITORIAL_GRID_VERSION = 'official-editorial-grid/v1';
 const OFFICIAL_EDITORIAL_TIMEZONE = 'America/Sao_Paulo';
+const { EDITORIAL_SCENARIOS, EXPECTED_DISCOVERY_HOURS, getEditorialScenarioForDiscoveryHour } = require('./editorial-scenario-config.cjs');
 
 function slot({ discoveryHour, publicationHour, scenarioId, title, focus, mode = 'api_search', isManualOnly = false, isDiscoveryEnabled = true, isPublicationEnabled = true, telegramIntroEnabled = true }) {
   return Object.freeze({
@@ -21,22 +22,27 @@ function slot({ discoveryHour, publicationHour, scenarioId, title, focus, mode =
 }
 
 const OFFICIAL_EDITORIAL_GRID = Object.freeze([
-  slot({ discoveryHour: 6, publicationHour: 7, scenarioId: 'casa_cozinha_editorial', title: 'Casa e Cozinha', focus: 'cama, mesa, banho e eletroportáteis' }),
-  slot({ discoveryHour: 7, publicationHour: 8, scenarioId: 'organizacao_editorial', title: 'Organização', focus: 'organização doméstica e utilidades' }),
-  slot({ discoveryHour: 8, publicationHour: 9, scenarioId: 'ferramentas_editorial', title: 'Ferramentas', focus: 'ferramentas manuais e elétricas' }),
-  slot({ discoveryHour: 9, publicationHour: 10, scenarioId: 'informatica_editorial', title: 'Informática', focus: 'computadores, periféricos e conectividade' }),
-  slot({ discoveryHour: 10, publicationHour: 11, scenarioId: 'celulares_editorial', title: 'Celulares', focus: 'smartphones e acessórios aderentes' }),
-  slot({ discoveryHour: 11, publicationHour: 12, scenarioId: 'beleza_editorial', title: 'Beleza', focus: 'cuidados pessoais, cabelo e cosméticos' }),
-  slot({ discoveryHour: 12, publicationHour: 13, scenarioId: 'moda_editorial', title: 'Moda', focus: 'roupas, calçados e acessórios' }),
-  slot({ discoveryHour: 13, publicationHour: 14, scenarioId: 'esporte_editorial', title: 'Esporte', focus: 'fitness, treino e equipamentos esportivos' }),
-  slot({ discoveryHour: 14, publicationHour: 15, scenarioId: 'pet_editorial', title: 'Pet', focus: 'alimentação, higiene e acessórios pet' }),
-  slot({ discoveryHour: 15, publicationHour: 16, scenarioId: 'automotivo_editorial', title: 'Automotivo', focus: 'acessórios, ferramentas, som, manutenção, limpeza e organização automotiva' }),
-  slot({ discoveryHour: 16, publicationHour: 17, scenarioId: 'games_editorial', title: 'Games', focus: 'consoles, jogos e periféricos gamers' }),
-  slot({ discoveryHour: 17, publicationHour: 18, scenarioId: 'tv_audio_editorial', title: 'TV e Áudio', focus: 'televisores, áudio e entretenimento' }),
-  slot({ discoveryHour: 18, publicationHour: 19, scenarioId: 'eletrodomesticos_editorial', title: 'Eletrodomésticos', focus: 'linha branca e eletrodomésticos de grande porte' }),
-  slot({ discoveryHour: 19, publicationHour: 20, scenarioId: 'moveis_editorial', title: 'Móveis', focus: 'móveis, quarto, sala e escritório' }),
-  slot({ discoveryHour: 20, publicationHour: 21, scenarioId: 'grandes_ofertas_editorial', title: 'Grandes Ofertas', focus: 'descontos e promoções de alto impacto', mode: 'api_search' }),
-  slot({ discoveryHour: 21, publicationHour: 22, scenarioId: 'cupons_aprovados_editorial', title: 'Cupons Aprovados', focus: 'cupons aprovados e códigos promocionais', mode: 'manual_only', isManualOnly: true, isDiscoveryEnabled: false, telegramIntroEnabled: false }),
+  ...EXPECTED_DISCOVERY_HOURS.map((discoveryHour) => {
+    const scenario = getEditorialScenarioForDiscoveryHour(discoveryHour);
+    return slot({
+      discoveryHour,
+      publicationHour: scenario.queueHour,
+      scenarioId: scenario.id,
+      title: scenario.name,
+      focus: scenario.name,
+    });
+  }),
+  slot({
+    discoveryHour: 21,
+    publicationHour: EDITORIAL_SCENARIOS.cupons_aprovados_editorial.queueHour,
+    scenarioId: 'cupons_aprovados_editorial',
+    title: EDITORIAL_SCENARIOS.cupons_aprovados_editorial.name,
+    focus: EDITORIAL_SCENARIOS.cupons_aprovados_editorial.name,
+    mode: 'manual_only',
+    isManualOnly: true,
+    isDiscoveryEnabled: false,
+    telegramIntroEnabled: false,
+  }),
 ]);
 
 function normalizeHour(value) {

@@ -3,14 +3,9 @@
 const {
   EDITORIAL_SCHEDULE_TIMEZONE,
   getEditorialScenarioById,
+  getEditorialScenarioForDiscoveryHour,
   getScenarioScheduleAudit,
 } = require('./editorial-scenario-config.cjs');
-const {
-  OFFICIAL_EDITORIAL_GRID_VERSION,
-  OFFICIAL_EDITORIAL_TIMEZONE,
-  getOfficialGridSlotByDiscoveryHour,
-  getOfficialGridSlotByScenarioId,
-} = require('./official-editorial-grid.cjs');
 
 const DISCOVERY_SCENARIO_RUNTIME_CONTRACT_VERSION = 'pmav5.discovery-scenario-runtime/v1';
 const MARKETPLACE_SCENARIO_CONTRACT_VERSION = 'pmav5.marketplace-scenario/v1';
@@ -99,9 +94,8 @@ function createDiscoveryScenarioRuntimeContract({
   const resolvedScenario = getEditorialScenarioById(resolvedScenarioId) || plannedScenario;
   const contract = marketplaceContract && typeof marketplaceContract === 'object' ? marketplaceContract : null;
   const scenarioId = resolvedScenario?.id || resolvedScenarioId || plannedScenario?.id || plannedScenarioId || null;
-  const officialGridSlot = getOfficialGridSlotByScenarioId(scenarioId)
-    || getOfficialGridSlotByDiscoveryHour(normalizedHour);
-  const publicationHour = officialGridSlot?.publicationHour
+  const canonicalScenario = getEditorialScenarioForDiscoveryHour(normalizedHour);
+  const publicationHour = canonicalScenario?.queueHour
     ?? (Number.isFinite(Number(resolvedScenario?.publicationHour)) ? Number(resolvedScenario.publicationHour) : null)
     ?? (Number.isFinite(Number(contract?.publicationHour)) ? Number(contract.publicationHour) : null)
     ?? (Number.isFinite(Number(resolvedScenario?.queueHour)) ? Number(resolvedScenario.queueHour) : null)
@@ -124,8 +118,7 @@ function createDiscoveryScenarioRuntimeContract({
   const hasHourCollision = Boolean(scheduleAudit.scenarios[scenarioId]?.hasHourCollision);
   const isManualOnly = resolvedScenario?.discoveryMode === 'manual_only';
   const isOrphanScenario = Boolean(scheduleAudit.scenarios[scenarioId]?.isOrphanScenario);
-  const expectedOfficialSlot = getOfficialGridSlotByDiscoveryHour(normalizedHour);
-  const isOfficialGridAligned = Boolean(officialGridSlot && (!expectedOfficialSlot || expectedOfficialSlot.scenarioId === scenarioId));
+  const isOfficialGridAligned = Boolean(canonicalScenario && (!normalizedHour || canonicalScenario.id === scenarioId));
   const missingAmazonBrowseNodes = isAmazon && effectiveBrowseNodeIds.length === 0;
   const usesGenericPromoKeywords = effectiveKeywords.some((keyword) => GENERIC_PROMO_KEYWORDS.includes(keyword.toLocaleLowerCase('pt-BR')));
   const usesBroadShopeeCategory = isShopee && effectiveApiCategories.some((category) => SHOPEE_BROAD_API_CATEGORIES.includes(Number(category)));
@@ -138,10 +131,10 @@ function createDiscoveryScenarioRuntimeContract({
 
   return {
     contractVersion: DISCOVERY_SCENARIO_RUNTIME_CONTRACT_VERSION,
-    officialGridVersion: OFFICIAL_EDITORIAL_GRID_VERSION,
+    officialGridVersion: 'editorial-scenario-config/v1',
     discoveryHour: normalizedHour,
     publicationHour,
-    timezone: String(timezone || OFFICIAL_EDITORIAL_TIMEZONE || EDITORIAL_SCHEDULE_TIMEZONE),
+    timezone: String(timezone || EDITORIAL_SCHEDULE_TIMEZONE),
     schedulerSource: String(schedulerSource || SCHEDULER_SOURCE),
     plannedScenarioId: plannedScenario?.id || plannedScenarioId || null,
     resolvedScenarioId: resolvedScenario?.id || resolvedScenarioId || null,
@@ -150,8 +143,8 @@ function createDiscoveryScenarioRuntimeContract({
     scenarioPriority: resolvedScenario?.priority || contract?.priority || null,
     queueHour,
     isOfficialGridAligned,
-    officialGridSlot: officialGridSlot || null,
-    gridSource: 'official-editorial-grid',
+    officialGridSlot: canonicalScenario ? { discoveryHour: normalizedHour, publicationHour, scenarioId: canonicalScenario.id } : null,
+    gridSource: 'scripts/editorial-scenario-config.cjs',
     scheduleWindow: getScheduleWindow(scheduleAudit, scenarioId, queueHour),
     marketplace: String(marketplace || 'unknown'),
     marketplaceContractVersion: String(contract?.contractVersion || MARKETPLACE_SCENARIO_CONTRACT_VERSION),
