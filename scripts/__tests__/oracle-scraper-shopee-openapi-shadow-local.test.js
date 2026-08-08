@@ -41,7 +41,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
     expect(result.marketplaces[0].shadow).toMatchObject({ decision: 'blocked_v1_scenario', topCount: 0 });
   });
 
-  it('persiste somente o top V1 limitado a trinta quando o canário está habilitado', async () => {
+  it('persiste todo o lote V1 aprovado quando o canário está habilitado', async () => {
     const persisted = [];
     const result = await runOracleScraperShopeeShadowLocal({
       scenarioId: 'casa_cozinha_editorial',
@@ -57,7 +57,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       },
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
-    expect(persisted).toHaveLength(30);
+    expect(persisted).toHaveLength(35);
     expect(persisted.every((item) => item.correlationId.startsWith('shopee-openapi-v1:'))).toBe(true);
     expect(persisted.every((item) => item.candidate.persistenceMetadata.mode === 'controlled-persist')).toBe(true);
     expect(result.persistCalls).toBe(1);

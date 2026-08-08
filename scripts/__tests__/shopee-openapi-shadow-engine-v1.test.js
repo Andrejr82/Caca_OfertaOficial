@@ -185,4 +185,44 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(calls.some((call) => call.variables.productCatId === 100010)).toBe(true);
     expect(result.writeAudit.supabaseWrites).toBe(0);
   });
+
+  it('busca todas as keywords/categorias e não limita o lote V1 a trinta', async () => {
+    const calls = [];
+    let sequence = 0;
+    const request = async (operation, query, variables) => {
+      calls.push({ operation, variables });
+      if (operation !== 'ShopeePromotionOffers') return { status: 200, data: { data: {} } };
+      if (variables.page > 1) return { status: 200, data: { data: { productOfferV2: { nodes: [] } } } };
+      const nodes = Array.from({ length: 20 }, () => {
+        const id = String(50000 + sequence++);
+        return product({
+          itemId: id,
+          shopId: String(60000 + sequence),
+          productName: `Modelo${id} organizador cozinha utensilio`,
+          productLink: `https://shopee.com.br/product/${60000 + sequence}/${id}`,
+          offerLink: `https://s.shopee.com.br/item-${id}`,
+          productCatIds: [100010],
+        });
+      });
+      return { status: 200, data: { data: { productOfferV2: { nodes } } } };
+    };
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, includeAuxiliary: false, includeDelta: false });
+    expect(calls.filter((call) => call.operation === 'ShopeePromotionOffers')).toHaveLength(14);
+    expect(result.queryEvidence.productOffers).toBe(140);
+    expect(result.scenarios.casa_cozinha_editorial.metrics.final).toBeGreaterThan(30);
+  });
+
+  it('não para nos primeiros candidatos históricos quando há novos depois deles', () => {
+    const historical = product({ itemId: '70000', shopId: '71000', productName: 'Organizador de cozinha com tampa' });
+    const candidates = [
+      ...Array.from({ length: 30 }, () => ({ ...historical })),
+      ...Array.from({ length: 40 }, (_, index) => {
+        const id = String(72000 + index);
+        return product({ itemId: id, shopId: String(73000 + index), productName: `Modelo${id} organizador cozinha`, productLink: `https://shopee.com.br/product/${73000 + index}/${id}`, offerLink: `https://s.shopee.com.br/historical-${id}` });
+      }),
+    ];
+    const result = runShadow({ sources: { productOffers: candidates }, contracts: { casa_cozinha_editorial: SCENARIO_CONTRACTS.casa_cozinha_editorial }, topLimit: Number.POSITIVE_INFINITY, applyDiversityCaps: false });
+    expect(result.scenarios.casa_cozinha_editorial.metrics.duplicates).toBe(29);
+    expect(result.scenarios.casa_cozinha_editorial.metrics.final).toBe(40);
+  });
 });

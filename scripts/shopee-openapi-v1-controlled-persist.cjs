@@ -19,7 +19,6 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
 ]);
 
 const CONTROLLED_PERSIST_SCENARIO = 'casa_cozinha_editorial';
-const CONTROLLED_PERSIST_LIMIT = 30;
 const BLOCKED_SCENARIO = 'grandes_ofertas_editorial';
 
 function isTrue(value) {
@@ -60,7 +59,6 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
     enabled: true,
     mode: 'controlled-persist',
     scenarioId: normalizedScenario,
-    limit: CONTROLLED_PERSIST_LIMIT,
   };
 }
 
@@ -81,7 +79,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
 
   const v1CorrelationId = `shopee-openapi-v1:${correlationId}`;
 
-  return (Array.isArray(top) ? top : []).slice(0, CONTROLLED_PERSIST_LIMIT).map((product, index) => {
+  return (Array.isArray(top) ? top : []).map((product, index) => {
     const sourceItemId = String(product.itemId || '').trim();
     const shopId = String(product.shopId || '').trim();
     const title = String(product.productName || product.title || '').trim();
@@ -168,7 +166,6 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
 module.exports = {
   CONTROLLED_PERSIST_SCENARIO,
   CONTROLLED_PERSIST_SCENARIOS,
-  CONTROLLED_PERSIST_LIMIT,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
 };

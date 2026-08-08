@@ -739,6 +739,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         countRejection(`classification_${candidate.classification.status || 'unknown'}`);
       }
       let deferredForQueue = previouslyDeferred;
+      const shopeeV1Enabled = marketplace === 'Shopee'
+        && String(process.env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED || '').trim().toLowerCase() === 'true';
+      const noCommercialCap = Number.MAX_SAFE_INTEGER;
+      const effectiveCopyQueueOptions = shopeeV1Enabled
+        ? { ...(copyQueueOptions || {}), maxTotal: noCommercialCap, maxPerMarketplace: noCommercialCap, maxPerCategory: noCommercialCap }
+        : (copyQueueOptions || {});
 
       // Active V2 is an explicit opt-in. The default and shadow paths keep the
       // exact V1 candidate set and queue behavior.
@@ -756,7 +762,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           const admission = await qualityAdmission(
             Object.freeze([...candidatesToPersist, ...previouslyDeferred]),
             marketplace,
-            { maxAccepted: copyQueueOptions?.maxPerMarketplace ?? COPY_QUEUE_DEFAULTS.maxPerMarketplace },
+            { maxAccepted: effectiveCopyQueueOptions.maxPerMarketplace ?? COPY_QUEUE_DEFAULTS.maxPerMarketplace },
           );
           const admitted = Array.isArray(admission?.accepted) ? admission.accepted : [];
           const admittedIds = new Set(admitted.map((product) => String(product?.sourceItemId || '')));
@@ -779,7 +785,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         }
       }
 
-      const queue = selectCopyQueue(candidatesToPersist, { ...copyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
+      const queue = selectCopyQueue(candidatesToPersist, { ...effectiveCopyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
       funnel.count('queueSelected', queue.selected.length);
       funnel.recordQueueSelection(queue.selectionTelemetry);
       for (const item of queue.skipped || []) countRejection(item.reason || 'queue_rejected');
@@ -848,7 +854,25 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       let persistedAll = { accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] };
 
       if (typeof persistShadow === 'function' && ['shadow', 'official'].includes(shopeeOpenApiShadow?.decision)) {
-        persistedAll = await persistShadow({ shadow: shopeeOpenApiShadow, marketplace, scenario, tenantId, correlationId, requestedAt });
+        const shadowProducts = Array.isArray(shopeeOpenApiShadow.top)
+          ? shopeeOpenApiShadow.top.map((product) => ({
+            ...product,
+            sourceItemId: String(product.itemId || '').trim(),
+            title: product.productName || product.title,
+            currentPrice: product.price,
+            originalPrice: product.originalPrice,
+            marketplaceMetrics: { ...(product.marketplaceMetrics || {}), itemId: product.itemId, shopId: product.shopId },
+          }))
+          : [];
+        const shadowFreshness = filterFreshCandidates('Shopee', shadowProducts, history);
+        const freshIds = new Set(shadowFreshness.accepted.map((product) => String(product.sourceItemId)));
+        const shadowForPersist = {
+          ...shopeeOpenApiShadow,
+          top: (Array.isArray(shopeeOpenApiShadow.top) ? shopeeOpenApiShadow.top : []).filter((product) => freshIds.has(String(product.itemId || ''))),
+          topCount: shadowFreshness.accepted.length,
+          rejectedCount: Number(shopeeOpenApiShadow.rejectedCount || 0) + shadowFreshness.rejected.length,
+        };
+        persistedAll = await persistShadow({ shadow: shadowForPersist, marketplace, scenario, tenantId, correlationId, requestedAt });
         funnel.count('rpcSent', persistedAll?.accepted || 0);
         funnel.mergeRpc(persistedAll || {});
         for (const offerId of persistedAll?.offerIds || []) {

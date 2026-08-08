@@ -4,7 +4,7 @@ const crypto = require('node:crypto');
 const GRAPHQL_CONTRACTS = require('./contracts/shopee-openapi-v1/index.cjs');
 
 function queryPlan(keywords, categoryIds, overrides = {}) {
-  return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
+  return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxPagesPerQuery: 100, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
 }
 
 const SCENARIO_CONTRACTS = Object.freeze({
@@ -200,10 +200,15 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
   if (typeof request !== 'function') throw new Error('runScenarioPlan requer request injetado');
   const keywords = plan.keywords.slice(0, maxKeywords ?? plan.keywords.length); const categoryIds = plan.categoryIds.slice(0, maxCategories ?? plan.categoryIds.length); const productOffers = []; const calls = [];
   const callProduct = async (variables, sourcePlan) => {
-    const response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page: 1, limit: plan.limits.productOfferV2PerQuery, sortType: 2, isAMSOffer: true });
-    const nodes = response.data?.data?.productOfferV2?.nodes || [];
-    const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
-    productOffers.push(...filtered); calls.push({ source: sourcePlan, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: filtered.length });
+    const pageSize = plan.limits.productOfferV2PerQuery;
+    const maxPages = plan.limits.maxPagesPerQuery;
+    for (let page = 1; page <= maxPages; page += 1) {
+      const response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true });
+      const nodes = response.data?.data?.productOfferV2?.nodes || [];
+      const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
+      productOffers.push(...filtered); calls.push({ source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: filtered.length });
+      if (nodes.length < pageSize) break;
+    }
   };
   for (const keyword of keywords) await callProduct({ keyword }, 'productOfferV2.keyword');
   for (const productCatId of categoryIds) await callProduct({ productCatId }, 'productOfferV2.category');
@@ -216,7 +221,7 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
     const shopResponse = await request('ShopOfferV2', GRAPHQL_CONTRACTS.shopOfferV2.query, { page: 1, limit: plan.limits.shopOfferV2 }); const shopeeResponse = await request('ShopeeOfferV2', GRAPHQL_CONTRACTS.shopeeOfferV2.query, { page: 1, limit: plan.limits.shopeeOfferV2 });
     shopOffers = shopResponse.data?.data?.shopOfferV2?.nodes || []; shopeeOffers = shopeeResponse.data?.data?.shopeeOfferV2?.nodes || [];
   }
-  const result = runShadow({ sources: { productOffers, deltaRows, datafeedId, shopOffers, shopeeOffers, maxFeedRows: plan.limits.maxFeedRows }, contracts: { [scenarioId]: SCENARIO_CONTRACTS[scenarioId] }, topLimit: 30 });
+  const result = runShadow({ sources: { productOffers, deltaRows, datafeedId, shopOffers, shopeeOffers, maxFeedRows: plan.limits.maxFeedRows }, contracts: { [scenarioId]: SCENARIO_CONTRACTS[scenarioId] }, topLimit: Number.POSITIVE_INFINITY, applyDiversityCaps: false });
   return { scenarioId, queryPlan: plan, queryEvidence: { calls, productOffers: productOffers.length, deltaRows: deltaRows.length, shopOffers: shopOffers.length, shopeeOffers: shopeeOffers.length }, ...result };
 }
 
@@ -246,7 +251,7 @@ async function collectScenarioCoverage({ request, maxKeywords = 5, maxCategories
   return { mode: 'live-scenario-coverage', flags: { DRY_RUN: '1', NO_DB_WRITE: '1', NO_POSTS: '1', NO_PUBLISH: '1' }, queryEvidence: { feedListStatus: feedListResponse.status, feedDataStatus, shopStatus: shopResponse.status, shopeeStatus: shopeeResponse.status, feed: feeds[0] || null, deltaRows: deltaRows.length, auxiliaryResolution }, scenarios, writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, publishCalls: 0, oracleCalls: 0 } };
 }
 
-function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20 } = {}) {
+function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20, applyDiversityCaps = true } = {}) {
   const delta = processDeltaRows(sources.deltaRows || [], { datafeedId: sources.datafeedId, maxRows: sources.maxFeedRows ?? 100 });
   const rawProducts = [...(sources.productOffers || []), ...delta.activeItems];
   const auxiliary = { shopOfferV2: (sources.shopOffers || []).map((node) => auxiliaryNode('shopOfferV2', node)), shopeeOfferV2: (sources.shopeeOffers || []).map((node) => auxiliaryNode('shopeeOfferV2', node)) };
@@ -264,8 +269,8 @@ function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20
     const familyCount = new Map(); const shopCount = new Map(); const top = [];
     for (const product of scoreable.sort((a, b) => b.score - a.score || b.sales - a.sales || a.itemId.localeCompare(b.itemId))) {
       const family = familyCount.get(product.familyKey) || 0; const shop = shopCount.get(product.shopId) || 0;
-      if (family >= contract.maxFamilyPerScenario) continue;
-      if (shop >= contract.maxShopPerScenario) continue;
+      if (applyDiversityCaps && family >= contract.maxFamilyPerScenario) continue;
+      if (applyDiversityCaps && shop >= contract.maxShopPerScenario) continue;
       if (top.length >= topLimit) break;
       familyCount.set(product.familyKey, family + 1); shopCount.set(product.shopId, shop + 1); top.push(product);
     }

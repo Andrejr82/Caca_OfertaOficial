@@ -57,6 +57,8 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
         product_id: row.product_id,
         shopee_item_id: row.shopee_item_id,
         shopee_shop_id: row.shopee_shop_id,
+        itemId: row.item_id || row.shopee_item_id,
+        shopId: row.shopee_shop_id || row.shop_id,
         asin: row.product_id,
       },
     });

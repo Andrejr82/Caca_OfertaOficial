@@ -1,6 +1,5 @@
 const {
   CONTROLLED_PERSIST_SCENARIOS,
-  CONTROLLED_PERSIST_LIMIT,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
 } = require('../shopee-openapi-v1-controlled-persist.cjs');
@@ -46,7 +45,6 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
         enabled: true,
         mode: 'controlled-persist',
         scenarioId: scenario,
-        limit: CONTROLLED_PERSIST_LIMIT,
       });
     }
   });
@@ -79,8 +77,8 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       .toMatchObject({ enabled: true, mode: 'controlled-persist' });
   });
 
-  it('builds at most thirty traceable V1 ingestions', () => {
-    const top = Array.from({ length: 35 }, (_, index) => ({
+  it('persists every approved traceable V1 ingestion without a commercial cap', () => {
+    const top = Array.from({ length: 67 }, (_, index) => ({
       itemId: String(1000 + index),
       shopId: String(2000 + index),
       productName: `Produto ${index}`,
@@ -104,7 +102,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       requestedAt: '2026-08-08T00:00:00.000Z',
     });
 
-    expect(ingestions).toHaveLength(30);
+    expect(ingestions).toHaveLength(67);
 
     for (const ingestion of ingestions) {
       expect(ingestion.correlationId).toBe('shopee-openapi-v1:abc-123');
@@ -118,7 +116,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     }
   });
 
-  it('persists only the available new candidates when fewer than thirty exist', () => {
+  it('persists only the available approved candidates when fewer exist', () => {
     const top = Array.from({ length: 7 }, (_, index) => ({
       itemId: String(3000 + index),
       shopId: String(4000 + index),

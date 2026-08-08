@@ -120,7 +120,6 @@ const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-re
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
 const { createShopeeOpenApiV1DiscoveryShadow } = require('./shopee-openapi-v1-discovery-shadow.cjs');
 const {
-  CONTROLLED_PERSIST_LIMIT,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
 } = require('./shopee-openapi-v1-controlled-persist.cjs');
@@ -1418,7 +1417,7 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       const discovery = createShopeeOpenApiV1DiscoveryShadow({
         env,
         request: boundedRequest,
-        engineOptions: { maxKeywords: 5, maxCategories: 2, includeDelta: false, includeAuxiliary: false },
+    engineOptions: { includeDelta: false, includeAuxiliary: false },
       });
       return await Promise.race([discovery(input), stageTimeout]);
     } catch (error) {
@@ -1448,7 +1447,6 @@ function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger
       correlationId,
       requestedAt,
     });
-    if (ingestions.length > CONTROLLED_PERSIST_LIMIT) throw new Error('Controlled persist candidate limit exceeded');
     const persisted = typeof persistRunner === 'function'
       ? await persistRunner(ingestions, 'Shopee', FINAL_STATE)
       : await persistDiscoveryIngestionV1(ingestions, 'Shopee', FINAL_STATE, stageLogger, {
@@ -1535,7 +1533,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     env,
     request: shadowRequest,
     runScenario,
-    engineOptions: { maxKeywords: 5, maxCategories: 2, includeDelta: false, includeAuxiliary: false },
+    engineOptions: { includeDelta: false, includeAuxiliary: false },
   });
   const result = await runDiscoveryOnlyCycle({
     tenantId: 'local-shopee-openapi-shadow',
