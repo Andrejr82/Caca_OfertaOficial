@@ -115,6 +115,23 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     expect(repo.writes).toHaveLength(0);
   });
 
+  it("recognizes the real 43-offer cycle across normalized market correlations", async () => {
+    const correlation = "b278725c-f8e7-4777-812f-3bb8a883454f";
+    const rawOffers = [
+      ...Array.from({ length: 27 }, (_, index) => offer(`real-shopee-${index}`, "2026-08-07T10:00:01.000Z", { platform: "Shopee", shopee_item_id: `real-item-${index}`, explainability: { correlation_id: `shopee-openapi-v1:${correlation}`, discovery_evidence: { discoveredAt: "2026-08-07T10:00:00.000Z" } } })),
+      ...Array.from({ length: 8 }, (_, index) => offer(`real-amazon-${index}`, "2026-08-07T10:00:01.000Z", { platform: "Amazon", product_id: `REAL-ASIN-${index}`, explainability: { correlation_id: correlation, discovery_evidence: { discoveredAt: "2026-08-07T10:00:00.000Z" } } })),
+      ...Array.from({ length: 8 }, (_, index) => offer(`real-ml-${index}`, "2026-08-07T10:00:01.000Z", { platform: "Mercado Livre", item_id: `REAL-ML-${index}`, explainability: { correlation_id: correlation, discovery_evidence: { discoveredAt: "2026-08-07T10:00:00.000Z" } } })),
+    ];
+    const repo = repository({ today: rawOffers, fallback: [] });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+
+    expect(rawOffers).toHaveLength(43);
+    expect(result.selectedOfferIds).toHaveLength(30);
+    expect(result.selectedOfferIds.length).toBeGreaterThan(0);
+    expect(repo.writes).toHaveLength(0);
+  });
+
   it("uses today BRT first, falls back to 24h, and never asks for 48h/72h", async () => {
     const today = Array.from({ length: 20 }, (_, index) => offer(`today-${index}`, "2026-08-07T10:00:00.000Z"));
     const fallback = Array.from({ length: 10 }, (_, index) => offer(`yesterday-${index}`, "2026-08-06T13:00:00.000Z"));

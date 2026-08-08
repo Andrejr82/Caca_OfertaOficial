@@ -18,11 +18,24 @@ export type CommercialQueueCandidate = Offer & {
 };
 
 const PROTECTED_OPERATIONAL_STATUSES = new Set(["posted", "approved", "selected", "rejected", "deferred", "deleted"]);
+const DISCOVERY_CORRELATION_PREFIXES = ["shopee-openapi-v1:"] as const;
+
+export function normalizeDiscoveryCorrelationId(value: string | null | undefined): string | null {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return null;
+  for (const prefix of DISCOVERY_CORRELATION_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      const canonical = trimmed.slice(prefix.length).trim();
+      return canonical || null;
+    }
+  }
+  return trimmed;
+}
 
 export function discoveryCorrelationId(offer: Partial<Offer>): string | null {
   const explainability = offer.explainability && typeof offer.explainability === "object" ? offer.explainability : null;
   const value = (explainability as { correlation_id?: unknown } | null)?.correlation_id;
-  return typeof value === "string" && value.trim() ? value.trim() : null;
+  return normalizeDiscoveryCorrelationId(typeof value === "string" ? value : null);
 }
 
 function discoveryStartedAt(offer: Partial<Offer>): number | null {

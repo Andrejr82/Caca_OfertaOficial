@@ -20,7 +20,6 @@ export default async function WhatsappDashboardPage() {
     status: string;
     external_id: string | null;
     posted_at: string | null;
-    external_id: string | null;
     created_at: string;
     deleted_at?: string | null;
     affiliate_links?: {

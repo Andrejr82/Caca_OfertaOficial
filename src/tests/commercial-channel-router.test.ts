@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { routeCommercialCandidate, routeCommercialCandidates, selectOperationalPanelTop30, selectOperationalTopCandidates } from "@/lib/offers/commercial-channel-router";
-import { filterOperationalPanelOffers } from "@/lib/offers/commercial-curation-queue";
+import { buildCommercialQueue, filterOperationalPanelOffers, identifyLatestDiscoveryCohort, normalizeDiscoveryCorrelationId } from "@/lib/offers/commercial-curation-queue";
 
 const candidate = (overrides: any = {}) => ({
   id: "offer-1", platform: "Shopee", product_name: "Organizador de gaveta", category: "Casa", subcategory: "Organização", original_url: "https://example.test", current_price: 39, image_url: "https://example.test/image", commercialIntent: "casa_organizada_antes_depois", achadinhoScore: 80, automaticEligible: true, manualReviewRequired: false, commercialReasons: ["preço na faixa"], commercialRiskFlags: [], suggestedCopy: "copy", rejected: false, ...overrides,
@@ -90,5 +90,39 @@ describe("commercial channel router", () => {
     });
     expect(filterOperationalPanelOffers([make("old-updated")] as any)).toHaveLength(0);
     expect(filterOperationalPanelOffers([make("protected", "posted")] as any)).toHaveLength(0);
+  });
+
+  it("normalizes the real cross-market cycle before cohort grouping", () => {
+    const correlation = "b278725c-f8e7-4777-812f-3bb8a883454f";
+    expect(normalizeDiscoveryCorrelationId(correlation)).toBe(correlation);
+    expect(normalizeDiscoveryCorrelationId(`shopee-openapi-v1:${correlation}`)).toBe(correlation);
+    expect(normalizeDiscoveryCorrelationId(`unknown-prefix:${correlation}`)).toBe(`unknown-prefix:${correlation}`);
+
+    const make = (id: string, platform: string, correlationId: string, createdAt = "2026-08-08T10:00:01.000Z") => ({
+      ...candidate({ id, platform, product_name: `Organizador de gaveta ${platform} ${id}`, shopee_item_id: id }),
+      user_id: "u1", status: "pending_manual_review", score: 50, old_price: 49, rating: 4.8,
+      marketplace_metrics: { sales: 500, rating: 4.8, discount: 20 }, created_at: createdAt, updated_at: "2026-08-08T12:00:00.000Z",
+      explainability: { correlation_id: correlationId, discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } },
+    });
+    const realCycle = [
+      ...Array.from({ length: 27 }, (_, index) => make(`shopee-${index}`, "Shopee", `shopee-openapi-v1:${correlation}`)),
+      ...Array.from({ length: 8 }, (_, index) => make(`amazon-${index}`, "Amazon", correlation)),
+      ...Array.from({ length: 8 }, (_, index) => make(`ml-${index}`, "Mercado Livre", correlation)),
+    ];
+    const cohort = identifyLatestDiscoveryCohort(realCycle as any, new Date("2026-08-08T12:00:00.000Z"));
+    expect(cohort).toHaveLength(43);
+    expect(filterOperationalPanelOffers(realCycle as any)).toHaveLength(43);
+    const built = buildCommercialQueue(realCycle as any);
+    expect(built.length).toBeGreaterThan(0);
+    expect(routeCommercialCandidates(built).some((item) => item.targetQueue !== "panel_only")).toBe(true);
+    const selected = selectOperationalPanelTop30(realCycle as any);
+    expect(selected.length).toBeGreaterThan(0);
+    expect(selected.length).toBeLessThanOrEqual(30);
+
+    const differentCycle = make("different-cycle", "Shopee", "different-cycle", "2026-08-08T10:00:02.000Z");
+    expect(identifyLatestDiscoveryCohort([...realCycle, differentCycle] as any, new Date("2026-08-08T12:00:00.000Z"))).toHaveLength(1);
+    const historical = make("historical", "Shopee", `shopee-openapi-v1:${correlation}`, "2026-08-07T10:00:01.000Z");
+    historical.updated_at = "2026-08-08T12:00:00.000Z";
+    expect(filterOperationalPanelOffers([...realCycle, historical] as any).some((offer) => offer.id === historical.id)).toBe(false);
   });
 });
