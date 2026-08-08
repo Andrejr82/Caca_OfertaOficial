@@ -170,7 +170,8 @@ try {
   ssh(`set -eu; ${installFiles}`);
 
   // ─── Passo 3b: aplicar somente flags não sensíveis allowlisted ───────────
-  ssh(buildRemoteOverlayPlan({ PROJECT_DIR, projectDir: PROJECT_DIR, remoteStage, remoteBackup }));
+  const overlayFlags = parseOverlay(overlayText);
+  ssh(buildRemoteOverlayPlan({ PROJECT_DIR, projectDir: PROJECT_DIR, remoteStage, remoteBackup, overlay: overlayFlags }));
   console.log(`Overlay versionado aplicado com backup em ${remoteBackup}.`);
 
   // ─── Passo 4: gerar manifesto de release local ────────────────────────────
@@ -199,7 +200,7 @@ try {
   }
 
   // ─── Passo 7: restart somente do scraper, carregando o overlay ──────────
-  ssh(buildScraperRestartCommand(PM2_SCRAPER_NAME));
+  ssh(buildScraperRestartCommand(PM2_SCRAPER_NAME, overlayFlags));
 
   // ─── Passo 8: limpeza do stage temporário ────────────────────────────────
   ssh(`rm -rf '${remoteStage}'`);

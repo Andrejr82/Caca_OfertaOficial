@@ -8,6 +8,12 @@ const ORACLE_RUNTIME_FLAGS = Object.freeze({
 });
 
 const REQUIRED_KEYS = Object.freeze(Object.keys(ORACLE_RUNTIME_FLAGS));
+const ALLOWED_VALUES = Object.freeze({
+  SHOPEE_OPENAPI_ENGINE_V1_ENABLED: new Set(['true']),
+  SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: new Set(['true']),
+  NO_POSTS: new Set(['0', '1']),
+  NO_PUBLISH: new Set(['1']),
+});
 
 function parseOverlay(source) {
   const parsed = {};
@@ -23,7 +29,7 @@ function parseOverlay(source) {
       throw new Error(`Oracle runtime overlay key is not allowlisted: ${key}`);
     }
     if (Object.hasOwn(parsed, key)) throw new Error(`Oracle runtime overlay repeats key: ${key}`);
-    if (value !== ORACLE_RUNTIME_FLAGS[key]) {
+    if (!ALLOWED_VALUES[key].has(value)) {
       throw new Error(`Oracle runtime overlay value is invalid for ${key}.`);
     }
     parsed[key] = value;
@@ -62,14 +68,15 @@ function assertSafeRemotePath(value, label) {
   if (!/^\/[A-Za-z0-9._/-]+$/.test(value)) throw new Error(`${label} must be an absolute safe path.`);
 }
 
-function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup }) {
+function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup, overlay = ORACLE_RUNTIME_FLAGS }) {
   assertSafeRemotePath(projectDir, 'projectDir');
   assertSafeRemotePath(remoteStage, 'remoteStage');
   assertSafeRemotePath(remoteBackup, 'remoteBackup');
+  const flags = parseOverlay(Object.entries(overlay).map(([key, value]) => `${key}=${value}`).join('\n'));
   const envFile = `${projectDir}/.env.local`;
   const overlayFile = `${remoteStage}/config/oracle-runtime-overlay.env`;
   const tempFile = `${envFile}.overlay-${remoteStage.split('-').at(-1)}`;
-  const checks = REQUIRED_KEYS.map((key) => `grep -Fqx '${key}=${ORACLE_RUNTIME_FLAGS[key]}' '${overlayFile}'`).join(' && ');
+  const checks = REQUIRED_KEYS.map((key) => `grep -Fqx '${key}=${flags[key]}' '${overlayFile}'`).join(' && ');
   const allowlist = REQUIRED_KEYS.join('|');
 
   return [
@@ -77,7 +84,7 @@ function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup }) {
     `test -s '${envFile}'`,
     `test -s '${overlayFile}'`,
     `test "$(grep -Ev '^[[:space:]]*(#|$)' '${overlayFile}' | wc -l | tr -d ' ')" -eq ${REQUIRED_KEYS.length}`,
-    `if grep -Ev '^[[:space:]]*(#.*|(${allowlist})=(true|1)[[:space:]]*)$' '${overlayFile}' | grep -q .; then echo 'Overlay contains invalid or non-allowlisted key' >&2; exit 1; fi`,
+    `if grep -Ev '^[[:space:]]*(#.*|(${allowlist})=(true|0|1)[[:space:]]*)$' '${overlayFile}' | grep -q .; then echo 'Overlay contains invalid or non-allowlisted key' >&2; exit 1; fi`,
     checks,
     `mkdir -p '${remoteBackup}'`,
     `cp -p '${envFile}' '${remoteBackup}/env.local.before'`,
@@ -86,13 +93,15 @@ function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup }) {
     `test -s '${tempFile}'`,
     `chmod --reference='${envFile}' '${tempFile}' 2>/dev/null || true`,
     `mv '${tempFile}' '${envFile}'`,
-    ...REQUIRED_KEYS.map((key) => `grep -Fqx '${key}=${ORACLE_RUNTIME_FLAGS[key]}' '${envFile}'`),
+    ...REQUIRED_KEYS.map((key) => `grep -Fqx '${key}=${flags[key]}' '${envFile}'`),
   ].join('; ');
 }
 
-function buildScraperRestartCommand(pm2ScraperName) {
+function buildScraperRestartCommand(pm2ScraperName, overlay = ORACLE_RUNTIME_FLAGS) {
   if (!/^[A-Za-z0-9._/-]+$/.test(pm2ScraperName)) throw new Error('PM2 scraper name is invalid.');
-  return `set -eu; export SHOPEE_OPENAPI_ENGINE_V1_ENABLED=true SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=true NO_POSTS=1 NO_PUBLISH=1; pm2 restart '${pm2ScraperName}' --update-env; pm2 describe '${pm2ScraperName}' >/dev/null`;
+  const flags = parseOverlay(Object.entries(overlay).map(([key, value]) => `${key}=${value}`).join('\n'));
+  const exports = REQUIRED_KEYS.map((key) => `${key}=${flags[key]}`).join(' ');
+  return `set -eu; export ${exports}; pm2 restart '${pm2ScraperName}' --update-env; pm2 describe '${pm2ScraperName}' >/dev/null`;
 }
 
 module.exports = { ORACLE_RUNTIME_FLAGS, parseOverlay, mergeEnvText, buildRemoteOverlayPlan, buildScraperRestartCommand };
