@@ -77,7 +77,7 @@ function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup }) {
     `test -s '${envFile}'`,
     `test -s '${overlayFile}'`,
     `test "$(grep -Ev '^[[:space:]]*(#|$)' '${overlayFile}' | wc -l | tr -d ' ')" -eq ${REQUIRED_KEYS.length}`,
-    `if grep -Ev '^[[:space:]]*((#|$)|(${allowlist})=(true|1)[[:space:]]*)$' '${overlayFile}' | grep -q .; then echo 'Overlay contains invalid or non-allowlisted key' >&2; exit 1; fi`,
+    `if grep -Ev '^[[:space:]]*(#.*|(${allowlist})=(true|1)[[:space:]]*)$' '${overlayFile}' | grep -q .; then echo 'Overlay contains invalid or non-allowlisted key' >&2; exit 1; fi`,
     checks,
     `mkdir -p '${remoteBackup}'`,
     `cp -p '${envFile}' '${remoteBackup}/env.local.before'`,

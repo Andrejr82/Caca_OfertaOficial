@@ -57,7 +57,7 @@ test('requires a durable backup before applying the overlay', () => {
 
   assert.match(plan, /cp -p '\/home\/ubuntu\/Caca_OfertaOficial\/.env\.local' '\/home\/ubuntu\/Caca_OfertaOficial\/.rollout-backups\/oracle-runtime-test\/env\.local\.before'/);
   assert.match(plan, /mv '\/home\/ubuntu\/Caca_OfertaOficial\/.env\.local\.overlay-/);
-  assert.match(plan, /\(#\|\$\)/);
+  assert.match(plan, /#\.\*/);
 });
 
 test('restarts only oracle-scraper with its updated environment', () => {
