@@ -98,7 +98,8 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
     expect(result.windowUsed).toBe("24h_fallback");
-    expect(result.created).toBe(30);
+    expect(result.created).toBe(0);
+    expect(result.reasons.legacy_copy_generation_disabled).toBe(30);
     expect(repo.calls).toContain("offers:9h");
     expect(repo.calls).toContain("offers:24h");
     expect(repo.calls.some((call) => call.includes("48h") || call.includes("72h"))).toBe(false);
@@ -112,7 +113,8 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
     expect(result.windowUsed).toBe("today_brt");
-    expect(result.created).toBe(30);
+    expect(result.created).toBe(0);
+    expect(result.reasons.legacy_copy_generation_disabled).toBe(30);
     expect(repo.calls).not.toContain("offers:24h");
     expect(repo.writes.some((write) => write.offerId === "old-history")).toBe(false);
   });
@@ -157,7 +159,7 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
 
     expect(result.skippedAlreadyPosted).toBeGreaterThanOrEqual(4);
     expect(result.skippedAlreadyApproved).toBe(1);
-    expect(result.created).toBe(2);
+    expect(result.created).toBe(0);
     expect(repo.writes.filter((write) => write.type === "draft").every((write) => !posts.some((item) => item.offer_id === write.offerId))).toBe(true);
   });
 
@@ -173,7 +175,7 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
 
     expect(result.skippedAlreadySeenToday).toBe(1);
     expect(result.windowUsed).toBe("24h_fallback");
-    expect(repo.writes.filter((write) => write.type === "draft").map((write) => write.offerId).slice(0, 2)).toEqual(["new-cycle-0", "new-cycle-1"]);
+    expect(repo.writes.filter((write) => write.type === "draft")).toHaveLength(0);
   });
 
   it("skips an item when affiliate link creation fails and does not create a raw-link draft", async () => {
@@ -182,7 +184,8 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
 
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(result.skippedAffiliateFailed).toBe(1);
+    expect(result.skippedAffiliateFailed).toBe(0);
+    expect(result.reasons.legacy_copy_generation_disabled).toBeGreaterThan(0);
     expect(repo.writes.some((write) => write.type === "draft" && write.offerId === "link-fails")).toBe(false);
   });
 

@@ -52,8 +52,6 @@ app.get('/ping', (req, res) => {
   res.json({ ok: true, version: 'oracle-v2', ts: Date.now() });
 });
 
-const { startTelegramAutomation } = require('./telegram-auto-publisher.cjs');
-const { startFacebookAutomation } = require('./facebook-auto-publisher.cjs');
 const PORT = 3002;
 const API_KEY = process.env.ORACLE_API_KEY;
 const LEGACY_ENDPOINT_DISABLED = 'LEGACY_ENDPOINT_DISABLED: Oracle API is a technical gateway; Discovery belongs to the Oracle Worker';
@@ -256,7 +254,6 @@ app.post('/api/shopee/dub-video', async (req, res) => {
   try {
     // 1. Verifica se a oferta já existe no banco
     let offerId = null;
-    let productName = title;
     
     // Busca oferta pela URL original
     const { data: existingOffers } = await supabaseAdmin
@@ -268,7 +265,6 @@ app.post('/api/shopee/dub-video', async (req, res) => {
       
     if (existingOffers && existingOffers.length > 0) {
       offerId = existingOffers[0].id;
-      productName = existingOffers[0].product_name || title;
       console.log(`[Oracle Dubber] Oferta encontrada no banco: ${offerId}. Atualizando preço e imagem...`);
       
       // Atualiza a oferta existente com os dados frescos da extração (corrige fotos antigas que eram mp4)
@@ -363,82 +359,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
       throw new Error(`Erro ao criar video_job: ${jobError.message}`);
     }
     
-    // 5. Cria links e posts (rascunhos) para Facebook e Instagram
-    console.log(`[Oracle Dubber] Criando drafts para Facebook e Instagram...`);
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://caca-oferta-oficial.vercel.app';
-    const channels = [
-      { name: 'facebook', prefix: 'fb_' },
-      { name: 'instagram', prefix: 'ig_' }
-    ];
-    
-    for (const channel of channels) {
-      const subId = `${channel.prefix}${offerId}`;
-      const trackedUrl = `${baseUrl.replace(/\/$/, '')}/go/${subId}`;
-      
-      const { data: link, error: linkError } = await supabaseAdmin
-        .from('affiliate_links')
-        .upsert({ 
-          user_id: tenantId, 
-          offer_id: offerId, 
-          channel: channel.name, 
-          original_url: originalUrl, 
-          tracked_url: trackedUrl, 
-          sub_id: subId 
-        }, { onConflict: 'offer_id,channel' })
-        .select('id')
-        .single();
-        
-      if (!linkError && link) {
-        const priceNum = parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.'));
-        const priceStr = priceNum && priceNum > 0 ? `R$ ${priceNum.toFixed(2).replace('.', ',')}` : null;
-        
-        const hook = priceStr ? `✨ Encontramos este por ${priceStr}` : `✨ Achado incrível na Shopee`;
-        
-        let finalCopy;
-        if (channel.name === 'facebook') {
-          finalCopy = [
-            hook,
-            '',
-            `🛍️ ${productName}`,
-            '',
-            `🧴 Achado na Shopee`,
-            '',
-            priceStr ? `💰 ${priceStr}` : `💰 Consulte o preço atual no link!`,
-            '',
-            `👉 Link de compra no primeiro comentário! 👇`
-          ].filter(line => line !== null).join('\n');
-        } else {
-          finalCopy = [
-            hook,
-            '',
-            `Uma opção para sua rotina: **${productName}**.`,
-            '',
-            priceStr ? `💰 **Apenas ${priceStr}**` : `💰 **Consulte no site**`,
-            '',
-            `🔎 **Link na bio ou nos Stories para consultar a oferta.** 👇`,
-            '',
-            `#oferta #shopee`
-          ].filter(line => line !== null).join('\n');
-        }
-        
-        const { error: postError } = await supabaseAdmin
-          .from('posts')
-          .insert({ 
-            user_id: tenantId, 
-            offer_id: offerId, 
-            affiliate_link_id: link.id, 
-            channel: channel.name, 
-            content: finalCopy, 
-            status: 'draft' 
-          });
-        
-        if (postError) {
-          console.error(`[Oracle Dubber] Falha ao criar draft ${channel.name}: ${postError.message}`);
-        } else {
-          console.log(`[Oracle Dubber] Draft ${channel.name} criado com sucesso!`);
-        }
-      }
-    }
+    // Social drafts and copy are created only by the Official AI/editorial flow.
     
     // 6. Apaga o arquivo local
     try {
@@ -527,9 +448,4 @@ app.post('/api/trim-video', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`🚀 Micro-API Oracle rodando firme e forte na porta ${PORT}`);
   
-  // Inicia o motor de disparo do Telegram
-  startTelegramAutomation(60000); // Roda a cada 60s
-  
-  // Inicia o motor de disparo do Facebook
-  startFacebookAutomation(90000); // Roda a cada 90s
 });
