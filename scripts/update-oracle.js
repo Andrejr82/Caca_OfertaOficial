@@ -9,6 +9,7 @@ const {
   parseOverlay,
   buildRemoteOverlayPlan,
   buildScraperRestartCommand,
+  buildOracleApiRestartCommand,
 } = require('./oracle-runtime-overlay.cjs');
 require('dotenv').config({ path: '.env.local' });
 
@@ -29,6 +30,7 @@ const SERVER_IP = process.env.ORACLE_SERVER_IP || '193.122.242.178';
 const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';
 const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '/home/ubuntu/Caca_OfertaOficial';
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
+const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
 const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const RUNTIME_OVERLAY_FILE = 'config/oracle-runtime-overlay.env';
@@ -71,6 +73,7 @@ const DEPLOY_FILES = [
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
 if (!/^[A-Za-z0-9._/-]+$/.test(PM2_SCRAPER_NAME)) throw new Error('Nome PM2 inválido.');
+if (!/^[A-Za-z0-9._/-]+$/.test(PM2_API_NAME)) throw new Error('Nome PM2 API inválido.');
 if (!/^\/[A-Za-z0-9._/-]+$/.test(PROJECT_DIR)) throw new Error('ORACLE_PROJECT_DIR deve ser um caminho absoluto seguro.');
 
 const ssh = (command) => execFileSync('ssh', [
@@ -203,6 +206,9 @@ try {
 
   // ─── Passo 7: restart somente do scraper, carregando o overlay ──────────
   ssh(buildScraperRestartCommand(PM2_SCRAPER_NAME, overlayFlags));
+  // oracle-api owns the legacy Telegram/Facebook queue; it must load the same
+  // fail-closed overlay or it can publish with a stale process environment.
+  ssh(buildOracleApiRestartCommand(PM2_API_NAME, overlayFlags));
 
   // ─── Passo 8: limpeza do stage temporário ────────────────────────────────
   ssh(`rm -rf '${remoteStage}'`);

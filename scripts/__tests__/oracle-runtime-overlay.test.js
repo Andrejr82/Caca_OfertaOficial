@@ -8,6 +8,7 @@ const {
   mergeEnvText,
   buildRemoteOverlayPlan,
   buildScraperRestartCommand,
+  buildOracleApiRestartCommand,
 } = require('../oracle-runtime-overlay.cjs');
 
 test('accepts exactly the versioned non-secret Oracle flags', () => {
@@ -64,4 +65,10 @@ test('restarts only oracle-scraper with its updated environment', () => {
   const command = buildScraperRestartCommand('oracle-scraper');
   assert.match(command, /pm2 restart 'oracle-scraper' --update-env/);
   assert.doesNotMatch(command, /oracle-api/);
+});
+
+test('restarts oracle-api too because it owns the legacy publisher worker', () => {
+  const command = buildOracleApiRestartCommand('oracle-api');
+  assert.match(command, /pm2 restart 'oracle-api' --update-env/);
+  assert.doesNotMatch(command, /whatsapp-bot|shopee-feed-sync/);
 });

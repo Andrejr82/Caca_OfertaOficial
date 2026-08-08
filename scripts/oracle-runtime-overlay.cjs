@@ -104,4 +104,11 @@ function buildScraperRestartCommand(pm2ScraperName, overlay = ORACLE_RUNTIME_FLA
   return `set -eu; export ${exports}; pm2 restart '${pm2ScraperName}' --update-env; pm2 describe '${pm2ScraperName}' >/dev/null`;
 }
 
-module.exports = { ORACLE_RUNTIME_FLAGS, parseOverlay, mergeEnvText, buildRemoteOverlayPlan, buildScraperRestartCommand };
+function buildOracleApiRestartCommand(pm2ApiName, overlay = ORACLE_RUNTIME_FLAGS) {
+  if (!/^[A-Za-z0-9._/-]+$/.test(pm2ApiName)) throw new Error('PM2 API name is invalid.');
+  const flags = parseOverlay(Object.entries(overlay).map(([key, value]) => `${key}=${value}`).join('\n'));
+  const exports = REQUIRED_KEYS.map((key) => `${key}=${flags[key]}`).join(' ');
+  return `set -eu; export ${exports}; pm2 restart '${pm2ApiName}' --update-env; pm2 describe '${pm2ApiName}' >/dev/null`;
+}
+
+module.exports = { ORACLE_RUNTIME_FLAGS, parseOverlay, mergeEnvText, buildRemoteOverlayPlan, buildScraperRestartCommand, buildOracleApiRestartCommand };
