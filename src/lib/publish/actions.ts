@@ -566,6 +566,7 @@ async function generateQuickPostActionInternal(
   let originalItemId: string | null | undefined;
   let finalItemId: string | null | undefined;
   let identitySource: string | undefined;
+  let sheinManualConfirmed = false;
 
   // ─── Mercado Livre ────────────────────────────────────────────────────────
   if (detectedPlatform === "Mercado Livre") {
@@ -798,6 +799,7 @@ async function generateQuickPostActionInternal(
     price = sheinData.price;
     canonicalUrl = sheinData.canonicalUrl;
     itemId = sheinData.productId || sheinData.sku;
+    sheinManualConfirmed = sheinData.priceSource === "MANUAL_CONFIRMATION";
     // OneLink já é monetizado; preserve-o como affiliate_url. Links diretos
     // continuam sendo tratados como URL canônica para o fluxo manual.
     generatedAffiliateUrl = /^https?:\/\/onelink\.shein\.com\//i.test(inputUrl)
@@ -871,6 +873,7 @@ async function generateQuickPostActionInternal(
     resolvedUrl: canonicalUrl,
     itemId,
     shopId,
+    manualConfirmation: sheinManualConfirmed,
   });
 
   const titleQuality = validateProductTitle(title);

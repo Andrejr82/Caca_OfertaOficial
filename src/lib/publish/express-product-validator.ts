@@ -22,6 +22,8 @@ export interface ExpressProductInput {
   resolvedUrl?: string;
   itemId?: string;
   shopId?: string;
+  /** Explicit user confirmation is the only identity bypass, and only for Shein. */
+  manualConfirmation?: boolean;
 }
 
 export interface ExpressValidationResult {
@@ -92,6 +94,7 @@ const CODE_ONLY = /^(?:MLB[-_ ]?\d{6,14}|B0[-_ ]?[A-Z0-9]{8}|SKU[-_ ]?\d+|[A-Z0-
 // ─── Validações individuais ──────────────────────────────────────────────────
 
 function validateIdentity(input: ExpressProductInput): boolean {
+  if (input.marketplace === "Shein" && input.manualConfirmation === true) return true;
   return !!(input.itemId?.trim() || input.shopId?.trim());
 }
 
