@@ -192,7 +192,7 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     const request = async (operation, query, variables) => {
       calls.push({ operation, variables });
       if (operation !== 'ShopeePromotionOffers') return { status: 200, data: { data: {} } };
-      if (variables.page > 1) return { status: 200, data: { data: { productOfferV2: { nodes: [] } } } };
+      if (variables.page > 1) return { status: 200, data: { data: { productOfferV2: { nodes: [], pageInfo: { hasNextPage: false } } } } };
       const nodes = Array.from({ length: 20 }, () => {
         const id = String(50000 + sequence++);
         return product({
@@ -204,7 +204,7 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
           productCatIds: [100010],
         });
       });
-      return { status: 200, data: { data: { productOfferV2: { nodes } } } };
+      return { status: 200, data: { data: { productOfferV2: { nodes, pageInfo: { hasNextPage: true } } } } };
     };
     const result = await runScenarioPlan('casa_cozinha_editorial', { request, includeAuxiliary: false, includeDelta: false });
     expect(calls.filter((call) => call.operation === 'ShopeePromotionOffers')).toHaveLength(14);

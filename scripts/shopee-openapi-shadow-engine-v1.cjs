@@ -205,9 +205,10 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
     for (let page = 1; page <= maxPages; page += 1) {
       const response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true });
       const nodes = response.data?.data?.productOfferV2?.nodes || [];
+      const pageInfo = response.data?.data?.productOfferV2?.pageInfo;
       const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
       productOffers.push(...filtered); calls.push({ source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: filtered.length });
-      if (nodes.length < pageSize) break;
+      if (!pageInfo || pageInfo.hasNextPage !== true) break;
     }
   };
   for (const keyword of keywords) await callProduct({ keyword }, 'productOfferV2.keyword');
