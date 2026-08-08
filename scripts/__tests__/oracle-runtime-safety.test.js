@@ -27,4 +27,23 @@ describe('Oracle runtime safety', () => {
       else process.env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED = previous;
     }
   });
+
+  it('keeps boot side-effect free and runs one cycle only on explicit command or scheduler tick', async () => {
+    let cycles = 0;
+    let scheduledCallback;
+    let scheduleCalls = 0;
+    const cycle = async () => { cycles += 1; };
+    const schedule = (_expression, callback) => { scheduleCalls += 1; scheduledCallback = callback; };
+
+    scraper.startOracleScraper({ argv: ['node', 'oracle-scraper.cjs'], cycle, schedule });
+    expect(cycles).toBe(0);
+    expect(scheduleCalls).toBe(1);
+
+    await scheduledCallback();
+    expect(cycles).toBe(1);
+
+    await scraper.startOracleScraper({ argv: ['node', 'oracle-scraper.cjs', '--run-now'], cycle, schedule });
+    expect(cycles).toBe(2);
+    expect(scheduleCalls).toBe(1);
+  });
 });

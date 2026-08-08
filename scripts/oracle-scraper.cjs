@@ -1660,6 +1660,19 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
   });
 }
 
+function startOracleScraper({ argv = process.argv, cycle = runScrapingCycle, schedule = cron.schedule } = {}) {
+  const run = () => Promise.resolve(cycle()).catch((error) => {
+    console.error('[Oracle Discovery-Only V5] ' + error.message);
+  });
+  if (argv.includes('--run-now')) return run();
+  schedule(CRON_SCHEDULE, run, {
+    name: 'oracle-worker-discovery-v5',
+    timezone: 'America/Sao_Paulo',
+    noOverlap: true,
+  });
+  return undefined;
+}
+
 if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1') {
   if (process.argv.includes('--shopee-native-top20-dry-run')) {
     executeShopeeNativeDiscoveryV5({ dryRun: true, scenario: CLI_SCENARIO_ID }).catch((error) => {
@@ -1690,14 +1703,7 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
       process.exitCode = 1;
     });
   } else {
-    runScrapingCycle().catch((error) => console.error('[Oracle Discovery-Only V5] ' + error.message));
-    cron.schedule(CRON_SCHEDULE, () => runScrapingCycle().catch((error) => {
-      console.error('[Oracle Discovery-Only V5] ' + error.message);
-    }), {
-      name: 'oracle-worker-discovery-v5',
-      timezone: 'America/Sao_Paulo',
-      noOverlap: true,
-    });
+    startOracleScraper();
   }
 }
 
@@ -1716,6 +1722,7 @@ module.exports = {
   runMercadoLivreOfficialDryRun,
   runShopeeScenarioRecording,
   runMultiMarketplaceScenarioRecording,
+  startOracleScraper,
   runManualMarketplaceScenarioRecording,
   createScenarioRuntimeResolver,
   runScrapingCycle,
