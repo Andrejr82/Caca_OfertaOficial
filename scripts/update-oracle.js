@@ -134,10 +134,13 @@ const stamp = `${Date.now()}-${process.pid}`;
 const remoteStage = `/tmp/caca-oferta-deploy-${stamp}`;
 const remoteBackup = `${PROJECT_DIR}/.rollout-backups/oracle-runtime-${stamp}`;
 const localOverlayPath = path.resolve(__dirname, '..', RUNTIME_OVERLAY_FILE);
+const overlayTransferPath = path.join(os.tmpdir(), `oracle-runtime-overlay-${stamp}.env`);
 
 try {
   if (!fs.existsSync(localOverlayPath)) throw new Error(`Overlay versionado não encontrado: ${RUNTIME_OVERLAY_FILE}`);
-  parseOverlay(fs.readFileSync(localOverlayPath, 'utf8'));
+  const overlayText = fs.readFileSync(localOverlayPath, 'utf8').replace(/\r\n/g, '\n');
+  parseOverlay(overlayText);
+  fs.writeFileSync(overlayTransferPath, overlayText, 'utf8');
   console.log(`Conectando à Oracle ${TARGET}...`);
   ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteStage}/config' '${remoteBackup}/scripts'`);
 
@@ -156,7 +159,7 @@ try {
     console.log(`Enviando ${relativeFile}...`);
     scp(localFile, `${remoteStage}/${relativeFile}`);
   }
-  scp(localOverlayPath, `${remoteStage}/${RUNTIME_OVERLAY_FILE}`);
+  scp(overlayTransferPath, `${remoteStage}/${RUNTIME_OVERLAY_FILE}`);
 
   // ─── Passo 3: validar staged e instalar arquivos ──────────────────────────
   const installFiles = DEPLOY_FILES.map((relativeFile) => {
@@ -201,10 +204,12 @@ try {
   // ─── Passo 8: limpeza do stage temporário ────────────────────────────────
   ssh(`rm -rf '${remoteStage}'`);
   fs.unlinkSync(localManifestPath);
+  fs.unlinkSync(overlayTransferPath);
 
   console.log(`Deploy do Oracle Worker concluído. release=${commit}`);
 } catch (error) {
   try { ssh(`rm -rf '${remoteStage}'`); } catch { /* limpeza best-effort */ }
+  try { fs.unlinkSync(overlayTransferPath); } catch { /* limpeza best-effort */ }
   console.error(`Falha no deploy Oracle: ${error.message}`);
   process.exitCode = 1;
 }
