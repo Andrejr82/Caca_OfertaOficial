@@ -11,6 +11,7 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   }
   if (command.metadata?.copyV2Auto === true && command.metadata.copyV2 !== true) return "Automated Copy V2 requires copyV2 metadata";
   if (command.metadata?.copyV2Regenerate === true && command.metadata.copyV2 !== true) return "Copy V2 regeneration requires copyV2 metadata";
+  if (command.metadata?.copyV3Regenerate === true && command.metadata.copyV3Express !== true) return "Copy V3 regeneration requires copyV3Express metadata";
   // Idempotency key deve ser estável por offer (ADR-014: a IA detecta o modo internamente).
   // Formato v1 (approval e legado): ai:{offerId}:v1
   // Formato v2 (draft batch): ai:draft:{offerId}:v2
@@ -37,8 +38,13 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
       ? command.idempotencyKey.slice(copyV2Prefix.length)
       : "";
     const isCopyV2 = command.metadata?.copyV2 === true && /^(?:v1|\d+)$/.test(copyV2Revision);
-    if (!isV1 && !isV2Draft && !isCopyV2) {
-      return "AI idempotency key must be ai:{offerId}:v1, ai:draft:{offerId}:v2 or ai:copy-v2:{offerId}:{revision}";
+    const copyV3Prefix = `ai:copy-v3:${command.offerId}:`;
+    const copyV3Revision = command.idempotencyKey.startsWith(copyV3Prefix)
+      ? command.idempotencyKey.slice(copyV3Prefix.length)
+      : "";
+    const isCopyV3 = command.metadata?.copyV3Express === true && /^(?:v1|\d+)$/.test(copyV3Revision);
+    if (!isV1 && !isV2Draft && !isCopyV2 && !isCopyV3) {
+      return "AI idempotency key must be ai:{offerId}:v1, ai:draft:{offerId}:v2, ai:copy-v2:{offerId}:{revision} or ai:copy-v3:{offerId}:{revision}";
     }
   }
   if (command.offerId === "ALL_PENDING" && !command.idempotencyKey.startsWith("ai:ALL_PENDING:") && !command.idempotencyKey.startsWith("ai:batch:")) {
@@ -58,10 +64,11 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
 export function validateCandidateOffer(offer: OfficialAIOffer): string | null {
   const evidence = offer.explainability || {};
   if (evidence.contract_version !== "pmav5.candidate/v1") return "Candidate contract version is invalid";
-  if (![evidence.candidate_id, evidence.ingestion_id, evidence.correlation_id].every(nonEmpty)) {
+  const isManual = evidence.manual_source === true;
+  if (![evidence.candidate_id, evidence.ingestion_id, ...(isManual ? [] : [evidence.correlation_id])].every(nonEmpty)) {
     return "Candidate identity evidence is incomplete";
   }
-  if (!evidence.discovery_evidence || !evidence.marketplace_metrics) return "Candidate evidence is incomplete";
+  if ((!isManual && !evidence.discovery_evidence) || !evidence.marketplace_metrics) return "Candidate evidence is incomplete";
   if (![offer.marketplace, offer.productName, offer.originalUrl, offer.imageUrl].every(nonEmpty)) return "Candidate fields are incomplete";
   if (!/^https:\/\//i.test(offer.originalUrl) || !/^https:\/\//i.test(offer.imageUrl)) return "Candidate URLs must use HTTPS";
   if (!Number.isFinite(offer.currentPrice) || offer.currentPrice <= 0) return "Candidate current price is invalid";

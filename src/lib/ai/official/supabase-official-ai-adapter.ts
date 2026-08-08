@@ -302,7 +302,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
           details: { channel, postId: post.id, affiliateLinkId: post.affiliate_link_id ?? link.id, operation: "insert" }
         });
       } else {
-        if (input.command.metadata?.copyV2Regenerate === true) {
+        if (input.command.metadata?.copyV2Regenerate === true || input.command.metadata?.copyV3Regenerate === true) {
           const { error: updateError } = await this.client
             .from("posts")
             .update({ content: materializeDraftContent(channel, assertOfficialCopy(input.content.channelCopies[channel] || "", channel), trackedUrl, { repairInvalidUrl: true }) })

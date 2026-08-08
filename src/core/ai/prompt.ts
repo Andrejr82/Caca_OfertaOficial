@@ -375,9 +375,8 @@ function v3Hook(facts: CopyV3Facts, channel: OfficialAIChannel, fields: CopyV3Fi
   const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
   if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate) && !/^(?:oferta em destaque|boa opção para sua rotina|seleção oficial do dia|uma opção para sua rotina)$/iu.test(candidate)) return candidate;
   if (channel === "whatsapp" && v3DerivedBenefit(facts)) return "🎮 Jogue no computador com controle sem fio ou com fio";
-  const product = channel === "whatsapp" ? compactProductName(facts.productName) : cleanProductName(facts.productName);
-  if (channel === "whatsapp" && !attribute && !v3Context(facts)) return `💡 Oferta na ${facts.marketplace}`;
-  return attribute ? `${attribute.emoji} ${product} com ${attribute.text}` : `✨ ${product}`;
+  if (attribute) return `${attribute.emoji} ${attribute.text}`;
+  return v3Context(facts) ?? `✨ Destaque do dia na ${facts.marketplace}`;
 }
 
 /** Copy V3: provider fields are validated first; all commercial facts remain deterministic. */

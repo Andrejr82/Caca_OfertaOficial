@@ -21,7 +21,7 @@ interface PreparedPost {
   imageUrl: string;
   trackedUrl: string;
   copy: string;
-  copies?: { telegram: string; whatsapp: string; instagram: string; };
+  copies?: { telegram: string; whatsapp: string; instagram: string; facebook: string; };
   status: "ready" | "confirming" | "publishing" | "published" | "error" | "partial_error";
   publishMessage: string;
   expanded: boolean;
@@ -119,7 +119,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
               trackedUrl: res.trackedUrl || (res as any).affiliateUrl || "",
               copy: res.copy,
               copies: res.copies,
-              targetChannels: channel === "omnichannel" ? ["telegram", "instagram", "whatsapp"] : [channel],
+              targetChannels: channel === "omnichannel" ? ["telegram", "whatsapp", "facebook", "instagram"] : [channel],
               status: "ready",
               publishMessage: "",
               expanded: index === 0,

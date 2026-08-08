@@ -113,6 +113,62 @@ function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = 
 }
 
 describe("generateOfficialAI", () => {
+  it("gera Copy V3 omnichannel para oferta manual sem exigir coorte de discovery", async () => {
+    const productName = "Cama Box Casal Colchão Molas Ensacadas Pillow Maximus 138x188x62cm Cinza";
+    const manualOffer: OfficialAIOffer = {
+      ...offer,
+      id: "offer-manual-shopee",
+      state: "pending_manual_review",
+      productName,
+      currentPrice: 989,
+      originalPrice: null,
+      explainability: {
+        contract_version: "pmav5.candidate/v1",
+        candidate_id: "manual-request-1",
+        ingestion_id: "quick-publication-request-1",
+        manual_source: true,
+        marketplace_metrics: { item_id: "22494398493", shop_id: "408715442" }
+      },
+      affiliateLinks: [
+        { channel: "telegram", trackedUrl: "https://app.com/go/tg_offer-manual-shopee" },
+        { channel: "whatsapp", trackedUrl: "https://app.com/go/wp_offer-manual-shopee" },
+        { channel: "facebook", trackedUrl: "https://app.com/go/fb_offer-manual-shopee" },
+        { channel: "instagram", trackedUrl: "https://app.com/go/ig_offer-manual-shopee" }
+      ]
+    };
+    const dependencies = createDependencies({
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(manualOffer) },
+      content: {
+        persistDrafts: vi.fn().mockImplementation(async ({ channels }: { channels: readonly string[] }) => channels.map((channel) => ({
+          postId: `post-${channel}`, affiliateLinkId: `link-${channel}`, channel, state: "draft" as const
+        })))
+      }
+    });
+
+    const result = await generateOfficialAI({
+      ...command,
+      offerId: manualOffer.id,
+      channels: ["telegram", "whatsapp", "facebook", "instagram"],
+      commandId: "quick-publication:offer-manual-shopee:copy-v3-1",
+      idempotencyKey: "ai:copy-v3:offer-manual-shopee:1",
+      origin: "publish.quick-publication",
+      metadata: { copyV3Express: true, copyV3Regenerate: true }
+    }, dependencies);
+
+    expect(result.status).toBe("drafted");
+    expect(dependencies.content.persistDrafts).toHaveBeenCalledWith(expect.objectContaining({
+      channels: ["telegram", "whatsapp", "facebook", "instagram"]
+    }));
+    const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content.channelCopies;
+    for (const channel of ["telegram", "whatsapp", "facebook", "instagram"] as const) {
+      const copy = persisted[channel] || "";
+      expect(copy).toBeTruthy();
+      expect(copy).not.toContain("/go/tg_");
+      expect(copy.split("\n\n", 1)[0]).not.toBe(`✨ ${productName}`);
+      expect((copy.match(new RegExp(productName, "g")) || []).length).toBeLessThanOrEqual(1);
+    }
+  });
+
   it("usa o renderer Copy V2 para comandos copyV2 e inclui marketplace/frete apenas com evidência", async () => {
     const dependencies = createDependencies({
       offers: {

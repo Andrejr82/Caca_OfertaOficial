@@ -29,7 +29,7 @@ interface QuickPostResult {
   trackedUrl?: string;
   affiliateUrl?: string;
   copy?: string;
-  copies?: { telegram: string; whatsapp: string; instagram: string };
+  copies?: { telegram: string; whatsapp: string; instagram: string; facebook: string };
 }
 
 // ─── Telemetria (sem dados sensíveis) ────────────────────────────────────────
@@ -887,8 +887,8 @@ async function generateQuickPostActionInternal(
         contract_version: "pmav5.candidate/v1",
         candidate_id: candidateId,
         ingestion_id: ingestionId,
-        correlation_id: correlationId,
-        discovery_evidence: {
+        manual_source: true,
+        manual_resolution: {
           source: "quick-publication",
           resolved_url: resolvedUrl,        // URL após resolução de redirects
           canonical_url: canonicalUrl,      // URL canônica do produto
@@ -940,16 +940,16 @@ async function generateQuickPostActionInternal(
   stage("generate_ai_copy");
 
   const targetChannels: OfficialAIChannel[] = channel === "omnichannel"
-    ? ["telegram", "instagram", "whatsapp"]
-    : channel === "telegram" || channel === "instagram" || channel === "whatsapp"
+    ? ["telegram", "whatsapp", "facebook", "instagram"]
+    : channel === "telegram" || channel === "instagram" || channel === "whatsapp" || channel === "facebook"
       ? [channel]
       : ["telegram"];
 
-  const commandId = `quick-publication:${offer.id}:copy-v2-2`;
+  const commandId = `quick-publication:${offer.id}:copy-v3-1`;
   const command: OfficialAICommand = {
     contractVersion: "pmav5.ai/v1",
     commandId,
-    idempotencyKey: `ai:copy-v2:${offer.id}:2`,
+    idempotencyKey: `ai:copy-v3:${offer.id}:1`,
     correlationId,
     causationId: null,
     offerId: offer.id,
@@ -960,7 +960,7 @@ async function generateQuickPostActionInternal(
     actor: { type: "user", id: userId, service: "quick-publication" },
     origin: "publish.quick-publication",
     reason: { code: "GENERATE_OFFICIAL_CONTENT" },
-    metadata: { copyV2: true, copyV2Express: true, copyV2Regenerate: true },
+    metadata: { copyV3Express: true, copyV3Regenerate: true },
   };
 
   // A Official AI executada pela Oracle usa service role. A Expressa precisa

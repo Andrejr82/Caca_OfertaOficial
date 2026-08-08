@@ -166,7 +166,8 @@ function resolveMode(
   tenantId: string,
   copyV2 = false,
   commandIsAuto = false,
-  expressValidated = false
+  expressValidated = false,
+  copyV3Express = false
 ):
   | { ok: true; mode: InternalMode }
   | { ok: false; code: string; message: string; offerState: "pending_manual_review" | "selected" | "unknown" } {
@@ -182,7 +183,7 @@ function resolveMode(
   // A Expressa é uma exceção estreita: o produto já passou pelo seu quality
   // gate e pode receber Copy V2, mas continua aguardando revisão manual.
   if (offer.state === "pending_manual_review") {
-    if (copyV2 && expressValidated) {
+    if ((copyV2 || copyV3Express) && expressValidated) {
       return { ok: true, mode: "copy_v2_express" };
     }
     if (copyV2 && commandIsAuto) {
@@ -525,7 +526,8 @@ export async function generateOfficialAI(
     command.tenantId,
     command.metadata?.copyV2 === true,
     command.metadata?.copyV2Auto === true && command.actor.type === "service",
-    command.metadata?.copyV2Express === true && command.origin === "publish.quick-publication"
+    (command.metadata?.copyV2Express === true || command.metadata?.copyV3Express === true) && command.origin === "publish.quick-publication",
+    command.metadata?.copyV3Express === true && command.origin === "publish.quick-publication"
   );
   if (!modeResult.ok) {
     return rejectAndRecord(
