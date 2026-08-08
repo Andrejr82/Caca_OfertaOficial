@@ -6,6 +6,7 @@ import { createCommercialCurationDraft } from "@/lib/offers/create-commercial-cu
 import type { CommercialDraftChannel } from "@/lib/offers/commercial-draft-validation";
 
 export function CommercialCurationPanel({ candidates }: { candidates: CommercialQueueCandidate[] }) {
+  const operationalCandidates = candidates.slice(0, 30);
   const [marketplace, setMarketplace] = useState("");
   const [intent, setIntent] = useState("");
   const [mode, setMode] = useState<"" | "automatic" | "manual-first" | "rejected">("");
@@ -15,7 +16,7 @@ export function CommercialCurationPanel({ candidates }: { candidates: Commercial
   const [draftFeedback, setDraftFeedback] = useState<Record<string, string>>({});
   const [isCreatingDraft, startCreatingDraft] = useTransition();
 
-  const filtered = useMemo(() => candidates.filter((candidate) => {
+  const filtered = useMemo(() => operationalCandidates.filter((candidate) => {
     if (marketplace && candidate.platform !== marketplace) return false;
     if (intent && candidate.commercialIntent !== intent) return false;
     if (mode === "automatic" && !candidate.automaticEligible) return false;
@@ -23,12 +24,12 @@ export function CommercialCurationPanel({ candidates }: { candidates: Commercial
     if (mode === "rejected" && !candidate.rejected) return false;
     if (risk && !candidate.commercialRiskFlags.includes(risk)) return false;
     return !minScore || candidate.achadinhoScore >= Number(minScore);
-  }), [candidates, marketplace, intent, mode, risk, minScore]);
+  }), [operationalCandidates, marketplace, intent, mode, risk, minScore]);
   const automatic = filtered.filter((candidate) => candidate.automaticEligible);
   const manual = filtered.filter((candidate) => candidate.manualReviewRequired);
   const rejected = filtered.filter((candidate) => candidate.rejected);
-  const intents = [...new Set(candidates.map((candidate) => candidate.commercialIntent))].sort();
-  const risks = [...new Set(candidates.flatMap((candidate) => candidate.commercialRiskFlags))].sort();
+  const intents = [...new Set(operationalCandidates.map((candidate) => candidate.commercialIntent))].sort();
+  const risks = [...new Set(operationalCandidates.flatMap((candidate) => candidate.commercialRiskFlags))].sort();
 
   function createDraft(candidate: CommercialQueueCandidate) {
     const selectedChannel = selectedChannels[candidate.id] || "telegram";

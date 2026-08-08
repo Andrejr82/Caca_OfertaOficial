@@ -3,15 +3,16 @@ import { OfferForm } from "@/components/offers/offer-form";
 import { listOffersWithDraftStatus } from "@/lib/offers/queries";
 import { ShoppingBag } from "lucide-react";
 import { OffersClient } from "./OffersClient";
-import { buildCommercialQueue } from "@/lib/offers/commercial-curation-queue";
+import { selectOperationalPanelTop30 } from "@/lib/offers/commercial-channel-router";
 import { CommercialCurationPanel } from "@/components/offers/commercial-curation-panel";
-import { deduplicateCommercialOffers } from "@/lib/offers/catalog-grouping";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export default async function OffersPage() {
-  const offers = deduplicateCommercialOffers(await listOffersWithDraftStatus());
-  const commercialCandidates = buildCommercialQueue(offers);
+  const offers = await listOffersWithDraftStatus();
+  const commercialCandidates = selectOperationalPanelTop30(offers);
+  const operationalOfferIds = new Set(commercialCandidates.map((candidate) => candidate.id));
+  const operationalOffers = offers.filter((offer) => operationalOfferIds.has(offer.id));
 
   return (
     <div className="grid gap-6 animate-fadeIn">
@@ -37,7 +38,7 @@ export default async function OffersPage() {
       <CommercialCurationPanel candidates={commercialCandidates} />
 
       {/* Offers List */}
-      <OffersClient initialOffers={offers} />
+      <OffersClient initialOffers={operationalOffers} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { routeCommercialCandidate, routeCommercialCandidates, selectOperationalTopCandidates } from "@/lib/offers/commercial-channel-router";
+import { routeCommercialCandidate, routeCommercialCandidates, selectOperationalPanelTop30, selectOperationalTopCandidates } from "@/lib/offers/commercial-channel-router";
 
 const candidate = (overrides: any = {}) => ({
   id: "offer-1", platform: "Shopee", product_name: "Organizador de gaveta", category: "Casa", subcategory: "Organização", original_url: "https://example.test", current_price: 39, image_url: "https://example.test/image", commercialIntent: "casa_organizada_antes_depois", achadinhoScore: 80, automaticEligible: true, manualReviewRequired: false, commercialReasons: ["preço na faixa"], commercialRiskFlags: [], suggestedCopy: "copy", rejected: false, ...overrides,
@@ -26,5 +26,39 @@ describe("commercial channel router", () => {
     const selected = selectOperationalTopCandidates(pool, { channel: "telegram", limit: 30, diversity: true });
     expect(selected).toHaveLength(30);
     expect(new Set(selected.map((item) => item.product_name)).size).toBeGreaterThan(3);
+  });
+
+  it("contains a broad new cohort to 30 unique operational panel slots", () => {
+    const cycle = "cycle-panel";
+    const discovery = { correlation_id: cycle, discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } };
+    const offers = Array.from({ length: 430 }, (_, index) => ({
+      ...candidate({ id: `panel-${index}`, product_name: `Organizador de gaveta modelo ${index}`, category: index % 5 === 0 ? "Casa" : "Tech", achadinhoScore: 90 - index / 100 }),
+      user_id: "u1", status: "pending_manual_review", score: 50, old_price: 49, rating: 4.8, marketplace_metrics: { sales: 500, rating: 4.8, discount: 20 }, created_at: "2026-08-08T10:00:01.000Z", updated_at: "2026-08-08T10:00:02.000Z", explainability: discovery,
+      shopee_item_id: `item-${index}`,
+    }));
+    const selected = selectOperationalPanelTop30(offers as any);
+    expect(selected).toHaveLength(30);
+    expect(new Set(selected.map((item) => item.id)).size).toBe(30);
+  });
+
+  it("blocks protected history and old rows updated during the current cycle", () => {
+    const discovery = { correlation_id: "cycle-current", discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } };
+    const make = (id: string, status: string, created_at: string, item: string) => ({ ...candidate({ id, shopee_item_id: item }), user_id: "u1", status, created_at, updated_at: "2026-08-08T10:05:00.000Z", explainability: discovery });
+    const offers = [
+      make("old-updated", "pending_manual_review", "2026-08-07T10:00:00.000Z", "old"),
+      make("posted", "posted", "2026-08-08T10:00:01.000Z", "posted"),
+      make("approved", "approved", "2026-08-08T10:00:02.000Z", "approved"),
+      make("rejected", "rejected", "2026-08-08T10:00:03.000Z", "rejected"),
+      make("deferred", "deferred", "2026-08-08T10:00:04.000Z", "deferred"),
+      make("deleted", "deleted", "2026-08-08T10:00:05.000Z", "deleted"),
+      make("new", "pending_manual_review", "2026-08-08T10:00:06.000Z", "new"),
+    ];
+    const selected = selectOperationalPanelTop30(offers as any);
+    expect(selected.map((item) => item.id)).toEqual(["new"]);
+  });
+
+  it("does not publish or invoke Telegram while selecting the panel top 30", () => {
+    const offer = { ...candidate({ id: "panel-only", shopee_item_id: "panel-only" }), user_id: "u1", status: "pending_manual_review", created_at: "2026-08-08T10:00:01.000Z", updated_at: "2026-08-08T10:05:00.000Z", explainability: { correlation_id: "cycle", discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } } };
+    expect(selectOperationalPanelTop30([offer] as any)).toHaveLength(1);
   });
 });

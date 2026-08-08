@@ -1,4 +1,5 @@
-import type { CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
+import { buildCommercialQueue, filterOperationalPanelOffers, type CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
+import type { Offer } from "@/types/domain";
 
 export type CommercialTargetQueue = "telegram" | "manual_whatsapp" | "reels_manual" | "panel_only";
 export type RoutedCommercialCandidate = CommercialQueueCandidate & {
@@ -41,9 +42,11 @@ export function routeCommercialCandidates(candidates: CommercialQueueCandidate[]
   return candidates.map(routeCommercialCandidate).sort((a, b) => b.priority - a.priority);
 }
 
-export function selectOperationalTopCandidates(candidates: RoutedCommercialCandidate[], options: { limit?: number; channel: Exclude<CommercialTargetQueue, "panel_only">; diversity?: boolean } ) {
+type OperationalSelectionChannel = Exclude<CommercialTargetQueue, "panel_only"> | "operational";
+
+export function selectOperationalTopCandidates(candidates: RoutedCommercialCandidate[], options: { limit?: number; channel: OperationalSelectionChannel; diversity?: boolean } ) {
   const limit = options.limit || 30;
-  const pool = candidates.filter((candidate) => candidate.targetQueue === options.channel).sort((a, b) => b.priority - a.priority || b.achadinhoScore - a.achadinhoScore);
+  const pool = candidates.filter((candidate) => options.channel === "operational" ? candidate.targetQueue !== "panel_only" : candidate.targetQueue === options.channel).sort((a, b) => b.priority - a.priority || b.achadinhoScore - a.achadinhoScore);
   if (options.diversity === false) return pool.slice(0, limit);
   const selected: RoutedCommercialCandidate[] = [];
   const families = new Set<string>(); const categories = new Map<string, number>(); const sellers = new Map<string, number>();
@@ -58,4 +61,12 @@ export function selectOperationalTopCandidates(candidates: RoutedCommercialCandi
   }
   if (selected.length < limit) for (const candidate of pool) { if (!selected.some((item) => item.id === candidate.id)) selected.push(candidate); if (selected.length >= limit) break; }
   return selected;
+}
+
+/** Operational panel boundary: discovery remains broad; only rendered candidates are capped. */
+export function selectOperationalPanelTop30(offers: Offer[], limit = 30): RoutedCommercialCandidate[] {
+  const eligible = filterOperationalPanelOffers(offers);
+  const candidates = buildCommercialQueue(eligible);
+  const routed = routeCommercialCandidates(candidates.filter((candidate) => !candidate.rejected && Boolean(candidate.image_url)));
+  return selectOperationalTopCandidates(routed, { channel: "operational", limit, diversity: true });
 }
