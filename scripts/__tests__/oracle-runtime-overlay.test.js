@@ -12,6 +12,7 @@ const {
 
 test('accepts exactly the versioned non-secret Oracle flags', () => {
   const overlay = parseOverlay([
+    '# Non-secret controls only',
     'SHOPEE_OPENAPI_ENGINE_V1_ENABLED=true',
     'SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=true',
     'NO_POSTS=1',
@@ -56,6 +57,7 @@ test('requires a durable backup before applying the overlay', () => {
 
   assert.match(plan, /cp -p '\/home\/ubuntu\/Caca_OfertaOficial\/.env\.local' '\/home\/ubuntu\/Caca_OfertaOficial\/.rollout-backups\/oracle-runtime-test\/env\.local\.before'/);
   assert.match(plan, /mv '\/home\/ubuntu\/Caca_OfertaOficial\/.env\.local\.overlay-/);
+  assert.match(plan, /\(#\|\$\)/);
 });
 
 test('restarts only oracle-scraper with its updated environment', () => {
