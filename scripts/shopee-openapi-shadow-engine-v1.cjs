@@ -194,7 +194,7 @@ function auxiliaryNode(source, node) {
   return { source, requiresProductResolution: true, resolved: Boolean(node.resolvedProduct), offerLink: node.offerLink || null, imageUrl: node.imageUrl || null, commissionRate: node.commissionRate ?? null, raw: node, resolvedProduct: node.resolvedProduct || null };
 }
 
-async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories, maxConcurrentQueries = 3, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
+async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
   const plan = SCENARIO_QUERY_PLANS[scenarioId];
   if (!plan) throw new Error(`Plano Shopee ausente para ${scenarioId}`);
   if (typeof request !== 'function') throw new Error('runScenarioPlan requer request injetado');
@@ -202,13 +202,35 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
   const callProduct = async (variables, sourcePlan) => {
     const pageSize = plan.limits.productOfferV2PerQuery;
     const maxPages = plan.limits.maxPagesPerQuery;
-    for (let page = 1; page <= maxPages; page += 1) {
-      const response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true });
-      const nodes = response.data?.data?.productOfferV2?.nodes || [];
-      const pageInfo = response.data?.data?.productOfferV2?.pageInfo;
-      const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
-      productOffers.push(...filtered); calls.push({ source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: filtered.length });
-      if (!pageInfo || pageInfo.hasNextPage !== true) break;
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), Math.max(1, Number(sourceTimeoutMs) || 25_000));
+    const seenCursors = new Set();
+    try {
+      for (let page = 1; page <= maxPages; page += 1) {
+        let response;
+        try {
+          response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true }, { signal: controller.signal });
+        } catch (error) {
+          calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: controller.signal.aborted ? 'source_timeout' : 'source_error', error: error?.message || String(error) });
+          break;
+        }
+        const nodes = response.data?.data?.productOfferV2?.nodes || [];
+        const pageInfo = response.data?.data?.productOfferV2?.pageInfo;
+        const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
+        const evidence = { source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: filtered.length };
+        productOffers.push(...filtered);
+        if (nodes.length === 0) { calls.push({ ...evidence, stopReason: 'empty_page' }); break; }
+        if (!pageInfo || pageInfo.hasNextPage !== true) { calls.push({ ...evidence, stopReason: 'has_next_page_false' }); break; }
+        const cursor = pageInfo.endCursor ?? pageInfo.nextCursor ?? pageInfo.cursor ?? pageInfo.page ?? null;
+        if (cursor == null) { calls.push({ ...evidence, stopReason: 'cursor_missing' }); break; }
+        if (pageInfo.page != null && Number(pageInfo.page) < page) { calls.push({ ...evidence, stopReason: 'cursor_not_advanced' }); break; }
+        const cursorKey = String(cursor);
+        if (seenCursors.has(cursorKey)) { calls.push({ ...evidence, stopReason: 'cursor_repeated' }); break; }
+        seenCursors.add(cursorKey);
+        calls.push(evidence);
+      }
+    } finally {
+      clearTimeout(timeoutId);
     }
   };
   const queryTasks = [

@@ -204,7 +204,7 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
           productCatIds: [100010],
         });
       });
-      return { status: 200, data: { data: { productOfferV2: { nodes, pageInfo: { hasNextPage: true } } } } };
+      return { status: 200, data: { data: { productOfferV2: { nodes, pageInfo: { hasNextPage: true, endCursor: `cursor-${variables.keyword || variables.productCatId}` } } } } };
     };
     const result = await runScenarioPlan('casa_cozinha_editorial', { request, includeAuxiliary: false, includeDelta: false });
     expect(calls.filter((call) => call.operation === 'ShopeePromotionOffers')).toHaveLength(14);
@@ -227,6 +227,45 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(result.queryEvidence.calls).toHaveLength(7);
     expect(peak).toBeGreaterThan(1);
     expect(peak).toBeLessThanOrEqual(3);
+  });
+
+  it('encerra uma fonte quando o cursor da paginação se repete', async () => {
+    const request = async (operation, query, variables) => ({
+      status: 200,
+      data: { data: { productOfferV2: { nodes: [product({ itemId: String(8100 + variables.page) })], pageInfo: { hasNextPage: true, endCursor: 'cursor-igual' } } } },
+    });
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
+    expect(result.queryEvidence.calls).toHaveLength(2);
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('cursor_repeated');
+  });
+
+  it('encerra uma fonte em página vazia mesmo quando a API informa próxima página', async () => {
+    const request = async () => ({ status: 200, data: { data: { productOfferV2: { nodes: [], pageInfo: { hasNextPage: true, endCursor: 'seguinte' } } } } });
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
+    expect(result.queryEvidence.calls).toHaveLength(1);
+    expect(result.queryEvidence.calls[0].stopReason).toBe('empty_page');
+  });
+
+  it('continua enquanto o cursor avança e encerra no último pageInfo', async () => {
+    const request = async (operation, query, variables) => ({
+      status: 200,
+      data: { data: { productOfferV2: { nodes: [product({ itemId: String(8200 + variables.page), shopId: String(9200 + variables.page), productLink: `https://shopee.com.br/product/${9200 + variables.page}/${8200 + variables.page}`, offerLink: `https://s.shopee.com.br/${8200 + variables.page}` })], pageInfo: { hasNextPage: variables.page < 3, endCursor: `cursor-${variables.page}` } } } },
+    });
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
+    expect(result.queryEvidence.calls).toHaveLength(3);
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('has_next_page_false');
+  });
+
+  it('preserva resultados de outra fonte quando uma excede seu orçamento técnico', async () => {
+    const request = async (operation, query, variables, options = {}) => {
+      if (variables.keyword === 'liquidificador') {
+        await new Promise((resolve, reject) => options.signal?.addEventListener('abort', () => reject(Object.assign(new Error('source aborted'), { code: 'SOURCE_ABORTED' })), { once: true }));
+      }
+      return { status: 200, data: { data: { productOfferV2: { nodes: [product({ itemId: '8301', shopId: '9301', productName: 'Panela para cozinha', productLink: 'https://shopee.com.br/product/9301/8301', offerLink: 'https://s.shopee.com.br/8301' })], pageInfo: { hasNextPage: false } } } } };
+    };
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 2, maxCategories: 0, maxConcurrentQueries: 2, sourceTimeoutMs: 5, includeDelta: false, includeAuxiliary: false });
+    expect(result.queryEvidence.productOffers).toBe(1);
+    expect(result.queryEvidence.calls.some((call) => call.stopReason === 'source_timeout')).toBe(true);
   });
 
   it('não para nos primeiros candidatos históricos quando há novos depois deles', () => {
