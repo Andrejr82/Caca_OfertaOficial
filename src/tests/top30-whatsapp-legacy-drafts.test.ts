@@ -167,7 +167,7 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     expect(repo.writes.filter((write) => write.type === "draft").every((write) => !posts.some((item) => item.offer_id === write.offerId))).toBe(true);
   });
 
-  it("blocks rejected and deferred offers before commercial routing", async () => {
+  it("blocks rejected and deferred offers without creating a legacy draft", async () => {
     const today = [
       offer("rejected", "2026-08-07T10:00:00.000Z", { status: "rejected" }),
       offer("deferred", "2026-08-07T10:00:00.000Z", { status: "deferred" }),
@@ -175,12 +175,13 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     ];
     const repo = repository({ today, fallback: [] });
 
-    await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(repo.writes.filter((write) => write.type === "draft").map((write) => write.offerId)).toEqual(["eligible"]);
+    expect(repo.writes.filter((write) => write.type === "draft")).toHaveLength(0);
+    expect(result.reasons.legacy_copy_generation_disabled).toBe(1);
   });
 
-  it("blocks a deleted post and a republished product with a new offer id", async () => {
+  it("blocks a deleted-post identity without creating a legacy draft", async () => {
     const today = [
       offer("new-offer-id", "2026-08-07T10:00:00.000Z", { shopee_item_id: "same-item" }),
       offer("new-product", "2026-08-07T10:00:00.000Z", { shopee_item_id: "fresh-item" }),
@@ -193,9 +194,10 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
       { id: "new-product", platform: "Shopee", shopee_item_id: "fresh-item", item_id: null, product_id: null, shopee_shop_id: null, original_url: "https://shopee.test/fresh-item" },
     ];
 
-    await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
 
-    expect(repo.writes.filter((write) => write.type === "draft").map((write) => write.offerId)).toEqual(["new-product"]);
+    expect(repo.writes.filter((write) => write.type === "draft")).toHaveLength(0);
+    expect(result.reasons.legacy_copy_generation_disabled).toBe(1);
   });
 
   it("does not duplicate an offer already seen today and prioritizes the latest discovery correlation", async () => {
