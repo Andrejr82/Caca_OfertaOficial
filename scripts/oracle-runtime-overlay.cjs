@@ -92,7 +92,7 @@ function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup }) {
 
 function buildScraperRestartCommand(pm2ScraperName) {
   if (!/^[A-Za-z0-9._/-]+$/.test(pm2ScraperName)) throw new Error('PM2 scraper name is invalid.');
-  return `set -eu; pm2 restart '${pm2ScraperName}' --update-env; pm2 describe '${pm2ScraperName}' >/dev/null`;
+  return `set -eu; export SHOPEE_OPENAPI_ENGINE_V1_ENABLED=true SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=true NO_POSTS=1 NO_PUBLISH=1; pm2 restart '${pm2ScraperName}' --update-env; pm2 describe '${pm2ScraperName}' >/dev/null`;
 }
 
 module.exports = { ORACLE_RUNTIME_FLAGS, parseOverlay, mergeEnvText, buildRemoteOverlayPlan, buildScraperRestartCommand };
