@@ -19,8 +19,14 @@ if (require.main === module && retiredWorkerFlag) {
   process.exit(1);
 }
 
-const scenarioArgIndex = process.argv.indexOf('--scenario');
-const CLI_SCENARIO_ID = scenarioArgIndex !== -1 ? process.argv[scenarioArgIndex + 1] : null;
+function parseScenarioArg(argv = process.argv) {
+  const equalsArg = argv.find((arg) => String(arg).startsWith('--scenario='));
+  if (equalsArg) return String(equalsArg).slice('--scenario='.length).trim() || null;
+  const scenarioArgIndex = argv.indexOf('--scenario');
+  return scenarioArgIndex !== -1 ? String(argv[scenarioArgIndex + 1] || '').trim() || null : null;
+}
+
+const CLI_SCENARIO_ID = parseScenarioArg();
 
 global.WebSocket = require('ws');
 
@@ -174,6 +180,13 @@ const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
 const SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS = 15_000;
 const SHOPEE_OPENAPI_MAX_RETRIES = 1;
 const SHOPEE_OPENAPI_STAGE_TIMEOUT_MS = 90_000;
+
+function selectOracleReleaseId({ gitHead = '', env = process.env, releaseData = {} } = {}) {
+  return String(gitHead || '').trim()
+    || String(env.ORACLE_RELEASE_ID || '').trim()
+    || String(releaseData.release_id || releaseData.commit || '').trim()
+    || 'unknown';
+}
 
 function getActiveMarketplaceScenario(marketplace = 'Shopee') {
   const routed = CLI_SCENARIO_ID
@@ -1477,21 +1490,25 @@ async function runScrapingCycleCore() {
   const correlationId = crypto.randomUUID();
   const stageLogger = createStageLogger(correlationId);
   const discoveryHour = getSaoPauloHour();
-  const cycleScenario = getCycleScenario(discoveryHour, 1);
+  const routedScenario = CLI_SCENARIO_ID
+    ? (MARKETPLACE_SCENARIOS[CLI_SCENARIO_ID] || SHOPEE_SCENARIOS[CLI_SCENARIO_ID])
+    : null;
+  const cycleScenario = routedScenario || getCycleScenario(discoveryHour, 1);
   const plannedScenarioId = cycleScenario?.scenarioId || cycleScenario?.id || null;
-  
-  let releaseId = process.env.ORACLE_RELEASE_ID;
+
+  let releaseData = {};
   let deployedAt = '';
-  if (!releaseId) {
-    try {
-      const fs = require('node:fs');
-      const releaseData = JSON.parse(fs.readFileSync('.runtime-release.json', 'utf8'));
-      releaseId = releaseData.release_id || releaseData.commit || 'unknown';
-      deployedAt = releaseData.deployed_at ? ` deployedAt=${releaseData.deployed_at}` : '';
-    } catch {
-      releaseId = 'unknown';
-    }
-  }
+  try {
+    const fs = require('node:fs');
+    releaseData = JSON.parse(fs.readFileSync('.runtime-release.json', 'utf8'));
+    deployedAt = releaseData.deployed_at ? ` deployedAt=${releaseData.deployed_at}` : '';
+  } catch {}
+  let gitHead = '';
+  try {
+    const { execFileSync } = require('node:child_process');
+    gitHead = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8', cwd: process.cwd(), stdio: ['ignore', 'pipe', 'ignore'] });
+  } catch {}
+  const releaseId = selectOracleReleaseId({ gitHead, env: process.env, releaseData });
 
   console.log(`[Oracle Boot] release=${releaseId}${deployedAt} amazonMissingCommercialDataPenalty=${process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY || -8} startedAt=${new Date(startedAt).toISOString()}`);
 
@@ -1709,6 +1726,8 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
 
 module.exports = {
   CRON_SCHEDULE,
+  parseScenarioArg,
+  selectOracleReleaseId,
   calculateScoreV1,
   executeShopeeNativeDiscoveryV5,
   fetchAmazonHtmlViaScrapedo,

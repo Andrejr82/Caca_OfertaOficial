@@ -46,4 +46,14 @@ describe('Oracle runtime safety', () => {
     expect(cycles).toBe(2);
     expect(scheduleCalls).toBe(1);
   });
+
+  it('accepts equals-form scenario arguments and prefers the executable Git release', () => {
+    expect(scraper.parseScenarioArg(['node', 'oracle-scraper.cjs', '--scenario=organizacao_editorial']))
+      .toBe('organizacao_editorial');
+    expect(scraper.selectOracleReleaseId({
+      gitHead: '12e2c27e',
+      env: {},
+      releaseData: { commit: 'e1eb625' },
+    })).toBe('12e2c27e');
+  });
 });
