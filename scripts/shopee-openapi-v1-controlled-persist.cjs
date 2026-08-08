@@ -19,7 +19,7 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
 ]);
 
 const CONTROLLED_PERSIST_SCENARIO = 'casa_cozinha_editorial';
-const CONTROLLED_PERSIST_LIMIT = 5;
+const CONTROLLED_PERSIST_LIMIT = 30;
 const BLOCKED_SCENARIO = 'grandes_ofertas_editorial';
 
 function isTrue(value) {

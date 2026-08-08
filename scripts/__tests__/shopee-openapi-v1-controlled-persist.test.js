@@ -79,8 +79,8 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       .toMatchObject({ enabled: true, mode: 'controlled-persist' });
   });
 
-  it('builds at most five traceable V1 ingestions', () => {
-    const top = Array.from({ length: 8 }, (_, index) => ({
+  it('builds at most thirty traceable V1 ingestions', () => {
+    const top = Array.from({ length: 35 }, (_, index) => ({
       itemId: String(1000 + index),
       shopId: String(2000 + index),
       productName: `Produto ${index}`,
@@ -104,7 +104,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       requestedAt: '2026-08-08T00:00:00.000Z',
     });
 
-    expect(ingestions).toHaveLength(5);
+    expect(ingestions).toHaveLength(30);
 
     for (const ingestion of ingestions) {
       expect(ingestion.correlationId).toBe('shopee-openapi-v1:abc-123');
@@ -116,5 +116,26 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       });
       expect(ingestion.candidate.persistenceMetadata.payload_v1).toBeTruthy();
     }
+  });
+
+  it('persists only the available new candidates when fewer than thirty exist', () => {
+    const top = Array.from({ length: 7 }, (_, index) => ({
+      itemId: String(3000 + index),
+      shopId: String(4000 + index),
+      productName: `Novo produto ${index}`,
+      offerLink: `https://s.shopee.com.br/new-${index}`,
+      imageUrl: `https://down-br.img.susercontent.com/new-${index}.jpg`,
+      price: 49.9,
+      originalPrice: 69.9,
+      productCatIds: ['100010'],
+      score: 80,
+    }));
+
+    expect(buildControlledPersistIngestions(top, {
+      scenarioId: 'casa_cozinha_editorial',
+      tenantId: 'tenant-test',
+      correlationId: 'few-new',
+      requestedAt: '2026-08-08T00:00:00.000Z',
+    })).toHaveLength(7);
   });
 });

@@ -4,7 +4,7 @@ process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
 const { runOracleScraperShopeeShadowLocal } = require('../oracle-scraper.cjs');
 
 describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
-  function topCandidates(count = 6) {
+  function topCandidates(count = 35) {
     return Array.from({ length: count }, (_, index) => ({
       itemId: String(500 + index), shopId: String(600 + index), productName: `Casa ${index}`,
       productLink: `https://shopee.com.br/product/${600 + index}/${500 + index}`,
@@ -41,7 +41,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
     expect(result.marketplaces[0].shadow).toMatchObject({ decision: 'blocked_v1_scenario', topCount: 0 });
   });
 
-  it('persiste somente o top V1 limitado a cinco quando o canário está habilitado', async () => {
+  it('persiste somente o top V1 limitado a trinta quando o canário está habilitado', async () => {
     const persisted = [];
     const result = await runOracleScraperShopeeShadowLocal({
       scenarioId: 'casa_cozinha_editorial',
@@ -57,7 +57,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       },
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
-    expect(persisted).toHaveLength(5);
+    expect(persisted).toHaveLength(30);
     expect(persisted.every((item) => item.correlationId.startsWith('shopee-openapi-v1:'))).toBe(true);
     expect(persisted.every((item) => item.candidate.persistenceMetadata.mode === 'controlled-persist')).toBe(true);
     expect(result.persistCalls).toBe(1);
