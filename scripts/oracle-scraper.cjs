@@ -184,6 +184,23 @@ function getActiveMarketplaceScenario(marketplace = 'Shopee') {
   return getMarketplaceScenarioContract(scenarioId, marketplace) || routed || null;
 }
 
+function createScenarioRuntimeResolver({ plannedScenarioId = null, discoveryHour = getSaoPauloHour(), schedulerSource = 'oracle-node-cron' } = {}) {
+  return (marketplace, products = [], discoveryMeta = {}, scenario = null) => {
+    const resolvedScenarioId = typeof scenario === 'string'
+      ? scenario
+      : scenario?.scenarioId || scenario?.id || discoveryMeta?.scenario || plannedScenarioId;
+    return createDiscoveryScenarioRuntimeContract({
+      discoveryHour,
+      schedulerSource,
+      plannedScenarioId,
+      resolvedScenarioId,
+      marketplace,
+      marketplaceContract: getMarketplaceScenarioContract(resolvedScenarioId, marketplace),
+      coverageStatus: discoveryMeta?.coverageStatus || 'pending',
+    });
+  };
+}
+
 let supabaseClient;
 
 function getSupabase() {
@@ -418,6 +435,17 @@ async function loadShopeeNoveltyKeys() {
 }
 
 async function executeShopeeNativeDiscoveryV5(options = {}) {
+  if (process.env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED === 'true') {
+    return {
+      decision: 'blocked_v1_enabled',
+      engine: 'shopee_openapi_v1',
+      categories: [],
+      executedAt: new Date().toISOString(),
+      aiCalled: false,
+      databaseChanged: false,
+      postsCreated: 0,
+    };
+  }
   const dryRun = options.dryRun === true;
   const noveltyKeys = dryRun ? new Set() : await loadShopeeNoveltyKeys();
   
@@ -864,7 +892,8 @@ async function scrapeStore(store, stageLogger = null) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
     // Shopee V1 is materialized through shadowDiscovery/persistShadow in the
-    // official cycle. An empty legacy list keeps V5 non-selectable at runtime.
+    // official cycle. An empty legacy list keeps V5 non-selectable at runtime;
+    // executeShopeeNativeDiscoveryV5 is intentionally never called here.
     return [];
   }
   if (store === 'Mercado Livre') {
@@ -1639,6 +1668,7 @@ module.exports = {
   runShopeeScenarioRecording,
   runMultiMarketplaceScenarioRecording,
   runManualMarketplaceScenarioRecording,
+  createScenarioRuntimeResolver,
   runScrapingCycle,
   runOracleScraperShopeeShadowLocal,
   scrapeStore,

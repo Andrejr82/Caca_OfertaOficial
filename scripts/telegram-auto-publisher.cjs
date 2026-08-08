@@ -14,6 +14,9 @@ const supabase = createClient(
 );
 
 function sendTelegramPhoto(text, photoUrl) {
+  if (process.env.NO_PUBLISH === '1') {
+    return Promise.reject(new Error('Telegram publication disabled by NO_PUBLISH=1.'));
+  }
   if (!process.env.TELEGRAM_BOT_TOKEN || !process.env.TELEGRAM_CHANNEL_ID) {
     return Promise.reject(new Error('Telegram não configurado.'));
   }
@@ -138,6 +141,10 @@ function createTelegramPublisher(options = {}) {
   }
 
   async function processQueue() {
+    if (process.env.NO_PUBLISH === '1') {
+      log('log', { event: 'poll_skipped', result: 'no_publish' });
+      return { result: 'disabled', reason: 'NO_PUBLISH=1' };
+    }
     if (cycleInFlight) {
       log('log', { event: 'poll_skipped', result: 'overlap' });
       return { result: 'overlap' };

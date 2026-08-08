@@ -16,6 +16,9 @@ const supabase = createClient(
 );
 
 function sendFacebookPost(message, mediaUrl) {
+  if (process.env.NO_PUBLISH === '1') {
+    return Promise.reject(new Error('Facebook publication disabled by NO_PUBLISH=1.'));
+  }
   if (!process.env.FACEBOOK_ACCESS_TOKEN || !process.env.FACEBOOK_PAGE_ID) {
     return Promise.reject(new Error("Facebook não configurado (Falta Access Token ou Page ID)."));
   }
@@ -94,6 +97,9 @@ function sendFacebookPost(message, mediaUrl) {
 }
 
 function sendFacebookComment(postId, message) {
+  if (process.env.NO_PUBLISH === '1') {
+    return Promise.reject(new Error('Facebook publication disabled by NO_PUBLISH=1.'));
+  }
   if (!process.env.FACEBOOK_ACCESS_TOKEN) {
     return Promise.reject(new Error("Facebook não configurado (Falta Access Token)."));
   }
@@ -258,5 +264,6 @@ function startFacebookAutomation(_intervalMs = 1200000) { // A cada 20 minutos
 module.exports = {
   startFacebookAutomation,
   processFacebookQueue,
-  sendFacebookPost
+  sendFacebookPost,
+  sendFacebookComment,
 };

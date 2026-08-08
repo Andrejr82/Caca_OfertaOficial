@@ -59,6 +59,8 @@ const DEPLOY_FILES = [
   'scripts/offer-freshness-gate.cjs',
   'scripts/marketplace-search-quality.cjs',
   'scripts/marketplace-scenario-contracts.cjs',
+  'scripts/scenario-runtime-contract.cjs',
+  'scripts/official-editorial-grid.cjs',
   'scripts/offer-quality-shadow-runtime.cjs',
   'scripts/offer-quality-queue-runtime.cjs',
   'scripts/oracle-api.cjs',

@@ -199,6 +199,22 @@ function fixture(input: {
 }
 
 describe("publishOfficialPost", () => {
+  it("fails closed when NO_PUBLISH=1 before any transport or state transition", async () => {
+    const previous = process.env.NO_PUBLISH;
+    process.env.NO_PUBLISH = "1";
+    try {
+      const test = fixture();
+      const result = await publishOfficialPost(command(), test.dependencies);
+
+      expect(result).toMatchObject({ status: "rejected", code: "PUBLICATION_DISABLED", failureStage: "guard" });
+      expect(test.counts()).toEqual({ transportCalls: 0, postTransitions: 0, offerTransitions: 0 });
+      expect(test.savedReceipts).toHaveLength(0);
+    } finally {
+      if (previous === undefined) delete process.env.NO_PUBLISH;
+      else process.env.NO_PUBLISH = previous;
+    }
+  });
+
   it("publishes persisted content, stores the receipt, then transitions post and offer", async () => {
     const test = fixture();
 

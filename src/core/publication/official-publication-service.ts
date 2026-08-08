@@ -112,6 +112,15 @@ export async function publishOfficialPost(
   const invalid = validatePublicationCommand(command);
   if (invalid) return auditRejection(command, dependencies, rejected(command, invalid.code, invalid.message, "command", startedAt), audit);
 
+  if (process.env.NO_PUBLISH === "1") {
+    return auditRejection(
+      command,
+      dependencies,
+      rejected(command, "PUBLICATION_DISABLED", "External publication is disabled by NO_PUBLISH=1", "guard", startedAt),
+      audit,
+    );
+  }
+
   const commandFingerprint = fingerprint(command);
   const reservation = await dependencies.reservations.begin(command.idempotencyKey, commandFingerprint, command);
   audit.reservation = reservation.status;

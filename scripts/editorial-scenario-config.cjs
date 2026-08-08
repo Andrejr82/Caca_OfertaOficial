@@ -1,6 +1,7 @@
 'use strict';
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
+const EDITORIAL_SCHEDULE_TIMEZONE = 'America/Sao_Paulo';
 
 const COMMON_BLOCKED = Object.freeze([
   'adulto', 'infantil', 'usado', 'recondicionado', 'peça avulsa', 'peca avulsa',
@@ -190,12 +191,38 @@ function getEditorialScenarioForDiscoveryHour(hour) {
   return getEditorialScenarioForHour(publicationHour);
 }
 
+function getScenarioScheduleAudit() {
+  const scenarios = {};
+  const hours = new Map();
+  for (const scenario of Object.values(EDITORIAL_SCENARIOS)) {
+    const queueHour = Number(scenario.queueHour);
+    const collision = hours.has(queueHour);
+    if (!hours.has(queueHour)) hours.set(queueHour, []);
+    hours.get(queueHour).push(scenario.id);
+    scenarios[scenario.id] = {
+      scheduleWindow: { start: queueHour, end: queueHour + 1, scenarioIds: [scenario.id] },
+      hasHourCollision: collision,
+      isOrphanScenario: !Number.isFinite(queueHour),
+    };
+  }
+  for (const ids of hours.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) {
+      scenarios[id].hasHourCollision = true;
+      scenarios[id].scheduleWindow.scenarioIds = [...ids];
+    }
+  }
+  return { timezone: EDITORIAL_SCHEDULE_TIMEZONE, scenarios };
+}
+
 module.exports = {
   MARKETPLACES,
+  EDITORIAL_SCHEDULE_TIMEZONE,
   EDITORIAL_SCENARIOS,
   EDITORIAL_SCENARIO_IDS,
   QUEUE_BY_HOUR,
   getEditorialScenarioById,
   getEditorialScenarioForHour,
   getEditorialScenarioForDiscoveryHour,
+  getScenarioScheduleAudit,
 };
