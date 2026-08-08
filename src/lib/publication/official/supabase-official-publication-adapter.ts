@@ -15,7 +15,7 @@ import type {
 } from "@/core/publication";
 import type { StateServiceDependencies } from "@/core/state";
 import { offerStateVersion, postStateVersion, transitionOfficialOfferState, transitionOfficialPostState } from "@/lib/state/official-state-service";
-import { buildCouponSocialMessage, isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
+import { isCouponOffer, resolveCouponPublishImageUrl } from "@/lib/coupons/presentation";
 import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
 
 const IDEMPOTENCY_PREFIX = "pmav5.publication.idempotency.";
@@ -106,9 +106,7 @@ export class SupabaseOfficialPublicationAdapter implements
     if (error) throw new Error(`Official publication post read failed: ${error.message}`);
     if (!data) return null;
     const related = Array.isArray(data.offers) ? data.offers[0] : data.offers;
-    const link = Array.isArray(data.affiliate_links) ? data.affiliate_links[0] : data.affiliate_links;
     const channel = data.channel as OfficialPublicationChannel;
-    const coupon = isCouponOffer(related);
     return {
       id: data.id,
       tenantId: data.user_id,
@@ -116,9 +114,7 @@ export class SupabaseOfficialPublicationAdapter implements
       channel,
       state: data.status,
       version: postStateVersion(data.status),
-      content: coupon
-        ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
-        : data.content,
+      content: data.content,
       mediaUrl: await resolvePublicationImage(channel, related),
       destination: this.destinations[channel] ?? "",
       metadata: channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}
@@ -134,9 +130,7 @@ export class SupabaseOfficialPublicationAdapter implements
     if (error) throw new Error(`Official publication related posts read failed: ${error.message}`);
     return Promise.all((data ?? []).map(async (item) => {
       const related = Array.isArray(item.offers) ? item.offers[0] : item.offers;
-      const link = Array.isArray(item.affiliate_links) ? item.affiliate_links[0] : item.affiliate_links;
       const channel = item.channel as OfficialPublicationChannel;
-      const coupon = isCouponOffer(related);
       return {
         id: item.id,
         tenantId: item.user_id,
@@ -144,9 +138,7 @@ export class SupabaseOfficialPublicationAdapter implements
         channel,
         state: item.status,
         version: postStateVersion(item.status),
-        content: coupon
-          ? buildCouponSocialMessage(related, link?.tracked_url || related?.original_url || "")
-          : item.content,
+        content: item.content,
         mediaUrl: await resolvePublicationImage(channel, related),
         destination: this.destinations[channel] ?? "",
         metadata: (channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}) as Readonly<Record<string, string | number | boolean>>

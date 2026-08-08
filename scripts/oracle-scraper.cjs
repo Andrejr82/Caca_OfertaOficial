@@ -114,8 +114,16 @@ const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-nati
 const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
 const { classifyCandidate } = require('./classification-coverage.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
+const { attachDiscoveryFunnelMeta, normalizeRpcOutcome, readDiscoveryFunnelMeta } = require('./discovery-funnel-contract.cjs');
+const { createDiscoveryScenarioRuntimeContract } = require('./scenario-runtime-contract.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
+const { createShopeeOpenApiV1DiscoveryShadow } = require('./shopee-openapi-v1-discovery-shadow.cjs');
+const {
+  CONTROLLED_PERSIST_LIMIT,
+  getControlledPersistDecision,
+  buildControlledPersistIngestions,
+} = require('./shopee-openapi-v1-controlled-persist.cjs');
 
 function createQualityShadowRunner() {
   if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'shadow') return null;
@@ -164,6 +172,9 @@ const CRON_SCHEDULE = '0 6-20 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
+const SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS = 15_000;
+const SHOPEE_OPENAPI_MAX_RETRIES = 1;
+const SHOPEE_OPENAPI_STAGE_TIMEOUT_MS = 90_000;
 
 function getActiveMarketplaceScenario(marketplace = 'Shopee') {
   const routed = CLI_SCENARIO_ID
@@ -215,30 +226,52 @@ async function fetchAmazonHtmlViaScrapedo(url) {
   return response.data;
 }
 
-async function callShopeeAffiliateApi(payload) {
-  if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) return null;
+async function callShopeeAffiliateApi(payload, { timeoutMs = SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries = SHOPEE_OPENAPI_MAX_RETRIES, signal, appId = SHOPEE_APP_ID, appSecret = SHOPEE_APP_SECRET } = {}) {
+  if (!appId || !appSecret) return null;
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    if (signal?.aborted) {
+      const error = new Error('Shopee OpenAPI abortada pelo timeout da etapa');
+      error.code = 'SHOPEE_OPENAPI_ABORTED';
+      throw error;
+    }
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = crypto
       .createHash('sha256')
-      .update(SHOPEE_APP_ID + timestamp + payload + SHOPEE_APP_SECRET)
+      .update(appId + timestamp + payload + appSecret)
       .digest('hex');
+    const attemptController = new AbortController();
+    const abortAttempt = () => attemptController.abort(signal?.reason);
+    const timeoutId = setTimeout(() => attemptController.abort(), timeoutMs);
+    signal?.addEventListener('abort', abortAttempt, { once: true });
     try {
       const response = await axios.post(SHOPEE_API_URL, payload, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'SHA256 Credential=' + SHOPEE_APP_ID + ', Timestamp=' + timestamp + ', Signature=' + signature,
+          Authorization: 'SHA256 Credential=' + appId + ', Timestamp=' + timestamp + ', Signature=' + signature,
         },
-        timeout: 60000,
+        timeout: timeoutMs,
+        signal: attemptController.signal,
         validateStatus: () => true,
       });
-      if (response.status !== 429 || attempt === 2) return response;
+      if (![429, 500, 502, 503, 504].includes(response.status) || attempt === maxRetries) return response;
       const retryAfter = Number(response.headers?.['retry-after'] ?? 0);
-      await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1)));
+      await new Promise((resolve, reject) => {
+        const retryTimer = setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 2_000) : 500);
+        const abortRetry = () => { clearTimeout(retryTimer); reject(Object.assign(new Error('Shopee retry abortado pelo timeout da etapa'), { code: 'SHOPEE_OPENAPI_ABORTED' })); };
+        signal?.addEventListener('abort', abortRetry, { once: true });
+      });
     } catch (error) {
       lastError = error;
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      if (signal?.aborted || attempt >= maxRetries) throw error;
+      await new Promise((resolve, reject) => {
+        const retryTimer = setTimeout(resolve, 500);
+        const abortRetry = () => { clearTimeout(retryTimer); reject(Object.assign(new Error('Shopee retry abortado pelo timeout da etapa'), { code: 'SHOPEE_OPENAPI_ABORTED' })); };
+        signal?.addEventListener('abort', abortRetry, { once: true });
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abortAttempt);
     }
   }
   throw lastError;
@@ -723,7 +756,10 @@ function discoveryGroupKey(product, productType) {
 }
 
 async function filterNovelNormalizedProducts(marketplace, products, stageLogger) {
-  if (!Array.isArray(products) || products.length === 0) return [];
+  const sourceMeta = readDiscoveryFunnelMeta(products);
+  if (!Array.isArray(products) || products.length === 0) {
+    return attachDiscoveryFunnelMeta([], { ...sourceMeta, afterNovelty: 0 });
+  }
   
   let stageStartedAt;
   if (stageLogger) stageStartedAt = stageLogger.start('filterNovelNormalizedProducts', products.length);
@@ -746,14 +782,18 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
     });
 
     if (stageLogger) stageLogger.end('filterNovelNormalizedProducts', stageStartedAt, filtered.length);
-    return filtered;
+    return attachDiscoveryFunnelMeta(filtered, {
+      ...sourceMeta,
+      afterNovelty: filtered.length,
+      knownIdentityRejected: products.length - filtered.length,
+    });
   } catch (err) {
     if (stageLogger) stageLogger.error('filterNovelNormalizedProducts', stageStartedAt, err.message);
     throw err;
   }
 }
 
-async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue }, stageLogger = null) {
+async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue, funnel = null }, stageLogger = null) {
   let stageStartedAt;
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryV2Metadata', products.length);
 
@@ -766,6 +806,16 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
     
     const { data: run, error: runError } = await withTimeout(insertRunPromise, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_insertRun`);
     if (runError || !run) throw new Error(`Discovery V2 run failed: ${runError?.message || 'run not created'}`);
+    if (funnel && run.id) {
+      const { error: metadataError } = await withTimeout(
+        supabase.from('discovery_runs').update({ metadata: { contract: funnel.contractVersion, funnel, scenarioRuntime: funnel.scenarioRuntime || null } }).eq('id', run.id),
+        Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+        `persistV2Metadata_updateFunnel`
+      );
+      if (metadataError) {
+        console.warn(`[Discovery Funnel V1] metadata não persistido marketplace=${marketplace}: ${metadataError.message}`);
+      }
+    }
     const itemRows = products.map((product) => ({ user_id: tenantId, discovery_run_id: run.id, marketplace, external_id: String(product.sourceItemId), source_url: product.sourceUrl, raw_payload: product.rawPayload || product, title_raw: String(product.title) }));
     
     let items = [], itemError = null;
@@ -813,13 +863,9 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
 async function scrapeStore(store, stageLogger = null) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
-    const scenario = getActiveMarketplaceScenario('Shopee');
-    const result = await executeShopeeNativeDiscoveryV5({ persist: false, scenario });
-    const normalized = result.categories
-      .flatMap((category) => category.products)
-      .map((product) => normalizeShopeeCandidate(product, discoveredAt, scenario?.scenarioId || scenario?.id))
-      .filter((product) => matchesScenarioProduct(scenario, product.title));
-    return filterNovelNormalizedProducts(store, normalized, stageLogger);
+    // Shopee V1 is materialized through shadowDiscovery/persistShadow in the
+    // official cycle. An empty legacy list keeps V5 non-selectable at runtime.
+    return [];
   }
   if (store === 'Mercado Livre') {
     const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
@@ -884,7 +930,7 @@ async function scrapeStore(store, stageLogger = null) {
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
 }
 
-async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE, stageLogger = null) {
+async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE, stageLogger = null, persistenceContext = null) {
   let stageStartedAt;
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryIngestionV1', ingestions.length);
 
@@ -907,6 +953,16 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       discovery_evidence: candidate.discoveryEvidence,
       marketplace_metrics: metrics,
     };
+    if (persistenceContext) {
+      explainability = {
+        ...explainability,
+        engine: persistenceContext.engine,
+        mode: persistenceContext.mode,
+        scenarioId: persistenceContext.scenarioId,
+        correlation_id: correlationId,
+        payload_v1: candidate.persistenceMetadata?.payload_v1 || rawPayload,
+      };
+    }
 
     const monetization = candidate.monetization || processMonetization(marketplace, candidate.sourceUrl);
     if (!monetization.valid) {
@@ -994,6 +1050,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     if (error) throw new Error(error.message || 'Falha no RPC');
 
     const offerIds = data?.offer_ids || [];
+    let affiliateLinkWrites = 0;
     if (offerIds.length > 0) {
       const { data: offersData, error: selectErr } = await getSupabase()
         .from('offers')
@@ -1021,6 +1078,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
         }
         
         if (linksToInsert.length > 0) {
+          affiliateLinkWrites = linksToInsert.length;
           const { error: linksError } = await getSupabase()
             .from('affiliate_links')
             .upsert(linksToInsert, { onConflict: 'offer_id, channel' });
@@ -1059,14 +1117,29 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     if (stageLogger) stageLogger.end('RPC_upsert_discovery_offers_v2', rpcStartedAt, data.inserted + data.updated);
     if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, data.inserted + data.updated);
     
-    return { 
+    const rpcOutcome = normalizeRpcOutcome({
       accepted: data.inserted + data.updated,
       inserted: data.inserted,
       updated: data.updated,
       ignored: data.ignored,
       failed: data.failed,
       offerIds: [...new Set(Array.isArray(data.offer_ids) ? data.offer_ids : [])],
-      state: FINAL_STATE 
+      state: FINAL_STATE,
+    });
+    if (rpcOutcome.partialSuccess) {
+      console.warn(`[Discovery Funnel V1] RPC parcial marketplace=${marketplace} failed=${rpcOutcome.failed}`);
+    }
+    return {
+      ...rpcOutcome,
+      state: rpcOutcome.rpcState === 'partial_success' ? 'partial_success' : FINAL_STATE,
+      writeAudit: {
+        supabaseWrites: Number(data.inserted || 0) + affiliateLinkWrites,
+        offersWrites: Number(data.inserted || 0),
+        postsWrites: 0,
+        affiliateLinkWrites,
+        publishCalls: 0,
+        oracleCalls: 0,
+      },
     };
   } catch (err) {
     if (stageLogger) stageLogger.error('persistDiscoveryIngestionV1', stageStartedAt, err.message);
@@ -1223,13 +1296,12 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     correlationId,
     requestedAt,
     marketplaces: selectedMarketplaces,
+    shadowDiscovery: createShopeeOpenApiV1OfficialDiscovery(),
+    persistShadow: createShopeeOpenApiV1OfficialPersistRunner(),
     discover: async (marketplace) => {
       const marketplaceScenario = getMarketplaceScenarioContract(scenarioId || scenario.scenarioId || scenario.id, marketplace) || scenario;
       if (marketplace === 'Shopee') {
-        const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: marketplaceScenario });
-        const normalized = discovered.categories.flatMap((group) => group.products)
-          .map((product) => normalizeShopeeCandidate(product, requestedAt));
-        return filterNovelNormalizedProducts(marketplace, normalized);
+        return [];
       }
       if (marketplace === 'Amazon') {
         const discovered = await runAmazonScenarioDiscovery(marketplaceScenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
@@ -1254,14 +1326,82 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: Math.min(30, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
+    scenarioResolver: () => scenarioId || scenario?.scenarioId || scenario?.id || 'unknown',
+    scenarioRuntimeResolver: createScenarioRuntimeResolver({
+      plannedScenarioId: scenarioId || scenario?.scenarioId || scenario?.id || null,
+      discoveryHour: getSaoPauloHour(),
+      schedulerSource: 'manual-scenario-recording',
+    }),
   });
   return { ...result, category: category || 'Geral', scenarioId: scenarioId || null, requestedMarketplaces: selectedMarketplaces, limit: perMarketplace };
+}
+
+function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } = {}) {
+  return async function runShopeeOpenApiV1OfficialDiscovery(input = {}) {
+    const scenarioId = String(input.scenario || 'unknown');
+    const controller = new AbortController();
+    const timeoutMs = Number(env.SHOPEE_OPENAPI_STAGE_TIMEOUT_MS || SHOPEE_OPENAPI_STAGE_TIMEOUT_MS);
+    let rejectStageTimeout;
+    const stageTimeout = new Promise((_, reject) => { rejectStageTimeout = reject; });
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      rejectStageTimeout(Object.assign(new Error(`Timeout Shopee OpenAPI de ${timeoutMs}ms excedido`), { code: 'SHOPEE_OPENAPI_STAGE_TIMEOUT' }));
+    }, timeoutMs);
+    const boundedRequest = (operationName, query, variables = {}) => request
+      ? request(operationName, query, variables, { signal: controller.signal, timeoutMs: SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries: SHOPEE_OPENAPI_MAX_RETRIES })
+      : callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }), { signal: controller.signal });
+    try {
+      const discovery = createShopeeOpenApiV1DiscoveryShadow({
+        env,
+        request: boundedRequest,
+        engineOptions: { maxKeywords: 5, maxCategories: 2, includeDelta: false, includeAuxiliary: false },
+      });
+      return await Promise.race([discovery(input), stageTimeout]);
+    } catch (error) {
+      const timedOut = controller.signal.aborted || error?.code === 'SHOPEE_OPENAPI_ABORTED';
+      console.error(`[Shopee OpenAPI V1] scenario=${scenarioId} status=${timedOut ? 'timeout' : 'failed'} error=${error?.message || String(error)}`);
+      return {
+        engine: 'shopee_openapi_v1', mode: 'official', scenarioId,
+        topCount: 0, rejectedCount: 0, families: 0, shops: 0, imageLinkRate: 0, scoreAvg: 0,
+        decision: timedOut ? 'timeout' : 'failed', top: [],
+        writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 },
+        error: error?.message || String(error),
+      };
+    } finally {
+      clearTimeout(timeoutId);
+      controller.abort();
+    }
+  };
+}
+
+function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env } = {}) {
+  return async ({ shadow, scenario, correlationId, requestedAt }) => {
+    const decision = getControlledPersistDecision(scenario, env);
+    if (!decision.enabled) return { accepted: 0, inserted: 0, updated: 0, failed: 0, state: FINAL_STATE, offerIds: [] };
+    const ingestions = buildControlledPersistIngestions(shadow.top, {
+      scenarioId: decision.scenarioId,
+      tenantId: ADMIN_USER_ID,
+      correlationId,
+      requestedAt,
+    });
+    if (ingestions.length > CONTROLLED_PERSIST_LIMIT) throw new Error('Controlled persist candidate limit exceeded');
+    const persisted = typeof persistRunner === 'function'
+      ? await persistRunner(ingestions, 'Shopee', FINAL_STATE)
+      : await persistDiscoveryIngestionV1(ingestions, 'Shopee', FINAL_STATE, stageLogger, {
+        engine: 'shopee_openapi_v1', mode: 'controlled-persist', scenarioId: decision.scenarioId,
+      });
+    if (Number(persisted?.failed || 0) > 0) throw new Error(`Controlled persist RPC failed for ${persisted.failed} candidate(s)`);
+    return persisted;
+  };
 }
 
 async function runScrapingCycleCore() {
   const startedAt = Date.now();
   const correlationId = crypto.randomUUID();
   const stageLogger = createStageLogger(correlationId);
+  const discoveryHour = getSaoPauloHour();
+  const cycleScenario = getCycleScenario(discoveryHour, 1);
+  const plannedScenarioId = cycleScenario?.scenarioId || cycleScenario?.id || null;
   
   let releaseId = process.env.ORACLE_RELEASE_ID;
   let deployedAt = '';
@@ -1278,11 +1418,14 @@ async function runScrapingCycleCore() {
 
   console.log(`[Oracle Boot] release=${releaseId}${deployedAt} amazonMissingCommercialDataPenalty=${process.env.AMAZON_MISSING_COMMERCIAL_DATA_PENALTY || -8} startedAt=${new Date(startedAt).toISOString()}`);
 
+  const shopeeOfficialDiscovery = createShopeeOpenApiV1OfficialDiscovery();
   const result = await runDiscoveryOnlyCycle({
     tenantId: ADMIN_USER_ID,
     correlationId,
     requestedAt: new Date().toISOString(),
     discover: (store) => scrapeStore(store, stageLogger),
+    shadowDiscovery: shopeeOfficialDiscovery,
+    persistShadow: createShopeeOpenApiV1OfficialPersistRunner({ stageLogger }),
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
@@ -1292,6 +1435,8 @@ async function runScrapingCycleCore() {
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
+    scenarioResolver: (marketplace) => getActiveMarketplaceScenario(marketplace)?.scenarioId || getActiveMarketplaceScenario(marketplace)?.id || 'unknown',
+    scenarioRuntimeResolver: createScenarioRuntimeResolver({ plannedScenarioId, discoveryHour }),
     observe: async (event) => {
       if (event?.eventType === 'discovery.quality.shadow.completed' || event?.eventType === 'discovery.quality.shadow.failed') {
         console.log(`[Offer Quality Shadow] ${JSON.stringify(event)}`);
@@ -1308,6 +1453,66 @@ async function runScrapingCycleCore() {
   }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
   return result;
+}
+
+async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
+  const activeScenario = scenarioId || getActiveMarketplaceScenario('Shopee')?.scenarioId || getActiveMarketplaceScenario('Shopee')?.id || 'casa_cozinha_editorial';
+  const controlledPersistDecision = getControlledPersistDecision(activeScenario, env);
+  const scenario = getMarketplaceScenarioContract(activeScenario, 'Shopee') || getActiveMarketplaceScenario('Shopee');
+  const correlationId = crypto.randomUUID();
+  let legacyTop = 0;
+  let persistCalls = 0;
+  let controlledPersistAudit = { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 };
+  const shadowRequest = request || (async (operationName, query, variables = {}) => {
+    const response = await callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }));
+    return { status: response?.status || 0, data: response?.data || {} };
+  });
+  const shadowDiscovery = createShopeeOpenApiV1DiscoveryShadow({
+    env,
+    request: shadowRequest,
+    runScenario,
+    engineOptions: { maxKeywords: 5, maxCategories: 2, includeDelta: false, includeAuxiliary: false },
+  });
+  const result = await runDiscoveryOnlyCycle({
+    tenantId: 'local-shopee-openapi-shadow',
+    correlationId,
+    requestedAt,
+    marketplaces: ['Shopee'],
+    discover: async () => [],
+    shadowDiscovery,
+    persistShadow: controlledPersistDecision.enabled ? async (payload) => {
+      persistCalls += 1;
+      const persisted = await createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, env })(payload);
+      controlledPersistAudit = {
+        ...controlledPersistAudit,
+        ...(persisted?.writeAudit || {}),
+        offersWrites: Number(persisted?.inserted || persisted?.accepted || 0),
+        supabaseWrites: Number(persisted?.inserted || persisted?.accepted || 0) + Number(persisted?.writeAudit?.affiliateLinkWrites || 0),
+        postsWrites: 0,
+        publishCalls: 0,
+        oracleCalls: 0,
+      };
+      return persisted;
+    } : null,
+    loadDeferred: async () => [],
+    loadHistory: async () => [],
+    persist: async (...args) => {
+      persistCalls += 1;
+      if (typeof persistRunner === 'function') return persistRunner(...args);
+      throw new Error('Persistência bloqueada no Oracle Scraper Shopee shadow local');
+    },
+    copyQueueOptions: { maxTotal: 0, maxPerMarketplace: 0, maxPerCategory: 0 },
+    scenarioResolver: () => activeScenario,
+    scenarioRuntimeResolver: () => ({ scenarioId: activeScenario, mode: 'shadow-local' }),
+  });
+  const summary = result.marketplaces[0];
+  return {
+    ...result,
+    persistCalls,
+    controlledPersist: controlledPersistDecision,
+    writeAudit: controlledPersistAudit,
+    marketplaces: [{ ...summary, legacyTop, legacySelected: summary.queueSelected, persistCalls }],
+  };
 }
 
 async function runScrapingCycle() {
@@ -1331,33 +1536,7 @@ async function runMercadoLivreOfficialDryRun() {
 }
 
 async function runShopeeScenarioRecording(scenario) {
-  const correlationId = crypto.randomUUID();
-  const requestedAt = new Date().toISOString();
-  const result = await runDiscoveryOnlyCycle({
-    tenantId: ADMIN_USER_ID,
-    correlationId,
-    requestedAt,
-    discover: async (marketplace) => {
-      if (marketplace !== 'Shopee') return [];
-      const discovered = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario });
-      return discovered.categories.flatMap((category) => category.products)
-        .map((product) => normalizeShopeeCandidate(product, requestedAt));
-    },
-    loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadRecentDiscoveryHistory,
-    persist: persistDiscoveryIngestionV1,
-    prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
-    qualityShadow: createQualityShadowRunner(),
-    qualityAdmission: createQualityAdmissionRunner(),
-    persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
-    notifyWorkPending: notifyWorkPendingToOfficialAI,
-  });
-  for (const summary of result.marketplaces || []) {
-    console.log(`[Shopee V5 Recording] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos, duplicados=${summary.duplicatesRejected}, rejeitados=${summary.rejected}`);
-  }
-  console.log(`[Shopee V5 Recording] ciclo=${correlationId} estado=${result.finalState} ofertas=${result.offerIds.length}`);
-  return result;
+  return runOracleScraperShopeeShadowLocal({ scenarioId: scenario?.scenarioId || scenario?.id || scenario });
 }
 
 async function runMultiMarketplaceScenarioRecording(scenarioId) {
@@ -1371,13 +1550,11 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     tenantId: ADMIN_USER_ID,
     correlationId,
     requestedAt,
+    shadowDiscovery: createShopeeOpenApiV1OfficialDiscovery(),
+    persistShadow: createShopeeOpenApiV1OfficialPersistRunner(),
     discover: async (marketplace) => {
       if (marketplace === 'Shopee') {
-        const result = await executeShopeeNativeDiscoveryV5({ dryRun: false, scenario: scenarioId });
-        const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
-        return result.categories.flatMap((category) => category.products)
-          .filter((product) => matchesMarketplaceContract(contract, product.productName))
-          .map((product) => normalizeShopeeCandidate(product, requestedAt));
+        return [];
       }
       if (marketplace === 'Amazon') {
         const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
@@ -1463,11 +1640,17 @@ module.exports = {
   runMultiMarketplaceScenarioRecording,
   runManualMarketplaceScenarioRecording,
   runScrapingCycle,
+  runOracleScraperShopeeShadowLocal,
   scrapeStore,
   generateMLAffiliateLinkWithId,
   processMonetization,
   buildAffiliateLinkRows,
   createQualityAdmissionRunner,
+  createShopeeOpenApiV1OfficialDiscovery,
+  callShopeeAffiliateApi,
+  SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS,
+  SHOPEE_OPENAPI_MAX_RETRIES,
+  SHOPEE_OPENAPI_STAGE_TIMEOUT_MS,
   mercadoLivreIdentityKey,
   isEquivalentMercadoLivreProduct,
 };

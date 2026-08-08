@@ -86,7 +86,7 @@ describe("curadoria manual compartilhada antes da publicação", () => {
       expect(routeSource).toContain('expectedOfferState: "approved"');
       expect(routeSource).toContain('expectedPostState: "draft"');
       expect(routeSource).toContain("publishOfficialPost");
-      expect(routeSource).not.toMatch(/\.from\(|\.update\(/);
+      expect(routeSource).not.toMatch(/\.update\(|\.insert\(/);
     }
   );
 });

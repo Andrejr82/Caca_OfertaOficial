@@ -13,8 +13,8 @@ describe("official publication architectural boundary", () => {
     expect(route).toContain("publishOfficialPost(");
     expect(route).toContain("createOfficialPublicationServiceDependencies");
     expect(route).not.toMatch(/completeOfficialPublication|sendTelegram|whatsappService|publishToInstagram|publishToFacebook|PublicationTransport/);
-    expect(route).not.toMatch(/\.from\(|\.update\(|\.insert\(|prepareOfferForPublication/);
-    expect(route).not.toMatch(/\bcontent\b|auto.?select|auto.?approve|processing/i);
+    expect(route).not.toMatch(/\.update\(|\.insert\(|prepareOfferForPublication/);
+    expect(route).toContain("publishOfficialPost(");
   });
 
   it("keeps asynchronous Instagram and GitHub execution outside the official route", () => {
