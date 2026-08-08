@@ -5,6 +5,11 @@ const { createHash } = require('node:crypto');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
+const {
+  parseOverlay,
+  buildRemoteOverlayPlan,
+  buildScraperRestartCommand,
+} = require('./oracle-runtime-overlay.cjs');
 require('dotenv').config({ path: '.env.local' });
 
 /**
@@ -24,9 +29,9 @@ const SERVER_IP = process.env.ORACLE_SERVER_IP || '193.122.242.178';
 const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';
 const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '/home/ubuntu/Caca_OfertaOficial';
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
-const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
 const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
+const RUNTIME_OVERLAY_FILE = 'config/oracle-runtime-overlay.env';
 const DEPLOY_FILES = [
   'scripts/shopee-feed-sync.cjs',
   'scripts/oracle-scraper.cjs',
@@ -36,6 +41,10 @@ const DEPLOY_FILES = [
   'scripts/amazon-scenario-config.cjs',
   'scripts/shopee-scenario-config.cjs',
   'scripts/shopee-native-discovery-v5.cjs',
+  'scripts/shopee-openapi-shadow-engine-v1.cjs',
+  'scripts/shopee-openapi-v1-adapter.cjs',
+  'scripts/shopee-openapi-v1-controlled-persist.cjs',
+  'scripts/shopee-openapi-v1-discovery-shadow.cjs',
   'scripts/shopee-trends-miner.cjs',
   'scripts/mercadolivre-official-intents-v5.cjs',
   'scripts/publication-queue.cjs',
@@ -59,7 +68,7 @@ const DEPLOY_FILES = [
 ];
 
 if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
-if (!/^[A-Za-z0-9._/-]+$/.test(PM2_SCRAPER_NAME) || !/^[A-Za-z0-9._/-]+$/.test(PM2_API_NAME)) throw new Error('Nome PM2 inválido.');
+if (!/^[A-Za-z0-9._/-]+$/.test(PM2_SCRAPER_NAME)) throw new Error('Nome PM2 inválido.');
 if (!/^\/[A-Za-z0-9._/-]+$/.test(PROJECT_DIR)) throw new Error('ORACLE_PROJECT_DIR deve ser um caminho absoluto seguro.');
 
 const ssh = (command) => execFileSync('ssh', [
@@ -123,11 +132,14 @@ function buildReleaseManifest({ commit, files }) {
 
 const stamp = `${Date.now()}-${process.pid}`;
 const remoteStage = `/tmp/caca-oferta-deploy-${stamp}`;
-const remoteBackup = `/tmp/caca-oferta-backup-${stamp}`;
+const remoteBackup = `${PROJECT_DIR}/.rollout-backups/oracle-runtime-${stamp}`;
+const localOverlayPath = path.resolve(__dirname, '..', RUNTIME_OVERLAY_FILE);
 
 try {
+  if (!fs.existsSync(localOverlayPath)) throw new Error(`Overlay versionado não encontrado: ${RUNTIME_OVERLAY_FILE}`);
+  parseOverlay(fs.readFileSync(localOverlayPath, 'utf8'));
   console.log(`Conectando à Oracle ${TARGET}...`);
-  ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteBackup}/scripts'`);
+  ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteStage}/config' '${remoteBackup}/scripts'`);
 
   // ─── Passo 1: backup remoto ───────────────────────────────────────────────
   const backupFiles = DEPLOY_FILES.map((relativeFile) => {
@@ -144,6 +156,7 @@ try {
     console.log(`Enviando ${relativeFile}...`);
     scp(localFile, `${remoteStage}/${relativeFile}`);
   }
+  scp(localOverlayPath, `${remoteStage}/${RUNTIME_OVERLAY_FILE}`);
 
   // ─── Passo 3: validar staged e instalar arquivos ──────────────────────────
   const installFiles = DEPLOY_FILES.map((relativeFile) => {
@@ -152,6 +165,10 @@ try {
     return `test -s '${stagedPath}' && install -m 0644 '${stagedPath}' '${remotePath}'`;
   }).join('; ');
   ssh(`set -eu; ${installFiles}`);
+
+  // ─── Passo 3b: aplicar somente flags não sensíveis allowlisted ───────────
+  ssh(buildRemoteOverlayPlan({ PROJECT_DIR, projectDir: PROJECT_DIR, remoteStage, remoteBackup }));
+  console.log(`Overlay versionado aplicado com backup em ${remoteBackup}.`);
 
   // ─── Passo 4: gerar manifesto de release local ────────────────────────────
   const commit = getLocalCommit();
@@ -178,8 +195,8 @@ try {
     console.log(`Hash validado: oracle-scraper.cjs = ${localHash.slice(0, 12)}...`);
   }
 
-  // ─── Passo 7: restart PM2 (somente após upload do manifesto) ─────────────
-  ssh(`set -eu; pm2 restart '${PM2_SCRAPER_NAME}'; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null; pm2 restart '${PM2_API_NAME}'; pm2 describe '${PM2_API_NAME}' >/dev/null`);
+  // ─── Passo 7: restart somente do scraper, carregando o overlay ──────────
+  ssh(buildScraperRestartCommand(PM2_SCRAPER_NAME));
 
   // ─── Passo 8: limpeza do stage temporário ────────────────────────────────
   ssh(`rm -rf '${remoteStage}'`);
