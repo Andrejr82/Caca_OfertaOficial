@@ -13,9 +13,9 @@ describe("Instagram publication safety", () => {
     })).toEqual({ ok: true });
   });
 
-  it("bloqueia cooldown, excesso diário, duplicata e URL direta", () => {
-    expect(evaluateInstagramSafety({ caption: "Oferta", publishedAt: ["2026-07-30T19:45:00.000Z"], recentCaptions: [], now })).toMatchObject({ ok: false, code: "INSTAGRAM_COOLDOWN" });
-    expect(evaluateInstagramSafety({ caption: "Oferta", publishedAt: Array.from({ length: 6 }, () => "2026-07-30T10:00:00.000Z"), recentCaptions: [], now })).toMatchObject({ ok: false, code: "INSTAGRAM_DAILY_LIMIT" });
+  it("permite intervalo curto e volume abaixo do limite Meta, mantendo duplicata e URL direta bloqueadas", () => {
+    expect(evaluateInstagramSafety({ caption: "Oferta em um minuto", publishedAt: ["2026-07-30T19:59:00.000Z"], recentCaptions: [], now })).toEqual({ ok: true });
+    expect(evaluateInstagramSafety({ caption: "Oferta em volume", publishedAt: Array.from({ length: 6 }, () => "2026-07-30T10:00:00.000Z"), recentCaptions: [], now })).toEqual({ ok: true });
     expect(evaluateInstagramSafety({ caption: "Oferta", publishedAt: [], recentCaptions: [" oferta "], now })).toMatchObject({ ok: false, code: "INSTAGRAM_DUPLICATE_CAPTION" });
     expect(evaluateInstagramSafety({ caption: "Oferta https://example.com", publishedAt: [], recentCaptions: [], now })).toMatchObject({ ok: false, code: "INSTAGRAM_CAPTION_INVALID" });
   });

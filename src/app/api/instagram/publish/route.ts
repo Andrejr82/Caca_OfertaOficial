@@ -9,6 +9,8 @@ import {
 } from "@/lib/publication/official/create-official-publication-service";
 import { createOfficialPublicationApprovalDependencies } from "@/lib/publication/official/create-official-publication-approval";
 import { evaluateInstagramSafety, instagramVideoFingerprint, validateInstagramReelMetadata } from "@/lib/instagram/safety";
+import { fetchInstagramContentPublishingLimit } from "@/lib/instagram/content-publishing-limit";
+import { discoverInstagramBusinessId } from "@/lib/instagram/client";
 
 type PublicationBody = {
   postId?: string; offerId?: string; videoJobId?: string; commandId?: string; idempotencyKey?: string;
@@ -88,7 +90,7 @@ export async function POST(request: Request) {
       .eq("status", "published")
       .gte("posted_at", since)
       .order("posted_at", { ascending: false })
-      .limit(20);
+      .limit(100);
     if (recentPostsError) return NextResponse.json({ ok: false, message: "Não foi possível validar a janela de segurança do Instagram." }, { status: 503 });
 
     if (mediaType === "REELS") {
@@ -115,10 +117,21 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (draftPostError || !draftPost) return NextResponse.json({ ok: false, message: "Draft do Instagram não encontrado." }, { status: 404 });
 
+    let metaLimit: { quotaUsage: number; quotaTotal: number } | undefined;
+    if (process.env.INSTAGRAM_ACCESS_TOKEN) {
+      try {
+        const instagramUserId = await discoverInstagramBusinessId();
+        const limit = await fetchInstagramContentPublishingLimit(instagramUserId, process.env.INSTAGRAM_ACCESS_TOKEN);
+        if (limit.available) metaLimit = { quotaUsage: limit.quotaUsage, quotaTotal: limit.quotaTotal };
+      } catch {
+        // The local fallback below counts the same rolling 24-hour window using the official quota.
+      }
+    }
     const safety = evaluateInstagramSafety({
       caption: draftPost.content || "",
       publishedAt: (recentPosts ?? []).map((post) => post.posted_at).filter(Boolean),
-      recentCaptions: (recentPosts ?? []).map((post) => post.content).filter(Boolean)
+      recentCaptions: (recentPosts ?? []).map((post) => post.content).filter(Boolean),
+      metaLimit
     });
     if (!safety.ok) return NextResponse.json({ ok: false, code: safety.code, message: safety.message }, { status: 429 });
 

@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
-export const INSTAGRAM_MIN_INTERVAL_MS = 30 * 60 * 1000;
-export const INSTAGRAM_MAX_POSTS_24H = 6;
+/** Official Meta Content Publishing API fallback, used only when Meta's limit endpoint is unavailable. */
+export const INSTAGRAM_META_FALLBACK_LIMIT_24H = 100;
 
 export function normalizeInstagramCaption(value: string): string {
   return value
@@ -27,6 +27,7 @@ export function evaluateInstagramSafety(input: {
   publishedAt: readonly string[];
   recentCaptions: readonly string[];
   now?: number;
+  metaLimit?: { quotaUsage: number; quotaTotal: number };
 }): { ok: true } | { ok: false; code: string; message: string } {
   const captionError = validateInstagramCaption(input.caption);
   if (captionError) return { ok: false, code: "INSTAGRAM_CAPTION_INVALID", message: captionError };
@@ -36,13 +37,15 @@ export function evaluateInstagramSafety(input: {
     .map((value) => Date.parse(value))
     .filter((value) => Number.isFinite(value));
   const recent24h = timestamps.filter((value) => now - value < 24 * 60 * 60 * 1000);
-  if (recent24h.length >= INSTAGRAM_MAX_POSTS_24H) {
-    return { ok: false, code: "INSTAGRAM_DAILY_LIMIT", message: "Limite seguro de publicações do Instagram atingido (6 em 24 horas)." };
-  }
-  const latest = Math.max(...recent24h, 0);
-  if (latest > 0 && now - latest < INSTAGRAM_MIN_INTERVAL_MS) {
-    const minutes = Math.ceil((INSTAGRAM_MIN_INTERVAL_MS - (now - latest)) / 60000);
-    return { ok: false, code: "INSTAGRAM_COOLDOWN", message: `Aguarde aproximadamente ${minutes} minuto(s) antes de publicar outra oferta no Instagram.` };
+  const quotaUsage = input.metaLimit?.quotaUsage ?? recent24h.length;
+  const quotaTotal = input.metaLimit?.quotaTotal ?? INSTAGRAM_META_FALLBACK_LIMIT_24H;
+  if (quotaUsage >= quotaTotal) {
+    const utilization = `${quotaUsage}/${quotaTotal}`;
+    return {
+      ok: false,
+      code: "INSTAGRAM_META_LIMIT",
+      message: `Limite de publicações via API do Instagram atingido na janela móvel de 24 horas.${input.metaLimit ? ` Utilização: ${utilization}.` : ""}`
+    };
   }
   const normalized = normalizeInstagramCaption(input.caption);
   if (input.recentCaptions.some((caption) => normalizeInstagramCaption(caption) === normalized)) {
