@@ -124,7 +124,7 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
 
     expect(result.windowUsed).toBe("24h_fallback");
     expect(result.created).toBe(0);
-    expect(result.reasons.legacy_copy_generation_disabled).toBe(30);
+    expect(result.reasons.legacy_copy_generation_disabled).toBe(20);
     expect(repo.calls).toContain("offers:9h");
     expect(repo.calls).toContain("offers:24h");
     expect(repo.calls.some((call) => call.includes("48h") || call.includes("72h"))).toBe(false);

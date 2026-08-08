@@ -33,29 +33,62 @@ function discoveryStartedAt(offer: Partial<Offer>): number | null {
   return Number.isFinite(timestamp) ? timestamp : null;
 }
 
+function brtDayKey(timestamp: number): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(timestamp));
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
 /**
  * The v2 discovery RPC returns offer_ids for the current correlation_id.
- * The panel query has no cycle result, so reconstruct that cohort from the
- * persisted correlation_id and immutable created_at. updated_at is never used.
+ * Panel queries may persist only part of the evidence, so use correlation_id,
+ * discovery_evidence.discoveredAt, or the BRT created_at day as fallbacks.
+ * updated_at is never used.
  */
-export function identifyLatestDiscoveryCohort(offers: Offer[]): Offer[] {
-  const groups = new Map<string, Offer[]>();
-  for (const offer of offers) {
-    const correlationId = discoveryCorrelationId(offer);
-    const createdAt = new Date(offer.created_at).getTime();
-    if (!correlationId || !Number.isFinite(createdAt)) continue;
-    const group = groups.get(correlationId) || [];
-    group.push(offer);
-    groups.set(correlationId, group);
+export function identifyLatestDiscoveryCohort(offers: Offer[], now = new Date()): Offer[] {
+  const rows = offers.map((offer) => ({
+    offer,
+    createdAt: new Date(offer.created_at).getTime(),
+    correlationId: discoveryCorrelationId(offer),
+    discoveredAt: discoveryStartedAt(offer),
+  })).filter((row) => Number.isFinite(row.createdAt));
+  if (rows.length === 0) return [];
+
+  const correlatedGroups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    if (!row.correlationId) continue;
+    const group = correlatedGroups.get(row.correlationId) || [];
+    group.push(row);
+    correlatedGroups.set(row.correlationId, group);
   }
-  const latest = [...groups.values()].sort((left, right) => {
-    const maxCreatedAt = (group: Offer[]) => Math.max(...group.map((offer) => new Date(offer.created_at).getTime()));
-    return maxCreatedAt(right) - maxCreatedAt(left);
-  })[0];
-  if (!latest) return [];
-  const cycleStartedAt = Math.max(...latest.map(discoveryStartedAt).filter((value): value is number => value !== null));
-  if (!Number.isFinite(cycleStartedAt)) return [];
-  return latest.filter((offer) => new Date(offer.created_at).getTime() >= cycleStartedAt);
+
+  if (correlatedGroups.size > 0) {
+    const latest = [...correlatedGroups.values()].sort((left, right) => Math.max(...right.map((row) => row.createdAt)) - Math.max(...left.map((row) => row.createdAt)))[0];
+    const latestDay = brtDayKey(Math.max(...latest.map((row) => row.createdAt)));
+    if (latestDay !== brtDayKey(now.getTime())) return [];
+    const cycleStart = Math.min(...latest.map((row) => row.discoveredAt).filter((value): value is number => value !== null));
+    if (Number.isFinite(cycleStart)) {
+      return latest.filter((row) => row.createdAt >= cycleStart).map((row) => row.offer);
+    }
+    return latest.filter((row) => brtDayKey(row.createdAt) === latestDay).map((row) => row.offer);
+  }
+
+  const evidenceGroups = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const key = row.discoveredAt === null ? brtDayKey(row.createdAt) : brtDayKey(row.discoveredAt);
+    const group = evidenceGroups.get(key) || [];
+    group.push(row);
+    evidenceGroups.set(key, group);
+  }
+  const latest = [...evidenceGroups.values()].sort((left, right) => Math.max(...right.map((row) => row.createdAt)) - Math.max(...left.map((row) => row.createdAt)))[0];
+  const latestKey = latest[0].discoveredAt === null ? brtDayKey(latest[0].createdAt) : brtDayKey(latest[0].discoveredAt);
+  if (latestKey !== brtDayKey(now.getTime())) return [];
+  return latest.filter((row) => (row.discoveredAt === null ? brtDayKey(row.createdAt) : brtDayKey(row.discoveredAt)) === latestKey).map((row) => row.offer);
 }
 
 export function filterOperationalPanelOffers(offers: Offer[]): Offer[] {

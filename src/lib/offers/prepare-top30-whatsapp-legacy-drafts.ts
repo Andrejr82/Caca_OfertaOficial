@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildCommercialQueue, discoveryCorrelationId, identifyLatestDiscoveryCohort, type CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
+import { buildCommercialQueue, identifyLatestDiscoveryCohort, type CommercialQueueCandidate } from "@/lib/offers/commercial-curation-queue";
 import { routeCommercialCandidates, selectOperationalTopCandidates, type RoutedCommercialCandidate } from "@/lib/offers/commercial-channel-router";
 import type { Offer } from "@/types/domain";
 
@@ -126,8 +126,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
       }
       return true;
     });
-    const hasDiscoveryContract = fresh.some((offer) => discoveryCorrelationId(offer) && Boolean(offer.explainability?.discovery_evidence?.discoveredAt));
-    const latestCycleOffers = hasDiscoveryContract ? identifyLatestDiscoveryCohort(fresh) : fresh;
+    const latestCycleOffers = identifyLatestDiscoveryCohort(fresh, now);
     return filterAndRoute(latestCycleOffers, { protectedPostIds, protectedIdentities, protectedHistoricalOffers, protectedHistoricalOfferIds, postedOfferIds, approvedOfferIds, seenTodayIds, todayDraftIds, oldDraftIds, reasons });
   };
 
