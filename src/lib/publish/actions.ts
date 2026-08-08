@@ -18,6 +18,7 @@ import { extractMLId } from "@/lib/platforms/mercadolivre";
 import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateInput } from "@/lib/publish/express-affiliate-links";
 import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
 import { deriveShopeeKeyword, selectShopeeIdentity } from "@/lib/publish/shopee-identity";
+import { resolveSheinExpressProduct, SheinAdapterError, type SheinManualConfirmation } from "@/lib/publish/shein-express-adapter";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -511,6 +512,7 @@ async function generateQuickPostActionInternal(
   channel: Channel | "omnichannel",
   requestId = crypto.randomUUID(),
   diagnostics?: { stage: string },
+  sheinManualConfirmation?: SheinManualConfirmation,
 ): Promise<QuickPostResult> {
   const inputUrl = affiliateUrl.trim();
   const operationId = requestId;
@@ -767,7 +769,6 @@ async function generateQuickPostActionInternal(
     }
 
     resolvedUrl = resolved.resolvedUrl;
-    canonicalUrl = resolvedUrl;
     originalItemId = resolved.originalItemId;
     finalItemId = resolved.finalItemId;
     identitySource = resolved.identitySource;
@@ -776,10 +777,27 @@ async function generateQuickPostActionInternal(
     log("[Express Resolved]", { requestId: operationId, resolvedUrl: sanitizeUrlForLog(resolvedUrl), redirectCount: resolved.redirectChain.length, identitySource });
 
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Shein" });
-    const sheinData = await readSheinMetadata(resolvedUrl, resolved.htmlBody);
+    let sheinData;
+    try {
+      sheinData = await resolveSheinExpressProduct({
+        inputUrl,
+        resolvedUrl,
+        html: resolved.htmlBody,
+        manualConfirmation: sheinManualConfirmation,
+      });
+    } catch (error) {
+      const errorCode = error instanceof SheinAdapterError ? error.code : "SHEIN_PRICE_AMBIGUOUS";
+      const message = errorCode === "SHEIN_IDENTITY_AMBIGUOUS"
+        ? "A identidade do produto SHEIN não pôde ser confirmada. Use um link canônico de produto."
+        : "O preço SHEIN não pôde ser confirmado automaticamente. Solicite confirmação manual.";
+      log("[Express Link Error]", { requestId: operationId, errorCode, stage: "marketplace_provider" });
+      return { ok: false, status: errorCode, message };
+    }
     title = sheinData.title;
     imageUrl = sheinData.imageUrl;
     price = sheinData.price;
+    canonicalUrl = sheinData.canonicalUrl;
+    itemId = sheinData.productId || sheinData.sku;
     // OneLink já é monetizado; preserve-o como affiliate_url. Links diretos
     // continuam sendo tratados como URL canônica para o fluxo manual.
     generatedAffiliateUrl = /^https?:\/\/onelink\.shein\.com\//i.test(inputUrl)
@@ -1012,11 +1030,12 @@ async function generateQuickPostActionInternal(
 export async function generateQuickPostAction(
   affiliateUrl: string,
   channel: Channel | "omnichannel",
+  options?: { sheinManualConfirmation?: SheinManualConfirmation },
 ): Promise<QuickPostResult> {
   const requestId = crypto.randomUUID();
   const diagnostics = { stage: "start" };
   try {
-    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics);
+    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics, options?.sheinManualConfirmation);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     log("[Express Unhandled Error]", {
