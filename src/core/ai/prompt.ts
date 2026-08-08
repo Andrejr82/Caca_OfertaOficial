@@ -3,27 +3,29 @@ import { marketplaceLabel, selectOfferIcons } from "./icon-catalog";
 import { renderSocialHashtags } from "./social-hashtags";
 
 const SYSTEM_PROMPT = `Você é o copywriter de ofertas da Official AI do Caça Oferta.
-Você não conversa, não introduz a mensagem e não escreve parágrafos. Produza somente copy comercial curta no framework O.P.A.C.: Oferta, Produto, Atributo e Conversão.
+Você não conversa, não introduz a mensagem e não escreve a copy final. Produza somente JSON estruturado para a Copy V3.
 
 Regras obrigatórias:
-- Gere somente um gancho curto no campo hook (ou hooks por canal). Nunca gere produto, preço, desconto, atributo, CTA, hashtags ou URL.
+- Gere somente hook, benefitLine e contextLine. Nunca gere produto, preço, desconto, marketplace, frete, cupom, estoque, urgência, parcelamento, avaliação, vendas, CTA, hashtags ou URL.
 - O gancho (hook) deve focar no produto ou em um benefício explicitamente comprovado nos dados. Só mencione urgência, prazo ou escassez quando houver evidência persistida para isso.
 - O gancho não pode passar de 90 caracteres.
 - Escreva como uma recomendação curta de uma pessoa: varie a abertura, evite repetir “oferta” e “achado” em toda mensagem e prefira o benefício comercial comprovado.
 - Use somente fatos presentes nos dados de entrada. Nunca invente preço, desconto, frete, cupom, estoque, parcelamento, marca, especificação, atributo ou benefício.
-- O atributo deve existir literalmente no título, nos atributos estruturados persistidos ou nos metadados persistidos. Nunca infira ou deduza atributo. Se não existir, omita a linha.
+- benefitLine e contextLine só podem usar fatos sustentados por product_name, category, marketplace_metrics, explainability e atributos/metadados persistidos. Nunca invente benefício técnico.
 - Nunca escreva: Olá, Nova chegada, Temos um novo, Você vai amar, Confira, Não perca, Imperdível, Produto incrível, Compre agora, Aproveite enquanto durar, Essa oportunidade é única, Só agora, Corre que, estoque acaba ou antes que o preço suba.
 - Nunca inclua URL, [link] ou qualquer placeholder. A persistência anexará exatamente um link rastreado.
 - Responda somente JSON válido com todos os campos solicitados. Não retorne estados, aprovação, publicação nem instruções operacionais.`;
 
-function buildCopyV2Prompt(input: Record<string, unknown>) {
+function buildCopyV3Prompt(input: Record<string, unknown>) {
   const channels = (input.channels ?? [input.channel]) as readonly OfficialAIChannel[];
   return {
     system: SYSTEM_PROMPT,
     user: JSON.stringify({
       ...input,
       outputContract: {
-        hook: "Gancho curto (MÁXIMO 80 caracteres). NENHUMA quebra de linha. NENHUMA palavra proibida (Olá, Confira, etc)."
+        hook: "Gancho curto e específico, máximo 90 caracteres, uma linha",
+        benefitLine: "Benefício objetivo sustentado pelos dados, ou string vazia quando não houver evidência",
+        contextLine: "Contexto natural de uso/compra sustentado pelos dados, ou string vazia quando não houver evidência"
       },
       formatting: "Retorne exatamente esse objeto JSON, sem markdown. Formate valores em reais com duas casas decimais."
     })
@@ -35,7 +37,7 @@ function discountPercentage(currentPrice: number, originalPrice: number | null) 
   return Math.round((1 - currentPrice / originalPrice) * 100);
 }
 
-export interface CopyV2Facts {
+export interface CopyV3Facts {
   productName: string;
   marketplace: string;
   category: string | null;
@@ -43,6 +45,14 @@ export interface CopyV2Facts {
   originalPrice: number | null;
   evidence?: Record<string, unknown>;
   freeShipping?: boolean | null;
+}
+
+export type CopyV2Facts = CopyV3Facts;
+
+export interface CopyV3Fields {
+  hook?: string | null;
+  benefitLine?: string | null;
+  contextLine?: string | null;
 }
 
 const ATTRIBUTE_PATTERNS = [
@@ -264,8 +274,8 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
 }
 
 export function buildOfficialPrompt(offer: OfficialAIOffer, channels: readonly OfficialAIChannel[]) {
-  return buildCopyV2Prompt({
-    task: "Crie copy O.P.A.C. independente para cada canal solicitado.",
+  return buildCopyV3Prompt({
+    task: "Gere os campos estruturados da Copy V3 para cada canal solicitado.",
     product: {
       title: offer.productName,
       marketplace: offer.marketplace,
@@ -283,14 +293,14 @@ export function buildOfficialPrompt(offer: OfficialAIOffer, channels: readonly O
       facebook: "Feed de Página; texto factual, escaneável, com marketplace, preço e CTA direto; sem URL na resposta."
     },
     required: [
-      "hook"
+      "hook", "benefitLine", "contextLine"
     ]
   });
 }
 
 export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegeneration) {
-  return buildCopyV2Prompt({
-    task: "Gere somente um gancho curto para este draft.",
+  return buildCopyV3Prompt({
+    task: "Gere somente os campos estruturados da Copy V3 para este draft.",
     channel: draft.channel,
     product: {
       title: draft.productName,
@@ -302,8 +312,72 @@ export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegener
       persistedMetadata: draft.evidence
     },
     linkRule: "NÃO inclua URL ou link na resposta; o sistema anexará o link rastreado existente.",
-    required: [
-      "hook"
-    ]
+    required: ["hook", "benefitLine", "contextLine"]
   });
+}
+
+const COPY_V3_FORBIDDEN = /\b(?:R\$|preço|desconto|frete|cupom|estoque|parcelad|avaliaç|vendas?|%|marketplace|shopee|amazon|mercado livre)\b|https?:\/\/|www\.|\[[^\]]*link[^\]]*\]/iu;
+const COPY_V3_UNSUPPORTED_ATTRIBUTE = /\b(?:sabor|voltagem|capacidade|material|potente|resistente|impermeável|bluetooth|jarra|filtro|frost\s+free)\b/iu;
+
+function v3Words(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]{4,}/gu) ?? [];
+}
+
+function validateV3Field(facts: CopyV3Facts, value: string | null | undefined) {
+  if (!value) return null;
+  const normalized = sanitizeOfficialAIHook(value.replace(/[\r\n]+/gu, " "));
+  if (!normalized || normalized.length > 180 || COPY_V3_FORBIDDEN.test(normalized)) return null;
+  const sourceText = [facts.productName, facts.category ?? "", ...persistedStrings(facts.evidence ?? {})].join(" ");
+  const unsupported = normalized.match(COPY_V3_UNSUPPORTED_ATTRIBUTE)?.[0];
+  if (unsupported && !new RegExp(`\\b${unsupported.replace(/\\s+/gu, "\\\\s+")}\\b`, "iu").test(sourceText)) return null;
+  const source = new Set(v3Words(sourceText));
+  return v3Words(normalized).some((word) => source.has(word)) ? normalized : null;
+}
+
+function v3Context(facts: CopyV3Facts) {
+  const text = `${facts.category ?? ""} ${facts.productName}`.toLocaleLowerCase("pt-BR");
+  if (/cafeteira|café|cozinha|panela|fritadeira|liquidificador|batedeira|airfryer/iu.test(text)) return "🍳 Para o preparo na cozinha";
+  if (/geladeira|lavadora|lava e seca|micro-ondas|cooktop|forno|fogão|ar-condicionado|aspirador|tv|televis/iu.test(text)) return "🏠 Para a rotina da casa";
+  if (/ferramenta|furadeira|parafusadeira|chave|serra|oficina/iu.test(text)) return "🛠️ Para reparos e projetos";
+  if (/celular|smartphone|notebook|tablet|console|fone|headset|tecnologia/iu.test(text)) return "📱 Para a rotina conectada";
+  if (/cachorro|gato|pet|ração|brinquedo animal/iu.test(text)) return "🐾 Para a rotina do pet";
+  if (/camiseta|vestido|tênis|sapato|bermuda|roupa|moda/iu.test(text)) return "👕 Para compor o dia a dia";
+  return null;
+}
+
+function v3Hook(facts: CopyV3Facts, fields: CopyV3Fields | undefined, attribute: ReturnType<typeof objectiveAttribute>) {
+  const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
+  if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate) && !/^(?:oferta em destaque|boa opção para sua rotina|seleção oficial do dia|uma opção para sua rotina)$/iu.test(candidate)) return candidate;
+  const product = cleanProductName(facts.productName);
+  return attribute ? `${attribute.emoji} ${product} com ${attribute.text}` : `✨ ${product}`;
+}
+
+/** Copy V3: provider fields are validated first; all commercial facts remain deterministic. */
+export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAIChannel, fields?: CopyV3Fields) {
+  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
+  const attribute = objectiveAttribute(facts);
+  const benefit = validateV3Field(facts, fields?.benefitLine) ?? (attribute ? `✨ ${attribute.text}.` : null);
+  const context = validateV3Field(facts, fields?.contextLine) ?? v3Context(facts);
+  const marketplace = marketplaceLabel(facts.marketplace);
+  const icons = selectOfferIcons(facts.category, facts.productName);
+  const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
+  const freight = shippingLine(facts);
+  const product = cleanProductName(facts.productName);
+  const price = discount && facts.originalPrice
+    ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
+    : facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : "💰 Consulte o preço atual no link!";
+  const commercial = [
+    `🛍️ ${product}`,
+    `${iconLine} ${marketplace.text}`,
+    ...(freight ? [freight] : []),
+    ...(benefit ? [benefit] : []),
+    ...(context ? [context] : []),
+    price
+  ];
+
+  if (channel === "instagram") return [v3Hook(facts, fields, attribute), ...commercial, "🔎 Link na bio ou nos Stories para consultar a oferta. 👇", renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
+  if (channel === "facebook") return [v3Hook(facts, fields, attribute), ...commercial, "👉 Link de compra no primeiro comentário! 👇", renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
+  if (channel === "whatsapp") return [v3Hook(facts, fields, attribute), ...commercial, "👉"].join("\n\n");
+  if (channel === "telegram") return [v3Hook(facts, fields, attribute), ...commercial, "👉"].join("\n\n");
+  return [v3Hook(facts, fields, attribute), ...commercial, "🛒 Ver oferta 👇"].join("\n\n");
 }

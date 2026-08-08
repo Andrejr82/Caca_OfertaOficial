@@ -1,7 +1,7 @@
 import { emitOfficialAITelemetrySafely, type AIProviderPort, type AIProviderRequest, type AIProviderResponse, type OfficialAIServiceDependencies } from "./ports";
 import type { BatchCursor } from "./ports";
 import { inspectOfficialAIHook, isCopyV2TextSafe } from "./content-schema";
-import { buildCopyV2ChannelCopy, buildOfficialPrompt } from "./prompt";
+import { buildCopyV3ChannelCopy, buildOfficialPrompt } from "./prompt";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
 import type {
   OfficialAIAuditRecord,
@@ -575,7 +575,6 @@ export async function generateOfficialAI(
     durationMs: 0, details: { finishReason: "skipped-llm-by-policy" }
   });
 
-  const { generateAllMessages } = await import("@/lib/messages/generate");
   const mappedOffer: any = {
     id: offer!.id,
     user_id: offer!.tenantId,
@@ -617,8 +616,6 @@ export async function generateOfficialAI(
     );
   }
 
-  const useCopyV2Renderer = command.metadata?.copyV2 === true || command.metadata?.copyV2Auto === true;
-  const generatedMessages = useCopyV2Renderer ? null : generateAllMessages(mappedOffer, mappedOffer.affiliate_links);
   const explainability = offer!.explainability ?? {};
   const explainabilityMetrics = (explainability.marketplace_metrics && typeof explainability.marketplace_metrics === "object")
     ? explainability.marketplace_metrics as Record<string, unknown>
@@ -636,7 +633,7 @@ export async function generateOfficialAI(
     explainabilityMetrics.shipping_free,
     explainabilityMetrics.shippingFree
   ].find((value): value is boolean => typeof value === "boolean");
-  const copyV2Facts = {
+  const copyV3Facts = {
     productName: offer!.productName,
     marketplace: offer!.marketplace,
     category: offer!.category,
@@ -646,67 +643,7 @@ export async function generateOfficialAI(
     freeShipping: freeShippingValue ?? null
   };
 
-  // Extração inteligente do shortName via LLM
-  let shortName = offer!.productName;
-  let shortNameInference = null;
-  try {
-    const aiProvider = dependencies.providers.resolve(command.providerPreference);
-    const shortNamePrompt = {
-      system: `Você é um extrator de essência de produtos. Sua única tarefa é encurtar o nome do produto, preservando apenas a estrutura [TIPO DE PRODUTO] + [MARCA] + [LINHA/MODELO].
-REGRAS RÍGIDAS:
-1. NUNCA inclua peso (ex: 1kg), volume (ex: 500ml), voltagem (110v/220v) ou cores.
-2. NUNCA inclua palavras-chave de SEO (ex: "Moda Praia Básico", "Promoção", "Original").
-3. Retorne APENAS um objeto JSON com a chave "shortName" e o valor sendo o nome curto, sem explicações.
-4. O resultado deve ter no máximo 45 caracteres.
-
-EXEMPLOS:
-Entrada: Kit com 4 Short Linho Masculino Bermuda Mauricinho Masculina Moda Praia Básico acima do joelho Loja Intro
-Saída: {"shortName": "Kit 4 Shorts Linho Masculino"}
-
-Entrada: PremieR Pet Golden Seleção Natural Ração Seca para Gatos Castrados Sabor Frango com Batata Doce 1kg
-Saída: {"shortName": "Ração PremieR Pet Golden"}`,
-      user: `Entrada: ${offer!.productName}\nSaída:`
-    };
-    const inferenceStart = Date.now();
-    const shortNameResponse = await aiProvider.generate({
-      prompt: shortNamePrompt,
-      correlationId: command.correlationId,
-      timeoutMs: 15000,
-      temperature: 0.1,
-      maxTokens: 50,
-      metadata: { stage: "short_name_extraction", offerId: command.offerId }
-    });
-    
-    let extracted = "";
-    const rawContent = shortNameResponse.content;
-    // O http-provider parseia o JSON e retorna como objeto.
-    // Suportamos também o caso de string JSON por segurança.
-    if (rawContent && typeof rawContent === "object") {
-      extracted = (rawContent as Record<string, unknown>).shortName as string || "";
-    } else if (typeof rawContent === "string") {
-      try {
-        const parsed = JSON.parse(rawContent) as Record<string, unknown>;
-        extracted = typeof parsed.shortName === "string" ? parsed.shortName : "";
-      } catch {
-        // resposta não é JSON válido — mantém nome original
-      }
-    }
-
-    if (extracted && extracted.length > 0 && extracted.length <= 55) {
-      shortName = extracted;
-      // Só persiste no banco se o LLM realmente encurtou o nome
-      await dependencies.offers.updateShortName(command.offerId, command.tenantId, shortName);
-    }
-    shortNameInference = { provider: shortNameResponse.provider, model: shortNameResponse.model, latencyMs: shortNameResponse.latencyMs };
-  } catch (error) {
-    await emitTelemetry(dependencies, {
-      eventType: "official_ai.inference.failed",
-      correlationId: command.correlationId,
-      offerId: command.offerId,
-      stage: "short_name_extraction",
-      details: exceptionDetails(error)
-    });
-  }
+  const shortName = offer!.shortName || offer!.productName;
 
   const content = {
     title: offer!.productName,
@@ -717,15 +654,10 @@ Saída: {"shortName": "Ração PremieR Pet Golden"}`,
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: ["Preço atual"],
-    explanation: "Copy determinística gerada pela engine comercial (generate.ts) sem chamada LLM.",
+    explanation: "Copy V3 central: campos estruturados validados e fatos comerciais determinísticos.",
     channelCopies: Object.fromEntries(command.channels.map((channel) => {
       let text = "";
-      if (useCopyV2Renderer) {
-        text = buildCopyV2ChannelCopy(copyV2Facts, channel);
-      } else if (channel === "instagram") text = generatedMessages?.instagram?.feed || "";
-      else if (channel === "facebook") text = generatedMessages?.facebook || "";
-      else if (channel === "telegram") text = generatedMessages!.telegram;
-      else if (channel === "whatsapp") text = generatedMessages!.whatsapp;
+      text = buildCopyV3ChannelCopy(copyV3Facts, channel);
       return [channel, text];
     }))
   };

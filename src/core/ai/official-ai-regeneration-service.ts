@@ -1,6 +1,6 @@
 import { isCopyV2TextSafe, validateOfficialAIHook } from "./content-schema";
 import type { OfficialAIRegenerationDependencies } from "./ports";
-import { buildCopyV2ChannelCopy, buildOfficialRegenerationPrompt, sanitizeOfficialAIHook } from "./prompt";
+import { buildCopyV3ChannelCopy, buildOfficialRegenerationPrompt, sanitizeOfficialAIHook } from "./prompt";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIDraftForRegeneration, type OfficialAIRegenerationCommand, type OfficialAIRegenerationItem, type OfficialAIRegenerationResult } from "./types";
 
 const FORBIDDEN_OPENING = /^\s*(?:[^\p{L}\p{N}]{0,4}\s*)?(?:Olá|Temos um novo|Você vai amar|Confira|Conheça|Não perca)(?=\s|[!,:;.-]|$)/iu;
@@ -10,14 +10,15 @@ const STOCK = /\bestoque\b|últimas unidades|últimas peças/iu;
 export const OFFICIAL_AI_REGENERATION_BATCH_LIMIT = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
-function providerHook(value: unknown, channel: OfficialAIDraftForRegeneration["channel"]) {
+function providerFields(value: unknown, channel: OfficialAIDraftForRegeneration["channel"]) {
   if (!value || typeof value !== "object") return null;
-  const data = value as { hook?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> };
-  const candidate = data.hooks?.[channel] ?? data.hook ?? data.channelCopies?.[channel];
-  const hook = validateOfficialAIHook(typeof candidate === "string"
-    ? sanitizeOfficialAIHook(candidate.split(/[\r\n]/u, 1)[0])
-    : candidate);
-  return hook;
+  const data = value as { hook?: unknown; benefitLine?: unknown; contextLine?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> };
+  const candidate = data.hooks?.[channel] ?? data.channelCopies?.[channel] ?? data;
+  const structured = candidate && typeof candidate === "object" ? candidate as { hook?: unknown; benefitLine?: unknown; contextLine?: unknown } : { hook: candidate };
+  const hook = validateOfficialAIHook(typeof structured.hook === "string"
+    ? sanitizeOfficialAIHook(structured.hook.split(/[\r\n]/u, 1)[0])
+    : structured.hook);
+  return hook ? { hook, benefitLine: typeof structured.benefitLine === "string" ? structured.benefitLine : null, contextLine: typeof structured.contextLine === "string" ? structured.contextLine : null } : null;
 }
 
 export function getOfficialAIRegenerationBatchLimit(value?: number) {
@@ -112,10 +113,10 @@ export async function regenerateOfficialDrafts(
         maxTokens: 1_200,
         metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft" }
       });
-      const hook = providerHook(inference.content, draft.channel);
-      if (!hook) throw new Error("INVALID_PROVIDER_OUTPUT");
-      validateCopy(hook, draft);
-      const copy = buildCopyV2ChannelCopy(draft, draft.channel, hook);
+      const fields = providerFields(inference.content, draft.channel);
+      if (!fields) throw new Error("INVALID_PROVIDER_OUTPUT");
+      validateCopy(fields.hook, draft);
+      const copy = buildCopyV3ChannelCopy(draft, draft.channel, fields);
       const afterContent = `${copy}\n\n${draft.trackedUrl}`;
       const updated = await dependencies.drafts.updateContent({
         tenantId: command.tenantId,

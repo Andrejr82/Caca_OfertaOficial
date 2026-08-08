@@ -162,13 +162,12 @@ describe("Official AI O.P.A.C.", () => {
   it("prompt oficial exige O.P.A.C., proíbe invenções e nunca pede URL", () => {
     const prompt = buildOfficialPrompt(offer, ["whatsapp", "telegram", "instagram"]);
     const text = `${prompt.system}\n${prompt.user}`;
-    expect(text).toContain("O.P.A.C.");
-    expect(text).toContain("Oferta");
-    expect(text).toContain("Produto");
-    expect(text).toContain("Atributo");
-    expect(text).toContain("Conversão");
+    expect(text).toContain("Copy V3");
+    expect(text).toContain("hook");
+    expect(text).toContain("benefitLine");
+    expect(text).toContain("contextLine");
     expect(text).toContain("Nunca invente");
-    expect(text).toContain("somente um gancho curto");
+    expect(text).toContain("hook, benefitLine e contextLine");
     expect(text).not.toContain("urgência natural");
   });
 

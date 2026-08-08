@@ -210,7 +210,7 @@ describe("generateOfficialAI", () => {
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
     for (const channel of command.channels) {
       if (channel === "instagram") {
-        expect(persisted.channelCopies[channel]).toContain("#ProdutoOficial");
+        expect(persisted.channelCopies[channel]).toContain("#Produto");
       } else if (channel === "telegram") {
         expect(persisted.channelCopies[channel]).toContain("Produto oficial");
       } else {
@@ -334,7 +334,7 @@ describe("generateOfficialAI", () => {
     expect(result).toMatchObject({ status: "drafted", offerState: "pending_manual_review" });
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.explanation).toContain("Copy determinística gerada pela engine comercial");
+    expect(persisted.explanation).toContain("Copy V3 central");
     expect(persisted.channelCopies.telegram).toContain("Produto oficial");
   });
 

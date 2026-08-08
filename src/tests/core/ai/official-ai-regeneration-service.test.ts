@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   regenerateOfficialDrafts,
-  buildCopyV2ChannelCopy,
+  buildCopyV3ChannelCopy,
   type OfficialAIDraftForRegeneration,
   type OfficialAIRegenerationCommand,
   type OfficialAIRegenerationDependencies
@@ -79,7 +79,7 @@ describe("regenerateOfficialDrafts", () => {
       tenantId: "tenant-1",
       postId: "post-1",
       expectedContent: draft.currentContent,
-      content: `${buildCopyV2ChannelCopy(draft, "whatsapp")}\n\n${draft.trackedUrl}`
+      content: `${buildCopyV3ChannelCopy(draft, "whatsapp")}\n\n${draft.trackedUrl}`
     });
     expect(result.items[0]).toMatchObject({
       postId: "post-1",
