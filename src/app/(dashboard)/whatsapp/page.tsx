@@ -6,6 +6,7 @@ import { SocialChannelPostsView } from "@/components/dashboard/social-channel-po
 import { MessageCircle } from "lucide-react";
 import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
 import { getTodayBrtStart, prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
+import { mergePanelDrafts } from "@/lib/offers/panel-draft-selection";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function WhatsappDashboardPage() {
       notes: string | null;
       status: string;
       created_at: string;
+      explainability?: Record<string, unknown> | null;
     };
   }
 
@@ -55,21 +57,16 @@ export default async function WhatsappDashboardPage() {
     }
   }
 
-  if (supabase && selectedOfferIds.size > 0) {
+  if (supabase) {
     const todayStart = getTodayBrtStart();
     const { data: drafts } = await supabase
       .from("posts")
       .select("*, offers(*), affiliate_links(tracked_url)")
       .eq("channel", "whatsapp")
       .eq("status", "draft")
-      .in("offer_id", [...selectedOfferIds])
-      .gte("created_at", todayStart.toISOString())
       .order("created_at", { ascending: false });
 
-    draftPosts = (drafts || []).filter((post) => {
-      const offerStatus = post.offers?.status;
-      return post.status === "draft" && !post.deleted_at && !post.posted_at && !post.external_id && Boolean(post.offers?.created_at && post.offers.created_at >= todayStart.toISOString()) && !["posted", "approved", "rejected", "deferred"].includes(offerStatus);
-    });
+    draftPosts = mergePanelDrafts(drafts || [], selectedOfferIds, todayStart);
   }
 
   const historyData = await getPostHistory("whatsapp");
