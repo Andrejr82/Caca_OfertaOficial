@@ -34,7 +34,7 @@ function discountPercentage(currentPrice: number, originalPrice: number | null) 
   return Math.round((1 - currentPrice / originalPrice) * 100);
 }
 
-interface CopyV2Facts {
+export interface CopyV2Facts {
   productName: string;
   marketplace: string;
   category: string | null;
@@ -101,8 +101,8 @@ function cleanProductName(value: string) {
 }
 
 const DEFAULT_HOOKS = {
-  discount: ["🔥 Agora por {price} (economia de {saving})", "💡 Economia de {saving}", "✨ Preço atual: {price} (menos {saving})"],
-  standard: ["✨ Encontramos este por {price}", "💡 Preço atual: {price}", "⭐ Uma opção por {price}"]
+  discount: ["🔥 Economia confirmada de {saving}", "💡 Desconto verificado de {saving}", "✨ Oferta com economia de {saving}"],
+  standard: ["✨ Oferta em destaque", "💡 Boa opção para sua rotina", "⭐ Seleção oficial do dia"]
 } as const;
 
 function stableIndex(value: string, length: number) {
@@ -142,7 +142,7 @@ function hookFor(facts: CopyV2Facts, hook?: string) {
     const market = facts.marketplace || 'Shopee';
     const isFeminine = /shopee|amazon|shein/i.test(market);
     const inMarket = isFeminine ? "na" : "no";
-    return `✨ Achado incrível ${inMarket} ${market}`;
+    return `✨ Oferta em destaque ${inMarket} ${market}`;
   }
 
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
@@ -174,7 +174,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
-      `${iconLine} Achado ${inMarket} ${facts.marketplace}`,
+      `${iconLine} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice && facts.currentPrice > 0
@@ -193,7 +193,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(discount !== null && facts.originalPrice !== null && facts.currentPrice > 0 ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
-      facts.currentPrice > 0 ? `✅ *Preço atual: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim() : `✅ Consulte o preço atual no link!`,
+      facts.currentPrice > 0 ? `✅ *Valor confirmado: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim() : `✅ Consulte o valor no link!`,
       `👉 `
     ];
     return blocks.join("\n\n");

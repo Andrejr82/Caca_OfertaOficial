@@ -65,13 +65,6 @@ export interface PanelValidation {
   notPublished: boolean;
 }
 
-function materializeCopy(copy: string, trackedUrl: string) {
-  const cleanCopy = copy.trimEnd();
-  return /https?:\/\/\S+/.test(cleanCopy)
-    ? cleanCopy.replace(/https?:\/\/\S+/g, trackedUrl).trimEnd()
-    : `${cleanCopy}\n\n👉 ${trackedUrl}`;
-}
-
 function selectByChannel(candidates: RoutedCommercialCandidate[], channel: BridgeChannel) {
   const target = channel === "whatsapp" ? "manual_whatsapp" : "telegram";
   return selectOperationalTopCandidates(candidates, { channel: target, limit: HARD_LIMIT_PER_CHANNEL, diversity: false })[0] ?? null;
@@ -113,36 +106,7 @@ export async function runControlledBridge(repository: BridgeRepository, options:
   const candidates = selectBridgeCandidates(eligibleOffers, links, drafts, publishedKeys);
   const result: BridgeResult = { mode: options.dryRun ? "dry-run" : "execute", candidates, drafts: [], validation: { whatsapp: emptyValidation(), telegram: emptyValidation() } };
   if (options.dryRun) return result;
-
-  for (const item of candidates) {
-    const key = `${item.offerId}:${item.channel}`;
-    const latestPublished = (await repository.listPublished(item.channel)).find((row) => row.offer_id === item.offerId);
-    if (latestPublished) continue;
-    const existingDraft = drafts.get(key) ?? (await repository.listDrafts(item.channel)).find((row) => row.offer_id === item.offerId) ?? null;
-    if (existingDraft) {
-      result.drafts.push({ channel: item.channel, offerId: item.offerId, action: "reused", postId: existingDraft.id });
-      continue;
-    }
-    const offer = eligibleOffers.find((row) => row.id === item.offerId)!;
-    const existingLink = links.get(key) ?? (await repository.listAffiliateLinks(item.channel)).find((row) => row.offer_id === offer.id) ?? null;
-    let link = existingLink;
-    if (!link) {
-      try {
-        link = await repository.createAffiliateLink({ userId: offer.user_id, offerId: offer.id, channel: item.channel, originalUrl: offer.original_url, subId: createSubId(item.channel, offer.product_name, offer.id), trackedUrl: createTrackedUrl(offer.original_url, createSubId(item.channel, offer.product_name, offer.id)) });
-      } catch (error) {
-        if (!String(error).toLowerCase().includes("duplicate key") && !String(error).toLowerCase().includes("unique constraint")) throw error;
-        link = (await repository.listAffiliateLinks(item.channel)).find((row) => row.offer_id === offer.id) ?? null;
-        if (!link) throw error;
-      }
-    }
-    if (!link) throw new Error(`affiliate link unavailable for ${key}`);
-    const post = await repository.insertDraft({ userId: offer.user_id, offerId: offer.id, channel: item.channel, affiliateLinkId: link.id, content: materializeCopy(item.candidate.suggestedCopy, link.tracked_url) });
-    result.drafts.push({ channel: item.channel, offerId: item.offerId, action: "created", postId: post.id });
-  }
-  result.validation = {
-    whatsapp: validatePanelDraft(await repository.listPanelDrafts("whatsapp"), result.candidates.find((item) => item.channel === "whatsapp")),
-    telegram: validatePanelDraft(await repository.listPanelDrafts("telegram"), result.candidates.find((item) => item.channel === "telegram"))
-  };
+  // Legacy execution is intentionally fail-closed. Official AI owns post creation.
   return result;
 }
 

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { assertOfficialCopy } from "@/core/ai/official-copy-policy";
 
 const CHANNELS = new Set(["facebook", "instagram", "telegram", "whatsapp"]);
 
@@ -14,6 +15,11 @@ export async function POST(request: Request) {
     }
     if (content.length > 10000) {
       return NextResponse.json({ ok: false, message: "A mensagem excede o limite permitido." }, { status: 400 });
+    }
+    try {
+      assertOfficialCopy(content, channel);
+    } catch {
+      return NextResponse.json({ ok: false, message: "Use a copy oficial gerada pela Official AI." }, { status: 400 });
     }
 
     const client = await createServerSupabaseClient();

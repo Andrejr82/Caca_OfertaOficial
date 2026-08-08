@@ -32,9 +32,9 @@ describe("Official AI O.P.A.C.", () => {
     }, "telegram", "🔥 PREÇO BAIXOU");
 
     expect(copy).toBe([
-      "🔥 Agora por R$ 79,90 (economia de R$ 20,00)",
+      "🔥 Economia confirmada de R$ 20,00",
       "🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
-      "🎧 Achado na Shopee",
+      "🎧 Oferta na Shopee",
       "✨ Bluetooth 5.3",
       "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
       "👉 "
@@ -56,7 +56,7 @@ describe("Official AI O.P.A.C.", () => {
 
   it("destaca preço sem inventar desconto quando preço anterior não é válido", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: 79.9 }, "whatsapp");
-    expect(copy).toContain("✅ *Preço atual: R$ 79,90*");
+    expect(copy).toContain("✅ *Valor confirmado: R$ 79,90*");
     expect(copy).not.toContain("Preço anterior");
     expect(copy).not.toMatch(/📉|% OFF/iu);
   });
@@ -72,7 +72,7 @@ describe("Official AI O.P.A.C.", () => {
     const copy = ["whatsapp", "telegram", "instagram"].map((channel) => buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, channel as "whatsapp" | "telegram" | "instagram")).join("\n");
     expect(copy).not.toMatch(/estoque|só agora|corre que|antes que o preço suba|relâmpago|baixou muito/iu);
     expect(copy).not.toContain("Preço e condições podem mudar");
-    expect(copy).toContain("Preço atual");
+    expect(copy).toContain("Valor confirmado");
   });
 
   it.each(["whatsapp", "telegram", "facebook"] as const)("não adiciona aviso genérico de preço no Copy V2 de %s", (channel) => {
@@ -90,7 +90,7 @@ describe("Official AI O.P.A.C.", () => {
     const first = buildCopyV2ChannelCopy({ ...offer, productName: "Smart TV 4K 50 polegadas" }, "telegram");
     const same = buildCopyV2ChannelCopy({ ...offer, productName: "Smart TV 4K 50 polegadas" }, "telegram");
     expect(first).toBe(same);
-    expect(first).not.toContain("OFERTA EM DESTAQUE");
+    expect(first).toContain("economia de");
   });
 
   it("mostra economia absoluta somente quando há preço anterior válido", () => {
@@ -114,7 +114,7 @@ describe("Official AI O.P.A.C.", () => {
   it("omite atributo quando título e metadados não contêm fato objetivo confiável", () => {
     const copy = buildCopyV2ChannelCopy({ ...offer, originalPrice: null }, "whatsapp");
     expect(copy.split("\n\n")).toContain("🛍️ Tênis Casual Feminino");
-    expect(copy).toContain("✅ *Preço atual: R$ 79,90*");
+    expect(copy).toContain("✅ *Valor confirmado: R$ 79,90*");
     expect(copy).not.toContain("Preço e condições podem mudar");
     expect(copy).not.toMatch(/excelente|incrível|alta performance|ideal para você|durabilidade|premium/iu);
   });
@@ -143,7 +143,7 @@ describe("Official AI O.P.A.C.", () => {
     expect(copy).toMatch(/R\$ 79,90|Economia de/iu);
     expect(copy).toContain("Fone Bluetooth 5.3");
     expect(copy).toContain("Bluetooth 5.3");
-    if (channel === "whatsapp") expect(copy).toContain("✅ *Preço atual: R$ 79,90* (20% OFF)");
+    if (channel === "whatsapp") expect(copy).toContain("✅ *Valor confirmado: R$ 79,90* (20% OFF)");
     else expect(copy).toContain("💰");
     if (channel === "instagram") expect(copy).toContain("#oferta #shopee");
     else expect(copy).toMatch(/👉 $/mu);

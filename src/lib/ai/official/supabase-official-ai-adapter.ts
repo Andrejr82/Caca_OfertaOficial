@@ -17,6 +17,7 @@ import type { BatchCursor, OfficialAIApprovalPort, OfficialAIServiceDependencies
 import type { StateServiceDependencies } from "@/core/state";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { offerStateVersion, transitionOfficialOfferState } from "@/lib/state/official-state-service";
+import { assertOfficialCopy } from "@/core/ai/official-copy-policy";
 
 const IDEMPOTENCY_PREFIX = "pmav5.ai.idempotency.";
 const POLL_ATTEMPTS = 50;
@@ -288,7 +289,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
             offer_id: input.offer.id,
             affiliate_link_id: link.id,
             channel,
-            content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl, { repairInvalidUrl: true }),
+            content: materializeDraftContent(channel, assertOfficialCopy(input.content.channelCopies[channel] || "", channel), trackedUrl, { repairInvalidUrl: true }),
             status: "draft"
           })
           .select("id,affiliate_link_id,channel,status")
@@ -304,7 +305,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
         if (input.command.metadata?.copyV2Regenerate === true) {
           const { error: updateError } = await this.client
             .from("posts")
-            .update({ content: materializeDraftContent(channel, input.content.channelCopies[channel] || "", trackedUrl, { repairInvalidUrl: true }) })
+            .update({ content: materializeDraftContent(channel, assertOfficialCopy(input.content.channelCopies[channel] || "", channel), trackedUrl, { repairInvalidUrl: true }) })
             .eq("id", post.id)
             .eq("user_id", this.tenantId)
             .eq("status", "draft");

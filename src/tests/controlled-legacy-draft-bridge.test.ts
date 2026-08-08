@@ -27,15 +27,12 @@ describe("controlled legacy draft bridge", () => {
   it("reutiliza link e draft existentes sem duplicar", async () => {
     const repo = repository([offer("offer-1")], { links: { "offer-1:telegram": { id: "link-1", tracked_url: "https://cacaoferta.com.br/go/tg_offer-1" } }, drafts: { "offer-1:telegram": { id: "post-1", status: "draft" } } });
     const result = await runControlledBridge(repo, { dryRun: false });
-    expect(repo.writes).not.toContain("link:offer-1:telegram"); expect(repo.writes).not.toContain("draft:offer-1:telegram"); expect(result.drafts.some((item) => item.action === "reused")).toBe(true);
+    expect(repo.writes).toEqual([]); expect(result.drafts).toEqual([]);
   });
-  it("cria apenas posts draft e valida cópia, imagem e link afiliado", async () => {
-    const repo = repository([offer("offer-1")]); const result = await runControlledBridge(repo, { dryRun: false });
-    expect(repo.writes.filter((item) => item.startsWith("draft:")).length).toBeLessThanOrEqual(2);
-    expect(result.validation.telegram.isDraft || result.validation.whatsapp.isDraft).toBe(true);
-    expect(result.validation.telegram.notPublished && result.validation.whatsapp.notPublished).toBe(true);
-    const postContent = [...repo.contents.values()].join("\n");
-    expect(postContent).toContain("🔗 Ver oferta");
-    expect(postContent).toContain("👉 https://cacaoferta.com.br/go/");
+  it("bloqueia criação de posts fora da Official AI", async () => {
+    const repo = repository([offer("offer-1")]);
+    const result = await runControlledBridge(repo, { dryRun: false });
+    expect(result.drafts).toEqual([]);
+    expect(repo.writes.filter((item) => item.startsWith("draft:")).length).toBe(0);
   });
 });

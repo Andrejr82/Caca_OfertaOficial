@@ -132,7 +132,7 @@ describe("generateOfficialAI", () => {
     await generateOfficialAI({ ...command, metadata: { copyV2: true } }, dependencies);
 
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("Achado na Shopee");
+    expect(persisted.channelCopies.telegram).toContain("Oferta na Shopee");
     expect(persisted.channelCopies.telegram).toContain("Frete grátis confirmado");
     expect(persisted.channelCopies.telegram).not.toContain("~de");
   });
@@ -155,7 +155,7 @@ describe("generateOfficialAI", () => {
     expect(result.status).toBe("drafted");
     expect(result.offerState).toBe("pending_manual_review");
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("Achado na Shopee");
+    expect(persisted.channelCopies.telegram).toContain("Oferta na Shopee");
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
 
@@ -187,7 +187,7 @@ describe("generateOfficialAI", () => {
     await generateOfficialAI(mlCommand, dependencies);
 
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("Achado no Mercado Livre");
+    expect(persisted.channelCopies.telegram).toContain("Oferta no Mercado Livre");
     expect(persisted.channelCopies.telegram).toContain("🚚 Frete grátis confirmado");
     expect(persisted.channelCopies.telegram).not.toContain("🏷️ Vendido por");
   });

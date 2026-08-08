@@ -29,9 +29,9 @@ export function selectOfferIcons(category: string | null | undefined, productNam
 
 export function marketplaceLabel(marketplace: string) {
   const labels: Record<string, { icon: string; text: string }> = {
-    amazon: { icon: "📦", text: "Achado na Amazon" },
-    shopee: { icon: "🛒", text: "Achado na Shopee" },
-    "mercado livre": { icon: "🟡", text: "Achado no Mercado Livre" },
+    amazon: { icon: "📦", text: "Oferta na Amazon" },
+    shopee: { icon: "🛒", text: "Oferta na Shopee" },
+    "mercado livre": { icon: "🟡", text: "Oferta no Mercado Livre" },
   };
-  return labels[marketplace.trim().toLocaleLowerCase("pt-BR")] ?? { icon: "🛍️", text: "Achado em loja parceira" };
+  return labels[marketplace.trim().toLocaleLowerCase("pt-BR")] ?? { icon: "🛍️", text: "Oferta em loja parceira" };
 }
