@@ -212,6 +212,23 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(result.scenarios.casa_cozinha_editorial.metrics.final).toBeGreaterThan(30);
   });
 
+  it('consulta fontes independentes com concorrência limitada, sem cortar páginas', async () => {
+    let active = 0;
+    let peak = 0;
+    const request = async (operation, query, variables) => {
+      if (operation !== 'ShopeePromotionOffers') return { status: 200, data: { data: {} } };
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      active -= 1;
+      return { status: 200, data: { data: { productOfferV2: { nodes: [], pageInfo: { hasNextPage: false } } } } };
+    };
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, includeAuxiliary: false, includeDelta: false });
+    expect(result.queryEvidence.calls).toHaveLength(7);
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(3);
+  });
+
   it('não para nos primeiros candidatos históricos quando há novos depois deles', () => {
     const historical = product({ itemId: '70000', shopId: '71000', productName: 'Organizador de cozinha com tampa' });
     const candidates = [

@@ -194,7 +194,7 @@ function auxiliaryNode(source, node) {
   return { source, requiresProductResolution: true, resolved: Boolean(node.resolvedProduct), offerLink: node.offerLink || null, imageUrl: node.imageUrl || null, commissionRate: node.commissionRate ?? null, raw: node, resolvedProduct: node.resolvedProduct || null };
 }
 
-async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
+async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories, maxConcurrentQueries = 3, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
   const plan = SCENARIO_QUERY_PLANS[scenarioId];
   if (!plan) throw new Error(`Plano Shopee ausente para ${scenarioId}`);
   if (typeof request !== 'function') throw new Error('runScenarioPlan requer request injetado');
@@ -211,8 +211,18 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
       if (!pageInfo || pageInfo.hasNextPage !== true) break;
     }
   };
-  for (const keyword of keywords) await callProduct({ keyword }, 'productOfferV2.keyword');
-  for (const productCatId of categoryIds) await callProduct({ productCatId }, 'productOfferV2.category');
+  const queryTasks = [
+    ...keywords.map((keyword) => () => callProduct({ keyword }, 'productOfferV2.keyword')),
+    ...categoryIds.map((productCatId) => () => callProduct({ productCatId }, 'productOfferV2.category')),
+  ];
+  const workerCount = Math.max(1, Math.min(Number(maxConcurrentQueries) || 1, queryTasks.length));
+  let nextTask = 0;
+  await Promise.all(new Array(workerCount).fill(null).map(async () => {
+    while (nextTask < queryTasks.length) {
+      const task = queryTasks[nextTask++];
+      await task();
+    }
+  }));
   let deltaRows = sharedSources.deltaRows || []; let datafeedId = sharedSources.datafeedId || null; let shopOffers = sharedSources.shopOffers || []; let shopeeOffers = sharedSources.shopeeOffers || [];
   if (includeDelta && !sharedSources.deltaRows) {
     const feedResponse = await request('ListItemFeeds', GRAPHQL_CONTRACTS.listItemFeeds.query, {}); const feeds = feedResponse.data?.data?.listItemFeeds?.feeds || []; datafeedId = feeds[0]?.datafeedId || null;
