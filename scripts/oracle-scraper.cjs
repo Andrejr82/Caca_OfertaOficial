@@ -172,6 +172,9 @@ const CRON_SCHEDULE = '0 6-20 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
+const SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS = 15_000;
+const SHOPEE_OPENAPI_MAX_RETRIES = 1;
+const SHOPEE_OPENAPI_STAGE_TIMEOUT_MS = 90_000;
 
 function getActiveMarketplaceScenario(marketplace = 'Shopee') {
   const routed = CLI_SCENARIO_ID
@@ -223,30 +226,52 @@ async function fetchAmazonHtmlViaScrapedo(url) {
   return response.data;
 }
 
-async function callShopeeAffiliateApi(payload) {
-  if (!SHOPEE_APP_ID || !SHOPEE_APP_SECRET) return null;
+async function callShopeeAffiliateApi(payload, { timeoutMs = SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries = SHOPEE_OPENAPI_MAX_RETRIES, signal, appId = SHOPEE_APP_ID, appSecret = SHOPEE_APP_SECRET } = {}) {
+  if (!appId || !appSecret) return null;
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    if (signal?.aborted) {
+      const error = new Error('Shopee OpenAPI abortada pelo timeout da etapa');
+      error.code = 'SHOPEE_OPENAPI_ABORTED';
+      throw error;
+    }
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = crypto
       .createHash('sha256')
-      .update(SHOPEE_APP_ID + timestamp + payload + SHOPEE_APP_SECRET)
+      .update(appId + timestamp + payload + appSecret)
       .digest('hex');
+    const attemptController = new AbortController();
+    const abortAttempt = () => attemptController.abort(signal?.reason);
+    const timeoutId = setTimeout(() => attemptController.abort(), timeoutMs);
+    signal?.addEventListener('abort', abortAttempt, { once: true });
     try {
       const response = await axios.post(SHOPEE_API_URL, payload, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: 'SHA256 Credential=' + SHOPEE_APP_ID + ', Timestamp=' + timestamp + ', Signature=' + signature,
+          Authorization: 'SHA256 Credential=' + appId + ', Timestamp=' + timestamp + ', Signature=' + signature,
         },
-        timeout: 60000,
+        timeout: timeoutMs,
+        signal: attemptController.signal,
         validateStatus: () => true,
       });
-      if (response.status !== 429 || attempt === 2) return response;
+      if (![429, 500, 502, 503, 504].includes(response.status) || attempt === maxRetries) return response;
       const retryAfter = Number(response.headers?.['retry-after'] ?? 0);
-      await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 2000 * (attempt + 1)));
+      await new Promise((resolve, reject) => {
+        const retryTimer = setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter * 1000, 2_000) : 500);
+        const abortRetry = () => { clearTimeout(retryTimer); reject(Object.assign(new Error('Shopee retry abortado pelo timeout da etapa'), { code: 'SHOPEE_OPENAPI_ABORTED' })); };
+        signal?.addEventListener('abort', abortRetry, { once: true });
+      });
     } catch (error) {
       lastError = error;
-      if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 1500 * (attempt + 1)));
+      if (signal?.aborted || attempt >= maxRetries) throw error;
+      await new Promise((resolve, reject) => {
+        const retryTimer = setTimeout(resolve, 500);
+        const abortRetry = () => { clearTimeout(retryTimer); reject(Object.assign(new Error('Shopee retry abortado pelo timeout da etapa'), { code: 'SHOPEE_OPENAPI_ABORTED' })); };
+        signal?.addEventListener('abort', abortRetry, { once: true });
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      signal?.removeEventListener('abort', abortAttempt);
     }
   }
   throw lastError;
@@ -1312,14 +1337,41 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
 }
 
 function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } = {}) {
-  return createShopeeOpenApiV1DiscoveryShadow({
-    env,
-    request: request || (async (operationName, query, variables = {}) => {
-      const response = await callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }));
-      return { status: response?.status || 0, data: response?.data || {} };
-    }),
-    engineOptions: { maxKeywords: 5, maxCategories: 2, includeDelta: false, includeAuxiliary: false },
-  });
+  return async function runShopeeOpenApiV1OfficialDiscovery(input = {}) {
+    const scenarioId = String(input.scenario || 'unknown');
+    const controller = new AbortController();
+    const timeoutMs = Number(env.SHOPEE_OPENAPI_STAGE_TIMEOUT_MS || SHOPEE_OPENAPI_STAGE_TIMEOUT_MS);
+    let rejectStageTimeout;
+    const stageTimeout = new Promise((_, reject) => { rejectStageTimeout = reject; });
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      rejectStageTimeout(Object.assign(new Error(`Timeout Shopee OpenAPI de ${timeoutMs}ms excedido`), { code: 'SHOPEE_OPENAPI_STAGE_TIMEOUT' }));
+    }, timeoutMs);
+    const boundedRequest = (operationName, query, variables = {}) => request
+      ? request(operationName, query, variables, { signal: controller.signal, timeoutMs: SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries: SHOPEE_OPENAPI_MAX_RETRIES })
+      : callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }), { signal: controller.signal });
+    try {
+      const discovery = createShopeeOpenApiV1DiscoveryShadow({
+        env,
+        request: boundedRequest,
+        engineOptions: { maxKeywords: 5, maxCategories: 2, includeDelta: false, includeAuxiliary: false },
+      });
+      return await Promise.race([discovery(input), stageTimeout]);
+    } catch (error) {
+      const timedOut = controller.signal.aborted || error?.code === 'SHOPEE_OPENAPI_ABORTED';
+      console.error(`[Shopee OpenAPI V1] scenario=${scenarioId} status=${timedOut ? 'timeout' : 'failed'} error=${error?.message || String(error)}`);
+      return {
+        engine: 'shopee_openapi_v1', mode: 'official', scenarioId,
+        topCount: 0, rejectedCount: 0, families: 0, shops: 0, imageLinkRate: 0, scoreAvg: 0,
+        decision: timedOut ? 'timeout' : 'failed', top: [],
+        writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 },
+        error: error?.message || String(error),
+      };
+    } finally {
+      clearTimeout(timeoutId);
+      controller.abort();
+    }
+  };
 }
 
 function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env } = {}) {
@@ -1594,6 +1646,11 @@ module.exports = {
   processMonetization,
   buildAffiliateLinkRows,
   createQualityAdmissionRunner,
+  createShopeeOpenApiV1OfficialDiscovery,
+  callShopeeAffiliateApi,
+  SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS,
+  SHOPEE_OPENAPI_MAX_RETRIES,
+  SHOPEE_OPENAPI_STAGE_TIMEOUT_MS,
   mercadoLivreIdentityKey,
   isEquivalentMercadoLivreProduct,
 };
