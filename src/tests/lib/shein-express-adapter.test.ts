@@ -117,4 +117,26 @@ describe("Shein Express Adapter", () => {
       priceSource: "MANUAL_CONFIRMATION",
     });
   });
+
+  it("accepts manual confirmation for an ambiguous OneLink without inventing identity", () => {
+    const result = parseSheinExpressProduct({
+      inputUrl: "https://onelink.shein.com/46/ambiguous",
+      resolvedUrl: "https://onelink.shein.com/46/ambiguous",
+      html: "<title>Oferta SHEIN</title>",
+      manualConfirmation: {
+        title: "Produto confirmado manualmente",
+        price: 25.5,
+        imageUrl: "https://img.ltwebstatic.com/manual.jpg",
+      },
+    });
+
+    expect(result).toMatchObject({
+      canonicalUrl: "https://onelink.shein.com/46/ambiguous",
+      title: "Produto confirmado manualmente",
+      price: 25.5,
+      priceSource: "MANUAL_CONFIRMATION",
+    });
+    expect(result.productId).toBeUndefined();
+    expect(result.sku).toBeUndefined();
+  });
 });

@@ -156,7 +156,6 @@ function uniqueNumbers(values: number[]): number[] {
 export function parseSheinExpressProduct(input: ParseSheinExpressProductInput): SheinExpressProduct {
   const html = input.html || "";
   const identity = resolveIdentity(input.inputUrl, input.resolvedUrl, html);
-  if (!identity) throw new SheinAdapterError("SHEIN_IDENTITY_AMBIGUOUS");
 
   const sourceHtml = input.productHtml || html;
   const structured = readJsonLd(sourceHtml);
@@ -175,8 +174,6 @@ export function parseSheinExpressProduct(input: ParseSheinExpressProductInput): 
   ].filter((value): value is number => value !== null);
   const prices = uniqueNumbers(metadataPrices);
 
-  if (prices.length > 1) throw new SheinAdapterError("SHEIN_PRICE_AMBIGUOUS");
-
   const manual = input.manualConfirmation;
   const manualIsValid = Boolean(
     manual?.title.trim()
@@ -187,15 +184,18 @@ export function parseSheinExpressProduct(input: ParseSheinExpressProductInput): 
 
   if (manual && manualIsValid) {
     return {
-      canonicalUrl: identity.url,
-      productId: identity.productId,
-      sku: identity.sku,
+      canonicalUrl: identity?.url || input.resolvedUrl || input.inputUrl,
+      productId: identity?.productId,
+      sku: identity?.sku,
       title: manual.title.trim(),
       price: manual.price,
       imageUrl: manual.imageUrl.trim(),
       priceSource: "MANUAL_CONFIRMATION",
     };
   }
+
+  if (!identity) throw new SheinAdapterError("SHEIN_IDENTITY_AMBIGUOUS");
+  if (prices.length > 1) throw new SheinAdapterError("SHEIN_PRICE_AMBIGUOUS");
 
   if (prices.length !== 1) throw new SheinAdapterError("SHEIN_PRICE_AMBIGUOUS");
   if (!title.trim() || !imageUrl.trim()) throw new SheinAdapterError("SHEIN_PRICE_AMBIGUOUS");
