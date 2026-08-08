@@ -111,6 +111,22 @@ function cleanProductName(value: string) {
   return cut > 0 ? cleaned.slice(0, cut) : words[0];
 }
 
+function compactProductName(value: string) {
+  const cleaned = cleanProductName(value)
+    .replace(/\bsem\s+fio\s+e\s+com\s+fio\b/iu, "sem fio/com fio")
+    .replace(/\s+\b(?:preto|preta|branco|branca|wireless|joystick)\b/giu, "")
+    .replace(/\s+para\s+computador\b/iu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (/\bcontrole\s+xbox\s+360\b/iu.test(cleaned)) {
+    const mode = cleaned.match(/sem\s+fio\/com\s+fio/iu)?.[0] ?? "";
+    return `Controle Xbox 360${mode ? ` ${mode}` : ""}`;
+  }
+  if (cleaned.length <= 58) return cleaned;
+  const words = cleaned.split(" ");
+  return words.slice(0, 7).join(" ");
+}
+
 const DEFAULT_HOOKS = {
   discount: ["🔥 Economia confirmada de {saving}", "💡 Desconto verificado de {saving}", "✨ Oferta com economia de {saving}"],
   standard: ["✨ Oferta em destaque", "💡 Boa opção para sua rotina", "⭐ Seleção oficial do dia"]
@@ -336,6 +352,7 @@ function validateV3Field(facts: CopyV3Facts, value: string | null | undefined) {
 
 function v3Context(facts: CopyV3Facts) {
   const text = `${facts.category ?? ""} ${facts.productName}`.toLocaleLowerCase("pt-BR");
+  if (/controle|joystick|xbox|playstation|nintendo|game|gamer/iu.test(text)) return "🎮 Para jogar no computador";
   if (/cafeteira|café|cozinha|panela|fritadeira|liquidificador|batedeira|airfryer/iu.test(text)) return "🍳 Para o preparo na cozinha";
   if (/geladeira|lavadora|lava e seca|micro-ondas|cooktop|forno|fogão|ar-condicionado|aspirador|tv|televis/iu.test(text)) return "🏠 Para a rotina da casa";
   if (/ferramenta|furadeira|parafusadeira|chave|serra|oficina/iu.test(text)) return "🛠️ Para reparos e projetos";
@@ -345,10 +362,21 @@ function v3Context(facts: CopyV3Facts) {
   return null;
 }
 
-function v3Hook(facts: CopyV3Facts, fields: CopyV3Fields | undefined, attribute: ReturnType<typeof objectiveAttribute>) {
+function v3DerivedBenefit(facts: CopyV3Facts) {
+  const text = [facts.productName, ...persistedStrings(facts.evidence ?? {})].join(" ");
+  if (/controle|joystick/iu.test(text) && /sem\s+fio/iu.test(text) && /com\s+fio/iu.test(text) && /computador|pc/iu.test(text)) {
+    return "Sem fio ou com fio para usar no computador.";
+  }
+  if (/controle|joystick/iu.test(text) && /computador|pc/iu.test(text)) return "Controle para usar no computador.";
+  return null;
+}
+
+function v3Hook(facts: CopyV3Facts, channel: OfficialAIChannel, fields: CopyV3Fields | undefined, attribute: ReturnType<typeof objectiveAttribute>) {
   const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
   if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate) && !/^(?:oferta em destaque|boa opção para sua rotina|seleção oficial do dia|uma opção para sua rotina)$/iu.test(candidate)) return candidate;
-  const product = cleanProductName(facts.productName);
+  if (channel === "whatsapp" && v3DerivedBenefit(facts)) return "🎮 Jogue no computador com controle sem fio ou com fio";
+  const product = channel === "whatsapp" ? compactProductName(facts.productName) : cleanProductName(facts.productName);
+  if (channel === "whatsapp" && !attribute && !v3Context(facts)) return `💡 Oferta na ${facts.marketplace}`;
   return attribute ? `${attribute.emoji} ${product} com ${attribute.text}` : `✨ ${product}`;
 }
 
@@ -356,13 +384,13 @@ function v3Hook(facts: CopyV3Facts, fields: CopyV3Fields | undefined, attribute:
 export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAIChannel, fields?: CopyV3Fields) {
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const attribute = objectiveAttribute(facts);
-  const benefit = validateV3Field(facts, fields?.benefitLine) ?? (attribute ? `✨ ${attribute.text}.` : null);
+  const benefit = validateV3Field(facts, fields?.benefitLine) ?? v3DerivedBenefit(facts) ?? (attribute ? `✨ ${attribute.text}.` : null);
   const context = validateV3Field(facts, fields?.contextLine) ?? v3Context(facts);
   const marketplace = marketplaceLabel(facts.marketplace);
   const icons = selectOfferIcons(facts.category, facts.productName);
   const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
   const freight = shippingLine(facts);
-  const product = cleanProductName(facts.productName);
+  const product = channel === "whatsapp" ? compactProductName(facts.productName) : cleanProductName(facts.productName);
   const price = discount && facts.originalPrice
     ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
     : facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : "💰 Consulte o preço atual no link!";
@@ -375,9 +403,9 @@ export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAICh
     price
   ];
 
-  if (channel === "instagram") return [v3Hook(facts, fields, attribute), ...commercial, "🔎 Link na bio ou nos Stories para consultar a oferta. 👇", renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
-  if (channel === "facebook") return [v3Hook(facts, fields, attribute), ...commercial, "👉 Link de compra no primeiro comentário! 👇", renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
-  if (channel === "whatsapp") return [v3Hook(facts, fields, attribute), ...commercial, "👉"].join("\n\n");
-  if (channel === "telegram") return [v3Hook(facts, fields, attribute), ...commercial, "👉"].join("\n\n");
-  return [v3Hook(facts, fields, attribute), ...commercial, "🛒 Ver oferta 👇"].join("\n\n");
+  if (channel === "instagram") return [v3Hook(facts, channel, fields, attribute), ...commercial, "🔎 Link na bio ou nos Stories para consultar a oferta. 👇", renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
+  if (channel === "facebook") return [v3Hook(facts, channel, fields, attribute), ...commercial, "👉 Link de compra no primeiro comentário! 👇", renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
+  if (channel === "whatsapp") return [v3Hook(facts, channel, fields, attribute), ...commercial, "👉"].join("\n\n");
+  if (channel === "telegram") return [v3Hook(facts, channel, fields, attribute), ...commercial, "👉"].join("\n\n");
+  return [v3Hook(facts, channel, fields, attribute), ...commercial, "🛒 Ver oferta 👇"].join("\n\n");
 }

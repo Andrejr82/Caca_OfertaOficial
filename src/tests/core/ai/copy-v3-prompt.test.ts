@@ -78,6 +78,43 @@ describe("Official AI Copy V3", () => {
     expect(copy).toContain("R$ 114,63");
   });
 
+  it("não duplica título no WhatsApp e deriva contexto Xbox somente do título", () => {
+    const productName = "Controle Xbox 360 Sem Fio e Com Fio Preto Wireless Joystick Para Computador";
+    const copy = buildCopyV3ChannelCopy({
+      productName,
+      marketplace: "Shopee",
+      category: null,
+      currentPrice: 59.98,
+      originalPrice: 122.99,
+      evidence: {}
+    }, "whatsapp");
+
+    expect(copy).not.toContain(productName + "\n\n🛍️");
+    expect(copy.match(new RegExp(productName, "g")) ?? []).toHaveLength(0);
+    expect(copy).toContain("sem fio/com fio");
+    expect(copy).toContain("Sem fio ou com fio para usar no computador.");
+    expect(copy).toContain("Para jogar no computador");
+    expect(copy).toContain("R$ 59,98");
+    expect(copy).toContain("51% OFF");
+    expect(copy).not.toMatch(/Oferta em destaque|Boa opção para sua rotina|Seleção oficial do dia|Uma opção para sua rotina/iu);
+  });
+
+  it("mantém fallback curto sem repetir o título integral quando faltam evidências", () => {
+    const productName = "Produto simples sem atributos";
+    const copy = buildCopyV3ChannelCopy({
+      productName,
+      marketplace: "Shopee",
+      category: null,
+      currentPrice: 20,
+      originalPrice: null,
+      evidence: {}
+    }, "whatsapp");
+
+    expect(copy.match(new RegExp(productName, "g")) ?? []).toHaveLength(1);
+    expect(copy).toContain("🛍️ Produto simples sem atributos");
+    expect(copy).not.toMatch(/Oferta em destaque|Boa opção para sua rotina|Seleção oficial do dia|Uma opção para sua rotina/iu);
+  });
+
   it("usa a mesma fábrica para geração inicial e regeneração", () => {
     const initial = buildCopyV3ChannelCopy(coffeeMaker, "telegram", {
       hook: "Seu café da manhã pode ficar bem mais prático",
