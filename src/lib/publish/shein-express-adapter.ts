@@ -1,6 +1,7 @@
 import { parseSheinOneLinkHtml } from "./shein-link";
+import { discoverSheinImages, type SheinImageCandidate } from "./shein-image-discovery";
 
-export type SheinAdapterErrorCode = "SHEIN_IDENTITY_AMBIGUOUS" | "SHEIN_PRICE_AMBIGUOUS";
+export type SheinAdapterErrorCode = "SHEIN_IDENTITY_AMBIGUOUS" | "SHEIN_PRICE_AMBIGUOUS" | "SHEIN_IMAGE_AMBIGUOUS";
 
 export interface SheinManualConfirmation {
   title: string;
@@ -32,11 +33,13 @@ export interface ResolveSheinExpressProductInput extends ParseSheinExpressProduc
 
 export class SheinAdapterError extends Error {
   readonly code: SheinAdapterErrorCode;
+  readonly imageCandidates: SheinImageCandidate[];
 
-  constructor(code: SheinAdapterErrorCode) {
+  constructor(code: SheinAdapterErrorCode, imageCandidates: SheinImageCandidate[] = []) {
     super(code);
     this.name = "SheinAdapterError";
     this.code = code;
+    this.imageCandidates = imageCandidates;
   }
 }
 
@@ -133,7 +136,9 @@ function resolveIdentity(inputUrl: string, resolvedUrl: string, html: string): {
 export async function resolveSheinExpressProduct(input: ResolveSheinExpressProductInput): Promise<SheinExpressProduct> {
   let productHtml = input.productHtml;
   const embedded = parseSheinOneLinkHtml(input.html || "");
-  const candidateUrl = embedded?.productUrl || input.resolvedUrl;
+  const candidateUrl = /-p-\d+/i.test(input.resolvedUrl)
+    ? input.resolvedUrl
+    : embedded?.productUrl || input.resolvedUrl;
   if (!productHtml && candidateUrl !== input.resolvedUrl) {
     try {
       const response = await (input.fetcher || fetch)(candidateUrl, {
@@ -146,7 +151,19 @@ export async function resolveSheinExpressProduct(input: ResolveSheinExpressProdu
       // A challenge or network failure is handled by the fail-closed parser/manual path.
     }
   }
-  return parseSheinExpressProduct({ ...input, productHtml });
+  const product = parseSheinExpressProduct({ ...input, productHtml });
+  if (product.priceSource === "AUTOMATIC_METADATA") {
+    const discovery = await discoverSheinImages({
+      canonicalUrl: product.canonicalUrl,
+      productId: product.productId,
+      html: productHtml || input.html || "",
+    });
+    if (discovery.validProductImages.length === 0) {
+      throw new SheinAdapterError("SHEIN_IMAGE_AMBIGUOUS", discovery.candidates);
+    }
+    return { ...product, imageUrl: discovery.validProductImages[0].url };
+  }
+  return product;
 }
 
 function uniqueNumbers(values: number[]): number[] {

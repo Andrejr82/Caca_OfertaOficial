@@ -30,6 +30,7 @@ function parsePrice(value: string): number {
 }
 
 function isHttpUrl(value: string): boolean {
+  if (/^data:image\/(?:avif|gif|jpe?g|png|webp);base64,/i.test(value.trim())) return true;
   try {
     const url = new URL(value.trim());
     return url.protocol === "http:" || url.protocol === "https:";

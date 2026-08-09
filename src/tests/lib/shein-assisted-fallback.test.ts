@@ -60,4 +60,12 @@ describe("Shein assisted fallback", () => {
       imageUrl: valid.imageUrl,
     });
   });
+
+  it("accepts a bounded local image upload as the explicit image confirmation", () => {
+    const result = validateSheinAssistedConfirmation({
+      ...valid,
+      imageUrl: "data:image/png;base64,ZmFrZQ==",
+    });
+    expect(result.ok).toBe(true);
+  });
 });

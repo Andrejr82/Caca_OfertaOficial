@@ -123,9 +123,13 @@ function validatePrice(price: number | undefined): boolean {
   return true;
 }
 
-function validateImage(imageUrl: string | undefined, marketplace: string): boolean {
+function validateImage(imageUrl: string | undefined, marketplace: string, manualConfirmation = false): boolean {
   if (!imageUrl?.trim()) return false;
   const url = imageUrl.trim();
+
+  if (marketplace === "Shein" && manualConfirmation && /^data:image\/(?:avif|gif|jpe?g|png|webp);base64,/i.test(url)) {
+    return url.length <= 2_800_000;
+  }
 
   // Deve ser http ou https
   if (!url.startsWith("http://") && !url.startsWith("https://")) return false;
@@ -178,7 +182,7 @@ export function validateExpressProduct(input: ExpressProductInput): ExpressValid
   const identityConfirmed = validateIdentity(input);
   const nameConfirmed = validateName(input.title ?? "");
   const priceConfirmed = validatePrice(input.price);
-  const imageConfirmed = validateImage(input.imageUrl, input.marketplace);
+  const imageConfirmed = validateImage(input.imageUrl, input.marketplace, input.manualConfirmation === true);
 
   // Prioridade dos erros: identidade > nome > preço > imagem
   let errorCode: ExpressValidationResult["errorCode"];

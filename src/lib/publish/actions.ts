@@ -19,6 +19,7 @@ import { buildExpressAffiliateLinks, isAmazonAffiliateInput, isShopeeAffiliateIn
 import { chooseMLExtractionUrl } from "@/lib/publish/ml-extraction-url";
 import { deriveShopeeKeyword, selectShopeeIdentity } from "@/lib/publish/shopee-identity";
 import { resolveSheinExpressProduct, SheinAdapterError, type SheinManualConfirmation } from "@/lib/publish/shein-express-adapter";
+import { discoverSheinImages, extractSheinProductId, type SheinImageCandidate } from "@/lib/publish/shein-image-discovery";
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
 
@@ -31,6 +32,11 @@ interface QuickPostResult {
   affiliateUrl?: string;
   copy?: string;
   copies?: { telegram: string; whatsapp: string; instagram: string; facebook: string };
+  assisted?: {
+    canonicalUrl: string;
+    productId?: string;
+    imageCandidates: SheinImageCandidate[];
+  };
 }
 
 // ─── Telemetria (sem dados sensíveis) ────────────────────────────────────────
@@ -457,6 +463,53 @@ export async function readSheinMetadata(resolvedUrl: string, htmlBody?: string):
 
 // ─── Leitura de metadados genérico para Amazon ───────────────────────────────
 
+/** Read-only image discovery for the assisted SHEIN form. */
+export async function discoverSheinImagesAction(
+  originalUrl: string,
+  canonicalUrl = "",
+): Promise<{
+  ok: boolean;
+  canonicalUrl: string;
+  productId?: string;
+  imageCandidates: SheinImageCandidate[];
+  message?: string;
+}> {
+  const resolved = await resolveMarketplaceUrl(originalUrl, { maxRedirects: 10, timeoutMs: 15_000 });
+  if (resolved.errorCode && !canonicalUrl.trim()) {
+    return { ok: false, canonicalUrl: resolved.resolvedUrl, imageCandidates: [], message: "Não foi possível resolver o link SHEIN." };
+  }
+
+  const targetUrl = canonicalUrl.trim() || resolved.resolvedUrl;
+  let parsedTarget: URL;
+  try {
+    parsedTarget = new URL(targetUrl);
+  } catch {
+    return { ok: false, canonicalUrl: targetUrl, imageCandidates: [], message: "URL canônica inválida." };
+  }
+  const host = parsedTarget.hostname.toLowerCase().replace(/^www\./, "");
+  if (!(host === "shein.com" || host.endsWith(".shein.com"))) {
+    return { ok: false, canonicalUrl: targetUrl, imageCandidates: [], message: "A URL canônica precisa pertencer à SHEIN." };
+  }
+
+  let html = targetUrl === resolved.resolvedUrl ? resolved.htmlBody || "" : "";
+  if (!html) {
+    try {
+      const response = await fetch(targetUrl, {
+        redirect: "follow",
+        headers: { Accept: "text/html,application/xhtml+xml" },
+        signal: AbortSignal.timeout(12_000),
+      });
+      if (response.ok) html = await response.text();
+    } catch {
+      html = "";
+    }
+  }
+
+  const productId = extractSheinProductId(targetUrl);
+  const discovery = await discoverSheinImages({ canonicalUrl: targetUrl, productId, html });
+  return { ok: true, canonicalUrl: targetUrl, productId, imageCandidates: discovery.validProductImages };
+}
+
 export async function readAmazonMetadata(resolvedUrl: string, htmlBody?: string): Promise<{
   title: string;
   imageUrl: string;
@@ -513,6 +566,7 @@ async function generateQuickPostActionInternal(
   requestId = crypto.randomUUID(),
   diagnostics?: { stage: string },
   sheinManualConfirmation?: SheinManualConfirmation,
+  sheinCanonicalUrl?: string,
 ): Promise<QuickPostResult> {
   const inputUrl = affiliateUrl.trim();
   const operationId = requestId;
@@ -779,10 +833,11 @@ async function generateQuickPostActionInternal(
 
     log("[Express Parse Start]", { requestId: operationId, marketplace: "Shein" });
     let sheinData;
+    const sheinSourceUrl = sheinCanonicalUrl?.trim() || resolvedUrl;
     try {
       sheinData = await resolveSheinExpressProduct({
         inputUrl,
-        resolvedUrl,
+        resolvedUrl: sheinSourceUrl,
         html: resolved.htmlBody,
         manualConfirmation: sheinManualConfirmation,
       });
@@ -790,9 +845,29 @@ async function generateQuickPostActionInternal(
       const errorCode = error instanceof SheinAdapterError ? error.code : "SHEIN_PRICE_AMBIGUOUS";
       const message = errorCode === "SHEIN_IDENTITY_AMBIGUOUS"
         ? "A identidade do produto SHEIN não pôde ser confirmada. Use um link canônico de produto."
-        : "O preço SHEIN não pôde ser confirmado automaticamente. Solicite confirmação manual.";
+        : errorCode === "SHEIN_IMAGE_AMBIGUOUS"
+          ? "A imagem SHEIN não pôde ser confirmada automaticamente. Escolha uma imagem ou informe uma URL manual."
+          : "O preço SHEIN não pôde ser confirmado automaticamente. Solicite confirmação manual.";
       log("[Express Link Error]", { requestId: operationId, errorCode, stage: "marketplace_provider" });
-      return { ok: false, status: errorCode, message };
+      let imageCandidates = error instanceof SheinAdapterError ? error.imageCandidates : [];
+      if (imageCandidates.length === 0) {
+        const discovery = await discoverSheinImages({
+          canonicalUrl: sheinSourceUrl,
+          productId: extractSheinProductId(sheinCanonicalUrl?.trim() || resolvedUrl),
+          html: resolved.htmlBody || "",
+        });
+        imageCandidates = discovery.validProductImages;
+      }
+      return {
+        ok: false,
+        status: errorCode,
+        message,
+        assisted: {
+          canonicalUrl: sheinSourceUrl,
+          productId: extractSheinProductId(sheinCanonicalUrl?.trim() || resolvedUrl),
+          imageCandidates,
+        },
+      };
     }
     title = sheinData.title;
     imageUrl = sheinData.imageUrl;
@@ -1033,12 +1108,12 @@ async function generateQuickPostActionInternal(
 export async function generateQuickPostAction(
   affiliateUrl: string,
   channel: Channel | "omnichannel",
-  options?: { sheinManualConfirmation?: SheinManualConfirmation },
+  options?: { sheinManualConfirmation?: SheinManualConfirmation; sheinCanonicalUrl?: string },
 ): Promise<QuickPostResult> {
   const requestId = crypto.randomUUID();
   const diagnostics = { stage: "start" };
   try {
-    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics, options?.sheinManualConfirmation);
+    return await generateQuickPostActionInternal(affiliateUrl, channel, requestId, diagnostics, options?.sheinManualConfirmation, options?.sheinCanonicalUrl);
   } catch (error) {
     const message = error instanceof Error ? error.message : "unknown error";
     log("[Express Unhandled Error]", {

@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import Image from "next/image";
-import { generateQuickPostAction, publishToTelegramAction, publishToInstagramAction, publishToWhatsAppAction } from "@/lib/publish/actions";
+import { discoverSheinImagesAction, generateQuickPostAction, publishToTelegramAction, publishToInstagramAction, publishToWhatsAppAction } from "@/lib/publish/actions";
 import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
 import { channels, type Channel } from "@/types/domain";
 import {
@@ -10,6 +10,7 @@ import {
   validateSheinAssistedConfirmation,
   type SheinAssistedFormValue,
 } from "@/lib/publish/shein-assisted-fallback";
+import type { SheinImageCandidate } from "@/lib/publish/shein-image-discovery";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select } from "@/components/ui/field";
@@ -37,6 +38,8 @@ interface PreparedPost {
 
 interface SheinAssistedRequest extends SheinAssistedFormValue {
   id: string;
+  canonicalUrl: string;
+  imageCandidates: SheinImageCandidate[];
   error: string;
   submitting: boolean;
   message: string;
@@ -155,9 +158,11 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
             assisted.push({
               id: `shein-assisted-${Date.now()}-${index}`,
               originalUrl: links[index],
+              canonicalUrl: res.assisted?.canonicalUrl || links[index],
               title: "",
               price: "",
-              imageUrl: "",
+              imageUrl: res.assisted?.imageCandidates[0]?.url || "",
+              imageCandidates: res.assisted?.imageCandidates || [],
               error: res.message,
               submitting: false,
               message: "",
@@ -182,7 +187,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
     if (validPosts.length > 0) setLinksInput("");
   }
 
-  function updateSheinAssistedRequest(id: string, field: keyof SheinAssistedFormValue, value: string) {
+  function updateSheinAssistedRequest(id: string, field: keyof Pick<SheinAssistedRequest, "originalUrl" | "canonicalUrl" | "title" | "price" | "imageUrl">, value: string) {
     setSheinAssistedRequests((prev) => prev.map((request) => (
       request.id === id ? { ...request, [field]: value, message: "" } : request
     )));
@@ -209,6 +214,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
           price: payload.price,
           imageUrl: payload.imageUrl,
         },
+        sheinCanonicalUrl: request.canonicalUrl,
       });
       const prepared = preparedPostFromResult(request.originalUrl, result, posts.length);
       if (!prepared) {
@@ -228,6 +234,29 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
       setSheinAssistedRequests((prev) => prev.map((item) => (
         item.id === request.id ? { ...item, submitting: false, message: error instanceof Error ? error.message : "Erro ao confirmar SHEIN." } : item
       )));
+    }
+  }
+
+  async function discoverImagesForSheinRequest(request: SheinAssistedRequest) {
+    setSheinAssistedRequests((prev) => prev.map((item) => (
+      item.id === request.id ? { ...item, submitting: true, message: "Buscando imagens vinculadas ao produto..." } : item
+    )));
+    try {
+      const result = await discoverSheinImagesAction(request.originalUrl, request.canonicalUrl);
+      setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? {
+        ...item,
+        canonicalUrl: result.canonicalUrl,
+        imageCandidates: result.imageCandidates,
+        imageUrl: result.imageCandidates[0]?.url || item.imageUrl,
+        submitting: false,
+        message: result.imageCandidates.length ? "Imagem vinculada encontrada. Confirme os dados." : (result.message || "Nenhuma imagem vinculada encontrada; informe uma URL manual."),
+      } : item));
+    } catch (error) {
+      setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? {
+        ...item,
+        submitting: false,
+        message: error instanceof Error ? error.message : "Falha na descoberta de imagem.",
+      } : item));
     }
   }
 
@@ -447,6 +476,16 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                       <label className="text-xs text-white/50">URL original</label>
                       <input value={request.originalUrl} readOnly className="glass-input mt-1 w-full rounded-lg p-2.5 text-xs font-mono text-white/60" />
                     </div>
+                    <div className="md:col-span-2">
+                      <label className="text-xs text-white/70">URL canônica SHEIN (opcional)</label>
+                      <input
+                        value={request.canonicalUrl}
+                        onChange={(e) => updateSheinAssistedRequest(request.id, "canonicalUrl", e.target.value)}
+                        placeholder="Cole a URL com -p-<productId> para buscar a galeria"
+                        className="glass-input mt-1 w-full rounded-lg p-2.5 text-xs font-mono"
+                        disabled={request.submitting}
+                      />
+                    </div>
                     <div>
                       <label className="text-xs text-white/70">Título confirmado *</label>
                       <input
@@ -478,8 +517,56 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                         className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm"
                         disabled={request.submitting}
                       />
+                      <div className="mt-2 flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-xs h-7 px-3"
+                          disabled={request.submitting}
+                          onClick={() => void discoverImagesForSheinRequest(request)}
+                        >
+                          <ImageIcon size={12} /> Buscar galeria automaticamente
+                        </Button>
+                        <label className="text-xs text-white/50 cursor-pointer">
+                          ou upload manual
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            disabled={request.submitting}
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (!file) return;
+                              if (file.size > 2_000_000) {
+                                updateSheinAssistedRequest(request.id, "imageUrl", "");
+                                setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, message: "A imagem local deve ter até 2 MB." } : item));
+                                return;
+                              }
+                              const reader = new FileReader();
+                              reader.onload = () => updateSheinAssistedRequest(request.id, "imageUrl", String(reader.result || ""));
+                              reader.readAsDataURL(file);
+                            }}
+                          />
+                        </label>
+                      </div>
                     </div>
                   </div>
+
+                  {request.imageCandidates.length > 0 && (
+                    <div className="flex gap-2 overflow-x-auto py-1">
+                      {request.imageCandidates.map((candidate) => (
+                        <button
+                          type="button"
+                          key={candidate.url}
+                          onClick={() => updateSheinAssistedRequest(request.id, "imageUrl", candidate.url)}
+                          className={`h-16 w-16 flex-shrink-0 rounded border overflow-hidden ${request.imageUrl === candidate.url ? "border-amber-400" : "border-white/10"}`}
+                          title={`Selecionar imagem (${candidate.source})`}
+                        >
+                          <img src={candidate.url} alt="Candidata SHEIN" className="h-full w-full object-cover" />
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {!validation.ok && (
                     <p className="text-xs text-red-300">Preencha título, preço positivo e uma URL de imagem HTTP(S).</p>
