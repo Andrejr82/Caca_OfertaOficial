@@ -24,6 +24,8 @@ export type TelegramEditorialSelection = {
     amazonSelected: number;
     mercadoLivreSelected: number;
     staleCohortsIgnored: number;
+    loadedRows: number;
+    eligibleDraftOffers: number;
   };
 };
 
@@ -94,6 +96,8 @@ export function selectEditorialTop30TelegramSelection(rows: readonly TelegramEdi
       amazonSelected: nonShopeeIds.filter((id) => cohortOffers.some((offer) => offer.id === id && offer.platform === "Amazon")).length,
       mercadoLivreSelected: nonShopeeIds.filter((id) => cohortOffers.some((offer) => offer.id === id && offer.platform === "Mercado Livre")).length,
       staleCohortsIgnored: Math.max(0, orderedCohorts.length - 1),
+      loadedRows: rows.length,
+      eligibleDraftOffers: eligibleOffers.length,
     },
   };
 }

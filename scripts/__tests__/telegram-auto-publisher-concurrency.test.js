@@ -1,7 +1,7 @@
 'use strict';
 
 import { describe, expect, it } from 'vitest';
-const { createTelegramPublisher, telegramIdempotencyKey } = require('../telegram-auto-publisher.cjs');
+const { createTelegramPublisher, telegramIdempotencyKey, assertDryRunSafe } = require('../telegram-auto-publisher.cjs');
 
 function createFakeSupabase() {
   const state = {
@@ -49,6 +49,24 @@ class FakeQuery {
 }
 
 describe('Telegram Oracle publisher concurrency', () => {
+  it('bloqueia send e qualquer mutação quando DRY_RUN está ativo', () => {
+    expect(() => assertDryRunSafe(true, 'telegram_send')).toThrow('DRY_RUN_MUTATION_BLOCKED:telegram_send');
+    expect(() => assertDryRunSafe(true, 'claim')).toThrow('DRY_RUN_MUTATION_BLOCKED:claim');
+    expect(() => assertDryRunSafe(true, 'status_update')).toThrow('DRY_RUN_MUTATION_BLOCKED:status_update');
+    expect(() => assertDryRunSafe(false, 'telegram_send')).not.toThrow();
+  });
+
+  it('dry-run retorna pré-processamento sem chamar send ou update', async () => {
+    const supabase = createFakeSupabase();
+    const sends = [];
+    const worker = createTelegramPublisher({ dryRun: true, supabase, sendPhoto: async () => { sends.push(true); throw new Error('send must not run'); }, sleep: async () => {} });
+    const result = await worker.processQueue({ selectedEditorialTop30OfferIds: ['offer-1', 'missing-offer'] });
+    expect(result).toMatchObject({ result: 'dry_run', publisherInputCount: 2, publisherAcceptedCount: 1, publisherSkippedCount: 1 });
+    expect(result.publisherSkips).toEqual([{ offer_id: 'missing-offer', reason: 'no_eligible_draft_for_selected_offer' }]);
+    expect(sends).toHaveLength(0);
+    expect(supabase.state.posts[0].status).toBe('draft');
+  });
+
   it('fails closed when no editorial Top30 selection is supplied', async () => {
     const supabase = createFakeSupabase();
     const sends = [];

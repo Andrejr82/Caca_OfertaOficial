@@ -66,6 +66,10 @@ function telegramIdempotencyKey(postId) {
   return `telegram:post:${postId}`;
 }
 
+function assertDryRunSafe(dryRun, operation) {
+  if (dryRun) throw new Error(`DRY_RUN_MUTATION_BLOCKED:${operation}`);
+}
+
 function createTelegramPublisher(options = {}) {
   const database = options.supabase || supabase;
   const sendPhoto = options.sendPhoto || sendTelegramPhoto;
@@ -73,6 +77,7 @@ function createTelegramPublisher(options = {}) {
   const now = options.now || (() => new Date().toISOString());
   const sleep = options.sleep || ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
   const pid = options.pid || process.pid;
+  const dryRun = options.dryRun === true || process.env.DRY_RUN === 'true';
   let cycleInFlight = false;
 
   function log(level, entry) {
@@ -81,6 +86,7 @@ function createTelegramPublisher(options = {}) {
   }
 
   async function claimPost(post) {
+    assertDryRunSafe(dryRun, 'claim');
     const idempotencyKey = telegramIdempotencyKey(post.id);
     const { data, error } = await database
       .from('posts')
@@ -101,6 +107,7 @@ function createTelegramPublisher(options = {}) {
   }
 
   async function markPublished(post, idempotencyKey, externalId) {
+    assertDryRunSafe(dryRun, 'status_update');
     return database
       .from('posts')
       .update({
@@ -117,6 +124,7 @@ function createTelegramPublisher(options = {}) {
   }
 
   async function markFailed(post, idempotencyKey, message) {
+    assertDryRunSafe(dryRun, 'error_update');
     return database
       .from('posts')
       .update({ publishing_error: message })
@@ -175,7 +183,7 @@ function createTelegramPublisher(options = {}) {
 
       const { data: posts, error } = await database
         .from('posts')
-        .select('id, offer_id, content, channel, status, offers(image_url, product_name, notes, explainability)')
+        .select('id, offer_id, content, channel, status, created_at, offers(image_url, product_name, notes, explainability, platform, category, category_name)')
         .eq('status', 'draft')
         .eq('channel', 'telegram')
         .in('offer_id', selectedOfferIds)
@@ -187,6 +195,28 @@ function createTelegramPublisher(options = {}) {
       if (!uniquePosts.length) {
         log('log', { event: 'poll_completed', result: 'empty' });
         return { result: 'empty' };
+      }
+
+      if (dryRun) {
+        const acceptedIds = new Set(uniquePosts.map((post) => post.offer_id));
+        const skipped = selectedOfferIds
+          .filter((offerId) => !acceptedIds.has(offerId))
+          .map((offerId) => ({ offer_id: offerId, reason: 'no_eligible_draft_for_selected_offer' }));
+        return {
+          result: 'dry_run',
+          publisherInputCount: selectedOfferIds.length,
+          publisherAcceptedCount: uniquePosts.length,
+          publisherSkippedCount: skipped.length,
+          publisherSkips: skipped,
+          acceptedPosts: uniquePosts.map((post) => ({
+            post_id: post.id,
+            offer_id: post.offer_id,
+            platform: post.offers?.platform || null,
+            category: post.offers?.category || post.offers?.category_name || null,
+            created_at: post.created_at || null,
+            status: post.status,
+          })),
+        };
       }
 
       for (const post of uniquePosts) {
@@ -213,6 +243,7 @@ function createTelegramPublisher(options = {}) {
 
         try {
           log('log', { event: 'publication_started', post_id: post.id, offer_id: post.offer_id, idempotency_key: idempotencyKey, result: 'claimed' });
+          assertDryRunSafe(dryRun, 'telegram_send');
           const telegramResult = await sendPhoto(claimedPost.content || '', mediaUrl, {
             postId: post.id,
             offerId: post.offer_id,
@@ -282,5 +313,6 @@ module.exports = {
   startTelegramAutomation,
   stopTelegramAutomation,
   processTelegramQueue,
-  sendTelegramPhoto
+  sendTelegramPhoto,
+  assertDryRunSafe
 };
