@@ -119,7 +119,15 @@ async function defaultValidateImage(url: string): Promise<boolean> {
 }
 
 export async function discoverSheinImages(input: SheinImageDiscoveryInput): Promise<SheinImageDiscoveryResult> {
-  const raw = extractCandidates(input.html);
+  const sourcePriority: Record<SheinImageSource, number> = {
+    "og:image": 0,
+    "twitter:image": 1,
+    "json-ld": 2,
+    "picture/source/srcset": 3,
+    "img/src/srcset": 4,
+    "embedded-state": 5,
+  };
+  const raw = extractCandidates(input.html).sort((a, b) => sourcePriority[a.source] - sourcePriority[b.source]);
   const canonicalProductId = extractSheinProductId(input.canonicalUrl);
   const linkedToProduct = Boolean(input.productId && canonicalProductId === input.productId);
   const candidates: SheinImageCandidate[] = [];
@@ -135,7 +143,9 @@ export async function discoverSheinImages(input: SheinImageDiscoveryInput): Prom
       rejectedAssets.push(item.url);
       continue;
     }
-    candidates.push({ ...item, linkedToProduct });
+    const embeddedIdentityEvidence = item.source !== "embedded-state"
+      || Boolean(input.productId && new RegExp(`${input.productId}.{0,1200}${item.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "is").test(input.html));
+    candidates.push({ ...item, linkedToProduct: linkedToProduct && embeddedIdentityEvidence });
   }
 
   const validateImage = input.validateImage || defaultValidateImage;
