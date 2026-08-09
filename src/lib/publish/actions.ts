@@ -613,6 +613,7 @@ async function generateQuickPostActionInternal(
   let imageUrl = "";
   let price = 0;
   let couponText: string | null = null;
+  let discountPercent: number | null = null;
   let resolvedUrl = inputUrl;
   let canonicalUrl = inputUrl;
   let itemId: string | undefined;
@@ -874,6 +875,7 @@ async function generateQuickPostActionInternal(
     imageUrl = sheinData.imageUrl;
     price = sheinData.price;
     couponText = sheinManualConfirmation?.couponText?.trim() || null;
+    discountPercent = sheinManualConfirmation?.discountPercent ?? null;
     canonicalUrl = sheinData.canonicalUrl;
     itemId = sheinData.productId || sheinData.sku;
     sheinManualConfirmed = sheinData.priceSource === "MANUAL_CONFIRMATION";
@@ -1003,6 +1005,7 @@ async function generateQuickPostActionInternal(
         marketplace_metrics: {
           extracted_at: new Date().toISOString(),
           comparison: "not_applicable",
+          ...(platform === "Shein" && discountPercent !== null ? { discount: discountPercent } : {}),
         },
       },
     })

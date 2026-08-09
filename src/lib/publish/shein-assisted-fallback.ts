@@ -8,6 +8,7 @@ export interface SheinAssistedFormValue {
   price: string;
   imageUrl: string;
   couponText?: string;
+  discountPercent?: number;
 }
 
 export interface SheinAssistedPayload extends SheinManualConfirmation {
@@ -53,7 +54,13 @@ export function validateSheinAssistedConfirmation(value: SheinAssistedFormValue)
 
   if (errors.length > 0) return { ok: false, errors };
   const couponText = value.couponText?.trim();
-  return { ok: true, confirmation: couponText ? { title, price, imageUrl, couponText } : { title, price, imageUrl } };
+  const discountPercent = typeof value.discountPercent === "number" && value.discountPercent >= 0
+    ? value.discountPercent
+    : undefined;
+  return {
+    ok: true,
+    confirmation: { title, price, imageUrl, ...(couponText ? { couponText } : {}), ...(discountPercent !== undefined ? { discountPercent } : {}) },
+  };
 }
 
 export function buildSheinAssistedPayload(

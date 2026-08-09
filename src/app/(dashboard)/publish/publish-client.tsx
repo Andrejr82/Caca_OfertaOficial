@@ -44,6 +44,7 @@ interface SheinAssistedRequest extends SheinAssistedFormValue {
   imageCandidates: SheinImageCandidate[];
   captureJson: string;
   couponText: string;
+  discountPercent?: number;
   error: string;
   submitting: boolean;
   message: string;
@@ -136,6 +137,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
         imageCandidates,
         captureJson: "",
         couponText: sharedText.couponText || "",
+        discountPercent: sharedText.discountPercent,
         error: message,
         submitting: false,
         message: sharedText.discountPercent ? `Desconto informado: ${sharedText.discountPercent}%` : "",
@@ -257,6 +259,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
           price: payload.price,
           imageUrl: payload.imageUrl,
           couponText: payload.couponText,
+          discountPercent: request.discountPercent,
         },
         sheinCanonicalUrl: request.canonicalUrl,
       });
@@ -623,6 +626,12 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                         disabled={request.submitting}
                       />
                     </div>
+                    {request.discountPercent !== undefined && (
+                      <div className="md:col-span-2">
+                        <label className="text-xs text-white/70">Desconto informado</label>
+                        <input value={`${request.discountPercent}%`} readOnly className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm text-white/60" />
+                      </div>
+                    )}
                     <div className="md:col-span-2">
                       <label className="text-xs text-white/70">Imagem confirmada (URL) *</label>
                       <input

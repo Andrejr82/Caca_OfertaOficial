@@ -8,6 +8,7 @@ export interface SheinManualConfirmation {
   price: number;
   imageUrl: string;
   couponText?: string;
+  discountPercent?: number;
 }
 
 export interface SheinExpressProduct {
