@@ -149,3 +149,36 @@ test('copy permanece comercial e normal enquanto TTS recebe texto falável', () 
   assert.match(ttsText, /Acesse o link na publicação\.$/u);
   assert.doesNotMatch(ttsText, /27"|180Hz/u);
 });
+
+test('fallback preserva identidade curta do Mixer com e sem marca', () => {
+  const withBrand = 'Mixer 3 Em 1 Power Inox Elgin 1000w MIX3X Triturador Inox Shopee Brasil';
+  const withoutBrand = 'Mixer 3 Em 1 Power Inox 1000w MIX3X Triturador Inox';
+
+  for (const title of [withBrand, withoutBrand]) {
+    const copy = buildFallbackDubbingScript(title, 15);
+    assert.match(copy, /Mixer/iu);
+    assert.match(copy, /(?:3 em 1|três em um)/iu);
+    assert.match(copy, /Acesse o link na publicação\.$/u);
+  }
+});
+
+test('sanitização usa fallback quando Mixer não tem identidade mínima', () => {
+  const title = 'Mixer 3 Em 1 Power Inox Elgin 1000w MIX3X Triturador Inox Shopee Brasil';
+  const unsafe = 'Olha essa opção para a cozinha. Você encontra na Shopee. Acesse o link na publicação.';
+  const copy = sanitizeDubbingScript(unsafe, title, 15);
+
+  assert.match(copy, /Mixer/iu);
+  assert.match(copy, /(?:3 em 1|três em um)/iu);
+  assert.doesNotMatch(copy, /MIX3X|1000w|Shopee Brasil/iu);
+});
+
+test('Shopee permanece na copy e vira Chopí somente no TTS', () => {
+  const copy = 'Você encontra na Shopee. Acesse o link na publicação.';
+  const ttsText = normalizeSpeechForTTS(copy);
+
+  assert.match(copy, /Shopee/u);
+  assert.doesNotMatch(copy, /Chopí/u);
+  assert.match(ttsText, /Chopí/u);
+  assert.doesNotMatch(ttsText, /Shopee/u);
+  assert.match(ttsText, /Acesse o link na publicação\.$/u);
+});

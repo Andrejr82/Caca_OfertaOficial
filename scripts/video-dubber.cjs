@@ -115,6 +115,7 @@ function normalizeSpeechForTTS(text) {
     .replace(/\b(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g, '')
     .replace(/[\/|]/gu, ' e ')
     .replace(/[()]/gu, '')
+    .replace(/\bShopee\b/giu, 'Chopí')
     .replace(/\s+/gu, ' ')
     .trim();
 }
@@ -128,6 +129,7 @@ function extractDubbingFacts(title) {
   const normalized = normalizeDubbingTitle(title);
   const lower = normalized.toLowerCase();
   const category = [
+    ['mixer', 'um mixer', 'preparar e triturar alimentos', 'deixar o preparo mais prático'],
     ['potes', 'um conjunto de potes de vidro herméticos', 'organizar e armazenar alimentos', 'deixar os alimentos visíveis e a cozinha mais organizada'],
     ['tênis', 'um tênis casual', 'compor produções do dia a dia', 'combinar com diferentes looks casuais'],
     ['camisetas', 'um kit de camisetas', 'montar opções para o dia a dia', 'ter peças básicas para variar as combinações'],
@@ -139,7 +141,11 @@ function extractDubbingFacts(title) {
   ].find(([key]) => lower.includes(key)) || ['produto', 'um produto', 'resolver uma tarefa do dia a dia', 'ter uma opção prática para essa tarefa'];
 
   let features = [];
-  if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
+  if (/\bmixer\b/iu.test(normalized)) {
+    const combination = normalized.match(/\b(\d+)\s+em\s+1\b/iu)?.[0];
+    features = [combination, /inox/iu.test(normalized) ? 'inox' : null].filter(Boolean);
+  }
+  else if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
     const quantityMatch = normalized.match(/\b(\d+)\s+potes?/iu);
     const quantity = quantityMatch ? `${numberWord(quantityMatch[1], false)} ` : '';
     features = [`${quantity}potes de vidro herméticos${/bambu/iu.test(normalized) ? ' com tampa de bambu' : ''}`];
@@ -163,7 +169,10 @@ function extractDubbingFacts(title) {
     features = terms.filter((term) => new RegExp(`\\b${term.replace(' ', '\\s+')}\\b`, 'iu').test(normalized));
   }
 
-  return { key: category[0], category: category[1], useCase: category[2], benefit: category[3], features: features.slice(0, 3) };
+  const categoryName = category[0] === 'mixer'
+    ? `${category[1]}${features[0] ? ` ${features[0]}` : ''}`
+    : category[1];
+  return { key: category[0], category: categoryName, useCase: category[2], benefit: category[3], features: features.slice(0, 3) };
 }
 
 function buildFallbackDubbingScript(title, durationSecs = 15) {
@@ -198,6 +207,13 @@ ESTRUTURA:
 4. Um benefício concreto e seguro, sem extrapolar os fatos.
 5. CTA final claro: Você encontra na Shopee. Acesse o link na publicação.
 
+IDENTIDADE DO PRODUTO:
+- Mencione exatamente uma identificação curta, natural e factual do produto.
+- A identificação deve começar pelo tipo ou nome principal do produto.
+- Inclua uma característica distintiva curta quando existir e for útil.
+- Marca é opcional e nunca substitui o tipo do produto.
+- Não use SKU, código, potência ou marketplace como identidade.
+
 REGRAS DE ESTILO:
 - Frases curtas, fluidas e naturais para TTS.
 - Escreva para fala, não para leitura de catálogo: uma ideia ou especificação por frase.
@@ -228,6 +244,14 @@ function hasUnsupportedSpecificFact(script, title) {
   return SPECIFIC_DUBBING_FACTS.some((fact) => output.includes(fact) && !source.includes(fact));
 }
 
+function hasProductIdentity(script, title) {
+  const facts = extractDubbingFacts(title);
+  const output = String(script || '').toLowerCase();
+  if (facts.key !== 'produto') return output.includes(facts.key.toLowerCase());
+  const firstProductWord = normalizeDubbingTitle(title).match(/[A-Za-zÀ-ÿ]{4,}/u)?.[0];
+  return Boolean(firstProductWord && output.includes(firstProductWord.toLowerCase()));
+}
+
 function repeatsProductName(script, title) {
   const category = extractDubbingFacts(title).category.toLowerCase();
   return category.length > 3 && String(script || '').toLowerCase().split(category).length - 1 > 1;
@@ -240,6 +264,7 @@ function sanitizeDubbingScript(script, title, durationSecs = 15) {
     .replace(/\s+([,.!?])/gu, '$1')
     .trim();
   const safe = isSafeDubbingScript(cleaned)
+    && hasProductIdentity(cleaned, title)
     && !hasUnsupportedSpecificFact(cleaned, title)
     && !repeatsProductName(cleaned, title);
   return safe ? cleaned : buildFallbackDubbingScript(title, durationSecs);
