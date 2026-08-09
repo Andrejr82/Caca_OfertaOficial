@@ -11,6 +11,7 @@ type FixturePost = {
   deleted_at?: string | null;
   offers: {
     id: string;
+    platform: string;
     status: string;
     created_at: string;
     explainability?: Record<string, unknown>;
@@ -27,6 +28,7 @@ function post(index: number, overrides: Partial<FixturePost["offers"]> = {}): Fi
     external_id: null,
     offers: {
       id: `offer-${index}`,
+      platform: "Amazon",
       status: "pending_manual_review",
       created_at: "2026-08-08T12:00:00.000Z",
       ...overrides,
@@ -35,7 +37,7 @@ function post(index: number, overrides: Partial<FixturePost["offers"]> = {}): Fi
 }
 
 describe("panel draft selection", () => {
-  it("exibe 30 editoriais selecionados mais 1 manual express fora do Top30", () => {
+  it("exibe todos os editoriais atuais mais 1 manual express fora do Top30 operacional", () => {
     const editorial = Array.from({ length: 582 }, (_, index) => post(index));
     const manual = post(999, {
       created_at: "2026-07-01T12:00:00.000Z",
@@ -49,8 +51,9 @@ describe("panel draft selection", () => {
       new Date("2026-08-08T03:00:00.000Z"),
     );
 
-    expect(visible).toHaveLength(31);
+    expect(visible).toHaveLength(583);
     expect(visible.filter((item) => editorialTop30.has(item.offer_id))).toHaveLength(30);
+    expect(visible.filter((item) => !editorialTop30.has(item.offer_id))).toHaveLength(553);
     expect(visible.filter((item) => item.offer_id === "offer-999")).toHaveLength(1);
   });
 
@@ -75,5 +78,43 @@ describe("panel draft selection", () => {
     const duplicate = { ...post(1), id: "post-1-duplicate" };
 
     expect(mergePanelDrafts([first, duplicate], new Set(["offer-1"]), new Date("2026-08-08T03:00:00.000Z"))).toHaveLength(1);
+  });
+
+  it("mantém os 15 drafts editoriais válidos quando activeOfferIds contém apenas 3", () => {
+    const drafts = [
+      ...Array.from({ length: 10 }, (_, index) => post(index, { platform: "Amazon" })),
+      ...Array.from({ length: 3 }, (_, index) => post(100 + index, { platform: "Mercado Livre" })),
+      ...Array.from({ length: 2 }, (_, index) => post(200 + index, { platform: "Shopee" })),
+    ];
+    const activeOfferIds = new Set(drafts.slice(0, 3).map((item) => item.offer_id));
+
+    const visible = mergePanelDrafts(drafts, activeOfferIds, new Date("2026-08-08T03:00:00.000Z"));
+
+    expect(visible).toHaveLength(15);
+    expect(visible.filter((item) => item.offers.platform === "Amazon")).toHaveLength(10);
+    expect(visible.filter((item) => item.offers.platform === "Mercado Livre")).toHaveLength(3);
+    expect(visible.filter((item) => item.offers.platform === "Shopee")).toHaveLength(2);
+    expect(visible.filter((item) => activeOfferIds.has(item.offer_id))).toHaveLength(3);
+  });
+
+  it("não oculta drafts válidos ao trocar activeOfferIds para outro lote", () => {
+    const drafts = [post(1), post(2), post(3)];
+    const firstBatch = new Set(["offer-1"]);
+    const secondBatch = new Set(["offer-3"]);
+
+    expect(mergePanelDrafts(drafts, firstBatch, new Date("2026-08-08T03:00:00.000Z"))).toHaveLength(3);
+    expect(mergePanelDrafts(drafts, secondBatch, new Date("2026-08-08T03:00:00.000Z"))).toHaveLength(3);
+  });
+
+  it("mantém protegidos fora do painel mesmo sem activeOfferIds", () => {
+    const protectedDrafts = [
+      post(1, { status: "posted" }),
+      post(2, { status: "approved" }),
+      post(3, { status: "rejected" }),
+      post(4, { status: "deferred" }),
+      { ...post(5), deleted_at: "2026-08-08T13:00:00.000Z" },
+    ];
+
+    expect(mergePanelDrafts(protectedDrafts, new Set(), new Date("2026-08-08T03:00:00.000Z"))).toEqual([]);
   });
 });

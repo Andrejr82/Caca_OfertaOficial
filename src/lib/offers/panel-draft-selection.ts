@@ -1,5 +1,6 @@
 type PanelDraftOffer = {
   id?: string;
+  platform?: string | null;
   status?: string | null;
   created_at?: string | null;
   explainability?: Record<string, unknown> | null;
@@ -31,13 +32,12 @@ function isActiveDraft(post: PanelDraftPost): boolean {
 
 export function mergePanelDrafts<T extends PanelDraftPost>(
   drafts: readonly T[],
-  editorialOfferIds: ReadonlySet<string>,
+  _editorialOfferIds: ReadonlySet<string>,
   editorialDayStart: Date,
 ): T[] {
   const selected = drafts.filter((post) => {
     if (!isActiveDraft(post)) return false;
     if (isManualExpressDraft(post)) return true;
-    if (!editorialOfferIds.has(post.offer_id)) return false;
     const postCreatedAt = new Date(post.created_at).getTime();
     const offerCreatedAt = new Date(post.offers?.created_at || "").getTime();
     return Number.isFinite(postCreatedAt)
