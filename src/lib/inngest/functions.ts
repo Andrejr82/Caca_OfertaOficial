@@ -8,9 +8,14 @@ import { TELEGRAM_CYCLE_INTROS } from "@/config/cycle-intros";
 import { sendTelegramMessage } from "@/lib/telegram/client";
 import { loadEditorialTop30TelegramOfferIds } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
 
-const { createTelegramPublisher } = require("../../../scripts/telegram-auto-publisher.cjs") as {
+type TelegramPublisherFactory = {
   createTelegramPublisher: (options: { supabase: unknown }) => { processQueue: (options: { selectedEditorialTop30OfferIds: string[] }) => Promise<unknown> };
 };
+
+function loadTelegramPublisher(supabase: unknown) {
+  const { createTelegramPublisher } = require("../../../scripts/telegram-auto-publisher.cjs") as TelegramPublisherFactory;
+  return createTelegramPublisher({ supabase });
+}
 
 const PARALLEL_COMPONENT_DISABLED = "PARALLEL_COMPONENT_DISABLED: submit a command to an official service";
 
@@ -92,7 +97,7 @@ export const publishTelegramEditorialTop30 = inngest.createFunction(
     const client = adminClient();
     const selectedEditorialTop30OfferIds = await step.run("select-editorial-top30", () => loadEditorialTop30TelegramOfferIds(client));
     if (selectedEditorialTop30OfferIds.length === 0) return { result: "empty", selectedEditorialTop30OfferIds: [] };
-    return step.run("publish-editorial-top30", () => createTelegramPublisher({ supabase: client }).processQueue({ selectedEditorialTop30OfferIds }));
+    return step.run("publish-editorial-top30", () => loadTelegramPublisher(client).processQueue({ selectedEditorialTop30OfferIds }));
   }
 );
 
