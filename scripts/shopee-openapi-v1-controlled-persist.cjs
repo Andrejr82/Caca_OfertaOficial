@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { normalizePriceIntegrity } = require('./shopee-openapi-shadow-engine-v1.cjs');
 
 const CONTROLLED_PERSIST_SCENARIOS = new Set([
   'casa_cozinha_editorial',
@@ -87,8 +88,23 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
     const title = String(product.productName || product.title || '').trim();
     const sourceUrl = String(product.offerLink || product.productLink || '').trim();
     const imageUrl = String(product.imageUrl || '').trim();
-    const currentPrice = Number(product.price);
-    const originalPrice = Number(product.originalPrice);
+    const hasV1Range = product.priceMin != null || product.priceMax != null;
+    const priceIntegrity = normalizePriceIntegrity({
+      price: product.price ?? product.currentPrice,
+      priceMin: product.priceMin,
+      priceMax: product.priceMax,
+      priceDiscountRate: product.priceDiscountRate,
+      officialOldPrice: product.officialOldPrice ?? (hasV1Range ? null : product.originalPrice),
+    });
+    const currentPrice = Number(product.currentPrice ?? product.price ?? priceIntegrity.currentPrice);
+    const originalPrice = priceIntegrity.oldPrice;
+    const payloadV1 = {
+      ...product,
+      price: currentPrice,
+      currentPrice,
+      originalPrice,
+      priceIntegrity,
+    };
 
     if (
       !/^\d+$/.test(sourceItemId) ||
@@ -129,7 +145,8 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
         productCatId: String(product.productCatIds?.[0] || 'unknown'),
         sales: product.sales,
         rating: product.ratingStar,
-        discount: product.priceDiscountRate,
+        discount: priceIntegrity.discountPercent,
+        priceDiscountRate: product.priceDiscountRate ?? null,
         commissionRate: product.commissionPercent ?? product.commissionRate,
       },
       deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
@@ -147,7 +164,8 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
         mode: 'controlled-persist',
         scenarioId: normalizedScenario,
         correlation_id: v1CorrelationId,
-        payload_v1: product,
+        payload_v1: payloadV1,
+        priceIntegrity,
       },
     };
 

@@ -7,6 +7,7 @@ const {
   SCENARIO_QUERY_PLANS,
   GRAPHQL_CONTRACTS,
   normalizeCommission,
+  normalizePriceIntegrity,
   evaluateIntent,
   normalizeProductOffer,
   normalizeFeedColumns,
@@ -184,6 +185,44 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(calls.some((call) => call.variables.keyword === 'organizador de cozinha')).toBe(true);
     expect(calls.some((call) => call.variables.productCatId === 100010)).toBe(true);
     expect(result.writeAudit.supabaseWrites).toBe(0);
+  });
+
+  it('trata priceMin/priceMax como range e não cria desconto falso', () => {
+    expect(normalizePriceIntegrity({ priceMin: 17.05, priceMax: 90.20, priceDiscountRate: 41 })).toEqual(expect.objectContaining({
+      currentPrice: 17.05,
+      oldPrice: null,
+      discountPercent: null,
+      priceAuthority: 'priceMin',
+      oldPriceAuthority: 'none',
+      discountAuthority: 'none',
+      rangeAmbiguous: true,
+      safeForPublication: true,
+    }));
+  });
+
+  it('não promove priceMax a old price em range ou sem range', () => {
+    expect(normalizePriceIntegrity({ priceMin: 20, priceMax: 100, priceDiscountRate: 50 }).oldPrice).toBeNull();
+    expect(normalizePriceIntegrity({ priceMin: 50, priceMax: 50 }).oldPrice).toBeNull();
+  });
+
+  it('preserva preço simples sem atribuir autoridade de priceMin', () => {
+    expect(normalizePriceIntegrity({ price: 12.5 })).toEqual(expect.objectContaining({
+      currentPrice: 12.5,
+      priceAuthority: 'price',
+      rangeAmbiguous: false,
+    }));
+  });
+
+  it('aceita somente preço anterior explicitamente oficial e consistente', () => {
+    expect(normalizePriceIntegrity({ priceMin: 80, priceMax: 100, priceDiscountRate: 20, officialOldPrice: 100 })).toEqual(expect.objectContaining({
+      currentPrice: 80, oldPrice: 100, discountPercent: 20, oldPriceAuthority: 'officialOldPrice', discountAuthority: 'officialOldPrice', safeForPublication: true,
+    }));
+  });
+
+  it('falha fechado quando preço oficial contradiz o desconto da API', () => {
+    expect(normalizePriceIntegrity({ priceMin: 80, priceMax: 100, priceDiscountRate: 50, officialOldPrice: 100 })).toEqual(expect.objectContaining({
+      currentPrice: 80, oldPrice: null, discountPercent: null, safeForPublication: false,
+    }));
   });
 
   it('busca todas as keywords/categorias e não limita o lote V1 a trinta', async () => {

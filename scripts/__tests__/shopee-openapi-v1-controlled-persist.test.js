@@ -136,4 +136,16 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       requestedAt: '2026-08-08T00:00:00.000Z',
     })).toHaveLength(7);
   });
+
+  it('não persiste priceMax como originalPrice em payload V1', () => {
+    const [ingestion] = buildControlledPersistIngestions([{
+      itemId: '81255167', shopId: '9001', productName: 'Produto em range',
+      productLink: 'https://shopee.com.br/product/9001/81255167', offerLink: 'https://s.shopee.com.br/range',
+      imageUrl: 'https://cf.shopee.com.br/range.jpg', price: 17.05, priceMin: 17.05, priceMax: 90.20,
+      priceDiscountRate: 41, originalPrice: 90.20, productCatIds: ['100010'],
+    }], { scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-1', correlationId: 'corr-1', requestedAt: '2026-08-09T00:00:00.000Z' });
+    expect(ingestion.candidate.currentPrice).toBe(17.05);
+    expect(ingestion.candidate.originalPrice).toBeNull();
+    expect(ingestion.candidate.persistenceMetadata.payload_v1.originalPrice).toBeNull();
+  });
 });

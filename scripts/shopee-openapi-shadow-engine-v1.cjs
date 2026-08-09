@@ -64,6 +64,39 @@ function classifyNegativeClasses(value, contract = {}) {
 function number(value) { const parsed = Number.parseFloat(String(value ?? '').replace(',', '.')); return Number.isFinite(parsed) ? parsed : 0; }
 function percent(value) { const parsed = number(value); return parsed > 0 && parsed <= 1 ? parsed * 100 : parsed; }
 
+function normalizePriceIntegrity({ price, priceMin, priceMax, priceDiscountRate, officialOldPrice } = {}) {
+  const min = number(priceMin);
+  const max = number(priceMax);
+  const simplePrice = number(price);
+  const currentPrice = min > 0 ? min : max > 0 ? max : simplePrice;
+  const priceAuthority = min > 0 ? 'priceMin' : max > 0 ? 'priceMax_fallback' : simplePrice > 0 ? 'price' : 'unresolved';
+  const rangeAmbiguous = min > 0 && max > 0 && min !== max;
+  const apiDiscount = percent(priceDiscountRate);
+  const explicitOldPrice = number(officialOldPrice);
+  let oldPrice = null;
+  let discountPercent = null;
+  let oldPriceAuthority = 'none';
+  let discountAuthority = 'none';
+  let safeForPublication = currentPrice > 0;
+
+  if (explicitOldPrice > 0) {
+    const computedDiscount = currentPrice > 0 && explicitOldPrice > currentPrice
+      ? Math.round(((explicitOldPrice - currentPrice) / explicitOldPrice) * 100)
+      : null;
+    const contradictory = computedDiscount === null || (apiDiscount > 0 && Math.abs(computedDiscount - apiDiscount) > 2);
+    if (contradictory) {
+      safeForPublication = false;
+    } else {
+      oldPrice = explicitOldPrice;
+      discountPercent = computedDiscount;
+      oldPriceAuthority = 'officialOldPrice';
+      discountAuthority = 'officialOldPrice';
+    }
+  }
+
+  return { currentPrice, oldPrice, discountPercent, priceAuthority, oldPriceAuthority, discountAuthority, rangeAmbiguous, safeForPublication };
+}
+
 function normalizeCommission(fields = {}) {
   const entries = [['commissionRate', fields.commissionRate], ['shopeeCommissionRate', fields.shopeeCommissionRate], ['sellerCommissionRate', fields.sellerCommissionRate]]
     .map(([basis, value]) => ({ basis, value: percent(value) })).filter((entry) => entry.value > 0);
@@ -104,14 +137,25 @@ function evaluateIntent(product, contract) {
 
 function normalizeProductOffer(node = {}, context = {}) {
   const commission = normalizeCommission(node);
-  const price = number(node.priceMin) || number(node.priceMax) || number(node.price);
+  const priceIntegrity = normalizePriceIntegrity({
+    price: node.price,
+    priceMin: node.priceMin,
+    priceMax: node.priceMax,
+    priceDiscountRate: node.priceDiscountRate ?? node.discount,
+    officialOldPrice: context.officialOldPrice ?? node.officialOldPrice,
+  });
+  const price = priceIntegrity.currentPrice || number(node.price);
   const productLink = String(node.productLink || '').trim();
   const offerLink = String(node.offerLink || '').trim();
   const imageUrl = String(node.imageUrl || '').trim();
   const productName = String(node.productName || node.title || '').trim();
   const normalized = {
     source: context.source || 'productOfferV2', itemId: String(node.itemId || '').trim(), shopId: String(node.shopId || '').trim(), productName,
-    productLink, offerLink, imageUrl, price, originalPrice: number(node.priceMax), ratingStar: number(node.ratingStar ?? node.rating), sales: number(node.sales), priceDiscountRate: number(node.priceDiscountRate ?? node.discount),
+    productLink, offerLink, imageUrl, price, currentPrice: price, originalPrice: priceIntegrity.oldPrice,
+    priceMin: number(node.priceMin), priceMax: number(node.priceMax), priceDiscountRate: number(node.priceDiscountRate ?? node.discount),
+    priceRangeAmbiguous: priceIntegrity.rangeAmbiguous, priceAuthority: priceIntegrity.priceAuthority,
+    oldPriceAuthority: priceIntegrity.oldPriceAuthority, discountAuthority: priceIntegrity.discountAuthority,
+    safeForPublication: priceIntegrity.safeForPublication, ratingStar: number(node.ratingStar ?? node.rating), sales: number(node.sales),
     commissionRate: node.commissionRate, shopeeCommissionRate: node.shopeeCommissionRate, sellerCommissionRate: node.sellerCommissionRate, ...commission,
     shopType: Array.isArray(node.shopType) ? node.shopType.map(Number) : [], productCatIds: Array.isArray(node.productCatIds) ? node.productCatIds.map(String) : (context.productCatId ? [String(context.productCatId)] : []), updateType: context.updateType || node.updateType || null,
   };
@@ -385,4 +429,4 @@ if (require.main === module) {
   runCli().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => { console.error(`[Shopee Shadow V1] ${error.message}`); process.exitCode = 1; });
 }
 
-module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, scoreProduct, buildFixtureSources, collectLiveSources, runCli };
+module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, scoreProduct, buildFixtureSources, collectLiveSources, runCli };
