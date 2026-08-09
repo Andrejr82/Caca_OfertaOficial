@@ -75,6 +75,8 @@ function PremiumImagePreview({ offerId, productName }: { offerId?: string; produ
 // ─── Component ───
 export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
   const [linksInput, setLinksInput] = useState(initialUrl);
+  const [sheinShareInput, setSheinShareInput] = useState("");
+  const [sheinSharePreview, setSheinSharePreview] = useState<ReturnType<typeof parseSheinShareText> | null>(null);
   const [channel, setChannel] = useState<Channel | "omnichannel">("omnichannel");
 
   // Batch processing
@@ -119,15 +121,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
   }
 
   // ─── Batch generate com isolamento por item (MAX_CONCURRENCY=3) ───
-  async function handleBatchGenerate(e: React.FormEvent) {
-    e.preventDefault();
-    let sharedText: ReturnType<typeof parseSheinShareText> | null = null;
-    try {
-      sharedText = parseSheinShareText(linksInput);
-    } catch {
-      // Normal URL batches continue through the existing flow.
-    }
-    if (sharedText) {
+  async function processSheinShare(sharedText: ReturnType<typeof parseSheinShareText>) {
       setIsProcessing(true);
       let imageCandidates: SheinImageCandidate[] = [];
       let imageUrl = "";
@@ -156,7 +150,20 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
       }, ...prev]);
       setProcessSummary({ total: 1, success: 0, failed: 1 });
       setIsProcessing(false);
-      setLinksInput("");
+      setSheinShareInput("");
+      setSheinSharePreview(null);
+  }
+
+  async function handleBatchGenerate(e: React.FormEvent) {
+    e.preventDefault();
+    let sharedText: ReturnType<typeof parseSheinShareText> | null = null;
+    try {
+      sharedText = parseSheinShareText(linksInput);
+    } catch {
+      // Normal URL batches continue through the existing flow.
+    }
+    if (sharedText) {
+      await processSheinShare(sharedText);
       return;
     }
     const links = parseLinks(linksInput);
@@ -444,6 +451,45 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
 
   return (
     <div className="grid gap-6 min-w-0 w-full max-w-full">
+      <section className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-4 space-y-3">
+        <div>
+          <h2 className="text-sm font-semibold text-amber-200">Mensagem compartilhada da SHEIN</h2>
+          <p className="mt-1 text-xs text-white/50">Cole aqui a mensagem completa recebida/compartilhada no WhatsApp.</p>
+        </div>
+        <textarea
+          value={sheinShareInput}
+          onChange={(e) => {
+            const value = e.target.value;
+            setSheinShareInput(value);
+            try {
+              setSheinSharePreview(parseSheinShareText(value));
+            } catch {
+              setSheinSharePreview(null);
+            }
+          }}
+          placeholder="Não perca esta oferta grande na SHEIN!\n💰Preço[R$94,32] -20%\n🛒Produto...\n🎁Cupom...\nhttps://onelink.shein.com/..."
+          className="glass-input focus-ring w-full rounded-lg py-3 px-4 text-sm font-mono resize-none h-[150px]"
+          disabled={isProcessing}
+        />
+        {sheinSharePreview && (
+          <div className="grid gap-1 rounded-lg bg-black/20 p-3 text-xs text-white/70">
+            <p><span className="text-white/40">Título:</span> {sheinSharePreview.title}</p>
+            <p><span className="text-white/40">Preço:</span> R$ {sheinSharePreview.price.toFixed(2).replace(".", ",")}</p>
+            {sheinSharePreview.discountPercent !== undefined && <p><span className="text-white/40">Desconto:</span> {sheinSharePreview.discountPercent}%</p>}
+            {sheinSharePreview.couponText && <p><span className="text-white/40">Cupom:</span> {sheinSharePreview.couponText}</p>}
+            <p className="truncate"><span className="text-white/40">URL original:</span> {sheinSharePreview.originalUrl}</p>
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="primary"
+          disabled={isProcessing || !sheinSharePreview}
+          onClick={() => sheinSharePreview && void processSheinShare(sheinSharePreview)}
+          className="bg-amber-600 hover:bg-amber-500 border-0 text-xs"
+        >
+          <Zap size={14} /> Processar mensagem SHEIN
+        </Button>
+      </section>
       {/* ─── Input Area ─── */}
       <form onSubmit={handleBatchGenerate} className="grid gap-4">
         <div className="grid gap-4 md:grid-cols-[1fr_200px]">
