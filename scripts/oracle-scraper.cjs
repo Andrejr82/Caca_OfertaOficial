@@ -546,7 +546,34 @@ async function loadRecentDiscoveryHistory(marketplace) {
 
 async function runAmazonScenarioDiscovery(scenario, options = {}) {
   if (scenario?.discoveryMode === 'manual_only') {
-    return { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario.label, products: [], raw_products: 0, duplicates: 0, queries: [], split_scenarios: [] };
+    return {
+      pipeline: 'Amazon Scenario Discovery V5',
+      dry_run: true,
+      scenario: scenario.label,
+      products: [],
+      raw_products: 0,
+      duplicates: 0,
+      queries: [],
+      split_scenarios: [],
+      queryTelemetry: [],
+      telemetryTotals: { attempted: 0, succeeded: 0, failed: 0, empty: 0 },
+      sourceStatus: 'empty',
+      telemetry: {
+        contract_version: 'pmav5.amazon-query-telemetry/v1',
+        correlation_id: options.correlationId || null,
+        scenario: scenario.id || scenario.scenarioId || scenario.label || null,
+        release_id: options.releaseId || 'unknown',
+        schedulerSource: options.schedulerSource || 'unknown',
+        fetch_path: 'global.fetch',
+        provider: 'amazon_public_search',
+        config: { keywords: [], browse_node_ids: [], max_retries: 0, retry_delay_ms: 0, inter_query_delay_ms: 0, max_per_keyword: 0 },
+        queries: [],
+        total_queries_attempted: 0,
+        total_queries_succeeded: 0,
+        total_queries_failed: 0,
+        total_queries_empty: 0,
+      },
+    };
   }
   const parts = Array.isArray(scenario?.splitInto) && scenario.splitInto.length
     ? scenario.splitInto.map((id) => getMarketplaceScenarioContract(id, 'Amazon')).filter(Boolean)
@@ -563,6 +590,28 @@ async function runAmazonScenarioDiscovery(scenario, options = {}) {
     seen.add(key);
     return true;
   });
+  const telemetryParts = results.map((entry) => entry.result.telemetry).filter(Boolean);
+  const queryTelemetry = telemetryParts.flatMap((part) => part.queries || []);
+  const telemetryTotals = queryTelemetry.reduce((totals, query) => {
+    totals.attempted += 1;
+    if (query.status === 'ok') totals.succeeded += 1;
+    else if (['http_error', 'transport_error'].includes(query.status)) totals.failed += 1;
+    else totals.empty += 1;
+    return totals;
+  }, { attempted: 0, succeeded: 0, failed: 0, empty: 0 });
+  const sourceStatus = telemetryTotals.failed > 0
+    ? telemetryTotals.succeeded > 0 || telemetryTotals.empty > 0 ? 'partial' : 'failed'
+    : telemetryTotals.succeeded > 0 ? 'completed'
+      : queryTelemetry.length > 0 && queryTelemetry.every((query) => query.status === 'parse_empty') ? 'parse_zero' : 'empty';
+  const telemetry = {
+    ...(telemetryParts[0] || {}),
+    queries: queryTelemetry,
+    total_queries_attempted: telemetryTotals.attempted,
+    total_queries_succeeded: telemetryTotals.succeeded,
+    total_queries_failed: telemetryTotals.failed,
+    total_queries_empty: telemetryTotals.empty,
+    source_status: sourceStatus,
+  };
   return {
     ...(results[0]?.result || { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario?.label }),
     products,
@@ -570,6 +619,10 @@ async function runAmazonScenarioDiscovery(scenario, options = {}) {
     duplicates: results.reduce((total, entry) => total + Number(entry.result.duplicates || 0), 0) + results.reduce((total, entry) => total + entry.result.products.length, 0) - products.length,
     queries: results.flatMap((entry) => entry.result.queries || []),
     split_scenarios: parts.map((part) => part.scenarioId || part.id),
+    queryTelemetry,
+    telemetryTotals,
+    sourceStatus,
+    telemetry,
   };
 }
 
@@ -901,7 +954,7 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
   }
 }
 
-async function scrapeStore(store, stageLogger = null) {
+async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
     // Defensive fallback only: the official cycle bypasses scrapeStore for
@@ -952,7 +1005,7 @@ async function scrapeStore(store, stageLogger = null) {
     if (stageLogger) amazonStageStartedAt = stageLogger.start('Amazon_Top20_extraction', scenario?.keywords?.length || 0);
     
     const result = scenario?.keywords?.length
-      ? await runAmazonScenarioDiscovery(scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 })
+      ? await runAmazonScenarioDiscovery(scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1, ...runtimeContext })
       : await runAmazonNativeTop20({
         fetchImpl: global.fetch,
         knownAsins,
@@ -966,6 +1019,12 @@ async function scrapeStore(store, stageLogger = null) {
       .filter((product) => Number(product.price) > 0 && /^https:\/\//i.test(product.image || ''))
       .map((product) => normalizeAmazonCandidate(product, discoveredAt, scenario?.scenarioId || scenario?.id))
       .filter((product) => matchesScenarioProduct(scenario, product.title));
+    attachDiscoveryFunnelMeta(normalized, {
+      sourceStatus: result.sourceStatus,
+      extracted: result.raw_products,
+      afterParse: result.queryTelemetry.reduce((total, query) => total + Number(query.parser_count || 0), 0),
+      amazonTelemetry: result.telemetry,
+    });
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
   }
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
@@ -1395,8 +1454,14 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
         return [];
       }
       if (marketplace === 'Amazon') {
-        const discovered = await runAmazonScenarioDiscovery(marketplaceScenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
+        const discovered = await runAmazonScenarioDiscovery(marketplaceScenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1, correlationId, schedulerSource: 'manual-scenario-recording', releaseId: process.env.ORACLE_RELEASE_ID || 'unknown' });
         const normalized = discovered.products.map((product) => normalizeAmazonCandidate(product, requestedAt));
+        attachDiscoveryFunnelMeta(normalized, {
+          sourceStatus: discovered.sourceStatus,
+          extracted: discovered.raw_products,
+          afterParse: discovered.queryTelemetry.reduce((total, query) => total + Number(query.parser_count || 0), 0),
+          amazonTelemetry: discovered.telemetry,
+        });
         return filterNovelNormalizedProducts(marketplace, normalized);
       }
       const discovered = await runMercadoLivreOfficialIntentCoverage({
@@ -1534,7 +1599,7 @@ async function runScrapingCycleCore() {
     tenantId: ADMIN_USER_ID,
     correlationId,
     requestedAt: new Date().toISOString(),
-    discover: (store) => scrapeStore(store, stageLogger),
+    discover: (store) => scrapeStore(store, stageLogger, { correlationId, schedulerSource: 'oracle-node-cron', releaseId }),
     shopeeDiscovery: shopeeOfficialDiscovery,
     persistShopee: createShopeeOpenApiV1OfficialPersistRunner({ stageLogger }),
     loadDeferred: loadDeferredDiscoveryIngestions,
@@ -1670,10 +1735,17 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       }
       if (marketplace === 'Amazon') {
         const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
-        const result = await runAmazonScenarioDiscovery(contract || scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1 });
-        return result.products
+        const result = await runAmazonScenarioDiscovery(contract || scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1, correlationId, schedulerSource: 'manual-scenario-recording', releaseId: process.env.ORACLE_RELEASE_ID || 'unknown' });
+        const normalized = result.products
           .filter((product) => matchesMarketplaceContract(contract, product.title))
           .map((product) => normalizeAmazonCandidate(product, requestedAt));
+        attachDiscoveryFunnelMeta(normalized, {
+          sourceStatus: result.sourceStatus,
+          extracted: result.raw_products,
+          afterParse: result.queryTelemetry.reduce((total, query) => total + Number(query.parser_count || 0), 0),
+          amazonTelemetry: result.telemetry,
+        });
+        return normalized;
       }
       // Buscar acima do limite de publicação cria margem para duplicatas,
       // filtros de qualidade e caps da fila (10 por marketplace/categoria).

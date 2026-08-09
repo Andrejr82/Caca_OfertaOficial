@@ -639,13 +639,18 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       const funnel = createDiscoveryFunnel({ marketplace, scenario, correlationId, startedAt: new Date(marketplaceStartedAt).toISOString(), scenarioRuntime });
       activeFunnel = funnel;
       funnel.setFinalByCategory(discoveryMeta.finalByCategory);
+      if (marketplace === 'Amazon' && discoveryMeta.amazonTelemetry) {
+        funnel.setSourceTelemetry(discoveryMeta.amazonTelemetry);
+        const failedQueries = Number(discoveryMeta.amazonTelemetry.total_queries_failed || 0);
+        if (failedQueries > 0) funnel.count('failed', failedQueries);
+      }
       funnel.count('extracted', discoveryMeta.extracted ?? products?.length ?? 0);
       funnel.count('afterParse', discoveryMeta.afterParse ?? products?.length ?? 0);
       funnel.count('afterRelevance', discoveryMeta.afterRelevance ?? products?.length ?? 0);
       funnel.count('afterNovelty', discoveryMeta.afterNovelty ?? products?.length ?? 0);
       funnel.reject('known_identity', discoveryMeta.knownIdentityRejected || 0);
       funnel.reject('scenario_mismatch', discoveryMeta.scenarioMismatchRejected || 0);
-      if (discoveryMeta.sourceStatus) funnel.setSourceStatus(discoveryMeta.sourceStatus);
+      if (discoveryMeta.sourceStatus && discoveryMeta.sourceStatus !== 'completed') funnel.setSourceStatus(discoveryMeta.sourceStatus);
       const previouslyDeferred = typeof loadDeferred === 'function' ? await loadDeferred(marketplace) : [];
       if (!Array.isArray(products)) throw new Error(`Discovery ${marketplace} retornou payload inválido`);
       const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];

@@ -267,7 +267,10 @@ async function runAmazonScenarioDryRun({
   maxPerKeyword = 20,
   minDelayMs = 2000,
   retryDelayMs = 10000,
-  maxRetries = 1
+  maxRetries = 1,
+  correlationId = null,
+  schedulerSource = 'unknown',
+  releaseId = 'unknown'
 } = {}) {
   if (!scenario || ((!Array.isArray(scenario.keywords) || scenario.keywords.length === 0) && (!Array.isArray(scenario.browseNodeIds) || scenario.browseNodeIds.length === 0))) throw new Error('Cenário Amazon sem termos ou browse nodes');
   const collected = [];
@@ -298,50 +301,136 @@ async function runAmazonScenarioDryRun({
     };
     if (index > 0 && minDelayMs > 0) await sleep(minDelayMs);
     let queryResult = null;
+    const attempts = [];
     for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const attemptStartedAt = Date.now();
       try {
         const html = await fetchHtml(url, fetchImpl);
         httpCalls += 1;
         const parsed = parseSearchPage(html, source).slice(0, maxPerKeyword);
         const sanitized = sanitizeProducts(parsed);
+        const responseBytes = Buffer.byteLength(String(html ?? ''), 'utf8');
+        const status = sanitized.products.length > 0
+          ? 'ok'
+          : responseBytes === 0 ? 'empty_response' : 'parse_empty';
+        const attemptResult = {
+          attempt,
+          http_status: 200,
+          retry_count: attempt,
+          latency_ms: Date.now() - attemptStartedAt,
+          response_bytes: responseBytes,
+          parser_count: parsed.length,
+          structurally_valid_count: sanitized.products.length,
+          status,
+        };
+        attempts.push(attemptResult);
         queryResult = {
           keyword: keyword || null,
           browse_node_id: browseNodeId || null,
+          request_url: url,
+          fetch_path: 'global.fetch',
+          provider: 'amazon_public_search',
+          correlation_id: correlationId,
+          scenario: scenario.id || scenario.scenarioId || scenario.label || null,
+          attempt,
           collected: parsed.length,
           valid: sanitized.products.length,
           discarded: sanitized.discarded.length,
           http_status: 200,
           retry_count: attempt,
-          status: sanitized.products.length > 0 ? 'ok' : 'empty_response'
+          latency_ms: attemptResult.latency_ms,
+          response_bytes: responseBytes,
+          parser_count: parsed.length,
+          structurally_valid_count: sanitized.products.length,
+          status,
+          attempts,
         };
         if (sanitized.products.length > 0 || attempt >= maxRetries) {
           collected.push(...sanitized.products);
           break;
         }
       } catch (error) {
+        const status = classifyAmazonQueryError(error);
+        const attemptResult = {
+          attempt,
+          http_status: Number.isInteger(error?.httpStatus) ? error.httpStatus : null,
+          retry_count: attempt,
+          latency_ms: Date.now() - attemptStartedAt,
+          response_bytes: Number.isFinite(error?.responseBytes) ? error.responseBytes : null,
+          parser_count: 0,
+          structurally_valid_count: 0,
+          status,
+          error_code: String(error?.code || 'AMAZON_FETCH_ERROR').slice(0, 80),
+          error_message: sanitizeAmazonError(error),
+        };
+        attempts.push(attemptResult);
         queryResult = {
           keyword: keyword || null,
           browse_node_id: browseNodeId || null,
+          request_url: url,
+          fetch_path: 'global.fetch',
+          provider: 'amazon_public_search',
+          correlation_id: correlationId,
+          scenario: scenario.id || scenario.scenarioId || scenario.label || null,
+          attempt,
           collected: 0,
           valid: 0,
           discarded: 0,
-          http_status: null,
+          http_status: attemptResult.http_status,
           retry_count: attempt,
-          status: 'blocked_or_error',
-          error: error instanceof Error ? error.message : String(error)
+          latency_ms: attemptResult.latency_ms,
+          response_bytes: attemptResult.response_bytes,
+          parser_count: 0,
+          structurally_valid_count: 0,
+          status,
+          error_code: attemptResult.error_code,
+          error_message: attemptResult.error_message,
+          attempts,
         };
         if (attempt >= maxRetries) break;
       }
       if (retryDelayMs > 0) await sleep(retryDelayMs);
     }
-    queries.push(queryResult ?? { keyword: keyword || null, browse_node_id: browseNodeId || null, collected: 0, valid: 0, discarded: 0, http_status: null, retry_count: maxRetries, status: 'blocked_or_error' });
+    queries.push(queryResult ?? { keyword: keyword || null, browse_node_id: browseNodeId || null, request_url: url, fetch_path: 'global.fetch', provider: 'amazon_public_search', correlation_id: correlationId, scenario: scenario.id || scenario.scenarioId || scenario.label || null, attempt: maxRetries, collected: 0, valid: 0, discarded: 0, http_status: null, retry_count: maxRetries, latency_ms: 0, response_bytes: null, parser_count: 0, structurally_valid_count: 0, status: 'transport_error', error_code: 'AMAZON_FETCH_ERROR', error_message: 'No query result', attempts });
   }
   const unique = deduplicate(collected);
   const novelty = applyNovelty(unique.products);
   const products = novelty.products.map((product) => ({ ...product, score: calculateDeterministicScore(product) }));
   const contractErrors = products.flatMap((product) => validateFinalContract(product));
   if (contractErrors.length) throw new Error(`Contrato V5 inválido: ${[...new Set(contractErrors)].join(',')}`);
-  return { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario.label, keywords: scenario.keywords || [], browse_node_ids: browseNodeIds, queries, products, raw_products: collected.length, duplicates: unique.duplicates, http_calls: httpCalls };
+  const telemetryTotals = {
+    attempted: queries.length,
+    succeeded: queries.filter((query) => query.status === 'ok').length,
+    failed: queries.filter((query) => ['http_error', 'transport_error'].includes(query.status)).length,
+    empty: queries.filter((query) => ['empty_response', 'parse_empty'].includes(query.status)).length,
+  };
+  const sourceStatus = telemetryTotals.failed > 0
+    ? telemetryTotals.succeeded > 0 || telemetryTotals.empty > 0 ? 'partial' : 'failed'
+    : telemetryTotals.succeeded > 0 ? 'completed'
+      : queries.every((query) => query.status === 'parse_empty') ? 'parse_zero' : 'empty';
+  const telemetry = {
+    contract_version: 'pmav5.amazon-query-telemetry/v1',
+    correlation_id: correlationId,
+    scenario: scenario.id || scenario.scenarioId || scenario.label || null,
+    release_id: releaseId || 'unknown',
+    schedulerSource: schedulerSource || 'unknown',
+    fetch_path: 'global.fetch',
+    provider: 'amazon_public_search',
+    config: {
+      keywords: [...keywords],
+      browse_node_ids: [...browseNodeIds],
+      max_retries: maxRetries,
+      retry_delay_ms: retryDelayMs,
+      inter_query_delay_ms: minDelayMs,
+      max_per_keyword: maxPerKeyword,
+    },
+    queries,
+    total_queries_attempted: telemetryTotals.attempted,
+    total_queries_succeeded: telemetryTotals.succeeded,
+    total_queries_failed: telemetryTotals.failed,
+    total_queries_empty: telemetryTotals.empty,
+  };
+  return { pipeline: 'Amazon Scenario Discovery V5', dry_run: true, scenario: scenario.label, keywords: scenario.keywords || [], browse_node_ids: browseNodeIds, queries, products, raw_products: collected.length, duplicates: unique.duplicates, http_calls: httpCalls, queryTelemetry: queries, telemetryTotals, sourceStatus, telemetry };
 }
 
 function validateFinalContract(product) {
@@ -412,10 +501,37 @@ async function fetchHtml(url, fetchImpl) {
     },
     redirect: 'follow'
   });
-  if (!response.ok || response.status !== 200) throw new Error(`HTTP ${response.status} ${url}`);
+  if (!response.ok || response.status !== 200) {
+    const error = new Error(`HTTP ${response.status}`);
+    error.code = 'AMAZON_HTTP_ERROR';
+    error.httpStatus = response.status;
+    try {
+      const body = await response.text();
+      error.responseBytes = Buffer.byteLength(String(body ?? ''), 'utf8');
+    } catch {}
+    throw error;
+  }
   const html = await response.text();
-  if (/Robot Check|Digite os caracteres/i.test(html)) throw new Error(`HTTP 200 com desafio anti-automação: ${url}`);
+  if (/Robot Check|Digite os caracteres/i.test(html)) {
+    const error = new Error('Amazon anti-automation challenge');
+    error.code = 'AMAZON_CHALLENGE';
+    error.httpStatus = 200;
+    error.responseBytes = Buffer.byteLength(html, 'utf8');
+    throw error;
+  }
   return html;
+}
+
+function sanitizeAmazonError(error) {
+  return String(error?.message || error || 'unknown error')
+    .replace(/([?&](?:token|api[_-]?key|secret|authorization)=)[^&\s]+/gi, '$1[REDACTED]')
+    .replace(/\b(token|api[_-]?key|secret|authorization)\s*[:=]\s*[^\s,]+/gi, '$1=[REDACTED]')
+    .slice(0, 300);
+}
+
+function classifyAmazonQueryError(error) {
+  if (error?.code === 'AMAZON_HTTP_ERROR' || error?.code === 'AMAZON_CHALLENGE') return 'http_error';
+  return 'transport_error';
 }
 
 async function runAmazonNativeTop20({
