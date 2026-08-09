@@ -14,8 +14,8 @@ describe("quality gate e catálogo de ícones", () => {
   });
 
   it("normaliza o marketplace por renderer determinístico", () => {
-    expect(marketplaceLabel("Amazon").text).toBe("Achado na Amazon");
-    expect(marketplaceLabel("Mercado Livre").text).toBe("Achado no Mercado Livre");
+    expect(marketplaceLabel("Amazon").text).toBe("Oferta na Amazon");
+    expect(marketplaceLabel("Mercado Livre").text).toBe("Oferta no Mercado Livre");
   });
 
   it("mantém licença e versão do catálogo auditáveis", () => {
