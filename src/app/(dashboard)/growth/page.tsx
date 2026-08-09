@@ -30,9 +30,9 @@ export default async function GrowthDashboardPage({
   };
 
   return (
-    <div className="grid gap-6 animate-fadeIn pb-10">
+    <div className="min-w-0 max-w-full grid gap-6 animate-fadeIn pb-10">
       {/* Header */}
-      <header className="flex items-center gap-3 mb-2">
+      <header className="flex flex-wrap items-center gap-3 mb-2">
         <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-lg shadow-indigo-500/20">
           <Activity size={20} className="text-white" />
         </span>
@@ -41,7 +41,7 @@ export default async function GrowthDashboardPage({
           <p className="text-xs text-white/40">Visão consolidada de tráfego, fontes e funil de conversão real em {days} dias.</p>
         </div>
         
-        <div className="ml-auto flex items-center gap-2 bg-white/5 p-1 rounded-lg border border-white/[0.04]">
+        <div className="ml-auto flex flex-wrap items-center gap-2 bg-white/5 p-1 rounded-lg border border-white/[0.04]">
           {[7, 15, 30, 90].map(d => (
             <Link 
               key={d}
@@ -69,6 +69,9 @@ export default async function GrowthDashboardPage({
             <DollarSign size={14} /> Vendas Convertidas
           </h3>
           <p className="text-3xl font-black text-emerald-400">{totalSales.toLocaleString('pt-BR')}</p>
+          <p className="mt-1 text-[11px] text-white/30">
+            {totalSales === 0 ? "Nenhuma venda registrada" : "vendas confirmadas"}
+          </p>
         </div>
         <div className="glass-card p-5 border border-purple-500/10">
           <h3 className="text-xs font-bold text-purple-400/70 uppercase tracking-widest mb-1 flex items-center gap-2">
@@ -81,8 +84,35 @@ export default async function GrowthDashboardPage({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-2">
+        <section className="glass-card min-w-0 p-6 border border-white/[0.04] lg:col-span-2">
+          <div className="border-b border-white/[0.04] pb-3 mb-5">
+            <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em] flex items-center gap-2">
+              <Calendar size={16} /> Evolução temporal
+            </h2>
+            <p className="text-xs text-white/30 mt-1">Cliques oficiais em click_events por dia.</p>
+          </div>
+          {trafficTrends.length === 0 ? (
+            <p className="text-sm text-white/30 text-center py-4">Sem dados no período.</p>
+          ) : (
+            <div className="flex min-w-max items-end gap-2 overflow-x-auto pb-2">
+              {trafficTrends.map((trend) => {
+                const maxClicks = Math.max(...trafficTrends.map((item) => item.clicks));
+                const height = maxClicks > 0 ? Math.max((trend.clicks / maxClicks) * 100, 8) : 8;
+                return (
+                  <div key={trend.date} className="flex w-14 shrink-0 flex-col items-center gap-2">
+                    <span className="text-[10px] font-bold text-white/60">{trend.clicks}</span>
+                    <div className="flex h-24 w-full items-end rounded bg-white/[0.03]">
+                      <div className="w-full rounded bg-indigo-500/70" style={{ height: `${height}%` }} />
+                    </div>
+                    <span className="text-[9px] text-white/35">{trend.date.slice(5)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
         {/* Source Breakdown */}
-        <section className="glass-card p-6 border border-white/[0.04]">
+        <section className="glass-card min-w-0 p-6 border border-white/[0.04]">
           <div className="border-b border-white/[0.04] pb-3 mb-5">
             <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em] flex items-center gap-2">
               <BarChart3 size={16} /> Performance por Canal
@@ -116,7 +146,7 @@ export default async function GrowthDashboardPage({
         </section>
 
         {/* Device Breakdown */}
-        <section className="glass-card p-6 border border-white/[0.04]">
+        <section className="glass-card min-w-0 p-6 border border-white/[0.04]">
           <div className="border-b border-white/[0.04] pb-3 mb-5">
             <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em] flex items-center gap-2">
               <Smartphone size={16} /> Tráfego por Dispositivo
@@ -166,7 +196,7 @@ export default async function GrowthDashboardPage({
       </div>
 
       {/* Funnel Table: A Mina de Ouro */}
-      <section className="glass-card p-6 border border-white/[0.04] mt-2">
+      <section className="glass-card min-w-0 max-w-full p-6 border border-white/[0.04] mt-2">
         <div className="border-b border-white/[0.04] pb-3 mb-5">
           <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em] flex items-center gap-2">
             <TrendingUp size={16} /> Funil Profundo: Conversão por Campanha
@@ -175,7 +205,7 @@ export default async function GrowthDashboardPage({
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-white/[0.04]">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[760px] w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/[0.04] bg-white/[0.01]">
                 <th className="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-white/30">Produto</th>

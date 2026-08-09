@@ -12,9 +12,9 @@ export default async function TrackingPage() {
   const reports = await getTrackingReports();
 
   return (
-    <div className="grid gap-6 animate-fadeIn">
+    <div className="min-w-0 max-w-full grid gap-6 animate-fadeIn">
       {/* Header */}
-      <header className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center gap-3">
         <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
           <Link2 size={20} className="text-white" />
         </span>
@@ -25,7 +25,7 @@ export default async function TrackingPage() {
       </header>
 
       {/* Link Generator Form */}
-      <section className="glass-card p-5">
+      <section className="glass-card min-w-0 max-w-full p-5">
         <div className="border-b border-white/[0.04] pb-3 mb-4">
           <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">Gerador de Link Rastreado</h2>
         </div>
@@ -33,14 +33,14 @@ export default async function TrackingPage() {
       </section>
 
       {/* Reports Table */}
-      <section className="glass-card p-5">
+      <section className="glass-card min-w-0 max-w-full p-5">
         <div className="border-b border-white/[0.04] pb-3 mb-4">
           <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em]">Links Gerados & Relatório de Performance</h2>
           <p className="text-xs text-white/25 mt-1">Estatísticas consolidadas de desempenho para cada canal e link.</p>
         </div>
 
         <div className="overflow-x-auto rounded-lg border border-white/[0.04]">
-          <table className="w-full text-left border-collapse">
+          <table className="min-w-[980px] w-full text-left border-collapse">
             <thead>
               <tr className="border-b border-white/[0.04]">
                 <th className="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-white/30">Canal</th>

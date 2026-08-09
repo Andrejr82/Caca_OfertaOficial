@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AffiliateLink, Offer, Sale } from "@/types/domain";
+import { countClicksByAffiliateLink, type ClickEventMetric } from "@/lib/analytics/metrics";
 
 export async function getCurrentUserId() {
   const supabase = await createServerSupabaseClient();
@@ -229,7 +230,6 @@ export async function getTrackingReports() {
       channel,
       sub_id,
       tracked_url,
-      clicks,
       offers (
         id,
         product_name,
@@ -239,6 +239,11 @@ export async function getTrackingReports() {
     .order("created_at", { ascending: false });
 
   if (!linksData) return [];
+
+  const { data: clickEventsData } = await supabase
+    .from("click_events")
+    .select("affiliate_link_id");
+  const clicksByLink = countClicksByAffiliateLink((clickEventsData || []) as ClickEventMetric[]);
 
   const { data: salesData } = await supabase
     .from("sales")
@@ -251,7 +256,7 @@ export async function getTrackingReports() {
       .filter((sale) => sale.status === "confirmed")
       .reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0);
 
-    const clicks = link.clicks || 0;
+    const clicks = clicksByLink[link.id] || 0;
     const cost = clicks > 0 ? clicks * 0.15 : 0;
     const roi = cost > 0 ? ((revenue - cost) / cost) * 100 : 100;
 

@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { countClicksByAffiliateLink, summarizeClickEvents, type ClickEventMetric } from "@/lib/analytics/metrics";
 
 export async function getGrowthMetrics(days = 30) {
   const supabase = await createServerSupabaseClient();
@@ -13,7 +14,7 @@ export async function getGrowthMetrics(days = 30) {
     .select("created_at, source, device_type, affiliate_link_id")
     .gte("created_at", startDate.toISOString());
 
-  const clicks = clicksData || [];
+  const clicks = (clicksData || []) as ClickEventMetric[];
 
   // 2. Fetch Affiliate Links & Offers for context
   const { data: linksData } = await supabase
@@ -39,28 +40,8 @@ export async function getGrowthMetrics(days = 30) {
 
   // === AGGREGATIONS ===
 
-  // A. Traffic Over Time (grouped by YYYY-MM-DD)
-  const trafficByDate = clicks.reduce<Record<string, number>>((acc, click) => {
-    const dateStr = new Date(click.created_at).toISOString().split('T')[0];
-    acc[dateStr] = (acc[dateStr] || 0) + 1;
-    return acc;
-  }, {});
-  
-  // Sort dates chronologically
-  const trafficTrends = Object.entries(trafficByDate)
-    .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
-    .map(([date, count]) => ({ date, clicks: count }));
-
-  // B. Source Breakdown
-  const sourceBreakdown = clicks.reduce<Record<string, number>>((acc, click) => {
-    const src = click.source || 'unknown';
-    acc[src] = (acc[src] || 0) + 1;
-    return acc;
-  }, {});
-
-  const sourceData = Object.entries(sourceBreakdown)
-    .sort((a, b) => b[1] - a[1])
-    .map(([source, count]) => ({ source, count }));
+  const clickSummary = summarizeClickEvents(clicks, sales);
+  const { trafficTrends, sourceData } = clickSummary;
 
   // C. Device Breakdown
   const deviceBreakdown = clicks.reduce<Record<string, number>>((acc, click) => {
@@ -75,10 +56,7 @@ export async function getGrowthMetrics(days = 30) {
 
   // D. Funnel Metrics (Top Converters)
   // Agrupar cliques por link
-  const linkClicks = clicks.reduce<Record<string, number>>((acc, click) => {
-    acc[click.affiliate_link_id] = (acc[click.affiliate_link_id] || 0) + 1;
-    return acc;
-  }, {});
+  const linkClicks = countClicksByAffiliateLink(clicks);
 
   const funnelData = links.map(link => {
     const linkSales = sales.filter(s => s.affiliate_link_id === link.id);
@@ -112,7 +90,7 @@ export async function getGrowthMetrics(days = 30) {
     sourceData,
     deviceData,
     funnelData,
-    totalClicks: clicks.length,
-    totalSales: sales.filter(s => s.status === 'confirmed').length
+    totalClicks: clickSummary.totalClicks,
+    totalSales: clickSummary.totalSales
   };
 }
