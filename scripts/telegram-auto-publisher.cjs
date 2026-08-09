@@ -167,7 +167,7 @@ function createTelegramPublisher(options = {}) {
         log('log', { event: 'poll_skipped', result: 'disabled' });
         return { result: 'disabled' };
       }
-      const selectedOfferIds = [...new Set(options.selectedEditorialTop30OfferIds.map(String).filter(Boolean))].slice(0, 30);
+      const selectedOfferIds = [...new Set(options.selectedEditorialTop30OfferIds.map(String).filter(Boolean))];
       if (selectedOfferIds.length === 0) {
         log('log', { event: 'poll_completed', result: 'empty', selection: 'editorial_top30' });
         return { result: 'empty' };
@@ -179,8 +179,7 @@ function createTelegramPublisher(options = {}) {
         .eq('status', 'draft')
         .eq('channel', 'telegram')
         .in('offer_id', selectedOfferIds)
-        .order('created_at', { ascending: true })
-        .limit(30);
+        .order('created_at', { ascending: true });
       if (error) throw error;
       const uniquePosts = [...new Map((posts || [])
         .filter((post) => post.offers?.explainability?.manual_source !== true)

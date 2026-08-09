@@ -77,4 +77,26 @@ describe("Telegram editorial auto-publish selection", () => {
   it("returns no candidates when no current editorial draft exists", () => {
     expect(selectEditorialTop30TelegramOfferIds([draft(offer("old", "2026-08-07T10:00:00.000Z"))], NOW)).toEqual([]);
   });
+
+  it("keeps Shopee at Top30 while including every eligible Amazon and Mercado Livre draft", () => {
+    const shopee = Array.from({ length: 50 }, (_, index) => draft(offer(`shopee-${index}`, "2026-08-08T10:00:01.000Z")));
+    const amazon = Array.from({ length: 8 }, (_, index) => draft(offer(`amazon-${index}`, "2026-08-08T10:00:01.000Z", { platform: "Amazon" })));
+    const mercadoLivre = Array.from({ length: 3 }, (_, index) => draft(offer(`ml-${index}`, "2026-08-08T10:00:01.000Z", { platform: "Mercado Livre" })));
+
+    const selected = selectEditorialTop30TelegramOfferIds([...shopee, ...amazon, ...mercadoLivre], NOW);
+
+    expect(selected).toHaveLength(41);
+    expect(selected.filter((id) => id.startsWith("shopee-"))).toHaveLength(30);
+    expect(selected.filter((id) => id.startsWith("amazon-"))).toHaveLength(8);
+    expect(selected.filter((id) => id.startsWith("ml-"))).toHaveLength(3);
+  });
+
+  it("deduplicates offers and excludes manual or published drafts from the union", () => {
+    const eligible = draft(offer("eligible", "2026-08-08T10:00:01.000Z", { platform: "Amazon" }));
+    const duplicate = { ...eligible, id: "post-duplicate" };
+    const manual = draft(offer("manual", "2026-08-08T10:00:01.000Z", { platform: "Amazon", explainability: { manual_source: true } }));
+    const published = draft(offer("published", "2026-08-08T10:00:01.000Z", { platform: "Mercado Livre" }), { status: "published", external_id: "tg-1" });
+
+    expect(selectEditorialTop30TelegramOfferIds([eligible, duplicate, manual, published], NOW)).toEqual(["eligible"]);
+  });
 });

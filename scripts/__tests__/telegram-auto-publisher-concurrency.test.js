@@ -81,6 +81,25 @@ describe('Telegram Oracle publisher concurrency', () => {
     }
   });
 
+  it('publishes the complete cross-marketplace selection instead of applying a global Top30 cap', async () => {
+    const supabase = createFakeSupabase();
+    supabase.state.posts = Array.from({ length: 41 }, (_, index) => ({
+      id: `post-${index}`,
+      offer_id: `offer-${index}`,
+      channel: 'telegram',
+      status: 'draft',
+      content: `Oferta ${index}`,
+      media_url: 'https://example.test/image.jpg',
+      offers: { image_url: 'https://example.test/image.jpg', product_name: `Produto ${index}`, notes: '' }
+    }));
+    const sends = [];
+    const worker = createTelegramPublisher({ supabase, sendPhoto: async (_text, _mediaUrl, context) => { sends.push(context.offerId); return { message_id: sends.length }; }, sleep: async () => {} });
+
+    await worker.processQueue({ selectedEditorialTop30OfferIds: Array.from({ length: 41 }, (_, index) => `offer-${index}`) });
+
+    expect(sends).toHaveLength(41);
+  });
+
   it('allows only one of two workers to send the same draft', async () => {
     const supabase = createFakeSupabase();
     const sends = [];

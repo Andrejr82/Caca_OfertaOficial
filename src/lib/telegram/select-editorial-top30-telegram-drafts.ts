@@ -29,10 +29,20 @@ export function selectEditorialTop30TelegramOfferIds(rows: readonly TelegramEdit
     const createdAt = new Date(post.created_at).getTime();
     if (post.status !== "draft" || hasPublicationEvidence(post) || protectedOfferIds.has(post.offer_id)) continue;
     if (!Number.isFinite(createdAt) || createdAt < todayStart || createdAt > now.getTime() || !post.offers) continue;
+    if (post.offers.explainability?.manual_source === true) continue;
     if (!eligibleDraftOffers.has(post.offer_id)) eligibleDraftOffers.set(post.offer_id, post.offers);
   }
 
-  return [...new Set(selectEditorialTop30([...eligibleDraftOffers.values()]).map((candidate) => candidate.id))];
+  const eligibleOffers = [...eligibleDraftOffers.values()];
+  const selectedShopeeIds = selectEditorialTop30(
+    eligibleOffers.filter((offer) => offer.platform === "Shopee"),
+    30,
+    now,
+  ).map((candidate) => candidate.id);
+  const nonShopeeIds = eligibleOffers
+    .filter((offer) => offer.platform === "Amazon" || offer.platform === "Mercado Livre")
+    .map((offer) => offer.id);
+  return [...new Set([...selectedShopeeIds, ...nonShopeeIds])];
 }
 
 export async function loadEditorialTop30TelegramOfferIds(client: { from: (table: string) => any }, now = new Date()): Promise<string[]> {
