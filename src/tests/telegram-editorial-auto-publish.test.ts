@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Offer } from "@/types/domain";
-import { selectEditorialTop30TelegramOfferIds, selectEditorialTop30TelegramSelection, type TelegramEditorialDraftRow } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
+import { loadEditorialTop30TelegramOfferIds, loadTelegramEditorialDraftRows, selectEditorialTop30TelegramOfferIds, selectEditorialTop30TelegramSelection, type TelegramEditorialDraftRow } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
 
 const NOW = new Date("2026-08-08T12:00:00.000Z");
 
@@ -131,6 +131,47 @@ describe("Telegram editorial auto-publish selection", () => {
     expect(selected.every((id) => id.startsWith("pet-shopee-"))).toBe(true);
     expect(selected.some((id) => id.startsWith("moveis-") || id.startsWith("beleza-"))).toBe(false);
     expect(selection.diagnostics).toMatchObject({ selectedCohortCorrelationId: "cycle-c", selectedCohortScenarioId: "pet_editorial", shopeeSelected: 30, staleCohortsIgnored: 2 });
+  });
+
+  it("pagina além de 1000 posts stale para alcançar o cohort atual", async () => {
+    const now = new Date("2026-08-09T12:00:00.000Z");
+    const stale = Array.from({ length: 1000 }, (_, index) => draft(offer(`stale-${index}`, "2026-08-08T00:00:00.000Z")));
+    const current = Array.from({ length: 10 }, (_, index) => draft(offer(`paged-current-${index}`, "2026-08-09T10:00:00.000Z", {
+      explainability: { scenarioId: "beleza_editorial", correlation_id: "paged-current", discovery_evidence: { discoveredAt: "2026-08-09T10:00:00.000Z" } },
+    })));
+    const rows = [...stale, ...current];
+    const client = {
+      from() {
+        const query: any = {
+          from: 0,
+          to: 0,
+          select() { return query; },
+          eq() { return query; },
+          order() { return query; },
+          range(from: number, to: number) { query.from = from; query.to = to; return query; },
+          then(resolve: (value: unknown) => unknown) { return Promise.resolve({ data: rows.slice(query.from, query.to + 1), error: null }).then(resolve); },
+        };
+        return query;
+      },
+    };
+
+    const selected = await loadEditorialTop30TelegramOfferIds(client, now);
+
+    expect(selected).toHaveLength(10);
+    expect(selected.every((id) => id.startsWith("paged-current-"))).toBe(true);
+  });
+
+  it("falha fechado ao exceder o limite técnico de páginas", async () => {
+    const client = {
+      from() {
+        const query: any = {
+          select() { return query; }, eq() { return query; }, order() { return query; }, range() { return query; },
+          then(resolve: (value: unknown) => unknown) { return Promise.resolve({ data: [draft(offer("full-page", "2026-08-09T10:00:00.000Z"))], error: null }).then(resolve); },
+        };
+        return query;
+      },
+    };
+    await expect(loadTelegramEditorialDraftRows(client, { pageSize: 1, maxPages: 2 })).rejects.toThrow("maxPages=2");
   });
 
   it("deduplicates offers and excludes manual or published drafts from the union", () => {

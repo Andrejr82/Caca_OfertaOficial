@@ -30,6 +30,8 @@ export type TelegramEditorialSelection = {
 };
 
 const PROTECTED_POST_STATUSES = new Set(["published", "posted", "approved", "rejected", "deferred", "deleted", "publishing"]);
+const TELEGRAM_POST_PAGE_SIZE = 1000;
+const TELEGRAM_POST_MAX_PAGES = 100;
 
 function hasPublicationEvidence(post: Pick<TelegramEditorialDraftRow, "status" | "posted_at" | "external_id">): boolean {
   return PROTECTED_POST_STATUSES.has(post.status.toLowerCase()) || Boolean(post.posted_at || post.external_id);
@@ -102,13 +104,31 @@ export function selectEditorialTop30TelegramSelection(rows: readonly TelegramEdi
   };
 }
 
+export async function loadTelegramEditorialDraftRows(client: { from: (table: string) => any }, options: { pageSize?: number; maxPages?: number } = {}): Promise<TelegramEditorialDraftRow[]> {
+  const pageSize = options.pageSize || TELEGRAM_POST_PAGE_SIZE;
+  const maxPages = options.maxPages || TELEGRAM_POST_MAX_PAGES;
+  const rows: TelegramEditorialDraftRow[] = [];
+  for (let page = 0; page < maxPages; page += 1) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await client
+      .from("posts")
+      .select("id,offer_id,channel,status,content,created_at,posted_at,external_id,offers(*)")
+      .eq("channel", "telegram")
+      .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, to);
+    if (error) throw error;
+    const pageRows = (data || []) as TelegramEditorialDraftRow[];
+    rows.push(...pageRows);
+    if (pageRows.length < pageSize) return rows;
+  }
+  throw new Error(`Telegram posts pagination exceeded technical maxPages=${maxPages}`);
+}
+
 export async function loadEditorialTop30TelegramSelection(client: { from: (table: string) => any }, now = new Date()): Promise<TelegramEditorialSelection> {
-  const { data, error } = await client
-    .from("posts")
-    .select("id,offer_id,channel,status,content,created_at,posted_at,external_id,offers(*)")
-    .eq("channel", "telegram");
-  if (error) throw error;
-  return selectEditorialTop30TelegramSelection((data || []) as TelegramEditorialDraftRow[], now);
+  const rows = await loadTelegramEditorialDraftRows(client);
+  return selectEditorialTop30TelegramSelection(rows, now);
 }
 
 export async function loadEditorialTop30TelegramOfferIds(client: { from: (table: string) => any }, now = new Date()): Promise<string[]> {
