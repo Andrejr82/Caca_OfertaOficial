@@ -32,6 +32,13 @@ describe("SHEIN share text parser", () => {
     expect(() => parseSheinShareText("🛒Produto\n💰Preço[R$10,00]")).toThrow("SHEIN_SHARE_URL_REQUIRED");
   });
 
+  it("parses a single-line share without leaking coupon or URL into title", () => {
+    const result = parseSheinShareText("💰Preço[R$94,32] -20% 🛒Produto de verão 🎁Cupom 50% OFF https://onelink.shein.com/46/abc123");
+    expect(result.title).toBe("Produto de verão");
+    expect(result.couponText).toBe("Cupom 50% OFF");
+    expect(result.originalUrl).toBe("https://onelink.shein.com/46/abc123");
+  });
+
   it("fails closed for invalid shared text", () => {
     expect(() => parseSheinShareText("oferta SHEIN sem dados")).toThrow("SHEIN_SHARE_INVALID");
     expect(() => parseSheinShareText("🛒Produto\n💰Preço[R$0,00]\nhttps://onelink.shein.com/46/abc123")).toThrow("SHEIN_SHARE_PRICE_INVALID");

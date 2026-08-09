@@ -123,17 +123,9 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
   // ─── Batch generate com isolamento por item (MAX_CONCURRENCY=3) ───
   async function processSheinShare(sharedText: ReturnType<typeof parseSheinShareText>) {
       setIsProcessing(true);
-      let imageCandidates: SheinImageCandidate[] = [];
-      let imageUrl = "";
-      let message = "Confirme os dados compartilhados pela SHEIN.";
-      try {
-        const discovery = await discoverSheinImagesAction(sharedText.originalUrl, sharedText.originalUrl);
-        imageCandidates = discovery.imageCandidates;
-        imageUrl = imageCandidates[0]?.url || "";
-        if (imageUrl) message = "Imagem vinculada encontrada. Confirme os dados.";
-      } catch {
-        message = "Imagem não encontrada automaticamente; informe uma URL ou faça upload manual.";
-      }
+      const imageCandidates: SheinImageCandidate[] = [];
+      const imageUrl = "";
+      const message = "Confira os dados e insira uma imagem por URL ou upload manual.";
       setSheinAssistedRequests((prev) => [{
         id: `shein-share-${Date.now()}`,
         originalUrl: sharedText.originalUrl,
@@ -600,49 +592,6 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                       <label className="text-xs text-white/50">URL original</label>
                       <input value={request.originalUrl} readOnly className="glass-input mt-1 w-full rounded-lg p-2.5 text-xs font-mono text-white/60" />
                     </div>
-                    <div className="md:col-span-2">
-                      <label className="text-xs text-white/70">URL canônica SHEIN (opcional)</label>
-                      <input
-                        value={request.canonicalUrl}
-                        onChange={(e) => updateSheinAssistedRequest(request.id, "canonicalUrl", e.target.value)}
-                        placeholder="Cole a URL com -p-<productId> para buscar a galeria"
-                        className="glass-input mt-1 w-full rounded-lg p-2.5 text-xs font-mono"
-                        disabled={request.submitting}
-                      />
-                    </div>
-                    <div className="md:col-span-2 rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <div>
-                          <p className="text-xs font-semibold text-white/80">Imagem da página SHEIN aberta</p>
-                          <p className="text-[11px] text-white/45">Se houver challenge, capture somente as imagens renderizadas no navegador.</p>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="text-xs h-8 px-3 whitespace-nowrap"
-                          disabled={request.submitting}
-                          onClick={() => void copySheinCaptureSnippet(request)}
-                        >
-                          <Copy size={12} /> Capturar imagens da página SHEIN aberta
-                        </Button>
-                      </div>
-                      <textarea
-                        value={request.captureJson}
-                        onChange={(e) => updateSheinAssistedRequest(request.id, "captureJson", e.target.value)}
-                        placeholder="Cole aqui o JSON copiado do Console da página SHEIN"
-                        className="glass-input w-full rounded-lg p-2.5 text-[11px] font-mono min-h-20"
-                        disabled={request.submitting}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        className="text-xs h-7 px-3"
-                        disabled={request.submitting || !request.captureJson.trim()}
-                        onClick={() => applySheinCapturedImages(request)}
-                      >
-                        <ImageIcon size={12} /> Aplicar imagens capturadas
-                      </Button>
-                    </div>
                     <div>
                       <label className="text-xs text-white/70">Título confirmado *</label>
                       <input
@@ -685,15 +634,6 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                         disabled={request.submitting}
                       />
                       <div className="mt-2 flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          className="text-xs h-7 px-3"
-                          disabled={request.submitting}
-                          onClick={() => void discoverImagesForSheinRequest(request)}
-                        >
-                          <ImageIcon size={12} /> Buscar galeria automaticamente
-                        </Button>
                         <label className="text-xs text-white/50 cursor-pointer">
                           ou upload manual
                           <input
@@ -704,6 +644,10 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
+                              if (!/^image\/(?:jpeg|png|webp)$/i.test(file.type)) {
+                                setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, message: "Use JPG, JPEG, PNG ou WEBP." } : item));
+                                return;
+                              }
                               if (file.size > 2_000_000) {
                                 updateSheinAssistedRequest(request.id, "imageUrl", "");
                                 setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, message: "A imagem local deve ter até 2 MB." } : item));
@@ -719,19 +663,10 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                     </div>
                   </div>
 
-                  {request.imageCandidates.length > 0 && (
-                    <div className="flex gap-2 overflow-x-auto py-1">
-                      {request.imageCandidates.map((candidate) => (
-                        <button
-                          type="button"
-                          key={candidate.url}
-                          onClick={() => updateSheinAssistedRequest(request.id, "imageUrl", candidate.url)}
-                          className={`h-16 w-16 flex-shrink-0 rounded border overflow-hidden ${request.imageUrl === candidate.url ? "border-amber-400" : "border-white/10"}`}
-                          title={`Selecionar imagem (${candidate.source})`}
-                        >
-                          <img src={candidate.url} alt="Candidata SHEIN" className="h-full w-full object-cover" />
-                        </button>
-                      ))}
+                  {request.imageUrl && (
+                    <div className="rounded-lg border border-white/10 bg-black/20 p-2">
+                      <p className="mb-2 text-xs text-white/50">Preview da imagem confirmada</p>
+                      <img src={request.imageUrl} alt={request.title || "Imagem SHEIN"} className="max-h-56 w-full rounded object-contain" />
                     </div>
                   )}
 
@@ -747,7 +682,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                       onClick={() => void confirmSheinAssistedRequest(request)}
                       className="bg-amber-600 hover:bg-amber-500 border-0 text-xs"
                     >
-                      {request.submitting ? <><Loader2 size={14} className="animate-spin" /> Confirmando...</> : <><CheckCircle2 size={14} /> Confirmar dados e gerar drafts</>}
+                      {request.submitting ? <><Loader2 size={14} className="animate-spin" /> Finalizando...</> : <><CheckCircle2 size={14} /> Finalizar publicação</>}
                     </Button>
                   </div>
                 </div>

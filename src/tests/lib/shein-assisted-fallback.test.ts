@@ -47,6 +47,13 @@ describe("Shein assisted fallback", () => {
     });
   });
 
+  it("rejects unsupported image formats", () => {
+    expect(validateSheinAssistedConfirmation({ ...valid, imageUrl: "https://cdn.example.com/image.svg" })).toMatchObject({
+      ok: false,
+      errors: ["IMAGEM_URL_INVÁLIDA"],
+    });
+  });
+
   it("builds a manual-source payload without allowing IA or title lookup to set price", () => {
     const result = validateSheinAssistedConfirmation(valid);
     if (!result.ok) throw new Error("fixture should be valid");

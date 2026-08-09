@@ -27,14 +27,12 @@ export function parseSheinShareText(input: string): SheinShareTextResult {
   if (!price) throw new Error("SHEIN_SHARE_PRICE_INVALID");
 
   const titleStart = text.indexOf("🛒");
-  const titleLines = titleStart >= 0
-    ? text.slice(titleStart + "🛒".length).split("\n").filter((line) => !/^\s*(?:💰|🎁|https?:\/\/)/u.test(line))
-    : [];
-  const title = titleLines.join("\n").trim();
+  const afterCart = titleStart >= 0 ? text.slice(titleStart + "🛒".length) : "";
+  const title = (afterCart.split(/💰|🎁|https?:\/\//u)[0] || "").trim();
   if (!title) throw new Error("SHEIN_SHARE_TITLE_REQUIRED");
 
-  const couponMatch = text.match(/🎁\s*([^\n]+)/u);
-  const couponText = couponMatch?.[1]?.trim() || undefined;
+  const couponMatch = text.match(/🎁\s*([\s\S]*?)(?=https?:\/\/|$)/u);
+  const couponText = couponMatch?.[1]?.replace(/\s+/g, " ").trim() || undefined;
   return {
     marketplace: "shein",
     price,

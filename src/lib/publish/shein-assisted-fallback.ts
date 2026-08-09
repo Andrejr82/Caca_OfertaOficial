@@ -31,10 +31,11 @@ function parsePrice(value: string): number {
 }
 
 function isHttpUrl(value: string): boolean {
-  if (/^data:image\/(?:avif|gif|jpe?g|png|webp);base64,/i.test(value.trim())) return true;
+  if (/^data:image\/(?:jpe?g|png|webp);base64,/i.test(value.trim())) return true;
   try {
     const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
+    return (url.protocol === "http:" || url.protocol === "https:")
+      && /\.(?:jpe?g|png|webp)(?:$|[?#])/i.test(url.pathname + url.search);
   } catch {
     return false;
   }
@@ -51,7 +52,8 @@ export function validateSheinAssistedConfirmation(value: SheinAssistedFormValue)
   if (!isHttpUrl(imageUrl)) errors.push("IMAGEM_URL_INVÁLIDA");
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, confirmation: { title, price, imageUrl, couponText: value.couponText?.trim() || undefined } };
+  const couponText = value.couponText?.trim();
+  return { ok: true, confirmation: couponText ? { title, price, imageUrl, couponText } : { title, price, imageUrl } };
 }
 
 export function buildSheinAssistedPayload(
