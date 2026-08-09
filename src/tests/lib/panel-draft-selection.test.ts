@@ -37,6 +37,29 @@ function post(index: number, overrides: Partial<FixturePost["offers"]> = {}): Fi
 }
 
 describe("panel draft selection", () => {
+  it("exibe somente os 15 drafts do cohort atual entre 989 drafts do mesmo dia", () => {
+    const currentCorrelation = "ac619781-3b00-47a6-8fa1-1290a2732e74";
+    const current = [
+      ...Array.from({ length: 10 }, (_, index) => post(index, { platform: "Amazon", explainability: { correlation_id: currentCorrelation } })),
+      ...Array.from({ length: 3 }, (_, index) => post(100 + index, { platform: "Mercado Livre", explainability: { correlation_id: currentCorrelation } })),
+      ...Array.from({ length: 2 }, (_, index) => post(200 + index, { platform: "Shopee", explainability: { correlation_id: currentCorrelation } })),
+    ];
+    const previous = Array.from({ length: 974 }, (_, index) => post(100 + index, { created_at: "2026-08-08T10:00:01.000Z", explainability: { correlation_id: "previous-cycle" } }));
+    const visible = mergePanelDrafts([...current, ...previous], new Set(current.slice(0, 3).map((item) => item.offer_id)), new Date("2026-08-08T03:00:00.000Z"));
+    expect([...current, ...previous]).toHaveLength(989);
+    expect(visible).toHaveLength(15);
+    expect(visible.filter((item) => item.offers.platform === "Amazon")).toHaveLength(10);
+    expect(visible.filter((item) => item.offers.platform === "Mercado Livre")).toHaveLength(3);
+    expect(visible.filter((item) => item.offers.platform === "Shopee")).toHaveLength(2);
+  });
+
+  it("trocar o cohort editorial oculta o anterior sem usar activeOfferIds", () => {
+    const first = post(1, { explainability: { correlation_id: "cycle-a" }, created_at: "2026-08-08T10:00:01.000Z" });
+    const second = post(2, { explainability: { correlation_id: "cycle-b" }, created_at: "2026-08-08T11:00:01.000Z" });
+
+    expect(mergePanelDrafts([first, second], new Set([first.offer_id]), new Date("2026-08-08T03:00:00.000Z"))).toEqual([second]);
+    expect(mergePanelDrafts([first, second], new Set([second.offer_id]), new Date("2026-08-08T03:00:00.000Z"))).toEqual([second]);
+  });
   it("exibe todos os editoriais atuais mais 1 manual express fora do Top30 operacional", () => {
     const editorial = Array.from({ length: 582 }, (_, index) => post(index));
     const manual = post(999, {
