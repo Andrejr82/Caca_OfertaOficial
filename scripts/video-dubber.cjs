@@ -62,6 +62,63 @@ function normalizeDubbingTitle(title) {
     .trim();
 }
 
+const TTS_ACRONYM_ALIASES = new Map([
+  ['SSD', 'ésse ésse dê'],
+  ['USB', 'u ésse bê'],
+  ['HDMI', 'agá dê éme í'],
+  ['RGB', 'érre gê bê'],
+  ['QHD', 'quê agá dê'],
+  ['FHD', 'éfe agá dê'],
+]);
+
+function integerToPortuguese(value) {
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0 || number > 10000) return String(value);
+  const units = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+  const teens = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+  const tens = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+  const hundreds = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+
+  if (number < 10) return units[number];
+  if (number < 20) return teens[number - 10];
+  if (number < 100) return `${tens[Math.floor(number / 10)]}${number % 10 ? ` e ${units[number % 10]}` : ''}`;
+  if (number === 100) return 'cem';
+  if (number < 1000) return `${hundreds[Math.floor(number / 100)]}${number % 100 ? ` e ${integerToPortuguese(number % 100)}` : ''}`;
+  if (number === 1000) return 'mil';
+  if (number < 10000) return `${integerToPortuguese(Math.floor(number / 1000))} mil${number % 1000 ? ` e ${integerToPortuguese(number % 1000)}` : ''}`;
+  return 'dez mil';
+}
+
+function decimalToPortuguese(value) {
+  const [whole, fraction] = String(value).replace('.', ',').split(',');
+  if (!fraction) return integerToPortuguese(Number(whole));
+  return `${integerToPortuguese(Number(whole))} vírgula ${fraction.split('').map((digit) => integerToPortuguese(Number(digit))).join(' ')}`;
+}
+
+function normalizeSpeechForTTS(text) {
+  let normalized = String(text || '')
+    .replace(/\b(\d{1,3})\s*["”]/gu, (_, value) => `${integerToPortuguese(value)} polegadas`)
+    .replace(/\b(\d{1,4})\s*°/gu, (_, value) => `${integerToPortuguese(value)} graus`)
+    .replace(/\b(\d+(?:[.,]\d+)?)\s*GHz\b/giu, (_, value) => `${decimalToPortuguese(value)} gigahertz`)
+    .replace(/\b(\d{1,6})\s*mAh\b/giu, (_, value) => `${integerToPortuguese(value)} miliampères-hora`)
+    .replace(/\b(\d{1,5})\s*GB\b/giu, (_, value) => `${integerToPortuguese(value)} ${Number(value) === 1 ? 'gigabyte' : 'gigabytes'}`)
+    .replace(/\b(\d{1,3})\s*TB\b/giu, (_, value) => `${integerToPortuguese(value)} ${Number(value) === 1 ? 'terabyte' : 'terabytes'}`)
+    .replace(/\b(\d{1,4})\s*V\b/giu, (_, value) => `${integerToPortuguese(value)} volts`)
+    .replace(/\b(\d{1,4})\s*Hz\b/giu, (_, value) => `${integerToPortuguese(value)} hertz`)
+    .replace(/\b(\d{1,2})\s+em\s+(\d{1,2})\b/giu, (_, first, second) => `${integerToPortuguese(first)} em ${integerToPortuguese(second)}`);
+
+  for (const [alias, spoken] of TTS_ACRONYM_ALIASES) {
+    normalized = normalized.replace(new RegExp(`\\b${alias}\\b`, 'giu'), spoken);
+  }
+
+  return normalized
+    .replace(/\b(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g, '')
+    .replace(/[\/|]/gu, ' e ')
+    .replace(/[()]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
 function numberWord(value, feminine = false) {
   const words = feminine ? { 2: 'duas', 3: 'três', 5: 'cinco' } : { 2: 'dois', 3: 'três', 5: 'cinco' };
   return words[Number(value)] || value;
@@ -143,6 +200,11 @@ ESTRUTURA:
 
 REGRAS DE ESTILO:
 - Frases curtas, fluidas e naturais para TTS.
+- Escreva para fala, não para leitura de catálogo: uma ideia ou especificação por frase.
+- Não repita o título completo nem carregue SKU, modelo ou código alfanumérico sem valor comercial.
+- Evite slash, pipes, parênteses e blocos técnicos; selecione apenas especificações úteis.
+- Expresse números e unidades em forma natural de fala.
+- Não invente pronúncia de marcas, não traduza marcas e omita especificação técnica redundante.
 - Persuasão por clareza, ritmo e especificidade; sem exagero de propaganda.
 - Não mencione preço, desconto, economia ou estoque.
 - Não use emojis, aspas, títulos ou numeração.
@@ -343,10 +405,14 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     let copy = await generateDubbingCopy(title, price, durationSecs, gender);
     console.log(`[Job ${jobId}] Roteiro:\n${copy}`);
 
+    // Reverter "Chopí" antes do TTS e manter copy comercial intacta no retorno.
+    copy = copy.replace(/Chopí/gi, 'Shopee');
+    const ttsText = normalizeSpeechForTTS(copy);
+
     // 5. Gerar áudio inicial (sem ajuste de rate) com pitch +5Hz para entusiasmo
     const PITCH = '+10Hz';
     console.log(`[Job ${jobId}] Gerando áudio TTS inicial (pitch: ${PITCH})...`);
-    await generateTTS(copy, audioPath, '+0%', PITCH);
+    await generateTTS(ttsText, audioPath, '+0%', PITCH);
 
     // 6. Medir duração do áudio gerado
     const audioDuration = await getAudioDuration(audioPath);
@@ -361,7 +427,7 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
         console.log(`[Job ${jobId}] Diferença: ${((audioDuration - durationSecs) > 0 ? '+' : '')}${(audioDuration - durationSecs).toFixed(1)}s. Ajustando rate para: ${rate}`);
 
         try { fs.unlinkSync(audioPath); } catch(e) {}
-        await generateTTS(copy, audioPath, rate, PITCH);
+        await generateTTS(ttsText, audioPath, rate, PITCH);
 
         const finalAudioDuration = await getAudioDuration(audioPath);
         console.log(`[Job ${jobId}] ✅ Áudio ajustado: ${finalAudioDuration ? finalAudioDuration.toFixed(1) : '?'}s (rate: ${rate})`);
@@ -377,9 +443,6 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     // 9. Cleanup
     fs.unlinkSync(rawVideoPath);
     fs.unlinkSync(audioPath);
-
-    // Reverter "Chopí" → "Shopee" na copy para banco/frontend
-    copy = copy.replace(/Chopí/gi, 'Shopee');
 
     console.log(`[Job ${jobId}] Concluído! Arquivo: ${finalVideoPath}`);
     return {
@@ -402,4 +465,5 @@ module.exports = {
   buildFallbackDubbingScript,
   sanitizeDubbingScript,
   isSafeDubbingScript,
+  normalizeSpeechForTTS,
 };

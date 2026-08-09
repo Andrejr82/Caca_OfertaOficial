@@ -7,6 +7,7 @@ const {
   sanitizeDubbingScript,
   buildDubbingPrompt,
   generateDubbingCopy,
+  normalizeSpeechForTTS,
 } = require('../video-dubber.cjs');
 
 const FORBIDDEN = [
@@ -93,7 +94,58 @@ test('prompt define autoridade factual, variedade e CTA sem instruções proibid
   assert.match(prompt, /não invente|não crie/iu);
   assert.match(prompt, /45 a 80 palavras/u);
   assert.match(prompt, /CTA final/u);
+  assert.match(prompt, /escreva para fala/iu);
+  assert.match(prompt, /SKU.*código alfanumérico/iu);
+  assert.match(prompt, /números e unidades.*forma natural de fala/iu);
+  assert.match(prompt, /não invente pronúncia de marcas/iu);
   for (const phrase of ['isso mudou minha vida', 'corre que pode acabar', 'preço incrível']) {
     assert.equal(prompt.toLowerCase().includes(phrase), false, phrase);
   }
+});
+
+test('normalizador converte medidas frequentes para fala natural', () => {
+  const input = 'Monitor Gamer 27" com 360° e 48V, 180Hz, 2,4GHz, 512GB, 1TB, 10000mAh e 3 em 1.';
+  const output = normalizeSpeechForTTS(input);
+
+  for (const phrase of [
+    'vinte e sete polegadas',
+    'trezentos e sessenta graus',
+    'quarenta e oito volts',
+    'cento e oitenta hertz',
+    'dois vírgula quatro gigahertz',
+    'quinhentos e doze gigabytes',
+    'um terabyte',
+    'dez mil miliampères-hora',
+    'três em um',
+  ]) assert.match(output, new RegExp(phrase, 'iu'), phrase);
+  assert.doesNotMatch(output, /27["”]|360°|48\s*V|180\s*Hz|2,4\s*GHz|512\s*GB|1\s*TB|10000\s*mAh/u);
+});
+
+test('normalizador aplica aliases explícitos para siglas técnicas', () => {
+  const output = normalizeSpeechForTTS('SSD USB HDMI RGB QHD FHD');
+  assert.equal(output, 'ésse ésse dê u ésse bê agá dê éme í érre gê bê quê agá dê éfe agá dê');
+});
+
+test('normalizador remove códigos alfanuméricos não comerciais', () => {
+  const output = normalizeSpeechForTTS('Monitor DXMO238F100 HQ27IP18 TGT-HRTC-BL03 com 27".');
+  assert.doesNotMatch(output, /DXMO238F100|HQ27IP18|TGT-HRTC-BL03/u);
+  assert.match(output, /vinte e sete polegadas/u);
+});
+
+test('normalizador transforma separadores técnicos em pausas faláveis', () => {
+  const output = normalizeSpeechForTTS('Monitor QHD/USB (RGB) | sem fio');
+  assert.doesNotMatch(output, /[\/|()]/u);
+  assert.match(output, /quê agá dê e u ésse bê/u);
+});
+
+test('copy permanece comercial e normal enquanto TTS recebe texto falável', () => {
+  const copy = 'Monitor Gamer 27" QHD 180Hz. Você encontra na Shopee. Acesse o link na publicação.';
+  const ttsText = normalizeSpeechForTTS(copy);
+
+  assert.equal(copy, 'Monitor Gamer 27" QHD 180Hz. Você encontra na Shopee. Acesse o link na publicação.');
+  assert.match(copy, /27"/u);
+  assert.match(ttsText, /vinte e sete polegadas/u);
+  assert.match(ttsText, /cento e oitenta hertz/u);
+  assert.match(ttsText, /Acesse o link na publicação\.$/u);
+  assert.doesNotMatch(ttsText, /27"|180Hz/u);
 });
