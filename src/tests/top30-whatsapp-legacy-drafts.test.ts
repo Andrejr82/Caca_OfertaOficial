@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { Offer } from "@/types/domain";
 import {
   prepareTop30WhatsappLegacyDrafts,
+  rotateNextWhatsappEditorialBatch,
+  type WhatsappEditorialBatchState,
   type Top30WhatsappRepository,
 } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 
@@ -53,11 +55,13 @@ function repository(input: {
   fallback: Offer[];
   posts?: TestPost[];
   links?: Map<string, { id: string; tracked_url: string }>;
+  state?: WhatsappEditorialBatchState | null;
 }) {
   const calls: string[] = [];
   const writes: Array<{ type: string; offerId: string; content?: string }> = [];
   const links = input.links ?? new Map();
   const posts = input.posts ?? [];
+  let state = input.state ?? null;
   const repo: Top30WhatsappRepository & { calls: string[]; writes: typeof writes } = {
     calls,
     writes,
@@ -88,6 +92,12 @@ function repository(input: {
     async insertDraft(input) {
       writes.push({ type: "draft", offerId: input.offerId, content: input.content });
       return { id: `post-${input.offerId}`, status: "draft" as const, channel: "whatsapp" as const };
+    },
+    async loadWhatsappEditorialBatchState() {
+      return state;
+    },
+    async saveWhatsappEditorialBatchState(nextState) {
+      state = nextState;
     },
   };
   return repo;
@@ -270,5 +280,74 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     expect(result.reasons.telegram_blocked).toBe(1);
     expect(repo.calls.some((call) => call.includes("telegram"))).toBe(false);
     expect(result.created).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("rotateNextWhatsappEditorialBatch", () => {
+  it("advances through today's full eligible universe without recycling the active batch", async () => {
+    const offers = Array.from({ length: 90 }, (_, index) => offer(`next-${index}`, "2026-08-07T10:00:01.000Z", { item_id: `next-item-${index}` }));
+    const repo = repository({
+      today: offers,
+      fallback: [],
+      state: { version: 1, dayKey: "2026-08-07", activeOfferIds: offers.slice(0, 30).map((item) => item.id), seenOfferIds: offers.slice(0, 30).map((item) => item.id), exhausted: false },
+    });
+    const first = await rotateNextWhatsappEditorialBatch(repo, { now: NOW });
+    const second = await rotateNextWhatsappEditorialBatch(repo, { now: NOW });
+    expect(first.selectedCount).toBe(30);
+    expect(second.selectedCount).toBe(30);
+    expect(new Set([...first.selectedOfferIds, ...second.selectedOfferIds]).size).toBe(60);
+    expect(first.selectedOfferIds.some((id) => id.startsWith("next-0"))).toBe(false);
+    expect(first).not.toHaveProperty("created");
+    expect(first).not.toHaveProperty("legacy_copy_generation_disabled");
+  });
+
+  it("does not let manual, protected, historical, or duplicate offers consume slots", async () => {
+    const eligible = Array.from({ length: 30 }, (_, index) => offer(`eligible-${index}`, "2026-08-07T10:00:01.000Z", { item_id: `eligible-item-${index}` }));
+    const raw = [
+      ...eligible,
+      offer("manual", "2026-08-07T10:00:01.000Z", { explainability: { manual_source: true }, item_id: "manual-item" }),
+      offer("rejected", "2026-08-07T10:00:01.000Z", { status: "rejected", item_id: "rejected-item" }),
+      offer("duplicate", "2026-08-07T10:00:01.000Z", { item_id: "eligible-item-0" }),
+    ];
+    const repo = repository({ today: raw, fallback: [], posts: [post("eligible-1", "posted", "2026-08-06T10:00:00.000Z")] });
+    const result = await rotateNextWhatsappEditorialBatch(repo, { now: NOW });
+    expect(result.selectedOfferIds).not.toContain("manual");
+    expect(result.selectedOfferIds).not.toContain("rejected");
+    expect(result.selectedOfferIds.filter((id) => ["eligible-0", "duplicate"].includes(id))).toHaveLength(1);
+    expect(result.selectedCount).toBeLessThanOrEqual(30);
+  });
+
+  it("uses all eligible offers today instead of reapplying the latest-cycle limit", async () => {
+    const olderCycle = Array.from({ length: 31 }, (_, index) => offer(`older-${index}`, "2026-08-07T09:00:01.000Z", { item_id: `older-item-${index}`, explainability: { correlation_id: "older-cycle" } }));
+    const latestCycle = Array.from({ length: 30 }, (_, index) => offer(`latest-${index}`, "2026-08-07T10:00:01.000Z", { item_id: `latest-item-${index}`, explainability: { correlation_id: "latest-cycle" } }));
+    const repo = repository({
+      today: [...olderCycle, ...latestCycle],
+      fallback: [],
+      state: { version: 1, dayKey: "2026-08-07", activeOfferIds: latestCycle.map((item) => item.id), seenOfferIds: latestCycle.map((item) => item.id), exhausted: false },
+    });
+    const result = await rotateNextWhatsappEditorialBatch(repo, { now: NOW });
+    expect(result.selectedCount).toBe(30);
+    expect(result.selectedOfferIds.every((id) => id.startsWith("older-"))).toBe(true);
+  });
+
+  it("returns exhausted and never recycles after all IDs were seen", async () => {
+    const only = [offer("only", "2026-08-07T10:00:01.000Z")];
+    const state: WhatsappEditorialBatchState = { version: 1, dayKey: "2026-08-07", activeOfferIds: ["only"], seenOfferIds: ["only"], exhausted: false };
+    const repo = repository({ today: only, fallback: [], state });
+    const result = await rotateNextWhatsappEditorialBatch(repo, { now: NOW });
+    expect(result.status).toBe("exhausted");
+    expect(result.selectedOfferIds).toEqual([]);
+  });
+});
+
+describe("WhatsApp opening batch authority", () => {
+  it("keeps the persisted active batch after the page refreshes", async () => {
+    const repo = repository({
+      today: [offer("initial-cycle", "2026-08-07T10:00:01.000Z")],
+      fallback: [],
+      state: { version: 1, dayKey: "2026-08-07", activeOfferIds: ["click-1", "click-2"], seenOfferIds: ["click-1", "click-2"], exhausted: false },
+    });
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
+    expect(result.selectedOfferIds).toEqual(["click-1", "click-2"]);
   });
 });

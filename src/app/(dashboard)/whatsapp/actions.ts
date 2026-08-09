@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository, type Top30WhatsappResult } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
+import { rotateNextWhatsappEditorialBatch, SupabaseTop30WhatsappRepository, type WhatsappNextBatchResult } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 
-export type Top30WhatsappActionResult = Top30WhatsappResult & { ok: boolean; message?: string };
+export type Top30WhatsappActionResult = WhatsappNextBatchResult & { ok: boolean; message?: string };
 
 function failed(message: string): Top30WhatsappActionResult {
-  return { ok: false, windowUsed: "today_brt", created: 0, reusedTodayDrafts: 0, reused: 0, skippedAlreadyPosted: 0, skippedAlreadyApproved: 0, skippedAlreadySeenToday: 0, skippedOldDraft: 0, skippedNotFresh: 0, skippedAffiliateFailed: 0, skipped: 0, reasons: { preparation_failed: 1 }, selectedOfferIds: [], message };
+  return { ok: false, mode: "next-batch", status: "exhausted", selectedOfferIds: [], selectedCount: 0, availableBeforeSelection: 0, message };
 }
 
-export async function prepareTop30WhatsappLegacyDraftsAction(): Promise<Top30WhatsappActionResult> {
+export async function rotateNextWhatsappEditorialBatchAction(): Promise<Top30WhatsappActionResult> {
   const authClient = await createServerSupabaseClient();
   if (!authClient) return failed("Supabase indisponível para preparar os drafts.");
   const { data: auth } = await authClient.auth.getUser();
@@ -20,10 +20,13 @@ export async function prepareTop30WhatsappLegacyDraftsAction(): Promise<Top30Wha
   const client = createSupabaseAdminClient() || authClient;
   if (!client) return failed("Supabase indisponível para preparar os drafts.");
   try {
-    const result = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(client, userId));
+    const result = await rotateNextWhatsappEditorialBatch(new SupabaseTop30WhatsappRepository(client, userId));
     revalidatePath("/whatsapp");
-    return { ok: true, ...result, message: "Drafts WhatsApp preparados em Aguardando aprovação." };
+    return { ok: true, ...result, message: result.status === "selected" ? "Novo lote editorial WhatsApp selecionado." : "Não há mais ofertas editoriais disponíveis hoje." };
   } catch (error) {
     return failed(error instanceof Error ? error.message : "Não foi possível preparar os drafts WhatsApp.");
   }
 }
+
+/** @deprecated Use rotateNextWhatsappEditorialBatchAction for the refresh control. */
+export const prepareTop30WhatsappLegacyDraftsAction = rotateNextWhatsappEditorialBatchAction;

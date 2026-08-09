@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { prepareTop30WhatsappLegacyDraftsAction } from "@/app/(dashboard)/whatsapp/actions";
+import { rotateNextWhatsappEditorialBatchAction } from "@/app/(dashboard)/whatsapp/actions";
 import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
 
 const refresh = vi.fn();
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 vi.mock("@/app/(dashboard)/whatsapp/actions", () => ({
-  prepareTop30WhatsappLegacyDraftsAction: vi.fn(),
+  rotateNextWhatsappEditorialBatchAction: vi.fn(),
 }));
 
 describe("WhatsappTop30Action", () => {
@@ -16,29 +16,38 @@ describe("WhatsappTop30Action", () => {
   });
 
   it("prepara apenas drafts WhatsApp, mostra o resumo e atualiza a lista antiga", async () => {
-    vi.mocked(prepareTop30WhatsappLegacyDraftsAction).mockResolvedValue({
+    vi.mocked(rotateNextWhatsappEditorialBatchAction).mockResolvedValue({
       ok: true,
-      windowUsed: "today_brt",
-      created: 30,
-      reusedTodayDrafts: 0,
-      reused: 0,
-      skippedAlreadyPosted: 0,
-      skippedAlreadyApproved: 0,
-      skippedAlreadySeenToday: 0,
-      skippedOldDraft: 0,
-      skippedNotFresh: 0,
-      skippedAffiliateFailed: 0,
-      skipped: 0,
-      reasons: { telegram_blocked: 1 },
+      mode: "next-batch",
+      status: "selected",
+      selectedCount: 30,
+      availableBeforeSelection: 60,
       selectedOfferIds: Array.from({ length: 30 }, (_, index) => `offer-${index}`),
+      message: "Novo lote editorial WhatsApp selecionado.",
     });
 
     render(<WhatsappTop30Action />);
     fireEvent.click(screen.getByRole("button", { name: "Atualizar melhores ofertas" }));
 
-    await waitFor(() => expect(screen.getByText(/30 criados/)).toBeTruthy());
-    expect(screen.getByText(/today_brt/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("30 novas ofertas carregadas")).toBeTruthy());
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Telegram|Vídeos|Reels/i)).toBeNull();
+  });
+
+  it("informa quando o dia editorial está esgotado sem sugerir criação de drafts", async () => {
+    vi.mocked(rotateNextWhatsappEditorialBatchAction).mockResolvedValue({
+      ok: true,
+      mode: "next-batch",
+      status: "exhausted",
+      selectedCount: 0,
+      availableBeforeSelection: 0,
+      selectedOfferIds: [],
+      message: "Não há mais ofertas editoriais disponíveis hoje.",
+    });
+
+    render(<WhatsappTop30Action />);
+    fireEvent.click(screen.getByRole("button", { name: "Atualizar melhores ofertas" }));
+
+    await waitFor(() => expect(screen.getByText("0 novas ofertas disponíveis hoje")).toBeTruthy());
   });
 });

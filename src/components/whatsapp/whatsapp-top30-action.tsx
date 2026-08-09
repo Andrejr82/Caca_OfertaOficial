@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { prepareTop30WhatsappLegacyDraftsAction, type Top30WhatsappActionResult } from "@/app/(dashboard)/whatsapp/actions";
+import { rotateNextWhatsappEditorialBatchAction, type Top30WhatsappActionResult } from "@/app/(dashboard)/whatsapp/actions";
 
 export function WhatsappTop30Action() {
   const router = useRouter();
@@ -11,7 +11,7 @@ export function WhatsappTop30Action() {
 
   function handlePrepare() {
     startTransition(async () => {
-      const nextResult = await prepareTop30WhatsappLegacyDraftsAction();
+      const nextResult = await rotateNextWhatsappEditorialBatchAction();
       setResult(nextResult);
       if (nextResult.ok) router.refresh();
     });
@@ -24,7 +24,11 @@ export function WhatsappTop30Action() {
       </button>
       {result && (
         <span role="status" className={result.ok ? "text-xs text-emerald-200" : "text-xs text-red-200"}>
-          {result.ok ? `${result.created} criados · ${result.reusedTodayDrafts} drafts de hoje reutilizados · ${result.skipped} pulados · ${result.windowUsed}` : result.message}
+          {result.ok
+            ? result.status === "exhausted"
+              ? "0 novas ofertas disponíveis hoje"
+              : `${result.selectedCount} novas ofertas carregadas`
+            : result.message}
         </span>
       )}
     </div>

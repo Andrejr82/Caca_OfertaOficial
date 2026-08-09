@@ -25,6 +25,22 @@ export type Top30WhatsappResult = {
   selectedOfferIds: string[];
 };
 
+export type WhatsappEditorialBatchState = {
+  version: 1;
+  dayKey: string;
+  activeOfferIds: string[];
+  seenOfferIds: string[];
+  exhausted: boolean;
+};
+
+export type WhatsappNextBatchResult = {
+  mode: "next-batch";
+  status: "selected" | "exhausted";
+  selectedOfferIds: string[];
+  selectedCount: number;
+  availableBeforeSelection: number;
+};
+
 type AffiliateLinkRow = { offer_id: string; channel: typeof WHATSAPP_CHANNEL; id: string; tracked_url: string };
 type WhatsappPostRow = {
   id: string;
@@ -45,6 +61,8 @@ export interface Top30WhatsappRepository {
   listHistoricalOffers: () => Promise<HistoricalOfferIdentityRow[]>;
   createAffiliateLink(input: { userId: string; offerId: string; originalUrl: string; trackedUrl: string; subId: string }): Promise<{ id: string; tracked_url: string }>;
   insertDraft(input: { userId: string; offerId: string; affiliateLinkId: string; content: string }): Promise<{ id: string; status: "draft"; channel: typeof WHATSAPP_CHANNEL }>;
+  loadWhatsappEditorialBatchState?: () => Promise<WhatsappEditorialBatchState | null>;
+  saveWhatsappEditorialBatchState?: (state: WhatsappEditorialBatchState) => Promise<void>;
 }
 
 export function getTodayBrtStart(now = new Date()): Date {
@@ -64,6 +82,11 @@ export function prepareTop30WhatsappLegacyDrafts(repository: Top30WhatsappReposi
 
 async function prepare(repository: Top30WhatsappRepository, options: { now?: Date }): Promise<Top30WhatsappResult> {
   const now = options.now ?? new Date();
+  const dayKey = getBrtDayKey(now);
+  const existingState = await repository.loadWhatsappEditorialBatchState?.();
+  if (existingState?.version === 1 && existingState.dayKey === dayKey && existingState.activeOfferIds.length > 0) {
+    return { ...emptyOpeningResult(), selectedOfferIds: existingState.activeOfferIds, windowUsed: "today_brt" };
+  }
   const todayStart = getTodayBrtStart(now);
   const fallbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
   const [todayOffers, postRows, historicalOffers] = await Promise.all([
@@ -171,7 +194,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const skippedOldDraft = oldDraftIds.size;
   const skippedNotFresh = reasons.not_fresh ?? 0;
   const skipped = skippedAlreadyPosted + skippedAlreadyApproved + skippedAlreadySeenToday + skippedOldDraft + skippedNotFresh + skippedAffiliateFailed + skippedCreateFailed + (reasons.legacy_copy_generation_disabled ?? 0);
-  return {
+  const result = {
     windowUsed,
     created,
     reusedTodayDrafts,
@@ -186,6 +209,79 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     reasons,
     selectedOfferIds: selected.map((candidate) => candidate.id),
   };
+  await repository.saveWhatsappEditorialBatchState?.({
+    version: 1,
+    dayKey: getBrtDayKey(now),
+    activeOfferIds: result.selectedOfferIds,
+    seenOfferIds: result.selectedOfferIds,
+    exhausted: result.selectedOfferIds.length === 0,
+  });
+  return result;
+}
+
+/** Selects the next editorial batch. Unlike opening, this intentionally does not use latest-cycle cohorting. */
+export async function rotateNextWhatsappEditorialBatch(repository: Top30WhatsappRepository, options: { now?: Date } = {}): Promise<WhatsappNextBatchResult> {
+  const now = options.now ?? new Date();
+  const todayStart = getTodayBrtStart(now);
+  const dayKey = getBrtDayKey(now);
+  const state = await repository.loadWhatsappEditorialBatchState?.();
+  const active = state?.dayKey === dayKey ? new Set(state.activeOfferIds) : new Set<string>();
+  const seen = state?.dayKey === dayKey ? new Set(state.seenOfferIds) : new Set<string>();
+  const [offers, posts, historicalOffers] = await Promise.all([
+    repository.listOffersBetween(todayStart, now),
+    repository.listWhatsappPosts(),
+    repository.listHistoricalOffers(),
+  ]);
+  const protectedIds = new Set<string>();
+  const protectedIdentities = new Set<string>();
+  const historicalIds = new Set<string>();
+  const postedOrProtected = new Set<string>();
+  for (const post of posts) {
+    const published = post.status === "posted" || post.status === "published" || Boolean(post.posted_at || post.external_id);
+    if (published || post.status === "approved" || post.status === "rejected" || post.status === "deferred" || post.status === "deleted") {
+      protectedIds.add(post.offer_id);
+      postedOrProtected.add(post.offer_id);
+    }
+  }
+  for (const historical of historicalOffers) {
+    if (postedOrProtected.has(historical.id)) {
+      historicalIds.add(historical.id);
+      protectedIdentities.add(offerIdentity(historical));
+    }
+  }
+  const eligible = offers.filter((offer) => {
+    const createdAt = new Date(offer.created_at).getTime();
+    if (isManualExpressOffer(offer) || !Number.isFinite(createdAt) || createdAt < todayStart.getTime() || createdAt > now.getTime()) return false;
+    if (active.has(offer.id) || seen.has(offer.id) || protectedIds.has(offer.id) || historicalIds.has(offer.id)) return false;
+    if (["posted", "approved", "rejected", "deferred", "deleted"].includes(String(offer.status))) return false;
+    if (protectedIdentities.has(offerIdentity(offer))) return false;
+    return true;
+  });
+  const routed = routeWhatsappCandidates(buildCommercialQueue(eligible, { limit: eligible.length }));
+  const selected = selectOperationalTopCandidates(routed, { channel: "manual_whatsapp", limit: TOP30_LIMIT, diversity: true });
+  const nextState: WhatsappEditorialBatchState = {
+    version: 1,
+    dayKey,
+    activeOfferIds: selected.map((candidate) => candidate.id),
+    seenOfferIds: [...new Set([...seen, ...active, ...selected.map((candidate) => candidate.id)])],
+    exhausted: selected.length === 0,
+  };
+  await repository.saveWhatsappEditorialBatchState?.(nextState);
+  return {
+    mode: "next-batch",
+    status: selected.length > 0 ? "selected" : "exhausted",
+    selectedOfferIds: selected.map((candidate) => candidate.id),
+    selectedCount: selected.length,
+    availableBeforeSelection: routed.length,
+  };
+}
+
+function getBrtDayKey(now: Date) {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: BRAZIL_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+function emptyOpeningResult(): Top30WhatsappResult {
+  return { windowUsed: "today_brt", created: 0, reusedTodayDrafts: 0, reused: 0, skippedAlreadyPosted: 0, skippedAlreadyApproved: 0, skippedAlreadySeenToday: 0, skippedOldDraft: 0, skippedNotFresh: 0, skippedAffiliateFailed: 0, skipped: 0, reasons: {}, selectedOfferIds: [] };
 }
 
 function filterAndRoute(
@@ -324,5 +420,16 @@ export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository 
     const { data, error } = await this.client.from("posts").insert({ user_id: input.userId, offer_id: input.offerId, affiliate_link_id: input.affiliateLinkId, channel: WHATSAPP_CHANNEL, content: input.content, status: "draft" }).select("id,status,channel").single();
     if (error || !data) throw new Error(error?.message ?? "draft insert failed");
     return data as { id: string; status: "draft"; channel: typeof WHATSAPP_CHANNEL };
+  }
+
+  async loadWhatsappEditorialBatchState() {
+    const { data, error } = await this.client.from("app_settings").select("value").eq("user_id", this.userId).eq("key", "whatsapp_editorial_batch_state").maybeSingle();
+    if (error) throw new Error(error.message);
+    return (data?.value ?? null) as WhatsappEditorialBatchState | null;
+  }
+
+  async saveWhatsappEditorialBatchState(state: WhatsappEditorialBatchState) {
+    const { error } = await this.client.from("app_settings").upsert({ user_id: this.userId, key: "whatsapp_editorial_batch_state", value: state, updated_at: new Date().toISOString() }, { onConflict: "user_id,key" });
+    if (error) throw new Error(error.message);
   }
 }
