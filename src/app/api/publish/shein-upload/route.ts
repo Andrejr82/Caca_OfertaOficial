@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { detectSheinImageType } from "@/lib/publish/shein-upload-validation";
 
 const MAX_BYTES = 2_000_000;
 const MIME_TO_EXTENSION: Record<string, string> = {
@@ -19,14 +20,17 @@ export async function POST(request: Request) {
   if (!(file instanceof File)) return NextResponse.json({ message: "Arquivo ausente." }, { status: 400 });
   if (!MIME_TO_EXTENSION[file.type]) return NextResponse.json({ message: "Use JPG, JPEG, PNG ou WEBP." }, { status: 400 });
   if (file.size > MAX_BYTES) return NextResponse.json({ message: "A imagem deve ter até 2 MB." }, { status: 400 });
+  const bytes = Buffer.from(await file.arrayBuffer());
+  const detectedType = detectSheinImageType(bytes);
+  if (!detectedType || detectedType !== file.type) return NextResponse.json({ message: "O conteúdo real não corresponde a uma imagem JPG, PNG ou WEBP válida." }, { status: 400 });
 
   const supabase = createSupabaseAdminClient();
   if (!supabase) return NextResponse.json({ message: "Storage não configurado." }, { status: 503 });
 
-  const bucket = process.env.VIDEO_STORAGE_BUCKET || "videos";
-  const path = `express/${auth.user.id}/${crypto.randomUUID()}.${MIME_TO_EXTENSION[file.type]}`;
-  const upload = await supabase.storage.from(bucket).upload(path, Buffer.from(await file.arrayBuffer()), {
-    contentType: file.type,
+  const bucket = process.env.OFFER_IMAGE_STORAGE_BUCKET || "offer-images";
+  const path = `${auth.user.id}/express/${crypto.randomUUID()}.${MIME_TO_EXTENSION[detectedType]}`;
+  const upload = await supabase.storage.from(bucket).upload(path, bytes, {
+    contentType: detectedType,
     upsert: false,
   });
   if (upload.error) return NextResponse.json({ message: `Falha ao salvar imagem: ${upload.error.message}` }, { status: 502 });
