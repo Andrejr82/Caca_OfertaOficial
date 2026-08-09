@@ -261,7 +261,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       expect(store).not.toContain(forbidden);
     }
 
-    expect(store).toContain("executeShopeeNativeDiscoveryV5");
+    expect(store).not.toContain("executeShopeeNativeDiscoveryV5");
     expect(store).toContain("runMercadoLivreOfficialIntentCoverage");
     expect(store).not.toContain("runMercadoLivreNativeTop20");
     expect(store).toContain("runAmazonNativeTop20");

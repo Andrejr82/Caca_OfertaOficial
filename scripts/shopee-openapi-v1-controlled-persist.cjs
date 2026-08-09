@@ -77,7 +77,9 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
     throw new Error('Controlled persist context is incomplete');
   }
 
-  const v1CorrelationId = `shopee-openapi-v1:${correlationId}`;
+  // The OpenAPI V1 ingestion is one stage of the cycle, not a nested cycle.
+  // Keep its correlation id identical to discovery_runs and explainability.
+  const v1CorrelationId = correlationId;
 
   return (Array.isArray(top) ? top : []).map((product, index) => {
     const sourceItemId = String(product.itemId || '').trim();

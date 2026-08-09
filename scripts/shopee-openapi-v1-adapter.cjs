@@ -71,6 +71,12 @@ async function runShopeeOpenApiV1ShadowForScenario(scenarioId, options = {}) {
   return { ...decision, result, writeAudit: { ...ZERO_WRITE_AUDIT } };
 }
 
+// Official cycles use this name. The historical shadow-named export remains
+// for isolated diagnostics and compatibility tests only.
+async function runShopeeOpenApiV1OfficialForScenario(scenarioId, options = {}) {
+  return runShopeeOpenApiV1ShadowForScenario(scenarioId, options);
+}
+
 function createShopeeOpenApiV1Dispatcher({ legacyRunner, shadowRunner = runShopeeOpenApiV1ShadowForScenario } = {}) {
   return async function dispatchShopeeScenario(scenarioId, options = {}) {
     const decision = getShopeeOpenApiV1Decision(scenarioId, options.env || process.env);
@@ -84,6 +90,7 @@ module.exports = {
   isShopeeOpenApiV1Enabled,
   isShopeeOpenApiV1Scenario,
   getShopeeOpenApiV1Decision,
+  runShopeeOpenApiV1OfficialForScenario,
   runShopeeOpenApiV1ShadowForScenario,
   createShopeeOpenApiV1Dispatcher,
 };

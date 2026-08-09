@@ -512,7 +512,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, shadowDiscovery = null, persistShadow = null, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null, scenarioResolver = null, scenarioRuntimeResolver = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, shopeeDiscovery = null, persistShopee = null, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null, scenarioResolver = null, scenarioRuntimeResolver = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -558,6 +558,68 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     for (const marketplace of requestedMarketplaces) {
       const marketplaceStartedAt = Date.now();
       await safeObserve('discovery.marketplace.started', { marketplace });
+      if (marketplace === 'Shopee' && typeof shopeeDiscovery === 'function') {
+        const scenario = typeof scenarioResolver === 'function' ? scenarioResolver(marketplace, [], {}) : 'unknown';
+        let scenarioRuntime = null;
+        if (typeof scenarioRuntimeResolver === 'function') {
+          try { scenarioRuntime = scenarioRuntimeResolver(marketplace, [], {}, scenario) || null; } catch {}
+        }
+        const funnel = createDiscoveryFunnel({ marketplace, scenario, correlationId, startedAt: new Date(marketplaceStartedAt).toISOString(), scenarioRuntime });
+        activeFunnel = funnel;
+        let discovery;
+        try {
+          discovery = await shopeeDiscovery(Object.freeze({ marketplace, scenario, correlationId, requestedAt }));
+        } catch (error) {
+          discovery = { engine: 'shopee_openapi_v1', mode: 'official', decision: 'failed', top: [], metrics: {}, error: error?.message || String(error) };
+        }
+        const metrics = discovery?.metrics || {};
+        const top = Array.isArray(discovery?.top) ? discovery.top : [];
+        funnel.count('extracted', metrics.raw ?? discovery?.extracted ?? top.length);
+        funnel.count('afterParse', metrics.parsed ?? top.length);
+        funnel.count('afterRelevance', metrics.approvedContract ?? top.length);
+        funnel.count('afterIdentityDedup', metrics.scoreable ?? top.length);
+        funnel.count('afterQualityGate', metrics.final ?? top.length);
+        for (const [reason, count] of Object.entries(discovery?.rejectionReasons || {})) funnel.reject(reason, count);
+        const sourceFailure = ['failed', 'timeout'].includes(discovery?.decision);
+        const sourceBlocked = discovery?.decision === 'blocked';
+        if (sourceFailure || sourceBlocked) {
+          if (sourceFailure) funnel.count('failed', 1).setFailed();
+          else funnel.setSourceStatus('blocked').setTerminalStatus('blocked');
+          if (typeof persistV2Metadata === 'function') {
+            await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: [], queue: { selected: [], skipped: [], deferred: [], limits: { engine: 'shopee_openapi_v1', persistenceCap: null } }, funnel: funnel.snapshot() });
+          }
+          const summary = Object.freeze({ marketplace, discovered: Number(metrics.raw ?? 0), duplicatesRejected: 0, freshnessRejected: 0, freshnessReasons: {}, queueSelected: 0, queueSkipped: 0, queueDeferred: 0, queueLimits: { engine: 'shopee_openapi_v1', persistenceCap: null }, funnel: { extracted: Number(metrics.raw ?? 0), persisted: 0, contractVersion: funnel.snapshot().contractVersion, status: funnel.snapshot().status, counters: funnel.snapshot().counters, rejectionReasons: funnel.snapshot().rejectionReasons }, rejected: 0, classificationCoverage: {}, persisted: 0, inserted: 0, updated: 0, state: FINAL_STATE, funnelContract: funnel.snapshot(), shopeeV1: discovery });
+          summaries.push(summary);
+          await safeObserve('discovery.marketplace.completed', { marketplace, finalState: FINAL_STATE, funnelStatus: funnel.snapshot().status, durationMs: Date.now() - marketplaceStartedAt, metadata: summary });
+          continue;
+        }
+        const v1Candidates = top.map((product, index) => ({
+          ...product, sourceItemId: String(product.itemId || '').trim(), title: product.productName || product.title,
+          sourceUrl: product.offerLink || product.productLink, imageUrl: product.imageUrl,
+          currentPrice: product.price, originalPrice: product.originalPrice, discoveredAt: requestedAt, correlationId, intent: scenario,
+          category: { id: String(product.productCatIds?.[0] || 'unknown'), name: scenario, source: 'Shopee OpenAPI V1' },
+          marketplaceMetrics: { ...(product.marketplaceMetrics || {}), itemId: product.itemId, shopId: product.shopId, shopee_item_id: product.itemId, shopee_shop_id: product.shopId, sourcePosition: index + 1, productCatId: String(product.productCatIds?.[0] || 'unknown') },
+          deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
+        }));
+        const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];
+        const freshness = filterFreshCandidates('Shopee', v1Candidates, history);
+        funnel.count('afterNovelty', freshness.accepted.length).count('afterClassification', freshness.accepted.length).count('queueSelected', freshness.accepted.length);
+        for (const item of freshness.rejected || []) funnel.reject(item?.reason || 'freshness_rejected');
+        const queue = { selected: freshness.accepted, skipped: [], deferred: [], limits: { engine: 'shopee_openapi_v1', persistenceCap: null, selection: 'all_v1_rule_survivors' } };
+        funnel.recordQueueSelection({ groupKeyVersion: 'shopee-openapi-v1', candidatesReceived: freshness.accepted.length, candidatesSelected: freshness.accepted.length });
+        let persistedAll = { accepted: 0, inserted: 0, updated: 0, ignored: 0, offerIds: [] };
+        if (freshness.accepted.length > 0 && typeof persistShopee === 'function') {
+          persistedAll = await persistShopee({ discovery: { ...discovery, top: top.filter((product) => freshness.accepted.some((candidate) => candidate.sourceItemId === String(product.itemId || ''))) }, candidates: freshness.accepted, marketplace, scenario, tenantId, correlationId, requestedAt });
+          funnel.count('rpcSent', Math.max(0, freshness.accepted.length - Number(persistedAll?.rpcSent || 0))).mergeRpc(persistedAll || {});
+          for (const offerId of persistedAll?.offerIds || []) if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
+        }
+        funnel.setTerminalStatus(deriveMarketplaceTerminalStatus({ counters: funnel.snapshot().counters, sourceStatus: freshness.accepted.length === 0 && Number(metrics.raw ?? top.length) === 0 ? 'empty' : undefined }));
+        if (typeof persistV2Metadata === 'function') await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: freshness.accepted, queue, funnel: funnel.snapshot() });
+        const summary = Object.freeze({ marketplace, discovered: Number(metrics.raw ?? top.length), duplicatesRejected: Number(metrics.duplicates || 0), freshnessRejected: freshness.rejected?.length || 0, freshnessReasons: (freshness.rejected || []).reduce((all, item) => ({ ...all, [item.reason]: Number(all[item.reason] || 0) + 1 }), {}), queueSelected: freshness.accepted.length, queueSkipped: 0, queueDeferred: 0, queueLimits: queue.limits, funnel: { extracted: Number(metrics.raw ?? top.length), searchQualityAccepted: Number(metrics.final ?? top.length), freshnessAccepted: freshness.accepted.length, unique: Number(metrics.scoreable ?? top.length), classified: freshness.accepted.length, candidatesBeforeQueue: freshness.accepted.length, queueSelected: freshness.accepted.length, persisted: Number(persistedAll.accepted || 0), contractVersion: funnel.snapshot().contractVersion, status: funnel.snapshot().status, counters: funnel.snapshot().counters, rejectionReasons: funnel.snapshot().rejectionReasons }, rejected: Number(metrics.technicalRejected || 0) + Number(metrics.intentRejected || 0) + Number(metrics.duplicates || 0) + (freshness.rejected?.length || 0), classificationCoverage: {}, persisted: Number(persistedAll.accepted || 0), inserted: persistedAll.inserted || 0, updated: persistedAll.updated || 0, state: FINAL_STATE, funnelContract: funnel.snapshot(), shopeeV1: discovery });
+        summaries.push(summary);
+        await safeObserve('discovery.marketplace.completed', { marketplace, finalState: FINAL_STATE, funnelStatus: summary.funnelContract.status, durationMs: Date.now() - marketplaceStartedAt, metadata: summary });
+        continue;
+      }
       const products = await discover(marketplace);
       const discoveryMeta = readDiscoveryFunnelMeta(products);
       const scenario = typeof scenarioResolver === 'function'
@@ -820,65 +882,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         }
       }
 
-      let shopeeOpenApiShadow = undefined;
-      if (marketplace === 'Shopee' && typeof shadowDiscovery === 'function') {
-        try {
-          shopeeOpenApiShadow = await shadowDiscovery(Object.freeze({
-            marketplace,
-            scenario,
-            correlationId,
-            requestedAt,
-            products: Object.freeze([...products]),
-          }));
-          await safeObserve('discovery.shopee_openapi_v1.shadow.completed', {
-            marketplace,
-            scenarioId: scenario,
-            metadata: shopeeOpenApiShadow && typeof shopeeOpenApiShadow === 'object' ? shopeeOpenApiShadow : {},
-          });
-        } catch (shadowError) {
-          shopeeOpenApiShadow = {
-            engine: 'shopee_openapi_v1',
-            mode: 'shadow',
-            scenarioId: scenario,
-            decision: 'shadow_error',
-            error: shadowError?.message || String(shadowError),
-          };
-          await safeObserve('discovery.shopee_openapi_v1.shadow.failed', {
-            marketplace,
-            scenarioId: scenario,
-            metadata: shopeeOpenApiShadow,
-          });
-        }
-      }
-
       let persistedAll = { accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] };
 
-      if (typeof persistShadow === 'function' && ['shadow', 'official'].includes(shopeeOpenApiShadow?.decision)) {
-        const shadowProducts = Array.isArray(shopeeOpenApiShadow.top)
-          ? shopeeOpenApiShadow.top.map((product) => ({
-            ...product,
-            sourceItemId: String(product.itemId || '').trim(),
-            title: product.productName || product.title,
-            currentPrice: product.price,
-            originalPrice: product.originalPrice,
-            marketplaceMetrics: { ...(product.marketplaceMetrics || {}), itemId: product.itemId, shopId: product.shopId },
-          }))
-          : [];
-        const shadowFreshness = filterFreshCandidates('Shopee', shadowProducts, history);
-        const freshIds = new Set(shadowFreshness.accepted.map((product) => String(product.sourceItemId)));
-        const shadowForPersist = {
-          ...shopeeOpenApiShadow,
-          top: (Array.isArray(shopeeOpenApiShadow.top) ? shopeeOpenApiShadow.top : []).filter((product) => freshIds.has(String(product.itemId || ''))),
-          topCount: shadowFreshness.accepted.length,
-          rejectedCount: Number(shopeeOpenApiShadow.rejectedCount || 0) + shadowFreshness.rejected.length,
-        };
-        persistedAll = await persistShadow({ shadow: shadowForPersist, marketplace, scenario, tenantId, correlationId, requestedAt });
-        funnel.count('rpcSent', persistedAll?.accepted || 0);
-        funnel.mergeRpc(persistedAll || {});
-        for (const offerId of persistedAll?.offerIds || []) {
-          if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
-        }
-      } else if (queue.selected.length > 0) {
+      if (queue.selected.length > 0) {
         const selectedIngestions = [];
         for (const product of queue.selected) {
           try {
@@ -967,7 +973,6 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         state: FINAL_STATE,
         funnelContract: funnel.snapshot(),
         ...(amazonTelemetry ? { amazonTelemetry } : {})
-        ,...(shopeeOpenApiShadow ? { shadow: shopeeOpenApiShadow } : {})
       });
       summaries.push(summary);
       await safeObserve('discovery.marketplace.completed', {
@@ -1004,10 +1009,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
     marketplaces: Object.freeze(summaries),
     offerIds: Object.freeze([...materializedOfferIds]),
     finalState: FINAL_STATE,
-    status: summaries.some((summary) => summary.funnelContract?.status === 'partial') ? 'partial' : 'completed',
+    status: summaries.some((summary) => summary.funnelContract?.status === 'failed')
+      ? 'failed'
+      : summaries.some((summary) => summary.funnelContract?.status === 'partial') ? 'partial' : 'completed',
   });
   await safeObserve('discovery.completed', {
-    result: result.status === 'partial' ? 'partial' : 'success',
+    result: result.status === 'failed' ? 'failed' : result.status === 'partial' ? 'partial' : 'success',
     finalState: FINAL_STATE,
     funnelStatus: result.status,
     durationMs: Date.now() - startedAt,

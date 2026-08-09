@@ -51,16 +51,16 @@ describe('Shopee OpenAPI V1 resilience', () => {
     expect(Date.now() - startedAt).toBeLessThan(500);
   });
 
-  it('erro HTTP Shopee produz resultado vazio sem abortar o ciclo', async () => {
+  it('erro HTTP Shopee is reported as source failure, never as an empty result', async () => {
     const discovery = createShopeeOpenApiV1OfficialDiscovery({
       env: BASE_ENV,
       request: async () => ({ status: 503, data: { errors: [{ message: 'unavailable' }] } }),
     });
     const result = await discovery({ scenario: 'tv_audio_editorial' });
-    expect(result).toMatchObject({ engine: 'shopee_openapi_v1', decision: 'official', topCount: 0 });
+    expect(result).toMatchObject({ engine: 'shopee_openapi_v1', decision: 'failed', topCount: 0 });
   });
 
-  it('erro HTTP não derruba o worker e não chama V5', async () => {
+  it('erro HTTP does not invoke legacy Shopee discovery or V5', async () => {
     let shopeeDiscoverCalls = 0;
     let mercadoLivreDiscoverCalls = 0;
     let v5Calls = 0;
@@ -77,14 +77,14 @@ describe('Shopee OpenAPI V1 resilience', () => {
         mercadoLivreDiscoverCalls += 1;
         return [];
       },
-      shadowDiscovery: async () => ({ engine: 'shopee_openapi_v1', decision: 'failed', topCount: 0 }),
+      shopeeDiscovery: async () => ({ engine: 'shopee_openapi_v1', decision: 'failed', topCount: 0, metrics: {} }),
       persist: async () => ({ accepted: 0, inserted: 0, updated: 0, offerIds: [] }),
       loadDeferred: async () => [],
       loadHistory: async () => [],
     });
-    expect(result.status).toBe('completed');
+    expect(result.status).toBe('failed');
     expect(result.marketplaces).toHaveLength(2);
-    expect(shopeeDiscoverCalls).toBe(1);
+    expect(shopeeDiscoverCalls).toBe(0);
     expect(mercadoLivreDiscoverCalls).toBe(1);
     expect(v5Calls).toBe(0);
   });

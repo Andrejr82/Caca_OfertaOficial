@@ -214,6 +214,10 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
           calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: controller.signal.aborted ? 'source_timeout' : 'source_error', error: error?.message || String(error) });
           break;
         }
+        if (Number(response?.status || 0) >= 400 || Array.isArray(response?.data?.errors) && response.data.errors.length > 0) {
+          calls.push({ source: sourcePlan, page, status: response?.status || 0, requested: variables, returned: 0, acceptedShopType: 0, stopReason: 'source_error', error: response?.data?.errors?.map((item) => item?.message).filter(Boolean).join('; ') || `HTTP ${response?.status || 0}` });
+          break;
+        }
         const nodes = response.data?.data?.productOfferV2?.nodes || [];
         const pageInfo = response.data?.data?.productOfferV2?.pageInfo;
         const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));

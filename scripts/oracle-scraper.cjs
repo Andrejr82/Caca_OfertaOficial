@@ -125,7 +125,7 @@ const { createDiscoveryScenarioRuntimeContract } = require('./scenario-runtime-c
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
 const { assertEditorialScheduleValid } = require('./editorial-scenario-config.cjs');
-const { createShopeeOpenApiV1DiscoveryShadow } = require('./shopee-openapi-v1-discovery-shadow.cjs');
+const { runShopeeOpenApiV1OfficialForScenario } = require('./shopee-openapi-v1-adapter.cjs');
 const {
   getControlledPersistDecision,
   buildControlledPersistIngestions,
@@ -904,9 +904,8 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
 async function scrapeStore(store, stageLogger = null) {
   const discoveredAt = new Date().toISOString();
   if (store === 'Shopee') {
-    // Shopee V1 is materialized through shadowDiscovery/persistShadow in the
-    // official cycle. An empty legacy list keeps V5 non-selectable at runtime;
-    // executeShopeeNativeDiscoveryV5 is intentionally never called here.
+    // Defensive fallback only: the official cycle bypasses scrapeStore for
+    // Shopee and invokes the OpenAPI V1 authority directly. V5 stays disabled.
     return [];
   }
   if (store === 'Mercado Livre') {
@@ -1388,8 +1387,8 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     correlationId,
     requestedAt,
     marketplaces: selectedMarketplaces,
-    shadowDiscovery: createShopeeOpenApiV1OfficialDiscovery(),
-    persistShadow: createShopeeOpenApiV1OfficialPersistRunner(),
+    shopeeDiscovery: createShopeeOpenApiV1OfficialDiscovery(),
+    persistShopee: createShopeeOpenApiV1OfficialPersistRunner(),
     discover: async (marketplace) => {
       const marketplaceScenario = getMarketplaceScenarioContract(scenarioId || scenario.scenarioId || scenario.id, marketplace) || scenario;
       if (marketplace === 'Shopee') {
@@ -1443,12 +1442,28 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       ? request(operationName, query, variables, { signal: options.signal || controller.signal, timeoutMs: SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries: SHOPEE_OPENAPI_MAX_RETRIES })
       : callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }), { signal: options.signal || controller.signal });
     try {
-      const discovery = createShopeeOpenApiV1DiscoveryShadow({
+      const response = await Promise.race([runShopeeOpenApiV1OfficialForScenario(scenarioId, {
         env,
         request: boundedRequest,
-    engineOptions: { includeDelta: false, includeAuxiliary: false },
-      });
-      return await Promise.race([discovery(input), stageTimeout]);
+        includeDelta: false,
+        includeAuxiliary: false,
+      }), stageTimeout]);
+      if (!response?.enabled) {
+        return { engine: 'shopee_openapi_v1', mode: 'official', scenarioId, decision: 'blocked', top: [], topCount: 0, metrics: {}, error: response?.reason || 'v1_disabled', writeAudit: response?.writeAudit };
+      }
+      const scenarioResult = response.result?.scenarios?.[scenarioId] || {};
+      const calls = response.result?.queryEvidence?.calls || [];
+      const sourceErrors = calls.filter((call) => call.stopReason === 'source_error' || call.stopReason === 'source_timeout' || Number(call.status || 0) >= 400);
+      const metrics = scenarioResult.metrics || {};
+      const decision = sourceErrors.length > 0 && Number(metrics.raw || 0) === 0 ? 'failed' : 'official';
+      return {
+        engine: 'shopee_openapi_v1', mode: 'official', scenarioId, decision,
+        top: Array.isArray(scenarioResult.top) ? scenarioResult.top : [], topCount: Number(scenarioResult.top?.length || 0),
+        rejectedCount: Number(scenarioResult.rejected?.length || 0), metrics,
+        rejectionReasons: scenarioResult.rejectionReasons || {}, queryEvidence: response.result?.queryEvidence || {},
+        ...(sourceErrors.length > 0 ? { error: `Shopee OpenAPI returned ${sourceErrors.length} source error(s)` } : {}),
+        writeAudit: response.writeAudit,
+      };
     } catch (error) {
       const timedOut = controller.signal.aborted || error?.code === 'SHOPEE_OPENAPI_ABORTED';
       console.error(`[Shopee OpenAPI V1] scenario=${scenarioId} status=${timedOut ? 'timeout' : 'failed'} error=${error?.message || String(error)}`);
@@ -1467,12 +1482,12 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
 }
 
 function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env } = {}) {
-  return async ({ shadow, scenario, correlationId, requestedAt }) => {
+  return async ({ discovery, scenario, tenantId, correlationId, requestedAt }) => {
     const decision = getControlledPersistDecision(scenario, env);
     if (!decision.enabled) return { accepted: 0, inserted: 0, updated: 0, failed: 0, state: FINAL_STATE, offerIds: [] };
-    const ingestions = buildControlledPersistIngestions(shadow.top, {
+    const ingestions = buildControlledPersistIngestions(discovery.top, {
       scenarioId: decision.scenarioId,
-      tenantId: ADMIN_USER_ID,
+      tenantId: tenantId || ADMIN_USER_ID,
       correlationId,
       requestedAt,
     });
@@ -1520,8 +1535,8 @@ async function runScrapingCycleCore() {
     correlationId,
     requestedAt: new Date().toISOString(),
     discover: (store) => scrapeStore(store, stageLogger),
-    shadowDiscovery: shopeeOfficialDiscovery,
-    persistShadow: createShopeeOpenApiV1OfficialPersistRunner({ stageLogger }),
+    shopeeDiscovery: shopeeOfficialDiscovery,
+    persistShopee: createShopeeOpenApiV1OfficialPersistRunner({ stageLogger }),
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
@@ -1563,11 +1578,8 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     const response = await callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }));
     return { status: response?.status || 0, data: response?.data || {} };
   });
-  const shadowDiscovery = createShopeeOpenApiV1DiscoveryShadow({
-    env,
-    request: shadowRequest,
-    runScenario,
-    engineOptions: { includeDelta: false, includeAuxiliary: false },
+  const shadowDiscovery = async ({ scenario }) => runShopeeOpenApiV1OfficialForScenario(scenario, {
+    env, request: shadowRequest, engine: runScenario, includeDelta: false, includeAuxiliary: false,
   });
   const result = await runDiscoveryOnlyCycle({
     tenantId: 'local-shopee-openapi-shadow',
@@ -1575,8 +1587,12 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     requestedAt,
     marketplaces: ['Shopee'],
     discover: async () => [],
-    shadowDiscovery,
-    persistShadow: controlledPersistDecision.enabled ? async (payload) => {
+    shopeeDiscovery: async (input) => {
+      const response = await shadowDiscovery(input);
+      const result = response?.result?.scenarios?.[input.scenario] || {};
+      return { engine: 'shopee_openapi_v1', mode: 'local-diagnostic', decision: response?.enabled ? 'official' : 'blocked', top: result.top || [], metrics: result.metrics || {} };
+    },
+    persistShopee: controlledPersistDecision.enabled ? async (payload) => {
       persistCalls += 1;
       const persisted = await createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, env })(payload);
       controlledPersistAudit = {
@@ -1646,8 +1662,8 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     tenantId: ADMIN_USER_ID,
     correlationId,
     requestedAt,
-    shadowDiscovery: createShopeeOpenApiV1OfficialDiscovery(),
-    persistShadow: createShopeeOpenApiV1OfficialPersistRunner(),
+    shopeeDiscovery: createShopeeOpenApiV1OfficialDiscovery(),
+    persistShopee: createShopeeOpenApiV1OfficialPersistRunner(),
     discover: async (marketplace) => {
       if (marketplace === 'Shopee') {
         return [];

@@ -105,12 +105,12 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     expect(ingestions).toHaveLength(67);
 
     for (const ingestion of ingestions) {
-      expect(ingestion.correlationId).toBe('shopee-openapi-v1:abc-123');
+      expect(ingestion.correlationId).toBe('abc-123');
       expect(ingestion.candidate.persistenceMetadata).toMatchObject({
         engine: 'shopee_openapi_v1',
         mode: 'controlled-persist',
         scenarioId,
-        correlation_id: 'shopee-openapi-v1:abc-123',
+        correlation_id: 'abc-123',
       });
       expect(ingestion.candidate.persistenceMetadata.payload_v1).toBeTruthy();
     }
