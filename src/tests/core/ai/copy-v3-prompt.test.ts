@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCopyV3ChannelCopy, type CopyV3Facts } from "@/core/ai/prompt";
+import { buildCopyV2ChannelCopy, buildCopyV3ChannelCopy, type CopyV2Facts, type CopyV3Facts } from "@/core/ai/prompt";
+import { marketplaceLabel } from "@/core/ai/icon-catalog";
 
 const coffeeMaker: CopyV3Facts = {
   productName: "Cafeteira Electrolux ECM10",
@@ -13,6 +14,28 @@ const coffeeMaker: CopyV3Facts = {
 const channels = ["instagram", "facebook", "whatsapp", "telegram"] as const;
 
 describe("Official AI Copy V3", () => {
+  it.each([
+    ["Amazon", "Calça Legging Suplex Goodbest Fitness Academia", "📦"],
+    ["Shopee", "Cama para cachorro com almofada", "🛒"],
+    ["Mercado Livre", "Notebook gamer 15 polegadas", "🟡"],
+  ] as const)("usa somente o ícone da marketplace na linha de marketplace para %s", (marketplace, productName, icon) => {
+    const facts = { ...coffeeMaker, marketplace, productName, category: "Produto", evidence: {} } satisfies CopyV3Facts;
+    const copy = buildCopyV3ChannelCopy(facts, "whatsapp");
+    const expectedLine = `${marketplaceLabel(marketplace).icon} ${marketplaceLabel(marketplace).text}`;
+    expect(copy).toContain(expectedLine);
+    expect(copy).not.toContain(`${icon === "📦" ? "👟 🏋️" : icon === "🛒" ? "🐾" : "💻"} ${marketplaceLabel(marketplace).text}`);
+  });
+
+  it.each(["whatsapp", "telegram", "facebook"] as const)("aplica a linha de marketplace da fonte oficial também no V2 em %s", (channel) => {
+    const facts: CopyV2Facts = {
+      marketplace: "Amazon", productName: "Calça Legging Suplex Fitness", category: "Moda",
+      currentPrice: 79.9, originalPrice: 99.9, evidence: {}
+    };
+    const copy = buildCopyV2ChannelCopy(facts, channel);
+    expect(copy).toContain(`${marketplaceLabel("Amazon").icon} ${marketplaceLabel("Amazon").text}`);
+    expect(copy).not.toContain(`👟 🏋️ ${marketplaceLabel("Amazon").text}`);
+  });
+
   it("renderiza campos estruturados sustentados e fatos comerciais determinísticos", () => {
     const copy = buildCopyV3ChannelCopy(coffeeMaker, "instagram", {
       hook: "Seu café da manhã pode ficar bem mais prático",

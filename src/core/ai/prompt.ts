@@ -1,5 +1,5 @@
 import type { OfficialAIChannel, OfficialAIDraftForRegeneration, OfficialAIOffer } from "./types";
-import { marketplaceLabel, selectOfferIcons } from "./icon-catalog";
+import { marketplaceLabel } from "./icon-catalog";
 import { renderSocialHashtags } from "./social-hashtags";
 import { resolveSemanticDomain, semanticContextLine } from "./semantic-context";
 
@@ -189,16 +189,14 @@ function shippingLine(facts: CopyV2Facts) {
 export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAIChannel, hook?: string) {
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const attribute = objectiveAttribute(facts);
-  const icons = selectOfferIcons(facts.category, facts.productName);
   const marketplace = marketplaceLabel(facts.marketplace);
-  const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
   const freight = shippingLine(facts);
 
   if (channel === "facebook") {
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
-      `${iconLine} ${marketplace.text}`,
+      `${marketplace.icon} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice && facts.currentPrice > 0
@@ -214,7 +212,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
-      `${iconLine} ${marketplace.text}`,
+      `${marketplace.icon} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(discount !== null && facts.originalPrice !== null && facts.currentPrice > 0 ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
@@ -228,7 +226,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
-      `${iconLine} ${marketplace.text}`,
+      `${marketplace.icon} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice && facts.currentPrice > 0
@@ -264,7 +262,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
     const blocks = [
       hookFor(facts, hook),
       `🛍️ ${cleanProductName(facts.productName)}`,
-      `${iconLine} ${marketplace.text}`,
+      `${marketplace.icon} ${marketplace.text}`,
       ...(freight ? [freight] : []),
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       discount && facts.originalPrice
@@ -446,8 +444,6 @@ export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAICh
   const benefit = validateV3Field(facts, fields?.benefitLine) ?? v3DerivedBenefit(facts) ?? (attribute ? `✨ ${attribute.text}.` : null);
   const context = validateV3Field(facts, fields?.contextLine) ?? v3Context(facts);
   const marketplace = marketplaceLabel(facts.marketplace);
-  const icons = selectOfferIcons(facts.category, facts.productName);
-  const iconLine = icons.length > 0 ? icons.map((icon) => icon.emoji).join(" ") : "🛍️";
   const freight = shippingLine(facts);
   const product = channel === "whatsapp" ? compactProductName(facts.productName) : cleanProductName(facts.productName);
   const price = discount && facts.originalPrice
@@ -455,7 +451,7 @@ export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAICh
     : facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : "💰 Consulte o preço atual no link!";
   const commercial = [
     `🛍️ ${product}`,
-    `${iconLine} ${marketplace.text}`,
+    `${marketplace.icon} ${marketplace.text}`,
     ...(freight ? [freight] : []),
     ...(benefit ? [benefit] : []),
     ...(context ? [context] : []),
