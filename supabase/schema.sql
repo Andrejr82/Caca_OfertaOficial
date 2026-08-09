@@ -189,7 +189,7 @@ insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_typ
 values (
   'offer-images',
   'offer-images',
-  false,
+  true,
   5242880,
   array['image/jpeg', 'image/png', 'image/webp', 'image/gif']
 )

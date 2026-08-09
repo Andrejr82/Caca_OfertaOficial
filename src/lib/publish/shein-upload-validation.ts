@@ -6,3 +6,7 @@ export function detectSheinImageType(buffer: Buffer): SheinImageMime | null {
   if (buffer.length >= 12 && buffer.subarray(0, 4).toString("ascii") === "RIFF" && buffer.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
   return null;
 }
+
+export function hasExactImageBytes(expected: Buffer, actual: Buffer): boolean {
+  return expected.length === actual.length && expected.equals(actual);
+}

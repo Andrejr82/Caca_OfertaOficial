@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { detectSheinImageType } from "@/lib/publish/shein-upload-validation";
+import { detectSheinImageType, hasExactImageBytes } from "@/lib/publish/shein-upload-validation";
 
 describe("SHEIN upload binary validation", () => {
   it("accepts real JPEG, PNG and WEBP signatures", () => {
@@ -11,5 +11,11 @@ describe("SHEIN upload binary validation", () => {
   it("rejects a renamed WEBP and non-image bytes", () => {
     expect(detectSheinImageType(Buffer.from("not-an-image"))).toBeNull();
     expect(detectSheinImageType(Buffer.from("image/webp"))).toBeNull();
+  });
+
+  it("requires the stored object bytes to match the uploaded bytes exactly", () => {
+    const original = Buffer.from("RIFF1234WEBP", "ascii");
+    expect(hasExactImageBytes(original, Buffer.from(original))).toBe(true);
+    expect(hasExactImageBytes(original, Buffer.from("RIFF1234WEBX", "ascii"))).toBe(false);
   });
 });

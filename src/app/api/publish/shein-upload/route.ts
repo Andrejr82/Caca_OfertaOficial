@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { detectSheinImageType } from "@/lib/publish/shein-upload-validation";
+import { detectSheinImageType, hasExactImageBytes } from "@/lib/publish/shein-upload-validation";
 
 const MAX_BYTES = 2_000_000;
 const MIME_TO_EXTENSION: Record<string, string> = {
@@ -36,5 +36,20 @@ export async function POST(request: Request) {
   if (upload.error) return NextResponse.json({ message: `Falha ao salvar imagem: ${upload.error.message}` }, { status: 502 });
 
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
+  const stored = await supabase.storage.from(bucket).download(path);
+  const storedBytes = stored.data ? Buffer.from(await stored.data.arrayBuffer()) : null;
+  if (stored.error || !storedBytes || !hasExactImageBytes(bytes, storedBytes) || detectSheinImageType(storedBytes) !== detectedType) {
+    await supabase.storage.from(bucket).remove([path]);
+    return NextResponse.json({ message: "O objeto salvo não corresponde aos bytes originais." }, { status: 502 });
+  }
+
+  const publicResponse = await fetch(data.publicUrl, { cache: "no-store" });
+  const publicContentType = publicResponse.headers.get("content-type")?.split(";", 1)[0].toLowerCase();
+  const publicBytes = publicResponse.ok ? Buffer.from(await publicResponse.arrayBuffer()) : null;
+  if (!publicResponse.ok || !publicContentType?.startsWith("image/") || !publicBytes || !hasExactImageBytes(bytes, publicBytes) || detectSheinImageType(publicBytes) !== detectedType) {
+    await supabase.storage.from(bucket).remove([path]);
+    return NextResponse.json({ message: `A URL pública não passou na validação (${publicResponse.status}).` }, { status: 502 });
+  }
+
   return NextResponse.json({ url: data.publicUrl });
 }
