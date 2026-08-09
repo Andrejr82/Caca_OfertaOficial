@@ -10,3 +10,17 @@ export function detectSheinImageType(buffer: Buffer): SheinImageMime | null {
 export function hasExactImageBytes(expected: Buffer, actual: Buffer): boolean {
   return expected.length === actual.length && expected.equals(actual);
 }
+
+export function isValidPublicImageResponse(
+  status: number,
+  contentType: string | null | undefined,
+  bytes: Buffer,
+  expected: Buffer,
+  expectedType: SheinImageMime,
+): boolean {
+  return status >= 200
+    && status < 300
+    && Boolean(contentType?.toLowerCase().startsWith("image/"))
+    && hasExactImageBytes(expected, bytes)
+    && detectSheinImageType(bytes) === expectedType;
+}
