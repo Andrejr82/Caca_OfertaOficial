@@ -20,8 +20,8 @@ export function routeCommercialCandidate(candidate: CommercialQueueCandidate): R
   let targetQueue: CommercialTargetQueue = "panel_only";
   let reason = "Sem canal seguro definido; manter na auditoria.";
   if (candidate.platform === "Amazon") {
-    targetQueue = "panel_only";
-    reason = "Amazon permanece fora do roteamento comercial V1.";
+    targetQueue = "manual_whatsapp";
+    reason = "Amazon elegível para revisão manual no painel WhatsApp; não entra em Telegram automático.";
   } else if (!candidate.rejected && !critical && candidate.automaticEligible && candidate.achadinhoScore >= 75) {
     targetQueue = "telegram";
     reason = "Score alto, elegibilidade automática e baixo risco para revisão no Telegram.";

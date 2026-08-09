@@ -85,7 +85,12 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
   const dayKey = getBrtDayKey(now);
   const existingState = await repository.loadWhatsappEditorialBatchState?.();
   if (existingState?.version === 1 && existingState.dayKey === dayKey && existingState.activeOfferIds.length > 0) {
-    return { ...emptyOpeningResult(), selectedOfferIds: existingState.activeOfferIds, windowUsed: "today_brt" };
+    const todayOffersForState = await repository.listOffersBetween(getTodayBrtStart(now), now);
+    const activeIds = new Set(existingState.activeOfferIds);
+    const activeRows = todayOffersForState.filter((offer) => activeIds.has(offer.id));
+    const latestCohort = identifyLatestDiscoveryCohort(todayOffersForState, now);
+    const stateHasCurrentCohort = activeRows.length === 0 || latestCohort.length === 0 || latestCohort.some((offer) => activeIds.has(offer.id));
+    if (stateHasCurrentCohort) return { ...emptyOpeningResult(), selectedOfferIds: existingState.activeOfferIds, windowUsed: "today_brt" };
   }
   const todayStart = getTodayBrtStart(now);
   const fallbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
@@ -258,7 +263,7 @@ export async function rotateNextWhatsappEditorialBatch(repository: Top30Whatsapp
     return true;
   });
   const routed = routeWhatsappCandidates(buildCommercialQueue(eligible, { limit: eligible.length }));
-  const selected = selectOperationalTopCandidates(routed, { channel: "manual_whatsapp", limit: TOP30_LIMIT, diversity: true });
+  const selected = selectOperationalTopCandidates(routed, { channel: "operational", limit: TOP30_LIMIT, diversity: true });
   const nextState: WhatsappEditorialBatchState = {
     version: 1,
     dayKey,
@@ -330,19 +335,19 @@ function cycleKey(offer: Offer): string | null {
 }
 
 function selectWithCyclePriority(candidates: RoutedCommercialCandidate[], latestCycle: string | null) {
-  if (!latestCycle) return selectOperationalTopCandidates(candidates, { channel: "manual_whatsapp", limit: TOP30_LIMIT, diversity: true });
+  if (!latestCycle) return selectOperationalTopCandidates(candidates, { channel: "operational", limit: TOP30_LIMIT, diversity: true });
   const cycleCandidates = candidates.filter((candidate) => cycleKey(candidate) === latestCycle);
   const otherCandidates = candidates.filter((candidate) => cycleKey(candidate) !== latestCycle);
-  const first = selectOperationalTopCandidates(cycleCandidates, { channel: "manual_whatsapp", limit: TOP30_LIMIT, diversity: true });
+  const first = selectOperationalTopCandidates(cycleCandidates, { channel: "operational", limit: TOP30_LIMIT, diversity: true });
   if (first.length >= TOP30_LIMIT) return first;
   const selectedIds = new Set(first.map((candidate) => candidate.id));
-  const rest = selectOperationalTopCandidates(otherCandidates.filter((candidate) => !selectedIds.has(candidate.id)), { channel: "manual_whatsapp", limit: TOP30_LIMIT - first.length, diversity: true });
+  const rest = selectOperationalTopCandidates(otherCandidates.filter((candidate) => !selectedIds.has(candidate.id)), { channel: "operational", limit: TOP30_LIMIT - first.length, diversity: true });
   return [...first, ...rest];
 }
 
 function routeWhatsappCandidates(candidates: CommercialQueueCandidate[]) {
   return routeCommercialCandidates(candidates.filter((candidate) => candidate.status !== "posted" && candidate.status !== "approved" && !candidate.rejected && Boolean(candidate.image_url)))
-    .filter((candidate) => candidate.targetQueue === "manual_whatsapp");
+    .filter((candidate) => candidate.targetQueue !== "panel_only");
 }
 
 function offerIdentity(offer: Pick<Offer, "platform" | "item_id" | "product_id" | "shopee_item_id" | "shopee_shop_id" | "original_url">) {
@@ -386,7 +391,7 @@ export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository 
   constructor(private readonly client: SupabaseClient, private readonly userId: string) {}
 
   async listOffersBetween(start: Date, end: Date) {
-    const { data, error } = await this.client.from("offers").select("*").eq("user_id", this.userId).in("platform", ["Shopee", "Mercado Livre"]).gte("created_at", start.toISOString()).lte("created_at", end.toISOString()).order("created_at", { ascending: false });
+    const { data, error } = await this.client.from("offers").select("*").eq("user_id", this.userId).in("platform", ["Shopee", "Mercado Livre", "Amazon"]).gte("created_at", start.toISOString()).lte("created_at", end.toISOString()).order("created_at", { ascending: false });
     if (error) throw new Error(error.message);
     return (data ?? []) as Offer[];
   }

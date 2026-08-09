@@ -3,7 +3,7 @@ import type { Offer } from "@/types/domain";
 import { selectEditorialTop30 } from "@/lib/offers/commercial-channel-router";
 import { mergePanelDrafts } from "@/lib/offers/panel-draft-selection";
 
-const TODAY_START = new Date("2026-08-08T03:00:00.000Z");
+const TODAY_START = new Date("2026-08-09T03:00:00.000Z");
 
 function editorialOffer(id: string, overrides: Partial<Offer> = {}): Offer {
   return {
@@ -24,8 +24,8 @@ function editorialOffer(id: string, overrides: Partial<Offer> = {}): Offer {
     status: "pending_manual_review",
     notes: null,
     seasonality: null,
-    created_at: "2026-08-08T10:00:01.000Z",
-    updated_at: "2026-08-08T12:00:00.000Z",
+    created_at: "2026-08-09T10:00:01.000Z",
+    updated_at: "2026-08-09T12:00:00.000Z",
     marketplace_metrics: { sales: 500, rating: 4.8, discount: 20 },
     explainability: {
       correlation_id: "cycle-editorial",
@@ -68,8 +68,8 @@ describe("editorial Top30 channel separation", () => {
     const manual = editorialOffer("manual-express", {
       product_name: "Link manual express",
       explainability: { manual_source: true },
-      created_at: "2026-08-08T11:00:00.000Z",
-      updated_at: "2026-08-08T11:00:00.000Z",
+      created_at: "2026-08-09T11:00:00.000Z",
+      updated_at: "2026-08-09T11:00:00.000Z",
     });
     const visible = mergePanelDrafts(
       [...editorial.map(draft), draft(manual)],

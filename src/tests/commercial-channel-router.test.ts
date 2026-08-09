@@ -14,9 +14,9 @@ describe("commercial channel router", () => {
     expect(routeCommercialCandidate(candidate({ achadinhoScore: 60, automaticEligible: false, manualReviewRequired: true, commercialIntent: "oferta_real_do_dia" })).targetQueue).toBe("manual_whatsapp");
     expect(routeCommercialCandidate(candidate({ achadinhoScore: 60, commercialIntent: "audio_e_gadget_visual", automaticEligible: false, manualReviewRequired: true })).targetQueue).toBe("reels_manual");
   });
-  it("sends critical risk and Amazon outside the main queues", () => {
+  it("sends critical risk to audit and Amazon to manual WhatsApp review", () => {
     expect(routeCommercialCandidate(candidate({ commercialRiskFlags: ["security_camera_manual"] })).targetQueue).toBe("panel_only");
-    expect(routeCommercialCandidate(candidate({ platform: "Amazon" })).targetQueue).toBe("panel_only");
+    expect(routeCommercialCandidate(candidate({ platform: "Amazon" })).targetQueue).toBe("manual_whatsapp");
   });
   it("orders by priority without a low artificial limit", () => {
     const routed = routeCommercialCandidates(Array.from({ length: 120 }, (_, index) => candidate({ id: `offer-${index}`, achadinhoScore: 40 + (index % 50) })));

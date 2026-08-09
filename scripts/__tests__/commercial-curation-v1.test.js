@@ -42,10 +42,10 @@ describe('Commercial Curation V1', () => {
     expect(getCommercialRiskFlags(product)).toContain('ml_missing_social_proof');
   });
 
-  it('keeps Amazon outside the V1 ranking', () => {
+  it('admits Amazon into manual commercial ranking', () => {
     const amazon = base({ marketplace: 'Amazon' });
-    expect(isCommerciallyEligible(amazon).eligible).toBe(false);
-    expect(rankCommercialOffers([amazon])).toHaveLength(0);
+    expect(isCommerciallyEligible(amazon).eligible).toBe(true);
+    expect(rankCommercialOffers([amazon])).toHaveLength(1);
   });
 
   it('routes expensive, large furniture, complex fashion, and missing data to safe outcomes', () => {

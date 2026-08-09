@@ -104,6 +104,33 @@ function repository(input: {
 }
 
 describe("prepareTop30WhatsappLegacyDrafts", () => {
+  it("reproduces the discovery cycle with 4 ML + 7 Amazon and refreshes stale active state", async () => {
+    const correlation = "50242c4e-921b-42b8-8b29-a80fc2ff6a24";
+    const discovery = { correlation_id: correlation, discovery_evidence: { discoveredAt: "2026-08-09T10:00:36.030Z" } };
+    const cycle = [
+      ...Array.from({ length: 4 }, (_, index) => offer(`cycle-ml-${index}`, "2026-08-09T10:00:52.042Z", {
+        platform: "Mercado Livre", product_name: `Organizador ${index}`, category: "Casa", item_id: `MLB-${index}`, explainability: discovery,
+      })),
+      ...Array.from({ length: 7 }, (_, index) => offer(`cycle-amazon-${index}`, "2026-08-09T10:01:43.135Z", {
+        platform: "Amazon", product_name: `Organizador Amazon ${index}`, category: "Casa", product_id: `ASIN-${index}`, explainability: discovery,
+      })),
+    ];
+    const stale = offer("stale-active", "2026-08-09T09:00:20.000Z", {
+      platform: "Shopee", product_name: "Faqueiro de cozinha", shopee_item_id: "stale-item", explainability: { correlation_id: "old-cycle" },
+    });
+    const repo = repository({
+      today: [...cycle, stale],
+      fallback: [],
+      state: { version: 1, dayKey: "2026-08-09", activeOfferIds: [stale.id], seenOfferIds: [stale.id], exhausted: false },
+    });
+
+    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: new Date("2026-08-09T12:00:00.000Z") });
+
+    expect(result.selectedOfferIds).toHaveLength(11);
+    expect(result.selectedOfferIds).toEqual(expect.arrayContaining(cycle.map((item) => item.id)));
+    expect(result.selectedOfferIds).not.toContain(stale.id);
+  });
+
   it("selects only the latest-cycle Top30 from 582 raw offers and keeps the database rows untouched", async () => {
     const discovery = { correlation_id: "cycle-real", discovery_evidence: { discoveredAt: "2026-08-07T10:00:00.000Z" } };
     const rawOffers = [
@@ -120,7 +147,7 @@ describe("prepareTop30WhatsappLegacyDrafts", () => {
     expect(result.selectedOfferIds).toHaveLength(30);
     expect(new Set(result.selectedOfferIds).size).toBe(30);
     expect(result.selectedOfferIds.filter((id) => id.startsWith("shopee-")).length).toBeLessThanOrEqual(30);
-    expect(result.selectedOfferIds.some((id) => id.startsWith("amazon-"))).toBe(false);
+    expect(result.selectedOfferIds.some((id) => id.startsWith("amazon-"))).toBe(true);
     expect(result.selectedOfferIds).not.toContain("old-updated");
     expect(repo.writes).toHaveLength(0);
   });

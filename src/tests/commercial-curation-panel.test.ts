@@ -27,9 +27,10 @@ const offer = (overrides: Record<string, unknown> = {}) => ({
 });
 
 describe("Commercial Curation panel queue", () => {
-  it("excludes Amazon and exposes metadata/copy", () => {
+  it("includes Amazon for manual WhatsApp review and exposes metadata/copy", () => {
     const queue = buildCommercialQueue([offer(), offer({ id: "amazon", platform: "Amazon" })] as any);
-    expect(queue).toHaveLength(1);
+    expect(queue).toHaveLength(2);
+    expect(queue.some((candidate) => candidate.platform === "Amazon")).toBe(true);
     expect(queue[0]).toMatchObject({ commercialIntent: "casa_organizada_antes_depois" });
     expect(queue[0].commercialMetadata).toMatchObject({ commercialCurationVersion: "commercial-curation/v1", copyVersion: "commercial-copy/v1" });
     expect(queue[0].suggestedCopy).toContain("🔗 Ver oferta");

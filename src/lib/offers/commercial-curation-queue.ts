@@ -136,7 +136,7 @@ function normalizeOffer(offer: Offer) {
 export function buildCommercialQueue(offers: Offer[], options: { limit?: number } = {}): CommercialQueueCandidate[] {
   const displayOffers = deduplicateCommercialOffers(offers);
   const rankingOptions = options.limit === undefined ? { includeRejected: true } : { includeRejected: true, limit: options.limit };
-  const ranked = curation.rankCommercialOffers(displayOffers.filter((offer) => offer.platform === "Shopee" || offer.platform === "Mercado Livre").map(normalizeOffer), rankingOptions);
+  const ranked = curation.rankCommercialOffers(displayOffers.filter((offer) => offer.platform === "Shopee" || offer.platform === "Mercado Livre" || offer.platform === "Amazon").map(normalizeOffer), rankingOptions);
   return ranked.map((candidate: any) => {
     const source = displayOffers.find((offer) => offer.id === candidate.id || offer.id === candidate.sourceOfferId);
     const metadata = curation.buildCommercialMetadata(candidate);
