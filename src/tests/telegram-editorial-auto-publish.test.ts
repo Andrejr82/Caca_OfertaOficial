@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Offer } from "@/types/domain";
-import { selectEditorialTop30TelegramOfferIds, type TelegramEditorialDraftRow } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
+import { selectEditorialTop30TelegramOfferIds, selectEditorialTop30TelegramSelection, type TelegramEditorialDraftRow } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
 
 const NOW = new Date("2026-08-08T12:00:00.000Z");
 
@@ -104,6 +104,33 @@ describe("Telegram editorial auto-publish selection", () => {
     expect(selected.filter((id) => id.startsWith("overnight-shopee-")).length).toBe(30);
     expect(selected.filter((id) => id.startsWith("overnight-amazon-")).length).toBe(14);
     expect(selected.filter((id) => id.startsWith("overnight-ml-")).length).toBe(9);
+  });
+
+  it("publica somente o cohort editorial corrente e não mistura backlog de 24h", () => {
+    const now = new Date("2026-08-09T15:30:00.000Z");
+    const cohort = (scenarioId: string, correlationId: string, createdAt: string) => ({
+      explainability: { scenarioId, correlation_id: correlationId, discovery_evidence: { discoveredAt: createdAt } },
+    });
+    const makeCohort = (prefix: string, scenarioId: string, correlationId: string, createdAt: string, shopeeCount: number, amazonCount: number, mlCount: number) => [
+      ...Array.from({ length: shopeeCount }, (_, index) => draft(offer(`${prefix}-shopee-${index}`, createdAt, cohort(scenarioId, correlationId, createdAt)))),
+      ...Array.from({ length: amazonCount }, (_, index) => draft(offer(`${prefix}-amazon-${index}`, createdAt, { platform: "Amazon", ...cohort(scenarioId, correlationId, createdAt) }))),
+      ...Array.from({ length: mlCount }, (_, index) => draft(offer(`${prefix}-ml-${index}`, createdAt, { platform: "Mercado Livre", ...cohort(scenarioId, correlationId, createdAt) }))),
+    ];
+    const old = makeCohort("moveis", "moveis_editorial", "cycle-a", "2026-08-09T13:00:00.000Z", 8, 2, 1);
+    const current = makeCohort("beleza", "beleza_editorial", "cycle-b", "2026-08-09T14:00:00.000Z", 10, 4, 2);
+    const newest = makeCohort("pet", "pet_editorial", "cycle-c", "2026-08-09T15:00:00.000Z", 73, 0, 0);
+
+    const currentSelection = selectEditorialTop30TelegramSelection([...old, ...current], now);
+    expect(currentSelection.offerIds).toHaveLength(16);
+    expect(currentSelection.offerIds.every((id) => id.startsWith("beleza-"))).toBe(true);
+
+    const selection = selectEditorialTop30TelegramSelection([...old, ...current, ...newest], now);
+    const selected = selection.offerIds;
+
+    expect(selected).toHaveLength(30);
+    expect(selected.every((id) => id.startsWith("pet-shopee-"))).toBe(true);
+    expect(selected.some((id) => id.startsWith("moveis-") || id.startsWith("beleza-"))).toBe(false);
+    expect(selection.diagnostics).toMatchObject({ selectedCohortCorrelationId: "cycle-c", selectedCohortScenarioId: "pet_editorial", shopeeSelected: 30, staleCohortsIgnored: 2 });
   });
 
   it("deduplicates offers and excludes manual or published drafts from the union", () => {

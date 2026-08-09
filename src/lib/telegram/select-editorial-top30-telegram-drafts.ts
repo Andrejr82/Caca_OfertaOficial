@@ -1,5 +1,6 @@
 import type { Offer } from "@/types/domain";
 import { selectEditorialTop30 } from "@/lib/offers/commercial-channel-router";
+import { normalizeDiscoveryCorrelationId } from "@/lib/offers/commercial-curation-queue";
 
 export type TelegramEditorialDraftRow = {
   id: string;
@@ -13,6 +14,19 @@ export type TelegramEditorialDraftRow = {
   offers: Offer | null;
 };
 
+export type TelegramEditorialSelection = {
+  offerIds: string[];
+  diagnostics: {
+    selectedCohortCorrelationId: string | null;
+    selectedCohortScenarioId: string | null;
+    selectedCohortDiscoveredAt: string | null;
+    shopeeSelected: number;
+    amazonSelected: number;
+    mercadoLivreSelected: number;
+    staleCohortsIgnored: number;
+  };
+};
+
 const PROTECTED_POST_STATUSES = new Set(["published", "posted", "approved", "rejected", "deferred", "deleted", "publishing"]);
 
 function hasPublicationEvidence(post: Pick<TelegramEditorialDraftRow, "status" | "posted_at" | "external_id">): boolean {
@@ -20,6 +34,21 @@ function hasPublicationEvidence(post: Pick<TelegramEditorialDraftRow, "status" |
 }
 
 export function selectEditorialTop30TelegramOfferIds(rows: readonly TelegramEditorialDraftRow[], now = new Date()): string[] {
+  return selectEditorialTop30TelegramSelection(rows, now).offerIds;
+}
+
+function cohortMetadata(offer: Offer) {
+  const explainability = offer.explainability && typeof offer.explainability === "object" ? offer.explainability as Record<string, unknown> : {};
+  const correlationId = normalizeDiscoveryCorrelationId(typeof explainability.correlation_id === "string" ? explainability.correlation_id : null);
+  const scenarioId = typeof explainability.scenarioId === "string" ? explainability.scenarioId : null;
+  const evidence = explainability.discovery_evidence && typeof explainability.discovery_evidence === "object" ? explainability.discovery_evidence as Record<string, unknown> : {};
+  const discoveredAt = typeof evidence.discoveredAt === "string" ? evidence.discoveredAt : null;
+  const timestamp = new Date(discoveredAt || offer.created_at).getTime();
+  const key = correlationId ? `correlation:${correlationId}` : scenarioId ? `scenario:${scenarioId}` : `day:${new Date(offer.created_at).toISOString().slice(0, 10)}`;
+  return { key, correlationId, scenarioId, discoveredAt, timestamp };
+}
+
+export function selectEditorialTop30TelegramSelection(rows: readonly TelegramEditorialDraftRow[], now = new Date()): TelegramEditorialSelection {
   const fallbackStart = now.getTime() - 24 * 60 * 60 * 1000;
   const protectedOfferIds = new Set(rows.filter(hasPublicationEvidence).map((post) => post.offer_id));
   const eligibleDraftOffers = new Map<string, Offer>();
@@ -33,23 +62,51 @@ export function selectEditorialTop30TelegramOfferIds(rows: readonly TelegramEdit
   }
 
   const eligibleOffers = [...eligibleDraftOffers.values()];
+  const cohorts = new Map<string, { offers: Offer[]; correlationId: string | null; scenarioId: string | null; discoveredAt: string | null; timestamp: number }>();
+  for (const offer of eligibleOffers) {
+    const metadata = cohortMetadata(offer);
+    const cohort = cohorts.get(metadata.key) || { offers: [], correlationId: metadata.correlationId, scenarioId: metadata.scenarioId, discoveredAt: metadata.discoveredAt, timestamp: metadata.timestamp };
+    cohort.offers.push(offer);
+    cohort.timestamp = Math.max(cohort.timestamp, metadata.timestamp);
+    if (!cohort.discoveredAt && metadata.discoveredAt) cohort.discoveredAt = metadata.discoveredAt;
+    cohorts.set(metadata.key, cohort);
+  }
+  const orderedCohorts = [...cohorts.values()].sort((left, right) => right.timestamp - left.timestamp);
+  const selectedCohort = orderedCohorts[0] || { offers: [], correlationId: null, scenarioId: null, discoveredAt: null, timestamp: 0 };
+  const cohortOffers = selectedCohort.offers;
   const selectedShopeeIds = selectEditorialTop30(
-    eligibleOffers.filter((offer) => offer.platform === "Shopee"),
+    cohortOffers.filter((offer) => offer.platform === "Shopee"),
     30,
     now,
     { allowRecentFallback: true },
   ).map((candidate) => candidate.id);
-  const nonShopeeIds = eligibleOffers
+  const nonShopeeIds = cohortOffers
     .filter((offer) => offer.platform === "Amazon" || offer.platform === "Mercado Livre")
     .map((offer) => offer.id);
-  return [...new Set([...selectedShopeeIds, ...nonShopeeIds])];
+  const offerIds = [...new Set([...selectedShopeeIds, ...nonShopeeIds])];
+  return {
+    offerIds,
+    diagnostics: {
+      selectedCohortCorrelationId: selectedCohort.correlationId,
+      selectedCohortScenarioId: selectedCohort.scenarioId,
+      selectedCohortDiscoveredAt: selectedCohort.discoveredAt,
+      shopeeSelected: selectedShopeeIds.length,
+      amazonSelected: nonShopeeIds.filter((id) => cohortOffers.some((offer) => offer.id === id && offer.platform === "Amazon")).length,
+      mercadoLivreSelected: nonShopeeIds.filter((id) => cohortOffers.some((offer) => offer.id === id && offer.platform === "Mercado Livre")).length,
+      staleCohortsIgnored: Math.max(0, orderedCohorts.length - 1),
+    },
+  };
 }
 
-export async function loadEditorialTop30TelegramOfferIds(client: { from: (table: string) => any }, now = new Date()): Promise<string[]> {
+export async function loadEditorialTop30TelegramSelection(client: { from: (table: string) => any }, now = new Date()): Promise<TelegramEditorialSelection> {
   const { data, error } = await client
     .from("posts")
     .select("id,offer_id,channel,status,content,created_at,posted_at,external_id,offers(*)")
     .eq("channel", "telegram");
   if (error) throw error;
-  return selectEditorialTop30TelegramOfferIds((data || []) as TelegramEditorialDraftRow[], now);
+  return selectEditorialTop30TelegramSelection((data || []) as TelegramEditorialDraftRow[], now);
+}
+
+export async function loadEditorialTop30TelegramOfferIds(client: { from: (table: string) => any }, now = new Date()): Promise<string[]> {
+  return (await loadEditorialTop30TelegramSelection(client, now)).offerIds;
 }

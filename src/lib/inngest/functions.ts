@@ -6,7 +6,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { inngest } from "./client";
 import { TELEGRAM_CYCLE_INTROS } from "@/config/cycle-intros";
 import { sendTelegramMessage } from "@/lib/telegram/client";
-import { loadEditorialTop30TelegramOfferIds } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
+import { loadEditorialTop30TelegramSelection } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
 
 type TelegramPublisherFactory = {
   createTelegramPublisher: (options: { supabase: unknown }) => { processQueue: (options: { selectedEditorialTop30OfferIds: string[] }) => Promise<unknown> };
@@ -95,9 +95,9 @@ export const publishTelegramEditorialTop30 = inngest.createFunction(
       return { result: "disabled", reason: "TELEGRAM_AUTO_PUBLISH!=1" };
     }
     const client = adminClient();
-    const selectedEditorialTop30OfferIds = await step.run("select-editorial-top30", () => loadEditorialTop30TelegramOfferIds(client));
-    if (selectedEditorialTop30OfferIds.length === 0) return { result: "empty", selectedEditorialTop30OfferIds: [] };
-    return step.run("publish-editorial-top30", () => loadTelegramPublisher(client).processQueue({ selectedEditorialTop30OfferIds }));
+    const selection = await step.run("select-editorial-top30", () => loadEditorialTop30TelegramSelection(client));
+    if (selection.offerIds.length === 0) return { result: "empty", selectedEditorialTop30OfferIds: [], selection: selection.diagnostics };
+    return step.run("publish-editorial-top30", () => loadTelegramPublisher(client).processQueue({ selectedEditorialTop30OfferIds: selection.offerIds }));
   }
 );
 
