@@ -1,30 +1,51 @@
 # Estado atual do sistema
 
-Atualizado em 31/07/2026. Baseado no checkout local e no código versionado; disponibilidade externa de Vercel, Supabase, Oracle e Meta precisa ser confirmada no ambiente correspondente.
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
+
+Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Oracle, PM2, Meta, Telegram, WhatsApp e marketplaces precisa ser confirmada no ambiente correspondente.
 
 ## Runtime
 
-- Next.js/Vercel: painel, APIs, Official AI, Copy V2, Publicação Expressa e transportes sociais.
-- Supabase: ofertas, links, posts, auditoria, classificação e storage.
-- Oracle: Discovery-Only de Shopee, Mercado Livre e Amazon; API técnica de scraping; motor WhatsApp separado.
-- Scheduler do Oracle Worker: seis janelas em `America/Sao_Paulo` (`00h`, `04h`, `08h`, `12h`, `16h`, `20h`) com `noOverlap`.
-- Canais implementados: Telegram, Instagram, Facebook e WhatsApp via transportes próprios. WhatsApp Baileys depende de estado externo e pode ser bloqueado pelo provedor.
+- Next.js 16/React 19: painel, APIs, curadoria, Official AI, Publicação Expressa, vídeos e transportes sociais.
+- Supabase: autenticação, ofertas, posts, links, auditoria, classificação, jobs e Storage de imagens/vídeos.
+- Oracle: Discovery-Only, Shopee OpenAPI V1 isolada, scraping auxiliar, processamento de vídeo e serviços operacionais.
+- Scheduler principal: seis janelas em `America/Sao_Paulo` (`00h`, `04h`, `08h`, `12h`, `16h`, `20h`) com proteção contra sobreposição.
 
-## IA e copies
+## Descoberta e curadoria
 
-- Official AI é a autoridade de geração e regeneração.
-- Discovery automática mantém a oferta em `pending_manual_review`.
-- Publicação Expressa usa Copy V2 somente após confirmação do produto e monetização, mantendo revisão manual.
-- A IA não decide seleção, preço, desconto ou compliance; recebe dados comprovados e redige o conteúdo.
+- Shopee, Mercado Livre e Amazon possuem caminhos de descoberta implementados.
+- Shopee OpenAPI V1 é uma fonte oficial isolada por flags, com paginação limitada e persistência controlada.
+- Curadoria Comercial V1 produz score, riscos, intenção editorial e filas por canal.
+- O painel operacional contém coortes e filas Top 30; identidade histórica e ofertas já publicadas são protegidas contra repetição.
+- Discovery não autoriza publicação. O runtime Oracle opera com guardas fail-closed e publicação bloqueada fora dos fluxos oficiais.
 
-## Qualidade e marketplaces
+## IA e conteúdo
 
-Shopee, Mercado Livre e Amazon possuem contratos de discovery separados. A flag `OFFER_QUALITY_PIPELINE_V2` continua documentada em `.env.example`; o modo efetivo deve ser confirmado no ambiente Oracle antes de declarar ativação.
+- Official AI gera e regenera drafts a partir de dados comprovados.
+- `posts.content` é a autoridade da copy publicada em todos os canais.
+- Copy V3 e hashtags dinâmicas estão implementadas; fallbacks não podem inventar preço, desconto, frete, avaliação ou identidade.
+- A IA não decide seleção, preço, monetização ou compliance.
+
+## Publicação
+
+- Transportes implementados: Telegram, Instagram, Facebook e WhatsApp.
+- Telegram possui publicação editorial Top 30; WhatsApp possui fila Top 30 do ciclo mais recente e rotação `next`.
+- Publicação Expressa multicanal permanece separada do Top 30 editorial.
+- Shein possui fluxo Express assistido, incluindo texto compartilhado, fallback de imagem e upload para Storage público validado.
 
 ## Vídeos
 
-O worker atual usa TTS, FFmpeg e runtime MuseTalk configurável. Lightning AI não é dependência operacional obrigatória.
+- Jobs de vídeo possuem claim, heartbeat, retry, cancelamento, aprovação, trim delegado ao Oracle e upload controlado.
+- O runtime de dublagem usa FFmpeg/FFprobe e TTS configurável. A presença do código não comprova que o worker esteja ativo.
 
-## Fonte de verificação
+## Qualidade e verificação
 
-Commit documental atual: `970aa6f` (31/07/2026). O SHA não comprova deploy externo; validar Vercel, Oracle, Supabase e PM2 separadamente.
+- `npm run verify` executa lint, typecheck, testes, build e verificação de segurança.
+- `npm run docs:audit` detecta commits de runtime posteriores à verificação documental.
+- Endpoints de saúde: `/api/health` e `/api/readiness`.
+
+## Limites
+
+Este documento confirma capacidade versionada, não estado de produção. Antes de declarar uma integração ativa, validar deploy, variáveis, migrations, filas, logs, credenciais e um smoke test do canal.

@@ -1,9 +1,32 @@
 # Troubleshooting atual
 
-1. **Worker não executa:** confirmar `pm2 jlist`, `pm2 logs oracle-scraper`, variáveis Supabase/marketplace, o scheduler único e o próximo ciclo de quatro horas.
-2. **Official AI não avança:** verificar `OFFICIAL_AI_TRIGGER_URL`, bearer/service role, `correlationId`, checkpoint, resposta paginada e logs de `/api/ai/generate`/`integration_logs`.
-3. **Oferta não aparece:** confirmar retorno de `upsert_discovery_offers_v1/v2`, tenant, estado `pending_manual_review`, RLS e filtros do painel.
-4. **Publicação falha:** confirmar post em `draft`, oferta aprovada, credenciais do canal, link rastreado e logs do adaptador; não alterar estado por SQL.
-5. **Oracle API falha:** conferir `ORACLE_API_KEY`, `SCRAPFLY_API_KEYS`/`SCRAPEDO_API_KEY`, reachability da porta 3002 e logs.
-6. **WhatsApp falha:** conferir processo `whatsapp-bot`, URL/chave/alvo, sessão Baileys e `/status`.
-7. **Monitor não alerta:** conferir timer, journal e `data/state.json` do Capacity Hunter; ele é read-only e não reinicia serviços observados.
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
+
+## Sequência de diagnóstico
+
+1. Registrar horário, ambiente, SHA, correlation ID e entidade afetada.
+2. Verificar `/api/health` e `/api/readiness`.
+3. Inspecionar Vercel, PM2/systemd e logs estruturados sem expor segredos.
+4. Confirmar migrations, RLS, Storage e estado da oferta/post no Supabase.
+5. Validar flags e overlay efetivos; não confiar apenas em `.env.example`.
+6. Reproduzir com o menor smoke test read-only possível.
+
+## Sintomas frequentes
+
+| Sintoma | Verificação inicial |
+|---|---|
+| Oferta não aparece | preço zero, coorte/correlation ID, deduplicação e persistência |
+| Oferta repetida | identidade histórica, IDs do marketplace e status publicado |
+| Draft ausente | estado da oferta, janela controlada, Official AI e `posts.content` |
+| Top 30 incorreto | ciclo mais recente, diversidade, canal e filtros editoriais |
+| WhatsApp indisponível | sessão Baileys, action client e processo `whatsapp-bot` |
+| Instagram/Facebook falha | token/permissões, mídia processada, webhook e recibo da API |
+| Imagem Shein inválida | confirmação, upload, bucket e acessibilidade pública |
+| Vídeo parado | claim, heartbeat, worker Oracle, FFmpeg e status do job |
+| Shopee V1 não persiste | flags, overlay, paginação, limites e logs fail-closed |
+
+## Recuperação
+
+Prefira desativar a flag específica e preservar dados. Não reinicie processos em loop nem publique manualmente para “testar” antes de identificar a fronteira da falha. Após correção, execute testes, uma coorte limitada e valide recibos antes de ampliar.

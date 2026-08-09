@@ -1,19 +1,46 @@
 # Deploy e operação atuais
 
-Este documento descreve o que o repositório configura; execução produtiva deve ser confirmada no ambiente.
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
 
-## Vercel/Next.js
+## Pré-deploy
 
-O build usa `next build`, conforme `vercel.json`. O único cron declarado é `GET /api/instagram/poll-comments` com `0 0 * * *`. As rotas, Official AI e publicação estão em `src/app/api/**`.
+```bash
+npm ci
+npm run docs:audit
+npm run verify
+```
 
-## Oracle
+Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade dos contratos. Não transporte `.env` pelo repositório.
 
-Os processos esperados são `oracle-api` (`:3002`), `oracle-scraper` (scheduler interno de quatro horas) e `whatsapp-bot` (`:3001`), normalmente supervisionados por PM2 externo. O procedimento detalhado está em [oracle.md](oracle.md). O Capacity Hunter é instalado separadamente como timer systemd de cinco minutos e não deve reiniciar os processos observados.
+## Vercel
+
+- Executa o painel Next.js, APIs e integrações server-side.
+- Validar build, variáveis, cron declarado em `vercel.json`, `/api/health` e `/api/readiness`.
+- Confirmar que rotas de publicação exigem autenticação e entidades oficiais.
 
 ## Supabase
 
-Schema e migrations estão em `supabase/`; credenciais são injetadas por ambiente. Não executar migrations, alterações de infraestrutura ou mudanças de estado por SQL como parte da operação normal sem procedimento explícito.
+- Aplicar migrations em ordem e registrar o SHA implantado.
+- Verificar tabelas, funções/RPCs, constraints, RLS e buckets públicos/privados.
+- Executar validações read-only antes de liberar ingestão.
 
-## Verificação
+## Oracle
 
-Antes de declarar deploy: conferir `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, saúde/readiness, logs do processo e confirmação externa da Vercel/Oracle/Supabase. O checkout não comprova sozinho disponibilidade produtiva. A versão anterior está em `../arquivos_Docs/docs/archive/deployment-legacy-2026-07-19.md`.
+- Validar overlay allowlisted e flags fail-closed antes de reiniciar PM2.
+- Processos esperados incluem worker/scraper, API técnica e WhatsApp quando habilitado.
+- Confirmar scheduler único, `noOverlap`, reachability, logs e SHA do checkout.
+
+## Liberação gradual
+
+1. Deploy com publicação bloqueada.
+2. Saúde, readiness e migrations.
+3. Discovery controlada e persistência observada.
+4. Geração limitada de drafts.
+5. Aprovação manual e smoke test por canal.
+6. Expansão somente com recibos e métricas saudáveis.
+
+## Rollback
+
+Reverter o artefato/commit e as flags primeiro. Migrations destrutivas exigem plano próprio; não presumir rollback automático do banco. Preservar logs, correlation IDs e recibos para investigação.

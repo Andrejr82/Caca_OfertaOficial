@@ -1,0 +1,29 @@
+name: Documentation Audit
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "scripts/**"
+      - "supabase/**"
+      - "apps/**"
+      - ".env.example"
+      - "package.json"
+      - "next.config.ts"
+      - "vercel.json"
+      - "README.md"
+      - "docs/**"
+  push:
+    branches: [main]
+
+jobs:
+  documentation-audit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node scripts/docs-audit.mjs
