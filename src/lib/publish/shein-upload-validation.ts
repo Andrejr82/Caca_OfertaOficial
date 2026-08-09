@@ -1,5 +1,11 @@
 export type SheinImageMime = "image/jpeg" | "image/png" | "image/webp";
 
+export function assertOfferImageObjectPath(bucket: string, objectPath: string): string {
+  const normalizedPath = objectPath.replace(/^\/+/, "");
+  if (normalizedPath.startsWith(`${bucket}/`)) throw new Error("OFFER_IMAGE_PATH_BUCKET_PREFIX");
+  return normalizedPath;
+}
+
 export function detectSheinImageType(buffer: Buffer): SheinImageMime | null {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) return "image/jpeg";
   if (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from("89504e470d0a1a0a", "hex"))) return "image/png";
