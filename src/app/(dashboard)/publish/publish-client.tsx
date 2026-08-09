@@ -45,6 +45,7 @@ interface SheinAssistedRequest extends SheinAssistedFormValue {
   captureJson: string;
   couponText: string;
   discountPercent?: number;
+  uploading: boolean;
   error: string;
   submitting: boolean;
   message: string;
@@ -138,6 +139,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
         captureJson: "",
         couponText: sharedText.couponText || "",
         discountPercent: sharedText.discountPercent,
+        uploading: false,
         error: message,
         submitting: false,
         message: sharedText.discountPercent ? `Desconto informado: ${sharedText.discountPercent}%` : "",
@@ -208,6 +210,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
               imageCandidates: res.assisted?.imageCandidates || [],
               captureJson: "",
               couponText: "",
+              uploading: false,
               error: res.message,
               submitting: false,
               message: "",
@@ -259,7 +262,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
           price: payload.price,
           imageUrl: payload.imageUrl,
           couponText: payload.couponText,
-          discountPercent: request.discountPercent,
+          discountPercent: payload.discountPercent,
         },
         sheinCanonicalUrl: request.canonicalUrl,
       });
@@ -649,7 +652,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                             type="file"
                             accept="image/*"
                             className="hidden"
-                            disabled={request.submitting}
+                            disabled={request.submitting || request.uploading}
                             onChange={(e) => {
                               const file = e.target.files?.[0];
                               if (!file) return;
@@ -662,9 +665,16 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                                 setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, message: "A imagem local deve ter até 2 MB." } : item));
                                 return;
                               }
-                              const reader = new FileReader();
-                              reader.onload = () => updateSheinAssistedRequest(request.id, "imageUrl", String(reader.result || ""));
-                              reader.readAsDataURL(file);
+                              setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, uploading: true, message: "Salvando imagem..." } : item));
+                              const formData = new FormData();
+                              formData.append("file", file);
+                              void fetch("/api/publish/shein-upload", { method: "POST", body: formData })
+                                .then(async (response) => {
+                                  const result = await response.json() as { url?: string; message?: string };
+                                  if (!response.ok || !result.url) throw new Error(result.message || "Falha ao salvar imagem.");
+                                  setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, imageUrl: result.url!, uploading: false, message: "Imagem salva e pronta para finalizar." } : item));
+                                })
+                                .catch((error: unknown) => setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? { ...item, uploading: false, message: error instanceof Error ? error.message : "Falha ao salvar imagem." } : item)));
                             }}
                           />
                         </label>
@@ -687,7 +697,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                     <Button
                       type="button"
                       variant="primary"
-                      disabled={request.submitting || !validation.ok}
+                      disabled={request.submitting || request.uploading || !validation.ok}
                       onClick={() => void confirmSheinAssistedRequest(request)}
                       className="bg-amber-600 hover:bg-amber-500 border-0 text-xs"
                     >

@@ -75,4 +75,13 @@ describe("Shein assisted fallback", () => {
     });
     expect(result.ok).toBe(true);
   });
+
+  it("preserves confirmed coupon and discount in the final payload", () => {
+    const result = validateSheinAssistedConfirmation({ ...valid, couponText: "Cupom 50% OFF", discountPercent: 20 });
+    if (!result.ok) throw new Error("fixture should be valid");
+    expect(buildSheinAssistedPayload(valid.originalUrl, result.confirmation)).toMatchObject({
+      couponText: "Cupom 50% OFF",
+      discountPercent: 20,
+    });
+  });
 });

@@ -42,6 +42,10 @@ function isHttpUrl(value: string): boolean {
   }
 }
 
+export function isValidSheinImageValue(value: string): boolean {
+  return isHttpUrl(value);
+}
+
 export function validateSheinAssistedConfirmation(value: SheinAssistedFormValue): ValidationResult {
   const errors: string[] = [];
   const title = value.title.trim();
@@ -50,7 +54,7 @@ export function validateSheinAssistedConfirmation(value: SheinAssistedFormValue)
 
   if (!title) errors.push("TÍTULO_OBRIGATÓRIO");
   if (!price) errors.push("PREÇO_OBRIGATÓRIO");
-  if (!isHttpUrl(imageUrl)) errors.push("IMAGEM_URL_INVÁLIDA");
+  if (!isValidSheinImageValue(imageUrl)) errors.push("IMAGEM_URL_INVÁLIDA");
 
   if (errors.length > 0) return { ok: false, errors };
   const couponText = value.couponText?.trim();
@@ -74,5 +78,7 @@ export function buildSheinAssistedPayload(
     title: confirmation.title,
     price: confirmation.price,
     imageUrl: confirmation.imageUrl,
+    ...(confirmation.couponText ? { couponText: confirmation.couponText } : {}),
+    ...(confirmation.discountPercent !== undefined ? { discountPercent: confirmation.discountPercent } : {}),
   };
 }
