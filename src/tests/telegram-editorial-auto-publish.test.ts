@@ -91,6 +91,21 @@ describe("Telegram editorial auto-publish selection", () => {
     expect(selected.filter((id) => id.startsWith("ml-"))).toHaveLength(3);
   });
 
+  it("não retorna vazio quando o último ciclo elegível atravessa a virada do dia BRT", () => {
+    const now = new Date("2026-08-09T12:00:00.000Z");
+    const cycleCreatedAt = "2026-08-08T22:11:40.000Z";
+    const shopee = Array.from({ length: 40 }, (_, index) => draft(offer(`overnight-shopee-${index}`, cycleCreatedAt)));
+    const amazon = Array.from({ length: 14 }, (_, index) => draft(offer(`overnight-amazon-${index}`, cycleCreatedAt, { platform: "Amazon" })));
+    const mercadoLivre = Array.from({ length: 9 }, (_, index) => draft(offer(`overnight-ml-${index}`, cycleCreatedAt, { platform: "Mercado Livre" })));
+
+    const selected = selectEditorialTop30TelegramOfferIds([...shopee, ...amazon, ...mercadoLivre], now);
+
+    expect(selected).toHaveLength(53);
+    expect(selected.filter((id) => id.startsWith("overnight-shopee-")).length).toBe(30);
+    expect(selected.filter((id) => id.startsWith("overnight-amazon-")).length).toBe(14);
+    expect(selected.filter((id) => id.startsWith("overnight-ml-")).length).toBe(9);
+  });
+
   it("deduplicates offers and excludes manual or published drafts from the union", () => {
     const eligible = draft(offer("eligible", "2026-08-08T10:00:01.000Z", { platform: "Amazon" }));
     const duplicate = { ...eligible, id: "post-duplicate" };

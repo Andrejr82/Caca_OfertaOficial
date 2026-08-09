@@ -1,6 +1,5 @@
 import type { Offer } from "@/types/domain";
 import { selectEditorialTop30 } from "@/lib/offers/commercial-channel-router";
-import { getTodayBrtStart } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 
 export type TelegramEditorialDraftRow = {
   id: string;
@@ -21,14 +20,14 @@ function hasPublicationEvidence(post: Pick<TelegramEditorialDraftRow, "status" |
 }
 
 export function selectEditorialTop30TelegramOfferIds(rows: readonly TelegramEditorialDraftRow[], now = new Date()): string[] {
-  const todayStart = getTodayBrtStart(now).getTime();
+  const fallbackStart = now.getTime() - 24 * 60 * 60 * 1000;
   const protectedOfferIds = new Set(rows.filter(hasPublicationEvidence).map((post) => post.offer_id));
   const eligibleDraftOffers = new Map<string, Offer>();
 
   for (const post of rows) {
     const createdAt = new Date(post.created_at).getTime();
     if (post.status !== "draft" || hasPublicationEvidence(post) || protectedOfferIds.has(post.offer_id)) continue;
-    if (!Number.isFinite(createdAt) || createdAt < todayStart || createdAt > now.getTime() || !post.offers) continue;
+    if (!Number.isFinite(createdAt) || createdAt < fallbackStart || createdAt > now.getTime() || !post.offers) continue;
     if (post.offers.explainability?.manual_source === true) continue;
     if (!eligibleDraftOffers.has(post.offer_id)) eligibleDraftOffers.set(post.offer_id, post.offers);
   }
@@ -38,6 +37,7 @@ export function selectEditorialTop30TelegramOfferIds(rows: readonly TelegramEdit
     eligibleOffers.filter((offer) => offer.platform === "Shopee"),
     30,
     now,
+    { allowRecentFallback: true },
   ).map((candidate) => candidate.id);
   const nonShopeeIds = eligibleOffers
     .filter((offer) => offer.platform === "Amazon" || offer.platform === "Mercado Livre")

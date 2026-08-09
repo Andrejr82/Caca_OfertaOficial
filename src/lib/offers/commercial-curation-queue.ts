@@ -63,7 +63,7 @@ function brtDayKey(timestamp: number): string {
  * discovery_evidence.discoveredAt, or the BRT created_at day as fallbacks.
  * updated_at is never used.
  */
-export function identifyLatestDiscoveryCohort(offers: Offer[], now = new Date()): Offer[] {
+export function identifyLatestDiscoveryCohort(offers: Offer[], now = new Date(), options: { allowRecentFallback?: boolean } = {}): Offer[] {
   const rows = offers.map((offer) => ({
     offer,
     createdAt: new Date(offer.created_at).getTime(),
@@ -83,7 +83,8 @@ export function identifyLatestDiscoveryCohort(offers: Offer[], now = new Date())
   if (correlatedGroups.size > 0) {
     const latest = [...correlatedGroups.values()].sort((left, right) => Math.max(...right.map((row) => row.createdAt)) - Math.max(...left.map((row) => row.createdAt)))[0];
     const latestDay = brtDayKey(Math.max(...latest.map((row) => row.createdAt)));
-    if (latestDay !== brtDayKey(now.getTime())) return [];
+    const latestCreatedAt = Math.max(...latest.map((row) => row.createdAt));
+    if (latestDay !== brtDayKey(now.getTime()) && !(options.allowRecentFallback === true && latestCreatedAt >= now.getTime() - 24 * 60 * 60 * 1000)) return [];
     const cycleStart = Math.min(...latest.map((row) => row.discoveredAt).filter((value): value is number => value !== null));
     if (Number.isFinite(cycleStart)) {
       return latest.filter((row) => row.createdAt >= cycleStart).map((row) => row.offer);
@@ -100,12 +101,13 @@ export function identifyLatestDiscoveryCohort(offers: Offer[], now = new Date())
   }
   const latest = [...evidenceGroups.values()].sort((left, right) => Math.max(...right.map((row) => row.createdAt)) - Math.max(...left.map((row) => row.createdAt)))[0];
   const latestKey = latest[0].discoveredAt === null ? brtDayKey(latest[0].createdAt) : brtDayKey(latest[0].discoveredAt);
-  if (latestKey !== brtDayKey(now.getTime())) return [];
+  const latestCreatedAt = Math.max(...latest.map((row) => row.createdAt));
+  if (latestKey !== brtDayKey(now.getTime()) && !(options.allowRecentFallback === true && latestCreatedAt >= now.getTime() - 24 * 60 * 60 * 1000)) return [];
   return latest.filter((row) => (row.discoveredAt === null ? brtDayKey(row.createdAt) : brtDayKey(row.discoveredAt)) === latestKey).map((row) => row.offer);
 }
 
-export function filterOperationalPanelOffers(offers: Offer[], now = new Date()): Offer[] {
-  return identifyLatestDiscoveryCohort(offers, now).filter((offer) => {
+export function filterOperationalPanelOffers(offers: Offer[], now = new Date(), options: { allowRecentFallback?: boolean } = {}): Offer[] {
+  return identifyLatestDiscoveryCohort(offers, now, options).filter((offer) => {
     const status = String((offer as Offer & { status?: string }).status || "").toLowerCase();
     return !PROTECTED_OPERATIONAL_STATUSES.has(status);
   });
