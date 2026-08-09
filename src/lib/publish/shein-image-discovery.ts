@@ -1,5 +1,3 @@
-export const SHEIN_REJECTED_IMAGE_URL = "https://img.ltwebstatic.com/images3_ps1/2024/09/05/1a/17255207321b314100eb24f789bb19ac1da3624dfe.png";
-
 export type SheinImageSource =
   | "og:image"
   | "twitter:image"
@@ -12,6 +10,10 @@ export interface SheinImageCandidate {
   url: string;
   source: SheinImageSource;
   linkedToProduct: boolean;
+  alt?: string;
+  width?: number;
+  height?: number;
+  score?: number;
 }
 
 export interface SheinImageDiscoveryInput {
@@ -19,6 +21,8 @@ export interface SheinImageDiscoveryInput {
   html: string;
   productId?: string;
   validateImage?: (url: string) => Promise<boolean>;
+  imageMetadata?: Record<string, { width: number; height: number; contentType?: string }>;
+  inspectImage?: (url: string) => Promise<{ valid: boolean; width?: number; height?: number }>;
 }
 
 export interface SheinImageDiscoveryResult {
@@ -26,6 +30,7 @@ export interface SheinImageDiscoveryResult {
   validProductImages: SheinImageCandidate[];
   rejectedAssets: string[];
   sourcesTested: SheinImageSource[];
+  fallbackRequired: boolean;
 }
 
 function readMeta(html: string, name: string): string {
@@ -50,22 +55,51 @@ function isHttpImageUrl(value: string): boolean {
   }
 }
 
-function isRejectedAsset(url: string): boolean {
-  return url === SHEIN_REJECTED_IMAGE_URL
-    || /(?:banner|badge|flag|icon|logo|sprite|country|brasil|placeholder|avatar|nav|promotion)/i.test(url);
+function isRejectedAsset(url: string, alt = ""): boolean {
+  return /(?:banner|badge|flag|icon|logo|sprite|country|brasil|placeholder|avatar|nav|promotion)/i.test(url)
+    || /^(?:icon|logo|flag|badge|banner|placeholder)$/i.test(alt.trim());
+}
+
+function scoreCandidate(candidate: SheinImageCandidate, input: SheinImageDiscoveryInput, repeated: number): number {
+  const alt = candidate.alt?.trim() || "";
+  const metadata = input.imageMetadata?.[candidate.url];
+  const width = metadata?.width || candidate.width || 0;
+  const height = metadata?.height || candidate.height || 0;
+  const ratio = width && height ? width / height : 1;
+  let score = 0;
+
+  if (candidate.source === "img/src/srcset" || candidate.source === "picture/source/srcset") score += 25;
+  if (candidate.source === "json-ld") score += 20;
+  if (candidate.source === "og:image" || candidate.source === "twitter:image") score += 5;
+  if (/\/v4\/j\/spmp\//i.test(candidate.url)) score += 15;
+  if (input.productId && candidate.url.includes(input.productId)) score += 20;
+  if (/\b(?:vis[aã]o|view)\s*1\b/i.test(alt)) score += 50;
+  else if (/\b(?:vis[aã]o|view)\s*\d+\b/i.test(alt)) score += 30;
+  if (alt.length >= 10 && !/^(?:icon|logo|flag|badge|banner|placeholder)$/i.test(alt)) score += 20;
+  if (!alt) score -= 15;
+  if (width >= 600 && height >= 600) score += 25;
+  if (width && height && ratio >= 0.7 && ratio <= 1.45) score += 15;
+  if (width && height && (ratio < 0.45 || ratio > 2.2)) score -= 60;
+  if (repeated > 3) score -= 35;
+  return score;
 }
 
 function parseSrcset(value: string): string[] {
   return value.split(",").map((entry) => entry.trim().split(/\s+/)[0]).filter(Boolean);
 }
 
-function addUrl(list: { url: string; source: SheinImageSource }[], url: string, source: SheinImageSource) {
+function addUrl(
+  list: { url: string; source: SheinImageSource; alt?: string; width?: number; height?: number; productId?: string }[],
+  url: string,
+  source: SheinImageSource,
+  details: { alt?: string; width?: number; height?: number; productId?: string } = {},
+) {
   const normalized = url.replace(/&amp;/g, "&").replace(/\\\//g, "/").trim();
-  if (isHttpImageUrl(normalized)) list.push({ url: normalized, source });
+  if (isHttpImageUrl(normalized)) list.push({ url: normalized, source, ...details });
 }
 
-function extractCandidates(html: string): { url: string; source: SheinImageSource }[] {
-  const found: { url: string; source: SheinImageSource }[] = [];
+function extractCandidates(html: string): { url: string; source: SheinImageSource; alt?: string; width?: number; height?: number; productId?: string }[] {
+  const found: { url: string; source: SheinImageSource; alt?: string; width?: number; height?: number; productId?: string }[] = [];
   addUrl(found, readMeta(html, "og:image"), "og:image");
   addUrl(found, readMeta(html, "twitter:image"), "twitter:image");
 
@@ -93,32 +127,41 @@ function extractCandidates(html: string): { url: string; source: SheinImageSourc
 
   for (const match of html.match(/<img\b[^>]*>/gi) || []) {
     const src = match.match(/\bsrc=["']([^"']+)["']/i)?.[1];
-    if (src) addUrl(found, src, "img/src/srcset");
+    const alt = match.match(/\balt=["']([^"']*)["']/i)?.[1]?.trim();
+    const width = Number(match.match(/\bwidth=["'](\d+)/i)?.[1] || 0) || undefined;
+    const height = Number(match.match(/\bheight=["'](\d+)/i)?.[1] || 0) || undefined;
+    const productId = match.match(/\bdata-(?:product|goods|item)-id=["'](\d+)["']/i)?.[1];
+    if (src) addUrl(found, src, "img/src/srcset", { alt, width, height, productId });
     const srcset = match.match(/\bsrcset=["']([^"']+)["']/i)?.[1] || "";
-    for (const url of parseSrcset(srcset)) addUrl(found, url, "img/src/srcset");
+    for (const url of parseSrcset(srcset)) addUrl(found, url, "img/src/srcset", { alt, width, height, productId });
   }
 
   return found;
 }
 
-async function defaultValidateImage(url: string): Promise<boolean> {
+async function defaultInspectImage(url: string): Promise<{ valid: boolean; width?: number; height?: number }> {
   try {
     const response = await fetch(url, {
       headers: { Accept: "image/*" },
       signal: AbortSignal.timeout(10_000),
     });
-    if (!response.ok || !response.headers.get("content-type")?.toLowerCase().startsWith("image/")) return false;
+    if (!response.ok || !response.headers.get("content-type")?.toLowerCase().startsWith("image/")) return { valid: false };
     const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length < 4_096) return false;
+    if (buffer.length < 4_096) return { valid: false };
     const sharpFactory = require("sharp") as (data: Buffer) => { metadata: () => Promise<{ width?: number; height?: number }> };
     const metadata = await sharpFactory(buffer).metadata();
-    return (metadata.width || 0) >= 200 && (metadata.height || 0) >= 200;
+    const width = metadata.width || 0;
+    const height = metadata.height || 0;
+    return { valid: width >= 200 && height >= 200, width, height };
   } catch {
-    return false;
+    return { valid: false };
   }
 }
 
 export async function discoverSheinImages(input: SheinImageDiscoveryInput): Promise<SheinImageDiscoveryResult> {
+  if (/(?:risk\/challenge|captcha|page_risk_crawler_block)/i.test(input.html)) {
+    return { candidates: [], validProductImages: [], rejectedAssets: [], sourcesTested: [], fallbackRequired: true };
+  }
   const sourcePriority: Record<SheinImageSource, number> = {
     "og:image": 0,
     "twitter:image": 1,
@@ -139,21 +182,50 @@ export async function discoverSheinImages(input: SheinImageDiscoveryInput): Prom
     if (!sourcesTested.includes(item.source)) sourcesTested.push(item.source);
     if (seen.has(item.url)) continue;
     seen.add(item.url);
-    if (isRejectedAsset(item.url)) {
+    if (isRejectedAsset(item.url, item.alt)) {
       rejectedAssets.push(item.url);
       continue;
     }
     const embeddedIdentityEvidence = item.source !== "embedded-state"
       || Boolean(input.productId && new RegExp(`${input.productId}.{0,1200}${item.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "is").test(input.html));
-    candidates.push({ ...item, linkedToProduct: linkedToProduct && embeddedIdentityEvidence });
+    const belongsToOtherProduct = Boolean(item.productId && input.productId && item.productId !== input.productId);
+    const metadata = input.imageMetadata?.[item.url];
+    if (metadata && (metadata.width < 200 || metadata.height < 200)) {
+      rejectedAssets.push(item.url);
+      continue;
+    }
+    candidates.push({
+      ...item,
+      width: metadata?.width || item.width,
+      height: metadata?.height || item.height,
+      linkedToProduct: linkedToProduct && embeddedIdentityEvidence && !belongsToOtherProduct,
+    });
   }
 
-  const validateImage = input.validateImage || defaultValidateImage;
   const validProductImages: SheinImageCandidate[] = [];
   for (const candidate of candidates) {
     if (!candidate.linkedToProduct) continue;
-    if (await validateImage(candidate.url)) validProductImages.push(candidate);
+    const metadata = input.imageMetadata?.[candidate.url];
+    const inspection = input.inspectImage
+      ? await input.inspectImage(candidate.url)
+      : metadata
+        ? { valid: true, width: metadata.width, height: metadata.height }
+        : input.validateImage
+          ? { valid: await input.validateImage(candidate.url) }
+          : await defaultInspectImage(candidate.url);
+    const width = inspection.width || candidate.width || 0;
+    const height = inspection.height || candidate.height || 0;
+    const ratio = width && height ? width / height : 1;
+    if (width && height && (width < 200 || height < 200 || ratio < 0.45 || ratio > 2.2)) {
+      rejectedAssets.push(candidate.url);
+      continue;
+    }
+    if (inspection.valid) validProductImages.push({ ...candidate, width, height });
   }
 
-  return { candidates, validProductImages, rejectedAssets, sourcesTested };
+  for (const candidate of validProductImages) {
+    candidate.score = scoreCandidate(candidate, input, raw.filter((item) => item.url === candidate.url).length);
+  }
+  validProductImages.sort((a, b) => (b.score || 0) - (a.score || 0));
+  return { candidates, validProductImages, rejectedAssets, sourcesTested, fallbackRequired: validProductImages.length === 0 };
 }
