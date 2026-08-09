@@ -1,6 +1,7 @@
 import type { OfficialAIChannel, OfficialAIDraftForRegeneration, OfficialAIOffer } from "./types";
 import { marketplaceLabel, selectOfferIcons } from "./icon-catalog";
 import { renderSocialHashtags } from "./social-hashtags";
+import { resolveSemanticDomain, semanticContextLine } from "./semantic-context";
 
 const SYSTEM_PROMPT = `Você é o copywriter de ofertas da Official AI do Caça Oferta.
 Você não conversa, não introduz a mensagem e não escreve a copy final. Produza somente JSON estruturado para a Copy V3.
@@ -351,15 +352,7 @@ function validateV3Field(facts: CopyV3Facts, value: string | null | undefined) {
 }
 
 function v3Context(facts: CopyV3Facts) {
-  const text = `${facts.category ?? ""} ${facts.productName}`.toLocaleLowerCase("pt-BR");
-  if (/controle|joystick|xbox|playstation|nintendo|game|gamer/iu.test(text)) return "🎮 Para jogar no computador";
-  if (/cafeteira|café|cozinha|panela|fritadeira|liquidificador|batedeira|airfryer/iu.test(text)) return "🍳 Para o preparo na cozinha";
-  if (/geladeira|lavadora|lava e seca|micro-ondas|cooktop|forno|fogão|ar-condicionado|aspirador|tv|televis/iu.test(text)) return "🏠 Para a rotina da casa";
-  if (/ferramenta|furadeira|parafusadeira|chave|serra|oficina/iu.test(text)) return "🛠️ Para reparos e projetos";
-  if (/celular|smartphone|notebook|tablet|console|fone|headset|tecnologia/iu.test(text)) return "📱 Para a rotina conectada";
-  if (/cachorro|gato|pet|ração|brinquedo animal/iu.test(text)) return "🐾 Para a rotina do pet";
-  if (/camiseta|vestido|tênis|sapato|bermuda|roupa|moda/iu.test(text)) return "👕 Para compor o dia a dia";
-  return null;
+  return semanticContextLine(resolveSemanticDomain(facts.productName, facts.category));
 }
 
 function v3DerivedBenefit(facts: CopyV3Facts) {
@@ -377,6 +370,73 @@ function v3Hook(facts: CopyV3Facts, channel: OfficialAIChannel, fields: CopyV3Fi
   if (channel === "whatsapp" && v3DerivedBenefit(facts)) return "🎮 Jogue no computador com controle sem fio ou com fio";
   if (attribute) return `${attribute.emoji} ${attribute.text}`;
   return v3Context(facts) ?? `✨ Destaque do dia na ${facts.marketplace}`;
+}
+
+function semanticText(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/gu, "")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .toLocaleLowerCase("pt-BR")
+    .trim();
+}
+
+function semanticContextKey(value: string) {
+  const text = semanticText(value);
+  if (/jogar|gamer|jogos|computador/.test(text)) return "context:gaming";
+  if (/rotina do pet|pet|animal/.test(text)) return "context:pet";
+  if (/cozinha|preparo/.test(text)) return "context:kitchen";
+  if (/rotina conectada|tecnologia/.test(text)) return "context:technology";
+  if (/reparos|projetos/.test(text)) return "context:tools";
+  if (/compor|moda/.test(text)) return "context:fashion";
+  return `context:${text}`;
+}
+
+function semanticNarrativeKey(value: string) {
+  const stopWords = new Set(["a", "o", "as", "os", "de", "da", "do", "das", "dos", "e", "para", "com", "na", "no", "um", "uma"]);
+  return semanticText(value).split(" ").filter((word) => word.length > 2 && !stopWords.has(word)).sort().join(" ");
+}
+
+function deduplicateSemanticSlots(blocks: string[], facts: CopyV3Facts) {
+  const productKey = semanticText(cleanProductName(facts.productName));
+  const attributeKey = objectiveAttribute(facts) ? semanticText(objectiveAttribute(facts)!.text) : null;
+  const seenContexts = new Set<string>();
+  const seenSpecs = new Set<string>();
+  const seenNarratives = new Set<string>();
+  const titleBlock = blocks.find((block) => block.trimStart().startsWith("🛍️"));
+  if (attributeKey && titleBlock && semanticText(titleBlock).includes(attributeKey)) seenSpecs.add(attributeKey);
+  const output: string[] = [];
+  for (const block of blocks) {
+    const text = semanticText(block);
+    if (!text) continue;
+    const isTitle = block.trimStart().startsWith("🛍️");
+    const isPrice = /r\$|off/.test(text);
+    const isMarketplace = /oferta (?:na|no) /.test(text);
+    const isContext = /^(?:para|no preparo|na rotina|na rotina do)/.test(text) || /jogar|rotina do pet|preparo na cozinha|reparos e projetos|rotina conectada|compor o dia a dia/.test(text);
+    if (isPrice || isMarketplace || isTitle) {
+      output.push(block);
+      continue;
+    }
+    if (isContext) {
+      const key = semanticContextKey(block);
+      if (seenContexts.has(key)) continue;
+      seenContexts.add(key);
+      output.push(block);
+      continue;
+    }
+    if (attributeKey && (text === attributeKey || text.includes(attributeKey))) {
+      if (seenSpecs.has(attributeKey)) continue;
+      seenSpecs.add(attributeKey);
+      output.push(block);
+      continue;
+    }
+    if (text === productKey) continue;
+    const narrativeKey = semanticNarrativeKey(block);
+    if (narrativeKey && seenNarratives.has(narrativeKey)) continue;
+    if (narrativeKey) seenNarratives.add(narrativeKey);
+    output.push(block);
+  }
+  return output;
 }
 
 /** Copy V3: provider fields are validated first; all commercial facts remain deterministic. */
@@ -401,10 +461,11 @@ export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAICh
     ...(context ? [context] : []),
     price
   ];
+  const slots = deduplicateSemanticSlots([v3Hook(facts, channel, fields, attribute), ...commercial], facts);
 
-  if (channel === "instagram") return [v3Hook(facts, channel, fields, attribute), ...commercial, "🔎 Link na bio ou nos Stories para consultar a oferta. 👇", renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
-  if (channel === "facebook") return [v3Hook(facts, channel, fields, attribute), ...commercial, "👉 Link de compra no primeiro comentário! 👇", renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
-  if (channel === "whatsapp") return [v3Hook(facts, channel, fields, attribute), ...commercial, "👉"].join("\n\n");
-  if (channel === "telegram") return [v3Hook(facts, channel, fields, attribute), ...commercial, "👉"].join("\n\n");
-  return [v3Hook(facts, channel, fields, attribute), ...commercial, "🛒 Ver oferta 👇"].join("\n\n");
+  if (channel === "instagram") return [...slots, "🔎 Link na bio ou nos Stories para consultar a oferta. 👇", renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
+  if (channel === "facebook") return [...slots, "👉 Link de compra no primeiro comentário! 👇", renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
+  if (channel === "whatsapp") return [...slots, "👉"].join("\n\n");
+  if (channel === "telegram") return [...slots, "👉"].join("\n\n");
+  return [...slots, "🛒 Ver oferta 👇"].join("\n\n");
 }

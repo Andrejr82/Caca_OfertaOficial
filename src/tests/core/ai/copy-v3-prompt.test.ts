@@ -140,4 +140,108 @@ describe("Official AI Copy V3", () => {
     expect(copy).toContain(expectedContext);
     expect(copy).not.toContain("Automotivo");
   });
+
+  it("corrige contexto incompatível e remove spec repetida no PC", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "PC Desktop Intel Core i3 8GB",
+      marketplace: "Amazon",
+      category: "Pet",
+      currentPrice: 899,
+      originalPrice: null,
+      evidence: { attributes: ["8GB"] }
+    }, "whatsapp", { hook: "💾 8GB" });
+
+    expect(copy).not.toMatch(/pet|🐾/iu);
+    expect(copy.match(/8GB/giu) ?? []).toHaveLength(1);
+    expect(copy).toContain("Oferta na Amazon");
+  });
+
+  it("não duplica contexto de monitor gamer", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Monitor Gamer Samsung 24 polegadas",
+      marketplace: "Amazon",
+      category: "Informática",
+      currentPrice: 799,
+      originalPrice: null,
+      evidence: {}
+    }, "facebook");
+
+    expect(copy.match(/Para jogar no computador/giu) ?? []).toHaveLength(1);
+    expect(copy.match(/Oferta na Amazon/giu) ?? []).toHaveLength(1);
+  });
+
+  it("preserva contexto pet e cozinha quando a classificação é compatível", () => {
+    const pet = buildCopyV3ChannelCopy({
+      productName: "Ração Golden para gatos",
+      marketplace: "Shopee",
+      category: "Pet",
+      currentPrice: 89,
+      originalPrice: null,
+      evidence: {}
+    }, "whatsapp");
+    const kitchen = buildCopyV3ChannelCopy({
+      productName: "Air Fryer Mondial",
+      marketplace: "Mercado Livre",
+      category: "Cozinha",
+      currentPrice: 299,
+      originalPrice: null,
+      evidence: {}
+    }, "telegram");
+
+    expect(pet).toContain("Para a rotina do pet");
+    expect(kitchen).toContain("Para o preparo na cozinha");
+    expect(kitchen).not.toMatch(/pet|🐾/iu);
+  });
+
+  it.each(["whatsapp", "telegram", "facebook", "instagram"] as const)("aplica slots semânticos uma vez em %s", (channel) => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Roteador TP-Link EX3000",
+      marketplace: "Mercado Livre",
+      category: "Pet",
+      currentPrice: 199,
+      originalPrice: 249,
+      evidence: {}
+    }, channel);
+
+    expect(copy).not.toMatch(/pet|🐾/iu);
+    expect(copy.match(/Oferta no Mercado Livre/giu) ?? []).toHaveLength(1);
+  });
+
+  it.each(["whatsapp", "telegram", "facebook", "instagram"] as const)("mantém marketplace puro em %s", (channel) => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "PC Desktop Intel Core i3 8GB",
+      marketplace: "Amazon",
+      category: "Pet",
+      currentPrice: 899,
+      originalPrice: null,
+      evidence: { attributes: ["8GB"] },
+    }, channel);
+
+    expect(copy).toContain("Oferta na Amazon");
+    expect(copy).not.toMatch(/🐾|Pet|CuidadosComPets/iu);
+  });
+
+  it.each(["whatsapp", "telegram", "facebook", "instagram"] as const)("não duplica o contexto do Olympikus Dynamic em %s", (channel) => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Tênis Olympikus Dynamic",
+      marketplace: "Mercado Livre",
+      category: "Moda",
+      currentPrice: 199,
+      originalPrice: null,
+      evidence: {}
+    }, channel);
+
+    expect(copy.match(/Para compor o dia a dia/giu) ?? []).toHaveLength(1);
+    expect(copy.match(/Oferta no Mercado Livre/giu) ?? []).toHaveLength(1);
+  });
+
+  it("omite benefício semanticamente igual ao hook", () => {
+    const copy = buildCopyV3ChannelCopy({ ...coffeeMaker, productName: "Cafeteira Electrolux para o café", category: "Cozinha" }, "telegram", {
+      hook: "Cafeteira Electrolux deixa o café simples",
+      benefitLine: "Cafeteira Electrolux deixa o café simples",
+      contextLine: "Para o preparo na cozinha",
+    });
+
+    expect(copy.match(/Cafeteira Electrolux deixa o café simples/giu) ?? []).toHaveLength(1);
+  });
 });

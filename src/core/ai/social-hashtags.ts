@@ -1,4 +1,5 @@
 import type { CopyV2Facts } from "./prompt";
+import { resolveSemanticDomain, semanticDomainLabel } from "./semantic-context";
 
 export type SocialHashtagChannel = "facebook" | "instagram";
 
@@ -79,9 +80,10 @@ function productTags(facts: CopyV2Facts): string[] {
 }
 
 export function generateSocialHashtags(facts: CopyV2Facts, channel: SocialHashtagChannel): string[] {
-  const sourceText = `${facts.productName} ${facts.category ?? ""}`;
+  const domain = resolveSemanticDomain(facts.productName, facts.category);
+  const sourceText = `${facts.productName} ${semanticDomainLabel(domain) ?? ""}`;
   const categoryTags = CATEGORY_RULES.find((rule) => rule.pattern.test(sourceText))?.tags ?? [];
-  const category = facts.category && !/^cat[:\s]/iu.test(facts.category) ? facts.category : "";
+  const category = semanticDomainLabel(domain) ?? "";
   const tags = [
     ...marketplaceTags(facts.marketplace),
     category,
