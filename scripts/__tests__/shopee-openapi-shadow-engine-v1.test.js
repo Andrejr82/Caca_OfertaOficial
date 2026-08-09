@@ -8,6 +8,7 @@ const {
   GRAPHQL_CONTRACTS,
   normalizeCommission,
   normalizePriceIntegrity,
+  matchesRequiredProductIdentity,
   evaluateIntent,
   normalizeProductOffer,
   normalizeFeedColumns,
@@ -79,6 +80,41 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(evaluateIntent({ productName: 'Centrífuga de salada inox', productCatIds: [100010], sales: 100, ratingStar: 4.8, priceDiscountRate: 20, commissionPercent: 5 }, SCENARIO_CONTRACTS.beleza_editorial).eligible).toBe(false);
     expect(evaluateIntent({ productName: 'Monitor de pressão arterial digital', productCatIds: [100001], sales: 100, ratingStar: 4.8, priceDiscountRate: 20, commissionPercent: 5 }, SCENARIO_CONTRACTS.informatica_editorial).eligible).toBe(false);
     expect(evaluateIntent({ productName: 'Notebook gamer 16GB SSD', productCatIds: [100644], sales: 100, ratingStar: 4.8, priceDiscountRate: 20, commissionPercent: 5 }, SCENARIO_CONTRACTS.informatica_editorial).eligible).toBe(true);
+  });
+
+  it('exige identidade real da classe e rejeita acessórios que apenas mencionam o alvo', () => {
+    const required = SCENARIO_CONTRACTS.informatica_editorial.requiredProductClass;
+    const fails = [
+      'Suporte De Parede Para Roteador Wi-Fi e Modem Regulável',
+      'Caixa Suporte Nicho para Roteador em MDF',
+      'Suporte Para Monitor Variadas Cores Base Monitor Gamer',
+      'Predador de Monitor – Estátua Decorativa Geek para Setup Gamer',
+      'Alien de Monitor – Estátua Decorativa Geek para Setup Gamer',
+      'Cabo Hd Sata 2.5 Adaptador Usb 3.0 Para Hd E Ssd',
+      'Case 3.0 para HD de Notebook ou SSD SATA',
+      'Cabo Ethernet CAT7 ... Roteador',
+    ];
+    for (const title of fails) expect(matchesRequiredProductIdentity(title, required)).toBe(false);
+
+    const passes = [
+      'Monitor Gamer 34 Curvo 165Hz',
+      'Kit de Roteador Deco X50 Dual Band AX3000 Mesh Wi-Fi 6',
+      'Roteador TP-Link Archer C20 AC750',
+      'Monitor Gamer 27 IPS Full HD',
+      'Computador PC Gamer Intel Core i7 ... SSD 960GB ... Monitor 20',
+      'PC Gamer Completo ... SSD 480GB, Monitor 19',
+    ];
+    for (const title of passes) expect(matchesRequiredProductIdentity(title, required)).toBe(true);
+  });
+
+  it('emite required_product_identity_missing quando a classe só aparece como referência', () => {
+    const result = evaluateIntent({
+      productName: 'Suporte Para Monitor Variadas Cores Base Monitor Gamer',
+      productCatIds: [100644], sales: 1000, ratingStar: 4.9, priceDiscountRate: 30, commissionPercent: 8,
+    }, SCENARIO_CONTRACTS.informatica_editorial);
+
+    expect(result.eligible).toBe(false);
+    expect(result.reasons).toContain('required_product_identity_missing');
   });
 
   it('aplica classes negativas antes do score nos cenários corrigidos', () => {

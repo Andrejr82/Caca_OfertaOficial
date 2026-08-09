@@ -48,6 +48,40 @@ function scenario(positiveDomain, requiredProductClass, negativeDomain, ambiguou
 function text(value) { return String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim(); }
 function hasTerm(value, term) { const haystack = ` ${text(value)} `; const needle = ` ${text(term)} `; return Boolean(text(term)) && haystack.includes(needle); }
 function anyTerm(value, terms) { return (terms || []).filter((term) => hasTerm(value, term)); }
+const REQUIRED_PRODUCT_NON_IDENTITY_TERMS = Object.freeze([
+  'suporte', 'base', 'nicho', 'prateleira', 'organizador', 'cabo', 'adaptador', 'case', 'enclosure', 'capa',
+  'decoracao', 'decorativo', 'decorativa', 'estatua', 'luminaria',
+]);
+const COMPOSITE_PRODUCT_PREFIXES = /^(?:kit|conjunto|pack|combo)(?: de)?$/u;
+function termPosition(value, term) {
+  const haystack = ` ${text(value)} `;
+  const needle = ` ${text(term)} `;
+  const position = needle.trim() ? haystack.indexOf(needle) : -1;
+  return position < 0 ? null : position;
+}
+function matchesRequiredProductIdentity(value, requiredProductClasses = []) {
+  const title = text(value);
+  const classPositions = (requiredProductClasses || [])
+    .map((term) => ({ term, position: termPosition(title, term) }))
+    .filter((match) => match.position !== null)
+    .sort((left, right) => left.position - right.position || text(right.term).length - text(left.term).length);
+  if (!classPositions.length) return false;
+
+  const negativePositions = REQUIRED_PRODUCT_NON_IDENTITY_TERMS
+    .map((term) => termPosition(title, term))
+    .filter((position) => position !== null)
+    .sort((left, right) => left - right);
+
+  return classPositions.some(({ position }) => {
+    const firstNegativePosition = negativePositions[0] ?? Number.POSITIVE_INFINITY;
+    if (position > firstNegativePosition) return false;
+    const prefix = title.slice(0, position).trim();
+    if (!prefix) return true;
+    if (COMPOSITE_PRODUCT_PREFIXES.test(prefix)) return true;
+    if (/\b(?:de|para|por|com|compat(?:ivel|ibilidade)?|aplicacao)\s*$/u.test(prefix)) return false;
+    return true;
+  });
+}
 const NEGATIVE_CLASS_PATTERNS = Object.freeze({
   spare_part: ['chave t','peca de reposicao','peca avulsa','pecas de reposicao'],
   replacement_part: ['reposicao','refil','tampa de reposicao','resistencia para','borracha para','borrachas compativel'],
@@ -116,6 +150,7 @@ function evaluateIntent(product, contract) {
   const title = product.productName || product.title || '';
   const matchedPositiveDomain = anyTerm(title, contract.positiveDomain);
   const matchedRequiredProductClass = anyTerm(title, contract.requiredProductClass);
+  const requiredProductIdentity = matchesRequiredProductIdentity(title, contract.requiredProductClass);
   const matchedNegativeDomain = anyTerm(title, contract.negativeDomain);
   const matchedAmbiguousTerms = anyTerm(title, contract.ambiguousTerms);
   const matchedNegativeClasses = classifyNegativeClasses(title, contract);
@@ -123,6 +158,7 @@ function evaluateIntent(product, contract) {
   const reasons = [];
   if (!matchedPositiveDomain.length && !apiCategoryAllowed) reasons.push('positive_domain_missing');
   if (!matchedRequiredProductClass.length) reasons.push('required_product_class_missing');
+  else if (!requiredProductIdentity) reasons.push('required_product_identity_missing');
   if (matchedNegativeDomain.length) reasons.push('negative_domain');
   if (matchedAmbiguousTerms.length) reasons.push('ambiguous_terms');
   if (matchedNegativeClasses.length) reasons.push('negative_class');
@@ -132,7 +168,7 @@ function evaluateIntent(product, contract) {
   if (number(product.ratingStar ?? product.rating) < contract.minRating) reasons.push('rating_below_minimum');
   if (number(product.priceDiscountRate ?? product.discount) < contract.minDiscount) reasons.push('discount_below_minimum');
   if (commission < contract.minCommission) reasons.push('commission_below_minimum');
-  return { eligible: reasons.length === 0, reasons, matchedPositiveDomain, matchedRequiredProductClass, matchedNegativeDomain, matchedAmbiguousTerms, matchedNegativeClasses };
+  return { eligible: reasons.length === 0, reasons, matchedPositiveDomain, matchedRequiredProductClass, requiredProductIdentity, matchedNegativeDomain, matchedAmbiguousTerms, matchedNegativeClasses };
 }
 
 function normalizeProductOffer(node = {}, context = {}) {
@@ -429,4 +465,4 @@ if (require.main === module) {
   runCli().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => { console.error(`[Shopee Shadow V1] ${error.message}`); process.exitCode = 1; });
 }
 
-module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, scoreProduct, buildFixtureSources, collectLiveSources, runCli };
+module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, scoreProduct, buildFixtureSources, collectLiveSources, runCli };
