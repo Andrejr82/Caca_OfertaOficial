@@ -1,26 +1,36 @@
 # Segurança
 
-O sistema lida indiretamente com as chaves privadas do administrador, assim como bancos de dados transacionais. Seguir as diretrizes de segurança é inegociável.
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
 
-## 1. RLS (Row Level Security)
-Esta é a camada primária de proteção do aplicativo inteiro.
-- Não existem `SELECT * FROM offers` vindos do cliente no Next.js que retornem dados aleatórios. Todo fetch injeta o JWT (`auth.uid()`) na política.
-- O arquivo `supabase/schema.sql` atesta isso: `create policy "offers select own" on public.offers for select using (auth.uid() = user_id)`.
+## Fronteiras de confiança
 
-## 2. Proteção nas API Routes
-- Qualquer endpoint na pasta `/src/app/api` (exceto webhooks externos) passa por uma checagem de sessão:
-  ```ts
-  const supabase = createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return new Response('Unauthorized', { status: 401 });
-  ```
+- Navegador usa somente credenciais públicas e sessão autenticada.
+- Operações administrativas usam clientes server-side e nunca expõem a service-role key.
+- Oracle↔Vercel e workers exigem segredo de serviço e validação de payload.
+- Webhooks validam autenticidade antes de alterar estado.
 
-## 3. Proteção Webhooks (Inngest)
-Para evitar que hackers disparem os background jobs deliberadamente fazendo um POST em `/api/inngest`:
-- A biblioteca nativa da Inngest usa `INNGEST_SIGNING_KEY` para garantir via Hmac-SHA256 que o payload enviado realmente veio da cloud oficial da Inngest e não de terceiros falsificando a requisição.
+## Banco e Storage
 
-## 4. Gestão do JWT
-- Como um app Server-Side Rendered (Next 16), o JWT não fica exposto em LocalStorage no modelo tradicional vulnerável a XSS, ele fica ancorado em Cookies httpOnly (gestão do pacote `@supabase/ssr`).
+- RLS deve permanecer habilitado e coberto por políticas explícitas.
+- Migrations precisam preservar constraints de estado, identidade e idempotência.
+- Uploads Shein/vídeo devem produzir URLs públicas somente nos buckets destinados a conteúdo público.
+- Nunca tornar sessões, logs, arquivos temporários ou credenciais publicamente acessíveis.
 
-## 5. Cuidados Adicionais
-O arquivo `scripts/security-check.mjs` pode ser rodado para varrer `.env` e checar vazamentos de chaves Groq ou Supabase Service Role Key no Frontend. Nunca pule as checagens pré-commit de segurança (Lints).
+## Publicação
+
+- Discovery e geração de draft não podem publicar implicitamente.
+- Rotas exigem `postId`/`offerId`, aprovação e conteúdo oficial em `posts.content`.
+- Guardas históricas evitam republicação por ID ou identidade comercial equivalente.
+- Preço, desconto, frete, rating, cupom e link precisam de evidência do marketplace.
+
+## Segredos e logs
+
+- Valores reais ficam fora do Git; `.env.example` contém apenas nomes seguros.
+- Sanitizar bearer tokens, cookies, payloads pessoais, URLs assinadas e service-role keys.
+- Executar `npm run security:check` antes do merge e do deploy.
+
+## Resposta a incidente
+
+Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afetados, avaliar dados persistidos e só reativar após smoke tests controlados.

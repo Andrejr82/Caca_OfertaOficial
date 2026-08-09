@@ -1,6 +1,20 @@
 # Arquitetura atual — Caça Oferta Oficial
 
-> Fonte canônica documental do runtime versionado no repositório em 2026-07-28. A implementação e o manifesto de release continuam sendo a autoridade final.
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
+
+> Fonte canônica documental do runtime versionado. A implementação, as migrations, os testes e o manifesto de release continuam sendo a autoridade final.
+
+## Evoluções incorporadas em agosto de 2026
+
+- Shopee OpenAPI V1 opera como fonte oficial isolada e controlada por flags; o caminho legado não deve ser inferido como equivalente.
+- Curadoria Comercial V1 adiciona intenção, score, riscos, aprovação e filas Top 30 por canal.
+- A identidade comercial e o histórico de publicação impedem reentrada indevida de ofertas equivalentes.
+- `posts.content` concentra a copy oficial; Copy V3 e hashtags dinâmicas alimentam os transportes.
+- Telegram e WhatsApp possuem fluxo editorial Top 30. O WhatsApp também expõe rotação `next`; Publicação Expressa continua independente.
+- Shein Express usa confirmação assistida e imagem pública validada antes de persistência/publicação.
+- Guardas fail-closed separam descoberta, geração controlada de drafts e publicação; Oracle não publica por efeito colateral do ciclo.
 
 ## Visão geral
 
