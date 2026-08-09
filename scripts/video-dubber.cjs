@@ -31,45 +31,166 @@ async function classifyProductGender(title, apiKey) {
   }
 }
 
+const FORBIDDEN_DUBBING_PHRASES = [
+  'absurdo', 'mudou minha vida', 'revolucionário', 'vai revolucionar',
+  'novo aliado', 'sua nova aliada', 'perfeito', 'incrível', 'você vai amar',
+  'corre que pode acabar', 'só hoje', 'últimas unidades', 'preço incrível',
+  'preço absurdo', 'não perca', 'imperdível', 'transforma sua vida',
+  'transforma sua rotina', 'imagina', 'chega de',
+];
+
+const UNSUPPORTED_DUBBING_CLAIMS = [
+  /\bmud(a|ou)\s+(?:a\s+)?minha\s+vida\b/iu,
+  /\b(?:vai\s+)?revolucion/iu,
+  /\beconomiz/iu,
+  /\b(?:mais\s+)?tempo\b/iu,
+  /\bdur(?:a|abilidade|ável)/iu,
+  /\b(?:superior|alta|excelente)\s+qualidade\b/iu,
+  /\b(?:confortável|conforto|eficiente|eficiência)\b/iu,
+];
+
+const SPECIFIC_DUBBING_FACTS = [
+  'inox', 'aço', 'algodão', 'vidro', 'bambu', 'usb', 'sem fio', 'bateria',
+  'baterias', 'maleta', 'peças', 'funções', 'hermético', 'gourmet', 'compacto',
+];
+
+function normalizeDubbingTitle(title) {
+  return String(title || '')
+    .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\b(?:direct selling|oficial|original|promoção|oferta)\b/giu, '')
+    .replace(/\s+/gu, ' ')
+    .trim();
+}
+
+function numberWord(value, feminine = false) {
+  const words = feminine ? { 2: 'duas', 3: 'três', 5: 'cinco' } : { 2: 'dois', 3: 'três', 5: 'cinco' };
+  return words[Number(value)] || value;
+}
+
+function extractDubbingFacts(title) {
+  const normalized = normalizeDubbingTitle(title);
+  const lower = normalized.toLowerCase();
+  const category = [
+    ['potes', 'um conjunto de potes de vidro herméticos', 'organizar e armazenar alimentos', 'deixar os alimentos visíveis e a cozinha mais organizada'],
+    ['tênis', 'um tênis casual', 'compor produções do dia a dia', 'combinar com diferentes looks casuais'],
+    ['camisetas', 'um kit de camisetas', 'montar opções para o dia a dia', 'ter peças básicas para variar as combinações'],
+    ['cafeteira', 'uma cafeteira elétrica', 'preparar café', 'deixar o preparo do café mais simples'],
+    ['parafusadeira', 'uma parafusadeira sem fio', 'fazer pequenos reparos e projetos', 'ter o conjunto de ferramentas reunido'],
+    ['ferramentas', 'um kit de ferramentas', 'fazer pequenos reparos', 'manter as ferramentas reunidas'],
+    ['torneira', 'uma torneira', 'organizar a área da pia', 'ter uma opção funcional para a pia'],
+    ['aspirador', 'um aspirador portátil', 'fazer a limpeza do dia a dia', 'alcançar espaços menores com praticidade'],
+  ].find(([key]) => lower.includes(key)) || ['produto', 'um produto', 'resolver uma tarefa do dia a dia', 'ter uma opção prática para essa tarefa'];
+
+  let features = [];
+  if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
+    const quantityMatch = normalized.match(/\b(\d+)\s+potes?/iu);
+    const quantity = quantityMatch ? `${numberWord(quantityMatch[1], false)} ` : '';
+    features = [`${quantity}potes de vidro herméticos${/bambu/iu.test(normalized) ? ' com tampa de bambu' : ''}`];
+  }
+  else if (/\b(?:kit\s+)?\d+\s+camisetas?/iu.test(normalized)) {
+    const match = normalized.match(/\bkit\s+(\d+)\s+camisetas?(?:\s+de\s+algodão)?/iu);
+    const quantity = match ? numberWord(match[1], true) : null;
+    features = [match ? `${quantity} camisetas${/algodão/iu.test(normalized) ? ' de algodão' : ''}` : 'camisetas básicas'];
+  }
+  else if (/parafusadeira/iu.test(normalized)) {
+    const voltage = normalized.match(/\b\d+\s*V\b/iu)?.[0];
+    const functions = normalized.match(/\b\d+\s+funções?/iu)?.[0];
+    const batteries = normalized.match(/\b\d+\s+baterias?/iu)?.[0];
+    const batteryFeature = batteries ? `${numberWord(batteries.match(/\d+/u)[0], true)} baterias${/maleta/iu.test(normalized) ? ' e maleta' : ''}` : (/maleta/iu.test(normalized) ? 'maleta' : null);
+    features = [voltage, functions && `${numberWord(functions.match(/\d+/u)[0])} funções`, batteryFeature].filter(Boolean);
+  } else if (/kit\s+ferramentas/iu.test(normalized)) {
+    const pieces = normalized.match(/\b\d+\s+peças?/iu)?.[0]?.toLowerCase();
+    features = [pieces, /maleta/iu.test(normalized) ? 'maleta' : null].filter(Boolean);
+  } else {
+    const terms = ['casual', 'elétrica', 'compacta', 'gourmet', 'bica móvel', 'portátil', 'USB', 'sem fio', 'impacto', 'algodão'];
+    features = terms.filter((term) => new RegExp(`\\b${term.replace(' ', '\\s+')}\\b`, 'iu').test(normalized));
+  }
+
+  return { key: category[0], category: category[1], useCase: category[2], benefit: category[3], features: features.slice(0, 3) };
+}
+
+function buildFallbackDubbingScript(title, durationSecs = 15) {
+  const facts = extractDubbingFacts(title);
+  let detail = ` A opção é indicada para ${facts.useCase}.`;
+  if (facts.key === 'potes' && facts.features.length) detail = ` O kit reúne ${facts.features[0]}.`;
+  if (facts.key === 'camisetas' && facts.features.length) detail = ` O kit reúne ${facts.features[0]}.`;
+  if (facts.key === 'parafusadeira' && facts.features.length) detail = ` O conjunto traz ${facts.features.join(', ')}.`;
+  if (facts.key === 'ferramentas' && facts.features.length) detail = ` O kit reúne ${facts.features.join(' e ')}.`;
+  if (facts.key === 'cafeteira' && facts.features.includes('compacta')) detail = ' O modelo tem formato compacto.';
+  if (facts.key === 'torneira' && facts.features.includes('bica móvel')) detail = ` O modelo tem ${facts.features.includes('gourmet') ? 'acabamento gourmet e ' : ''}bica móvel.`;
+  if (facts.key === 'aspirador' && facts.features.length) detail = ` O modelo tem ${facts.features.filter((feature) => feature !== 'portátil').join(' e ')}.`;
+  const benefit = Number(durationSecs) < 12 ? '' : ` É uma alternativa prática para ${facts.benefit}.`;
+  return `Olha uma opção interessante para ${facts.useCase}. Aqui está ${facts.category}.${detail}${benefit} Você encontra na Shopee. Acesse o link na publicação.`;
+}
+
+function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO') {
+  const targetWords = Math.round(durationSecs * 3.5);
+  return `Você escreve roteiro falado curto, natural e comercial em português do Brasil.
+
+ÚNICA FONTE DE FATOS: use somente informações presentes no título do produto abaixo. Não invente materiais, medidas, desempenho, durabilidade, conforto, economia, qualidade, resultados ou urgência.
+
+TÍTULO DO PRODUTO: ${normalizeDubbingTitle(title)}
+DURAÇÃO: ${durationSecs} segundos
+TAMANHO: aproximadamente ${targetWords} palavras, preferencialmente 45 a 80 palavras quando a duração permitir.
+CONCORDÂNCIA: use gênero e número naturais, sem forçar pronomes ou adjetivos.
+
+ESTRUTURA:
+1. Gancho variado com curiosidade ou utilidade real.
+2. Nome curto do produto, sem repetir o título completo.
+3. Uma a três características sustentadas pelo título.
+4. Um benefício concreto e seguro, sem extrapolar os fatos.
+5. CTA final claro: Você encontra na Shopee. Acesse o link na publicação.
+
+REGRAS DE ESTILO:
+- Frases curtas, fluidas e naturais para TTS.
+- Persuasão por clareza, ritmo e especificidade; sem exagero de propaganda.
+- Não mencione preço, desconto, economia ou estoque.
+- Não use emojis, aspas, títulos ou numeração.
+- Não use urgência falsa, superlativos genéricos ou promessas pessoais.
+- Retorne apenas o texto do roteiro.`;
+}
+
+function isSafeDubbingScript(script) {
+  const text = String(script || '').trim();
+  const lower = text.toLowerCase();
+  return text && text.split(/\s+/u).length <= 95
+    && !FORBIDDEN_DUBBING_PHRASES.some((phrase) => lower.includes(phrase))
+    && !UNSUPPORTED_DUBBING_CLAIMS.some((pattern) => pattern.test(text))
+    && !/\b(?:R\$|desconto|estoque|últim|economia|economiz)/iu.test(text)
+    && /Você encontra na Shopee\. Acesse o link na publicação\.$/u.test(text);
+}
+
+function hasUnsupportedSpecificFact(script, title) {
+  const output = String(script || '').toLowerCase();
+  const source = normalizeDubbingTitle(title).toLowerCase();
+  return SPECIFIC_DUBBING_FACTS.some((fact) => output.includes(fact) && !source.includes(fact));
+}
+
+function repeatsProductName(script, title) {
+  const category = extractDubbingFacts(title).category.toLowerCase();
+  return category.length > 3 && String(script || '').toLowerCase().split(category).length - 1 > 1;
+}
+
+function sanitizeDubbingScript(script, title, durationSecs = 15) {
+  const cleaned = String(script || '')
+    .replace(/["“”]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .replace(/\s+([,.!?])/gu, '$1')
+    .trim();
+  const safe = isSafeDubbingScript(cleaned)
+    && !hasUnsupportedSpecificFact(cleaned, title)
+    && !repeatsProductName(cleaned, title);
+  return safe ? cleaned : buildFallbackDubbingScript(title, durationSecs);
+}
+
 // --- ETAPA 1: Gerar roteiro persuasivo com gênero correto ---
 async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO') {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
-  // Alvo: ~3.5 palavras/segundo (midpoint), sem preocupar exatamente — o rate do TTS vai ajustar depois
   const targetWords = Math.round(durationSecs * 3.5);
-  // max_tokens dinâmico: ~2.5 tokens por palavra + margem de segurança generosa
   const dynamicMaxTokens = Math.max(350, Math.round(targetWords * 2.5) + 100);
-
-  const genderInstruction = gender === 'FEMININO'
-    ? `GÊNERO DO PRODUTO: FEMININO. Use OBRIGATORIAMENTE artigos e pronomes femininos: "A [produto]", "esta [produto]", "sua nova aliada", "ela é", "perfeita", "incrível", "prática". NUNCA use "o", "este", "seu" para referir ao produto.`
-    : `GÊNERO DO PRODUTO: MASCULINO. Use OBRIGATORIAMENTE artigos e pronomes masculinos: "O [produto]", "este [produto]", "seu novo aliado", "ele é", "perfeito", "incrível", "prático". NUNCA use "a", "esta", "sua" para referir ao produto.`;
-
-  const prompt = `Você é um dos melhores copywriters de vídeos curtos do Brasil, especialista em Reels e TikTok de Achadinhos.
-Sua missão é criar um ROTEIRO FALADO que faça o espectador PARAR de rolar o feed, SENTIR desejo imediato e CLICAR para comprar na Shopee.
-
-DADOS DO PRODUTO:
-Título completo: ${title}
-Preço: ${price}
-Duração do vídeo: ${durationSecs} segundos
-Tamanho alvo do roteiro: aproximadamente ${targetWords} palavras
-
-${genderInstruction}
-
-ESTRUTURA OBRIGATÓRIA DO ROTEIRO (siga essa ordem):
-1. GANCHO (2-3 segundos): Frase de impacto que para o scroll. Ex: "Isso mudou minha vida!", "Chega de sofrer com [problema]!", "Esse [produto] é um absurdo!".
-2. APRESENTAÇÃO (rápida): Diga o nome curto e comercial do produto. Ignore lixo de SEO do título — crie um nome simples.
-3. BENEFÍCIOS (maior parte): 2-3 benefícios reais ditos com paixão. Use "imagina...", "chega de...", "você vai...", "transforma...".
-4. URGÊNCIA: Uma frase criando pressa. Ex: "Tá com preço incrível agora na Chopí!", "Corre que pode acabar!".
-5. CTA FINAL: Obrigatório e com energia máxima: "Acesse o link na publicação!".
-
-REGRAS:
-- Roteiro com aproximadamente ${targetWords} palavras — seja preciso.
-- NUNCA mencione preço, valores ou porcentagem de desconto. O preço aparece na tela.
-- Escreva "Shopee" como "Chopí" para a voz sintética pronunciar corretamente.
-- Sem emojis, sem aspas, sem títulos ou numeração no texto final.
-- O texto deve soar natural e entusiasmado quando lido em voz alta.
-- Retorne APENAS o texto do roteiro, sem explicações.`;
+  const prompt = buildDubbingPrompt(title, durationSecs, gender);
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
@@ -82,7 +203,7 @@ REGRAS:
     { headers: { Authorization: `Bearer ${apiKey}` } }
   );
 
-  return response.data.choices[0].message.content.trim();
+  return sanitizeDubbingScript(response.data.choices[0].message.content, title, durationSecs);
 }
 
 // --- ETAPA 2: Gerar TTS com parâmetros de rate e pitch ---
@@ -275,5 +396,10 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
 }
 
 module.exports = {
-  processShopeeVideoDubbing
+  processShopeeVideoDubbing,
+  generateDubbingCopy,
+  buildDubbingPrompt,
+  buildFallbackDubbingScript,
+  sanitizeDubbingScript,
+  isSafeDubbingScript,
 };
