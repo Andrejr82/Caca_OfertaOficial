@@ -1,5 +1,27 @@
 # Integrações atuais
 
-Supabase é persistência/autenticação. Oracle fornece Worker Discovery-Only, gateway técnico de scraping e motor WhatsApp. Official AI usa Groq/Cerebras. Publicação usa Telegram, Instagram e WhatsApp; Facebook possui rota/transport e deve ser tratado conforme o schema e o ambiente. Shopee, Mercado Livre e Amazon são os marketplaces do worker atual.
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
 
-Inngest está integrado como executor delegado para publicação e processamento de oferta; não é autoridade de estado. Magalu, Netshoes, Shein, GitHub Actions, Cloudinary, Firecrawl, Scrapfly e Scrape.do aparecem em módulos específicos; presença de código não prova ativação produtiva. Consulte [architecture-current.md](architecture-current.md).
+| Integração | Capacidade versionada | Condição para declarar ativa |
+|---|---|---|
+| Supabase | Auth, dados, RPCs, auditoria e Storage | migrations aplicadas, RLS e smoke test |
+| Shopee | OpenAPI V1, extração/ingestão e Express | credenciais, flags e persistência validadas |
+| Mercado Livre | OAuth, descoberta e monetização | token válido e callback configurado |
+| Amazon | descoberta com contrato próprio | provider e monetização confirmados |
+| Shein | Express assistido e imagem pública | confirmação do produto e URL pública válida |
+| Telegram | teste, publicação e editorial Top 30 | bot/chat configurados e recibo confirmado |
+| Instagram | publicação, webhook e polling | app Meta, token, webhook e permissões |
+| Facebook | imagem/vídeo, webhook e comentários | página, token e processamento de mídia |
+| WhatsApp | Baileys, publicação e fila Top 30 | sessão externa saudável e ação disponível |
+| Google Drive | upload de mídia | OAuth/service account e pasta configurados |
+| Inngest | funções assíncronas delegadas | app sincronizado; jobs desabilitados não são ativos |
+| Oracle | discovery, scraping auxiliar e workers | PM2/systemd, overlay e reachability validados |
+
+## Fronteiras
+
+- Descoberta não autoriza publicação.
+- Copy publicada vem de `posts.content`.
+- Links, preços, descontos e identidades não podem ser sintetizados.
+- Código existente representa capacidade; ativação externa exige verificação no provedor.

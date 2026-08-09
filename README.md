@@ -1,5 +1,9 @@
 # Caça Oferta Oficial
 
+<!-- docs-status: current -->
+<!-- verified-against: dbf09b3 -->
+<!-- verified-on: 2026-08-09 -->
+
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
 O runtime operacional atual está descrito em [docs/CURRENT_SYSTEM_STATUS.md](docs/CURRENT_SYSTEM_STATUS.md). A hierarquia documental está em [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md). Os documentos PMAV5 são registros históricos e contratuais; não substituem a verificação do código e do manifesto de release.
@@ -61,6 +65,8 @@ O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `
 - [Segurança](docs/SECURITY.md)
 - [PMAV5 e contratos](docs/PMAV5/README.md)
 - [Operação de vídeo](docs/VIDEO_WORKER_CURRENT.md)
+- [Governança da documentação](docs/DOCUMENTATION_GOVERNANCE.md)
+- [Auditoria documental de 2026-08-09](docs/DOCUMENTATION_AUDIT_2026-08-09.md)
 
 ## Desenvolvimento local
 
@@ -79,6 +85,7 @@ npm run typecheck
 npm test
 npm run build
 npm run security:check
+npm run docs:audit
 npm run verify
 ```
 
