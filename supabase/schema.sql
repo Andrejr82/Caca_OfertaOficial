@@ -79,6 +79,8 @@ create table if not exists public.sales (
   gross_value numeric(12,2) not null check (gross_value >= 0),
   commission_value numeric(12,2) not null check (commission_value >= 0),
   status text not null default 'pending' check (status in ('pending', 'confirmed', 'cancelled')),
+  marketplace text check (marketplace is null or marketplace in ('Shopee', 'Mercado Livre')),
+  source_event_id text,
   sold_at timestamptz not null default now(),
   created_at timestamptz not null default now()
 );
@@ -112,6 +114,9 @@ create index if not exists affiliate_links_user_offer_idx on public.affiliate_li
 create index if not exists posts_user_channel_idx on public.posts(user_id, channel);
 create index if not exists posts_status_idx on public.posts(status);
 create index if not exists sales_user_sold_at_idx on public.sales(user_id, sold_at desc);
+create unique index if not exists sales_source_event_unique
+  on public.sales (user_id, marketplace, source_event_id)
+  where marketplace is not null and source_event_id is not null;
 create index if not exists integration_logs_user_created_idx on public.integration_logs(user_id, created_at desc);
 
 alter table public.profiles enable row level security;
