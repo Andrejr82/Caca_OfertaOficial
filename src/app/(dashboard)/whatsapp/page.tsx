@@ -47,10 +47,12 @@ export default async function WhatsappDashboardPage() {
   let draftPosts: PostWithOffer[] = [];
 
   let selectedOfferIds = new Set<string>();
+  let currentCohortOfferIds = new Set<string>();
   if (supabase && user?.id) {
     try {
       const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
       selectedOfferIds = new Set(top30.selectedOfferIds);
+      currentCohortOfferIds = new Set(top30.currentCohortOfferIds);
     } catch {
       // Fail closed: a preparation read failure must not render the raw draft cohort.
       selectedOfferIds = new Set();
@@ -66,7 +68,7 @@ export default async function WhatsappDashboardPage() {
       .eq("status", "draft")
       .order("created_at", { ascending: false });
 
-    draftPosts = mergePanelDrafts(drafts || [], selectedOfferIds, todayStart);
+    draftPosts = mergePanelDrafts(drafts || [], selectedOfferIds, todayStart, currentCohortOfferIds);
   }
 
   const historyData = await getPostHistory("whatsapp");

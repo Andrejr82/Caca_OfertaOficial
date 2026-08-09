@@ -23,6 +23,7 @@ export type Top30WhatsappResult = {
   skipped: number;
   reasons: Record<string, number>;
   selectedOfferIds: string[];
+  currentCohortOfferIds: string[];
 };
 
 export type WhatsappEditorialBatchState = {
@@ -83,22 +84,23 @@ export function prepareTop30WhatsappLegacyDrafts(repository: Top30WhatsappReposi
 async function prepare(repository: Top30WhatsappRepository, options: { now?: Date }): Promise<Top30WhatsappResult> {
   const now = options.now ?? new Date();
   const dayKey = getBrtDayKey(now);
+  const todayStart = getTodayBrtStart(now);
+  const todayOffersForState = await repository.listOffersBetween(todayStart, now);
+  const currentCohortOfferIds = identifyLatestDiscoveryCohort(todayOffersForState, now).map((offer) => offer.id);
   const existingState = await repository.loadWhatsappEditorialBatchState?.();
   if (existingState?.version === 1 && existingState.dayKey === dayKey && existingState.activeOfferIds.length > 0) {
-    const todayOffersForState = await repository.listOffersBetween(getTodayBrtStart(now), now);
     const activeIds = new Set(existingState.activeOfferIds);
     const activeRows = todayOffersForState.filter((offer) => activeIds.has(offer.id));
-    const latestCohort = identifyLatestDiscoveryCohort(todayOffersForState, now);
-    const stateHasCurrentCohort = activeRows.length === 0 || latestCohort.length === 0 || latestCohort.some((offer) => activeIds.has(offer.id));
-    if (stateHasCurrentCohort) return { ...emptyOpeningResult(), selectedOfferIds: existingState.activeOfferIds, windowUsed: "today_brt" };
+    const latestCohort = new Set(currentCohortOfferIds);
+    const stateHasCurrentCohort = activeRows.length === 0 || latestCohort.size === 0 || activeRows.some((offer) => latestCohort.has(offer.id));
+    if (stateHasCurrentCohort) return { ...emptyOpeningResult(), selectedOfferIds: existingState.activeOfferIds, currentCohortOfferIds, windowUsed: "today_brt" };
   }
-  const todayStart = getTodayBrtStart(now);
   const fallbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const [todayOffers, postRows, historicalOffers] = await Promise.all([
-    repository.listOffersBetween(todayStart, now),
+  const [postRows, historicalOffers] = await Promise.all([
     repository.listWhatsappPosts(),
     repository.listHistoricalOffers(),
   ]);
+  const todayOffers = todayOffersForState;
   const reasons: Record<string, number> = { telegram_blocked: 1 };
   const postedOfferIds = new Set<string>();
   const approvedOfferIds = new Set<string>();
@@ -213,6 +215,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     skipped,
     reasons,
     selectedOfferIds: selected.map((candidate) => candidate.id),
+    currentCohortOfferIds,
   };
   await repository.saveWhatsappEditorialBatchState?.({
     version: 1,
@@ -286,7 +289,7 @@ function getBrtDayKey(now: Date) {
 }
 
 function emptyOpeningResult(): Top30WhatsappResult {
-  return { windowUsed: "today_brt", created: 0, reusedTodayDrafts: 0, reused: 0, skippedAlreadyPosted: 0, skippedAlreadyApproved: 0, skippedAlreadySeenToday: 0, skippedOldDraft: 0, skippedNotFresh: 0, skippedAffiliateFailed: 0, skipped: 0, reasons: {}, selectedOfferIds: [] };
+  return { windowUsed: "today_brt", created: 0, reusedTodayDrafts: 0, reused: 0, skippedAlreadyPosted: 0, skippedAlreadyApproved: 0, skippedAlreadySeenToday: 0, skippedOldDraft: 0, skippedNotFresh: 0, skippedAffiliateFailed: 0, skipped: 0, reasons: {}, selectedOfferIds: [], currentCohortOfferIds: [] };
 }
 
 function filterAndRoute(

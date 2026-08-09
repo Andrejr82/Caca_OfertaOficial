@@ -37,8 +37,9 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
   drafts: readonly T[],
   _editorialOfferIds: ReadonlySet<string>,
   editorialDayStart: Date,
+  authoritativeCohortOfferIds?: ReadonlySet<string>,
 ): T[] {
-  const currentCohortOfferIds = getCurrentCohortOfferIds(drafts, editorialDayStart);
+  const currentCohortOfferIds = authoritativeCohortOfferIds ?? getCurrentCohortOfferIds(drafts, editorialDayStart);
   const selected = drafts.filter((post) => {
     if (!isActiveDraft(post)) return false;
     if (isManualExpressDraft(post)) return true;

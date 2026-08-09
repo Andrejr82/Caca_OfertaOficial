@@ -129,6 +129,32 @@ describe("panel draft selection", () => {
     expect(mergePanelDrafts(drafts, secondBatch, new Date("2026-08-08T03:00:00.000Z"))).toHaveLength(3);
   });
 
+  it("não recua para cohort antigo quando drafts do cohort atual são removidos", () => {
+    const current = Array.from({ length: 15 }, (_, index) => post(index, { explainability: { correlation_id: "current" } }));
+    const older = Array.from({ length: 300 }, (_, index) => post(1000 + index, { created_at: "2026-08-08T10:00:00.000Z", explainability: { correlation_id: "older" } }));
+    const currentIds = new Set(current.map((item) => item.offer_id));
+    const dayStart = new Date("2026-08-08T03:00:00.000Z");
+
+    expect(mergePanelDrafts([...current, ...older], new Set(), dayStart, currentIds)).toHaveLength(15);
+    expect(mergePanelDrafts([...current.slice(5), ...older], new Set(), dayStart, currentIds)).toHaveLength(10);
+    expect(mergePanelDrafts(older, new Set(), dayStart, currentIds)).toHaveLength(0);
+    expect(mergePanelDrafts(older, new Set(), dayStart, currentIds)).toHaveLength(0);
+  });
+
+  it("troca apenas quando uma autoridade de cohort mais nova é fornecida", () => {
+    const older = post(1, { explainability: { correlation_id: "older" } });
+    const newer = post(2, { explainability: { correlation_id: "newer" }, created_at: "2026-08-08T13:00:00.000Z" });
+    const dayStart = new Date("2026-08-08T03:00:00.000Z");
+
+    expect(mergePanelDrafts([older, newer], new Set(), dayStart, new Set([older.offer_id]))).toEqual([older]);
+    expect(mergePanelDrafts([older, newer], new Set(), dayStart, new Set([newer.offer_id]))).toEqual([newer]);
+  });
+
+  it("mantém manual express independente do cohort autoritativo", () => {
+    const manual = post(1, { created_at: "2026-07-01T12:00:00.000Z", explainability: { manual_source: true } });
+    expect(mergePanelDrafts([manual], new Set(), new Date("2026-08-08T03:00:00.000Z"), new Set())).toEqual([manual]);
+  });
+
   it("mantém protegidos fora do painel mesmo sem activeOfferIds", () => {
     const protectedDrafts = [
       post(1, { status: "posted" }),
