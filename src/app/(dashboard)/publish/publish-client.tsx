@@ -11,6 +11,7 @@ import {
   type SheinAssistedFormValue,
 } from "@/lib/publish/shein-assisted-fallback";
 import type { SheinImageCandidate } from "@/lib/publish/shein-image-discovery";
+import { SHEIN_BROWSER_CAPTURE_SNIPPET, parseSheinCapturedImages } from "@/lib/publish/shein-browser-capture";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select } from "@/components/ui/field";
@@ -40,6 +41,7 @@ interface SheinAssistedRequest extends SheinAssistedFormValue {
   id: string;
   canonicalUrl: string;
   imageCandidates: SheinImageCandidate[];
+  captureJson: string;
   error: string;
   submitting: boolean;
   message: string;
@@ -163,6 +165,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
               price: "",
               imageUrl: res.assisted?.imageCandidates[0]?.url || "",
               imageCandidates: res.assisted?.imageCandidates || [],
+              captureJson: "",
               error: res.message,
               submitting: false,
               message: "",
@@ -187,7 +190,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
     if (validPosts.length > 0) setLinksInput("");
   }
 
-  function updateSheinAssistedRequest(id: string, field: keyof Pick<SheinAssistedRequest, "originalUrl" | "canonicalUrl" | "title" | "price" | "imageUrl">, value: string) {
+  function updateSheinAssistedRequest(id: string, field: keyof Pick<SheinAssistedRequest, "originalUrl" | "canonicalUrl" | "title" | "price" | "imageUrl" | "captureJson">, value: string) {
     setSheinAssistedRequests((prev) => prev.map((request) => (
       request.id === id ? { ...request, [field]: value, message: "" } : request
     )));
@@ -256,6 +259,39 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
         ...item,
         submitting: false,
         message: error instanceof Error ? error.message : "Falha na descoberta de imagem.",
+      } : item));
+    }
+  }
+
+  async function copySheinCaptureSnippet(request: SheinAssistedRequest) {
+    try {
+      await navigator.clipboard.writeText(SHEIN_BROWSER_CAPTURE_SNIPPET);
+      setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? {
+        ...item,
+        message: "Snippet copiado. Execute-o no Console da página SHEIN aberta e cole o JSON abaixo.",
+      } : item));
+    } catch {
+      setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? {
+        ...item,
+        message: "Não foi possível copiar automaticamente; use o snippet exibido no código local.",
+      } : item));
+    }
+  }
+
+  function applySheinCapturedImages(request: SheinAssistedRequest) {
+    try {
+      const result = parseSheinCapturedImages(request.captureJson);
+      setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? {
+        ...item,
+        canonicalUrl: result.pageUrl,
+        imageCandidates: result.images,
+        imageUrl: result.images[0]?.url || item.imageUrl,
+        message: `${result.images.length} imagem(ns) capturada(s). Revise e confirme a principal.`,
+      } : item));
+    } catch (error) {
+      setSheinAssistedRequests((prev) => prev.map((item) => item.id === request.id ? {
+        ...item,
+        message: error instanceof Error ? error.message : "Captura inválida.",
       } : item));
     }
   }
@@ -485,6 +521,39 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                         className="glass-input mt-1 w-full rounded-lg p-2.5 text-xs font-mono"
                         disabled={request.submitting}
                       />
+                    </div>
+                    <div className="md:col-span-2 rounded-lg border border-white/10 bg-black/20 p-3 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div>
+                          <p className="text-xs font-semibold text-white/80">Imagem da página SHEIN aberta</p>
+                          <p className="text-[11px] text-white/45">Se houver challenge, capture somente as imagens renderizadas no navegador.</p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          className="text-xs h-8 px-3 whitespace-nowrap"
+                          disabled={request.submitting}
+                          onClick={() => void copySheinCaptureSnippet(request)}
+                        >
+                          <Copy size={12} /> Capturar imagens da página SHEIN aberta
+                        </Button>
+                      </div>
+                      <textarea
+                        value={request.captureJson}
+                        onChange={(e) => updateSheinAssistedRequest(request.id, "captureJson", e.target.value)}
+                        placeholder="Cole aqui o JSON copiado do Console da página SHEIN"
+                        className="glass-input w-full rounded-lg p-2.5 text-[11px] font-mono min-h-20"
+                        disabled={request.submitting}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="text-xs h-7 px-3"
+                        disabled={request.submitting || !request.captureJson.trim()}
+                        onClick={() => applySheinCapturedImages(request)}
+                      >
+                        <ImageIcon size={12} /> Aplicar imagens capturadas
+                      </Button>
                     </div>
                     <div>
                       <label className="text-xs text-white/70">Título confirmado *</label>
