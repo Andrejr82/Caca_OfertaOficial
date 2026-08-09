@@ -7,6 +7,7 @@ export interface SheinAssistedFormValue {
   title: string;
   price: string;
   imageUrl: string;
+  couponText?: string;
 }
 
 export interface SheinAssistedPayload extends SheinManualConfirmation {
@@ -50,7 +51,7 @@ export function validateSheinAssistedConfirmation(value: SheinAssistedFormValue)
   if (!isHttpUrl(imageUrl)) errors.push("IMAGEM_URL_INVÁLIDA");
 
   if (errors.length > 0) return { ok: false, errors };
-  return { ok: true, confirmation: { title, price, imageUrl } };
+  return { ok: true, confirmation: { title, price, imageUrl, couponText: value.couponText?.trim() || undefined } };
 }
 
 export function buildSheinAssistedPayload(

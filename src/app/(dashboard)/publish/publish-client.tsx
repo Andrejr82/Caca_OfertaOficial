@@ -12,6 +12,7 @@ import {
 } from "@/lib/publish/shein-assisted-fallback";
 import type { SheinImageCandidate } from "@/lib/publish/shein-image-discovery";
 import { SHEIN_BROWSER_CAPTURE_SNIPPET, parseSheinCapturedImages } from "@/lib/publish/shein-browser-capture";
+import { parseSheinShareText } from "@/lib/publish/shein-share-text";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Field, Select } from "@/components/ui/field";
@@ -42,6 +43,7 @@ interface SheinAssistedRequest extends SheinAssistedFormValue {
   canonicalUrl: string;
   imageCandidates: SheinImageCandidate[];
   captureJson: string;
+  couponText: string;
   error: string;
   submitting: boolean;
   message: string;
@@ -119,6 +121,44 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
   // ─── Batch generate com isolamento por item (MAX_CONCURRENCY=3) ───
   async function handleBatchGenerate(e: React.FormEvent) {
     e.preventDefault();
+    let sharedText: ReturnType<typeof parseSheinShareText> | null = null;
+    try {
+      sharedText = parseSheinShareText(linksInput);
+    } catch {
+      // Normal URL batches continue through the existing flow.
+    }
+    if (sharedText) {
+      setIsProcessing(true);
+      let imageCandidates: SheinImageCandidate[] = [];
+      let imageUrl = "";
+      let message = "Confirme os dados compartilhados pela SHEIN.";
+      try {
+        const discovery = await discoverSheinImagesAction(sharedText.originalUrl, sharedText.originalUrl);
+        imageCandidates = discovery.imageCandidates;
+        imageUrl = imageCandidates[0]?.url || "";
+        if (imageUrl) message = "Imagem vinculada encontrada. Confirme os dados.";
+      } catch {
+        message = "Imagem não encontrada automaticamente; informe uma URL ou faça upload manual.";
+      }
+      setSheinAssistedRequests((prev) => [{
+        id: `shein-share-${Date.now()}`,
+        originalUrl: sharedText.originalUrl,
+        canonicalUrl: sharedText.originalUrl,
+        title: sharedText.title,
+        price: sharedText.price.toFixed(2).replace(".", ","),
+        imageUrl,
+        imageCandidates,
+        captureJson: "",
+        couponText: sharedText.couponText || "",
+        error: message,
+        submitting: false,
+        message: sharedText.discountPercent ? `Desconto informado: ${sharedText.discountPercent}%` : "",
+      }, ...prev]);
+      setProcessSummary({ total: 1, success: 0, failed: 1 });
+      setIsProcessing(false);
+      setLinksInput("");
+      return;
+    }
     const links = parseLinks(linksInput);
     if (links.length === 0) return;
 
@@ -166,6 +206,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
               imageUrl: res.assisted?.imageCandidates[0]?.url || "",
               imageCandidates: res.assisted?.imageCandidates || [],
               captureJson: "",
+              couponText: "",
               error: res.message,
               submitting: false,
               message: "",
@@ -190,7 +231,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
     if (validPosts.length > 0) setLinksInput("");
   }
 
-  function updateSheinAssistedRequest(id: string, field: keyof Pick<SheinAssistedRequest, "originalUrl" | "canonicalUrl" | "title" | "price" | "imageUrl" | "captureJson">, value: string) {
+  function updateSheinAssistedRequest(id: string, field: keyof Pick<SheinAssistedRequest, "originalUrl" | "canonicalUrl" | "title" | "price" | "imageUrl" | "captureJson" | "couponText">, value: string) {
     setSheinAssistedRequests((prev) => prev.map((request) => (
       request.id === id ? { ...request, [field]: value, message: "" } : request
     )));
@@ -216,6 +257,7 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
           title: payload.title,
           price: payload.price,
           imageUrl: payload.imageUrl,
+          couponText: payload.couponText,
         },
         sheinCanonicalUrl: request.canonicalUrl,
       });
@@ -572,6 +614,16 @@ export function PublishClient({ initialUrl = "" }: { initialUrl?: string }) {
                         onChange={(e) => updateSheinAssistedRequest(request.id, "price", e.target.value)}
                         placeholder="R$ 0,00"
                         inputMode="decimal"
+                        className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm"
+                        disabled={request.submitting}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-xs text-white/70">Cupom informado (opcional)</label>
+                      <input
+                        value={request.couponText}
+                        onChange={(e) => updateSheinAssistedRequest(request.id, "couponText", e.target.value)}
+                        placeholder="Texto do cupom separado do preço"
                         className="glass-input mt-1 w-full rounded-lg p-2.5 text-sm"
                         disabled={request.submitting}
                       />

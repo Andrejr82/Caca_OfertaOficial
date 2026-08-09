@@ -612,6 +612,7 @@ async function generateQuickPostActionInternal(
   let title = "";
   let imageUrl = "";
   let price = 0;
+  let couponText: string | null = null;
   let resolvedUrl = inputUrl;
   let canonicalUrl = inputUrl;
   let itemId: string | undefined;
@@ -872,6 +873,7 @@ async function generateQuickPostActionInternal(
     title = sheinData.title;
     imageUrl = sheinData.imageUrl;
     price = sheinData.price;
+    couponText = sheinManualConfirmation?.couponText?.trim() || null;
     canonicalUrl = sheinData.canonicalUrl;
     itemId = sheinData.productId || sheinData.sku;
     sheinManualConfirmed = sheinData.priceSource === "MANUAL_CONFIRMATION";
@@ -977,6 +979,7 @@ async function generateQuickPostActionInternal(
       original_url: inputUrl,       // URL original fornecida pelo usuário
       image_url: imageUrl || null,
       current_price: price,
+      coupon: couponText,
       status: "pending_manual_review",
       score: 0,
       explainability: {
