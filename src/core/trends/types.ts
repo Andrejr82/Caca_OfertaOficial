@@ -83,6 +83,10 @@ export interface TrendRecommendation {
   justification: string | null;
   hypothesis: string | null;
   status: TrendLifecycleStatus;
+  confidence?: number | null;
+  strategyVersion?: string;
+  aiProvider?: string | null;
+  aiModel?: string | null;
 }
 
 export interface TrendExperiment {
@@ -109,5 +113,5 @@ export interface TrendExperimentListItem extends TrendExperiment {
 
 export interface TrendOpportunityListItem extends TrendOpportunity {
   signalTitle: string;
-  recommendation: Pick<TrendRecommendation, "offerId" | "channel" | "format" | "justification" | "hypothesis"> | null;
+  recommendation: Pick<TrendRecommendation, "offerId" | "channel" | "format" | "justification" | "hypothesis" | "confidence" | "strategyVersion" | "aiProvider" | "aiModel" | "status"> | null;
 }

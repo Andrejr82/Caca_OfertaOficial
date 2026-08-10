@@ -71,7 +71,7 @@ export async function listTrendOpportunities(): Promise<TrendOpportunityListItem
 
   const { data, error } = await supabase
     .from("trend_opportunities")
-    .select("id,signal_id,classification_id,offer_id,marketplace,normalized_product_term,match_status,match_reason,match_confidence,score,status,experiment_id,strategy_version,final_decision,trend_signals(title),trend_recommendations(offer_id,channel,format,justification,hypothesis),offers(current_price,old_price)")
+    .select("id,signal_id,classification_id,offer_id,marketplace,normalized_product_term,match_status,match_reason,match_confidence,score,status,experiment_id,strategy_version,final_decision,trend_signals(title),trend_recommendations(offer_id,channel,format,justification,hypothesis,confidence,strategy_version,ai_provider,ai_model,status),offers(current_price,old_price)")
     .order("created_at", { ascending: false });
 
   if (error || !data) return [];
@@ -100,7 +100,12 @@ export async function listTrendOpportunities(): Promise<TrendOpportunityListItem
           channel: row.trend_recommendations[0].channel,
           format: row.trend_recommendations[0].format,
           justification: row.trend_recommendations[0].justification,
-          hypothesis: row.trend_recommendations[0].hypothesis
+          hypothesis: row.trend_recommendations[0].hypothesis,
+          confidence: row.trend_recommendations[0].confidence,
+          strategyVersion: row.trend_recommendations[0].strategy_version,
+          aiProvider: row.trend_recommendations[0].ai_provider,
+          aiModel: row.trend_recommendations[0].ai_model,
+          status: row.trend_recommendations[0].status
         }
       : null
   }));
