@@ -2,7 +2,12 @@ const fs = require('fs');
 const path = require('path');
 const { execFile } = require('child_process');
 const ffmpeg = require('fluent-ffmpeg');
-const ffmpegBinary = require('ffmpeg-static');
+let ffmpegBinary = 'ffmpeg';
+try {
+  ffmpegBinary = require('ffmpeg-static') || ffmpegBinary;
+} catch {
+  // Oracle usa o binário FFmpeg do sistema quando o pacote opcional não existe.
+}
 
 function createJobWorkspace(baseDir, jobId) {
   const safeJobId = String(jobId || '').replace(/[^a-zA-Z0-9_-]/gu, '_');
