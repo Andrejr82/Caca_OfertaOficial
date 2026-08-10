@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import {
   BarChart3, Bot, Link2, MessageSquareText, Settings, ShoppingBag,
   Wallet, Instagram, Facebook, MessageCircle, PanelLeftClose,
-  PanelLeftOpen, LogOut, Zap, Menu, Activity, TerminalSquare, Film, Compass
+  PanelLeftOpen, LogOut, Zap, Menu, Activity, TerminalSquare, Film, Compass, BrainCircuit
 } from "lucide-react";
 import { signOutAction } from "@/lib/auth/actions";
 import { officialBrand } from "@/lib/env";
@@ -18,7 +18,8 @@ const navSections = [
     items: [
       { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
       { href: "/growth", label: "Growth", icon: Activity },
-      { href: "/strategy", label: "Estratégia", icon: Compass }
+      { href: "/strategy", label: "Estratégia", icon: Compass },
+      { href: "/trends", label: "Tendências IA", icon: BrainCircuit }
     ]
   },
   {
