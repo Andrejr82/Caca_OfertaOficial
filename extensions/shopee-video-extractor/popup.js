@@ -15,7 +15,7 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    files: ['content.js']
+    files: ['video-parser.js', 'content.js']
   }, (results) => {
     document.getElementById('extractBtn').disabled = false;
     

@@ -4,6 +4,11 @@ function extractVideoAndTitle() {
   let price = "0";
   let title = document.title.replace(' | Shopee Brasil', '').replace(/[\\/:*?"<>|]/g, '').trim();
 
+  const sharedCandidate = globalThis.shopeeVideoParser?.findVideoCandidateFromHtml(
+    document.documentElement?.outerHTML || ''
+  );
+  if (sharedCandidate) videoUrl = sharedCandidate.videoUrl;
+
   // Tenta pegar o título puro do elemento de nome do produto se possível
   const titleElement = document.querySelector('div[class*="product-briefing"] span, meta[property="og:title"]');
   if (titleElement) {
@@ -18,20 +23,22 @@ function extractVideoAndTitle() {
   if (title.length > 80) title = title.substring(0, 80).trim();
 
   // 1. Tentar achar uma tag <video>
-  const videoElements = document.querySelectorAll('video');
-  for (let vid of videoElements) {
-    if (vid.src && (vid.src.includes('.mp4') || vid.src.includes('shopee'))) {
-      videoUrl = vid.src;
-      break;
-    }
-    const sources = vid.querySelectorAll('source');
-    for (let source of sources) {
-      if (source.src && (source.src.includes('.mp4') || source.src.includes('shopee'))) {
-        videoUrl = source.src;
+  if (!videoUrl) {
+    const videoElements = document.querySelectorAll('video');
+    for (let vid of videoElements) {
+      if (vid.src && (vid.src.includes('.mp4') || vid.src.includes('shopee'))) {
+        videoUrl = vid.src;
         break;
       }
+      const sources = vid.querySelectorAll('source');
+      for (let source of sources) {
+        if (source.src && (source.src.includes('.mp4') || source.src.includes('shopee'))) {
+          videoUrl = source.src;
+          break;
+        }
+      }
+      if (videoUrl) break;
     }
-    if (videoUrl) break;
   }
 
   // 2. Tentar achar em scripts se não achou na tag <video>
