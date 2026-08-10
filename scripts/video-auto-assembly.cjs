@@ -8,6 +8,7 @@ try {
 } catch {
   // Oracle usa o binário FFmpeg do sistema quando o pacote opcional não existe.
 }
+ffmpeg.setFfmpegPath(ffmpegBinary);
 
 function createJobWorkspace(baseDir, jobId) {
   const safeJobId = String(jobId || '').replace(/[^a-zA-Z0-9_-]/gu, '_');
