@@ -7,8 +7,20 @@ export type RadarMatchStatus = "pending" | "matched" | "no_match";
 
 export interface RadarDirectEvidence {
   claim: string;
-  source_url?: string | null;
-  observed_at?: string | null;
+  evidence_type: string | null;
+  source_url: string | null;
+  observed_at: string | null;
+  rank_position: number | null;
+  best_seller_flag: boolean | null;
+  trending_flag: boolean | null;
+  sold_quantity: number | null;
+  price: number | null;
+  old_price: number | null;
+  discount_percent: number | null;
+  rating: number | null;
+  review_count: number | null;
+  shipping: string | null;
+  marketplace_identity: Record<string, string | null>;
 }
 
 export interface DailyTrendRadarInput {
@@ -89,6 +101,16 @@ function numberOrNull(value: unknown): number | null {
   return Number.isFinite(result) ? result : null;
 }
 
+function boundedNumberOrNull(value: unknown, min: number, max = Number.POSITIVE_INFINITY): number | null {
+  const result = numberOrNull(value);
+  return result !== null && result >= min && result <= max ? result : null;
+}
+
+function integerOrNull(value: unknown, min = 0): number | null {
+  const result = numberOrNull(value);
+  return result !== null && Number.isInteger(result) && result >= min ? result : null;
+}
+
 function boolOrNull(value: unknown): boolean | null {
   return typeof value === "boolean" ? value : null;
 }
@@ -115,18 +137,74 @@ function validDate(value: unknown): string | null {
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
+function normalizeMarketplaceIdentity(value: unknown): Record<string, string | null> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, raw]) => {
+    if (raw === null) return [[key, null]];
+    const normalized = text(raw);
+    return normalized ? [[key, normalized]] : [];
+  }));
+}
+
+function emptyDirectEvidence(claim: string): RadarDirectEvidence {
+  return {
+    claim,
+    evidence_type: null,
+    source_url: null,
+    observed_at: null,
+    rank_position: null,
+    best_seller_flag: null,
+    trending_flag: null,
+    sold_quantity: null,
+    price: null,
+    old_price: null,
+    discount_percent: null,
+    rating: null,
+    review_count: null,
+    shipping: null,
+    marketplace_identity: {}
+  };
+}
+
 function normalizeDirectEvidence(value: unknown): RadarDirectEvidence[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
     if (typeof entry === "string") {
       const claim = entry.trim();
-      return claim ? [{ claim, source_url: null, observed_at: null }] : [];
+      return claim ? [emptyDirectEvidence(claim)] : [];
     }
     if (!entry || typeof entry !== "object") return [];
     const item = entry as Record<string, unknown>;
     const claim = text(item.claim) || text(item.text) || text(item.fact);
     if (!claim) return [];
-    return [{ claim, source_url: validUrl(item.source_url ?? item.sourceUrl ?? item.url), observed_at: validDate(item.observed_at ?? item.observedAt) }];
+    return [{
+      claim,
+      evidence_type: text(item.evidence_type ?? item.evidenceType),
+      source_url: validUrl(item.source_url ?? item.sourceUrl ?? item.url),
+      observed_at: validDate(item.observed_at ?? item.observedAt),
+      rank_position: integerOrNull(item.rank_position ?? item.rankPosition, 1),
+      best_seller_flag: boolOrNull(item.best_seller_flag ?? item.bestSellerFlag),
+      trending_flag: boolOrNull(item.trending_flag ?? item.trendingFlag),
+      sold_quantity: integerOrNull(item.sold_quantity ?? item.soldQuantity, 0),
+      price: boundedNumberOrNull(item.price, 0),
+      old_price: boundedNumberOrNull(item.old_price ?? item.oldPrice, 0),
+      discount_percent: boundedNumberOrNull(item.discount_percent ?? item.discountPercent, 0, 100),
+      rating: boundedNumberOrNull(item.rating, 0, 5),
+      review_count: integerOrNull(item.review_count ?? item.reviewCount, 0),
+      shipping: text(item.shipping),
+      marketplace_identity: normalizeMarketplaceIdentity(item.marketplace_identity ?? item.marketplaceIdentity)
+    }];
+  });
+}
+
+function directEvidenceHasInvalidProvenance(value: unknown): boolean {
+  if (!Array.isArray(value)) return false;
+  return value.some((entry) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const item = entry as Record<string, unknown>;
+    const rawUrl = item.source_url ?? item.sourceUrl ?? item.url;
+    const rawObservedAt = item.observed_at ?? item.observedAt;
+    return (Boolean(text(rawUrl)) && !validUrl(rawUrl)) || (Boolean(text(rawObservedAt)) && !validDate(rawObservedAt));
   });
 }
 
@@ -139,10 +217,10 @@ function deriveEvidenceStatus(input: {
   sourceUrls: string[];
   observedAt: string | null;
   directEvidence: RadarDirectEvidence[];
-  invalidUrlProvided: boolean;
+  invalidProvenanceProvided: boolean;
   hasCommercialEvidence: boolean;
 }): RadarEvidenceStatus {
-  if (input.invalidUrlProvided || !input.productTerm || !input.observedAt) return "rejected";
+  if (input.invalidProvenanceProvided || !input.productTerm || !input.observedAt) return "rejected";
   if (input.sourceUrls.length === 0 || input.directEvidence.length === 0 || isBaselineOnly(input.directEvidence)) return "unverified";
   if (input.hasCommercialEvidence) return "verified";
   return "partial";
@@ -155,54 +233,64 @@ function potential(status: RadarEvidenceStatus, hasMarketplace: boolean): RadarP
   return "low";
 }
 
-function evidenceText(evidence: RadarDirectEvidence[]): string {
-  return evidence.map((item) => item.claim).join(" ");
+function singleNumber(values: Array<number | null>): number | null {
+  const observed = [...new Set(values.filter((value): value is number => value !== null))];
+  return observed.length === 1 ? observed[0] : null;
 }
 
-function rankFromEvidence(evidence: RadarDirectEvidence[]): number | null {
-  const match = evidenceText(evidence).match(/(?:rank|ranking|posi[cç][aã]o)\s*(?:#|n[úu]mero)?\s*(\d{1,4})|\b(\d{1,4})\s*[º°]\s*(?:mais\s+)?vendid/i);
-  return match ? Number(match[1] ?? match[2]) : null;
+function singleBoolean(values: Array<boolean | null>): boolean | null {
+  const observed = [...new Set(values.filter((value): value is boolean => value !== null))];
+  return observed.length === 1 ? observed[0] : null;
 }
 
-function numbersFromEvidence(evidence: RadarDirectEvidence[], pattern: RegExp): number[] {
-  return [...evidenceText(evidence).matchAll(pattern)].map((match) => Number(match[1].replace(".", "").replace(",", "."))).filter(Number.isFinite);
+function singleText(values: Array<string | null>): string | null {
+  const observed = [...new Set(values.filter((value): value is string => Boolean(value)))];
+  return observed.length === 1 ? observed[0] : null;
 }
 
 function observedPriceRange(evidence: RadarDirectEvidence[]): { min: number | null; max: number | null } {
-  const prices = numbersFromEvidence(evidence, /R\$\s*([\d.]+(?:,\d{1,2})?)/gi);
+  const prices = evidence.map((item) => item.price).filter((value): value is number => value !== null);
   return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : { min: null, max: null };
-}
-
-function observedDiscount(evidence: RadarDirectEvidence[]): number | null {
-  const discounts = numbersFromEvidence(evidence, /(\d{1,3})%\s*OFF/gi);
-  return discounts.length && new Set(discounts).size === 1 ? discounts[0] : null;
-}
-
-function observedRating(evidence: RadarDirectEvidence[]): number | null {
-  const ratings = numbersFromEvidence(evidence, /rating\s*([0-5](?:[.,]\d)?)/gi);
-  return ratings.length && new Set(ratings).size === 1 && ratings[0] <= 5 ? ratings[0] : null;
 }
 
 export function normalizeRadarInput(input: DailyTrendRadarInput, options: { external?: boolean } = {}): DailyTrendRadarResult {
   const productTerm = text(input.product_term) || "";
   const normalizedProductTerm = text(input.normalized_product_term) || productTerm.toLocaleLowerCase("pt-BR");
   const rawUrls = Array.isArray(input.source_urls) ? input.source_urls : [];
-  const sourceUrls = rawUrls.map(validUrl).filter((url): url is string => Boolean(url));
-  const invalidUrlProvided = rawUrls.some((url) => Boolean(text(url)) && !validUrl(url));
-  const directEvidence = normalizeDirectEvidence(input.direct_evidence);
-  const observedAt = validDate(input.observed_at);
+  const topLevelSourceUrls = rawUrls.map(validUrl).filter((url): url is string => Boolean(url));
+  const topLevelObservedAt = validDate(input.observed_at);
+  const rawDirectEvidence = input.direct_evidence;
+  const normalizedDirectEvidence = normalizeDirectEvidence(rawDirectEvidence);
+  const directEvidence = normalizedDirectEvidence.map((item) => ({
+    ...item,
+    source_url: item.source_url ?? (topLevelSourceUrls.length === 1 ? topLevelSourceUrls[0] : null),
+    observed_at: item.observed_at ?? topLevelObservedAt
+  }));
+  const sourceUrls = [...new Set([...topLevelSourceUrls, ...directEvidence.map((item) => item.source_url).filter((url): url is string => Boolean(url))])];
+  const invalidTopLevelUrl = rawUrls.some((url) => Boolean(text(url)) && !validUrl(url));
+  const invalidTopLevelObservedAt = Boolean(text(input.observed_at)) && !topLevelObservedAt;
+  const invalidProvenanceProvided = invalidTopLevelUrl || invalidTopLevelObservedAt || directEvidenceHasInvalidProvenance(rawDirectEvidence);
+  const observedAt = topLevelObservedAt ?? singleText(directEvidence.map((item) => item.observed_at));
   const externallyProvided = options.external === true;
-  const rankPosition = externallyProvided ? rankFromEvidence(directEvidence) : numberOrNull(input.rank_position);
-  const bestSellerFlag = externallyProvided
-    ? /(?:best\s*seller|mais\s+vendid[oa]|campe[aã]o\s+de\s+vendas)/i.test(evidenceText(directEvidence))
-    : input.best_seller_flag === true;
-  const observedPrices = externallyProvided ? observedPriceRange(directEvidence) : { min: numberOrNull(input.observed_price_min), max: numberOrNull(input.observed_price_max) };
-  const priceMin = externallyProvided ? observedPrices.min : numberOrNull(input.observed_price_min);
-  const priceMax = externallyProvided ? observedPrices.max : numberOrNull(input.observed_price_max);
-  const discount = externallyProvided ? observedDiscount(directEvidence) : numberOrNull(input.discount_percent);
-  const rating = externallyProvided ? observedRating(directEvidence) : numberOrNull(input.rating);
-  const hasCommercialEvidence = rankPosition !== null || bestSellerFlag || priceMin !== null || priceMax !== null || discount !== null || rating !== null;
-  const evidenceStatus = deriveEvidenceStatus({ productTerm, sourceUrls, observedAt, directEvidence, invalidUrlProvided, hasCommercialEvidence });
+  const structuredRank = singleNumber(directEvidence.map((item) => item.rank_position));
+  const structuredBestSeller = singleBoolean(directEvidence.map((item) => item.best_seller_flag));
+  const structuredTrending = singleBoolean(directEvidence.map((item) => item.trending_flag));
+  const structuredSoldQuantity = singleNumber(directEvidence.map((item) => item.sold_quantity));
+  const structuredPrices = observedPriceRange(directEvidence);
+  const structuredDiscount = singleNumber(directEvidence.map((item) => item.discount_percent));
+  const structuredRating = singleNumber(directEvidence.map((item) => item.rating));
+  const structuredShipping = singleText(directEvidence.map((item) => item.shipping));
+  const rankPosition = externallyProvided ? structuredRank : numberOrNull(input.rank_position);
+  const bestSellerFlag = externallyProvided ? structuredBestSeller : boolOrNull(input.best_seller_flag);
+  const priceMin = externallyProvided ? structuredPrices.min : numberOrNull(input.observed_price_min);
+  const priceMax = externallyProvided ? structuredPrices.max : numberOrNull(input.observed_price_max);
+  const discount = externallyProvided ? structuredDiscount : numberOrNull(input.discount_percent);
+  const rating = externallyProvided ? structuredRating : numberOrNull(input.rating);
+  const soldQuantity = externallyProvided ? structuredSoldQuantity : numberOrNull(input.sold_quantity_observed);
+  const shipping = externallyProvided ? structuredShipping : text(input.shipping_signal);
+  const trending = externallyProvided ? structuredTrending : boolOrNull(input.trending_flag);
+  const hasCommercialEvidence = rankPosition !== null || bestSellerFlag === true || priceMin !== null || priceMax !== null || discount !== null || rating !== null || soldQuantity !== null || Boolean(shipping) || trending === true;
+  const evidenceStatus = deriveEvidenceStatus({ productTerm, sourceUrls, observedAt, directEvidence, invalidProvenanceProvided, hasCommercialEvidence });
   const marketplaces = listOfStrings(input.marketplaces ?? (text(input.marketplace) ? [input.marketplace] : []));
   const sourceTypes = listOfStrings(input.source_types);
   const demandReason = evidenceStatus === "unverified"
@@ -216,18 +304,18 @@ export function normalizeRadarInput(input: DailyTrendRadarInput, options: { exte
     category: text(input.category),
     marketplaces,
     source_types: sourceTypes,
-    source_urls: [...new Set(sourceUrls)],
+    source_urls: sourceUrls,
     observed_at: observedAt,
     rank_position: rankPosition,
-    best_seller_flag: bestSellerFlag ? true : null,
-    trending_flag: externallyProvided ? null : boolOrNull(input.trending_flag),
+    best_seller_flag: bestSellerFlag,
+    trending_flag: trending,
     campaign_flag: externallyProvided ? null : boolOrNull(input.campaign_flag),
-    sold_quantity_observed: externallyProvided ? null : numberOrNull(input.sold_quantity_observed),
+    sold_quantity_observed: soldQuantity,
     observed_price_min: priceMin,
     observed_price_max: priceMax,
     discount_percent: discount !== null && discount >= 0 && discount <= 100 ? discount : null,
     rating: rating !== null && rating >= 0 && rating <= 5 ? rating : null,
-    shipping_signal: externallyProvided ? null : text(input.shipping_signal),
+    shipping_signal: shipping,
     direct_evidence: directEvidence,
     inferred_signals: listOfStrings(input.inferred_signals),
     source_count: sourceUrls.length,
