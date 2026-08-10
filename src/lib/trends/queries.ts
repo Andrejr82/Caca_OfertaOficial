@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/ai/trend-commercial-classifier";
-import type { TrendOpportunityListItem, TrendSignalListItem } from "@/core/trends/types";
+import type { TrendExperimentListItem, TrendOpportunityListItem, TrendSignalListItem } from "@/core/trends/types";
 
 export async function listTrendSignals(): Promise<TrendSignalListItem[]> {
   const supabase = await createServerSupabaseClient();
@@ -103,5 +103,35 @@ export async function listTrendOpportunities(): Promise<TrendOpportunityListItem
           hypothesis: row.trend_recommendations[0].hypothesis
         }
       : null
+  }));
+}
+
+export async function listTrendExperiments(): Promise<TrendExperimentListItem[]> {
+  const supabase = await createServerSupabaseClient();
+  if (!supabase) return [];
+
+  const { data, error } = await supabase
+    .from("trend_experiments")
+    .select("id,opportunity_id,recommendation_id,offer_id,marketplace,channel,format,hypothesis,window_days,strategy_version,started_at,ends_at,status,final_decision,decision_reason,metrics")
+    .order("created_at", { ascending: false });
+
+  if (error || !data) return [];
+  return data.map((row: any) => ({
+    id: row.id,
+    opportunityId: row.opportunity_id,
+    windowDays: 7,
+    strategyVersion: row.strategy_version,
+    status: row.status,
+    finalDecision: row.final_decision,
+    recommendationId: row.recommendation_id,
+    offerId: row.offer_id,
+    marketplace: row.marketplace,
+    channel: row.channel,
+    format: row.format,
+    hypothesis: row.hypothesis,
+    startedAt: row.started_at,
+    endsAt: row.ends_at,
+    decisionReason: row.decision_reason,
+    metrics: row.metrics && typeof row.metrics === "object" ? row.metrics : {}
   }));
 }

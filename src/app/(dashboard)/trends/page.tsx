@@ -1,15 +1,21 @@
 import { BrainCircuit } from "lucide-react";
+import { DailyRadarRefreshButton } from "@/components/trends/daily-radar-refresh-button";
 import { GoogleTrendsCollectButton } from "@/components/trends/google-trends-collect-button";
+import { MercadoLivreTrendsCollectButton } from "@/components/trends/mercado-livre-trends-collect-button";
 import { ClassifyTrendSignalsButton } from "@/components/trends/classify-trend-signals-button";
 import { MatchTrendSignalsButton } from "@/components/trends/match-trend-signals-button";
+import { buildDailyRadarFromTrendSignals, rankDailyTrendRadar } from "@/core/trends/daily-radar";
 import { partitionTrendSignalsForView } from "@/core/trends/view";
 import { TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/ai/trend-commercial-classifier";
-import { listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
+import { listTrendExperiments, listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
 
 export default async function TrendsPage() {
-  const [signals, opportunities] = await Promise.all([listTrendSignals(), listTrendOpportunities()]);
+  const [signals, opportunities, experiments] = await Promise.all([listTrendSignals(), listTrendOpportunities(), listTrendExperiments()]);
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
   const { operational: eligibleSignals, audit: rejectedSignals, pending: pendingSignals } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
+  const radar = rankDailyTrendRadar(buildDailyRadarFromTrendSignals(signals, opportunities));
+  const topRadar = radar.filter((result) => result.evidence_status === "verified" || result.evidence_status === "partial");
+  const radarAudit = radar.filter((result) => result.evidence_status === "unverified" || result.evidence_status === "rejected");
 
   return (
     <div className="grid gap-6 animate-fadeIn">
@@ -26,13 +32,53 @@ export default async function TrendsPage() {
       <section className="glass-card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
           <h2 className="text-sm font-bold text-white/70">Fonte ativa: Google Trends</h2>
-          <p className="mt-1 text-xs text-white/30">Região BR · daily trends · sem associação automática de oferta.</p>
+          <p className="mt-1 text-xs text-white/30">Google Trends geral + Mercado Livre Trends · região BR · sem associação automática de oferta.</p>
         </div>
         <div className="flex flex-wrap gap-3">
+          <DailyRadarRefreshButton />
           <GoogleTrendsCollectButton />
+          <MercadoLivreTrendsCollectButton />
           <ClassifyTrendSignalsButton />
           <MatchTrendSignalsButton />
         </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white/70">Radar de hoje</h2>
+            <p className="mt-1 text-xs text-white/30">Evidência atual separada de inferência. Sem scheduler ou chamada live automática.</p>
+          </div>
+          <span className="text-xs text-white/30">{topRadar.length} priorizado(s)</span>
+        </div>
+        {topRadar.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {topRadar.map((result) => (
+              <article key={`${result.normalized_product_term}-${result.source_urls[0] || "radar"}`} className="rounded-lg border border-white/[0.05] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">#{result.rank ?? "—"} · {result.evidence_status}</p>
+                    <h3 className="mt-1 text-sm font-bold text-white">{result.product_term}</h3>
+                  </div>
+                  <span className="text-xs text-white/35">{result.marketplaces.join(", ") || "marketplace pendente"}</span>
+                </div>
+                <p className="mt-2 text-xs text-white/40">Categoria: {result.category || "n/d"} · Match: {result.match_status}</p>
+                <p className="mt-1 text-xs text-white/40">Preço observado: {result.observed_price_min == null ? "n/d" : `R$ ${result.observed_price_min.toFixed(2)}`} {result.discount_percent == null ? "" : `· desconto ${result.discount_percent}%`}</p>
+                <p className="mt-2 text-xs text-white/45">Evidência: {result.direct_evidence.map((item) => item.claim).join("; ") || "n/d"}</p>
+                <p className="mt-1 text-xs text-white/30">Fontes: {result.source_urls.join(", ") || "n/d"}</p>
+                <p className="mt-2 text-[11px] text-white/30">Afiliado: {result.affiliate_potential} · Visual: {result.visual_content_potential} · Confiança: {result.confidence}</p>
+              </article>
+            ))}
+          </div>
+        ) : <p className="rounded-lg border border-dashed border-white/[0.08] p-4 text-sm text-white/35">Nenhum item verificado ou parcial no radar atual.</p>}
+        {radarAudit.length > 0 ? (
+          <details className="mt-4 rounded-lg border border-white/[0.05] p-3">
+            <summary className="cursor-pointer text-xs font-bold text-white/50">Pendentes / Auditoria ({radarAudit.length})</summary>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {radarAudit.map((result) => <p key={`${result.product_term}-${result.evidence_status}`} className="text-xs text-white/35">{result.product_term} · {result.evidence_status} · {result.demand_reason}</p>)}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       {eligibleSignals.length > 0 ? (
@@ -49,7 +95,8 @@ export default async function TrendsPage() {
                   <span className="rounded-full bg-amber-500/10 px-2 py-1 text-[10px] font-bold uppercase text-amber-300">{opportunityBySignal.get(signal.id)?.matchStatus ?? "no_match"}</span>
                 </div>
                 <p className="mt-2 text-xs text-white/35">Original: {signal.term}</p>
-                <p className="mt-1 text-xs text-white/35">Força: {signal.trendStrength ?? "n/d"} · Direção: {signal.trendDirection}</p>
+                <p className="mt-1 text-xs text-white/35">Fonte: {signal.source}</p>
+                <p className="mt-1 text-xs text-white/35">Força: {signal.trendStrength ?? "n/d"} · Direção: {signal.trendDirection ?? "n/d"}</p>
                 <div className="mt-3 border-t border-white/[0.05] pt-3 text-xs text-white/45">
                   <p>Relevância comercial: <span className="text-emerald-300">{signal.classification?.commercialRelevance}</span></p>
                   <p className="mt-1">Marketplace: {opportunityBySignal.get(signal.id)?.marketplace ?? "n/d"}</p>
@@ -77,7 +124,8 @@ export default async function TrendsPage() {
                 <h3 className="truncate text-sm font-bold text-white/70">{signal.term}</h3>
                 <span className="text-[10px] font-bold uppercase text-rose-300">rejected</span>
               </div>
-              <p className="mt-2 text-xs text-white/35">Força: {signal.trendStrength ?? "n/d"} · Direção: {signal.trendDirection}</p>
+              <p className="mt-2 text-xs text-white/35">Força: {signal.trendStrength ?? "n/d"} · Direção: {signal.trendDirection ?? "n/d"}</p>
+              <p className="mt-1 text-xs text-white/35">Fonte: {signal.source}</p>
               <p className="mt-2 text-xs text-white/35">Relevância: {signal.classification?.commercialRelevance ?? "n/d"}</p>
               <p className="mt-2 text-xs text-white/30">{signal.classification?.reason ?? "Sem motivo registrado."}</p>
             </article>
@@ -95,7 +143,8 @@ export default async function TrendsPage() {
                   <h3 className="truncate text-sm font-bold text-white/70">{signal.term}</h3>
                   <span className="text-[10px] font-bold uppercase text-sky-300">pending</span>
                 </div>
-                <p className="mt-2 text-xs text-white/35">Força: {signal.trendStrength ?? "n/d"} · Direção: {signal.trendDirection}</p>
+                <p className="mt-2 text-xs text-white/35">Força: {signal.trendStrength ?? "n/d"} · Direção: {signal.trendDirection ?? "n/d"}</p>
+                <p className="mt-1 text-xs text-white/35">Fonte: {signal.source}</p>
                 <p className="mt-2 text-xs text-white/30">Aguardando classificação na estratégia atual.</p>
               </article>
             ))}
@@ -125,6 +174,34 @@ export default async function TrendsPage() {
           ))}
         </section>
       )}
+
+      <section className="glass-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white/70">Experimento de 7 dias</h2>
+            <p className="mt-1 text-xs text-white/30">Exige oportunidade válida, recomendação e aprovação humana. Não inicia automaticamente.</p>
+          </div>
+          <span className="text-xs text-white/30">{experiments.length} real(is)</span>
+        </div>
+        {experiments.length === 0 ? (
+          <p className="mt-4 rounded-lg border border-dashed border-white/[0.08] p-4 text-sm text-white/35">Nenhum experimento ativo ou concluído.</p>
+        ) : (
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            {experiments.map((experiment) => (
+              <article key={experiment.id} className="rounded-lg border border-white/[0.05] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-white">{experiment.hypothesis || "Hipótese não registrada"}</h3>
+                  <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-bold uppercase text-violet-300">{experiment.status}</span>
+                </div>
+                <p className="mt-2 text-xs text-white/40">Canal: {experiment.channel || "n/d"} · Formato: {experiment.format || "n/d"}</p>
+                <p className="mt-1 text-xs text-white/40">Início: {experiment.startedAt || "n/d"} · Fim: {experiment.endsAt || "n/d"}</p>
+                <p className="mt-3 text-xs text-white/35">Métricas: vendas {experiment.metrics.salesCount ?? experiment.metrics.sales_count ?? 0} · cliques {experiment.metrics.clicks ?? 0} · comissão {experiment.metrics.commissionValue ?? experiment.metrics.commission_value ?? 0}</p>
+                <p className="mt-1 text-xs text-white/30">Decisão: {experiment.finalDecision || "pendente"}{experiment.decisionReason ? ` · ${experiment.decisionReason}` : ""}</p>
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

@@ -36,7 +36,7 @@ export async function persistTrendSignalClassifications(
 
 export async function persistTrendSignals(client: TrendPersistenceClient, userId: string, signals: TrendSignal[]): Promise<number> {
   const rows = signals
-    .filter((signal) => signal.source === "google_trends")
+    .filter((signal) => signal.source === "google_trends" || signal.source === "mercado_livre_trends")
     .map((signal) => ({
       user_id: userId,
       source_type: signal.sourceType,

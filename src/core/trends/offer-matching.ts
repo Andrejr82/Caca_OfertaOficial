@@ -13,6 +13,7 @@ export interface TrendOfferCandidate {
   itemId?: string | null;
   productId?: string | null;
   shopeeItemId?: string | null;
+  permalink?: string | null;
   marketplaceMetrics?: Record<string, unknown> | null;
 }
 

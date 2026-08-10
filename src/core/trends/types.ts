@@ -33,7 +33,7 @@ export interface TrendSignal {
   observedAt: string;
   capturedAt: string;
   trendStrength: number | null;
-  trendDirection: TrendDirection;
+  trendDirection: TrendDirection | null;
   offerId: string | null;
 }
 
@@ -92,6 +92,19 @@ export interface TrendExperiment {
   strategyVersion: string;
   status: TrendLifecycleStatus;
   finalDecision: string | null;
+}
+
+export interface TrendExperimentListItem extends TrendExperiment {
+  recommendationId: string | null;
+  offerId: string | null;
+  marketplace: "Shopee" | "Mercado Livre" | null;
+  channel: string | null;
+  format: string | null;
+  hypothesis: string | null;
+  startedAt: string | null;
+  endsAt: string | null;
+  decisionReason: string | null;
+  metrics: Record<string, number | null>;
 }
 
 export interface TrendOpportunityListItem extends TrendOpportunity {
