@@ -9,14 +9,63 @@ import { partitionTrendSignalsForView } from "@/core/trends/view";
 import { TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/ai/trend-commercial-classifier";
 import { listTrendExperiments, listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
 
+function radarSourceLabel(signal: { source: string; sourceName: string; evidence: Record<string, unknown> }) {
+  const source = signal.source.toLocaleLowerCase("pt-BR");
+  const provenance = typeof signal.evidence.provenance === "string" ? signal.evidence.provenance.toLocaleLowerCase("pt-BR") : "";
+  if (source.includes("google") || signal.sourceName.toLocaleLowerCase("pt-BR").includes("google")) return "Google Trends";
+  if (source.includes("mercado") || source.includes("mercadolivre") || signal.sourceName.toLocaleLowerCase("pt-BR").includes("mercado")) return "Mercado Livre";
+  if (provenance === "external_radar" || source.includes("external") || source.includes("radar")) return "Radar externo";
+  return signal.sourceName || signal.source;
+}
+
+function parseMatchEvidence(value: string | null) {
+  if (!value) return { reason: null, provenance: null, discoverySource: null, queries: [], marketplaceIdentity: null as Record<string, unknown> | null };
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return {
+      reason: typeof parsed.reason === "string" ? parsed.reason : null,
+      provenance: typeof parsed.provenance === "string" ? parsed.provenance : null,
+      discoverySource: typeof parsed.discovery_source === "string" ? parsed.discovery_source : null,
+      queries: Array.isArray(parsed.discovery_queries) ? parsed.discovery_queries.filter((item): item is string => typeof item === "string") : [],
+      marketplaceIdentity: parsed.marketplace_identity && typeof parsed.marketplace_identity === "object" ? parsed.marketplace_identity as Record<string, unknown> : null
+    };
+  } catch {
+    return { reason: value, provenance: null, discoverySource: null, queries: [], marketplaceIdentity: null };
+  }
+}
+
+function experimentIsActive(experiment: { startedAt: string | null; endsAt: string | null; status: string }) {
+  if (!experiment.startedAt || !experiment.endsAt || !["approved", "active", "measuring"].includes(experiment.status)) return false;
+  const now = Date.now();
+  return new Date(experiment.startedAt).getTime() <= now && now <= new Date(experiment.endsAt).getTime();
+}
+
 export default async function TrendsPage() {
   const [signals, opportunities, experiments] = await Promise.all([listTrendSignals(), listTrendOpportunities(), listTrendExperiments()]);
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
   const opportunityById = new Map(opportunities.map((opportunity) => [opportunity.id, opportunity]));
-  const { operational: eligibleSignals, audit: rejectedSignals, pending: pendingSignals } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
+  const experimentByOpportunity = new Map(experiments.map((experiment) => [experiment.opportunityId, experiment]));
+  const { operational: eligibleSignals, audit: rejectedSignals, pending } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
+  const pendingSignals = pending.filter((signal) => !opportunityBySignal.has(signal.id));
   const radar = rankDailyTrendRadar(buildDailyRadarFromTrendSignals(signals, opportunities));
-  const topRadar = radar.filter((result) => result.evidence_status === "verified" || result.evidence_status === "partial");
+  const topRadar = radar
+    .filter((result) => result.evidence_status === "verified" || result.evidence_status === "partial")
+    .sort((left, right) => {
+      const priority = (result: typeof left) => {
+        const opportunity = result.opportunity_id ? opportunityById.get(result.opportunity_id) : undefined;
+        const experiment = opportunity ? experimentByOpportunity.get(opportunity.id) : undefined;
+        if (experiment && experimentIsActive(experiment)) return 0;
+        if (opportunity?.recommendation?.status === "approved") return 1;
+        if (opportunity?.recommendation?.status === "recommended") return 2;
+        if (opportunity?.matchStatus === "matched") return 3;
+        if (result.evidence_status === "verified") return 4;
+        if (result.evidence_status === "partial") return 5;
+        return 6;
+      };
+      return priority(left) - priority(right) || (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER);
+    });
   const radarAudit = radar.filter((result) => result.evidence_status === "unverified" || result.evidence_status === "rejected");
+  const radarSources = [...new Set(signals.map(radarSourceLabel))];
 
   return (
     <div className="grid gap-6 animate-fadeIn">
@@ -32,8 +81,8 @@ export default async function TrendsPage() {
 
       <section className="glass-card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
-          <h2 className="text-sm font-bold text-white/70">Fonte ativa: Google Trends</h2>
-          <p className="mt-1 text-xs text-white/30">Google Trends geral + Mercado Livre Trends · região BR · sem associação automática de oferta.</p>
+          <h2 className="text-sm font-bold text-white/70">Fontes do Radar</h2>
+          <p className="mt-1 text-xs text-white/30">{radarSources.length > 0 ? radarSources.join(" · ") : "Nenhuma fonte persistida."} · sem associação automática de oferta.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <DailyRadarRefreshButton />
@@ -161,8 +210,9 @@ export default async function TrendsPage() {
         </section>
       ) : (
         <section className="grid gap-3">
-          {opportunities.map((opportunity) => (
-            <article key={opportunity.id} className="glass-card p-5">
+          {opportunities.map((opportunity) => {
+            const matchEvidence = parseMatchEvidence(opportunity.matchReason);
+            return <article key={opportunity.id} className="glass-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Opportunity real</p>
@@ -173,7 +223,14 @@ export default async function TrendsPage() {
               <p className="mt-3 text-sm text-white/40">Sinal: {opportunity.signalTitle} · Marketplace: {opportunity.marketplace || "n/d"}</p>
               <p className="mt-1 text-sm text-white/40">Oferta: {opportunity.offerId || "Nenhuma oferta compatível encontrada"} · Confiança: {opportunity.matchConfidence ?? "n/d"}</p>
               <p className="mt-1 text-sm text-white/40">Preço atual: {opportunity.currentPrice == null ? "n/d" : `R$ ${opportunity.currentPrice.toFixed(2)}`} · Desconto real: {opportunity.oldPrice && opportunity.currentPrice && opportunity.oldPrice > opportunity.currentPrice ? `${Math.round((1 - opportunity.currentPrice / opportunity.oldPrice) * 100)}%` : "n/d"}</p>
-              <p className="mt-1 text-xs text-white/30">{opportunity.matchReason || "Sem motivo registrado."}</p>
+              <div className="mt-3 grid gap-1 text-xs text-white/35">
+                <p>Evidência: {matchEvidence.reason || "n/d"}</p>
+                <p>Origem: {matchEvidence.provenance || "n/d"}</p>
+                <p>Fonte da descoberta: {matchEvidence.discoverySource || "n/d"}</p>
+                <p>Consulta: {matchEvidence.queries.length > 0 ? matchEvidence.queries.join(" · ") : "n/d"}</p>
+                <p>ID marketplace: {matchEvidence.marketplaceIdentity ? Object.values(matchEvidence.marketplaceIdentity).filter(Boolean).join(" · ") || "n/d" : "n/d"}</p>
+              </div>
+              {opportunity.matchReason && matchEvidence.reason !== opportunity.matchReason ? <details className="mt-2 text-[10px] text-white/25"><summary className="cursor-pointer">Auditoria técnica</summary><pre className="mt-1 whitespace-pre-wrap break-words">{opportunity.matchReason}</pre></details> : null}
               {opportunity.recommendation ? (
                 <div className="mt-4 rounded-lg border border-cyan-400/10 bg-cyan-500/[0.04] p-3 text-xs text-white/55">
                   <p className="font-bold text-cyan-200">Recommendation IA</p>
@@ -182,8 +239,8 @@ export default async function TrendsPage() {
                   {opportunity.recommendation.justification ? <p className="mt-2 text-white/40">{opportunity.recommendation.justification}</p> : null}
                 </div>
               ) : <p className="mt-3 text-xs text-white/30">Recommendation: ainda não disponível.</p>}
-            </article>
-          ))}
+            </article>;
+          })}
         </section>
       )}
 
@@ -199,22 +256,25 @@ export default async function TrendsPage() {
           <p className="mt-4 rounded-lg border border-dashed border-white/[0.08] p-4 text-sm text-white/35">Nenhum experimento ativo ou concluído.</p>
         ) : (
           <div className="mt-4 grid gap-3 lg:grid-cols-2">
-            {experiments.map((experiment) => (
-              <article key={experiment.id} className="rounded-lg border border-white/[0.05] p-4">
+            {experiments.map((experiment) => {
+              const active = experimentIsActive(experiment);
+              const experimentOpportunity = opportunityById.get(experiment.opportunityId);
+              return <article key={experiment.id} className="rounded-lg border border-white/[0.05] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-wider text-violet-300">{opportunityById.get(experiment.opportunityId)?.normalizedProductTerm || "Experimento real"}</p>
                     <h3 className="mt-1 text-sm font-bold text-white">{experiment.hypothesis || "Hipótese não registrada"}</h3>
                   </div>
-                  <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-bold uppercase text-violet-300">{experiment.status}</span>
+                  <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-bold uppercase text-violet-300">{active ? "active" : experiment.status}</span>
                 </div>
                 <p className="mt-2 text-xs text-white/40">Canal: {experiment.channel || "n/d"} · Formato: {experiment.format || "n/d"} · Duração: {experiment.windowDays} dias</p>
                 <p className="mt-1 text-xs text-white/40">Início: {experiment.startedAt || "n/d"} · Fim: {experiment.endsAt || "n/d"}</p>
                 <p className="mt-3 text-xs text-white/35">Métricas: vendas {experiment.metrics.salesCount ?? experiment.metrics.sales_count ?? 0} · cliques {experiment.metrics.clicks ?? 0} · comissão {experiment.metrics.commissionValue ?? experiment.metrics.commission_value ?? 0}</p>
                 <p className="mt-1 text-xs text-white/35">CTR: {experiment.metrics.ctr == null ? "não disponível" : experiment.metrics.ctr}</p>
-                <p className="mt-1 text-xs text-white/30">Decisão: {experiment.finalDecision || "pendente"}{experiment.decisionReason ? ` · ${experiment.decisionReason}` : ""}</p>
-              </article>
-            ))}
+                <p className="mt-1 text-xs text-white/35">Status do experimento: {active ? "ativo" : experiment.status}</p>
+                <p className="mt-1 text-xs text-white/30">Recommendation: {experimentOpportunity?.recommendation?.status || "n/d"} · Decisão final: {experiment.finalDecision || "pendente"}{experiment.decisionReason ? ` · ${experiment.decisionReason}` : ""}</p>
+              </article>;
+            })}
           </div>
         )}
       </section>
