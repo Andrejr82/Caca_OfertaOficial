@@ -353,6 +353,210 @@ Referência:
 
 ---
 
+# FASE 1 — MVP DE TENDÊNCIAS IA
+
+## Decisão de escopo
+
+Não implementar muitos agentes ou automações agora.
+
+Os cenários editoriais existentes continuam rodando normalmente. A nova camada de IA nasce **paralela**, isolada e experimental.
+
+Objetivo da Fase 1:
+
+```text
+DESCOBRIR TENDÊNCIA
+        ↓
+ENCONTRAR OFERTA COMPATÍVEL
+        ↓
+DECIDIR ONDE POSTAR
+        ↓
+DECIDIR COMO POSTAR
+        ↓
+PUBLICAR COMO EXPERIMENTO IDENTIFICADO
+        ↓
+MEDIR 7 DIAS
+        ↓
+ESCALAR / AJUSTAR / ABORTAR
+```
+
+## Página nova: Tendências IA
+
+Criar uma nova página independente no dashboard, provisoriamente chamada **Tendências IA**.
+
+Essa página será o centro operacional do experimento e deverá mostrar, por produto/oportunidade:
+
+- produto/tendência;
+- termo ou sinal de origem;
+- força/velocidade da tendência;
+- marketplace encontrado;
+- oferta compatível;
+- preço/desconto;
+- score de oportunidade;
+- canal sugerido;
+- formato sugerido;
+- justificativa curta da IA;
+- status do experimento;
+- data de início;
+- janela de 7 dias;
+- cliques;
+- vendas;
+- comissão;
+- decisão final: `escalar`, `ajustar`, `abortar`.
+
+## Vídeos permanecem separados
+
+A página **Vídeos de Ofertas** continua sendo a área de produção/edição de vídeo.
+
+Responsabilidades:
+
+- **Tendências IA** decide **o que testar, onde e em qual formato**;
+- **Vídeos de Ofertas** executa produção/edição quando o formato escolhido for vídeo.
+
+Não duplicar editor de vídeo dentro da página Tendências IA.
+
+## Capacidade mínima da IA na Fase 1
+
+A IA precisa conseguir:
+
+1. interpretar sinais de tendência provenientes de fontes verificáveis;
+2. normalizar o produto/termo pesquisado;
+3. comparar a tendência com ofertas reais já existentes no sistema;
+4. recomendar a melhor oferta compatível sem inventar correspondência;
+5. sugerir canal de publicação;
+6. sugerir formato: foto, carrossel, vídeo ou oferta direta;
+7. explicar em poucas linhas por que escolheu oferta/canal/formato;
+8. registrar a hipótese do experimento;
+9. analisar o resultado após 7 dias usando métricas reais;
+10. recomendar `escalar`, `ajustar` ou `abortar`.
+
+## IA como recomendação, não autoridade absoluta
+
+Na Fase 1:
+
+- nenhuma tendência pode ser inventada pelo LLM;
+- toda tendência precisa de fonte/sinal verificável;
+- nenhuma oferta pode ser criada ou associada por similaridade fraca;
+- preço e desconto continuam sujeitos às regras determinísticas existentes;
+- IA não altera os cenários editoriais existentes;
+- IA não publica autonomamente sem o fluxo explicitamente aprovado;
+- toda decisão precisa ser auditável.
+
+## Registro do experimento
+
+Cada publicação experimental deve carregar uma identificação estável, por exemplo:
+
+```text
+trend_experiment = 2026-08-w2
+trend_opportunity_id = <uuid>
+strategy_version = trend-v1
+```
+
+O objetivo é separar com clareza:
+
+- publicação editorial normal;
+- publicação orientada por tendência/IA.
+
+Sem essa separação, a avaliação de 7 dias fica contaminada.
+
+## Métricas de 7 dias
+
+### Primárias
+
+- vendas;
+- comissão gerada;
+- taxa clique → venda;
+- comissão por clique;
+- comissão por publicação experimental.
+
+### Secundárias
+
+- cliques;
+- CTR quando alcance/impressões estiverem disponíveis;
+- cliques por publicação;
+- alcance;
+- custo/esforço de produção.
+
+### Dimensões de diagnóstico
+
+- marketplace;
+- categoria/produto;
+- preço;
+- desconto;
+- canal;
+- formato;
+- horário;
+- origem da tendência.
+
+## Critério operacional após 7 dias
+
+### ESCALAR
+
+Há sinal comercial superior ao baseline e volume suficiente para justificar continuação.
+
+### AJUSTAR
+
+Há bons sinais de interesse, mas indícios de canal, formato, preço, timing ou seleção inadequados.
+
+### ABORTAR
+
+A tendência gera atenção sem monetização ou desempenho materialmente inferior ao baseline.
+
+Sete dias são uma **janela operacional inicial**, não prova estatística definitiva. Amostras pequenas devem ser marcadas como inconclusivas.
+
+## Ordem de implementação da Fase 1
+
+### Etapa A — Estrutura primeiro
+
+Antes de buscar tendências reais:
+
+- definir domínio/modelos;
+- definir estados e lifecycle;
+- definir contrato da IA;
+- definir fontes permitidas;
+- definir persistência;
+- criar página Tendências IA;
+- preparar vínculo com ofertas existentes;
+- preparar identificação experimental;
+- preparar métricas de 7 dias.
+
+### Etapa B — Primeiro radar real
+
+Somente depois da estrutura:
+
+- integrar uma fonte inicial de tendência;
+- produzir oportunidades reais em modo observação;
+- sem publicação automática.
+
+### Etapa C — Experimento controlado
+
+Selecionar poucas oportunidades, publicar de forma identificada e medir 7 dias.
+
+### Etapa D — Decisão
+
+Usar métricas reais para decidir:
+
+- continuar;
+- ajustar pesos/regras;
+- mudar canal/formato;
+- ou abortar a estratégia.
+
+## Regra de implementação
+
+**Não começar “na massa”.**
+
+A primeira implementação deve montar a fundação para que IA, fontes, ofertas, canais, formatos e métricas sejam desacoplados e auditáveis.
+
+Evitar neste momento:
+
+- múltiplos agentes autônomos;
+- dezenas de fontes externas;
+- modelos preditivos complexos;
+- alteração dos cenários editoriais existentes;
+- publicação automática;
+- otimização prematura.
+
+---
+
 ## Visão final para o Caça Oferta Oficial
 
 A evolução desejada é:
