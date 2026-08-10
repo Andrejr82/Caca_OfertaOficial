@@ -12,7 +12,7 @@ const {
 
 const FORBIDDEN = [
   'absurdo', 'mudou minha vida', 'revolucionário', 'vai revolucionar',
-  'novo aliado', 'sua nova aliada', 'perfeito', 'incrível', 'você vai amar',
+  'novo aliado', 'sua nova aliada', 'perfeito', 'perfeita', 'incrível', 'você vai amar',
   'corre que pode acabar', 'só hoje', 'últimas unidades', 'preço incrível',
   'preço absurdo', 'não perca', 'imperdível', 'transforma sua vida',
   'transforma sua rotina', 'imagina', 'chega de',
@@ -181,4 +181,21 @@ test('Shopee permanece na copy e vira Chopí somente no TTS', () => {
   assert.match(ttsText, /Chopí/u);
   assert.doesNotMatch(ttsText, /Shopee/u);
   assert.match(ttsText, /Acesse o link na publicação\.$/u);
+});
+
+test('Air Fryer recebe pronúncia segura somente no texto do TTS', () => {
+  const copy = 'Air Fryer, uma ótima opção para a cozinha. Você encontra na Shopee.';
+  const ttsText = normalizeSpeechForTTS(copy);
+
+  assert.equal(copy, 'Air Fryer, uma ótima opção para a cozinha. Você encontra na Shopee.');
+  assert.match(copy, /Air Fryer/u);
+  assert.match(ttsText, /ér fráier/iu);
+  assert.match(ttsText, /Chopí/u);
+  assert.doesNotMatch(ttsText, /Air Fryer|Shopee/u);
+  assert.match(ttsText, /ótima opção para a cozinha/u);
+});
+
+test('normalização de pronúncia não altera palavras não relacionadas', () => {
+  const text = 'Fritadeira elétrica para preparar alimentos.';
+  assert.equal(normalizeSpeechForTTS(text), text);
 });

@@ -79,6 +79,20 @@ const TTS_ACRONYM_ALIASES = new Map([
   ['FHD', 'éfe agá dê'],
 ]);
 
+const TTS_PRONUNCIATION_ALIASES = new Map([
+  ['Shopee', 'Chopí'],
+  ['Air Fryer', 'ér fráier'],
+]);
+
+function applyTtsPronunciationAliases(text) {
+  let output = String(text || '');
+  for (const [source, pronunciation] of TTS_PRONUNCIATION_ALIASES) {
+    const pattern = source.split(' ').map((part) => part.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&')).join('\\s+');
+    output = output.replace(new RegExp(`\\b${pattern}\\b`, 'giu'), pronunciation);
+  }
+  return output;
+}
+
 function integerToPortuguese(value) {
   const number = Number(value);
   if (!Number.isInteger(number) || number < 0 || number > 10000) return String(value);
@@ -119,11 +133,12 @@ function normalizeSpeechForTTS(text) {
     normalized = normalized.replace(new RegExp(`\\b${alias}\\b`, 'giu'), spoken);
   }
 
-  return normalized
+  normalized = normalized
     .replace(/\b(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9]+(?:-[A-Z0-9]+)*\b/g, '')
     .replace(/[\/|]/gu, ' e ')
-    .replace(/[()]/gu, '')
-    .replace(/\bShopee\b/giu, 'Chopí')
+    .replace(/[()]/gu, '');
+
+  return applyTtsPronunciationAliases(normalized)
     .replace(/\s+/gu, ' ')
     .trim();
 }

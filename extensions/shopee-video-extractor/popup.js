@@ -54,7 +54,7 @@ document.getElementById('dubBtn').addEventListener('click', async () => {
     const statusEl = document.getElementById('status');
     const dubBtn = document.getElementById('dubBtn');
     
-    statusEl.innerText = "Enviando para a Oracle dublar... Isso pode levar de 1 a 2 minutos.";
+    statusEl.innerText = "Preparando vídeo...\nEnviando para a Oracle preparar o vídeo...\nMontagem, narração e renderização em andamento.";
     dubBtn.disabled = true;
     dubBtn.innerText = "Dublando...";
 
