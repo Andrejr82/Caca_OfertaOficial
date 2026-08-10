@@ -38,8 +38,10 @@ export interface TrendDirectEvidence {
   marketplace_identity: Record<string, string | null>;
 }
 
+export type PersistedTrendDirectEvidence = Pick<TrendDirectEvidence, "claim"> & Partial<Omit<TrendDirectEvidence, "claim">>;
+
 export interface TrendSignalEvidence extends Record<string, unknown> {
-  direct_evidence?: TrendDirectEvidence[];
+  direct_evidence?: PersistedTrendDirectEvidence[];
   source_urls?: unknown;
 }
 
