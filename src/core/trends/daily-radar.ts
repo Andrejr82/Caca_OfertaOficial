@@ -17,6 +17,7 @@ export interface DailyTrendRadarInput {
   normalized_product_term?: unknown;
   category?: unknown;
   marketplaces?: unknown;
+  marketplace?: unknown;
   source_types?: unknown;
   source_urls?: unknown;
   observed_at?: unknown;
@@ -123,9 +124,9 @@ function normalizeDirectEvidence(value: unknown): RadarDirectEvidence[] {
     }
     if (!entry || typeof entry !== "object") return [];
     const item = entry as Record<string, unknown>;
-    const claim = text(item.claim) || text(item.text);
+    const claim = text(item.claim) || text(item.text) || text(item.fact);
     if (!claim) return [];
-    return [{ claim, source_url: validUrl(item.source_url ?? item.sourceUrl), observed_at: validDate(item.observed_at ?? item.observedAt) }];
+    return [{ claim, source_url: validUrl(item.source_url ?? item.sourceUrl ?? item.url), observed_at: validDate(item.observed_at ?? item.observedAt) }];
   });
 }
 
@@ -159,8 +160,27 @@ function evidenceText(evidence: RadarDirectEvidence[]): string {
 }
 
 function rankFromEvidence(evidence: RadarDirectEvidence[]): number | null {
-  const match = evidenceText(evidence).match(/(?:rank|ranking|posi[cç][aã]o)\s*(?:#|n[úu]mero)?\s*(\d{1,4})/i);
-  return match ? Number(match[1]) : null;
+  const match = evidenceText(evidence).match(/(?:rank|ranking|posi[cç][aã]o)\s*(?:#|n[úu]mero)?\s*(\d{1,4})|\b(\d{1,4})\s*[º°]\s*(?:mais\s+)?vendid/i);
+  return match ? Number(match[1] ?? match[2]) : null;
+}
+
+function numbersFromEvidence(evidence: RadarDirectEvidence[], pattern: RegExp): number[] {
+  return [...evidenceText(evidence).matchAll(pattern)].map((match) => Number(match[1].replace(".", "").replace(",", "."))).filter(Number.isFinite);
+}
+
+function observedPriceRange(evidence: RadarDirectEvidence[]): { min: number | null; max: number | null } {
+  const prices = numbersFromEvidence(evidence, /R\$\s*([\d.]+(?:,\d{1,2})?)/gi);
+  return prices.length ? { min: Math.min(...prices), max: Math.max(...prices) } : { min: null, max: null };
+}
+
+function observedDiscount(evidence: RadarDirectEvidence[]): number | null {
+  const discounts = numbersFromEvidence(evidence, /(\d{1,3})%\s*OFF/gi);
+  return discounts.length && new Set(discounts).size === 1 ? discounts[0] : null;
+}
+
+function observedRating(evidence: RadarDirectEvidence[]): number | null {
+  const ratings = numbersFromEvidence(evidence, /rating\s*([0-5](?:[.,]\d)?)/gi);
+  return ratings.length && new Set(ratings).size === 1 && ratings[0] <= 5 ? ratings[0] : null;
 }
 
 export function normalizeRadarInput(input: DailyTrendRadarInput, options: { external?: boolean } = {}): DailyTrendRadarResult {
@@ -176,13 +196,14 @@ export function normalizeRadarInput(input: DailyTrendRadarInput, options: { exte
   const bestSellerFlag = externallyProvided
     ? /(?:best\s*seller|mais\s+vendid[oa]|campe[aã]o\s+de\s+vendas)/i.test(evidenceText(directEvidence))
     : input.best_seller_flag === true;
-  const priceMin = externallyProvided ? null : numberOrNull(input.observed_price_min);
-  const priceMax = externallyProvided ? null : numberOrNull(input.observed_price_max);
-  const discount = externallyProvided ? null : numberOrNull(input.discount_percent);
-  const rating = externallyProvided ? null : numberOrNull(input.rating);
+  const observedPrices = externallyProvided ? observedPriceRange(directEvidence) : { min: numberOrNull(input.observed_price_min), max: numberOrNull(input.observed_price_max) };
+  const priceMin = externallyProvided ? observedPrices.min : numberOrNull(input.observed_price_min);
+  const priceMax = externallyProvided ? observedPrices.max : numberOrNull(input.observed_price_max);
+  const discount = externallyProvided ? observedDiscount(directEvidence) : numberOrNull(input.discount_percent);
+  const rating = externallyProvided ? observedRating(directEvidence) : numberOrNull(input.rating);
   const hasCommercialEvidence = rankPosition !== null || bestSellerFlag || priceMin !== null || priceMax !== null || discount !== null || rating !== null;
   const evidenceStatus = deriveEvidenceStatus({ productTerm, sourceUrls, observedAt, directEvidence, invalidUrlProvided, hasCommercialEvidence });
-  const marketplaces = listOfStrings(input.marketplaces);
+  const marketplaces = listOfStrings(input.marketplaces ?? (text(input.marketplace) ? [input.marketplace] : []));
   const sourceTypes = listOfStrings(input.source_types);
   const demandReason = evidenceStatus === "unverified"
     ? "Sem fonte atual verificável."

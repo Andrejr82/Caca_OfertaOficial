@@ -54,6 +54,36 @@ describe("DailyTrendRadarResult", () => {
     expect(result.rank).toBeNull();
   });
 
+  it("aceita o formato de pesquisa com fact/url e reextrai os campos observados", () => {
+    const [result] = importExternalRadarJson({ results: [{
+      product_term: "Produto real",
+      marketplace: "mercado_livre",
+      source_urls: ["https://example.com/ranking"],
+      observed_at: "2026-08-10T17:06:00-03:00",
+      direct_evidence: [{
+        source: "Ranking",
+        fact: "Produto na posição 5º MAIS VENDIDO por R$64,41, rating 4,7 e 20% OFF.",
+        url: "https://example.com/ranking"
+      }],
+      confidence: "alta",
+      best_seller_flag: false,
+      rank_position: 999,
+      price_min: 1
+    }] });
+
+    expect(result).toMatchObject({
+      evidence_status: "verified",
+      source_count: 1,
+      best_seller_flag: true,
+      rank_position: 5,
+      observed_price_min: 64.41,
+      observed_price_max: 64.41,
+      discount_percent: 20,
+      rating: 4.7,
+      marketplaces: ["mercado_livre"]
+    });
+  });
+
   it("bloqueia Market Baseline sem fonte atual", () => {
     const [result] = importExternalRadarJson({ results: [{
       product_term: "Creatina",

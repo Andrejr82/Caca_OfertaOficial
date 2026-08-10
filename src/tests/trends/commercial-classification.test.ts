@@ -51,6 +51,35 @@ describe("trend commercial classifier", () => {
     });
   });
 
+  it("aceita normalização que remove somente separador de milhar numérico", async () => {
+    const result = await classifyTrendSignal(signal("Power Bank 20.000 mAh"), provider({
+      commercial_relevance: 90,
+      is_product_intent: true,
+      normalized_product_term: "Power Bank 20000 mAh",
+      category_hint: "eletrônicos",
+      decision: "eligible",
+      reason: "Produto identificável."
+    }));
+
+    expect(result.decision).toBe("eligible");
+    expect(result.normalizedProductTerm).toBe("Power Bank 20000 mAh");
+  });
+
+  it("preserva o termo quando a resposta omite capacidade essencial", async () => {
+    const term = "Fone Bluetooth TWS 5.0 com estojo 300mAh";
+    const result = await classifyTrendSignal(signal(term), provider({
+      commercial_relevance: 90,
+      is_product_intent: true,
+      normalized_product_term: "Fone Bluetooth TWS 5.0",
+      category_hint: "eletrônicos",
+      decision: "eligible",
+      reason: "Produto identificável."
+    }));
+
+    expect(result.decision).toBe("eligible");
+    expect(result.normalizedProductTerm).toBe(term);
+  });
+
   it("rejeita latam airlines brasil mesmo se o modelo tentar aprovar", async () => {
     const result = await classifyTrendSignal(signal("latam airlines brasil"), provider({
       commercial_relevance: 90,

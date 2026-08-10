@@ -19,7 +19,12 @@ const NON_PRODUCT_CONTEXT = [
 
 function normalizedWords(value: string) {
   return value.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(\d{1,3}(?:[.,]\d{3})+)\b/g, (group) => group.replace(/[.,]/g, ""))
     .match(/[a-z0-9]+/g) ?? [];
+}
+
+function identityTokens(value: string) {
+  return normalizedWords(value).filter((word) => /\d/.test(word));
 }
 
 function isNonProductContext(term: string) {
@@ -92,6 +97,8 @@ export async function classifyTrendSignal(
   const modelDecision = value?.decision === "eligible" || value?.decision === "rejected" ? value.decision : "rejected";
   const sourceWords = new Set(normalizedWords(signal.term));
   const normalizedIsDerived = normalized.length > 0 && normalizedWords(normalized).every((word) => sourceWords.has(word));
+  const normalizedWordsSet = new Set(normalizedWords(normalized));
+  const preservesIdentityTokens = identityTokens(signal.term).every((word) => normalizedWordsSet.has(word));
   const blocked = isNonProductContext(signal.term);
   const eligible = modelDecision === "eligible" && productIntent && relevance !== null && relevance >= 50 && normalizedIsDerived && !blocked;
 
@@ -109,7 +116,7 @@ export async function classifyTrendSignal(
     signalId: signal.id,
     commercialRelevance: relevance,
     isProductIntent: true,
-    normalizedProductTerm: normalized,
+    normalizedProductTerm: preservesIdentityTokens ? normalized : signal.term,
     categoryHint: category || null,
     decision: "eligible",
     reason,
