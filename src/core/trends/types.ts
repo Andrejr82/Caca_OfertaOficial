@@ -17,6 +17,8 @@ export type TrendLifecycleStatus = (typeof TREND_LIFECYCLE_STATUSES)[number];
 export type TrendSourceType = (typeof TREND_SOURCE_TYPES)[number];
 export type TrendChannel = "telegram" | "instagram" | "whatsapp" | "facebook" | "other";
 export type TrendDirection = "rising" | "stable" | "falling";
+export type TrendCommercialDecision = "eligible" | "rejected";
+export type TrendMatchStatus = "matched" | "no_match";
 
 export interface TrendSignal {
   id: string;
@@ -35,10 +37,36 @@ export interface TrendSignal {
   offerId: string | null;
 }
 
+export interface TrendSignalClassification {
+  id: string;
+  signalId: string;
+  commercialRelevance: number;
+  isProductIntent: boolean;
+  normalizedProductTerm: string | null;
+  categoryHint: string | null;
+  decision: TrendCommercialDecision;
+  reason: string;
+  aiModel: string;
+  strategyVersion: string;
+  classifiedAt: string;
+}
+
+export interface TrendSignalListItem extends TrendSignal {
+  classification: TrendSignalClassification | null;
+}
+
 export interface TrendOpportunity {
   id: string;
   signalId: string;
+  classificationId: string | null;
   offerId: string | null;
+  marketplace: "Shopee" | "Mercado Livre" | null;
+  normalizedProductTerm: string | null;
+  matchStatus: TrendMatchStatus;
+  matchReason: string | null;
+  matchConfidence: number | null;
+  currentPrice: number | null;
+  oldPrice: number | null;
   score: number | null;
   status: TrendLifecycleStatus;
   experimentId: string | null;

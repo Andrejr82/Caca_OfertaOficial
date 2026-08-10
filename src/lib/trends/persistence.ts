@@ -1,9 +1,37 @@
-import type { TrendSignal } from "@/core/trends/types";
+import type { TrendSignal, TrendSignalClassification } from "@/core/trends/types";
 
 interface TrendPersistenceClient {
   from(table: string): {
     upsert(rows: Record<string, unknown>[], options: { onConflict: string }): PromiseLike<{ error: { message: string } | null }>;
   };
+}
+
+export function toTrendSignalClassificationRow(userId: string, classification: TrendSignalClassification) {
+  return {
+    user_id: userId,
+    trend_signal_id: classification.signalId,
+    commercial_relevance: classification.commercialRelevance,
+    is_product_intent: classification.isProductIntent,
+    normalized_product_term: classification.normalizedProductTerm,
+    category_hint: classification.categoryHint,
+    decision: classification.decision,
+    reason: classification.reason,
+    ai_model: classification.aiModel,
+    strategy_version: classification.strategyVersion,
+    classified_at: classification.classifiedAt
+  };
+}
+
+export async function persistTrendSignalClassifications(
+  client: TrendPersistenceClient,
+  userId: string,
+  classifications: TrendSignalClassification[]
+): Promise<number> {
+  if (classifications.length === 0) return 0;
+  const rows = classifications.map((classification) => toTrendSignalClassificationRow(userId, classification));
+  const { error } = await client.from("trend_signal_classifications").upsert(rows, { onConflict: "user_id,trend_signal_id,strategy_version" });
+  if (error) throw new Error(`Falha ao persistir classificação de tendência: ${error.message}`);
+  return rows.length;
 }
 
 export async function persistTrendSignals(client: TrendPersistenceClient, userId: string, signals: TrendSignal[]): Promise<number> {
