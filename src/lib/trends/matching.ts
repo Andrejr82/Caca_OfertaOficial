@@ -47,6 +47,8 @@ interface TrendMatchingClient {
   from(table: string): any;
 }
 
+export type TrendTargetedDiscovery = (classification: TrendSignalClassification) => Promise<TrendOfferCandidate[]>;
+
 export interface TrendMatchingSummary {
   eligibleSignals: number;
   matchedSignals: number;
@@ -96,7 +98,7 @@ export async function persistTrendOpportunities(client: TrendMatchingClient, row
   return rows.length;
 }
 
-export async function matchTrendSignalsForUser(client: TrendMatchingClient, userId: string): Promise<TrendMatchingSummary> {
+export async function matchTrendSignalsForUser(client: TrendMatchingClient, userId: string, targetedDiscovery?: TrendTargetedDiscovery): Promise<TrendMatchingSummary> {
   const classificationsQuery = await client.from("trend_signal_classifications")
     .select("id,trend_signal_id,commercial_relevance,is_product_intent,normalized_product_term,category_hint,decision,reason,ai_model,strategy_version,classified_at")
     .eq("user_id", userId)
@@ -121,10 +123,25 @@ export async function matchTrendSignalsForUser(client: TrendMatchingClient, user
       .select("id,platform,product_name,category,current_price,old_price,item_id,product_id,shopee_item_id,marketplace_metrics")
       .eq("user_id", userId)
       .in("platform", ["Shopee", "Mercado Livre"])
-      .ilike("product_name", `%${term}%`)
       .limit(5000);
     if (offersQuery.error) throw new Error(`Falha ao carregar ofertas candidatas: ${offersQuery.error.message}`);
-    const result = matchTrendClassification(classification, (offersQuery.data ?? []).map(offerCandidate));
+    const persistedCandidates = (offersQuery.data ?? []).map(offerCandidate);
+    const nativeIdToOfferId = new Map<string, string>();
+    for (const candidate of persistedCandidates as TrendOfferCandidate[]) {
+      for (const nativeId of [candidate.itemId, candidate.productId, candidate.shopeeItemId]) {
+        if (nativeId) nativeIdToOfferId.set(`${candidate.marketplace}:${nativeId}`, candidate.id);
+      }
+    }
+    const discoveredCandidates = targetedDiscovery ? await targetedDiscovery(classification) : [];
+    // Opportunity.offer_id is a foreign key. Current official results without
+    // a corresponding persisted offer remain discovery evidence, not writes.
+    const resolvedDiscoveredCandidates = discoveredCandidates.flatMap((candidate) => {
+      const nativeId = candidate.shopeeItemId || candidate.itemId || candidate.productId;
+      const offerId = nativeId ? nativeIdToOfferId.get(`${candidate.marketplace}:${nativeId}`) : null;
+      return offerId ? [{ ...candidate, id: offerId }] : [];
+    });
+    const candidates = [...persistedCandidates, ...resolvedDiscoveredCandidates];
+    const result = matchTrendClassification(classification, candidates);
     results.push({ classificationId: classification.id, term, result });
     rejectedFalseMatches += result.rejectedCandidates.length;
     if (result.status === "matched") matchedSignals += 1;

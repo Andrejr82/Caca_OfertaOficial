@@ -84,3 +84,17 @@ export async function searchMercadoLivreForTrendTerm(
   });
   return mapMercadoLivreProductsToTrendCandidates(normalizedProductTerm, result.products ?? []);
 }
+
+export async function searchMercadoLivreForTrendQueries(
+  service: ExistingMercadoLivreSearchService,
+  queries: string[],
+  accessToken: string
+): Promise<TrendOfferCandidate[]> {
+  const results = await Promise.all(queries.slice(0, 3).map((query) => searchMercadoLivreForTrendTerm(service, query, accessToken)));
+  const seen = new Set<string>();
+  return results.flat().filter((candidate) => {
+    if (seen.has(candidate.id)) return false;
+    seen.add(candidate.id);
+    return true;
+  });
+}

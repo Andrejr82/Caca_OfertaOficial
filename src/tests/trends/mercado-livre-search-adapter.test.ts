@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapMercadoLivreProductsToTrendCandidates, searchMercadoLivreForTrendTerm } from "@/lib/trends/mercado-livre-search-adapter";
+import { mapMercadoLivreProductsToTrendCandidates, searchMercadoLivreForTrendQueries, searchMercadoLivreForTrendTerm } from "@/lib/trends/mercado-livre-search-adapter";
 
 describe("Trend → Mercado Livre search adapter", () => {
   it("reuses official-search fields without inventing commercial signals", () => {
@@ -43,5 +43,18 @@ describe("Trend → Mercado Livre search adapter", () => {
 
     expect(calls).toEqual([{ keywords: ["Parafusadeira"], accessToken: "oauth-token", maxPerIntent: 20, delayMs: 0 }]);
     expect(candidates[0].id).toBe("MLB456");
+  });
+
+  it("uses each deterministic fallback query and deduplicates the native item", async () => {
+    const calls: string[] = [];
+    const candidates = await searchMercadoLivreForTrendQueries({
+      runMercadoLivreOfficialIntentCoverage: async ({ keywords }) => {
+        calls.push(keywords[0]);
+        return { products: [{ item_id: "MLB456", title: "Britânia BELLA01 1300W" }] };
+      }
+    }, ["Britânia BELLA01 1300W", "Britânia BELLA01", "BELLA01"], "oauth-token");
+
+    expect(calls).toEqual(["Britânia BELLA01 1300W", "Britânia BELLA01", "BELLA01"]);
+    expect(candidates).toHaveLength(1);
   });
 });
