@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  collectShopeeCampaignEvidence,
   collectShopeeProductOfferEvidence,
+  normalizeShopeeCampaignEvidence,
   normalizeShopeeProductOfferEvidence
 } from "@/lib/trends/shopee-evidence-collector";
 
@@ -21,7 +23,7 @@ const officialNode = {
 };
 
 describe("Shopee Evidence Collector", () => {
-  it("normaliza produto oficial em evidência canônica sem inventar ranking ou tendência", () => {
+  it("normaliza produto oficial em evidência canônica sem inventar ranking, tendência ou preço antigo", () => {
     const result = normalizeShopeeProductOfferEvidence([officialNode], {
       query: "air fryer",
       observedAt,
@@ -61,7 +63,7 @@ describe("Shopee Evidence Collector", () => {
       trending_flag: null,
       sold_quantity: 321,
       price: 299.9,
-      old_price: 349.9,
+      old_price: null,
       discount_percent: 14,
       rating: 4.8,
       review_count: null,
@@ -72,6 +74,19 @@ describe("Shopee Evidence Collector", () => {
         item_id: "456"
       }
     });
+  });
+
+  it("falha fechado para produto sem identidade nativa completa", () => {
+    const result = normalizeShopeeProductOfferEvidence([{ ...officialNode, shopId: null }], {
+      query: "air fryer",
+      observedAt,
+      capturedAt: observedAt
+    });
+
+    expect(result.status).toBe("empty");
+    expect(result.accepted).toBe(0);
+    expect(result.rejected).toBe(1);
+    expect(result.signals).toEqual([]);
   });
 
   it("falha fechado para produto sem URL oficial verificável", () => {
@@ -99,7 +114,39 @@ describe("Shopee Evidence Collector", () => {
     expect(result.errorCode).toBe("invalid_observed_at");
   });
 
-  it("expõe observabilidade e não produz sinais quando a fonte oficial falha", async () => {
+  it("normaliza campanha oficial sem tratá-la como produto, ranking ou tendência", () => {
+    const result = normalizeShopeeCampaignEvidence([{
+      offerName: "Festival de Ofertas",
+      offerLink: "https://shope.ee/campaign",
+      imageUrl: "https://cf.shopee.com.br/campaign.jpg",
+      commissionRate: 0.08
+    }], { observedAt, capturedAt: observedAt });
+
+    expect(result).toMatchObject({ source: "shopee_campaign", status: "ok", accepted: 1 });
+    expect(result.signals[0]).toMatchObject({
+      sourceName: "shopee_campaign",
+      source: "shopee_campaign",
+      term: "Festival de Ofertas",
+      title: "Festival de Ofertas",
+      trendStrength: null,
+      trendDirection: null
+    });
+    expect(result.signals[0].evidence.direct_evidence?.[0]).toMatchObject({
+      evidence_type: "shopee_campaign",
+      source_url: "https://shope.ee/campaign",
+      observed_at: observedAt,
+      rank_position: null,
+      best_seller_flag: null,
+      trending_flag: null,
+      price: null,
+      discount_percent: null,
+      rating: null,
+      marketplace_identity: { marketplace: "shopee" }
+    });
+    expect(result.signals[0].evidence.campaign_flag).toBe(true);
+  });
+
+  it("expõe observabilidade e não produz sinais quando a fonte oficial de produtos falha", async () => {
     const result = await collectShopeeProductOfferEvidence("air fryer", {
       now: () => new Date(observedAt),
       loadNodes: async () => {
@@ -118,16 +165,17 @@ describe("Shopee Evidence Collector", () => {
     });
   });
 
-  it("coleta por uma única fonte oficial e preserva os contadores", async () => {
-    const result = await collectShopeeProductOfferEvidence("air fryer", {
+  it("coleta produto e campanha por fontes oficiais separadas", async () => {
+    const product = await collectShopeeProductOfferEvidence("air fryer", {
       now: () => new Date(observedAt),
       loadNodes: async () => [officialNode]
     });
+    const campaign = await collectShopeeCampaignEvidence({
+      now: () => new Date(observedAt),
+      loadNodes: async () => [{ offerName: "Festival de Ofertas", offerLink: "https://shope.ee/campaign" }]
+    });
 
-    expect(result.status).toBe("ok");
-    expect(result.received).toBe(1);
-    expect(result.accepted).toBe(1);
-    expect(result.rejected).toBe(0);
-    expect(result.signals).toHaveLength(1);
+    expect(product).toMatchObject({ status: "ok", received: 1, accepted: 1, rejected: 0 });
+    expect(campaign).toMatchObject({ status: "ok", received: 1, accepted: 1, rejected: 0 });
   });
 });
