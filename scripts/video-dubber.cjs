@@ -4,6 +4,14 @@ const crypto = require('crypto');
 const { exec } = require('child_process');
 const axios = require('axios');
 const ffmpeg = require('fluent-ffmpeg');
+const {
+  analyzeAndAssemble,
+  buildVisualSpeechContext,
+  buildFinalRenderPlan,
+  createJobWorkspace,
+  getMediaInfo,
+  shouldRegenerateSpeech,
+} = require('./video-auto-assembly.cjs');
 
 // Se o edge-tts não estiver no PATH global do sistema, usaremos este atalho validado:
 const EDGE_TTS_BIN = 'C:\\Users\\André\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\edge-tts.exe';
@@ -33,7 +41,7 @@ async function classifyProductGender(title, apiKey) {
 
 const FORBIDDEN_DUBBING_PHRASES = [
   'absurdo', 'mudou minha vida', 'revolucionário', 'vai revolucionar',
-  'novo aliado', 'sua nova aliada', 'perfeito', 'incrível', 'você vai amar',
+  'novo aliado', 'sua nova aliada', 'perfeito', 'perfeita', 'incrível', 'você vai amar',
   'corre que pode acabar', 'só hoje', 'últimas unidades', 'preço incrível',
   'preço absurdo', 'não perca', 'imperdível', 'transforma sua vida',
   'transforma sua rotina', 'imagina', 'chega de',
@@ -46,7 +54,7 @@ const UNSUPPORTED_DUBBING_CLAIMS = [
   /\b(?:mais\s+)?tempo\b/iu,
   /\bdur(?:a|abilidade|ável)/iu,
   /\b(?:superior|alta|excelente)\s+qualidade\b/iu,
-  /\b(?:confortável|conforto|eficiente|eficiência)\b/iu,
+  /\b(?:confortável|conforto|confort|eficiente|eficiência)\b/iu,
 ];
 
 const SPECIFIC_DUBBING_FACTS = [
@@ -129,6 +137,7 @@ function extractDubbingFacts(title) {
   const normalized = normalizeDubbingTitle(title);
   const lower = normalized.toLowerCase();
   const category = [
+    ['calça', 'uma calça pantalona', 'compor looks do dia a dia', 'ter uma peça versátil para diferentes combinações'],
     ['mixer', 'um mixer', 'preparar e triturar alimentos', 'deixar o preparo mais prático'],
     ['potes', 'um conjunto de potes de vidro herméticos', 'organizar e armazenar alimentos', 'deixar os alimentos visíveis e a cozinha mais organizada'],
     ['tênis', 'um tênis casual', 'compor produções do dia a dia', 'combinar com diferentes looks casuais'],
@@ -144,6 +153,9 @@ function extractDubbingFacts(title) {
   if (/\bmixer\b/iu.test(normalized)) {
     const combination = normalized.match(/\b(\d+)\s+em\s+1\b/iu)?.[0];
     features = [combination, /inox/iu.test(normalized) ? 'inox' : null].filter(Boolean);
+  }
+  else if (/\bcalça\b|\bpantalona\b/iu.test(normalized)) {
+    features = ['pantalona', /bolso/iu.test(normalized) ? 'bolso' : null, /cintura alta/iu.test(normalized) ? 'cintura alta' : null].filter(Boolean);
   }
   else if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
     const quantityMatch = normalized.match(/\b(\d+)\s+potes?/iu);
@@ -185,12 +197,18 @@ function buildFallbackDubbingScript(title, durationSecs = 15) {
   if (facts.key === 'cafeteira' && facts.features.includes('compacta')) detail = ' O modelo tem formato compacto.';
   if (facts.key === 'torneira' && facts.features.includes('bica móvel')) detail = ` O modelo tem ${facts.features.includes('gourmet') ? 'acabamento gourmet e ' : ''}bica móvel.`;
   if (facts.key === 'aspirador' && facts.features.length) detail = ` O modelo tem ${facts.features.filter((feature) => feature !== 'portátil').join(' e ')}.`;
+  if (facts.key === 'calça' && facts.features.length) detail = ` A peça tem ${facts.features.join(' e ')}.`;
+  const categoryLabel = facts.category.replace(/^um |^uma /iu, '');
+  if (Number(durationSecs) < 13) {
+    return `Olha essa ${categoryLabel}.${detail} Você encontra na Shopee. Acesse o link na publicação.`;
+  }
   const benefit = Number(durationSecs) < 12 ? '' : ` É uma alternativa prática para ${facts.benefit}.`;
-  return `Olha uma opção interessante para ${facts.useCase}. Aqui está ${facts.category}.${detail}${benefit} Você encontra na Shopee. Acesse o link na publicação.`;
+  return `Olha essa ${categoryLabel} em destaque para ${facts.useCase}.${detail}${benefit} Você encontra na Shopee. Acesse o link na publicação.`;
 }
 
-function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO') {
+function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO', visualPlan = null) {
   const targetWords = Math.round(durationSecs * 3.5);
+  const visualContext = visualPlan ? `\nSEQUÊNCIA VISUAL DEFINIDA:\n${buildVisualSpeechContext(visualPlan)}\nA fala deve acompanhar essa sequência e comentar somente o que o título sustenta.` : '';
   return `Você escreve roteiro falado curto, natural e comercial em português do Brasil.
 
 ÚNICA FONTE DE FATOS: use somente informações presentes no título do produto abaixo. Não invente materiais, medidas, desempenho, durabilidade, conforto, economia, qualidade, resultados ou urgência.
@@ -225,7 +243,7 @@ REGRAS DE ESTILO:
 - Não mencione preço, desconto, economia ou estoque.
 - Não use emojis, aspas, títulos ou numeração.
 - Não use urgência falsa, superlativos genéricos ou promessas pessoais.
-- Retorne apenas o texto do roteiro.`;
+- Retorne apenas o texto do roteiro.${visualContext}`;
 }
 
 function isSafeDubbingScript(script) {
@@ -271,13 +289,13 @@ function sanitizeDubbingScript(script, title, durationSecs = 15) {
 }
 
 // --- ETAPA 1: Gerar roteiro persuasivo com gênero correto ---
-async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO') {
+async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO', visualPlan = null) {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) throw new Error('GROQ_API_KEY não configurada no .env.local');
 
   const targetWords = Math.round(durationSecs * 3.5);
   const dynamicMaxTokens = Math.max(350, Math.round(targetWords * 2.5) + 100);
-  const prompt = buildDubbingPrompt(title, durationSecs, gender);
+  const prompt = buildDubbingPrompt(title, durationSecs, gender, visualPlan);
 
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
@@ -338,16 +356,24 @@ async function downloadVideo(url, outputPath) {
   });
 }
 
-function mergeAudioVideo(videoPath, audioPath, outputPath) {
+function mergeAudioVideo(videoPath, audioPath, outputPath, finalDuration) {
   return new Promise((resolve, reject) => {
-    ffmpeg()
+    const command = ffmpeg()
       .input(videoPath)
-      .input(audioPath)
-      .outputOptions([
-        '-map 0:v',
+      .input(audioPath);
+    const duration = Number(finalDuration);
+    if (Number.isFinite(duration) && duration > 0) {
+      command.complexFilter(`[0:v]trim=duration=${duration},setpts=PTS-STARTPTS[vout]`);
+    }
+    command.outputOptions([
+        Number.isFinite(duration) && duration > 0 ? '-map [vout]' : '-map 0:v',
         '-map 1:a',
-        '-c:v copy',
-        '-c:a aac'
+        '-c:v libx264',
+        '-preset medium',
+        '-crf 18',
+        '-c:a aac',
+        '-b:a 128k',
+        '-movflags +faststart'
       ])
       .save(outputPath)
       .on('end', resolve)
@@ -400,14 +426,15 @@ function calculateRateAdjustment(audioDuration, videoDuration) {
  * @param {string} title - Título extraído
  * @param {string} price - Preço extraído
  */
-async function processShopeeVideoDubbing(videoUrl, title, price) {
-  const jobId = crypto.randomUUID();
-  const workDir = path.join(__dirname, '..', 'videos_processados');
-  if (!fs.existsSync(workDir)) fs.mkdirSync(workDir, { recursive: true });
-
-  const rawVideoPath = path.join(workDir, `${jobId}_raw.mp4`);
-  const audioPath = path.join(workDir, `${jobId}_audio.mp3`);
-  const finalVideoPath = path.join(workDir, `${jobId}_final.mp4`);
+async function processShopeeVideoDubbing(videoUrl, title, price, options = {}) {
+  const jobId = options.jobId || crypto.randomUUID();
+  const workDir = options.workDir || path.join(__dirname, '..', 'videos_processados');
+  const workspace = createJobWorkspace(workDir, jobId);
+  fs.mkdirSync(workspace.root, { recursive: true });
+  const rawVideoPath = workspace.input;
+  const assembledVideoPath = workspace.assembled;
+  const audioPath = workspace.audio;
+  const finalVideoPath = options.outputPath || workspace.output;
 
   console.log(`[Job ${jobId}] Iniciando dublagem: ${title}`);
 
@@ -416,9 +443,13 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
     console.log(`[Job ${jobId}] Baixando vídeo...`);
     await downloadVideo(videoUrl, rawVideoPath);
 
-    // 2. Duração exata do vídeo
-    const durationSecs = await getVideoDuration(rawVideoPath);
-    console.log(`[Job ${jobId}] Duração do vídeo: ${durationSecs}s`);
+    // 2. Análise visual e montagem antes da copy.
+    console.log(`[Job ${jobId}] Analisando trechos visuais...`);
+    const assembly = await analyzeAndAssemble(rawVideoPath, assembledVideoPath, {
+      targetDuration: options.targetDuration || 12,
+    });
+    const durationSecs = assembly.outputQuality.duration;
+    console.log(`[Job ${jobId}] Montagem: ${durationSecs.toFixed(2)}s | ${assembly.plan.segments.length} trechos`);
 
     // 3. Gênero do produto
     const apiKey = process.env.GROQ_API_KEY;
@@ -427,12 +458,12 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
 
     // 4. Gerar roteiro
     console.log(`[Job ${jobId}] Gerando roteiro...`);
-    let copy = await generateDubbingCopy(title, price, durationSecs, gender);
+    let copy = await generateDubbingCopy(title, price, durationSecs, gender, assembly.plan);
     console.log(`[Job ${jobId}] Roteiro:\n${copy}`);
 
     // Reverter "Chopí" antes do TTS e manter copy comercial intacta no retorno.
     copy = copy.replace(/Chopí/gi, 'Shopee');
-    const ttsText = normalizeSpeechForTTS(copy);
+    let ttsText = normalizeSpeechForTTS(copy);
 
     // 5. Gerar áudio inicial (sem ajuste de rate) com pitch +5Hz para entusiasmo
     const PITCH = '+10Hz';
@@ -441,32 +472,56 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
 
     // 6. Medir duração do áudio gerado
     const audioDuration = await getAudioDuration(audioPath);
+    let finalAudioDuration = audioDuration;
     console.log(`[Job ${jobId}] Áudio inicial: ${audioDuration ? audioDuration.toFixed(1) : '?'}s | Vídeo: ${durationSecs}s`);
 
     // 7. Se temos a duração, calcular rate exato e regenerar
     if (audioDuration !== null) {
-      const diffRatio = Math.abs(audioDuration - durationSecs) / durationSecs;
-
-      if (diffRatio > 0.05) { // só ajusta se diferença > 5%
+      if (shouldRegenerateSpeech(audioDuration, durationSecs)) {
         const rate = calculateRateAdjustment(audioDuration, durationSecs);
         console.log(`[Job ${jobId}] Diferença: ${((audioDuration - durationSecs) > 0 ? '+' : '')}${(audioDuration - durationSecs).toFixed(1)}s. Ajustando rate para: ${rate}`);
 
         try { fs.unlinkSync(audioPath); } catch(e) {}
         await generateTTS(ttsText, audioPath, rate, PITCH);
 
-        const finalAudioDuration = await getAudioDuration(audioPath);
+        finalAudioDuration = await getAudioDuration(audioPath);
         console.log(`[Job ${jobId}] ✅ Áudio ajustado: ${finalAudioDuration ? finalAudioDuration.toFixed(1) : '?'}s (rate: ${rate})`);
+        if (finalAudioDuration !== null && shouldRegenerateSpeech(finalAudioDuration, durationSecs)) {
+          console.log(`[Job ${jobId}] Regenerando roteiro factual mais curto para caber na montagem...`);
+          copy = buildFallbackDubbingScript(title, durationSecs);
+          ttsText = normalizeSpeechForTTS(copy);
+          try { fs.unlinkSync(audioPath); } catch (e) {}
+          await generateTTS(ttsText, audioPath, '+0%', PITCH);
+          finalAudioDuration = await getAudioDuration(audioPath);
+        }
+        if (finalAudioDuration !== null && shouldRegenerateSpeech(finalAudioDuration, durationSecs)) {
+          throw new Error(`TTS excede a duração útil após regeneração: ${finalAudioDuration.toFixed(2)}s > ${durationSecs.toFixed(2)}s`);
+        }
       } else {
-        console.log(`[Job ${jobId}] ✅ Áudio já dentro da tolerância (${(diffRatio * 100).toFixed(0)}%). Sem ajuste de rate necessário.`);
+        console.log(`[Job ${jobId}] ✅ Áudio cabe na duração da montagem (${audioDuration.toFixed(1)}s/${durationSecs.toFixed(1)}s).`);
       }
     }
 
-    // 8. Merge vídeo + áudio
+    if (finalAudioDuration === null) {
+      throw new Error('Não foi possível medir a duração real do TTS. Renderização interrompida para evitar cauda ou corte de áudio.');
+    }
+    const finalRender = buildFinalRenderPlan({
+      visualDuration: durationSecs,
+      audioDuration: finalAudioDuration,
+      endingMargin: options.endingMargin || 0.3,
+    });
+    if (!finalRender.audioFits || finalRender.audioCutRisk) {
+      throw new Error(`TTS não cabe na montagem sem corte: ${finalAudioDuration.toFixed(2)}s > ${durationSecs.toFixed(2)}s`);
+    }
+
+    // 8. Merge vídeo + áudio; corta somente a cauda visual após a fala.
     console.log(`[Job ${jobId}] Mesclando vídeo e áudio...`);
-    await mergeAudioVideo(rawVideoPath, audioPath, finalVideoPath);
+    await mergeAudioVideo(assembledVideoPath, audioPath, finalVideoPath, finalRender.finalDuration);
+    const finalQuality = await getMediaInfo(finalVideoPath);
 
     // 9. Cleanup
     fs.unlinkSync(rawVideoPath);
+    fs.unlinkSync(assembledVideoPath);
     fs.unlinkSync(audioPath);
 
     console.log(`[Job ${jobId}] Concluído! Arquivo: ${finalVideoPath}`);
@@ -474,7 +529,15 @@ async function processShopeeVideoDubbing(videoUrl, title, price) {
       success: true,
       jobId,
       finalVideoPath,
-      copy
+      copy,
+      ttsText,
+      assemblyPlan: assembly.plan,
+      inputQuality: assembly.inputQuality,
+      outputQuality: finalQuality,
+      assembledQuality: assembly.outputQuality,
+      audioDuration: finalAudioDuration,
+      finalDuration: finalRender.finalDuration,
+      endingMargin: finalRender.endingMargin,
     };
 
   } catch (error) {

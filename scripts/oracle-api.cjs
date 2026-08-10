@@ -305,9 +305,10 @@ app.post('/api/shopee/dub-video', async (req, res) => {
       throw new Error(`CRÍTICO: offerId ficou ${offerId} após checar ou criar a oferta! A coluna id existe na tabela offers?`);
     }
 
-    // 2. Dubla o vídeo localmente
+    // 2. Dubla o vídeo localmente. O mesmo ID isola workspace, storage e video_job.
     const { processShopeeVideoDubbing } = require('./video-dubber.cjs');
-    const result = await processShopeeVideoDubbing(videoUrl, title, price || 'Não informado');
+    const jobId = require('crypto').randomUUID();
+    const result = await processShopeeVideoDubbing(videoUrl, title, price || 'Não informado', { jobId });
 
     if (!result.success) {
       return res.status(500).json({ error: result.error });
@@ -318,7 +319,6 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     const path = require('path');
     const videoBuffer = fs.readFileSync(result.finalVideoPath);
 
-    const jobId = require('crypto').randomUUID();
     const storagePath = `${tenantId}/${jobId}.mp4`;
 
     console.log(`[Oracle Dubber] Fazendo upload do vídeo para o Storage...`);
@@ -350,7 +350,13 @@ app.post('/api/shopee/dub-video', async (req, res) => {
         video_url: uploadedVideoUrl,
         metadata: {
           source: 'oracle-extension',
-          prompt: result.copy
+          prompt: result.copy,
+          assemblyPlan: result.assemblyPlan,
+          inputQuality: result.inputQuality,
+          outputQuality: result.outputQuality,
+          audioDuration: result.audioDuration,
+          finalDuration: result.finalDuration,
+          endingMargin: result.endingMargin
         },
         completed_at: new Date().toISOString()
       });
