@@ -74,14 +74,16 @@ export interface AffiliateLink {
 export interface Sale {
   id: string;
   user_id: string;
-  offer_id: string;
+  offer_id: string | null;
   affiliate_link_id: string | null;
-  channel: Channel;
+  channel: Channel | null;
   gross_value: number;
   commission_value: number;
   status: SaleStatus;
   sold_at: string;
   created_at: string;
+  marketplace?: string | null;
+  source_event_id?: string | null;
 }
 
 export type DeltaLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";

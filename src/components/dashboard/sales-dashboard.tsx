@@ -11,9 +11,9 @@ import { Field, Select, Input } from "@/components/ui/field";
 
 interface SaleItem {
   id: string;
-  offer_id: string;
+  offer_id: string | null;
   affiliate_link_id: string | null;
-  channel: string;
+  channel: string | null;
   gross_value: number;
   commission_value: number;
   status: string;
@@ -135,9 +135,9 @@ export function SalesDashboard({ initialSales, offers, links, createSaleAction }
     };
 
     filteredByDateSales.forEach((sale) => {
-      const channel = sale.channel.toLowerCase();
+      const channel = sale.channel?.toLowerCase() || "unattributed";
       if (!map[channel]) {
-        map[channel] = { revenue: 0, count: 0, name: channel.charAt(0).toUpperCase() + channel.slice(1) };
+        map[channel] = { revenue: 0, count: 0, name: "Não atribuída" };
       }
       map[channel].revenue += Number(sale.commission_value || 0);
       map[channel].count += 1;
@@ -151,7 +151,7 @@ export function SalesDashboard({ initialSales, offers, links, createSaleAction }
     const map: Record<string, number> = {};
     
     activeSales.forEach((sale) => {
-      const offer = offersMap.get(sale.offer_id);
+      const offer = sale.offer_id ? offersMap.get(sale.offer_id) : undefined;
       const platform = offer?.platform || "Outro";
       map[platform] = (map[platform] || 0) + Number(sale.commission_value || 0);
     });
@@ -164,13 +164,14 @@ export function SalesDashboard({ initialSales, offers, links, createSaleAction }
     const map: Record<string, { name: string; count: number; revenue: number }> = {};
 
     activeSales.forEach((sale) => {
-      const offer = offersMap.get(sale.offer_id);
-      const name = offer?.product_name || "Produto Desconhecido";
-      if (!map[sale.offer_id]) {
-        map[sale.offer_id] = { name, count: 0, revenue: 0 };
+      const offer = sale.offer_id ? offersMap.get(sale.offer_id) : undefined;
+      const offerKey = sale.offer_id || "unattributed";
+      const name = offer?.product_name || "Não atribuída";
+      if (!map[offerKey]) {
+        map[offerKey] = { name, count: 0, revenue: 0 };
       }
-      map[sale.offer_id].count += 1;
-      map[sale.offer_id].revenue += Number(sale.commission_value || 0);
+      map[offerKey].count += 1;
+      map[offerKey].revenue += Number(sale.commission_value || 0);
     });
 
     return Object.values(map)

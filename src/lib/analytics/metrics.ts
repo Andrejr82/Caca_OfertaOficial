@@ -5,7 +5,48 @@ export type ClickEventMetric = {
   device_type?: string | null;
 };
 
-type SaleMetric = { status?: string | null };
+export type SaleMetric = {
+  status?: string | null;
+  offer_id?: string | null;
+  affiliate_link_id?: string | null;
+  channel?: string | null;
+  gross_value?: number | null;
+  commission_value?: number | null;
+};
+
+export const UNATTRIBUTED_LABEL = "Não atribuída";
+
+export function isUnattributedSale(sale: SaleMetric): boolean {
+  return !sale.offer_id && !sale.affiliate_link_id && !sale.channel;
+}
+
+export function summarizeSales(sales: SaleMetric[]) {
+  const confirmed = sales.filter((sale) => sale.status === "confirmed");
+  const addBreakdown = (key: "channel" | "offer_id") => {
+    const groups = new Map<string, { sales: number; revenue: number }>();
+    for (const sale of confirmed) {
+      const value = key === "channel" ? sale.channel : sale.offer_id;
+      const label = value || UNATTRIBUTED_LABEL;
+      const current = groups.get(label) || { sales: 0, revenue: 0 };
+      current.sales += 1;
+      current.revenue += Number(sale.commission_value || 0);
+      groups.set(label, current);
+    }
+    return [...groups.entries()].map(([label, values]) => key === "channel"
+      ? { channel: label, ...values }
+      : { offer: label, ...values });
+  };
+
+  const unattributed = confirmed.filter(isUnattributedSale);
+  return {
+    totalSales: confirmed.length,
+    totalRevenue: confirmed.reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0),
+    unattributedSales: unattributed.length,
+    unattributedRevenue: unattributed.reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0),
+    channelBreakdown: addBreakdown("channel"),
+    offerBreakdown: addBreakdown("offer_id"),
+  };
+}
 
 const KNOWN_SOURCES = ["facebook", "telegram", "whatsapp", "instagram"] as const;
 
@@ -53,7 +94,7 @@ export function summarizeClickEvents(events: ClickEventMetric[], sales: SaleMetr
 
   return {
     totalClicks: events.length,
-    totalSales: sales.filter((sale) => sale.status === "confirmed").length,
+    totalSales: summarizeSales(sales).totalSales,
     sourceData: Object.entries(sourceBreakdown)
       .sort(([, left], [, right]) => right - left)
       .map(([source, count]) => ({ source, count })),

@@ -51,19 +51,44 @@ function valueFromRow(row: Record<string, unknown>, aliases: string[]) {
   return match?.[1] ?? "";
 }
 
+function hasRowKey(row: Record<string, unknown>, aliases: string[]) {
+  return Object.keys(row).some((key) => aliases.includes(normalizedKey(key)));
+}
+
+function firstValueFromRow(row: Record<string, unknown>, aliases: string[]) {
+  for (const alias of aliases) {
+    const value = valueFromRow(row, [alias]);
+    if (String(value).trim()) return String(value).trim();
+  }
+  return "";
+}
+
 function toMarketplaceSaleInput(marketplace: string, userId: string, row: Record<string, unknown>): MarketplaceSaleInput {
+  const normalizedMarketplace = marketplace.trim().toLowerCase();
+  const orderId = valueFromRow(row, ["ordereventid", "orderid", "iddopedido", "conversionid", "transactionid", "id"]);
+  const itemId = valueFromRow(row, ["itemid", "idd item", "iddoitem"]);
+  const modelId = valueFromRow(row, ["modelid", "modelodeid"]);
+  const isShopeeItemReport = normalizedMarketplace === "shopee"
+    && hasRowKey(row, ["itemid", "iddoitem"])
+    && hasRowKey(row, ["modelid", "modelodeid"]);
+  const sourceEventId = isShopeeItemReport
+    ? [orderId, itemId, modelId].every((value) => String(value).trim())
+      ? `shopee:${String(orderId).trim()}:${String(itemId).trim()}:${String(modelId).trim()}`
+      : ""
+    : String(orderId);
+
   return {
     marketplace,
     userId,
-    sourceEventId: String(valueFromRow(row, ["ordereventid", "orderid", "conversionid", "transactionid", "id"])),
+    sourceEventId,
     offerId: String(valueFromRow(row, ["offerid", "itemid", "productid"])),
     affiliateLinkId: String(valueFromRow(row, ["affiliatelinkid", "linkid"])) || null,
-    subId: String(valueFromRow(row, ["subid", "affiliatesubid", "trackingid"])) || null,
+    subId: firstValueFromRow(row, ["subid", "subid1", "subid2", "subid3", "subid4", "subid5", "affiliatesubid", "trackingid"]) || null,
     channel: String(valueFromRow(row, ["channel", "canal"])) || null,
-    grossValue: String(valueFromRow(row, ["grossvalue", "ordervalue", "saleamount", "amount", "gmv", "valorbruto"])),
-    commissionValue: String(valueFromRow(row, ["commissionvalue", "commission", "commissionamount", "earnings", "comissao"])),
-    status: String(valueFromRow(row, ["status", "salestatus", "conversionstatus"])),
-    soldAt: String(valueFromRow(row, ["soldat", "saleat", "orderdate", "conversiondate", "date"])),
+    grossValue: String(valueFromRow(row, ["grossvalue", "ordervalue", "saleamount", "amount", "gmv", "valorbruto", "valordecompra", "valordecomprar", "valordecomprars"])),
+    commissionValue: String(valueFromRow(row, ["commissionvalue", "commission", "commissionamount", "earnings", "comissao", "comissaoliquidadoafiliado", "comissaoliquidadoafiliador", "comissaoliquidadoafiliadors"])),
+    status: String(valueFromRow(row, ["statusdoitemdoafiliado", "status", "salestatus", "conversionstatus"])),
+    soldAt: String(valueFromRow(row, ["soldat", "saleat", "orderdate", "horariodopedido", "conversiondate", "date"])),
   };
 }
 

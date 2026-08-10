@@ -3,6 +3,7 @@ import {
   countClicksByAffiliateLink,
   normalizeTrafficSource,
   summarizeClickEvents,
+  summarizeSales,
 } from "@/lib/analytics/metrics";
 
 describe("growth and tracking click metrics", () => {
@@ -36,5 +37,24 @@ describe("growth and tracking click metrics", () => {
 
     expect(countClicksByAffiliateLink(events)["link-1"]).toBe(2);
     expect((countClicksByAffiliateLink(events) as Record<string, number>)["legacy_clicks"]).toBeUndefined();
+  });
+
+  it("counts unattributed confirmed sales globally and labels their breakdown explicitly", () => {
+    const summary = summarizeSales([
+      { status: "confirmed", offer_id: null, affiliate_link_id: null, channel: null, commission_value: 0.7467, gross_value: 24.89 },
+      { status: "confirmed", offer_id: "offer-1", affiliate_link_id: "link-1", channel: "telegram", commission_value: 2, gross_value: 20 },
+      { status: "pending", offer_id: null, affiliate_link_id: null, channel: null, commission_value: 9, gross_value: 90 },
+    ]);
+
+    expect(summary.totalSales).toBe(2);
+    expect(summary.totalRevenue).toBe(2.7467);
+    expect(summary.unattributedSales).toBe(1);
+    expect(summary.unattributedRevenue).toBe(0.7467);
+    expect(summary.channelBreakdown).toEqual(expect.arrayContaining([
+      expect.objectContaining({ channel: "Não atribuída", sales: 1, revenue: 0.7467 }),
+    ]));
+    expect(summary.offerBreakdown).toEqual(expect.arrayContaining([
+      expect.objectContaining({ offer: "Não atribuída", sales: 1, revenue: 0.7467 }),
+    ]));
   });
 });

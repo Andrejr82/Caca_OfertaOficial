@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { countClicksByAffiliateLink, summarizeClickEvents, type ClickEventMetric } from "@/lib/analytics/metrics";
+import { countClicksByAffiliateLink, summarizeClickEvents, summarizeSales, type ClickEventMetric, type SaleMetric } from "@/lib/analytics/metrics";
 
 export async function getGrowthMetrics(days = 30) {
   const supabase = await createServerSupabaseClient();
@@ -33,10 +33,11 @@ export async function getGrowthMetrics(days = 30) {
   // 3. Fetch Sales to calculate CR%
   const { data: salesData } = await supabase
     .from("sales")
-    .select("affiliate_link_id, status, commission_value")
+    .select("affiliate_link_id, offer_id, channel, status, commission_value, gross_value")
     .gte("sold_at", startDate.toISOString());
 
-  const sales = salesData || [];
+  const sales = (salesData || []) as SaleMetric[];
+  const salesSummary = summarizeSales(sales);
 
   // === AGGREGATIONS ===
 
@@ -85,12 +86,29 @@ export async function getGrowthMetrics(days = 30) {
   // Sort by Conversion Rate or Revenue
   funnelData.sort((a, b) => b.revenue - a.revenue || b.conversionRate - a.conversionRate);
 
+  if (salesSummary.unattributedSales > 0) {
+    funnelData.push({
+      id: "unattributed-sales",
+      productName: "Não atribuída",
+      platform: "Marketplace",
+      channel: "Não atribuída",
+      clicks: 0,
+      sales: salesSummary.unattributedSales,
+      conversionRate: 0,
+      revenue: salesSummary.unattributedRevenue,
+      revenuePerClick: 0,
+    });
+  }
+
   return {
     trafficTrends,
     sourceData,
     deviceData,
     funnelData,
     totalClicks: clickSummary.totalClicks,
-    totalSales: clickSummary.totalSales
+    totalSales: salesSummary.totalSales,
+    totalRevenue: salesSummary.totalRevenue,
+    unattributedSales: salesSummary.unattributedSales,
+    unattributedRevenue: salesSummary.unattributedRevenue,
   };
 }

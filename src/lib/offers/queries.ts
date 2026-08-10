@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { AffiliateLink, Offer, Sale } from "@/types/domain";
-import { countClicksByAffiliateLink, type ClickEventMetric } from "@/lib/analytics/metrics";
+import { countClicksByAffiliateLink, summarizeSales, type ClickEventMetric, type SaleMetric } from "@/lib/analytics/metrics";
 
 export async function getCurrentUserId() {
   const supabase = await createServerSupabaseClient();
@@ -247,9 +247,10 @@ export async function getTrackingReports() {
 
   const { data: salesData } = await supabase
     .from("sales")
-    .select("affiliate_link_id, commission_value, status, gross_value");
+    .select("affiliate_link_id, offer_id, channel, commission_value, status, gross_value");
+  const salesSummary = summarizeSales((salesData || []) as SaleMetric[]);
 
-  return linksData.map((link: any) => {
+  const reports = linksData.map((link: any) => {
     const linkSales = salesData?.filter((sale) => sale.affiliate_link_id === link.id) || [];
     const conversions = linkSales.length;
     const revenue = linkSales
@@ -274,6 +275,24 @@ export async function getTrackingReports() {
       platform: link.offers?.platform || "Outro"
     };
   });
+
+  if (salesSummary.unattributedSales > 0) {
+    reports.push({
+      id: "unattributed-sales",
+      channel: "Não atribuída",
+      subId: null,
+      trackedUrl: "#",
+      clicks: 0,
+      conversions: salesSummary.unattributedSales,
+      revenue: salesSummary.unattributedRevenue,
+      roi: 0,
+      isOrganic: true,
+      productName: "Não atribuída",
+      platform: "Marketplace",
+    });
+  }
+
+  return reports;
 }
 
 /**

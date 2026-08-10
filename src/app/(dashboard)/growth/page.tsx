@@ -19,7 +19,7 @@ export default async function GrowthDashboardPage({
     return <div className="p-10 text-white/50 text-center">Nenhum dado de tracking encontrado.</div>;
   }
 
-  const { trafficTrends, sourceData, deviceData, funnelData, totalClicks, totalSales } = data;
+  const { trafficTrends, sourceData, deviceData, funnelData, totalClicks, totalSales, totalRevenue } = data;
 
   const getSourceTone = (source: string) => {
     if (source === 'instagram') return 'instagram';
@@ -57,7 +57,7 @@ export default async function GrowthDashboardPage({
       </header>
 
       {/* Global KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="glass-card p-5 border border-white/[0.04]">
           <h3 className="text-xs font-bold text-white/40 uppercase tracking-widest mb-1 flex items-center gap-2">
             <Link2 size={14} /> Total de Cliques
@@ -72,6 +72,15 @@ export default async function GrowthDashboardPage({
           <p className="mt-1 text-[11px] text-white/30">
             {totalSales === 0 ? "Nenhuma venda registrada" : "vendas confirmadas"}
           </p>
+        </div>
+        <div className="glass-card p-5 border border-amber-500/10">
+          <h3 className="text-xs font-bold text-amber-400/70 uppercase tracking-widest mb-1 flex items-center gap-2">
+            <DollarSign size={14} /> Comissão Confirmada
+          </h3>
+          <p className="text-3xl font-black text-amber-300">
+            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(totalRevenue)}
+          </p>
+          <p className="mt-1 text-[11px] text-white/30">Inclui vendas não atribuídas</p>
         </div>
         <div className="glass-card p-5 border border-purple-500/10">
           <h3 className="text-xs font-bold text-purple-400/70 uppercase tracking-widest mb-1 flex items-center gap-2">

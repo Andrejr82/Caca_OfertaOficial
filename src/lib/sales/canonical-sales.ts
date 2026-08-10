@@ -26,7 +26,7 @@ export type AffiliateLinkReference = {
 
 export type CanonicalSale = {
   user_id: string;
-  offer_id: string;
+  offer_id: string | null;
   affiliate_link_id: string | null;
   channel: SalesChannel | null;
   gross_value: number;
@@ -56,6 +56,7 @@ export function createSupabaseSalesRepository(supabase: {
 
 const STATUS_ALIASES: Record<string, SaleStatus> = {
   pending: "pending",
+  pendente: "pending",
   processing: "pending",
   review: "pending",
   approved: "confirmed",
@@ -96,7 +97,7 @@ function normalizeMoney(value: number | string, field: string): number {
     ? Number(normalized.replace(/\./g, "").replace(",", "."))
     : Number(normalized);
   if (!Number.isFinite(parsed) || parsed < 0) throw new Error(`${field} inválido`);
-  return Number(parsed.toFixed(2));
+  return parsed;
 }
 
 function normalizeChannel(value: string | null | undefined): SalesChannel | null {
@@ -120,7 +121,6 @@ export function normalizeMarketplaceSale(
 ): CanonicalSale {
   if (!input.sourceEventId.trim()) throw new Error("sourceEventId é obrigatório para idempotência");
   if (!input.userId.trim()) throw new Error("userId é obrigatório");
-  if (!input.offerId.trim()) throw new Error("offerId é obrigatório");
 
   const soldAt = new Date(input.soldAt);
   if (Number.isNaN(soldAt.getTime())) throw new Error("soldAt inválido");
@@ -130,7 +130,7 @@ export function normalizeMarketplaceSale(
 
   return {
     user_id: input.userId,
-    offer_id: input.offerId,
+    offer_id: input.offerId.trim() || link?.offer_id || null,
     affiliate_link_id: link?.id || null,
     channel,
     gross_value: normalizeMoney(input.grossValue, "grossValue"),
@@ -144,12 +144,8 @@ export function normalizeMarketplaceSale(
 }
 
 export async function upsertCanonicalSale(sale: CanonicalSale, repository: SalesRepository) {
-  if (!sale.channel) {
-    return { status: "skipped" as const, reason: "channel_missing_for_sales_schema" };
-  }
-
   const { data, error } = await repository.upsert(
-    { ...sale, channel: sale.channel },
+    sale,
     { onConflict: "user_id,marketplace,source_event_id" },
   );
   if (error) throw new Error(`Falha ao upsertar venda canônica: ${error.message}`);
