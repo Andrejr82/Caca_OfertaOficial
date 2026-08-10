@@ -12,6 +12,7 @@ import { listTrendExperiments, listTrendOpportunities, listTrendSignals } from "
 export default async function TrendsPage() {
   const [signals, opportunities, experiments] = await Promise.all([listTrendSignals(), listTrendOpportunities(), listTrendExperiments()]);
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
+  const opportunityById = new Map(opportunities.map((opportunity) => [opportunity.id, opportunity]));
   const { operational: eligibleSignals, audit: rejectedSignals, pending: pendingSignals } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
   const radar = rankDailyTrendRadar(buildDailyRadarFromTrendSignals(signals, opportunities));
   const topRadar = radar.filter((result) => result.evidence_status === "verified" || result.evidence_status === "partial");
@@ -163,13 +164,24 @@ export default async function TrendsPage() {
           {opportunities.map((opportunity) => (
             <article key={opportunity.id} className="glass-card p-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <h2 className="font-bold text-white">{opportunity.signalTitle}</h2>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">Opportunity real</p>
+                  <h2 className="mt-1 font-bold text-white">{opportunity.normalizedProductTerm || opportunity.signalTitle}</h2>
+                </div>
                 <span className="rounded-full bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-300">{opportunity.status}</span>
               </div>
-              <p className="mt-3 text-sm text-white/40">Produto: {opportunity.normalizedProductTerm || "n/d"} · Marketplace: {opportunity.marketplace || "n/d"}</p>
+              <p className="mt-3 text-sm text-white/40">Sinal: {opportunity.signalTitle} · Marketplace: {opportunity.marketplace || "n/d"}</p>
               <p className="mt-1 text-sm text-white/40">Oferta: {opportunity.offerId || "Nenhuma oferta compatível encontrada"} · Confiança: {opportunity.matchConfidence ?? "n/d"}</p>
               <p className="mt-1 text-sm text-white/40">Preço atual: {opportunity.currentPrice == null ? "n/d" : `R$ ${opportunity.currentPrice.toFixed(2)}`} · Desconto real: {opportunity.oldPrice && opportunity.currentPrice && opportunity.oldPrice > opportunity.currentPrice ? `${Math.round((1 - opportunity.currentPrice / opportunity.oldPrice) * 100)}%` : "n/d"}</p>
               <p className="mt-1 text-xs text-white/30">{opportunity.matchReason || "Sem motivo registrado."}</p>
+              {opportunity.recommendation ? (
+                <div className="mt-4 rounded-lg border border-cyan-400/10 bg-cyan-500/[0.04] p-3 text-xs text-white/55">
+                  <p className="font-bold text-cyan-200">Recommendation IA</p>
+                  <p className="mt-1">Canal: {opportunity.recommendation.channel || "n/d"} · Formato: {opportunity.recommendation.format || "n/d"} · Confiança: {opportunity.recommendation.confidence ?? "n/d"}</p>
+                  <p className="mt-1">Aprovação: {opportunity.recommendation.status || "n/d"}</p>
+                  {opportunity.recommendation.justification ? <p className="mt-2 text-white/40">{opportunity.recommendation.justification}</p> : null}
+                </div>
+              ) : <p className="mt-3 text-xs text-white/30">Recommendation: ainda não disponível.</p>}
             </article>
           ))}
         </section>
@@ -190,12 +202,16 @@ export default async function TrendsPage() {
             {experiments.map((experiment) => (
               <article key={experiment.id} className="rounded-lg border border-white/[0.05] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <h3 className="text-sm font-bold text-white">{experiment.hypothesis || "Hipótese não registrada"}</h3>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-violet-300">{opportunityById.get(experiment.opportunityId)?.normalizedProductTerm || "Experimento real"}</p>
+                    <h3 className="mt-1 text-sm font-bold text-white">{experiment.hypothesis || "Hipótese não registrada"}</h3>
+                  </div>
                   <span className="rounded-full bg-violet-500/10 px-2 py-1 text-[10px] font-bold uppercase text-violet-300">{experiment.status}</span>
                 </div>
-                <p className="mt-2 text-xs text-white/40">Canal: {experiment.channel || "n/d"} · Formato: {experiment.format || "n/d"}</p>
+                <p className="mt-2 text-xs text-white/40">Canal: {experiment.channel || "n/d"} · Formato: {experiment.format || "n/d"} · Duração: {experiment.windowDays} dias</p>
                 <p className="mt-1 text-xs text-white/40">Início: {experiment.startedAt || "n/d"} · Fim: {experiment.endsAt || "n/d"}</p>
                 <p className="mt-3 text-xs text-white/35">Métricas: vendas {experiment.metrics.salesCount ?? experiment.metrics.sales_count ?? 0} · cliques {experiment.metrics.clicks ?? 0} · comissão {experiment.metrics.commissionValue ?? experiment.metrics.commission_value ?? 0}</p>
+                <p className="mt-1 text-xs text-white/35">CTR: {experiment.metrics.ctr == null ? "não disponível" : experiment.metrics.ctr}</p>
                 <p className="mt-1 text-xs text-white/30">Decisão: {experiment.finalDecision || "pendente"}{experiment.decisionReason ? ` · ${experiment.decisionReason}` : ""}</p>
               </article>
             ))}

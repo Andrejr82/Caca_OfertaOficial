@@ -117,4 +117,27 @@ describe("DailyTrendRadarResult", () => {
     expect(result.evidence_status).toBe("unverified");
     expect(rankDailyTrendRadar([result])[0].rank).toBeNull();
   });
+
+  it("lê evidência persistida do Radar externo e preserva match/opportunity", () => {
+    const [result] = buildDailyRadarFromTrendSignals([{
+      id: "radar-bella", sourceType: "external", sourceName: "external_radar", source: "external_radar", region: "BR", externalId: "bella", term: "Escova Secadora Britânia BELLA01", title: "Escova Secadora Britânia BELLA01", evidence: {
+        source_urls: ["https://shopee.com.br/list/Escova-Secadora"],
+        direct_evidence: [{ claim: "Britânia BELLA01 aparece na posição 2 de mais vendidos por R$99,90.", source_url: "https://shopee.com.br/list/Escova-Secadora" }],
+        evidence_status: "verified",
+        category: "Beleza e cuidados capilares"
+      }, observedAt: "2026-08-10T12:00:00.000Z", capturedAt: "2026-08-10T12:00:00.000Z", trendStrength: null, trendDirection: null, offerId: null, classification: {
+        id: "classification-bella", signalId: "radar-bella", commercialRelevance: 90, isProductIntent: true, normalizedProductTerm: "escova secadora britania bella01", categoryHint: "Beleza e cuidados capilares", decision: "eligible", reason: "Produto identificado", aiModel: "model", strategyVersion: "trend-commercial-v1", classifiedAt: "2026-08-10T12:00:00.000Z"
+      }
+    }], [{
+      id: "opportunity-bella", signalId: "radar-bella", classificationId: null, offerId: "offer-bella", marketplace: "Shopee", normalizedProductTerm: "escova secadora britania bella01", matchStatus: "matched", matchReason: "Identidade validada", matchConfidence: 100, currentPrice: 94.9, oldPrice: null, score: null, status: "matched", experimentId: "experiment-bella", strategyVersion: "daily-commercial-radar-v1", finalDecision: null, signalTitle: "Escova Secadora Britânia BELLA01", recommendation: null
+    }]);
+
+    expect(result).toMatchObject({
+      evidence_status: "verified",
+      marketplaces: ["Shopee"],
+      match_status: "matched",
+      opportunity_id: "opportunity-bella",
+      observed_price_min: 99.9
+    });
+  });
 });

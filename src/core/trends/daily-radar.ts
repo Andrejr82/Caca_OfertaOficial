@@ -296,22 +296,34 @@ export function buildDailyRadarFromTrendSignals(
     const opportunity = opportunityBySignal.get(signal.id);
     const evidence = signal.evidence ?? {};
     const sourceUrls = [validUrl(evidence.link), validUrl(evidence.exploreLink)].filter((url): url is string => Boolean(url));
+    const persistedSourceUrls = Array.isArray(evidence.source_urls)
+      ? evidence.source_urls.map(validUrl).filter((url): url is string => Boolean(url))
+      : [];
+    const persistedEvidence = Array.isArray(evidence.direct_evidence) ? evidence.direct_evidence : [];
     const classification = signal.classification;
-    const result = normalizeRadarInput({
+    const normalized = normalizeRadarInput({
       radar_date: signal.observedAt.slice(0, 10),
       product_term: signal.term,
       normalized_product_term: classification?.normalizedProductTerm || signal.term,
       category: classification?.categoryHint,
       marketplaces: opportunity?.marketplace ? [opportunity.marketplace] : [],
       source_types: [signal.sourceName],
-      source_urls: sourceUrls,
+      source_urls: [...new Set([...sourceUrls, ...persistedSourceUrls])],
       observed_at: signal.observedAt,
-      direct_evidence: sourceUrls.map((sourceUrl) => ({ claim: `Sinal observado em ${signal.sourceName}.`, source_url: sourceUrl, observed_at: signal.observedAt })),
+      direct_evidence: persistedEvidence.length > 0
+        ? persistedEvidence
+        : sourceUrls.map((sourceUrl) => ({ claim: `Sinal observado em ${signal.sourceName}.`, source_url: sourceUrl, observed_at: signal.observedAt })),
       inferred_signals: [],
       trending_flag: signal.source === "google_trends" ? true : null,
       match_status: opportunity?.matchStatus || "pending",
       opportunity_id: opportunity?.id || null
-    });
+    }, { external: true });
+    const result = {
+      ...normalized,
+      marketplaces: opportunity?.marketplace ? [opportunity.marketplace] : normalized.marketplaces,
+      match_status: opportunity?.matchStatus || "pending",
+      opportunity_id: opportunity?.id || null
+    };
     if (classification?.decision === "rejected") return { ...result, evidence_status: "rejected", confidence: 0, affiliate_potential: "low", visual_content_potential: "unassessed" };
     if (!classification) return { ...result, evidence_status: "unverified", confidence: 0, affiliate_potential: "unassessed", visual_content_potential: "unassessed" };
     return result;
