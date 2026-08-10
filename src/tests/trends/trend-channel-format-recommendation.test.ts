@@ -31,6 +31,19 @@ function providerWith(content: unknown): AIProviderPort {
   };
 }
 
+function providerWithSequence(contents: unknown[], prompts: string[]) : AIProviderPort {
+  let index = 0;
+  return {
+    name: "groq",
+    model: "llama-3.3-70b-versatile",
+    generate: async (request) => {
+      prompts.push(request.prompt.system);
+      const content = contents[index++];
+      return { content, provider: "groq", model: "llama-3.3-70b-versatile", latencyMs: 1 };
+    }
+  };
+}
+
 describe("trend channel and format recommendation", () => {
   it("returns a structured recommendation for a valid matched opportunity", async () => {
     const result = await recommendTrendChannelAndFormat(opportunity, {
@@ -57,6 +70,21 @@ describe("trend channel and format recommendation", () => {
     });
   });
 
+  it("normalizes the provider's English video alias to the existing contract value", async () => {
+    const result = await recommendTrendChannelAndFormat(opportunity, {
+      offerTitle: "Produto real",
+      evidenceStatus: "verified",
+      provenance: "external_radar"
+    }, providerWith({
+      channel: "Instagram",
+      format: "video",
+      rationale: "O produto permite demonstração visual.",
+      hypothesis: "Uma demonstração pode facilitar a compreensão do uso.",
+      confidence: 80
+    }));
+    expect(result?.format).toBe("vídeo");
+  });
+
   it("fails closed for invalid channel or format", async () => {
     await expect(recommendTrendChannelAndFormat(opportunity, {
       offerTitle: "Produto real",
@@ -74,9 +102,41 @@ describe("trend channel and format recommendation", () => {
       channel: "Instagram",
       format: "vídeo",
       rationale: "Produto demonstrável.",
-      hypothesis: "Aumentará o CTR e a conversão.",
+      hypothesis: "Aumentará os cliques e as conversões.",
       confidence: 80
     }))).resolves.toBeNull();
+  });
+
+  it("retries once after invalid output and accepts a valid second response", async () => {
+    const prompts: string[] = [];
+    const result = await recommendTrendChannelAndFormat(opportunity, {
+      offerTitle: "Produto real",
+      evidenceStatus: "verified",
+      provenance: "external_radar"
+    }, providerWithSequence([
+      { channel: "Instagram", format: "vídeo", rationale: "Aumentará o CTR.", hypothesis: "x", confidence: 80 },
+      { channel: "Instagram", format: "vídeo", rationale: "O produto tem demonstração visual clara.", hypothesis: "Uma demonstração pode facilitar a compreensão do uso.", confidence: 80 }
+    ], prompts));
+
+    expect(result?.channel).toBe("Instagram");
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("Remova qualquer menção");
+  });
+
+  it("uses at most one retry and remains fail-closed when both outputs are invalid", async () => {
+    const prompts: string[] = [];
+    const result = await recommendTrendChannelAndFormat(opportunity, {
+      offerTitle: "Produto real",
+      evidenceStatus: "verified",
+      provenance: "external_radar"
+    }, providerWithSequence([
+      { channel: "Instagram", format: "vídeo", rationale: "Aumentará o CTR.", hypothesis: "x", confidence: 80 },
+      { channel: "TikTok", format: "live", rationale: "Ainda inválido.", hypothesis: "y", confidence: 80 },
+      { channel: "WhatsApp", format: "imagem", rationale: "Não deve ser usado.", hypothesis: "z", confidence: 80 }
+    ], prompts));
+
+    expect(result).toBeNull();
+    expect(prompts).toHaveLength(2);
   });
 
   it("fails closed when provider fails or opportunity is not matched", async () => {
