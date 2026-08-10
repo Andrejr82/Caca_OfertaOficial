@@ -139,11 +139,16 @@ function validDate(value: unknown): string | null {
 
 function normalizeMarketplaceIdentity(value: unknown): Record<string, string | null> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value as Record<string, unknown>).flatMap(([key, raw]) => {
-    if (raw === null) return [[key, null]];
+  const entries: Array<[string, string | null]> = [];
+  for (const [key, raw] of Object.entries(value as Record<string, unknown>)) {
+    if (raw === null) {
+      entries.push([key, null]);
+      continue;
+    }
     const normalized = text(raw);
-    return normalized ? [[key, normalized]] : [];
-  }));
+    if (normalized) entries.push([key, normalized]);
+  }
+  return Object.fromEntries(entries);
 }
 
 function emptyDirectEvidence(claim: string): RadarDirectEvidence {
@@ -380,7 +385,7 @@ export function buildDailyRadarFromTrendSignals(
   opportunities: TrendOpportunityListItem[]
 ): DailyTrendRadarResult[] {
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
-  return signals.map((signal) => {
+  return signals.map((signal): DailyTrendRadarResult => {
     const opportunity = opportunityBySignal.get(signal.id);
     const evidence = signal.evidence ?? {};
     const sourceUrls = [validUrl(evidence.link), validUrl(evidence.exploreLink)].filter((url): url is string => Boolean(url));
@@ -406,10 +411,10 @@ export function buildDailyRadarFromTrendSignals(
       match_status: opportunity?.matchStatus || "pending",
       opportunity_id: opportunity?.id || null
     }, { external: true });
-    const result = {
+    const result: DailyTrendRadarResult = {
       ...normalized,
       marketplaces: opportunity?.marketplace ? [opportunity.marketplace] : normalized.marketplaces,
-      match_status: opportunity?.matchStatus || "pending",
+      match_status: opportunity?.matchStatus ?? "pending",
       opportunity_id: opportunity?.id || null
     };
     if (classification?.decision === "rejected") return { ...result, evidence_status: "rejected", confidence: 0, affiliate_potential: "low", visual_content_potential: "unassessed" };
