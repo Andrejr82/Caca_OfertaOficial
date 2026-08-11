@@ -101,15 +101,18 @@ function text(value: string): string {
   return value.trim();
 }
 
-function validDate(value: string): boolean {
-  return !Number.isNaN(new Date(value).getTime());
+function timestamp(value: string): number | null {
+  const result = new Date(value).getTime();
+  return Number.isNaN(result) ? null : result;
 }
 
 function validateSnapshot(input: TrendRadarSnapshotInput): void {
   if (!/^\d{4}-\d{2}-\d{2}$/u.test(input.radarDate)) {
     throw new Error("radarDate inválido.");
   }
-  if (!validDate(input.windowStart) || !validDate(input.windowEnd) || new Date(input.windowEnd) <= new Date(input.windowStart)) {
+  const windowStart = timestamp(input.windowStart);
+  const windowEnd = timestamp(input.windowEnd);
+  if (windowStart === null || windowEnd === null || windowEnd <= windowStart) {
     throw new Error("janela do Radar inválida.");
   }
   if (!text(input.strategyVersion)) throw new Error("strategyVersion obrigatório.");
