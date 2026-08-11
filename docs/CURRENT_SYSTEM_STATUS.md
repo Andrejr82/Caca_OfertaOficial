@@ -1,8 +1,8 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: 98d7b87 -->
+<!-- verified-on: 2026-08-11 -->
 
 Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Oracle, PM2, Meta, Telegram, WhatsApp e marketplaces precisa ser confirmada no ambiente correspondente.
 
@@ -49,3 +49,11 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 ## Limites
 
 Este documento confirma capacidade versionada, não estado de produção. Antes de declarar uma integração ativa, validar deploy, variáveis, migrations, filas, logs, credenciais e um smoke test do canal.
+
+## IA Executiva de Tendências
+
+- Fases 1–5 do plano de Trends foram implementadas e validadas no branch de feature.
+- Radar diário: snapshots persistidos, ranking Top 20/Top 3, saúde de fontes, evidência direta e Score `commercial-opportunity-score-v2`.
+- Integração Radar → Oracle está preparada apenas para observação/controlada; `TREND_EXECUTIVE_MODE=off` é o estado seguro e `active` continua bloqueado.
+- Feedback experimental `SCALE | ADJUST | ABORT` é auditável, mas não altera pesos automaticamente.
+- Governança bloqueia fontes degradadas/drifted e exige revisão humana para mudanças de pesos ou ativação.

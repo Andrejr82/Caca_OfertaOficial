@@ -20,6 +20,31 @@ export type TrendDirection = "rising" | "stable" | "falling";
 export type TrendCommercialDecision = "eligible" | "rejected";
 export type TrendMatchStatus = "matched" | "no_match";
 
+export interface TrendDirectEvidence {
+  claim: string;
+  evidence_type: string | null;
+  source_url: string | null;
+  observed_at: string | null;
+  rank_position: number | null;
+  best_seller_flag: boolean | null;
+  trending_flag: boolean | null;
+  sold_quantity: number | null;
+  price: number | null;
+  old_price: number | null;
+  discount_percent: number | null;
+  rating: number | null;
+  review_count: number | null;
+  shipping: string | null;
+  marketplace_identity: Record<string, string | null>;
+}
+
+export type PersistedTrendDirectEvidence = Pick<TrendDirectEvidence, "claim"> & Partial<Omit<TrendDirectEvidence, "claim">>;
+
+export interface TrendSignalEvidence extends Record<string, unknown> {
+  direct_evidence?: PersistedTrendDirectEvidence[];
+  source_urls?: unknown;
+}
+
 export interface TrendSignal {
   id: string;
   sourceType: TrendSourceType;
@@ -29,7 +54,7 @@ export interface TrendSignal {
   externalId: string | null;
   term: string;
   title: string;
-  evidence: Record<string, unknown>;
+  evidence: TrendSignalEvidence;
   observedAt: string;
   capturedAt: string;
   trendStrength: number | null;

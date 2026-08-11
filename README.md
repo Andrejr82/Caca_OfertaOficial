@@ -1,8 +1,8 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: 98d7b87 -->
+<!-- verified-on: 2026-08-11 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
@@ -99,3 +99,7 @@ npm run verify
 - `scripts/github-publish.ts`: fluxo de publicação de vídeos via GitHub/Storage quando habilitado.
 
 Ativação produtiva de Oracle, Vercel, Supabase, PM2, GitHub Actions e provedores externos não é inferida apenas pelo checkout. Confirme o ambiente e siga os runbooks antes de executar operações de produção.
+
+## IA Executiva de Tendências
+
+O runtime versionado inclui o Radar Executivo de Tendências em `/trends`, com evidência direta, snapshots auditáveis, Score V2, Top 3/Top 20, performance interna e contratos de integração Radar → Oracle. O modo operacional de Trend Executive permanece **fail-closed em `off`**; `shadow` não substitui a autoridade do cenário legado e `active` continua bloqueado até evidência suficiente e autorização explícita. Consulte `docs/AI_EXECUTIVE_TRENDS.md` e os relatórios `docs/TREND_EXECUTIVE_*`.
