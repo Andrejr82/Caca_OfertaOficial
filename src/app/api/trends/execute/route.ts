@@ -8,7 +8,6 @@ import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/merc
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { fetchGoogleTrendSignals } from "@/lib/trends/google-trends-adapter";
 import { fetchMercadoLivreTrendSignals } from "@/lib/trends/mercado-livre-trends-adapter";
-import { searchMercadoLivreForTrendQueries, type ExistingMercadoLivreProduct } from "@/lib/trends/mercado-livre-search-adapter";
 import { matchTrendSignalsForUser } from "@/lib/trends/matching";
 import { persistTrendSignalClassifications, persistTrendSignals } from "@/lib/trends/persistence";
 import { listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
@@ -22,8 +21,6 @@ import {
   createSupabaseTrendRadarSnapshotStore,
   persistTrendRadarSnapshot,
 } from "@/lib/trends/radar-snapshots";
-import { discoverMarketplaceCandidates } from "@/lib/trends/targeted-marketplace-discovery";
-import { searchShopeeOfficialV1 } from "@/lib/trends/shopee-search-adapter";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -113,34 +110,10 @@ export async function POST() {
     }
 
     stage = "match";
-    const mercadoLivre = require("../../../../../scripts/mercadolivre-official-intents-v5.cjs") as {
-      runMercadoLivreOfficialIntentCoverage(input: {
-        keywords: string[];
-        accessToken: string;
-        maxPerIntent: number;
-        delayMs: number;
-      }): Promise<{ products?: ExistingMercadoLivreProduct[] }>;
-    };
-    const matching = await matchTrendSignalsForUser(client, user.id, async (classification) => {
-      const term = classification.normalizedProductTerm ?? "";
-      const [shopee, mercadoLivreResult] = await Promise.all([
-        discoverMarketplaceCandidates({
-          marketplace: "Shopee",
-          normalizedProductTerm: term,
-          productIdentity: term,
-          searchShopee: searchShopeeOfficialV1,
-        }),
-        accessToken
-          ? discoverMarketplaceCandidates({
-              marketplace: "Mercado Livre",
-              normalizedProductTerm: term,
-              productIdentity: term,
-              searchMercadoLivre: (query) => searchMercadoLivreForTrendQueries(mercadoLivre, [query], accessToken),
-            })
-          : Promise.resolve(null),
-      ]);
-      return [...shopee.candidates, ...(mercadoLivreResult?.candidates ?? [])];
-    });
+    // A execução do Radar precisa ser determinística e terminar dentro da
+    // requisição. Discovery externo permanece na rota dedicada de matching e,
+    // futuramente, no Oracle shadow. Aqui usamos apenas ofertas já persistidas.
+    const matching = await matchTrendSignalsForUser(client, user.id);
 
     stage = "rank";
     signals = await listTrendSignals();
@@ -165,6 +138,7 @@ export async function POST() {
         },
         matching: {
           status: "healthy",
+          mode: "persisted_offers_only",
           eligibleSignals: matching.eligibleSignals,
           matchedSignals: matching.matchedSignals,
           noMatchSignals: matching.noMatchSignals,
