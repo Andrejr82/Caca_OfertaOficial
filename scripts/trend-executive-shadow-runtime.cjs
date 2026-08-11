@@ -58,9 +58,11 @@ function resolveShopeeScenarioForIntent(intent, scenarios = SHOPEE_SCENARIOS) {
   return ranked[0]?.id || null;
 }
 
-function isShopeeProduct(product) {
+function classifyShopeeShadowMarketplace(product) {
   const key = normalizeText(product?.marketplace_key || product?.marketplace);
-  return key === 'shopee';
+  if (!key) return { eligible: true, source: 'shadow_runner_default' };
+  if (key === 'shopee') return { eligible: true, source: 'radar' };
+  return { eligible: false, source: 'radar' };
 }
 
 function buildRadarShadowState(snapshot, { scenarios = SHOPEE_SCENARIOS, maxIntents = DEFAULT_MAX_INTENTS } = {}) {
@@ -76,7 +78,11 @@ function buildRadarShadowState(snapshot, { scenarios = SHOPEE_SCENARIOS, maxInte
   const ordered = [...products].sort((a, b) => Number(a?.priority || 999) - Number(b?.priority || 999));
 
   for (const product of ordered) {
-    if (!isShopeeProduct(product)) continue;
+    const marketplace = classifyShopeeShadowMarketplace(product);
+    if (!marketplace.eligible) {
+      rejected.push({ radarProductId: product?.id || null, reason: 'marketplace_ineligible' });
+      continue;
+    }
     if (!ELIGIBLE_EVIDENCE.has(String(product?.evidence_status || '').toLowerCase())) {
       rejected.push({ radarProductId: product?.id || null, reason: 'evidence_ineligible' });
       continue;
@@ -96,6 +102,7 @@ function buildRadarShadowState(snapshot, { scenarios = SHOPEE_SCENARIOS, maxInte
       radarRunId: run.id,
       radarProductId: product.id,
       marketplace: 'Shopee',
+      marketplaceSource: marketplace.source,
       searchTerms: [productTerm],
       category: product?.category || null,
       priority: Number(product?.priority || contracts.length + 1),
@@ -220,6 +227,7 @@ if (require.main === module) {
 module.exports = {
   DEFAULT_MAX_INTENTS,
   buildRadarShadowState,
+  classifyShopeeShadowMarketplace,
   loadLatestRadarSnapshot,
   resolveShopeeScenarioForIntent,
   runTrendExecutiveShadow,
