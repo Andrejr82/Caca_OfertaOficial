@@ -36,9 +36,21 @@ describe("Radar execution route contract", () => {
     const source = fs.readFileSync(routePath, "utf8");
 
     expect(source).toContain("const collectedExternalIds = new Set<string>()");
-    expect(source).toContain("collectedExternalIds.add(signal.externalId)");
+    expect(source).toContain("const collectedSignals: TrendSignal[] = []");
+    expect(source).toContain("collectedSignals.push(...googleSignals)");
+    expect(source).toContain("collectedSignals.push(...mlSignals)");
     expect(source).toContain("externalIds: refreshRequested ? [...collectedExternalIds] : undefined");
     expect(source.match(/externalIds: refreshRequested \? \[\.\.\.collectedExternalIds\] : undefined/g)?.length).toBe(2);
+  });
+
+  it("sobrepõe evidência fresca mesmo quando deduplicação não persiste a coleta", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+
+    expect(source).toContain("mergeCurrentCollectionSignals");
+    expect(source).toContain("evidence: current.evidence");
+    expect(source).toContain("observedAt: current.observedAt");
+    expect(source).toContain("capturedAt: current.capturedAt");
+    expect(source.match(/signals = mergeCurrentCollectionSignals\(signals, collectedSignals\)/g)?.length).toBe(2);
   });
 
   it("permite refresh explícito sem substituir a execução diária", () => {
