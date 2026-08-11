@@ -77,6 +77,16 @@ describe("Commercial Opportunity Score V2", () => {
     expect(result.total).toBe(100);
   });
 
+  it("não conta tipo e URL da mesma fonte como duas fontes", () => {
+    const result = calculateCommercialOpportunityScoreV2(radar({
+      source_types: ["mercado_livre_best_seller"],
+      source_urls: ["https://www.mercadolivre.com.br/c"],
+      source_count: 1,
+    }));
+
+    expect(result.breakdown.sourceConvergence).toBe(0);
+  });
+
   it("usa zero para performance interna ausente ou não verificada", () => {
     expect(calculateCommercialOpportunityScoreV2(radar()).breakdown.internalPerformance).toBe(0);
     expect(calculateCommercialOpportunityScoreV2(radar(), {
