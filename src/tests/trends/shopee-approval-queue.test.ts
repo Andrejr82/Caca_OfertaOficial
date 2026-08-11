@@ -93,6 +93,16 @@ describe("Shopee approval queue", () => {
     expect(ranked[0].score).toBeGreaterThanOrEqual(ranked[1].score);
   });
 
+  it("normaliza score persistido para 0-10 e preserva ranking completo na explicabilidade", () => {
+    const selected = rankTrendShopeeCandidates(radar("charger", 1, "carregador portatil"), [candidate("123", "Carregador Portatil 20000mAh")]);
+    const rows = buildTrendShopeeApprovalRows("user-1", "run-1", selected);
+    expect(selected[0].score).toBeGreaterThan(10);
+    expect(rows[0].score).toBeGreaterThanOrEqual(0);
+    expect(rows[0].score).toBeLessThanOrEqual(10);
+    expect(rows[0].score).toBe(Number((selected[0].score / 10).toFixed(2)));
+    expect(rows[0].explainability.ranking_score).toBe(selected[0].score);
+  });
+
   it("materializa somente pending_manual_review e mantém publicação automática desligada", async () => {
     const selected = rankTrendShopeeCandidates(radar("charger", 1, "carregador portatil"), [candidate("123", "Carregador Portatil 20000mAh")]);
     const rows = buildTrendShopeeApprovalRows("user-1", "run-1", selected);
