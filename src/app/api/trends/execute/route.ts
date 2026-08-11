@@ -4,9 +4,11 @@ import { classifyTrendSignal, TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/a
 import { DAILY_TREND_RADAR_STRATEGY_VERSION, buildDailyRadarFromTrendSignals } from "@/core/trends/daily-radar";
 import { buildExecutiveRadarRanking } from "@/core/trends/executive-radar-ranking";
 import { buildStrongestNiches7d } from "@/core/trends/strongest-niches-7d";
+import { buildInternalPerformanceByProduct } from "@/core/trends/internal-performance-score";
 import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { fetchGoogleTrendSignals } from "@/lib/trends/google-trends-adapter";
+import { loadInternalClickSignals } from "@/lib/trends/internal-click-performance";
 import { fetchMercadoLivreTrendSignals } from "@/lib/trends/mercado-livre-trends-adapter";
 import { matchTrendSignalsForUser } from "@/lib/trends/matching";
 import { persistTrendSignalClassifications, persistTrendSignals } from "@/lib/trends/persistence";
@@ -24,6 +26,8 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+const INTERNAL_PERFORMANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 type SourceHealthEntry = {
   status: "healthy" | "degraded" | "unavailable";
@@ -110,9 +114,6 @@ export async function POST() {
     }
 
     stage = "match";
-    // A execução do Radar precisa ser determinística e terminar dentro da
-    // requisição. Discovery externo permanece na rota dedicada de matching e,
-    // futuramente, no Oracle shadow. Aqui usamos apenas ofertas já persistidas.
     const matching = await matchTrendSignalsForUser(client, user.id);
 
     stage = "rank";
@@ -120,7 +121,18 @@ export async function POST() {
     const opportunities = (await listTrendOpportunities())
       .filter((opportunity) => opportunity.strategyVersion === TREND_COMMERCIAL_STRATEGY_VERSION);
     const radar = buildDailyRadarFromTrendSignals(signals, opportunities);
-    const ranking = buildExecutiveRadarRanking(radar, { asOf: window.windowEnd });
+    const internalWindowEnd = new Date(window.windowEnd);
+    const internalWindowStart = new Date(internalWindowEnd.getTime() - INTERNAL_PERFORMANCE_WINDOW_MS);
+    const internalClickSignals = await loadInternalClickSignals(
+      client,
+      internalWindowStart.toISOString(),
+      internalWindowEnd.toISOString(),
+    );
+    const internalPerformanceByProduct = buildInternalPerformanceByProduct(internalClickSignals);
+    const ranking = buildExecutiveRadarRanking(radar, {
+      asOf: window.windowEnd,
+      internalPerformanceByProduct,
+    });
     const niches = buildStrongestNiches7d(radar, { asOf: window.windowEnd });
 
     stage = "persist";
@@ -143,6 +155,10 @@ export async function POST() {
           matchedSignals: matching.matchedSignals,
           noMatchSignals: matching.noMatchSignals,
           opportunitiesCreated: matching.opportunitiesCreated,
+        },
+        internal_clicks: {
+          status: "healthy",
+          productsWithClicks: internalClickSignals.length,
         },
       },
       executiveSummary: {
