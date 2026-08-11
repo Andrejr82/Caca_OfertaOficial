@@ -64,6 +64,18 @@ describe("Executive Radar Top 20 / Top 3", () => {
     expect(ranking.filter((item) => item.isFocus).map((item) => item.priority)).toEqual([1, 2, 3]);
   });
 
+  it("remove identidades comerciais duplicadas antes do Top 20", () => {
+    const ranking = buildExecutiveRadarRanking([
+      radar("Creatina", { normalized_product_term: "creatina", source_count: 2 }),
+      radar("Creatina Growth", { normalized_product_term: "creatina", source_count: 1 }),
+      radar("Chaleira elétrica", { normalized_product_term: "chaleira elétrica" }),
+    ], { asOf: "2026-08-10T23:00:00.000Z" });
+
+    expect(ranking).toHaveLength(2);
+    expect(ranking.filter((item) => item.result.normalized_product_term === "creatina")).toHaveLength(1);
+    expect(ranking.find((item) => item.result.normalized_product_term === "creatina")?.result.product_term).toBe("Creatina");
+  });
+
   it("persiste breakdown auditável e separa evidência de recomendação nos motivos", () => {
     const [item] = buildExecutiveRadarRanking([radar("Fone")], { asOf: "2026-08-10T23:00:00.000Z" });
 
