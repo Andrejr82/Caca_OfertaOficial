@@ -3,7 +3,7 @@ import {
   filterMateriallyChangedTrendSignals,
   trendSignalMaterialFingerprint
 } from "@/lib/trends/trend-evidence-deduplication";
-import type { TrendSignal } from "@/core/trends/types";
+import type { PersistedTrendDirectEvidence, TrendSignal } from "@/core/trends/types";
 
 function signal(overrides: Partial<TrendSignal> = {}): TrendSignal {
   return {
@@ -49,6 +49,37 @@ function signal(overrides: Partial<TrendSignal> = {}): TrendSignal {
   };
 }
 
+function snapshotExternalId(value: TrendSignal): string {
+  if (!value.externalId) throw new Error("Fixture requer externalId.");
+  return value.externalId;
+}
+
+function commercialEvidence(overrides: Partial<PersistedTrendDirectEvidence> = {}): PersistedTrendDirectEvidence {
+  return {
+    claim: "Oferta observada via API oficial.",
+    evidence_type: "mercado_livre_offer",
+    source_url: "https://api.mercadolibre.com/items?ids=MLB123456789",
+    observed_at: "2026-08-11T00:30:00.000Z",
+    rank_position: null,
+    best_seller_flag: null,
+    trending_flag: null,
+    sold_quantity: null,
+    price: 199.9,
+    old_price: null,
+    discount_percent: null,
+    rating: null,
+    review_count: null,
+    shipping: null,
+    marketplace_identity: {
+      marketplace: "mercado_livre",
+      entity_type: "ITEM",
+      item_id: "MLB123456789",
+      product_id: "MLB70334862"
+    },
+    ...overrides
+  };
+}
+
 describe("Trend evidence deduplication", () => {
   it("ignora somente timestamps ao comparar a mesma evidência", () => {
     const before = signal();
@@ -67,7 +98,7 @@ describe("Trend evidence deduplication", () => {
     expect(trendSignalMaterialFingerprint(after)).toBe(trendSignalMaterialFingerprint(before));
     expect(filterMateriallyChangedTrendSignals([after], [{
       source_name: before.sourceName,
-      external_id: before.externalId,
+      external_id: snapshotExternalId(before),
       source_type: before.sourceType,
       source: before.source,
       region: before.region,
@@ -91,7 +122,7 @@ describe("Trend evidence deduplication", () => {
 
     expect(filterMateriallyChangedTrendSignals([after], [{
       source_name: before.sourceName,
-      external_id: before.externalId,
+      external_id: snapshotExternalId(before),
       source_type: before.sourceType,
       source: before.source,
       region: before.region,
@@ -106,20 +137,15 @@ describe("Trend evidence deduplication", () => {
   it("preserva observação quando preço muda", () => {
     const before = signal({
       evidence: {
-        direct_evidence: [{
-          ...(signal().evidence.direct_evidence?.[0] ?? {}),
-          evidence_type: "mercado_livre_offer",
-          price: 199.9
-        }]
+        direct_evidence: [commercialEvidence()]
       }
     });
     const after = signal({
       evidence: {
-        direct_evidence: [{
-          ...(before.evidence.direct_evidence?.[0] ?? {}),
+        direct_evidence: [commercialEvidence({
           observed_at: "2026-08-11T01:30:00.000Z",
           price: 179.9
-        }]
+        })]
       },
       observedAt: "2026-08-11T01:30:00.000Z",
       capturedAt: "2026-08-11T01:30:00.000Z"
@@ -127,7 +153,7 @@ describe("Trend evidence deduplication", () => {
 
     expect(filterMateriallyChangedTrendSignals([after], [{
       source_name: before.sourceName,
-      external_id: before.externalId,
+      external_id: snapshotExternalId(before),
       source_type: before.sourceType,
       source: before.source,
       region: before.region,
