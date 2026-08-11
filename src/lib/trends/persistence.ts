@@ -66,7 +66,13 @@ async function readExistingTrendSignals(
   const table = client.from("trend_signals");
   if (!table.select || signals.length === 0) return [];
 
-  const externalIds = [...new Set(signals.map((signal) => signal.externalId))];
+  const externalIds = [...new Set(
+    signals
+      .map((signal) => signal.externalId)
+      .filter((externalId): externalId is string => typeof externalId === "string" && externalId.length > 0)
+  )];
+  if (externalIds.length === 0) return [];
+
   const { data, error } = await table
     .select("source_name,external_id,source_type,source,region,term,title,evidence,trend_strength,trend_direction")
     .eq("user_id", userId)
