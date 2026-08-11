@@ -18,7 +18,12 @@ describe("Mercado Livre Trends adapter", () => {
       trendDirection: "rising",
       offerId: null
     });
-    expect(signals[0].evidence).toMatchObject({ rank: 1, trendBucket: "fastest_growing", url: "https://lista.mercadolivre.com.br/air-fryer-mondial" });
+    expect(signals[0].evidence).toMatchObject({
+      rank: 1,
+      trendBucket: "fastest_growing",
+      url: "https://lista.mercadolivre.com.br/air-fryer-mondial",
+      link: "https://lista.mercadolivre.com.br/air-fryer-mondial"
+    });
     expect(signals[10].trendDirection).toBeNull();
   });
 
