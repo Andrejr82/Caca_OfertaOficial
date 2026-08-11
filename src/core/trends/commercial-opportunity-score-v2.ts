@@ -40,12 +40,14 @@ function evidenceQuality(result: DailyTrendRadarResult): number {
 }
 
 function sourceConvergence(result: DailyTrendRadarResult): number {
-  const distinctSources = new Set([
-    ...result.source_types.filter(Boolean),
+  const distinctSourceTypes = new Set(result.source_types.filter(Boolean)).size;
+  const distinctSourceUrls = new Set([
+    ...result.source_urls.filter(Boolean),
     ...result.direct_evidence
       .map((item) => item.source_url)
       .filter((value): value is string => Boolean(value)),
   ]).size;
+  const distinctSources = Math.max(distinctSourceTypes, distinctSourceUrls);
 
   if (distinctSources >= 3) return 20;
   if (distinctSources === 2) return 12;
