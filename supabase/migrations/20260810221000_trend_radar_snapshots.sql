@@ -52,9 +52,6 @@ create index if not exists trend_radar_runs_user_date_idx
 create index if not exists trend_radar_runs_user_status_idx
   on public.trend_radar_runs(user_id, status, generated_at desc);
 
-create index if not exists trend_radar_products_run_priority_idx
-  on public.trend_radar_products(radar_run_id, priority);
-
 create index if not exists trend_radar_products_opportunity_idx
   on public.trend_radar_products(opportunity_id)
   where opportunity_id is not null;
