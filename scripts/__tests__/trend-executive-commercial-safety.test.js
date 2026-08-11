@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   buildRadarShadowState,
   classifyTrendCommercialSafety,
+  createTargetedShopeeRequest,
   runTrendExecutiveShadow,
 } = require('../trend-executive-shadow-runtime.cjs');
 
@@ -54,6 +55,25 @@ test('classifica segurança comercial com motivo auditável', () => {
   assert.deepEqual(classifyTrendCommercialSafety({ productTerm: 'iphone 16' }), { eligible: true, reason: null });
 });
 
+test('executa somente uma busca Shopee real pelo termo exato e bloqueia categoria ampla', async () => {
+  const calls = [];
+  const request = createTargetedShopeeRequest(['iphone 16'], async (payload) => {
+    calls.push(JSON.parse(payload));
+    return { status: 200, data: { data: { productOfferV2: { nodes: [], pageInfo: { hasNextPage: false } } } } };
+  });
+
+  const category = await request('ShopeePromotionOffers', 'query', { productCatId: 100013, page: 1 });
+  assert.equal(category.data.data.productOfferV2.nodes.length, 0);
+  assert.equal(calls.length, 0);
+
+  await request('ShopeePromotionOffers', 'query', { keyword: 'carregador turbo', page: 1 });
+  await request('ShopeePromotionOffers', 'query', { keyword: 'capinha celular', page: 1 });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].variables.keyword, 'iphone 16');
+  assert.equal(calls[0].variables.productCatId, null);
+});
+
 test('propaga o termo exato do Radar para a execução Shopee shadow', async () => {
   const calls = [];
   const report = await runTrendExecutiveShadow({
@@ -75,4 +95,5 @@ test('propaga o termo exato do Radar para a execução Shopee shadow', async () 
 
   assert.equal(report.executedIntents, 1);
   assert.deepEqual(calls[0].searchTerms, ['iphone 16']);
+  assert.equal(typeof calls[0].request, 'function');
 });
