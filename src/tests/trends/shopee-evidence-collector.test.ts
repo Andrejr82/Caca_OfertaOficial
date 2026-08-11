@@ -76,6 +76,25 @@ describe("Shopee Evidence Collector", () => {
     });
   });
 
+  it("mantém métricas comerciais ausentes como null", () => {
+    const result = normalizeShopeeProductOfferEvidence([{
+      itemId: "789",
+      shopId: "321",
+      productName: "Organizador",
+      productLink: "https://shopee.com.br/product/321/789",
+      priceMin: 49.9
+    }], { query: "organizador", observedAt, capturedAt: observedAt });
+
+    expect(result.signals[0].evidence.direct_evidence?.[0]).toMatchObject({
+      sold_quantity: null,
+      old_price: null,
+      discount_percent: null,
+      rating: null,
+      review_count: null,
+      shipping: null
+    });
+  });
+
   it("falha fechado para produto sem identidade nativa completa", () => {
     const result = normalizeShopeeProductOfferEvidence([{ ...officialNode, shopId: null }], {
       query: "air fryer",
