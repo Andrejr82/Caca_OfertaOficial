@@ -1,7 +1,7 @@
 # Integrações atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: e6cc151 -->
+<!-- verified-against: 98d7b87 -->
 <!-- verified-on: 2026-08-11 -->
 
 | Integração | Capacidade versionada | Condição para declarar ativa |
