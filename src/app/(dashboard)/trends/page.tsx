@@ -7,11 +7,15 @@ import { MatchTrendSignalsButton } from "@/components/trends/match-trend-signals
 import { ExecutiveRadarOverview } from "@/components/trends/executive-radar-overview";
 import { buildDailyRadarFromTrendSignals } from "@/core/trends/daily-radar";
 import { buildExecutiveRadarRanking } from "@/core/trends/executive-radar-ranking";
+import { buildInternalPerformanceByProduct } from "@/core/trends/internal-performance-score";
 import { buildStrongestNiches7d } from "@/core/trends/strongest-niches-7d";
 import { partitionTrendSignalsForView } from "@/core/trends/view";
 import { TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/ai/trend-commercial-classifier";
+import { listInternalClickSignals } from "@/lib/trends/internal-click-performance";
 import { listLatestTrendRadarSnapshot } from "@/lib/trends/radar-queries";
 import { listTrendExperiments, listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
+
+const INTERNAL_PERFORMANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 function radarSourceLabel(signal: { source: string; sourceName: string; evidence: Record<string, unknown> }) {
   const source = signal.source.toLocaleLowerCase("pt-BR");
@@ -29,18 +33,21 @@ function experimentIsActive(experiment: { startedAt: string | null; endsAt: stri
 }
 
 export default async function TrendsPage() {
-  const [signals, opportunities, experiments, latestSnapshot] = await Promise.all([
+  const now = new Date();
+  const internalWindowStart = new Date(now.getTime() - INTERNAL_PERFORMANCE_WINDOW_MS);
+  const [signals, opportunities, experiments, latestSnapshot, internalClickSignals] = await Promise.all([
     listTrendSignals(),
     listTrendOpportunities(),
     listTrendExperiments(),
     listLatestTrendRadarSnapshot(),
+    listInternalClickSignals(internalWindowStart.toISOString(), now.toISOString()),
   ]);
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
   const { operational, audit: rejectedSignals, pending } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
   const pendingSignals = pending.filter((signal) => !opportunityBySignal.has(signal.id));
   const radar = buildDailyRadarFromTrendSignals(signals, opportunities);
-  const now = new Date();
-  const ranking = buildExecutiveRadarRanking(radar, { asOf: now });
+  const internalPerformanceByProduct = buildInternalPerformanceByProduct(internalClickSignals);
+  const ranking = buildExecutiveRadarRanking(radar, { asOf: now, internalPerformanceByProduct });
   const strongestNiches = buildStrongestNiches7d(radar, { asOf: now });
   const radarAudit = radar.filter((result) => result.evidence_status === "unverified" || result.evidence_status === "rejected");
   const radarSources = [...new Set(signals.map(radarSourceLabel))];
@@ -61,7 +68,7 @@ export default async function TrendsPage() {
       <section className="glass-card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
           <h2 className="text-sm font-bold text-white/70">Controles atuais</h2>
-          <p className="mt-1 text-xs text-white/30">Atualizar tela ainda é refresh visual. A execução integrada do Radar entra na Task 2.6.</p>
+          <p className="mt-1 text-xs text-white/30">Executar Radar atualiza coleta, ranking e snapshot; atualizar tela apenas recarrega a visão.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <DailyRadarRefreshButton />
