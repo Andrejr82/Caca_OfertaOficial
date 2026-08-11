@@ -1,8 +1,8 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: e6cc151 -->
+<!-- verified-on: 2026-08-11 -->
 
 ## Pré-deploy
 
@@ -44,3 +44,7 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 ## Rollback
 
 Reverter o artefato/commit e as flags primeiro. Migrations destrutivas exigem plano próprio; não presumir rollback automático do banco. Preservar logs, correlation IDs e recibos para investigação.
+
+## Trend Executive
+
+A implementação de Trends não autoriza ativação produtiva. Antes de qualquer mudança futura de `TREND_EXECUTIVE_MODE`, exigir evidência shadow suficiente, readiness gate aprovado, coorte limitada, revisão técnica e autorização explícita. O rollback definido restaura `off` e `legacy_scenario`; nenhuma migration de Trends deve ser aplicada fora do procedimento operacional aprovado.
