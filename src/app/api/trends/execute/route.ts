@@ -98,7 +98,10 @@ export async function POST() {
     }
 
     stage = "classify";
-    let signals = await listTrendSignals();
+    let signals = await listTrendSignals({
+      observedFrom: window.windowStart,
+      observedTo: window.windowEnd,
+    });
     const pendingClassification = signals.filter((signal) => !signal.classification);
     if (pendingClassification.length > 0) {
       const provider = new OfficialAIProviderRegistry().resolve();
@@ -117,7 +120,10 @@ export async function POST() {
     const matching = await matchTrendSignalsForUser(client, user.id);
 
     stage = "rank";
-    signals = await listTrendSignals();
+    signals = await listTrendSignals({
+      observedFrom: window.windowStart,
+      observedTo: window.windowEnd,
+    });
     const opportunities = (await listTrendOpportunities())
       .filter((opportunity) => opportunity.strategyVersion === TREND_COMMERCIAL_STRATEGY_VERSION);
     const radar = buildDailyRadarFromTrendSignals(signals, opportunities);
