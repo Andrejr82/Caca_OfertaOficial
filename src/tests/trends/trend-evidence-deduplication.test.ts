@@ -174,4 +174,16 @@ describe("Trend evidence deduplication", () => {
 
     expect(filterMateriallyChangedTrendSignals([first, repeated], [])).toEqual([first]);
   });
+
+  it("preserva sinais sem externalId porque não há identidade segura para deduplicar", () => {
+    const first = signal({ id: "anonymous-1", externalId: null });
+    const repeated = signal({
+      id: "anonymous-2",
+      externalId: null,
+      observedAt: "2026-08-11T01:30:00.000Z",
+      capturedAt: "2026-08-11T01:30:00.000Z"
+    });
+
+    expect(filterMateriallyChangedTrendSignals([first, repeated], [])).toEqual([first, repeated]);
+  });
 });
