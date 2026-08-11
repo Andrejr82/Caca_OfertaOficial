@@ -23,11 +23,15 @@ function snapshot(): TrendRadarSnapshotView {
         productTerm: "Fone Bluetooth M90 Pro 5.3 TWS",
         normalizedProductTerm: "fone bluetooth m90 pro 5 3 tws",
         category: "Áudio e acessórios",
-        marketplace: "Shopee",
+        marketplace: null,
         evidenceStatus: "partial",
         sourceCount: 2,
         commercialScore: 32,
         confidence: 60,
+        directEvidenceSourceUrls: [
+          "https://shopee.com.br/list/Fone%20de%20ouvido/Sem%20Fio",
+          "https://shopee.com.br/list/Fone%20sem%20Fio",
+        ],
         scoreBreakdown: { evidenceQuality: 15, sourceConvergence: 12, recency: 5 },
         determiningReasons: ["Evidência: 2 fontes convergentes."],
         isFocus: true,
@@ -44,6 +48,7 @@ function snapshot(): TrendRadarSnapshotView {
         sourceCount: 1,
         commercialScore: 20,
         confidence: 60,
+        directEvidenceSourceUrls: ["https://trends.google.com/trending/rss?geo=BR"],
         scoreBreakdown: { evidenceQuality: 15, recency: 5 },
         determiningReasons: [],
         isFocus: true,
@@ -70,6 +75,21 @@ describe("Radar -> Oracle discovery contract", () => {
       blockedProductTerms: [],
       authority: "shadow_only",
     }));
+  });
+
+  it("resolves a missing marketplace only from unambiguous direct-evidence provenance", () => {
+    const result = buildRadarOracleDiscoveryContracts(snapshot());
+    expect(result.contracts[0].marketplace).toBe("Shopee");
+
+    const ambiguous = snapshot();
+    ambiguous.products[0] = {
+      ...ambiguous.products[0],
+      directEvidenceSourceUrls: [
+        "https://shopee.com.br/list/fone",
+        "https://www.mercadolivre.com.br/ofertas",
+      ],
+    };
+    expect(buildRadarOracleDiscoveryContracts(ambiguous).contracts).toHaveLength(0);
   });
 
   it("keeps evidence references auditable without copying inferred facts into Oracle intent", () => {
@@ -101,7 +121,7 @@ describe("Radar -> Oracle discovery contract", () => {
   it("orders contracts deterministically by radar priority", () => {
     const base = snapshot();
     base.products = [
-      { ...base.products[0], id: "product-3", priority: 3, marketplace: "Mercado Livre", productTerm: "Mouse Gamer", normalizedProductTerm: "mouse gamer" },
+      { ...base.products[0], id: "product-3", priority: 3, marketplace: "Mercado Livre", productTerm: "Mouse Gamer", normalizedProductTerm: "mouse gamer", directEvidenceSourceUrls: [] },
       { ...base.products[0], id: "product-1", priority: 1 },
     ];
 
