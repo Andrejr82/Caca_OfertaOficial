@@ -37,14 +37,14 @@ function experimentIsActive(experiment: { startedAt: string | null; endsAt: stri
 export default async function TrendsPage() {
   const now = new Date();
   const internalWindowStart = new Date(now.getTime() - INTERNAL_PERFORMANCE_WINDOW_MS);
-  const [signals, opportunities, experiments, latestSnapshot, internalClickSignals, approvalQueueOffers] = await Promise.all([
+  const [signals, opportunities, experiments, latestSnapshot, internalClickSignals] = await Promise.all([
     listTrendSignals(),
     listTrendOpportunities(),
     listTrendExperiments(),
     listLatestTrendRadarSnapshot(),
     listInternalClickSignals(internalWindowStart.toISOString(), now.toISOString()),
-    listTrendApprovalQueueOffers(),
   ]);
+  const approvalQueueOffers = await listTrendApprovalQueueOffers(latestSnapshot?.id);
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
   const { operational, audit: rejectedSignals, pending } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
   const pendingSignals = pending.filter((signal) => !opportunityBySignal.has(signal.id));
