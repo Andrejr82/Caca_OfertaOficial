@@ -5,6 +5,7 @@ import { MercadoLivreTrendsCollectButton } from "@/components/trends/mercado-liv
 import { ClassifyTrendSignalsButton } from "@/components/trends/classify-trend-signals-button";
 import { MatchTrendSignalsButton } from "@/components/trends/match-trend-signals-button";
 import { ExecutiveRadarOverview } from "@/components/trends/executive-radar-overview";
+import { TrendApprovalQueue } from "@/components/trends/trend-approval-queue";
 import { buildDailyRadarFromTrendSignals } from "@/core/trends/daily-radar";
 import { buildExecutiveRadarRanking } from "@/core/trends/executive-radar-ranking";
 import { buildInternalPerformanceByProduct } from "@/core/trends/internal-performance-score";
@@ -14,6 +15,7 @@ import { TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/ai/trend-commercial-cl
 import { listInternalClickSignals } from "@/lib/trends/internal-click-performance";
 import { listLatestTrendRadarSnapshot } from "@/lib/trends/radar-queries";
 import { listTrendExperiments, listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
+import { listTrendApprovalQueueOffers } from "@/lib/trends/approval-queue-queries";
 
 const INTERNAL_PERFORMANCE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -35,12 +37,13 @@ function experimentIsActive(experiment: { startedAt: string | null; endsAt: stri
 export default async function TrendsPage() {
   const now = new Date();
   const internalWindowStart = new Date(now.getTime() - INTERNAL_PERFORMANCE_WINDOW_MS);
-  const [signals, opportunities, experiments, latestSnapshot, internalClickSignals] = await Promise.all([
+  const [signals, opportunities, experiments, latestSnapshot, internalClickSignals, approvalQueueOffers] = await Promise.all([
     listTrendSignals(),
     listTrendOpportunities(),
     listTrendExperiments(),
     listLatestTrendRadarSnapshot(),
     listInternalClickSignals(internalWindowStart.toISOString(), now.toISOString()),
+    listTrendApprovalQueueOffers(),
   ]);
   const opportunityBySignal = new Map(opportunities.map((opportunity) => [opportunity.signalId, opportunity]));
   const { operational, audit: rejectedSignals, pending } = partitionTrendSignalsForView(signals, TREND_COMMERCIAL_STRATEGY_VERSION);
@@ -68,7 +71,7 @@ export default async function TrendsPage() {
       <section className="glass-card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
           <h2 className="text-sm font-bold text-white/70">Controles atuais</h2>
-          <p className="mt-1 text-xs text-white/30">Executar Radar atualiza coleta, ranking e snapshot; atualizar tela apenas recarrega a visão.</p>
+          <p className="mt-1 text-xs text-white/30">Executar Radar atualiza tendências, pesquisa Shopee e prepara a fila manual; atualizar tela apenas recarrega a visão.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <DailyRadarRefreshButton />
@@ -86,6 +89,8 @@ export default async function TrendsPage() {
         radarSources={radarSources}
         activeExperiments={activeExperiments}
       />
+
+      <TrendApprovalQueue offers={approvalQueueOffers} />
 
       <details className="glass-card p-5">
         <summary className="cursor-pointer text-sm font-bold text-white/60">Operação comercial existente ({operational.length})</summary>
