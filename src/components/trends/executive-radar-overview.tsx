@@ -1,0 +1,125 @@
+import type { StrongNiche7d } from "@/core/trends/strongest-niches-7d";
+import type { ExecutiveRadarRankingItem } from "@/core/trends/executive-radar-ranking";
+import type { TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
+
+interface ExecutiveRadarOverviewProps {
+  snapshot: TrendRadarSnapshotView | null;
+  niches: StrongNiche7d[];
+  ranking: ExecutiveRadarRankingItem[];
+  sourceLabels: string[];
+}
+
+function scoreLabel(value: number): string {
+  return `${Math.round(value * 10) / 10}/100`;
+}
+
+export function ExecutiveRadarOverview({ snapshot, niches, ranking, sourceLabels }: ExecutiveRadarOverviewProps) {
+  const focus = ranking.filter((item) => item.isFocus).slice(0, 3);
+
+  return (
+    <div className="grid gap-6">
+      <section className="glass-card p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white/70">Status da execução e fontes</h2>
+            <p className="mt-1 text-xs text-white/35">
+              {snapshot
+                ? `Snapshot ${snapshot.radarDate} · ${snapshot.status} · ${snapshot.strategyVersion}`
+                : "Nenhum snapshot executivo persistido ainda."}
+            </p>
+          </div>
+          <span className="text-xs text-white/35">{sourceLabels.length ? sourceLabels.join(" · ") : "Sem fontes persistidas"}</span>
+        </div>
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="mb-4">
+          <h2 className="text-sm font-bold text-white/70">Nichos mais fortes da semana</h2>
+          <p className="mt-1 text-xs text-white/35">Janela observada de 7 dias; cadência não representa volume de mercado.</p>
+        </div>
+        {niches.length ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {niches.slice(0, 6).map((niche) => (
+              <article key={niche.normalizedNiche} className="rounded-lg border border-white/[0.06] p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-white">{niche.niche}</h3>
+                  <span className="text-xs font-bold text-cyan-300">{scoreLabel(niche.strengthScore)}</span>
+                </div>
+                <p className="mt-2 text-xs text-white/40">Confiança {niche.confidence}% · {niche.sourceCount} fonte(s) · {niche.signalCadence.acceleration}</p>
+                <p className="mt-2 text-xs text-white/35">{niche.topProducts.map((item) => item.productTerm).join(" · ") || "Sem produtos elegíveis"}</p>
+              </article>
+            ))}
+          </div>
+        ) : <p className="text-sm text-white/35">Ainda não há evidência suficiente na janela de 7 dias.</p>}
+      </section>
+
+      <section className="grid gap-4 lg:grid-cols-3">
+        {[
+          ["Análise Shopee", "Shopee"],
+          ["Análise Mercado Livre", "Mercado Livre"],
+          ["Google Trends + Achadinhos", "Google"],
+        ].map(([title, key]) => {
+          const products = ranking.filter((item) => key === "Google"
+            ? item.result.source_types.some((source) => /google|achadinho/iu.test(source))
+            : item.result.marketplaces.some((marketplace) => marketplace.toLocaleLowerCase("pt-BR").includes(key.toLocaleLowerCase("pt-BR"))));
+          return (
+            <section key={title} className="glass-card p-5">
+              <h2 className="text-sm font-bold text-white/70">{title}</h2>
+              <p className="mt-2 text-xs text-white/35">
+                {products.length
+                  ? products.slice(0, 3).map((item) => `${item.result.product_term} (${scoreLabel(item.score.total)})`).join(" · ")
+                  : "Sem evidência elegível no ranking atual."}
+              </p>
+            </section>
+          );
+        })}
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white/70">Foco de Hoje · Top 3</h2>
+            <p className="mt-1 text-xs text-white/35">Recomendação derivada de evidência observada; não é evidência em si.</p>
+          </div>
+        </div>
+        {focus.length ? (
+          <div className="grid gap-3 lg:grid-cols-3">
+            {focus.map((item) => (
+              <article key={item.result.normalized_product_term} className="rounded-lg border border-cyan-400/20 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">#{item.priority} · {scoreLabel(item.score.total)}</p>
+                <h3 className="mt-1 text-sm font-bold text-white">{item.result.product_term}</h3>
+                <p className="mt-2 text-xs text-white/40">{item.result.category || "Sem categoria"} · {item.result.marketplaces.join(", ") || "marketplace pendente"}</p>
+                <div className="mt-3 grid gap-1">
+                  {item.determiningReasons.map((reason) => <p key={reason} className="text-xs text-white/35">{reason}</p>)}
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : <p className="text-sm text-white/35">Nenhum produto elegível para foco hoje.</p>}
+      </section>
+
+      <section className="glass-card p-5">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-white/70">Ranking Operacional · Top 20</h2>
+            <p className="mt-1 text-xs text-white/35">Score V2 com breakdown auditável 30/20/20/15/10/5.</p>
+          </div>
+          <span className="text-xs text-white/35">{ranking.length} produto(s)</span>
+        </div>
+        <div className="grid gap-2">
+          {ranking.map((item) => (
+            <article key={`${item.priority}-${item.result.normalized_product_term}`} className="grid gap-2 rounded-lg border border-white/[0.05] p-3 md:grid-cols-[60px_1fr_auto] md:items-center">
+              <span className="text-sm font-bold text-cyan-300">#{item.priority}</span>
+              <div>
+                <h3 className="text-sm font-bold text-white">{item.result.product_term}</h3>
+                <p className="text-xs text-white/35">{item.result.evidence_status} · {item.result.source_count} fonte(s) · confiança {item.result.confidence}%</p>
+              </div>
+              <span className="text-sm font-bold text-white/70">{scoreLabel(item.score.total)}</span>
+            </article>
+          ))}
+          {!ranking.length ? <p className="text-sm text-white/35">Sem ranking operacional elegível.</p> : null}
+        </div>
+      </section>
+    </div>
+  );
+}
