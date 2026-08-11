@@ -77,6 +77,7 @@ export interface TrendRadarProductRow extends Record<string, unknown> {
 
 export interface TrendRadarSnapshotStore {
   upsertRun(row: TrendRadarRunRow): Promise<{ id: string }>;
+  deleteProducts(runId: string): Promise<void>;
   upsertProducts(rows: TrendRadarProductRow[]): Promise<void>;
   updateRunState(runId: string, status: TrendRadarRunStatus, failureCode: string | null): Promise<void>;
 }
@@ -93,6 +94,9 @@ interface RadarSnapshotSupabaseTable {
     select(columns: string): {
       single(): PromiseLike<{ data: { id: string } | null; error: QueryError | null }>;
     };
+  };
+  delete(): {
+    eq(column: string, value: string): PromiseLike<{ error: QueryError | null }>;
   };
   update(values: Record<string, unknown>): {
     eq(column: string, value: string): PromiseLike<{ error: QueryError | null }>;
@@ -214,6 +218,13 @@ export function createSupabaseTrendRadarSnapshotStore(
       if (error || !data?.id) throw new Error("Falha ao persistir execução do Radar.");
       return { id: data.id };
     },
+    async deleteProducts(runId) {
+      const { error } = await client
+        .from("trend_radar_products")
+        .delete()
+        .eq("radar_run_id", runId);
+      if (error) throw new Error("Falha ao limpar produtos antigos do Radar.");
+    },
     async upsertProducts(rows) {
       if (rows.length === 0) return;
       const { error } = await client
@@ -247,6 +258,7 @@ export async function persistTrendRadarSnapshot(
 
   const products = toTrendRadarProductRows(run.id, input.products);
   try {
+    await store.deleteProducts(run.id);
     await store.upsertProducts(products);
   } catch {
     try {
