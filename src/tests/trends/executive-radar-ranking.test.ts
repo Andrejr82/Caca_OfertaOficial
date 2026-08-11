@@ -73,6 +73,19 @@ describe("Executive Radar Top 20 / Top 3", () => {
     expect(item.determiningReasons.some((reason) => reason.startsWith("Recomendação:"))).toBe(true);
   });
 
+  it("aplica performance interna verificada pelo produto normalizado", () => {
+    const baseline = buildExecutiveRadarRanking([radar("Câmera Wi-Fi")], {
+      asOf: "2026-08-10T23:00:00.000Z",
+    })[0];
+    const withInternal = buildExecutiveRadarRanking([radar("Câmera Wi-Fi")], {
+      asOf: "2026-08-10T23:00:00.000Z",
+      internalPerformanceByProduct: { "camera wi fi": { verified: true, score: 10 } },
+    })[0];
+
+    expect(withInternal.score.breakdown.internalPerformance).toBe(10);
+    expect(withInternal.score.total - baseline.score.total).toBe(10);
+  });
+
   it("exclui evidência rejected/unverified do Top 20 operacional", () => {
     const ranking = buildExecutiveRadarRanking([
       radar("Verificado"),
