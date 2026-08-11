@@ -33,6 +33,8 @@ export function mapShopeeProductsToTrendCandidates(products: ShopeeOfficialNode[
     const itemId = text(product.itemId);
     const productName = text(product.productName);
     if (!itemId || !productName) return [];
+    const affiliateUrl = text(product.offerLink);
+    const productLink = text(product.productLink);
     return [{
       id: itemId,
       marketplace: "Shopee",
@@ -41,11 +43,13 @@ export function mapShopeeProductsToTrendCandidates(products: ShopeeOfficialNode[
       oldPrice: null,
       itemId,
       shopeeItemId: itemId,
-      permalink: text(product.offerLink) || text(product.productLink),
+      permalink: affiliateUrl || productLink,
       marketplaceMetrics: {
         shopId: text(product.shopId),
         shopName: text(product.shopName),
         imageUrl: text(product.imageUrl),
+        affiliateUrl,
+        productLink,
         priceMax: numeric(product.priceMax),
         rating: numeric(product.ratingStar),
         sales: numeric(product.sales),
