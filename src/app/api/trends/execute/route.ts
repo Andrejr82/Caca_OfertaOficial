@@ -15,6 +15,7 @@ import { persistTrendSignalClassifications, persistTrendSignals } from "@/lib/tr
 import { listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
 import {
   buildRadarExecutionWindow,
+  buildRadarRefreshExecutionWindow,
   claimTrendRadarExecution,
   createSupabaseRadarExecutionStore,
 } from "@/lib/trends/radar-execution";
@@ -47,14 +48,15 @@ function executionClient(client: unknown): Parameters<typeof createSupabaseRadar
   return client as Parameters<typeof createSupabaseRadarExecutionStore>[0];
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const client = await createServerSupabaseClient();
   if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
 
   const { data: { user } } = await client.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-  const window = buildRadarExecutionWindow();
+  const refreshRequested = new URL(request.url).searchParams.get("refresh") === "1";
+  const window = refreshRequested ? buildRadarRefreshExecutionWindow() : buildRadarExecutionWindow();
   const executionStore = createSupabaseRadarExecutionStore(executionClient(client));
   const claim = await claimTrendRadarExecution(executionStore, {
     userId: user.id,
