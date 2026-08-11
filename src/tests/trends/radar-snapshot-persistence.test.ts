@@ -31,7 +31,10 @@ const input: TrendRadarSnapshotInput = {
     recommendedChannel: "instagram",
     recommendedFormat: "reel",
     matchStatus: "pending",
-    opportunityId: null
+    opportunityId: null,
+    scoreBreakdown: { evidenceQuality: 30, sourceConvergence: 20 },
+    determiningReasons: ["Evidência: Top seller oficial.", "Recomendação: score 88.5/100."],
+    isFocus: true
   }]
 };
 
@@ -67,7 +70,10 @@ describe("Trend Radar snapshot persistence", () => {
       evidence_status: "verified",
       commercial_score: 88.5,
       confidence: 91,
-      match_status: "pending"
+      match_status: "pending",
+      score_breakdown: input.products[0].scoreBreakdown,
+      determining_reasons: input.products[0].determiningReasons,
+      is_focus: true
     });
   });
 
