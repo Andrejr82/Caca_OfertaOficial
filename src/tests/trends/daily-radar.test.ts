@@ -135,7 +135,8 @@ describe("DailyTrendRadarResult", () => {
     expect(rankDailyTrendRadar([result])[0].rank).toBeNull();
   });
 
-  it("usa evidence.url do Mercado Livre como proveniência verificável", () => {
+  it("usa a proveniência padrão do Mercado Livre no Radar", () => {
+    const sourceUrl = "https://lista.mercadolivre.com.br/furadeira";
     const [result] = buildDailyRadarFromTrendSignals([{
       id: "ml-trend-1",
       sourceType: "external",
@@ -145,7 +146,7 @@ describe("DailyTrendRadarResult", () => {
       externalId: "MLB:furadeira",
       term: "furadeira",
       title: "furadeira",
-      evidence: { rank: 1, trendBucket: "fastest_growing", url: "https://lista.mercadolivre.com.br/furadeira", siteId: "MLB" },
+      evidence: { rank: 1, trendBucket: "fastest_growing", url: sourceUrl, link: sourceUrl, siteId: "MLB" },
       observedAt: "2026-08-11T18:40:50.793Z",
       capturedAt: "2026-08-11T18:40:50.793Z",
       trendStrength: null,
@@ -171,7 +172,7 @@ describe("DailyTrendRadarResult", () => {
       source_count: 1,
       normalized_product_term: "furadeira"
     });
-    expect(result.source_urls).toContain("https://lista.mercadolivre.com.br/furadeira");
+    expect(result.source_urls).toContain(sourceUrl);
   });
 
   it("lê evidência persistida do Radar externo e preserva match/opportunity", () => {
