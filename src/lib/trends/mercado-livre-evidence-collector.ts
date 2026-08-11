@@ -4,6 +4,8 @@ const SITE_ID = "MLB";
 const SOURCE = "mercado_livre_best_seller";
 
 type HighlightEntityType = "ITEM" | "PRODUCT" | "USER_PRODUCT";
+type OfficialEntity = Record<string, unknown>;
+type LoadedEntity = OfficialEntity | { entity: OfficialEntity; offer?: OfficialEntity | null };
 
 type HighlightEntry = {
   id?: unknown;
@@ -20,19 +22,21 @@ type HighlightPayload = {
   content?: unknown;
 };
 
-type OfficialEntity = Record<string, unknown>;
-
 interface NormalizeOptions {
   categoryId: string;
   observedAt: string;
   capturedAt: string;
-  loadEntity: (entry: { id: string; type: "ITEM" | "PRODUCT" }) => Promise<OfficialEntity>;
+  loadEntity: (entry: { id: string; type: "ITEM" | "PRODUCT" }) => Promise<LoadedEntity>;
 }
 
 interface CollectorDependencies {
   now?: () => Date;
   loadHighlights?: (categoryId: string, accessToken: string) => Promise<unknown>;
-  loadEntity?: (entry: { id: string; type: "ITEM" | "PRODUCT" }, accessToken: string) => Promise<OfficialEntity>;
+  loadEntity?: (entry: { id: string; type: "ITEM" | "PRODUCT" }, accessToken: string) => Promise<LoadedEntity>;
+}
+
+interface MercadoLivreOfficialService {
+  apiGet(path: string, options: { accessToken: string }): Promise<any>;
 }
 
 export interface MercadoLivreEvidenceCollectionResult {
@@ -131,12 +135,12 @@ function finalize(received: number, signals: TrendSignal[]): MercadoLivreEvidenc
   };
 }
 
-function itemIdentity(categoryId: string, itemId: string) {
+function itemIdentity(categoryId: string, itemId: string, productId: string | null = null) {
   return {
     marketplace: "mercado_livre",
     entity_type: "ITEM",
     item_id: itemId,
-    product_id: null,
+    product_id: productId,
     category_id: categoryId
   };
 }
@@ -151,6 +155,25 @@ function productIdentity(categoryId: string, productId: string) {
   };
 }
 
+function splitLoadedEntity(value: LoadedEntity): { entity: OfficialEntity; offer: OfficialEntity | null } {
+  if (value && typeof value === "object" && "entity" in value) {
+    const wrapped = value as { entity?: unknown; offer?: unknown };
+    return {
+      entity: wrapped.entity && typeof wrapped.entity === "object" ? wrapped.entity as OfficialEntity : {},
+      offer: wrapped.offer && typeof wrapped.offer === "object" ? wrapped.offer as OfficialEntity : null
+    };
+  }
+  return { entity: value as OfficialEntity, offer: null };
+}
+
+function applyOfferFacts(evidence: TrendDirectEvidence, entity: OfficialEntity) {
+  evidence.price = numberOrNull(entity.price, 0.01);
+  evidence.old_price = numberOrNull(entity.original_price, 0.01);
+  evidence.sold_quantity = integerOrNull(entity.sold_quantity, 0);
+  const shipping = entity.shipping && typeof entity.shipping === "object" ? entity.shipping as Record<string, unknown> : null;
+  evidence.shipping = shipping?.free_shipping === true ? "free_shipping" : null;
+}
+
 function normalizeItemEvidence(entity: OfficialEntity, categoryId: string, itemId: string, observedAt: string): { title: string; evidence: TrendDirectEvidence } | null {
   const resolvedId = text(entity.id)?.toUpperCase();
   const title = text(entity.title);
@@ -159,15 +182,11 @@ function normalizeItemEvidence(entity: OfficialEntity, categoryId: string, itemI
   const evidence = emptyEvidence({
     claim: `Item observado via API oficial do Mercado Livre: ${title}.`,
     evidenceType: "mercado_livre_offer",
-    sourceUrl: apiUrl(`/items/${itemId}`),
+    sourceUrl: apiUrl(`/items?ids=${itemId}`),
     observedAt,
-    identity: itemIdentity(categoryId, itemId)
+    identity: itemIdentity(categoryId, itemId, text(entity.catalog_product_id)?.toUpperCase() ?? null)
   });
-  evidence.price = numberOrNull(entity.price, 0.01);
-  evidence.old_price = numberOrNull(entity.original_price, 0.01);
-  evidence.sold_quantity = integerOrNull(entity.sold_quantity, 0);
-  const shipping = entity.shipping && typeof entity.shipping === "object" ? entity.shipping as Record<string, unknown> : null;
-  evidence.shipping = shipping?.free_shipping === true ? "free_shipping" : null;
+  applyOfferFacts(evidence, entity);
   return { title, evidence };
 }
 
@@ -186,6 +205,23 @@ function normalizeProductEvidence(entity: OfficialEntity, categoryId: string, pr
       identity: productIdentity(categoryId, productId)
     })
   };
+}
+
+function normalizeProductOfferEvidence(offer: OfficialEntity | null, categoryId: string, productId: string, title: string, observedAt: string): TrendDirectEvidence | null {
+  if (!offer) return null;
+  const itemId = validEntityId(offer.item_id ?? offer.id, "ITEM");
+  const price = numberOrNull(offer.price, 0.01);
+  if (!itemId || price === null) return null;
+
+  const evidence = emptyEvidence({
+    claim: `Oferta ativa observada para o produto de catálogo ${title}.`,
+    evidenceType: "mercado_livre_offer",
+    sourceUrl: apiUrl(`/products/${productId}/items?limit=20`),
+    observedAt,
+    identity: itemIdentity(categoryId, itemId, productId)
+  });
+  applyOfferFacts(evidence, offer);
+  return evidence;
 }
 
 export async function normalizeMercadoLivreBestSellerEvidence(
@@ -216,19 +252,19 @@ export async function normalizeMercadoLivreBestSellerEvidence(
     const id = validEntityId(rawEntry.id, type);
     if (!id) continue;
 
-    let entity: OfficialEntity;
+    let loaded: { entity: OfficialEntity; offer: OfficialEntity | null };
     try {
-      entity = await options.loadEntity({ id, type });
+      loaded = splitLoadedEntity(await options.loadEntity({ id, type }));
     } catch {
       continue;
     }
 
     const commercial = type === "ITEM"
-      ? normalizeItemEvidence(entity, categoryId, id, observedAt)
-      : normalizeProductEvidence(entity, categoryId, id, observedAt);
+      ? normalizeItemEvidence(loaded.entity, categoryId, id, observedAt)
+      : normalizeProductEvidence(loaded.entity, categoryId, id, observedAt);
     if (!commercial) continue;
 
-    const identity = type === "ITEM" ? itemIdentity(categoryId, id) : productIdentity(categoryId, id);
+    const identity = type === "ITEM" ? itemIdentity(categoryId, id, text(loaded.entity.catalog_product_id)?.toUpperCase() ?? null) : productIdentity(categoryId, id);
     const rankEvidence = emptyEvidence({
       claim: `${commercial.title} ocupa a posição ${position} no ranking oficial BEST_SELLER da categoria ${categoryId}.`,
       evidenceType: SOURCE,
@@ -238,6 +274,12 @@ export async function normalizeMercadoLivreBestSellerEvidence(
     });
     rankEvidence.rank_position = position;
     rankEvidence.best_seller_flag = true;
+
+    const directEvidence = [rankEvidence, commercial.evidence];
+    if (type === "PRODUCT") {
+      const offerEvidence = normalizeProductOfferEvidence(loaded.offer, categoryId, id, commercial.title, observedAt);
+      if (offerEvidence) directEvidence.push(offerEvidence);
+    }
 
     const externalId = `${SITE_ID}:${categoryId}:${type}:${id}`;
     signals.push({
@@ -250,8 +292,8 @@ export async function normalizeMercadoLivreBestSellerEvidence(
       term: commercial.title,
       title: commercial.title,
       evidence: {
-        source_urls: [rankEvidence.source_url, commercial.evidence.source_url].filter((url): url is string => Boolean(url)),
-        direct_evidence: [rankEvidence, commercial.evidence],
+        source_urls: directEvidence.map((evidence) => evidence.source_url).filter((url): url is string => Boolean(url)),
+        direct_evidence: directEvidence,
         category_id: categoryId,
         highlight_type: "BEST_SELLER",
         entity_type: type
@@ -267,24 +309,32 @@ export async function normalizeMercadoLivreBestSellerEvidence(
   return finalize(entries.length, signals);
 }
 
-async function fetchJson(url: string, accessToken: string): Promise<unknown> {
-  const response = await fetch(url, {
-    headers: { accept: "application/json", authorization: `Bearer ${accessToken}` },
-    signal: AbortSignal.timeout(10_000),
-    cache: "no-store"
-  });
-  if (!response.ok) throw new Error(`Mercado Livre API HTTP ${response.status}`);
-  return response.json();
+function officialService(): MercadoLivreOfficialService {
+  return require("../../../scripts/mercadolivre-official-intents-v5.cjs") as MercadoLivreOfficialService;
 }
 
 async function loadHighlights(categoryId: string, accessToken: string): Promise<unknown> {
-  return fetchJson(apiUrl(`/highlights/${SITE_ID}/category/${categoryId}`), accessToken);
+  return officialService().apiGet(`/highlights/${SITE_ID}/category/${categoryId}`, { accessToken });
 }
 
-async function loadEntity(entry: { id: string; type: "ITEM" | "PRODUCT" }, accessToken: string): Promise<OfficialEntity> {
-  const path = entry.type === "ITEM" ? `/items/${entry.id}` : `/products/${entry.id}`;
-  const payload = await fetchJson(apiUrl(path), accessToken);
-  return payload && typeof payload === "object" ? payload as OfficialEntity : {};
+async function loadEntity(entry: { id: string; type: "ITEM" | "PRODUCT" }, accessToken: string): Promise<LoadedEntity> {
+  const service = officialService();
+  if (entry.type === "ITEM") {
+    const response = await service.apiGet(`/items?ids=${encodeURIComponent(entry.id)}`, { accessToken });
+    const first = Array.isArray(response) ? response[0] : null;
+    return first?.body && typeof first.body === "object" ? first.body as OfficialEntity : {};
+  }
+
+  const [entity, offersPayload] = await Promise.all([
+    service.apiGet(`/products/${entry.id}`, { accessToken }),
+    service.apiGet(`/products/${entry.id}/items?limit=20`, { accessToken })
+  ]);
+  const offers = Array.isArray(offersPayload?.results) ? offersPayload.results as OfficialEntity[] : [];
+  const offer = offers.find((candidate) => numberOrNull(candidate.price, 0.01) !== null) ?? null;
+  return {
+    entity: entity && typeof entity === "object" ? entity as OfficialEntity : {},
+    offer
+  };
 }
 
 export async function collectMercadoLivreBestSellerEvidence(
