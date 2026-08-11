@@ -34,9 +34,17 @@ export async function persistTrendSignalClassifications(
   return rows.length;
 }
 
+const ALLOWED_TREND_SIGNAL_SOURCES = new Set([
+  "google_trends",
+  "mercado_livre_trends",
+  "mercado_livre_best_seller",
+  "shopee_product_offer",
+  "shopee_campaign"
+]);
+
 export async function persistTrendSignals(client: TrendPersistenceClient, userId: string, signals: TrendSignal[]): Promise<number> {
   const rows = signals
-    .filter((signal) => ["google_trends", "mercado_livre_trends", "shopee_product_offer", "shopee_campaign"].includes(signal.source))
+    .filter((signal) => ALLOWED_TREND_SIGNAL_SOURCES.has(signal.source))
     .map((signal) => ({
       user_id: userId,
       source_type: signal.sourceType,
