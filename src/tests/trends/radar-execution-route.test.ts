@@ -31,11 +31,20 @@ describe("Radar execution route contract", () => {
     expect(source.match(/listTrendSignals\(\{[\s\S]*?observedFrom: window\.windowStart[\s\S]*?observedTo: window\.windowEnd[\s\S]*?\}\)/g)?.length).toBe(2);
   });
 
+  it("permite refresh explícito sem substituir a execução diária", () => {
+    const routeSource = fs.readFileSync(routePath, "utf8");
+    const buttonSource = fs.readFileSync(buttonPath, "utf8");
+
+    expect(routeSource).toContain('searchParams.get("refresh") === "1"');
+    expect(routeSource).toContain("buildRadarRefreshExecutionWindow()");
+    expect(buttonSource).toContain('fetch("/api/trends/execute?refresh=1", { method: "POST" })');
+    expect(buttonSource).toContain("Executar Radar de Agora");
+  });
+
   it("separa executar Radar de atualizar tela", () => {
     const source = fs.readFileSync(buttonPath, "utf8");
 
-    expect(source).toContain('fetch("/api/trends/execute", { method: "POST" })');
-    expect(source).toContain("Executar Radar de Hoje");
+    expect(source).toContain("Executar Radar de Agora");
     expect(source).toContain("Atualizar tela");
   });
 });
