@@ -61,6 +61,40 @@ describe("Tendências IA: persistência", () => {
     ]), { onConflict: "user_id,source_name,external_id" });
   });
 
+  it("persiste ranking oficial BEST_SELLER do Mercado Livre sem confundir com Trends", async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const client = { from: vi.fn(() => ({ upsert })) };
+    const result = await persistTrendSignals(client, "user-1", [{
+      id: "ml-best-seller-1",
+      sourceType: "external",
+      sourceName: "mercado_livre_best_seller",
+      source: "mercado_livre_best_seller",
+      region: "BR",
+      externalId: "MLB:MLB432825:ITEM:MLB1234567890",
+      term: "Air Fryer 5L",
+      title: "Air Fryer 5L",
+      evidence: {
+        direct_evidence: [{
+          claim: "Posição 1 no BEST_SELLER oficial.",
+          evidence_type: "mercado_livre_best_seller",
+          source_url: "https://api.mercadolibre.com/highlights/MLB/category/MLB432825",
+          rank_position: 1,
+          best_seller_flag: true
+        }]
+      },
+      observedAt: "2026-08-11T00:15:00.000Z",
+      capturedAt: "2026-08-11T00:15:00.000Z",
+      trendStrength: null,
+      trendDirection: null,
+      offerId: null
+    }]);
+
+    expect(result).toBe(1);
+    expect(upsert).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ source: "mercado_livre_best_seller", source_name: "mercado_livre_best_seller", external_id: "MLB:MLB432825:ITEM:MLB1234567890" })
+    ]), { onConflict: "user_id,source_name,external_id" });
+  });
+
   it("continua descartando fontes externas não homologadas", async () => {
     const upsert = vi.fn().mockResolvedValue({ error: null });
     const client = { from: vi.fn(() => ({ upsert })) };
