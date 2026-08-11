@@ -1,6 +1,7 @@
 'use strict';
 
-const { describe, expect, it } = require('vitest');
+const test = require('node:test');
+const assert = require('node:assert/strict');
 const {
   TREND_EXECUTIVE_MODE_DEFAULT,
   buildTrendExecutiveDiscoveryPlan,
@@ -25,70 +26,64 @@ function radar(overrides = {}) {
   };
 }
 
-describe('TREND_EXECUTIVE_MODE runtime gate', () => {
-  it('defaults to off and preserves the current Oracle scenario as authority', () => {
-    const plan = buildTrendExecutiveDiscoveryPlan({
-      env: {},
-      radar: radar(),
-      legacyScenario: { id: 'informatica_editorial' },
-    });
-
-    expect(TREND_EXECUTIVE_MODE_DEFAULT).toBe('off');
-    expect(plan).toEqual(expect.objectContaining({
-      requestedMode: 'off',
-      effectiveMode: 'off',
-      authority: 'legacy_scenario',
-      authoritativeScenario: { id: 'informatica_editorial' },
-      shadowIntents: [],
-    }));
+test('defaults to off and preserves the current Oracle scenario as authority', () => {
+  const plan = buildTrendExecutiveDiscoveryPlan({
+    env: {},
+    radar: radar(),
+    legacyScenario: { id: 'informatica_editorial' },
   });
 
-  it('keeps legacy authority while exposing healthy Radar intents in shadow mode', () => {
-    const plan = buildTrendExecutiveDiscoveryPlan({
-      env: { TREND_EXECUTIVE_MODE: 'shadow' },
-      radar: radar(),
-      legacyScenario: { id: 'informatica_editorial' },
-    });
+  assert.equal(TREND_EXECUTIVE_MODE_DEFAULT, 'off');
+  assert.equal(plan.requestedMode, 'off');
+  assert.equal(plan.effectiveMode, 'off');
+  assert.equal(plan.authority, 'legacy_scenario');
+  assert.deepEqual(plan.authoritativeScenario, { id: 'informatica_editorial' });
+  assert.deepEqual(plan.shadowIntents, []);
+});
 
-    expect(plan.effectiveMode).toBe('shadow');
-    expect(plan.authority).toBe('legacy_scenario');
-    expect(plan.authoritativeScenario).toEqual({ id: 'informatica_editorial' });
-    expect(plan.shadowIntents).toHaveLength(1);
-    expect(plan.shadowIntents[0]).toEqual(expect.objectContaining({
-      radarRunId: 'run-1',
-      radarProductId: 'product-1',
-      authority: 'shadow_only',
-    }));
-    expect(plan.radarStatus).toBe('healthy');
+test('keeps legacy authority while exposing healthy Radar intents in shadow mode', () => {
+  const plan = buildTrendExecutiveDiscoveryPlan({
+    env: { TREND_EXECUTIVE_MODE: 'shadow' },
+    radar: radar(),
+    legacyScenario: { id: 'informatica_editorial' },
   });
 
-  it('falls back to the current scenario when Radar is unhealthy or has no executable intents', () => {
-    const plan = buildTrendExecutiveDiscoveryPlan({
-      env: { TREND_EXECUTIVE_MODE: 'shadow' },
-      radar: radar({ status: 'failed', contracts: [] }),
-      legacyScenario: { id: 'casa_cozinha_editorial' },
-    });
+  assert.equal(plan.effectiveMode, 'shadow');
+  assert.equal(plan.authority, 'legacy_scenario');
+  assert.deepEqual(plan.authoritativeScenario, { id: 'informatica_editorial' });
+  assert.equal(plan.shadowIntents.length, 1);
+  assert.equal(plan.shadowIntents[0].radarRunId, 'run-1');
+  assert.equal(plan.shadowIntents[0].radarProductId, 'product-1');
+  assert.equal(plan.shadowIntents[0].authority, 'shadow_only');
+  assert.equal(plan.radarStatus, 'healthy');
+});
 
-    expect(plan.effectiveMode).toBe('off');
-    expect(plan.authority).toBe('legacy_scenario');
-    expect(plan.shadowIntents).toEqual([]);
-    expect(plan.radarStatus).toBe('unhealthy');
-    expect(plan.fallbackReason).toBe('radar_unhealthy');
+test('falls back to the current scenario when Radar is unhealthy or has no executable intents', () => {
+  const plan = buildTrendExecutiveDiscoveryPlan({
+    env: { TREND_EXECUTIVE_MODE: 'shadow' },
+    radar: radar({ status: 'failed', contracts: [] }),
+    legacyScenario: { id: 'casa_cozinha_editorial' },
   });
 
-  it('keeps active inaccessible until an explicit future activation implementation exists', () => {
-    expect(() => buildTrendExecutiveDiscoveryPlan({
-      env: { TREND_EXECUTIVE_MODE: 'active' },
-      radar: radar(),
-      legacyScenario: { id: 'informatica_editorial' },
-    })).toThrow(/active.*bloqueado/i);
-  });
+  assert.equal(plan.effectiveMode, 'off');
+  assert.equal(plan.authority, 'legacy_scenario');
+  assert.deepEqual(plan.shadowIntents, []);
+  assert.equal(plan.radarStatus, 'unhealthy');
+  assert.equal(plan.fallbackReason, 'radar_unhealthy');
+});
 
-  it('fails closed to off for invalid mode values', () => {
-    expect(resolveTrendExecutiveMode({ TREND_EXECUTIVE_MODE: 'banana' })).toEqual({
-      requestedMode: 'banana',
-      effectiveMode: 'off',
-      reason: 'invalid_mode',
-    });
+test('keeps active inaccessible until an explicit future activation implementation exists', () => {
+  assert.throws(() => buildTrendExecutiveDiscoveryPlan({
+    env: { TREND_EXECUTIVE_MODE: 'active' },
+    radar: radar(),
+    legacyScenario: { id: 'informatica_editorial' },
+  }), /active.*bloqueado/i);
+});
+
+test('fails closed to off for invalid mode values', () => {
+  assert.deepEqual(resolveTrendExecutiveMode({ TREND_EXECUTIVE_MODE: 'banana' }), {
+    requestedMode: 'banana',
+    effectiveMode: 'off',
+    reason: 'invalid_mode',
   });
 });
