@@ -148,11 +148,30 @@ function numberWord(value, feminine = false) {
   return words[Number(value)] || value;
 }
 
+function deriveTitleProductIdentity(normalized) {
+  const tokens = normalized.toLowerCase().split(/\s+/u).filter(Boolean);
+  const ignored = new Set([
+    'masculina', 'masculino', 'feminina', 'feminino', 'unissex', 'adulto', 'adulta',
+    'academia', 'corrida', 'fitness', 'treino', 'casual', 'brasil', 'shopee',
+    'original', 'premium', 'novo', 'nova', 'kit', 'ou', 'para', 'com', 'sem', 'de', 'da', 'do',
+  ]);
+  const first = tokens.find((token) => /[a-zá-ú]/iu.test(token) && !/^\d/iu.test(token) && !ignored.has(token));
+  if (!first) return null;
+
+  const normalizedFirst = first.replace(/[.,;:]+$/gu, '');
+  const singular = normalizedFirst.endsWith('s') && normalizedFirst.length > 4
+    ? normalizedFirst.slice(0, -1)
+    : normalizedFirst;
+  const combination = normalized.match(/\b(\d+)\s*em\s*(\d+)\b/iu);
+  return combination ? `${singular} ${combination[1]} em ${combination[2]}` : singular;
+}
+
 function extractDubbingFacts(title) {
   const normalized = normalizeDubbingTitle(title);
   const lower = normalized.toLowerCase();
+  const derivedIdentity = deriveTitleProductIdentity(normalized);
   const category = [
-    ['calça', 'uma calça pantalona', 'compor looks do dia a dia', 'ter uma peça versátil para diferentes combinações'],
+    ['calça', 'uma calça', 'compor looks do dia a dia', 'ter uma peça para diferentes combinações'],
     ['mixer', 'um mixer', 'preparar e triturar alimentos', 'deixar o preparo mais prático'],
     ['potes', 'um conjunto de potes de vidro herméticos', 'organizar e armazenar alimentos', 'deixar os alimentos visíveis e a cozinha mais organizada'],
     ['tênis', 'um tênis casual', 'compor produções do dia a dia', 'combinar com diferentes looks casuais'],
@@ -162,7 +181,7 @@ function extractDubbingFacts(title) {
     ['ferramentas', 'um kit de ferramentas', 'fazer pequenos reparos', 'manter as ferramentas reunidas'],
     ['torneira', 'uma torneira', 'organizar a área da pia', 'ter uma opção funcional para a pia'],
     ['aspirador', 'um aspirador portátil', 'fazer a limpeza do dia a dia', 'alcançar espaços menores com praticidade'],
-  ].find(([key]) => lower.includes(key)) || ['produto', 'um produto', 'resolver uma tarefa do dia a dia', 'ter uma opção prática para essa tarefa'];
+  ].find(([key]) => lower.includes(key)) || [derivedIdentity || 'produto', `um ${derivedIdentity || 'produto'}`, 'conferir os detalhes apresentados', 'conhecer melhor o produto'];
 
   let features = [];
   if (/\bmixer\b/iu.test(normalized)) {
@@ -170,7 +189,7 @@ function extractDubbingFacts(title) {
     features = [combination, /inox/iu.test(normalized) ? 'inox' : null].filter(Boolean);
   }
   else if (/\bcalça\b|\bpantalona\b/iu.test(normalized)) {
-    features = ['pantalona', /bolso/iu.test(normalized) ? 'bolso' : null, /cintura alta/iu.test(normalized) ? 'cintura alta' : null].filter(Boolean);
+    features = [/pantalona/iu.test(normalized) ? 'pantalona' : null, /bolso/iu.test(normalized) ? 'bolso' : null, /cintura alta/iu.test(normalized) ? 'cintura alta' : null].filter(Boolean);
   }
   else if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
     const quantityMatch = normalized.match(/\b(\d+)\s+potes?/iu);
@@ -204,7 +223,7 @@ function extractDubbingFacts(title) {
 
 function buildFallbackDubbingScript(title, durationSecs = 15) {
   const facts = extractDubbingFacts(title);
-  let detail = ` A opção é indicada para ${facts.useCase}.`;
+  let detail = ` O produto é apresentado para ${facts.useCase}.`;
   if (facts.key === 'potes' && facts.features.length) detail = ` O kit reúne ${facts.features[0]}.`;
   if (facts.key === 'camisetas' && facts.features.length) detail = ` O kit reúne ${facts.features[0]}.`;
   if (facts.key === 'parafusadeira' && facts.features.length) detail = ` O conjunto traz ${facts.features.join(', ')}.`;
@@ -213,6 +232,9 @@ function buildFallbackDubbingScript(title, durationSecs = 15) {
   if (facts.key === 'torneira' && facts.features.includes('bica móvel')) detail = ` O modelo tem ${facts.features.includes('gourmet') ? 'acabamento gourmet e ' : ''}bica móvel.`;
   if (facts.key === 'aspirador' && facts.features.length) detail = ` O modelo tem ${facts.features.filter((feature) => feature !== 'portátil').join(' e ')}.`;
   if (facts.key === 'calça' && facts.features.length) detail = ` A peça tem ${facts.features.join(' e ')}.`;
+  if (!['calça', 'mixer', 'potes', 'tênis', 'camisetas', 'cafeteira', 'parafusadeira', 'ferramentas', 'torneira', 'aspirador'].includes(facts.key)) {
+    detail = ' O título apresenta este produto para você conferir os detalhes.';
+  }
   const categoryLabel = facts.category.replace(/^um |^uma /iu, '');
   if (Number(durationSecs) < 13) {
     return `Olha essa ${categoryLabel}.${detail} Você encontra na Shopee. Acesse o link na publicação.`;
@@ -566,6 +588,7 @@ module.exports = {
   generateDubbingCopy,
   buildDubbingPrompt,
   buildFallbackDubbingScript,
+  extractDubbingFacts,
   sanitizeDubbingScript,
   isSafeDubbingScript,
   normalizeSpeechForTTS,
