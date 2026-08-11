@@ -49,6 +49,25 @@ test('builds at most five executable Shopee shadow contracts from a completed Ra
   assert.equal(state.rejected[0].reason, 'scenario_unmapped');
 });
 
+test('allows marketplace-neutral Radar products only in the Shopee shadow runner', () => {
+  const neutralSnapshot = {
+    run: { id: 'run-neutral', status: 'completed' },
+    products: [
+      { id: 'n1', priority: 1, product_term: 'Fone Bluetooth M90 Pro 5.3 TWS', category: 'Tecnologia', marketplace: null, marketplace_key: '', evidence_status: 'partial' },
+      { id: 'n2', priority: 2, product_term: 'Escova Secadora Britânia 4 em 1', category: 'Beleza', marketplace: null, marketplace_key: '', evidence_status: 'partial' },
+      { id: 'ml1', priority: 3, product_term: 'Fone Bluetooth M90 Pro 5.3 TWS', category: 'Tecnologia', marketplace: 'Mercado Livre', marketplace_key: 'mercadolivre', evidence_status: 'verified' },
+    ],
+  };
+
+  const state = buildRadarShadowState(neutralSnapshot, { scenarios, maxIntents: 5 });
+  assert.deepEqual(state.contracts.map((contract) => contract.radarProductId), ['n1', 'n2']);
+  assert.ok(state.contracts.every((contract) => contract.marketplace === 'Shopee'));
+  assert.ok(state.contracts.every((contract) => contract.marketplaceSource === 'shadow_runner_default'));
+  assert.equal(state.rejected.length, 1);
+  assert.equal(state.rejected[0].radarProductId, 'ml1');
+  assert.equal(state.rejected[0].reason, 'marketplace_ineligible');
+});
+
 test('off mode never executes Oracle shadow discovery', async () => {
   let calls = 0;
   const report = await runTrendExecutiveShadow({
