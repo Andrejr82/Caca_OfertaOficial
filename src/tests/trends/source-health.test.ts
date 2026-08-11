@@ -34,6 +34,20 @@ describe("Trend source health", () => {
     });
   });
 
+  it("substitui mensagens livres para impedir segredo em telemetria", () => {
+    const health = buildTrendSourceHealth({
+      source: "mercado_livre_best_seller",
+      status: "failed",
+      received: 0,
+      accepted: 0,
+      rejected: 0,
+      errorCode: "HTTP 401 token-secreto"
+    }, "2026-08-11T00:30:00.000Z");
+
+    expect(health.errorCode).toBe("collector_error");
+    expect(JSON.stringify(health)).not.toContain("token-secreto");
+  });
+
   it("expõe contadores agregados para o futuro Radar Run", () => {
     const health = [
       buildTrendSourceHealth({ source: "google_trends", status: "ok", received: 19, accepted: 19, rejected: 0, errorCode: null }, "2026-08-11T00:30:00.000Z"),
