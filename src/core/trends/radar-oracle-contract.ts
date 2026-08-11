@@ -66,10 +66,46 @@ function isSupportedMarketplace(value: string | null): value is RadarOracleMarke
   return Boolean(value && SUPPORTED_MARKETPLACES.has(value as RadarOracleMarketplace));
 }
 
+function marketplaceFromEvidenceUrl(value: string): RadarOracleMarketplace | null {
+  try {
+    const hostname = new URL(value).hostname.toLocaleLowerCase("pt-BR").replace(/^www\./u, "");
+    if (hostname === "shopee.com.br" || hostname.endsWith(".shopee.com.br")) return "Shopee";
+    if (
+      hostname === "mercadolivre.com.br"
+      || hostname.endsWith(".mercadolivre.com.br")
+      || hostname === "mercadolibre.com.br"
+      || hostname.endsWith(".mercadolibre.com.br")
+    ) return "Mercado Livre";
+    if (hostname === "amazon.com.br" || hostname.endsWith(".amazon.com.br")) return "Amazon";
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveMarketplace(product: TrendRadarSnapshotProductView): RadarOracleMarketplace | null {
+  const evidenceMarketplaces = new Set(
+    product.directEvidenceSourceUrls
+      .map(marketplaceFromEvidenceUrl)
+      .filter((value): value is RadarOracleMarketplace => value !== null),
+  );
+  const evidenceMarketplace = evidenceMarketplaces.size === 1 ? [...evidenceMarketplaces][0] : null;
+
+  if (product.marketplace !== null) {
+    if (!isSupportedMarketplace(product.marketplace)) return null;
+    if (evidenceMarketplaces.size > 1) return null;
+    if (evidenceMarketplace && evidenceMarketplace !== product.marketplace) return null;
+    return product.marketplace;
+  }
+
+  return evidenceMarketplaces.size === 1 ? evidenceMarketplace : null;
+}
+
 function buildContract(snapshot: TrendRadarSnapshotView, product: TrendRadarSnapshotProductView): RadarOracleDiscoveryContract | null {
   const productTerm = product.productTerm.trim();
   const normalizedProductTerm = product.normalizedProductTerm.trim();
-  if (!productTerm || !normalizedProductTerm || !isSupportedMarketplace(product.marketplace)) return null;
+  const marketplace = resolveMarketplace(product);
+  if (!productTerm || !normalizedProductTerm || !marketplace) return null;
 
   return {
     contractVersion: RADAR_ORACLE_CONTRACT_VERSION,
@@ -79,7 +115,7 @@ function buildContract(snapshot: TrendRadarSnapshotView, product: TrendRadarSnap
     radarDate: snapshot.radarDate,
     strategyVersion: snapshot.strategyVersion,
     priority: product.priority,
-    marketplace: product.marketplace,
+    marketplace,
     productTerm,
     normalizedProductTerm,
     category: product.category,
