@@ -14,7 +14,9 @@ describe("Radar execution route contract", () => {
     expect(source).toContain("fetchGoogleTrendSignals");
     expect(source).toContain("fetchMercadoLivreTrendSignals");
     expect(source).toContain("classifyTrendSignal");
-    expect(source).toContain("matchTrendSignalsForUser");
+    expect(source).toContain("matchTrendSignalsForUser(client, user.id)");
+    expect(source).toContain('mode: "persisted_offers_only"');
+    expect(source).not.toContain("discoverMarketplaceCandidates");
     expect(source).toContain("buildExecutiveRadarRanking");
     expect(source).toContain("persistTrendRadarSnapshot");
     expect(source).toContain("status: 409");
