@@ -9,9 +9,10 @@ export async function listTrendApprovalQueueOffers() {
     .select("*")
     .eq("platform", "Shopee")
     .eq("status", "pending_manual_review")
+    .contains("explainability", { provenance: "trend_executive" })
     .order("score", { ascending: false })
     .order("updated_at", { ascending: false })
     .limit(100);
   if (error) throw new Error(`Falha ao ler fila Trends: ${error.message}`);
-  return ((data || []) as Offer[]).filter((offer) => offer.explainability?.provenance === "trend_executive");
+  return (data || []) as Offer[];
 }
