@@ -5,6 +5,7 @@ const ORACLE_RUNTIME_FLAGS = Object.freeze({
   SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true',
   NO_POSTS: '1',
   NO_PUBLISH: '1',
+  TREND_EXECUTIVE_MODE: 'off',
 });
 
 const REQUIRED_KEYS = Object.freeze(Object.keys(ORACLE_RUNTIME_FLAGS));
@@ -13,6 +14,7 @@ const ALLOWED_VALUES = Object.freeze({
   SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: new Set(['true']),
   NO_POSTS: new Set(['0', '1']),
   NO_PUBLISH: new Set(['1']),
+  TREND_EXECUTIVE_MODE: new Set(['off']),
 });
 
 function parseOverlay(source) {
@@ -77,14 +79,14 @@ function buildRemoteOverlayPlan({ projectDir, remoteStage, remoteBackup, overlay
   const overlayFile = `${remoteStage}/config/oracle-runtime-overlay.env`;
   const tempFile = `${envFile}.overlay-${remoteStage.split('-').at(-1)}`;
   const checks = REQUIRED_KEYS.map((key) => `grep -Fqx '${key}=${flags[key]}' '${overlayFile}'`).join(' && ');
-  const allowlist = REQUIRED_KEYS.join('|');
+  const allowedAssignments = REQUIRED_KEYS.map((key) => `${key}=${flags[key]}`).join('|');
 
   return [
     'set -eu',
     `test -s '${envFile}'`,
     `test -s '${overlayFile}'`,
     `test "$(grep -Ev '^[[:space:]]*(#|$)' '${overlayFile}' | wc -l | tr -d ' ')" -eq ${REQUIRED_KEYS.length}`,
-    `if grep -Ev '^[[:space:]]*(#.*|(${allowlist})=(true|0|1)[[:space:]]*)$' '${overlayFile}' | grep -q .; then echo 'Overlay contains invalid or non-allowlisted key' >&2; exit 1; fi`,
+    `if grep -Ev '^[[:space:]]*(#.*|(${allowedAssignments})[[:space:]]*)$' '${overlayFile}' | grep -q .; then echo 'Overlay contains invalid or non-allowlisted key' >&2; exit 1; fi`,
     checks,
     `mkdir -p '${remoteBackup}'`,
     `cp -p '${envFile}' '${remoteBackup}/env.local.before'`,

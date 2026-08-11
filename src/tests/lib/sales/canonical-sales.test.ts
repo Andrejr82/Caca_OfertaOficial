@@ -31,6 +31,9 @@ describe("canonical marketplace sales", () => {
       commission_value: 12.99,
       status: "confirmed",
       sold_at: "2026-08-09T12:00:00.000Z",
+      attribution_method: "sub_id",
+      source_sub_id: "tg_offer-1",
+      link_resolution: "matched",
     }));
   });
 
@@ -54,6 +57,9 @@ describe("canonical marketplace sales", () => {
       gross_value: 200,
       commission_value: 20,
       status: "pending",
+      attribution_method: "affiliate_link_id",
+      source_sub_id: null,
+      link_resolution: "matched",
     }));
   });
 
@@ -74,6 +80,8 @@ describe("canonical marketplace sales", () => {
 
     expect(sale.affiliate_link_id).toBeNull();
     expect(sale.link_resolution).toBe("missing");
+    expect(sale.attribution_method).toBe("channel_only");
+    expect(sale.source_sub_id).toBe("missing-sub-id");
   });
 
   it("accepts a real unattributed marketplace sale without guessing attribution", async () => {
@@ -89,10 +97,11 @@ describe("canonical marketplace sales", () => {
     expect(sale).toEqual(expect.objectContaining({
       offer_id: null, affiliate_link_id: null, channel: null,
       gross_value: 24.89, commission_value: 0.7467,
+      attribution_method: "unattributed", source_sub_id: null, link_resolution: "missing",
     }));
     await upsertCanonicalSale(sale, { upsert });
     expect(upsert).toHaveBeenCalledWith(
-      expect.objectContaining({ offer_id: null, affiliate_link_id: null, channel: null }),
+      expect.objectContaining({ offer_id: null, affiliate_link_id: null, channel: null, attribution_method: "unattributed" }),
       { onConflict: "user_id,marketplace,source_event_id" },
     );
   });
@@ -134,6 +143,8 @@ describe("canonical marketplace sales", () => {
       gross_value: 50,
       commission_value: 5,
       status: "confirmed",
+      attribution_method: "sub_id",
+      source_sub_id: "tg_offer-1",
     }));
   });
 
@@ -154,6 +165,8 @@ describe("canonical marketplace sales", () => {
       offer_id: null,
       affiliate_link_id: null,
       channel: null,
+      attribution_method: "unattributed",
+      source_sub_id: null,
       link_resolution: "missing",
     }));
   });
