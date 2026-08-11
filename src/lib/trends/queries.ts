@@ -2,13 +2,23 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { TREND_COMMERCIAL_STRATEGY_VERSION } from "@/core/ai/trend-commercial-classifier";
 import type { TrendExperimentListItem, TrendOpportunityListItem, TrendSignalListItem } from "@/core/trends/types";
 
-export async function listTrendSignals(): Promise<TrendSignalListItem[]> {
+export async function listTrendSignals(options: { observedFrom?: string; observedTo?: string; externalIds?: string[] } = {}): Promise<TrendSignalListItem[]> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return [];
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("trend_signals")
-    .select("id,source_type,source_name,source,region,external_id,term,title,evidence,observed_at,captured_at,trend_strength,trend_direction,offer_id")
+    .select("id,source_type,source_name,source,region,external_id,term,title,evidence,observed_at,captured_at,trend_strength,trend_direction,offer_id");
+
+  if (options.externalIds) {
+    const externalIds = [...new Set(options.externalIds.filter(Boolean))];
+    if (externalIds.length === 0) return [];
+    query = query.in("external_id", externalIds);
+  }
+  if (options.observedFrom) query = query.gte("observed_at", options.observedFrom);
+  if (options.observedTo) query = query.lt("observed_at", options.observedTo);
+
+  const { data, error } = await query
     .order("observed_at", { ascending: false })
     .limit(100);
 

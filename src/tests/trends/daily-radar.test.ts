@@ -135,6 +135,46 @@ describe("DailyTrendRadarResult", () => {
     expect(rankDailyTrendRadar([result])[0].rank).toBeNull();
   });
 
+  it("usa a proveniência padrão do Mercado Livre no Radar", () => {
+    const sourceUrl = "https://lista.mercadolivre.com.br/furadeira";
+    const [result] = buildDailyRadarFromTrendSignals([{
+      id: "ml-trend-1",
+      sourceType: "external",
+      sourceName: "mercado_livre_trends",
+      source: "mercado_livre_trends",
+      region: "BR",
+      externalId: "MLB:furadeira",
+      term: "furadeira",
+      title: "furadeira",
+      evidence: { rank: 1, trendBucket: "fastest_growing", url: sourceUrl, link: sourceUrl, siteId: "MLB" },
+      observedAt: "2026-08-11T18:40:50.793Z",
+      capturedAt: "2026-08-11T18:40:50.793Z",
+      trendStrength: null,
+      trendDirection: "rising",
+      offerId: null,
+      classification: {
+        id: "classification-ml-1",
+        signalId: "ml-trend-1",
+        commercialRelevance: 95,
+        isProductIntent: true,
+        normalizedProductTerm: "furadeira",
+        categoryHint: "Ferramentas",
+        decision: "eligible",
+        reason: "Produto identificado",
+        aiModel: "model",
+        strategyVersion: "trend-commercial-v1",
+        classifiedAt: "2026-08-11T18:40:55.000Z"
+      }
+    }], []);
+
+    expect(result).toMatchObject({
+      evidence_status: "partial",
+      source_count: 1,
+      normalized_product_term: "furadeira"
+    });
+    expect(result.source_urls).toContain(sourceUrl);
+  });
+
   it("lê evidência persistida do Radar externo e preserva match/opportunity", () => {
     const [result] = buildDailyRadarFromTrendSignals([{
       id: "radar-bella", sourceType: "external", sourceName: "external_radar", source: "external_radar", region: "BR", externalId: "bella", term: "Escova Secadora Britânia BELLA01", title: "Escova Secadora Britânia BELLA01", evidence: {

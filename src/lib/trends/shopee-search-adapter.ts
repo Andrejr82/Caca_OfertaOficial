@@ -6,11 +6,15 @@ interface ShopeeOfficialNode {
   productName?: string | null;
   productLink?: string | null;
   offerLink?: string | null;
+  imageUrl?: string | null;
   priceMin?: number | string | null;
   priceMax?: number | string | null;
   ratingStar?: number | string | null;
   sales?: number | string | null;
   priceDiscountRate?: number | string | null;
+  commissionRate?: number | string | null;
+  shopeeCommissionRate?: number | string | null;
+  sellerCommissionRate?: number | string | null;
   shopName?: string | null;
 }
 
@@ -29,18 +33,30 @@ export function mapShopeeProductsToTrendCandidates(products: ShopeeOfficialNode[
     const itemId = text(product.itemId);
     const productName = text(product.productName);
     if (!itemId || !productName) return [];
+    const affiliateUrl = text(product.offerLink);
+    const productLink = text(product.productLink);
     return [{
       id: itemId,
       marketplace: "Shopee",
       productName,
       currentPrice: numeric(product.priceMin),
-      oldPrice: numeric(product.priceMax),
+      oldPrice: null,
       itemId,
       shopeeItemId: itemId,
-      permalink: text(product.offerLink) || text(product.productLink),
+      permalink: affiliateUrl || productLink,
       marketplaceMetrics: {
-        shopId: text(product.shopId), shopName: text(product.shopName), rating: numeric(product.ratingStar),
-        sales: numeric(product.sales), discount: numeric(product.priceDiscountRate)
+        shopId: text(product.shopId),
+        shopName: text(product.shopName),
+        imageUrl: text(product.imageUrl),
+        affiliateUrl,
+        productLink,
+        priceMax: numeric(product.priceMax),
+        rating: numeric(product.ratingStar),
+        sales: numeric(product.sales),
+        discount: numeric(product.priceDiscountRate),
+        commissionRate: numeric(product.commissionRate),
+        shopeeCommissionRate: numeric(product.shopeeCommissionRate),
+        sellerCommissionRate: numeric(product.sellerCommissionRate),
       }
     }];
   });

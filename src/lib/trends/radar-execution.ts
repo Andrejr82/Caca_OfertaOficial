@@ -61,6 +61,18 @@ export function buildRadarExecutionWindow(now: Date = new Date()): RadarExecutio
   };
 }
 
+export function buildRadarRefreshExecutionWindow(now: Date = new Date()): RadarExecutionWindow {
+  if (Number.isNaN(now.getTime())) throw new Error("Data de execução inválida.");
+  const radarDate = localDate(now);
+  const windowEnd = new Date(now);
+  const windowStart = new Date(windowEnd.getTime() - (7 * 86_400_000));
+  return {
+    radarDate,
+    windowStart: windowStart.toISOString(),
+    windowEnd: windowEnd.toISOString(),
+  };
+}
+
 function runRow(identity: RadarExecutionIdentity): TrendRadarRunRow {
   return {
     user_id: identity.userId,

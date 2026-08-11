@@ -5,6 +5,7 @@ import { DAILY_TREND_RADAR_STRATEGY_VERSION, buildDailyRadarFromTrendSignals } f
 import { buildExecutiveRadarRanking } from "@/core/trends/executive-radar-ranking";
 import { buildStrongestNiches7d } from "@/core/trends/strongest-niches-7d";
 import { buildInternalPerformanceByProduct } from "@/core/trends/internal-performance-score";
+import type { TrendSignal, TrendSignalListItem } from "@/core/trends/types";
 import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { fetchGoogleTrendSignals } from "@/lib/trends/google-trends-adapter";
@@ -15,6 +16,7 @@ import { persistTrendSignalClassifications, persistTrendSignals } from "@/lib/tr
 import { listTrendOpportunities, listTrendSignals } from "@/lib/trends/queries";
 import {
   buildRadarExecutionWindow,
+  buildRadarRefreshExecutionWindow,
   claimTrendRadarExecution,
   createSupabaseRadarExecutionStore,
 } from "@/lib/trends/radar-execution";
@@ -47,14 +49,51 @@ function executionClient(client: unknown): Parameters<typeof createSupabaseRadar
   return client as Parameters<typeof createSupabaseRadarExecutionStore>[0];
 }
 
-export async function POST() {
+function signalIdentity(sourceName: string, externalId: string | null): string | null {
+  return externalId ? `${sourceName}\u0000${externalId}` : null;
+}
+
+function mergeCurrentCollectionSignals(
+  persistedSignals: TrendSignalListItem[],
+  collectedSignals: TrendSignal[],
+): TrendSignalListItem[] {
+  const currentByIdentity = new Map<string, TrendSignal>();
+  for (const current of collectedSignals) {
+    const identity = signalIdentity(current.sourceName, current.externalId);
+    if (identity) currentByIdentity.set(identity, current);
+  }
+
+  return persistedSignals.flatMap((persisted) => {
+    const identity = signalIdentity(persisted.sourceName, persisted.externalId);
+    const current = identity ? currentByIdentity.get(identity) : undefined;
+    if (!current) return [];
+    return [{
+      ...persisted,
+      sourceType: current.sourceType,
+      sourceName: current.sourceName,
+      source: current.source,
+      region: current.region,
+      externalId: current.externalId,
+      term: current.term,
+      title: current.title,
+      evidence: current.evidence,
+      observedAt: current.observedAt,
+      capturedAt: current.capturedAt,
+      trendStrength: current.trendStrength,
+      trendDirection: current.trendDirection,
+    }];
+  });
+}
+
+export async function POST(request: Request) {
   const client = await createServerSupabaseClient();
   if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
 
   const { data: { user } } = await client.auth.getUser();
   if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-  const window = buildRadarExecutionWindow();
+  const refreshRequested = new URL(request.url).searchParams.get("refresh") === "1";
+  const window = refreshRequested ? buildRadarRefreshExecutionWindow() : buildRadarExecutionWindow();
   const executionStore = createSupabaseRadarExecutionStore(executionClient(client));
   const claim = await claimTrendRadarExecution(executionStore, {
     userId: user.id,
@@ -70,11 +109,15 @@ export async function POST() {
   }
 
   const sourceHealth: Record<string, SourceHealthEntry> = {};
+  const collectedExternalIds = new Set<string>();
+  const collectedSignals: TrendSignal[] = [];
   let stage = "collect";
 
   try {
     try {
       const googleSignals = await fetchGoogleTrendSignals();
+      collectedSignals.push(...googleSignals);
+      for (const signal of googleSignals) if (signal.externalId) collectedExternalIds.add(signal.externalId);
       const persisted = await persistTrendSignals(persistenceClient(client), user.id, googleSignals);
       sourceHealth.google_trends = { status: "healthy", collected: googleSignals.length, persisted };
     } catch {
@@ -88,6 +131,8 @@ export async function POST() {
     if (accessToken) {
       try {
         const mlSignals = await fetchMercadoLivreTrendSignals(accessToken);
+        collectedSignals.push(...mlSignals);
+        for (const signal of mlSignals) if (signal.externalId) collectedExternalIds.add(signal.externalId);
         const persisted = await persistTrendSignals(persistenceClient(client), user.id, mlSignals);
         sourceHealth.mercado_livre_trends = { status: "healthy", collected: mlSignals.length, persisted };
       } catch {
@@ -98,7 +143,12 @@ export async function POST() {
     }
 
     stage = "classify";
-    let signals = await listTrendSignals();
+    let signals = await listTrendSignals({
+      externalIds: refreshRequested ? [...collectedExternalIds] : undefined,
+      observedFrom: refreshRequested ? undefined : window.windowStart,
+      observedTo: refreshRequested ? undefined : window.windowEnd,
+    });
+    if (refreshRequested) signals = mergeCurrentCollectionSignals(signals, collectedSignals);
     const pendingClassification = signals.filter((signal) => !signal.classification);
     if (pendingClassification.length > 0) {
       const provider = new OfficialAIProviderRegistry().resolve();
@@ -117,7 +167,12 @@ export async function POST() {
     const matching = await matchTrendSignalsForUser(client, user.id);
 
     stage = "rank";
-    signals = await listTrendSignals();
+    signals = await listTrendSignals({
+      externalIds: refreshRequested ? [...collectedExternalIds] : undefined,
+      observedFrom: refreshRequested ? undefined : window.windowStart,
+      observedTo: refreshRequested ? undefined : window.windowEnd,
+    });
+    if (refreshRequested) signals = mergeCurrentCollectionSignals(signals, collectedSignals);
     const opportunities = (await listTrendOpportunities())
       .filter((opportunity) => opportunity.strategyVersion === TREND_COMMERCIAL_STRATEGY_VERSION);
     const radar = buildDailyRadarFromTrendSignals(signals, opportunities);

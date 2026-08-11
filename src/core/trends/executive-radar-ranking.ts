@@ -40,11 +40,20 @@ function reasons(result: DailyTrendRadarResult, score: CommercialOpportunityScor
   ];
 }
 
+function commercialIdentity(result: DailyTrendRadarResult): string {
+  const term = result.normalized_product_term.trim().toLocaleLowerCase("pt-BR");
+  const marketplace = result.marketplaces
+    .map((value) => value.trim().toLocaleLowerCase("pt-BR"))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"))
+    .join("|");
+  return `${term}\u0000${marketplace}`;
+}
+
 export function buildExecutiveRadarRanking(
   results: DailyTrendRadarResult[],
   options: ExecutiveRadarRankingOptions,
 ): ExecutiveRadarRankingItem[] {
-  return results
+  const ranked = results
     .filter((result) => result.evidence_status === "verified" || result.evidence_status === "partial")
     .map((result) => {
       const normalizedKey = normalizeInternalPerformanceLabel(result.normalized_product_term);
@@ -64,7 +73,17 @@ export function buildExecutiveRadarRanking(
       const termOrder = a.result.normalized_product_term.localeCompare(b.result.normalized_product_term, "pt-BR");
       if (termOrder !== 0) return termOrder;
       return a.result.marketplaces.join("|").localeCompare(b.result.marketplaces.join("|"), "pt-BR");
-    })
+    });
+
+  const seen = new Set<string>();
+  const unique = ranked.filter(({ result }) => {
+    const identity = commercialIdentity(result);
+    if (seen.has(identity)) return false;
+    seen.add(identity);
+    return true;
+  });
+
+  return unique
     .slice(0, 20)
     .map(({ result, score }, index) => ({
       priority: index + 1,
