@@ -23,12 +23,20 @@ describe("Radar execution route contract", () => {
     expect(source).toContain("markFailed");
   });
 
-  it("restringe classificação e ranking à janela da execução atual", () => {
+  it("restringe a execução diária à janela temporal atual", () => {
     const source = fs.readFileSync(routePath, "utf8");
 
     expect(source).toContain("observedFrom: window.windowStart");
     expect(source).toContain("observedTo: window.windowEnd");
-    expect(source.match(/listTrendSignals\(\{[\s\S]*?observedFrom: window\.windowStart[\s\S]*?observedTo: window\.windowEnd[\s\S]*?\}\)/g)?.length).toBe(2);
+  });
+
+  it("no refresh classifica e ranqueia somente sinais coletados naquele clique", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+
+    expect(source).toContain("const collectedExternalIds = new Set<string>()");
+    expect(source).toContain("collectedExternalIds.add(signal.externalId)");
+    expect(source).toContain("externalIds: refreshRequested ? [...collectedExternalIds] : undefined");
+    expect(source.match(/externalIds: refreshRequested \? \[\.\.\.collectedExternalIds\] : undefined/g)?.length).toBe(2);
   });
 
   it("permite refresh explícito sem substituir a execução diária", () => {
