@@ -13,10 +13,10 @@ export function DailyRadarRefreshButton() {
     setExecuting(true);
     setMessage(null);
     try {
-      const response = await fetch("/api/trends/execute", { method: "POST" });
+      const response = await fetch("/api/trends/execute?refresh=1", { method: "POST" });
       const result = await response.json();
       if (!response.ok || !result.ok) throw new Error(result.message || "Falha ao executar Radar.");
-      setMessage(result.reused ? "Radar de hoje já concluído." : `Radar concluído com ${result.products ?? 0} produto(s).`);
+      setMessage(result.reused ? "Radar desta hora já concluído." : `Radar concluído com ${result.products ?? 0} produto(s).`);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao executar Radar.");
@@ -39,7 +39,7 @@ export function DailyRadarRefreshButton() {
         disabled={executing}
         className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-wait disabled:opacity-50"
       >
-        {executing ? "Executando Radar…" : "Executar Radar de Hoje"}
+        {executing ? "Executando Radar…" : "Executar Radar de Agora"}
       </button>
       <button
         type="button"
