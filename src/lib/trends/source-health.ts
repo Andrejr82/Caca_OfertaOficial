@@ -36,6 +36,12 @@ function nonNegativeInteger(value: number): number {
   return Number.isInteger(value) && value >= 0 ? value : 0;
 }
 
+function safeErrorCode(value: string | null): string | null {
+  if (!value) return null;
+  const code = String(value).trim();
+  return /^[a-z0-9][a-z0-9_-]{0,63}$/iu.test(code) ? code : "collector_error";
+}
+
 function healthStatus(input: TrendSourceCollectionStats): TrendSourceHealthStatus {
   if (input.status === "failed") return "failed";
   if (input.status === "empty") return "empty";
@@ -58,7 +64,7 @@ export function buildTrendSourceHealth(
     received: nonNegativeInteger(input.received),
     accepted: nonNegativeInteger(input.accepted),
     rejected: nonNegativeInteger(input.rejected),
-    errorCode: input.errorCode ? String(input.errorCode) : null,
+    errorCode: safeErrorCode(input.errorCode),
     observedAt: normalizedObservedAt.toISOString()
   };
 }
