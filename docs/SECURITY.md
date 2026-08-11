@@ -1,8 +1,8 @@
 # Segurança
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: e6cc151 -->
+<!-- verified-on: 2026-08-11 -->
 
 ## Fronteiras de confiança
 
@@ -34,3 +34,11 @@
 ## Resposta a incidente
 
 Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afetados, avaliar dados persistidos e só reativar após smoke tests controlados.
+
+## Segurança do Trend Executive
+
+- Evidência direta e inferência permanecem separadas; fato desconhecido não é sintetizado.
+- Fonte degradada, não confiável ou com drift material é bloqueada para novas contribuições até revisão.
+- `TREND_EXECUTIVE_MODE=active` permanece inacessível no runtime atual.
+- Shadow não publica, não altera autoridade e não aplica pesos automaticamente.
+- Feedback de experimentos e sinais internos só usam venda/conversão quando a atribuição é explicitamente confiável.
