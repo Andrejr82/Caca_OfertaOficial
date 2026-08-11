@@ -6,11 +6,15 @@ interface ShopeeOfficialNode {
   productName?: string | null;
   productLink?: string | null;
   offerLink?: string | null;
+  imageUrl?: string | null;
   priceMin?: number | string | null;
   priceMax?: number | string | null;
   ratingStar?: number | string | null;
   sales?: number | string | null;
   priceDiscountRate?: number | string | null;
+  commissionRate?: number | string | null;
+  shopeeCommissionRate?: number | string | null;
+  sellerCommissionRate?: number | string | null;
   shopName?: string | null;
 }
 
@@ -39,8 +43,15 @@ export function mapShopeeProductsToTrendCandidates(products: ShopeeOfficialNode[
       shopeeItemId: itemId,
       permalink: text(product.offerLink) || text(product.productLink),
       marketplaceMetrics: {
-        shopId: text(product.shopId), shopName: text(product.shopName), rating: numeric(product.ratingStar),
-        sales: numeric(product.sales), discount: numeric(product.priceDiscountRate)
+        shopId: text(product.shopId),
+        shopName: text(product.shopName),
+        imageUrl: text(product.imageUrl),
+        rating: numeric(product.ratingStar),
+        sales: numeric(product.sales),
+        discount: numeric(product.priceDiscountRate),
+        commissionRate: numeric(product.commissionRate),
+        shopeeCommissionRate: numeric(product.shopeeCommissionRate),
+        sellerCommissionRate: numeric(product.sellerCommissionRate),
       }
     }];
   });
