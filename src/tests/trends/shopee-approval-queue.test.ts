@@ -81,11 +81,12 @@ describe("Shopee approval queue", () => {
     expect(ranked.map((item) => item.itemId)).toEqual(["333"]);
   });
 
-  it("não confunde acessórios Samsung com celulares Samsung", () => {
+  it("não confunde acessórios ou wearables Samsung com celulares Samsung", () => {
     const input = radar("samsung", 1, "celular samsung");
     const ranked = rankTrendShopeeCandidates(input, [
       candidate("501", "Kit 2 em1 Película Vidro 3D + Capa Capinha Transparente Para Samsung Galaxy A55"),
       candidate("502", "Suporte Celular Tablet Universal Ajustável Compatível com Samsung"),
+      candidate("504", "Samsung Smartwatch Galaxy Fit3 Grafite"),
       candidate("503", "Samsung Galaxy A55 5G Smartphone 128GB"),
     ]);
     expect(ranked.map((item) => item.itemId)).toEqual(["503"]);
