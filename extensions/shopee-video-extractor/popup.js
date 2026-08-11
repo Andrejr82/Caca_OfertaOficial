@@ -1,6 +1,8 @@
 let currentVideoUrl = null;
 let currentTitle = "Shopee_Video";
 let currentOriginalUrl = null;
+let currentShopId = null;
+let currentItemId = null;
 
 document.getElementById('extractBtn').addEventListener('click', async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -15,7 +17,7 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    files: ['video-parser.js', 'content.js']
+    files: ['video-parser.js', 'price-parser.js', 'content.js']
   }, (results) => {
     document.getElementById('extractBtn').disabled = false;
     
@@ -30,6 +32,8 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
       currentVideoUrl = data.videoUrl;
       currentTitle = data.title || "Shopee_Video";
       currentOriginalUrl = data.originalUrl || "";
+      currentShopId = data.shopId || null;
+      currentItemId = data.itemId || null;
       window.currentImageUrl = data.imageUrl || "";
       window.currentPrice = data.price || "0";
       
@@ -70,6 +74,8 @@ document.getElementById('dubBtn').addEventListener('click', async () => {
           title: currentTitle,
           price: window.currentPrice,
           originalUrl: currentOriginalUrl,
+          shopId: currentShopId,
+          itemId: currentItemId,
           imageUrl: window.currentImageUrl,
           tenantId: "7a9ca7b7-f464-46e0-a9de-9b322c73628a" // ID do usuário administrador para aparecer no painel
         })

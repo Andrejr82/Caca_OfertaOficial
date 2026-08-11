@@ -2,7 +2,12 @@ function extractVideoAndTitle() {
   let videoUrl = null;
   let imageUrl = null;
   let price = "0";
+  let shopId = null;
+  let itemId = null;
   let title = document.title.replace(' | Shopee Brasil', '').replace(/[\\/:*?"<>|]/g, '').trim();
+  const identityMatch = window.location.pathname.match(/\/product\/(\d+)\/(\d+)/u)
+    || window.location.pathname.match(/-i\.(\d+)\.(\d+)/u);
+  if (identityMatch) [, shopId, itemId] = identityMatch;
 
   const sharedCandidate = globalThis.shopeeVideoParser?.findVideoCandidateFromHtml(
     document.documentElement?.outerHTML || ''
@@ -76,24 +81,21 @@ function extractVideoAndTitle() {
     if (firstImg && firstImg.src) imageUrl = firstImg.src;
   }
 
-  // 4. Pescar Preço (Instantâneo)
-  // Shopee tem várias classes, o mais seguro é pegar o conteúdo de uma tag com "R$" 
-  // que esteja na div principal de resumo do produto
+  // 4. Pescar preço somente com parser que exclui parcela, cupom e frete.
   try {
-    const priceElements = Array.from(document.querySelectorAll('div, span')).filter(el => 
-      el.innerText && el.innerText.includes('R$') && el.innerText.length < 20
-    );
-    if (priceElements.length > 0) {
-      // Pega o primeiro que parece ser o preço principal do topo
-      const priceText = priceElements[0].innerText;
-      const match = priceText.match(/R\$\s*(\d+[.,]\d{2})/);
-      if (match) {
-        price = match[1]; // Ex: 39,90
-      }
-    }
+    const candidates = Array.from(document.querySelectorAll('div, span'))
+      .filter((el) => el.innerText && el.innerText.includes('R$') && el.innerText.length < 120)
+      .map((el) => ({
+        text: el.innerText,
+        className: typeof el.className === 'string' ? el.className : '',
+        id: el.id || '',
+        ariaLabel: el.getAttribute?.('aria-label') || '',
+      }));
+    const selected = globalThis.shopeePriceParser?.selectPrimaryPrice(candidates);
+    if (selected) price = selected.raw;
   } catch(e) {}
 
-  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price };
+  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price, shopId, itemId };
 }
 
 extractVideoAndTitle();

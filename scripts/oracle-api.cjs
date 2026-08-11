@@ -2,6 +2,7 @@ const os = require('os');
 os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const express = require('express');
+const { resolvePriceAuthority } = require('./shopee-price-authority.cjs');
 const axios = require('axios');
 require('dotenv').config({ path: '.env.local' });
 const {
@@ -237,7 +238,7 @@ app.post('/api/manual/trends', async (req, res) => {
 });
 
 app.post('/api/shopee/dub-video', async (req, res) => {
-  const { token, videoUrl, title, price, originalUrl, imageUrl, tenantId } = req.body || {};
+  const { token, videoUrl, title, price, originalUrl, imageUrl, tenantId, shopId, itemId } = req.body || {};
 
   if (!isAuthorized(token)) {
     return res.status(401).json({ error: 'Unauthorized. Verifique a sua ORACLE_API_KEY.' });
@@ -247,21 +248,43 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     return res.status(400).json({ error: 'Faltam parâmetros obrigatórios (videoUrl, title, originalUrl, tenantId).' });
   }
 
-  if (price <= 0) {
-    return res.status(400).json({ error: 'O preço capturado foi R$ 0,00. A extração falhou. Tente novamente.' });
-  }
-
   try {
     // 1. Verifica se a oferta já existe no banco
     let offerId = null;
 
     // Busca oferta pela URL original
-    const { data: existingOffers } = await supabaseAdmin
-      .from('offers')
-      .select('id, product_name')
-      .eq('original_url', originalUrl)
-      .eq('user_id', tenantId)
-      .limit(1);
+    let existingOffers = [];
+    if (/^\d+$/.test(String(shopId || '')) && /^\d+$/.test(String(itemId || ''))) {
+      const identityQuery = await supabaseAdmin
+        .from('offers')
+        .select('id, product_name, current_price, shopee_shop_id, shopee_item_id')
+        .eq('user_id', tenantId)
+        .eq('platform', 'Shopee')
+        .eq('shopee_shop_id', String(shopId))
+        .eq('shopee_item_id', String(itemId))
+        .limit(1);
+      existingOffers = identityQuery.data || [];
+    }
+    if (!existingOffers.length) {
+      const urlQuery = await supabaseAdmin
+        .from('offers')
+        .select('id, product_name, current_price, shopee_shop_id, shopee_item_id')
+        .eq('original_url', originalUrl)
+        .eq('user_id', tenantId)
+        .limit(1);
+      existingOffers = urlQuery.data || [];
+    }
+
+    const existingOffer = existingOffers[0] || null;
+    const priceDecision = resolvePriceAuthority({
+      payloadPrice: price,
+      existingOffer,
+      payloadIdentity: { shopId, itemId },
+    });
+    const effectivePrice = priceDecision.price;
+    if (effectivePrice <= 0) {
+      return res.status(400).json({ error: 'O preço capturado não foi validado. A extração falhou. Tente novamente.' });
+    }
 
     if (existingOffers && existingOffers.length > 0) {
       offerId = existingOffers[0].id;
@@ -272,7 +295,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
         .from('offers')
         .update({
           image_url: imageUrl || null,
-          current_price: parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.')) || 0
+          current_price: effectivePrice
         })
         .eq('id', offerId);
 
@@ -286,8 +309,10 @@ app.post('/api/shopee/dub-video', async (req, res) => {
           product_name: title,
           original_url: originalUrl,
           image_url: imageUrl || null,
-          current_price: parseFloat(String(price || '').replace(/[^0-9,.]/g, '').replace(',', '.')) || 0,
+          current_price: effectivePrice,
           platform: 'Shopee',
+          shopee_shop_id: /^\d+$/.test(String(shopId || '')) ? String(shopId) : null,
+          shopee_item_id: /^\d+$/.test(String(itemId || '')) ? String(itemId) : null,
           status: 'pending_manual_review'
         })
         .select('id')
@@ -308,7 +333,7 @@ app.post('/api/shopee/dub-video', async (req, res) => {
     // 2. Dubla o vídeo localmente. O mesmo ID isola workspace, storage e video_job.
     const { processShopeeVideoDubbing } = require('./video-dubber.cjs');
     const jobId = require('crypto').randomUUID();
-    const result = await processShopeeVideoDubbing(videoUrl, title, price || 'Não informado', { jobId });
+    const result = await processShopeeVideoDubbing(videoUrl, title, effectivePrice, { jobId });
 
     if (!result.success) {
       return res.status(500).json({ error: result.error });
