@@ -55,7 +55,7 @@ const GENERIC_RELEVANCE_TOKENS = new Set([
   "produto", "oferta", "novo", "nova", "original", "kit",
 ]);
 const PHONE_INTENT_TOKENS = new Set(["celular", "smartphone"]);
-const PHONE_ACCESSORY_PATTERN = /\b(?:pelicula|capa|capinha|case|suporte|cabo|carregador|vidro|protetor|adaptador)\b/;
+const PHONE_NON_DEVICE_PATTERN = /\b(?:pelicula|capa|capinha|case|suporte|cabo|carregador|vidro|protetor|adaptador|smartwatch|smart watch|watch|relogio|wearable|pulseira inteligente|galaxy fit|fit3)\b/;
 
 function normalize(value: unknown) {
   return String(value ?? "")
@@ -112,7 +112,7 @@ function candidateRelevance(candidate: TrendOfferCandidate, productTerm: string)
   const isPhoneIntent = termTokens.some((token) => PHONE_INTENT_TOKENS.has(token));
 
   if (isPhoneIntent) {
-    if (PHONE_ACCESSORY_PATTERN.test(normalizedTitle)) return false;
+    if (PHONE_NON_DEVICE_PATTERN.test(normalizedTitle)) return false;
     const hasPhoneIdentity = titleTokens.has("celular")
       || titleTokens.has("smartphone")
       || titleTokens.has("telefone")
