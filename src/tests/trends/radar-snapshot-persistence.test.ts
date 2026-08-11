@@ -41,6 +41,7 @@ const input: TrendRadarSnapshotInput = {
 function store(overrides: Partial<TrendRadarSnapshotStore> = {}): TrendRadarSnapshotStore {
   return {
     upsertRun: async () => ({ id: "run-1" }),
+    deleteProducts: async () => {},
     upsertProducts: async () => {},
     updateRunState: async () => {},
     ...overrides
@@ -77,6 +78,32 @@ describe("Trend Radar snapshot persistence", () => {
     });
   });
 
+  it("substitui o conjunto de produtos do run antes de persistir o retry", async () => {
+    const calls: string[] = [];
+
+    await persistTrendRadarSnapshot(store({
+      deleteProducts: async (runId) => { calls.push(`delete:${runId}`); },
+      upsertProducts: async () => { calls.push("upsert"); },
+      updateRunState: async (_runId, status) => { calls.push(`state:${status}`); }
+    }), "user-1", input);
+
+    expect(calls).toEqual(["delete:run-1", "upsert", "state:completed"]);
+  });
+
+  it("limpa produtos antigos mesmo quando o retry atual resulta em zero produtos", async () => {
+    const calls: string[] = [];
+    const emptyInput = { ...input, products: [] };
+
+    const result = await persistTrendRadarSnapshot(store({
+      deleteProducts: async (runId) => { calls.push(`delete:${runId}`); },
+      upsertProducts: async () => { calls.push("upsert"); },
+      updateRunState: async (_runId, status) => { calls.push(`state:${status}`); }
+    }), "user-1", emptyInput);
+
+    expect(result).toEqual({ runId: "run-1", productCount: 0, status: "completed" });
+    expect(calls).toEqual(["delete:run-1", "upsert", "state:completed"]);
+  });
+
   it("marca run como completed após persistir produtos", async () => {
     const states: Array<{ runId: string; status: string; failureCode: string | null }> = [];
     const persistedProducts: Record<string, unknown>[][] = [];
@@ -96,6 +123,7 @@ describe("Trend Radar snapshot persistence", () => {
 
     await expect(persistTrendRadarSnapshot(store({
       upsertRun: async () => { throw new Error("token-secreto database raw detail"); },
+      deleteProducts: async () => { productsTouched = true; },
       upsertProducts: async () => { productsTouched = true; }
     }), "user-1", input)).rejects.toThrow("Falha ao persistir execução do Radar.");
 
@@ -107,6 +135,17 @@ describe("Trend Radar snapshot persistence", () => {
 
     await expect(persistTrendRadarSnapshot(store({
       upsertProducts: async () => { throw new Error("token-secreto database detail"); },
+      updateRunState: async (runId, status, failureCode) => { states.push({ runId, status, failureCode }); }
+    }), "user-1", input)).rejects.toThrow("Falha ao persistir produtos do Radar.");
+
+    expect(states).toEqual([{ runId: "run-1", status: "failed", failureCode: "products_persistence_failed" }]);
+  });
+
+  it("marca run como failed se a limpeza de produtos antigos falhar", async () => {
+    const states: Array<{ runId: string; status: string; failureCode: string | null }> = [];
+
+    await expect(persistTrendRadarSnapshot(store({
+      deleteProducts: async () => { throw new Error("database raw detail"); },
       updateRunState: async (runId, status, failureCode) => { states.push({ runId, status, failureCode }); }
     }), "user-1", input)).rejects.toThrow("Falha ao persistir produtos do Radar.");
 
