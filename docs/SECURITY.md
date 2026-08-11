@@ -1,7 +1,7 @@
 # Segurança
 
 <!-- docs-status: current -->
-<!-- verified-against: 98d7b87 -->
+<!-- verified-against: 5bd83a8 -->
 <!-- verified-on: 2026-08-11 -->
 
 ## Fronteiras de confiança
