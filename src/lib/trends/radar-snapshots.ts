@@ -24,6 +24,9 @@ export interface TrendRadarProductSnapshotInput {
   recommendedFormat: string | null;
   matchStatus: RadarMatchStatus;
   opportunityId: string | null;
+  scoreBreakdown: Record<string, number>;
+  determiningReasons: string[];
+  isFocus: boolean;
 }
 
 export interface TrendRadarSnapshotInput {
@@ -67,6 +70,9 @@ export interface TrendRadarProductRow extends Record<string, unknown> {
   recommended_format: string | null;
   match_status: RadarMatchStatus;
   opportunity_id: string | null;
+  score_breakdown: Record<string, number>;
+  determining_reasons: string[];
+  is_focus: boolean;
 }
 
 export interface TrendRadarSnapshotStore {
@@ -143,6 +149,12 @@ function validateSnapshot(input: TrendRadarSnapshotInput): void {
     if (product.commercialScore !== null && (!Number.isFinite(product.commercialScore) || product.commercialScore < 0 || product.commercialScore > 100)) {
       throw new Error("commercialScore inválido.");
     }
+    if (Object.values(product.scoreBreakdown).some((value) => !Number.isFinite(value) || value < 0)) {
+      throw new Error("scoreBreakdown inválido.");
+    }
+    if (!Array.isArray(product.determiningReasons) || product.determiningReasons.some((reason) => !text(reason))) {
+      throw new Error("determiningReasons inválido.");
+    }
   }
 }
 
@@ -182,7 +194,10 @@ export function toTrendRadarProductRows(
     recommended_channel: product.recommendedChannel ? text(product.recommendedChannel) : null,
     recommended_format: product.recommendedFormat ? text(product.recommendedFormat) : null,
     match_status: product.matchStatus,
-    opportunity_id: product.opportunityId
+    opportunity_id: product.opportunityId,
+    score_breakdown: product.scoreBreakdown,
+    determining_reasons: product.determiningReasons,
+    is_focus: product.isFocus
   }));
 }
 
