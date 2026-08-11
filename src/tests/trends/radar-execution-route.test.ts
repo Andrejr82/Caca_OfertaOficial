@@ -26,8 +26,10 @@ describe("Radar execution route contract", () => {
   it("restringe a execução diária à janela temporal atual", () => {
     const source = fs.readFileSync(routePath, "utf8");
 
-    expect(source).toContain("observedFrom: window.windowStart");
-    expect(source).toContain("observedTo: window.windowEnd");
+    expect(source).toContain("observedFrom: refreshRequested ? undefined : window.windowStart");
+    expect(source).toContain("observedTo: refreshRequested ? undefined : window.windowEnd");
+    expect(source.match(/observedFrom: refreshRequested \? undefined : window\.windowStart/g)?.length).toBe(2);
+    expect(source.match(/observedTo: refreshRequested \? undefined : window\.windowEnd/g)?.length).toBe(2);
   });
 
   it("no refresh classifica e ranqueia somente sinais coletados naquele clique", () => {
