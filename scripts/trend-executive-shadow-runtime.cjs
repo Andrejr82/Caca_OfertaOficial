@@ -3,7 +3,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
 const { buildTrendExecutiveDiscoveryPlan } = require('./trend-executive-mode.cjs');
-const { runOracleScraperShopeeShadowLocal } = require('./oracle-scraper.cjs');
+const { callShopeeAffiliateApi, runOracleScraperShopeeShadowLocal } = require('./oracle-scraper.cjs');
 require('dotenv').config({ path: '.env.local' });
 
 const DEFAULT_MAX_INTENTS = 5;
@@ -75,6 +75,46 @@ function classifyTrendCommercialSafety({ productTerm = '', category = '' } = {})
   const value = `${productTerm} ${category}`;
   const blocked = COMMERCIAL_SAFETY_RULES.find((rule) => rule.pattern.test(value));
   return blocked ? { eligible: false, reason: blocked.reason } : { eligible: true, reason: null };
+}
+
+function emptyShopeeProductOfferResponse() {
+  return {
+    status: 200,
+    data: {
+      data: {
+        productOfferV2: {
+          nodes: [],
+          pageInfo: { hasNextPage: false },
+        },
+      },
+    },
+  };
+}
+
+function createTargetedShopeeRequest(searchTerms, baseRequest = callShopeeAffiliateApi) {
+  const terms = [...new Set((Array.isArray(searchTerms) ? searchTerms : [])
+    .map((term) => String(term || '').trim())
+    .filter(Boolean))];
+  const targetTerm = terms[0] || null;
+  const executedTerms = new Set();
+
+  return async (operationName, query, variables = {}, options = {}) => {
+    if (operationName !== 'ShopeePromotionOffers' || !targetTerm) {
+      const response = await baseRequest(JSON.stringify({ operationName, query, variables }), options);
+      return { status: response?.status || 0, data: response?.data || {} };
+    }
+
+    if (variables?.productCatId != null) return emptyShopeeProductOfferResponse();
+
+    const identity = normalizeText(targetTerm);
+    if (executedTerms.has(identity)) return emptyShopeeProductOfferResponse();
+    executedTerms.add(identity);
+
+    variables.keyword = targetTerm;
+    variables.productCatId = null;
+    const response = await baseRequest(JSON.stringify({ operationName, query, variables }), options);
+    return { status: response?.status || 0, data: response?.data || {} };
+  };
 }
 
 function buildRadarShadowState(snapshot, { scenarios = SHOPEE_SCENARIOS, maxIntents = DEFAULT_MAX_INTENTS } = {}) {
@@ -183,7 +223,12 @@ async function runTrendExecutiveShadow({
     const scenarioId = intent.scenarioId;
     if (!scenarioId || seenScenarios.has(scenarioId)) continue;
     seenScenarios.add(scenarioId);
-    const execution = await runShopeeShadow({ scenarioId, searchTerms: intent.searchTerms, env: safeEnv });
+    const execution = await runShopeeShadow({
+      scenarioId,
+      searchTerms: intent.searchTerms,
+      request: createTargetedShopeeRequest(intent.searchTerms),
+      env: safeEnv,
+    });
     assertShadowReadOnly(execution);
     const summary = Array.isArray(execution?.marketplaces) ? execution.marketplaces[0] : null;
     results.push({
@@ -246,6 +291,7 @@ module.exports = {
   buildRadarShadowState,
   classifyShopeeShadowMarketplace,
   classifyTrendCommercialSafety,
+  createTargetedShopeeRequest,
   loadLatestRadarSnapshot,
   resolveShopeeScenarioForIntent,
   runTrendExecutiveShadow,
