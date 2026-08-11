@@ -55,6 +55,19 @@ interface CampaignCollectorDependencies {
   loadNodes?: () => Promise<ShopeeCampaignNode[]>;
 }
 
+type ShopeeApiResponse = { status: number; data: unknown };
+type ShopeeEngine = {
+  createSignedRequest(input: {
+    appId: string;
+    appSecret: string;
+    request: (input: { body: string; headers: Record<string, string> }) => Promise<ShopeeApiResponse>;
+  }): (operation: string, query: string, variables: Record<string, unknown>) => Promise<ShopeeApiResponse>;
+  GRAPHQL_CONTRACTS: {
+    productOfferV2: { query: string };
+    shopeeOfferV2: { query: string };
+  };
+};
+
 function text(value: unknown): string | null {
   const result = String(value ?? "").trim();
   return result || null;
@@ -91,11 +104,13 @@ function nonNegativeInteger(value: unknown): number | null {
 }
 
 function rating(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const result = Number(value);
   return Number.isFinite(result) && result >= 0 && result <= 5 ? result : null;
 }
 
 function discountPercent(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
   const result = Number(value);
   if (!Number.isFinite(result) || result < 0) return null;
   const normalized = result > 0 && result <= 1 ? result * 100 : result;
@@ -134,13 +149,12 @@ function failed(source: ShopeeEvidenceSource, errorCode: string): ShopeeEvidence
 
 function finalize(source: ShopeeEvidenceSource, received: number, signals: TrendSignal[]): ShopeeEvidenceCollectionResult {
   const accepted = signals.length;
-  const rejected = Math.max(0, received - accepted);
   return {
     source,
     status: accepted > 0 ? "ok" : "empty",
     received,
     accepted,
-    rejected,
+    rejected: Math.max(0, received - accepted),
     errorCode: null,
     signals
   };
@@ -249,21 +263,20 @@ export function normalizeShopeeCampaignEvidence(
   return finalize("shopee_campaign", nodes.length, signals);
 }
 
-async function signedShopeeRequest(operationName: string, query: string, variables: Record<string, unknown>) {
+function getShopeeEngine(): ShopeeEngine {
+  return require("../../../scripts/shopee-openapi-shadow-engine-v1.cjs") as ShopeeEngine;
+}
+
+async function signedShopeeRequest(
+  engine: ShopeeEngine,
+  operationName: string,
+  query: string,
+  variables: Record<string, unknown>
+): Promise<ShopeeApiResponse> {
   const appId = process.env.SHOPEE_APP_ID;
   const appSecret = process.env.SHOPEE_APP_SECRET;
   if (!appId || !appSecret) throw new Error("Shopee OpenAPI V1 não configurada.");
-  const engine = require("../../../scripts/shopee-openapi-shadow-engine-v1.cjs") as {
-    createSignedRequest(input: {
-      appId: string;
-      appSecret: string;
-      request: (input: { body: string; headers: Record<string, string> }) => Promise<{ status: number; data: unknown }>;
-    }): (operation: string, query: string, variables: Record<string, unknown>) => Promise<{ status: number; data: any }>;
-    GRAPHQL_CONTRACTS: {
-      productOfferV2: { query: string };
-      shopeeOfferV2: { query: string };
-    };
-  };
+
   const request = engine.createSignedRequest({
     appId,
     appSecret,
@@ -278,30 +291,29 @@ async function signedShopeeRequest(operationName: string, query: string, variabl
     }
   });
   const response = await request(operationName, query, variables);
-  if (response.status !== 200 || response.data?.errors?.length) throw new Error(`Shopee OpenAPI V1 HTTP ${response.status}`);
-  return { engine, response };
+  const errors = (response.data as { errors?: unknown[] } | null)?.errors;
+  if (response.status !== 200 || (Array.isArray(errors) && errors.length > 0)) {
+    throw new Error(`Shopee OpenAPI V1 HTTP ${response.status}`);
+  }
+  return response;
 }
 
 async function loadOfficialProductNodes(query: string): Promise<ShopeeProductOfferNode[]> {
-  const engine = require("../../../scripts/shopee-openapi-shadow-engine-v1.cjs") as {
-    GRAPHQL_CONTRACTS: { productOfferV2: { query: string } };
-  };
-  const { response } = await signedShopeeRequest("ShopeePromotionOffers", engine.GRAPHQL_CONTRACTS.productOfferV2.query, {
+  const engine = getShopeeEngine();
+  const response = await signedShopeeRequest(engine, "ShopeePromotionOffers", engine.GRAPHQL_CONTRACTS.productOfferV2.query, {
     keyword: query,
     page: 1,
     limit: 20,
     sortType: 2,
     isAMSOffer: true
   });
-  return response.data?.data?.productOfferV2?.nodes ?? [];
+  return (response.data as { data?: { productOfferV2?: { nodes?: ShopeeProductOfferNode[] } } } | null)?.data?.productOfferV2?.nodes ?? [];
 }
 
 async function loadOfficialCampaignNodes(): Promise<ShopeeCampaignNode[]> {
-  const engine = require("../../../scripts/shopee-openapi-shadow-engine-v1.cjs") as {
-    GRAPHQL_CONTRACTS: { shopeeOfferV2: { query: string } };
-  };
-  const { response } = await signedShopeeRequest("ShopeeOfferV2", engine.GRAPHQL_CONTRACTS.shopeeOfferV2.query, { page: 1, limit: 20 });
-  return response.data?.data?.shopeeOfferV2?.nodes ?? [];
+  const engine = getShopeeEngine();
+  const response = await signedShopeeRequest(engine, "ShopeeOfferV2", engine.GRAPHQL_CONTRACTS.shopeeOfferV2.query, { page: 1, limit: 20 });
+  return (response.data as { data?: { shopeeOfferV2?: { nodes?: ShopeeCampaignNode[] } } } | null)?.data?.shopeeOfferV2?.nodes ?? [];
 }
 
 export async function collectShopeeProductOfferEvidence(
