@@ -31,9 +31,17 @@ describe("Mercado Livre Evidence Collector", () => {
         category_id: categoryId,
         shipping: { free_shipping: true }
       } : {
-        id: entry.id,
-        name: "Smart TV 50",
-        permalink: "https://www.mercadolivre.com.br/p/MLB61695785"
+        entity: {
+          id: entry.id,
+          name: "Smart TV 50",
+          permalink: "https://www.mercadolivre.com.br/p/MLB61695785"
+        },
+        offer: {
+          item_id: "MLB999999999",
+          price: 2199,
+          original_price: 2499,
+          shipping: { free_shipping: true }
+        }
       }
     });
 
@@ -81,7 +89,7 @@ describe("Mercado Livre Evidence Collector", () => {
     });
     expect(evidence[1]).toMatchObject({
       evidence_type: "mercado_livre_offer",
-      source_url: "https://api.mercadolibre.com/items/MLB1234567890",
+      source_url: "https://api.mercadolibre.com/items?ids=MLB1234567890",
       observed_at: observedAt,
       rank_position: null,
       best_seller_flag: null,
@@ -94,7 +102,7 @@ describe("Mercado Livre Evidence Collector", () => {
     });
   });
 
-  it("preserva PRODUCT como produto de catálogo sem fabricar preço", async () => {
+  it("enriquece PRODUCT com oferta oficial sem atribuir preço ao catálogo", async () => {
     const result = await normalizeMercadoLivreBestSellerEvidence({
       ...highlightsPayload,
       content: [{ id: "MLB61695785", position: 2, type: "PRODUCT" }]
@@ -103,14 +111,24 @@ describe("Mercado Livre Evidence Collector", () => {
       observedAt,
       capturedAt: observedAt,
       loadEntity: async () => ({
-        id: "MLB61695785",
-        name: "Smart TV 50",
-        permalink: "https://www.mercadolivre.com.br/p/MLB61695785"
+        entity: {
+          id: "MLB61695785",
+          name: "Smart TV 50",
+          permalink: "https://www.mercadolivre.com.br/p/MLB61695785"
+        },
+        offer: {
+          item_id: "MLB999999999",
+          price: 2199,
+          original_price: 2499,
+          shipping: { free_shipping: true }
+        }
       })
     });
 
     expect(result.signals).toHaveLength(1);
-    expect(result.signals[0].evidence.direct_evidence?.[1]).toMatchObject({
+    const evidence = result.signals[0].evidence.direct_evidence ?? [];
+    expect(evidence).toHaveLength(3);
+    expect(evidence[1]).toMatchObject({
       evidence_type: "mercado_livre_product_evidence",
       source_url: "https://api.mercadolibre.com/products/MLB61695785",
       price: null,
@@ -123,6 +141,48 @@ describe("Mercado Livre Evidence Collector", () => {
         product_id: "MLB61695785",
         category_id: categoryId
       }
+    });
+    expect(evidence[2]).toMatchObject({
+      evidence_type: "mercado_livre_offer",
+      source_url: "https://api.mercadolibre.com/products/MLB61695785/items?limit=20",
+      price: 2199,
+      old_price: 2499,
+      shipping: "free_shipping",
+      marketplace_identity: {
+        marketplace: "mercado_livre",
+        entity_type: "ITEM",
+        item_id: "MLB999999999",
+        product_id: "MLB61695785",
+        category_id: categoryId
+      }
+    });
+  });
+
+  it("mantém PRODUCT legível quando a API não expõe oferta com preço", async () => {
+    const result = await normalizeMercadoLivreBestSellerEvidence({
+      ...highlightsPayload,
+      content: [{ id: "MLB61695785", position: 2, type: "PRODUCT" }]
+    }, {
+      categoryId,
+      observedAt,
+      capturedAt: observedAt,
+      loadEntity: async () => ({
+        entity: {
+          id: "MLB61695785",
+          name: "Smart TV 50",
+          permalink: "https://www.mercadolivre.com.br/p/MLB61695785"
+        },
+        offer: null
+      })
+    });
+
+    expect(result.signals).toHaveLength(1);
+    expect(result.signals[0].evidence.direct_evidence).toHaveLength(2);
+    expect(result.signals[0].evidence.direct_evidence?.[1]).toMatchObject({
+      evidence_type: "mercado_livre_product_evidence",
+      price: null,
+      old_price: null,
+      sold_quantity: null
     });
   });
 
