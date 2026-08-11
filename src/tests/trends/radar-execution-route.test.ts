@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 
 const routePath = path.join(process.cwd(), "src/app/api/trends/execute/route.ts");
 const buttonPath = path.join(process.cwd(), "src/components/trends/daily-radar-refresh-button.tsx");
+const overviewPath = path.join(process.cwd(), "src/components/trends/executive-radar-overview.tsx");
 
 describe("Radar execution route contract", () => {
   it("mantém autenticação, claim, pipeline e snapshot no endpoint real", () => {
@@ -23,11 +24,59 @@ describe("Radar execution route contract", () => {
     expect(source).toContain("markFailed");
   });
 
+  it("restringe a execução diária à janela temporal atual", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+
+    expect(source).toContain("observedFrom: refreshRequested ? undefined : window.windowStart");
+    expect(source).toContain("observedTo: refreshRequested ? undefined : window.windowEnd");
+    expect(source.match(/observedFrom: refreshRequested \? undefined : window\.windowStart/g)?.length).toBe(2);
+    expect(source.match(/observedTo: refreshRequested \? undefined : window\.windowEnd/g)?.length).toBe(2);
+  });
+
+  it("no refresh classifica e ranqueia somente sinais coletados naquele clique", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+
+    expect(source).toContain("const collectedExternalIds = new Set<string>()");
+    expect(source).toContain("const collectedSignals: TrendSignal[] = []");
+    expect(source).toContain("collectedSignals.push(...googleSignals)");
+    expect(source).toContain("collectedSignals.push(...mlSignals)");
+    expect(source).toContain("externalIds: refreshRequested ? [...collectedExternalIds] : undefined");
+    expect(source.match(/externalIds: refreshRequested \? \[\.\.\.collectedExternalIds\] : undefined/g)?.length).toBe(2);
+  });
+
+  it("sobrepõe evidência fresca mesmo quando deduplicação não persiste a coleta", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+
+    expect(source).toContain("mergeCurrentCollectionSignals");
+    expect(source).toContain("evidence: current.evidence");
+    expect(source).toContain("observedAt: current.observedAt");
+    expect(source).toContain("capturedAt: current.capturedAt");
+    expect(source.match(/signals = mergeCurrentCollectionSignals\(signals, collectedSignals\)/g)?.length).toBe(2);
+  });
+
+  it("permite refresh explícito sem substituir a execução diária", () => {
+    const routeSource = fs.readFileSync(routePath, "utf8");
+    const buttonSource = fs.readFileSync(buttonPath, "utf8");
+
+    expect(routeSource).toContain('searchParams.get("refresh") === "1"');
+    expect(routeSource).toContain("buildRadarRefreshExecutionWindow()");
+    expect(buttonSource).toContain('fetch("/api/trends/execute?refresh=1", { method: "POST" })');
+    expect(buttonSource).toContain("Executar Radar de Agora");
+  });
+
+  it("renderiza foco e ranking a partir do último snapshot persistido", () => {
+    const source = fs.readFileSync(overviewPath, "utf8");
+
+    expect(source).toContain("const snapshotProducts = latestSnapshot?.products ?? []");
+    expect(source).toContain("const focus = snapshotProducts.filter((item) => item.isFocus).slice(0, 3)");
+    expect(source).toContain("snapshotProducts.map((item)");
+    expect(source).not.toContain("const focus = ranking.filter((item) => item.isFocus).slice(0, 3)");
+  });
+
   it("separa executar Radar de atualizar tela", () => {
     const source = fs.readFileSync(buttonPath, "utf8");
 
-    expect(source).toContain('fetch("/api/trends/execute", { method: "POST" })');
-    expect(source).toContain("Executar Radar de Hoje");
+    expect(source).toContain("Executar Radar de Agora");
     expect(source).toContain("Atualizar tela");
   });
 });

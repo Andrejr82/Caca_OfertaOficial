@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   buildRadarExecutionWindow,
+  buildRadarRefreshExecutionWindow,
   claimTrendRadarExecution,
   type RadarExecutionIdentity,
   type RadarExecutionStore,
@@ -35,6 +36,24 @@ describe("Radar execution claim", () => {
       windowEnd: "2026-08-11T00:00:00.000Z",
     });
     expect(second).toEqual(first);
+  });
+
+  it("cria refresh novo a cada clique sem reutilizar a execução da mesma hora", () => {
+    const first = buildRadarRefreshExecutionWindow(new Date("2026-08-11T17:53:00.000Z"));
+    const second = buildRadarRefreshExecutionWindow(new Date("2026-08-11T17:53:01.000Z"));
+
+    expect(first).toEqual({
+      radarDate: "2026-08-11",
+      windowStart: "2026-08-04T17:53:00.000Z",
+      windowEnd: "2026-08-11T17:53:00.000Z",
+    });
+    expect(second).toEqual({
+      radarDate: "2026-08-11",
+      windowStart: "2026-08-04T17:53:01.000Z",
+      windowEnd: "2026-08-11T17:53:01.000Z",
+    });
+    expect(second).not.toEqual(first);
+    expect(first).not.toEqual(buildRadarExecutionWindow(new Date("2026-08-11T17:53:00.000Z")));
   });
 
   it("reivindica execução nova", async () => {
