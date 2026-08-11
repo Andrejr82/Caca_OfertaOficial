@@ -29,7 +29,7 @@ describe("Trend approval queue route contract", () => {
   it("renderiza a fila Pronto para aprovar dentro da Trends", () => {
     const page = fs.readFileSync(pagePath, "utf8");
     const queue = fs.readFileSync(queuePath, "utf8");
-    expect(page).toContain("listTrendApprovalQueueOffers()");
+    expect(page).toContain("listTrendApprovalQueueOffers(latestSnapshot?.id)");
     expect(page).toContain("<TrendApprovalQueue offers={approvalQueueOffers} />");
     expect(queue).toContain("Pronto para aprovar");
     expect(queue).toContain("approveTrendShopeeOfferAction");
