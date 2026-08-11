@@ -25,6 +25,7 @@ export function normalizeMercadoLivreTrendsResponse(payload: unknown, observedAt
 
     const bucket = trendBucket(index);
     const direction: TrendDirection | null = bucket === "fastest_growing" ? "rising" : null;
+    const sourceUrl = typeof entry.url === "string" ? entry.url : null;
     return [{
       id: `${SOURCE}:${SITE_ID}:${normalizedTerm}`,
       sourceType: "external",
@@ -37,7 +38,8 @@ export function normalizeMercadoLivreTrendsResponse(payload: unknown, observedAt
       evidence: {
         rank: index + 1,
         trendBucket: bucket,
-        url: typeof entry.url === "string" ? entry.url : null,
+        url: sourceUrl,
+        link: sourceUrl,
         siteId: SITE_ID
       },
       observedAt: capturedAt,
