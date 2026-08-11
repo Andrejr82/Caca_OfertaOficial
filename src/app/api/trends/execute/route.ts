@@ -72,11 +72,13 @@ export async function POST(request: Request) {
   }
 
   const sourceHealth: Record<string, SourceHealthEntry> = {};
+  const collectedExternalIds = new Set<string>();
   let stage = "collect";
 
   try {
     try {
       const googleSignals = await fetchGoogleTrendSignals();
+      for (const signal of googleSignals) if (signal.externalId) collectedExternalIds.add(signal.externalId);
       const persisted = await persistTrendSignals(persistenceClient(client), user.id, googleSignals);
       sourceHealth.google_trends = { status: "healthy", collected: googleSignals.length, persisted };
     } catch {
@@ -90,6 +92,7 @@ export async function POST(request: Request) {
     if (accessToken) {
       try {
         const mlSignals = await fetchMercadoLivreTrendSignals(accessToken);
+        for (const signal of mlSignals) if (signal.externalId) collectedExternalIds.add(signal.externalId);
         const persisted = await persistTrendSignals(persistenceClient(client), user.id, mlSignals);
         sourceHealth.mercado_livre_trends = { status: "healthy", collected: mlSignals.length, persisted };
       } catch {
@@ -101,8 +104,9 @@ export async function POST(request: Request) {
 
     stage = "classify";
     let signals = await listTrendSignals({
-      observedFrom: window.windowStart,
-      observedTo: window.windowEnd,
+      externalIds: refreshRequested ? [...collectedExternalIds] : undefined,
+      observedFrom: refreshRequested ? undefined : window.windowStart,
+      observedTo: refreshRequested ? undefined : window.windowEnd,
     });
     const pendingClassification = signals.filter((signal) => !signal.classification);
     if (pendingClassification.length > 0) {
@@ -123,8 +127,9 @@ export async function POST(request: Request) {
 
     stage = "rank";
     signals = await listTrendSignals({
-      observedFrom: window.windowStart,
-      observedTo: window.windowEnd,
+      externalIds: refreshRequested ? [...collectedExternalIds] : undefined,
+      observedFrom: refreshRequested ? undefined : window.windowStart,
+      observedTo: refreshRequested ? undefined : window.windowEnd,
     });
     const opportunities = (await listTrendOpportunities())
       .filter((opportunity) => opportunity.strategyVersion === TREND_COMMERCIAL_STRATEGY_VERSION);
