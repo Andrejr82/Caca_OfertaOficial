@@ -52,8 +52,10 @@ const COMMERCIAL_SAFETY_RULES = Object.freeze([
 ]);
 
 const GENERIC_RELEVANCE_TOKENS = new Set([
-  "produto", "oferta", "novo", "nova", "original", "kit", "celular", "smartphone",
+  "produto", "oferta", "novo", "nova", "original", "kit",
 ]);
+const PHONE_INTENT_TOKENS = new Set(["celular", "smartphone"]);
+const PHONE_ACCESSORY_PATTERN = /\b(?:pelicula|capa|capinha|case|suporte|cabo|carregador|vidro|protetor|adaptador)\b/;
 
 function normalize(value: unknown) {
   return String(value ?? "")
@@ -96,14 +98,28 @@ function safetyReason(product: TrendRadarApprovalProduct): string | null {
 
 function relevanceTokens(productTerm: string) {
   const tokens = words(productTerm).filter((token) => token.length >= 3);
-  const distinctive = tokens.filter((token) => !GENERIC_RELEVANCE_TOKENS.has(token));
+  const distinctive = tokens.filter((token) => !GENERIC_RELEVANCE_TOKENS.has(token) && !PHONE_INTENT_TOKENS.has(token));
   return distinctive.length > 0 ? distinctive : tokens;
 }
 
 function candidateRelevance(candidate: TrendOfferCandidate, productTerm: string): boolean {
+  const termTokens = words(productTerm);
   const expected = relevanceTokens(productTerm);
   if (expected.length === 0) return false;
+
+  const normalizedTitle = normalize(candidate.productName);
   const titleTokens = new Set(words(candidate.productName));
+  const isPhoneIntent = termTokens.some((token) => PHONE_INTENT_TOKENS.has(token));
+
+  if (isPhoneIntent) {
+    if (PHONE_ACCESSORY_PATTERN.test(normalizedTitle)) return false;
+    const hasPhoneIdentity = titleTokens.has("celular")
+      || titleTokens.has("smartphone")
+      || titleTokens.has("telefone")
+      || (termTokens.includes("samsung") && titleTokens.has("galaxy"));
+    if (!hasPhoneIdentity) return false;
+  }
+
   return expected.every((token) => titleTokens.has(token));
 }
 
