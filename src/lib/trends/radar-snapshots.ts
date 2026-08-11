@@ -222,9 +222,15 @@ export async function persistTrendRadarSnapshot(
   input: TrendRadarSnapshotInput
 ): Promise<{ runId: string; productCount: number; status: "completed" }> {
   validateSnapshot(input);
-  const run = await store.upsertRun(toTrendRadarRunRow(userId, input));
-  const products = toTrendRadarProductRows(run.id, input.products);
 
+  let run: { id: string };
+  try {
+    run = await store.upsertRun(toTrendRadarRunRow(userId, input));
+  } catch {
+    throw new Error("Falha ao persistir execução do Radar.");
+  }
+
+  const products = toTrendRadarProductRows(run.id, input.products);
   try {
     await store.upsertProducts(products);
   } catch {
@@ -236,6 +242,10 @@ export async function persistTrendRadarSnapshot(
     throw new Error("Falha ao persistir produtos do Radar.");
   }
 
-  await store.updateRunState(run.id, "completed", null);
+  try {
+    await store.updateRunState(run.id, "completed", null);
+  } catch {
+    throw new Error("Falha ao concluir execução do Radar.");
+  }
   return { runId: run.id, productCount: products.length, status: "completed" };
 }
