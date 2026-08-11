@@ -22,7 +22,7 @@ export function toTrendRadarSnapshotProducts(
     recommendedFormat: null,
     matchStatus: result.match_status,
     opportunityId: result.opportunity_id,
-    scoreBreakdown: score.breakdown,
+    scoreBreakdown: { ...score.breakdown },
     determiningReasons,
     isFocus,
   }));
