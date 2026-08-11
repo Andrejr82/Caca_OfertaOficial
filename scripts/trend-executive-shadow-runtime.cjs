@@ -12,6 +12,12 @@ const TOKEN_STOPWORDS = new Set([
   'a', 'o', 'as', 'os', 'de', 'da', 'do', 'das', 'dos', 'e', 'em', 'para', 'por',
   'com', 'sem', 'um', 'uma', 'kit', 'produto', 'oferta', 'novo', 'nova',
 ]);
+const COMMERCIAL_SAFETY_RULES = Object.freeze([
+  { reason: 'regulated_weapon', pattern: /\b(?:airsoft|arma|armas|municao|municao|taser|spray de pimenta)\b/i },
+  { reason: 'regulated_nicotine', pattern: /\b(?:vape|cigarro eletronico|cigarro eletrônico|nicotina|pod descartavel|pod descartável)\b/i },
+  { reason: 'regulated_medication', pattern: /\b(?:masteron|injetavel|injetável|minoxidil|tesamorelin|peptideos? de cobre|peptídeos? de cobre|ghk[ -]?cu)\b/i },
+  { reason: 'adult_product', pattern: /\b(?:vibrador|dildo|masturbador|sex shop)\b/i },
+]);
 
 function normalizeText(value) {
   return String(value || '')
@@ -65,6 +71,12 @@ function classifyShopeeShadowMarketplace(product) {
   return { eligible: false, source: 'radar' };
 }
 
+function classifyTrendCommercialSafety({ productTerm = '', category = '' } = {}) {
+  const value = `${productTerm} ${category}`;
+  const blocked = COMMERCIAL_SAFETY_RULES.find((rule) => rule.pattern.test(value));
+  return blocked ? { eligible: false, reason: blocked.reason } : { eligible: true, reason: null };
+}
+
 function buildRadarShadowState(snapshot, { scenarios = SHOPEE_SCENARIOS, maxIntents = DEFAULT_MAX_INTENTS } = {}) {
   const run = snapshot?.run || null;
   const products = Array.isArray(snapshot?.products) ? snapshot.products : [];
@@ -90,6 +102,11 @@ function buildRadarShadowState(snapshot, { scenarios = SHOPEE_SCENARIOS, maxInte
     const productTerm = String(product?.product_term || '').trim();
     if (!productTerm) {
       rejected.push({ radarProductId: product?.id || null, reason: 'missing_product_term' });
+      continue;
+    }
+    const safety = classifyTrendCommercialSafety({ productTerm, category: product?.category });
+    if (!safety.eligible) {
+      rejected.push({ radarProductId: product?.id || null, reason: 'commercial_safety_blocked', safetyReason: safety.reason, productTerm });
       continue;
     }
     const scenarioId = resolveShopeeScenarioForIntent({ productTerm, category: product?.category }, scenarios);
@@ -166,7 +183,7 @@ async function runTrendExecutiveShadow({
     const scenarioId = intent.scenarioId;
     if (!scenarioId || seenScenarios.has(scenarioId)) continue;
     seenScenarios.add(scenarioId);
-    const execution = await runShopeeShadow({ scenarioId, env: safeEnv });
+    const execution = await runShopeeShadow({ scenarioId, searchTerms: intent.searchTerms, env: safeEnv });
     assertShadowReadOnly(execution);
     const summary = Array.isArray(execution?.marketplaces) ? execution.marketplaces[0] : null;
     results.push({
@@ -228,6 +245,7 @@ module.exports = {
   DEFAULT_MAX_INTENTS,
   buildRadarShadowState,
   classifyShopeeShadowMarketplace,
+  classifyTrendCommercialSafety,
   loadLatestRadarSnapshot,
   resolveShopeeScenarioForIntent,
   runTrendExecutiveShadow,
