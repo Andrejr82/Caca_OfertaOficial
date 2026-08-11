@@ -23,6 +23,14 @@ describe("Radar execution route contract", () => {
     expect(source).toContain("markFailed");
   });
 
+  it("restringe classificação e ranking à janela da execução atual", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+
+    expect(source).toContain("observedFrom: window.windowStart");
+    expect(source).toContain("observedTo: window.windowEnd");
+    expect(source.match(/listTrendSignals\(\{[\s\S]*?observedFrom: window\.windowStart[\s\S]*?observedTo: window\.windowEnd[\s\S]*?\}\)/g)?.length).toBe(2);
+  });
+
   it("separa executar Radar de atualizar tela", () => {
     const source = fs.readFileSync(buttonPath, "utf8");
 
