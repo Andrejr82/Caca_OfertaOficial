@@ -139,6 +139,10 @@ function candidateScore(radar: TrendRadarApprovalProduct, candidate: TrendOfferC
   return Number((radarScore + ratingScore + salesScore + discountScore + commissionScore).toFixed(2));
 }
 
+function normalizeOfferScore(score: number): number {
+  return Number((Math.max(0, Math.min(100, Number(score) || 0)) / 10).toFixed(2));
+}
+
 export function rankTrendShopeeCandidates(
   radar: TrendRadarApprovalProduct,
   candidates: TrendOfferCandidate[],
@@ -242,7 +246,7 @@ export function buildTrendShopeeApprovalRows(userId: string, radarRunId: string,
     image_url: candidate.imageUrl,
     current_price: candidate.currentPrice,
     old_price: null,
-    score: candidate.score,
+    score: normalizeOfferScore(candidate.score),
     status: "pending_manual_review",
     explainability: {
       contract_version: "trend-executive.approval-queue/v1",
@@ -252,6 +256,7 @@ export function buildTrendShopeeApprovalRows(userId: string, radarRunId: string,
       radar_product_id: candidate.radarProductId,
       product_term: candidate.productTerm,
       ranking_score: candidate.score,
+      persisted_score_scale: "0-10",
       ranking_position: index + 1,
       automatic_publication: false,
       technical_validation: "passed",
