@@ -25,6 +25,7 @@ describe("Radar snapshot query mapping", () => {
         source_count: 2,
         commercial_score: "80.50",
         confidence: "90",
+        direct_evidence: [{ source_url: "https://www.mercadolivre.com.br/item" }],
         score_breakdown: { evidenceQuality: 30, recency: 5 },
         determining_reasons: ["Evidência: válida.", "Recomendação: score 80.5/100."],
         is_focus: true,
@@ -41,6 +42,11 @@ describe("Radar snapshot query mapping", () => {
         source_count: 1,
         commercial_score: 70,
         confidence: 60,
+        direct_evidence: [
+          { source_url: "https://shopee.com.br/list/fone" },
+          { source_url: "https://shopee.com.br/list/fone" },
+          { source_url: null },
+        ],
         score_breakdown: { evidenceQuality: 15 },
         determining_reasons: [],
         is_focus: true,
@@ -51,6 +57,7 @@ describe("Radar snapshot query mapping", () => {
     expect(view.status).toBe("completed");
     expect(view.sourceHealth).toEqual({ healthy: 3 });
     expect(view.products.map((item) => item.priority)).toEqual([1, 2]);
+    expect(view.products[0].directEvidenceSourceUrls).toEqual(["https://shopee.com.br/list/fone"]);
     expect(view.products[1].commercialScore).toBe(80.5);
     expect(view.products[1].confidence).toBe(90);
     expect(view.products[1].scoreBreakdown).toEqual({ evidenceQuality: 30, recency: 5 });
