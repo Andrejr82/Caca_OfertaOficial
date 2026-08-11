@@ -14,6 +14,7 @@ function radar(id: string, priority: number, term: string): TrendRadarApprovalPr
 }
 
 function candidate(id: string, title: string, scoreSeed = 0): TrendOfferCandidate {
+  const affiliateUrl = `https://s.shopee.com.br/${id}`;
   return {
     id,
     marketplace: "Shopee",
@@ -22,10 +23,11 @@ function candidate(id: string, title: string, scoreSeed = 0): TrendOfferCandidat
     oldPrice: null,
     itemId: id,
     shopeeItemId: id,
-    permalink: `https://s.shopee.com.br/${id}`,
+    permalink: affiliateUrl,
     marketplaceMetrics: {
       shopId: `8${id}`,
       imageUrl: `https://cf.shopee.com.br/${id}.jpg`,
+      affiliateUrl,
       rating: 4.8,
       sales: 1000 + scoreSeed,
       discount: 20,
@@ -49,6 +51,7 @@ describe("Shopee approval queue", () => {
     }]);
     expect(mapped.oldPrice).toBeNull();
     expect(mapped.marketplaceMetrics?.imageUrl).toBe("https://cf.shopee.com.br/123.jpg");
+    expect(mapped.marketplaceMetrics?.affiliateUrl).toBe("https://s.shopee.com.br/123");
     expect(mapped.marketplaceMetrics?.priceMax).toBe(129.9);
   });
 
@@ -68,12 +71,13 @@ describe("Shopee approval queue", () => {
     expect(result.candidates).toHaveLength(1);
   });
 
-  it("rejeita identidade técnica incompleta e produto sem aderência ao termo", () => {
+  it("rejeita identidade técnica incompleta, link não afiliado e produto sem aderência ao termo", () => {
     const input = radar("samsung", 1, "celular samsung");
     const invalidIdentity = { ...candidate("111", "Samsung Galaxy A55"), marketplaceMetrics: { imageUrl: "https://cf.shopee.com.br/111.jpg" } };
     const wrongProduct = candidate("222", "Apple iPhone 15 Pro Max");
+    const nonAffiliate = { ...candidate("444", "Samsung Galaxy A55 5G Smartphone"), marketplaceMetrics: { ...candidate("444", "Samsung Galaxy A55 5G Smartphone").marketplaceMetrics, affiliateUrl: null } };
     const valid = candidate("333", "Samsung Galaxy A55 5G Smartphone");
-    const ranked = rankTrendShopeeCandidates(input, [invalidIdentity, wrongProduct, valid]);
+    const ranked = rankTrendShopeeCandidates(input, [invalidIdentity, wrongProduct, nonAffiliate, valid]);
     expect(ranked.map((item) => item.itemId)).toEqual(["333"]);
   });
 
