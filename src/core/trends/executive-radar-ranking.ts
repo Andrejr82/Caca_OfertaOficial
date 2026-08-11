@@ -4,6 +4,7 @@ import {
   type CommercialOpportunityScoreV2,
   type VerifiedInternalPerformance,
 } from "@/core/trends/commercial-opportunity-score-v2";
+import { normalizeInternalPerformanceLabel } from "@/core/trends/internal-click-performance";
 
 export interface ExecutiveRadarRankingOptions {
   asOf: string | Date;
@@ -46,7 +47,10 @@ export function buildExecutiveRadarRanking(
   return results
     .filter((result) => result.evidence_status === "verified" || result.evidence_status === "partial")
     .map((result) => {
-      const internalPerformance = options.internalPerformanceByProduct?.[result.normalized_product_term];
+      const normalizedKey = normalizeInternalPerformanceLabel(result.normalized_product_term);
+      const internalPerformance = normalizedKey
+        ? options.internalPerformanceByProduct?.[normalizedKey]
+        : undefined;
       return {
         result,
         score: calculateCommercialOpportunityScoreV2(result, {
