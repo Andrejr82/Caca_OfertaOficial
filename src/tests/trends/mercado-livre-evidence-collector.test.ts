@@ -186,6 +186,77 @@ describe("Mercado Livre Evidence Collector", () => {
     });
   });
 
+  it("enriquece USER_PRODUCT oficial sem fabricar preço", async () => {
+    const result = await normalizeMercadoLivreBestSellerEvidence({
+      ...highlightsPayload,
+      content: [{ id: "MLBU4473329534", position: 2, type: "USER_PRODUCT" }]
+    }, {
+      categoryId,
+      observedAt,
+      capturedAt: observedAt,
+      loadEntity: async () => ({
+        entity: {
+          id: "MLBU4473329534",
+          name: "Cafeteira Elétrica 30 Xícaras",
+          user_id: 123456,
+          domain_id: "MLB-COFFEE_MAKERS"
+        },
+        offer: {
+          id: "MLB2099999999",
+          user_product_id: "MLBU4473329534",
+          title: "Cafeteira Elétrica 30 Xícaras",
+          price: 189.9,
+          original_price: 219.9,
+          shipping: { free_shipping: true }
+        }
+      })
+    });
+
+    expect(result).toMatchObject({ status: "ok", received: 1, accepted: 1, rejected: 0 });
+    expect(result.signals[0]).toMatchObject({
+      externalId: `MLB:${categoryId}:USER_PRODUCT:MLBU4473329534`,
+      title: "Cafeteira Elétrica 30 Xícaras"
+    });
+    const evidence = result.signals[0].evidence.direct_evidence ?? [];
+    expect(evidence).toHaveLength(3);
+    expect(evidence[0]).toMatchObject({
+      rank_position: 2,
+      best_seller_flag: true,
+      marketplace_identity: {
+        marketplace: "mercado_livre",
+        entity_type: "USER_PRODUCT",
+        user_product_id: "MLBU4473329534",
+        category_id: categoryId
+      }
+    });
+    expect(evidence[1]).toMatchObject({
+      evidence_type: "mercado_livre_user_product_evidence",
+      source_url: "https://api.mercadolibre.com/user-products/MLBU4473329534",
+      price: null,
+      marketplace_identity: {
+        marketplace: "mercado_livre",
+        entity_type: "USER_PRODUCT",
+        user_product_id: "MLBU4473329534",
+        seller_id: "123456",
+        category_id: categoryId
+      }
+    });
+    expect(evidence[2]).toMatchObject({
+      evidence_type: "mercado_livre_offer",
+      source_url: "https://api.mercadolibre.com/items?ids=MLB2099999999",
+      price: 189.9,
+      old_price: 219.9,
+      shipping: "free_shipping",
+      marketplace_identity: {
+        marketplace: "mercado_livre",
+        entity_type: "ITEM",
+        item_id: "MLB2099999999",
+        user_product_id: "MLBU4473329534",
+        category_id: categoryId
+      }
+    });
+  });
+
   it("rejeita payload que não declara BEST_SELLER oficialmente", async () => {
     const result = await normalizeMercadoLivreBestSellerEvidence({
       query_data: { highlight_type: "TRENDING", criteria: "CATEGORY", id: categoryId },
@@ -200,13 +271,10 @@ describe("Mercado Livre Evidence Collector", () => {
     expect(result).toMatchObject({ status: "failed", errorCode: "invalid_highlight_contract", signals: [] });
   });
 
-  it("rejeita posição fora do Top 20 e tipos sem enriquecimento homologado", async () => {
+  it("rejeita posição fora do Top 20", async () => {
     const result = await normalizeMercadoLivreBestSellerEvidence({
       ...highlightsPayload,
-      content: [
-        { id: "MLB1", position: 21, type: "ITEM" },
-        { id: "MLBU3013800008", position: 3, type: "USER_PRODUCT" }
-      ]
+      content: [{ id: "MLB1", position: 21, type: "ITEM" }]
     }, {
       categoryId,
       observedAt,
@@ -214,7 +282,7 @@ describe("Mercado Livre Evidence Collector", () => {
       loadEntity: async () => ({})
     });
 
-    expect(result).toMatchObject({ status: "empty", received: 2, accepted: 0, rejected: 2, signals: [] });
+    expect(result).toMatchObject({ status: "empty", received: 1, accepted: 0, rejected: 1, signals: [] });
   });
 
   it("falha fechado quando a entidade oficial não fornece título", async () => {
