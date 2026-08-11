@@ -1,7 +1,7 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: e6cc151 -->
+<!-- verified-against: 98d7b87 -->
 <!-- verified-on: 2026-08-11 -->
 
 > Fonte canônica documental do runtime versionado. A implementação, as migrations, os testes e o manifesto de release continuam sendo a autoridade final.
