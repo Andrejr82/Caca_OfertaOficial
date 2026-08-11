@@ -38,16 +38,21 @@ describe("Radar execution claim", () => {
     expect(second).toEqual(first);
   });
 
-  it("cria refresh horário idempotente sem reutilizar a janela diária concluída", () => {
+  it("cria refresh novo a cada clique sem reutilizar a execução da mesma hora", () => {
     const first = buildRadarRefreshExecutionWindow(new Date("2026-08-11T17:53:00.000Z"));
-    const second = buildRadarRefreshExecutionWindow(new Date("2026-08-11T17:59:59.000Z"));
+    const second = buildRadarRefreshExecutionWindow(new Date("2026-08-11T17:53:01.000Z"));
 
     expect(first).toEqual({
       radarDate: "2026-08-11",
-      windowStart: "2026-08-04T17:00:00.000Z",
-      windowEnd: "2026-08-11T17:00:00.000Z",
+      windowStart: "2026-08-04T17:53:00.000Z",
+      windowEnd: "2026-08-11T17:53:00.000Z",
     });
-    expect(second).toEqual(first);
+    expect(second).toEqual({
+      radarDate: "2026-08-11",
+      windowStart: "2026-08-04T17:53:01.000Z",
+      windowEnd: "2026-08-11T17:53:01.000Z",
+    });
+    expect(second).not.toEqual(first);
     expect(first).not.toEqual(buildRadarExecutionWindow(new Date("2026-08-11T17:53:00.000Z")));
   });
 
