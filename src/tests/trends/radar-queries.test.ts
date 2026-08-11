@@ -1,0 +1,58 @@
+import { describe, expect, it } from "vitest";
+import { mapTrendRadarSnapshotView } from "@/lib/trends/radar-queries";
+
+describe("Radar snapshot query mapping", () => {
+  it("normaliza números, JSON e ordena produtos por prioridade", () => {
+    const view = mapTrendRadarSnapshotView({
+      id: "run-1",
+      radar_date: "2026-08-10",
+      window_start: "2026-08-04T00:00:00.000Z",
+      window_end: "2026-08-11T00:00:00.000Z",
+      strategy_version: "daily-commercial-radar-v1",
+      status: "completed",
+      generated_at: "2026-08-10T22:30:00.000Z",
+      source_health: { healthy: 3 },
+      executive_summary: { focus: "eletrônicos" },
+    }, [
+      {
+        id: "p2",
+        priority: 2,
+        product_term: "Teclado",
+        normalized_product_term: "teclado",
+        category: "Eletrônicos",
+        marketplace: "Mercado Livre",
+        evidence_status: "verified",
+        source_count: 2,
+        commercial_score: "80.50",
+        confidence: "90",
+        score_breakdown: { evidenceQuality: 30, recency: 5 },
+        determining_reasons: ["Evidência: válida.", "Recomendação: score 80.5/100."],
+        is_focus: true,
+        opportunity_id: null,
+      },
+      {
+        id: "p1",
+        priority: 1,
+        product_term: "Fone",
+        normalized_product_term: "fone",
+        category: "Eletrônicos",
+        marketplace: "Shopee",
+        evidence_status: "partial",
+        source_count: 1,
+        commercial_score: 70,
+        confidence: 60,
+        score_breakdown: { evidenceQuality: 15 },
+        determining_reasons: [],
+        is_focus: true,
+        opportunity_id: "11111111-1111-1111-1111-111111111111",
+      },
+    ]);
+
+    expect(view.status).toBe("completed");
+    expect(view.sourceHealth).toEqual({ healthy: 3 });
+    expect(view.products.map((item) => item.priority)).toEqual([1, 2]);
+    expect(view.products[1].commercialScore).toBe(80.5);
+    expect(view.products[1].confidence).toBe(90);
+    expect(view.products[1].scoreBreakdown).toEqual({ evidenceQuality: 30, recency: 5 });
+  });
+});
