@@ -26,13 +26,13 @@ interface NormalizeOptions {
   categoryId: string;
   observedAt: string;
   capturedAt: string;
-  loadEntity: (entry: { id: string; type: "ITEM" | "PRODUCT" }) => Promise<LoadedEntity>;
+  loadEntity: (entry: { id: string; type: HighlightEntityType }) => Promise<LoadedEntity>;
 }
 
 interface CollectorDependencies {
   now?: () => Date;
   loadHighlights?: (categoryId: string, accessToken: string) => Promise<unknown>;
-  loadEntity?: (entry: { id: string; type: "ITEM" | "PRODUCT" }, accessToken: string) => Promise<LoadedEntity>;
+  loadEntity?: (entry: { id: string; type: HighlightEntityType }, accessToken: string) => Promise<LoadedEntity>;
 }
 
 interface MercadoLivreOfficialService {
@@ -155,6 +155,26 @@ function productIdentity(categoryId: string, productId: string) {
   };
 }
 
+function userProductIdentity(categoryId: string, userProductId: string, sellerId: string | null = null) {
+  return {
+    marketplace: "mercado_livre",
+    entity_type: "USER_PRODUCT",
+    user_product_id: userProductId,
+    seller_id: sellerId,
+    category_id: categoryId
+  };
+}
+
+function userProductItemIdentity(categoryId: string, itemId: string, userProductId: string) {
+  return {
+    marketplace: "mercado_livre",
+    entity_type: "ITEM",
+    item_id: itemId,
+    user_product_id: userProductId,
+    category_id: categoryId
+  };
+}
+
 function splitLoadedEntity(value: LoadedEntity): { entity: OfficialEntity; offer: OfficialEntity | null } {
   if (value && typeof value === "object" && "entity" in value) {
     const wrapped = value as { entity?: unknown; offer?: unknown };
@@ -207,6 +227,24 @@ function normalizeProductEvidence(entity: OfficialEntity, categoryId: string, pr
   };
 }
 
+function normalizeUserProductEvidence(entity: OfficialEntity, categoryId: string, userProductId: string, observedAt: string): { title: string; evidence: TrendDirectEvidence } | null {
+  const resolvedId = text(entity.id)?.toUpperCase();
+  const title = text(entity.name) ?? text(entity.title);
+  if (resolvedId !== userProductId || !title) return null;
+  const sellerId = text(entity.user_id);
+
+  return {
+    title,
+    evidence: emptyEvidence({
+      claim: `User Product observado via API oficial do Mercado Livre: ${title}.`,
+      evidenceType: "mercado_livre_user_product_evidence",
+      sourceUrl: apiUrl(`/user-products/${userProductId}`),
+      observedAt,
+      identity: userProductIdentity(categoryId, userProductId, sellerId)
+    })
+  };
+}
+
 function normalizeProductOfferEvidence(offer: OfficialEntity | null, categoryId: string, productId: string, title: string, observedAt: string): TrendDirectEvidence | null {
   if (!offer) return null;
   const itemId = validEntityId(offer.item_id ?? offer.id, "ITEM");
@@ -219,6 +257,24 @@ function normalizeProductOfferEvidence(offer: OfficialEntity | null, categoryId:
     sourceUrl: apiUrl(`/products/${productId}/items?limit=20`),
     observedAt,
     identity: itemIdentity(categoryId, itemId, productId)
+  });
+  applyOfferFacts(evidence, offer);
+  return evidence;
+}
+
+function normalizeUserProductOfferEvidence(offer: OfficialEntity | null, categoryId: string, userProductId: string, title: string, observedAt: string): TrendDirectEvidence | null {
+  if (!offer) return null;
+  const itemId = validEntityId(offer.item_id ?? offer.id, "ITEM");
+  const price = numberOrNull(offer.price, 0.01);
+  const resolvedUserProductId = text(offer.user_product_id)?.toUpperCase() ?? null;
+  if (!itemId || price === null || (resolvedUserProductId && resolvedUserProductId !== userProductId)) return null;
+
+  const evidence = emptyEvidence({
+    claim: `Oferta ativa observada para o User Product ${title}.`,
+    evidenceType: "mercado_livre_offer",
+    sourceUrl: apiUrl(`/items?ids=${itemId}`),
+    observedAt,
+    identity: userProductItemIdentity(categoryId, itemId, userProductId)
   });
   applyOfferFacts(evidence, offer);
   return evidence;
@@ -248,7 +304,7 @@ export async function normalizeMercadoLivreBestSellerEvidence(
   for (const rawEntry of entries) {
     const type = entityType(rawEntry.type);
     const position = integerOrNull(rawEntry.position, 1);
-    if (!type || !position || position > 20 || type === "USER_PRODUCT") continue;
+    if (!type || !position || position > 20) continue;
     const id = validEntityId(rawEntry.id, type);
     if (!id) continue;
 
@@ -261,10 +317,16 @@ export async function normalizeMercadoLivreBestSellerEvidence(
 
     const commercial = type === "ITEM"
       ? normalizeItemEvidence(loaded.entity, categoryId, id, observedAt)
-      : normalizeProductEvidence(loaded.entity, categoryId, id, observedAt);
+      : type === "PRODUCT"
+        ? normalizeProductEvidence(loaded.entity, categoryId, id, observedAt)
+        : normalizeUserProductEvidence(loaded.entity, categoryId, id, observedAt);
     if (!commercial) continue;
 
-    const identity = type === "ITEM" ? itemIdentity(categoryId, id, text(loaded.entity.catalog_product_id)?.toUpperCase() ?? null) : productIdentity(categoryId, id);
+    const identity = type === "ITEM"
+      ? itemIdentity(categoryId, id, text(loaded.entity.catalog_product_id)?.toUpperCase() ?? null)
+      : type === "PRODUCT"
+        ? productIdentity(categoryId, id)
+        : userProductIdentity(categoryId, id, text(loaded.entity.user_id));
     const rankEvidence = emptyEvidence({
       claim: `${commercial.title} ocupa a posição ${position} no ranking oficial BEST_SELLER da categoria ${categoryId}.`,
       evidenceType: SOURCE,
@@ -278,6 +340,9 @@ export async function normalizeMercadoLivreBestSellerEvidence(
     const directEvidence = [rankEvidence, commercial.evidence];
     if (type === "PRODUCT") {
       const offerEvidence = normalizeProductOfferEvidence(loaded.offer, categoryId, id, commercial.title, observedAt);
+      if (offerEvidence) directEvidence.push(offerEvidence);
+    } else if (type === "USER_PRODUCT") {
+      const offerEvidence = normalizeUserProductOfferEvidence(loaded.offer, categoryId, id, commercial.title, observedAt);
       if (offerEvidence) directEvidence.push(offerEvidence);
     }
 
@@ -317,20 +382,39 @@ async function loadHighlights(categoryId: string, accessToken: string): Promise<
   return officialService().apiGet(`/highlights/${SITE_ID}/category/${categoryId}`, { accessToken });
 }
 
-async function loadEntity(entry: { id: string; type: "ITEM" | "PRODUCT" }, accessToken: string): Promise<LoadedEntity> {
+async function loadItem(service: MercadoLivreOfficialService, itemId: string, accessToken: string): Promise<OfficialEntity> {
+  const response = await service.apiGet(`/items?ids=${encodeURIComponent(itemId)}`, { accessToken });
+  const first = Array.isArray(response) ? response[0] : null;
+  return first?.body && typeof first.body === "object" ? first.body as OfficialEntity : {};
+}
+
+async function loadEntity(entry: { id: string; type: HighlightEntityType }, accessToken: string): Promise<LoadedEntity> {
   const service = officialService();
-  if (entry.type === "ITEM") {
-    const response = await service.apiGet(`/items?ids=${encodeURIComponent(entry.id)}`, { accessToken });
-    const first = Array.isArray(response) ? response[0] : null;
-    return first?.body && typeof first.body === "object" ? first.body as OfficialEntity : {};
+  if (entry.type === "ITEM") return loadItem(service, entry.id, accessToken);
+
+  if (entry.type === "PRODUCT") {
+    const [entity, offersPayload] = await Promise.all([
+      service.apiGet(`/products/${entry.id}`, { accessToken }),
+      service.apiGet(`/products/${entry.id}/items?limit=20`, { accessToken })
+    ]);
+    const offers = Array.isArray(offersPayload?.results) ? offersPayload.results as OfficialEntity[] : [];
+    const offer = offers.find((candidate) => numberOrNull(candidate.price, 0.01) !== null) ?? null;
+    return {
+      entity: entity && typeof entity === "object" ? entity as OfficialEntity : {},
+      offer
+    };
   }
 
-  const [entity, offersPayload] = await Promise.all([
-    service.apiGet(`/products/${entry.id}`, { accessToken }),
-    service.apiGet(`/products/${entry.id}/items?limit=20`, { accessToken })
-  ]);
-  const offers = Array.isArray(offersPayload?.results) ? offersPayload.results as OfficialEntity[] : [];
-  const offer = offers.find((candidate) => numberOrNull(candidate.price, 0.01) !== null) ?? null;
+  const entity = await service.apiGet(`/user-products/${entry.id}`, { accessToken });
+  const sellerId = text(entity?.user_id);
+  let offer: OfficialEntity | null = null;
+  if (sellerId) {
+    const search = await service.apiGet(`/users/${encodeURIComponent(sellerId)}/items/search?user_product_id=${encodeURIComponent(entry.id)}`, { accessToken });
+    const itemId = Array.isArray(search?.results)
+      ? search.results.map((candidate: unknown) => validEntityId(candidate, "ITEM")).find(Boolean) ?? null
+      : null;
+    if (itemId) offer = await loadItem(service, itemId, accessToken);
+  }
   return {
     entity: entity && typeof entity === "object" ? entity as OfficialEntity : {},
     offer
