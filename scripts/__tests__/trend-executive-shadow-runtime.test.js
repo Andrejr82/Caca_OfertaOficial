@@ -62,7 +62,10 @@ test('allows marketplace-neutral and Mercado Livre evidence in the Shopee shadow
   const state = buildRadarShadowState(neutralSnapshot, { scenarios, maxIntents: 5 });
   assert.deepEqual(state.contracts.map((contract) => contract.radarProductId), ['n1', 'n2', 'ml1']);
   assert.ok(state.contracts.every((contract) => contract.marketplace === 'Shopee'));
-  assert.deepEqual(state.contracts.map((contract) => contract.marketplaceSource), ['shadow_runner_default', 'shadow_runner_default', 'cross_marketplace_evidence']);
+  assert.deepEqual(
+    state.contracts.map((contract) => contract.marketplaceSource),
+    ['shadow_runner_default', 'shadow_runner_default', 'radar_cross_marketplace'],
+  );
   assert.equal(state.rejected.length, 0);
 });
 
