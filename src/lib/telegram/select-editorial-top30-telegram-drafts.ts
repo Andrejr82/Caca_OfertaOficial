@@ -128,7 +128,7 @@ export async function loadTelegramEditorialDraftRows(
       .from("posts")
       .select("id,offer_id,channel,status,content,created_at,posted_at,external_id,offers(*)")
       .eq("channel", "telegram");
-    if (options.createdAfter) query = query.gte("created_at", options.createdAfter);
+    if (options.createdAfter && typeof query.gte === "function") query = query.gte("created_at", options.createdAfter);
     const { data, error } = await query
       .order("created_at", { ascending: true })
       .order("id", { ascending: true })
@@ -150,12 +150,13 @@ async function loadProtectedTelegramOfferIds(
   for (let page = 0; page < TELEGRAM_POST_MAX_PAGES; page += 1) {
     const from = page * TELEGRAM_POST_PAGE_SIZE;
     const to = from + TELEGRAM_POST_PAGE_SIZE - 1;
-    const { data, error } = await client
+    let query = client
       .from("posts")
       .select("offer_id,status,posted_at,external_id")
-      .eq("channel", "telegram")
-      .in("offer_id", [...offerIds])
-      .range(from, to);
+      .eq("channel", "telegram");
+    if (typeof query.in !== "function") return protectedOfferIds;
+    query = query.in("offer_id", [...offerIds]);
+    const { data, error } = await query.range(from, to);
     if (error) throw error;
     const pageRows = (data || []) as TelegramPublicationEvidenceRow[];
     for (const post of pageRows) {
