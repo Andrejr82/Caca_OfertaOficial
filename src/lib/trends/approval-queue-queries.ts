@@ -1,0 +1,17 @@
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { Offer } from "@/types/domain";
+
+export async function listTrendApprovalQueueOffers() {
+  const client = await createServerSupabaseClient();
+  if (!client) return [] as Offer[];
+  const { data, error } = await client
+    .from("offers")
+    .select("*")
+    .eq("platform", "Shopee")
+    .eq("status", "pending_manual_review")
+    .order("score", { ascending: false })
+    .order("updated_at", { ascending: false })
+    .limit(100);
+  if (error) throw new Error(`Falha ao ler fila Trends: ${error.message}`);
+  return ((data || []) as Offer[]).filter((offer) => offer.explainability?.provenance === "trend_executive");
+}
