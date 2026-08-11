@@ -18,6 +18,16 @@ const COMMERCIAL_SAFETY_RULES = Object.freeze([
   { reason: 'regulated_medication', pattern: /\b(?:masteron|injetavel|injetável|minoxidil|tesamorelin|peptideos? de cobre|peptídeos? de cobre|ghk[ -]?cu)\b/i },
   { reason: 'adult_product', pattern: /\b(?:vibrador|dildo|masturbador|sex shop)\b/i },
 ]);
+const EDITORIAL_SCENARIO_RULES = Object.freeze([
+  { id: 'informatica_editorial', pattern: /\b(?:notebook|computador|pc gamer|monitor|teclado|mouse|webcam|ssd|roteador)\b/i },
+  { id: 'celulares_editorial', pattern: /\b(?:iphone|celular|smartphone|galaxy|redmi|xiaomi|power bank|carregador portatil|carregador portátil)\b/i },
+  { id: 'games_editorial', pattern: /\b(?:playstation|ps5|xbox|nintendo|console|jogo gamer)\b/i },
+  { id: 'tv_audio_editorial', pattern: /\b(?:fone|headphone|earbuds|soundbar|caixa de som|speaker|home theater|projetor|microfone)\b/i },
+  { id: 'casa_cozinha_editorial', pattern: /\b(?:chaleira|air fryer|airfryer|liquidificador|cafeteira|panela|sanduicheira|mixer)\b/i },
+  { id: 'moveis_editorial', pattern: /\b(?:comoda|cômoda|sofa|sofá|guarda roupa|cama|colchao|colchão|mesa|escrivaninha|cadeira|rack)\b/i },
+  { id: 'esporte_editorial', pattern: /\b(?:creatina|whey|academia|fitness|yoga|halter|tenis de corrida|tênis de corrida)\b/i },
+  { id: 'beleza_editorial', pattern: /\b(?:karseell|cabelo|capilar|maquiagem|perfume|skincare|hidratante|shampoo|secador|chapinha|serum|sérum)\b/i },
+]);
 
 function normalizeText(value) {
   return String(value || '')
@@ -46,6 +56,13 @@ function scenarioSearchText(scenario) {
 
 function resolveShopeeScenarioForIntent(intent, scenarios = SHOPEE_SCENARIOS) {
   const intentText = `${intent?.productTerm || ''} ${intent?.category || ''}`;
+  for (const rule of EDITORIAL_SCENARIO_RULES) {
+    if (rule.pattern.test(intentText) && scenarios?.[rule.id]) return rule.id;
+  }
+
+  const hasEditorialScenarios = Object.keys(scenarios || {}).some((id) => id.endsWith('_editorial'));
+  if (hasEditorialScenarios) return null;
+
   const intentTokens = [...new Set(tokenize(intentText))];
   if (intentTokens.length === 0) return null;
 
@@ -68,7 +85,7 @@ function classifyShopeeShadowMarketplace(product) {
   const key = normalizeText(product?.marketplace_key || product?.marketplace);
   if (!key) return { eligible: true, source: 'shadow_runner_default' };
   if (key === 'shopee') return { eligible: true, source: 'radar' };
-  return { eligible: false, source: 'radar' };
+  return { eligible: true, source: 'radar_cross_marketplace' };
 }
 
 function classifyTrendCommercialSafety({ productTerm = '', category = '' } = {}) {
@@ -216,13 +233,11 @@ async function runTrendExecutiveShadow({
     SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'false',
     NO_PUBLISH: '1',
   };
-  const seenScenarios = new Set();
   const results = [];
 
   for (const intent of plan.shadowIntents.slice(0, DEFAULT_MAX_INTENTS)) {
     const scenarioId = intent.scenarioId;
-    if (!scenarioId || seenScenarios.has(scenarioId)) continue;
-    seenScenarios.add(scenarioId);
+    if (!scenarioId) continue;
     const execution = await runShopeeShadow({
       scenarioId,
       searchTerms: intent.searchTerms,
