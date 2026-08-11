@@ -19,11 +19,12 @@ describe("Trend Radar snapshot schema", () => {
     expect(sql).toMatch(/evidence_status text not null check \(evidence_status in \('verified', 'partial', 'unverified', 'rejected'\)\)/i);
   });
 
-  it("garante idempotência por execução e item do snapshot", () => {
+  it("garante idempotência por execução e item do snapshot sem índice redundante", () => {
     expect(sql).toMatch(/unique \(user_id, radar_date, window_start, window_end, strategy_version\)/i);
     expect(sql).toMatch(/unique \(radar_run_id, priority\)/i);
     expect(sql).toMatch(/unique \(radar_run_id, normalized_product_term, marketplace_key\)/i);
     expect(sql).toMatch(/check \(window_end > window_start\)/i);
+    expect(sql).not.toMatch(/create index if not exists trend_radar_products_run_priority_idx/i);
   });
 
   it("não executa Radar, não publica e não insere snapshots na migration", () => {
