@@ -65,7 +65,6 @@ export function buildRadarRefreshExecutionWindow(now: Date = new Date()): RadarE
   if (Number.isNaN(now.getTime())) throw new Error("Data de execução inválida.");
   const radarDate = localDate(now);
   const windowEnd = new Date(now);
-  windowEnd.setUTCMinutes(0, 0, 0);
   const windowStart = new Date(windowEnd.getTime() - (7 * 86_400_000));
   return {
     radarDate,
