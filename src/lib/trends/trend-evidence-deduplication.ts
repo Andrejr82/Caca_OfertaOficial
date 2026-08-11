@@ -68,13 +68,18 @@ export function filterMateriallyChangedTrendSignals(
   const result: TrendSignal[] = [];
 
   for (const signal of signals) {
+    if (!signal.externalId) {
+      result.push(signal);
+      continue;
+    }
+
     const identity = `${signal.sourceName}\u0000${signal.externalId}`;
     const fingerprint = trendSignalMaterialFingerprint(signal);
     const previousBatchFingerprint = seenBatch.get(identity);
 
     if (previousBatchFingerprint !== undefined) {
       if (previousBatchFingerprint === fingerprint) continue;
-      const previousIndex = result.findIndex((candidate) => `${candidate.sourceName}\u0000${candidate.externalId}` === identity);
+      const previousIndex = result.findIndex((candidate) => candidate.externalId && `${candidate.sourceName}\u0000${candidate.externalId}` === identity);
       if (previousIndex >= 0) result[previousIndex] = signal;
       seenBatch.set(identity, fingerprint);
       continue;
