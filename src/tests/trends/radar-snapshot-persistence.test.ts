@@ -85,13 +85,13 @@ describe("Trend Radar snapshot persistence", () => {
     expect(states).toEqual([{ runId: "run-1", status: "completed", failureCode: null }]);
   });
 
-  it("não tenta produtos quando o run não pode ser persistido", async () => {
+  it("não tenta produtos quando o run não pode ser persistido e sanitiza erro", async () => {
     let productsTouched = false;
 
     await expect(persistTrendRadarSnapshot(store({
-      upsertRun: async () => { throw new Error("database raw detail"); },
+      upsertRun: async () => { throw new Error("token-secreto database raw detail"); },
       upsertProducts: async () => { productsTouched = true; }
-    }), "user-1", input)).rejects.toThrow("database raw detail");
+    }), "user-1", input)).rejects.toThrow("Falha ao persistir execução do Radar.");
 
     expect(productsTouched).toBe(false);
   });
