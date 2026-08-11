@@ -25,7 +25,19 @@ const goodParafusadeira: DailyTrendRadarInput = {
   discount_percent: 20,
   rating: 4.8,
   shipping_signal: "free_shipping",
-  direct_evidence: [{ claim: "Best seller rank 3", source_url: "https://www.mercadolivre.com.br/MLB123" }],
+  direct_evidence: [{
+    claim: "Produto observado no ranking oficial.",
+    evidence_type: "marketplace_best_seller",
+    source_url: "https://www.mercadolivre.com.br/MLB123",
+    rank_position: 3,
+    best_seller_flag: true,
+    price: 199,
+    old_price: 249,
+    discount_percent: 20,
+    rating: 4.8,
+    shipping: "free_shipping",
+    marketplace_identity: { item_id: "MLB123" }
+  }],
   inferred_signals: ["facilidade de conversão"],
   source_count: 99,
   evidence_status: "unverified",
@@ -54,7 +66,7 @@ describe("DailyTrendRadarResult", () => {
     expect(result.rank).toBeNull();
   });
 
-  it("aceita o formato de pesquisa com fact/url e reextrai os campos observados", () => {
+  it("aceita fatos estruturados e preserva os campos observados", () => {
     const [result] = importExternalRadarJson({ results: [{
       product_term: "Produto real",
       marketplace: "mercado_livre",
@@ -62,8 +74,13 @@ describe("DailyTrendRadarResult", () => {
       observed_at: "2026-08-10T17:06:00-03:00",
       direct_evidence: [{
         source: "Ranking",
-        fact: "Produto na posição 5º MAIS VENDIDO por R$64,41, rating 4,7 e 20% OFF.",
-        url: "https://example.com/ranking"
+        fact: "Produto observado no ranking.",
+        url: "https://example.com/ranking",
+        rank_position: 5,
+        best_seller_flag: true,
+        price: 64.41,
+        discount_percent: 20,
+        rating: 4.7
       }],
       confidence: "alta",
       best_seller_flag: false,
@@ -100,7 +117,7 @@ describe("DailyTrendRadarResult", () => {
   it("prioriza verified, depois partial, e exclui unverified do top", () => {
     const results = importExternalRadarJson({ results: [
       { ...goodParafusadeira, product_term: "Mop", direct_evidence: [{ claim: "produto observado", source_url: "https://example.com/mop" }], source_urls: ["https://example.com/mop"], rank_position: null, best_seller_flag: null, observed_price_min: null, observed_price_max: null, discount_percent: null, rating: null },
-      { ...goodParafusadeira, product_term: "Power Bank 20.000 mAh", source_urls: ["https://shopee.com.br/power-bank"], direct_evidence: [{ claim: "Best seller rank 1", source_url: "https://shopee.com.br/power-bank" }] },
+      { ...goodParafusadeira, product_term: "Power Bank 20.000 mAh", source_urls: ["https://shopee.com.br/power-bank"], direct_evidence: [{ claim: "Produto observado no ranking.", source_url: "https://shopee.com.br/power-bank", rank_position: 1, best_seller_flag: true }] },
       { product_term: "Creatina", source_count: 0, source_urls: [], observed_at: "2026-08-10T12:00:00.000Z", direct_evidence: ["Market Baseline"], inferred_signals: [] }
     ] });
 
@@ -122,7 +139,13 @@ describe("DailyTrendRadarResult", () => {
     const [result] = buildDailyRadarFromTrendSignals([{
       id: "radar-bella", sourceType: "external", sourceName: "external_radar", source: "external_radar", region: "BR", externalId: "bella", term: "Escova Secadora Britânia BELLA01", title: "Escova Secadora Britânia BELLA01", evidence: {
         source_urls: ["https://shopee.com.br/list/Escova-Secadora"],
-        direct_evidence: [{ claim: "Britânia BELLA01 aparece na posição 2 de mais vendidos por R$99,90.", source_url: "https://shopee.com.br/list/Escova-Secadora" }],
+        direct_evidence: [{
+          claim: "Britânia BELLA01 observada na lista oficial.",
+          source_url: "https://shopee.com.br/list/Escova-Secadora",
+          rank_position: 2,
+          best_seller_flag: true,
+          price: 99.9
+        }],
         evidence_status: "verified",
         category: "Beleza e cuidados capilares"
       }, observedAt: "2026-08-10T12:00:00.000Z", capturedAt: "2026-08-10T12:00:00.000Z", trendStrength: null, trendDirection: null, offerId: null, classification: {

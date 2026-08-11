@@ -1,8 +1,8 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: 5bd83a8 -->
+<!-- verified-on: 2026-08-11 -->
 
 ## Princípios
 
@@ -37,3 +37,7 @@ npm run security:check
 ```
 
 Depois do deploy, valide `/api/health`, `/api/readiness`, logs Oracle/PM2 e um smoke test read-only das integrações necessárias.
+
+## Trend Executive
+
+`TREND_EXECUTIVE_MODE` aceita o contrato `off | shadow | active`, porém o runtime e o overlay versionado permanecem fail-closed: `off` é o padrão e `active` está bloqueado até implementação/autorização futura. `shadow` nunca substitui a autoridade do cenário legado. Não altere esta flag em produção sem cumprir o readiness gate e o plano de rollback documentado.

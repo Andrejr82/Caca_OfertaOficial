@@ -2,6 +2,7 @@ import { channels, saleStatuses, type SaleStatus } from "@/types/domain";
 
 export type SalesChannel = Extract<(typeof channels)[number], "telegram" | "instagram" | "whatsapp">;
 export type MarketplaceName = "Shopee" | "Mercado Livre";
+export type SaleAttributionMethod = "sub_id" | "affiliate_link_id" | "channel_only" | "unattributed";
 
 export type MarketplaceSaleInput = {
   marketplace: string;
@@ -35,6 +36,8 @@ export type CanonicalSale = {
   sold_at: string;
   marketplace: MarketplaceName;
   source_event_id: string;
+  attribution_method: SaleAttributionMethod;
+  source_sub_id: string | null;
   link_resolution: "matched" | "missing";
 };
 
@@ -108,11 +111,15 @@ function normalizeChannel(value: string | null | undefined): SalesChannel | null
 }
 
 function resolveLink(input: MarketplaceSaleInput, links: AffiliateLinkReference[]) {
-  const match = links.find((link) =>
-    (input.affiliateLinkId && link.id === input.affiliateLinkId)
-    || (input.subId && link.sub_id === input.subId),
-  );
-  return match || null;
+  if (input.affiliateLinkId) {
+    const direct = links.find((link) => link.id === input.affiliateLinkId);
+    if (direct) return { link: direct, method: "affiliate_link_id" as const };
+  }
+  if (input.subId) {
+    const bySubId = links.find((link) => link.sub_id === input.subId);
+    if (bySubId) return { link: bySubId, method: "sub_id" as const };
+  }
+  return null;
 }
 
 export function normalizeMarketplaceSale(
@@ -125,8 +132,11 @@ export function normalizeMarketplaceSale(
   const soldAt = new Date(input.soldAt);
   if (Number.isNaN(soldAt.getTime())) throw new Error("soldAt inválido");
 
-  const link = resolveLink(input, links);
+  const resolution = resolveLink(input, links);
+  const link = resolution?.link ?? null;
   const channel = link?.channel || normalizeChannel(input.channel);
+  const attributionMethod: SaleAttributionMethod = resolution?.method
+    ?? (channel ? "channel_only" : "unattributed");
 
   return {
     user_id: input.userId,
@@ -139,6 +149,8 @@ export function normalizeMarketplaceSale(
     sold_at: soldAt.toISOString(),
     marketplace: normalizeMarketplace(input.marketplace),
     source_event_id: input.sourceEventId.trim(),
+    attribution_method: attributionMethod,
+    source_sub_id: input.subId?.trim() || null,
     link_resolution: link ? "matched" : "missing",
   };
 }

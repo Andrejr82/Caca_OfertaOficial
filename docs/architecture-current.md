@@ -1,8 +1,8 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: 5bd83a8 -->
+<!-- verified-on: 2026-08-11 -->
 
 > Fonte canônica documental do runtime versionado. A implementação, as migrations, os testes e o manifesto de release continuam sendo a autoridade final.
 
@@ -135,3 +135,7 @@ produz exatamente o caminho V1 atual. `shadow` apenas compara V1 × V2, e
 somente `active` filtraria candidatos antes da fila, mediante aprovação
 explícita e ciclo controlado. Nenhum deploy, gravação Supabase, publicação ou
 mudança de PM2 é realizado por esta implementação.
+
+## Radar Executivo de Tendências
+
+A arquitetura inclui uma camada de inteligência de tendências separada da autoridade produtiva do Oracle. Collectors determinísticos persistem evidências; o Radar agrega nichos, Score V2, Top 3/Top 20 e performance interna em snapshots. O contrato Radar → Oracle carrega somente intenção e provenance auditável. Em `shadow`, o cenário legado continua autoritativo; `active` permanece bloqueado. O loop experimental transforma decisões finais em feedback para o próximo Radar sem reponderação automática do score.

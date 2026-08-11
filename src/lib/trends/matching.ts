@@ -110,6 +110,21 @@ export async function matchTrendSignalsForUser(client: TrendMatchingClient, user
     .eq("user_id", userId);
   if (existingQuery.error) throw new Error(`Falha ao carregar oportunidades existentes: ${existingQuery.error.message}`);
   const existing = new Set((existingQuery.data ?? []).map((row: any) => `${row.signal_id}:${row.offer_id}:${row.strategy_version}`));
+
+  const offersQuery = await client.from("offers")
+    .select("id,platform,product_name,category,current_price,old_price,item_id,product_id,shopee_item_id,marketplace_metrics")
+    .eq("user_id", userId)
+    .in("platform", ["Shopee", "Mercado Livre"])
+    .limit(5000);
+  if (offersQuery.error) throw new Error(`Falha ao carregar ofertas candidatas: ${offersQuery.error.message}`);
+  const persistedCandidates = (offersQuery.data ?? []).map(offerCandidate) as TrendOfferCandidate[];
+  const nativeIdToOfferId = new Map<string, string>();
+  for (const candidate of persistedCandidates) {
+    for (const nativeId of [candidate.itemId, candidate.productId, candidate.shopeeItemId]) {
+      if (nativeId) nativeIdToOfferId.set(`${candidate.marketplace}:${nativeId}`, candidate.id);
+    }
+  }
+
   const results: TrendMatchingSummary["results"] = [];
   const opportunityRows: TrendOpportunityRow[] = [];
   let rejectedFalseMatches = 0;
@@ -119,29 +134,22 @@ export async function matchTrendSignalsForUser(client: TrendMatchingClient, user
   for (const rawClassification of rows) {
     const classification = signalClassification(rawClassification);
     const term = classification.normalizedProductTerm ?? "";
-    const offersQuery = await client.from("offers")
-      .select("id,platform,product_name,category,current_price,old_price,item_id,product_id,shopee_item_id,marketplace_metrics")
-      .eq("user_id", userId)
-      .in("platform", ["Shopee", "Mercado Livre"])
-      .limit(5000);
-    if (offersQuery.error) throw new Error(`Falha ao carregar ofertas candidatas: ${offersQuery.error.message}`);
-    const persistedCandidates = (offersQuery.data ?? []).map(offerCandidate);
-    const nativeIdToOfferId = new Map<string, string>();
-    for (const candidate of persistedCandidates as TrendOfferCandidate[]) {
-      for (const nativeId of [candidate.itemId, candidate.productId, candidate.shopeeItemId]) {
-        if (nativeId) nativeIdToOfferId.set(`${candidate.marketplace}:${nativeId}`, candidate.id);
+    let result = matchTrendClassification(classification, persistedCandidates);
+
+    if (result.status !== "matched" && targetedDiscovery) {
+      const discoveredCandidates = await targetedDiscovery(classification);
+      // Opportunity.offer_id is a foreign key. Current official results without
+      // a corresponding persisted offer remain discovery evidence, not writes.
+      const resolvedDiscoveredCandidates = discoveredCandidates.flatMap((candidate) => {
+        const nativeId = candidate.shopeeItemId || candidate.itemId || candidate.productId;
+        const offerId = nativeId ? nativeIdToOfferId.get(`${candidate.marketplace}:${nativeId}`) : null;
+        return offerId ? [{ ...candidate, id: offerId }] : [];
+      });
+      if (resolvedDiscoveredCandidates.length > 0) {
+        result = matchTrendClassification(classification, [...persistedCandidates, ...resolvedDiscoveredCandidates]);
       }
     }
-    const discoveredCandidates = targetedDiscovery ? await targetedDiscovery(classification) : [];
-    // Opportunity.offer_id is a foreign key. Current official results without
-    // a corresponding persisted offer remain discovery evidence, not writes.
-    const resolvedDiscoveredCandidates = discoveredCandidates.flatMap((candidate) => {
-      const nativeId = candidate.shopeeItemId || candidate.itemId || candidate.productId;
-      const offerId = nativeId ? nativeIdToOfferId.get(`${candidate.marketplace}:${nativeId}`) : null;
-      return offerId ? [{ ...candidate, id: offerId }] : [];
-    });
-    const candidates = [...persistedCandidates, ...resolvedDiscoveredCandidates];
-    const result = matchTrendClassification(classification, candidates);
+
     results.push({ classificationId: classification.id, term, result });
     rejectedFalseMatches += result.rejectedCandidates.length;
     if (result.status === "matched") matchedSignals += 1;

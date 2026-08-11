@@ -1,8 +1,8 @@
 # Troubleshooting atual
 
 <!-- docs-status: current -->
-<!-- verified-against: dbf09b3 -->
-<!-- verified-on: 2026-08-09 -->
+<!-- verified-against: 5bd83a8 -->
+<!-- verified-on: 2026-08-11 -->
 
 ## Sequência de diagnóstico
 
@@ -30,3 +30,15 @@
 ## Recuperação
 
 Prefira desativar a flag específica e preservar dados. Não reinicie processos em loop nem publique manualmente para “testar” antes de identificar a fronteira da falha. Após correção, execute testes, uma coorte limitada e valide recibos antes de ampliar.
+
+## Trend Executive
+
+| Sintoma | Verificação inicial |
+|---|---|
+| Radar sem produtos | `source_health`, evidência elegível, classificação e matching persistido |
+| Marketplace ausente | provenance direta e domínio oficial; não inferir marketplace por texto genérico |
+| Shadow sem intenção executável | snapshot `completed`, marketplace suportado e contrato Radar → Oracle |
+| Fonte bloqueada | status `healthy`, `trusted=true` e ausência de drift material |
+| Ativação recusada | readiness gate, amostra shadow mínima e autorização do operador |
+
+Em qualquer anomalia, preserve `TREND_EXECUTIVE_MODE=off` e a autoridade `legacy_scenario` até identificar a causa.
