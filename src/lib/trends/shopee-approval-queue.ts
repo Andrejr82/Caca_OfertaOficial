@@ -116,8 +116,8 @@ function candidateTechnicalReason(candidate: TrendOfferCandidate, productTerm: s
   if (price == null || price <= 0) return "price_invalid";
   const imageUrl = textMetric(candidate, "imageUrl") || "";
   if (!/^https:\/\//i.test(imageUrl)) return "image_invalid";
-  const url = String(candidate.permalink || "").trim();
-  if (!/^https:\/\//i.test(url) || !/(?:shopee\.com\.br|s\.shopee\.com\.br|shope\.ee)/i.test(url)) return "affiliate_url_invalid";
+  const affiliateUrl = textMetric(candidate, "affiliateUrl") || "";
+  if (!/^https:\/\//i.test(affiliateUrl) || !/(?:s\.shopee\.com\.br|shope\.ee|affiliates|ext_camp)/i.test(affiliateUrl)) return "affiliate_url_invalid";
   if (!candidateRelevance(candidate, productTerm)) return "term_mismatch";
   return null;
 }
@@ -149,7 +149,7 @@ export function rankTrendShopeeCandidates(
     const itemId = String(candidate.shopeeItemId || candidate.itemId);
     const shopId = String(textMetric(candidate, "shopId"));
     const imageUrl = String(textMetric(candidate, "imageUrl"));
-    const affiliateUrl = String(candidate.permalink);
+    const affiliateUrl = String(textMetric(candidate, "affiliateUrl"));
     const rating = numberMetric(candidate, "rating");
     const sales = numberMetric(candidate, "sales");
     const discount = percent(candidate.marketplaceMetrics?.discount);
