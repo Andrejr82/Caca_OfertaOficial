@@ -46,6 +46,8 @@ export interface CopyV3Facts {
   originalPrice: number | null;
   evidence?: Record<string, unknown>;
   freeShipping?: boolean | null;
+  sellerName?: string | null;
+  marketplaceMetrics?: Record<string, unknown> | null;
 }
 
 export type CopyV2Facts = CopyV3Facts;

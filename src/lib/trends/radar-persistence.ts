@@ -84,11 +84,11 @@ export function buildRadarOfferRow(userId: string, radar: RadarPersistenceResult
     product_name: requireText(candidate.productName, "product_name"),
     category: candidate.category ?? radar.category ?? null,
     original_url: url,
-    image_url: null,
+    image_url: typeof candidate.marketplaceMetrics?.imageUrl === "string" ? candidate.marketplaceMetrics.imageUrl : null,
     current_price: requirePrice(candidate.currentPrice),
     old_price: candidate.oldPrice == null ? null : Number(candidate.oldPrice),
     score: 0,
-    status: "deferred",
+    status: "pending_manual_review",
     explainability: {
       provenance: "external_radar",
       radar_date: radar.radar_date,
@@ -157,7 +157,7 @@ export async function persistRadarOrigin(client: RadarPersistenceClient, userId:
 
 export async function persistRadarOffer(client: RadarPersistenceClient, userId: string, radar: RadarPersistenceResult, candidate: RadarPersistenceCandidate): Promise<string> {
   const row = buildRadarOfferRow(userId, radar, candidate);
-  const { error } = await client.rpc("upsert_trend_radar_offers_v1", { p_marketplace: candidate.marketplace, p_rows: [row] });
+  const { error } = await client.rpc("upsert_trend_radar_offers_v2", { p_marketplace: candidate.marketplace, p_rows: [row] });
   if (error) throw new Error(`Falha ao persistir oferta Radar: ${error.message}`);
   const identity = nativeIdentity(candidate);
   let query = client.from("offers").select("id").eq("user_id", userId).eq("platform", candidate.marketplace);

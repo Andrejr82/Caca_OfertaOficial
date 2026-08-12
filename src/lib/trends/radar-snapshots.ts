@@ -14,6 +14,7 @@ export interface TrendRadarProductSnapshotInput {
   marketplace: string | null;
   evidenceStatus: RadarEvidenceStatus;
   sourceCount: number;
+  trendScore?: number | null;
   commercialScore: number | null;
   confidence: number;
   directEvidence: unknown[];
@@ -60,6 +61,7 @@ export interface TrendRadarProductRow extends Record<string, unknown> {
   marketplace: string | null;
   evidence_status: RadarEvidenceStatus;
   source_count: number;
+  trend_score: number | null;
   commercial_score: number | null;
   confidence: number;
   direct_evidence: unknown[];
@@ -153,6 +155,9 @@ function validateSnapshot(input: TrendRadarSnapshotInput): void {
     if (product.commercialScore !== null && (!Number.isFinite(product.commercialScore) || product.commercialScore < 0 || product.commercialScore > 100)) {
       throw new Error("commercialScore inválido.");
     }
+    if (product.trendScore !== undefined && product.trendScore !== null && (!Number.isFinite(product.trendScore) || product.trendScore < 0 || product.trendScore > 100)) {
+      throw new Error("trendScore inválido.");
+    }
     if (Object.values(product.scoreBreakdown).some((value) => !Number.isFinite(value) || value < 0)) {
       throw new Error("scoreBreakdown inválido.");
     }
@@ -189,6 +194,7 @@ export function toTrendRadarProductRows(
     marketplace: product.marketplace ? text(product.marketplace) : null,
     evidence_status: product.evidenceStatus,
     source_count: product.sourceCount,
+    trend_score: product.trendScore ?? null,
     commercial_score: product.commercialScore,
     confidence: product.confidence,
     direct_evidence: product.directEvidence,

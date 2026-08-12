@@ -1,5 +1,5 @@
 import { CheckCircle2, ExternalLink, ShieldCheck, XCircle } from "lucide-react";
-import { approveTrendShopeeOfferAction, rejectTrendShopeeOfferAction } from "@/lib/trends/approval-actions";
+import { approveTrendOfferAction, rejectTrendOfferAction } from "@/lib/trends/approval-actions";
 import type { Offer } from "@/types/domain";
 
 const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
@@ -19,7 +19,7 @@ export function TrendApprovalQueue({ offers }: { offers: Offer[] }) {
             <ShieldCheck size={18} className="text-emerald-300" />
             <h2 className="text-base font-extrabold text-white">Pronto para aprovar ({offers.length})</h2>
           </div>
-          <p className="mt-1 text-xs text-white/35">Shopee validada e ranqueada. Aprovar apenas seleciona a oferta; nenhuma publicação é automática.</p>
+      <p className="mt-1 text-xs text-white/35">Shopee e Mercado Livre validados e ranqueados. Aprovar apenas seleciona a oferta; nenhuma publicação é automática.</p>
         </div>
         <a href="/offers" className="text-xs font-bold text-cyan-300 underline">Abrir operação de ofertas</a>
       </div>
@@ -52,16 +52,18 @@ export function TrendApprovalQueue({ offers }: { offers: Offer[] }) {
                   {discount != null && discount > 0 ? <span>{discount}% desc.</span> : null}
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <form action={approveTrendShopeeOfferAction}>
+                  <form action={approveTrendOfferAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
+                    <input type="hidden" name="platform" value={offer.platform} />
                     <input type="hidden" name="command_id" value={`trend-curation:${offer.id}:select:${requestedAt}`} />
                     <input type="hidden" name="requested_at" value={requestedAt} />
                     <button type="submit" className="inline-flex items-center gap-1 rounded-lg bg-emerald-400 px-3 py-1.5 text-xs font-black text-emerald-950">
                       <CheckCircle2 size={13} /> Aprovar
                     </button>
                   </form>
-                  <form action={rejectTrendShopeeOfferAction}>
+                  <form action={rejectTrendOfferAction}>
                     <input type="hidden" name="offer_id" value={offer.id} />
+                    <input type="hidden" name="platform" value={offer.platform} />
                     <input type="hidden" name="command_id" value={`trend-curation:${offer.id}:reject:${requestedAt}`} />
                     <input type="hidden" name="requested_at" value={requestedAt} />
                     <button type="submit" className="inline-flex items-center gap-1 rounded-lg border border-red-400/25 px-3 py-1.5 text-xs font-bold text-red-300">
@@ -69,7 +71,7 @@ export function TrendApprovalQueue({ offers }: { offers: Offer[] }) {
                     </button>
                   </form>
                   <a href={offer.original_url} target="_blank" rel="noreferrer" className="ml-auto inline-flex items-center gap-1 text-xs text-cyan-300 underline">
-                    Shopee <ExternalLink size={11} />
+                    {offer.platform} <ExternalLink size={11} />
                   </a>
                 </div>
               </div>
@@ -78,7 +80,7 @@ export function TrendApprovalQueue({ offers }: { offers: Offer[] }) {
         })}
         {!offers.length ? (
           <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-white/35 lg:col-span-2">
-            Execute o Radar para pesquisar, validar e preparar produtos Shopee.
+            Execute o Radar para pesquisar, validar e preparar produtos dos dois marketplaces.
           </div>
         ) : null}
       </div>

@@ -25,6 +25,7 @@ export function resolveSemanticDomain(productName: string, category: string | nu
 }
 
 export function semanticDomainLabel(domain: SemanticDomain | null): string | null {
+  if (!domain) return null;
   return {
     gaming: "Games",
     technology: "Tecnologia",
@@ -33,10 +34,11 @@ export function semanticDomainLabel(domain: SemanticDomain | null): string | nul
     home: "Casa",
     tools: "Ferramentas",
     fashion: "Moda",
-  }[domain ?? ""] ?? null;
+  }[domain] ?? null;
 }
 
 export function semanticContextLine(domain: SemanticDomain | null): string | null {
+  if (!domain) return null;
   return {
     gaming: "🎮 Para jogar no computador",
     kitchen: "🍳 Para o preparo na cozinha",
@@ -45,5 +47,5 @@ export function semanticContextLine(domain: SemanticDomain | null): string | nul
     tools: "🛠️ Para reparos e projetos",
     pet: "🐾 Para a rotina do pet",
     fashion: "👕 Para compor o dia a dia",
-  }[domain ?? ""] ?? null;
+  }[domain] ?? null;
 }

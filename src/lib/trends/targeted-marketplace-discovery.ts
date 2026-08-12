@@ -13,6 +13,7 @@ export interface DiscoverMarketplaceCandidatesInput {
   marketplace: TrendMatchingMarketplace;
   normalizedProductTerm: string;
   productIdentity: string;
+  queryVariants?: string[];
   searchShopee?: (query: string) => Promise<TrendOfferCandidate[]>;
   searchMercadoLivre?: (query: string) => Promise<TrendOfferCandidate[]>;
 }
@@ -47,7 +48,9 @@ export function expandMarketplaceQueries(normalizedProductTerm: string): string[
 }
 
 export async function discoverMarketplaceCandidates(input: DiscoverMarketplaceCandidatesInput): Promise<TargetedMarketplaceDiscovery> {
-  const query_used = expandMarketplaceQueries(input.normalizedProductTerm || input.productIdentity);
+  const query_used = input.queryVariants?.length
+    ? [...new Set(input.queryVariants.map((query) => query.trim()).filter(Boolean))].slice(0, 3)
+    : expandMarketplaceQueries(input.normalizedProductTerm || input.productIdentity);
   const source = input.marketplace === "Shopee" ? "shopee_v1_official" : "mercado_livre_official";
   const search = input.marketplace === "Shopee" ? input.searchShopee : input.searchMercadoLivre;
   if (!search || query_used.length === 0) return { candidates: [], query_used, source, discovery_status: "source_unavailable" };

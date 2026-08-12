@@ -24,10 +24,15 @@ export function DailyRadarRefreshButton() {
       });
       const queue = await queueResponse.json();
       if (!queueResponse.ok || !queue.ok) {
-        throw new Error(`Radar concluído, mas a fila Shopee falhou: ${queue.message || "erro desconhecido"}`);
+        throw new Error(`Radar concluído, mas a fila multimarketplace falhou: ${queue.message || "erro desconhecido"}`);
       }
 
-      setMessage(`Radar concluído · ${queue.searchedIntents ?? 0} tendência(s) pesquisada(s) · ${queue.readyCount ?? 0} pronto(s) para aprovar.`);
+      const shopee = queue.counters?.Shopee ?? { found: 0 };
+      const mercadoLivre = queue.counters?.["Mercado Livre"] ?? { found: 0 };
+      const readyShopee = queue.persisted?.Shopee?.readyOfferIds?.length ?? 0;
+      const readyMercadoLivre = queue.persisted?.["Mercado Livre"]?.readyOfferIds?.length ?? 0;
+      const partial = Number(queue.errors ?? 0) > 0 ? " · resultado parcial" : "";
+      setMessage(`Radar concluído · Shopee: ${shopee.found ?? 0} encontrados / ${readyShopee} prontos · Mercado Livre: ${mercadoLivre.found ?? 0} encontrados / ${readyMercadoLivre} prontos${partial}.`);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao executar Radar.");
@@ -60,7 +65,7 @@ export function DailyRadarRefreshButton() {
       >
         {refreshing ? "Atualizando…" : "Atualizar tela"}
       </button>
-      {message ? <span className="text-xs text-white/40">{message}</span> : null}
+      {message ? <span aria-live="polite" className="text-xs text-white/40">{message}</span> : null}
     </div>
   );
 }

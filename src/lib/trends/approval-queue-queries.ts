@@ -8,9 +8,9 @@ export async function listTrendApprovalQueueOffers(radarRunId?: string | null) {
   const { data, error } = await client
     .from("offers")
     .select("*")
-    .eq("platform", "Shopee")
+    .in("platform", ["Shopee", "Mercado Livre"])
     .eq("status", "pending_manual_review")
-    .contains("explainability", { provenance: "trend_executive", radar_run_id: radarRunId })
+    .contains("explainability", { provenance: "external_radar", radar_run_id: radarRunId })
     .order("score", { ascending: false })
     .order("updated_at", { ascending: false })
     .limit(100);

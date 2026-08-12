@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { mapMercadoLivreProductsToTrendCandidates, searchMercadoLivreForTrendQueries, searchMercadoLivreForTrendTerm } from "@/lib/trends/mercado-livre-search-adapter";
+import { createMercadoLivreOfficialSearchService, mapMercadoLivreProductsToTrendCandidates, searchMercadoLivreForTrendQueries, searchMercadoLivreForTrendTerm } from "@/lib/trends/mercado-livre-search-adapter";
 
 describe("Trend → Mercado Livre search adapter", () => {
+  it("provides a server-side official API service without importing legacy scripts", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response(JSON.stringify({ results: [{ id: "MLB900", title: "Produto oficial", price: 99, permalink: "https://mercadolivre.com.br/MLB900", thumbnail: "https://img.example/900.jpg" }] }), { status: 200 });
+    try {
+      const service = createMercadoLivreOfficialSearchService();
+      const result = await service.runMercadoLivreOfficialIntentCoverage({ keywords: ["Produto"], accessToken: "token", maxPerIntent: 5, delayMs: 0 });
+      expect(result.products).toEqual([expect.objectContaining({ item_id: "MLB900", title: "Produto oficial", price: 99 })]);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
   it("reuses official-search fields without inventing commercial signals", () => {
     const candidates = mapMercadoLivreProductsToTrendCandidates("Air Fryer", [{
       item_id: "MLB123",
@@ -32,6 +43,21 @@ describe("Trend → Mercado Livre search adapter", () => {
     expect(mapMercadoLivreProductsToTrendCandidates("Galaxy A17", [{ title: "Galaxy A17" }])).toEqual([]);
   });
 
+  it("uses the catalog identity when the official result has no item id", () => {
+    const candidates = mapMercadoLivreProductsToTrendCandidates("Notebook", [{
+      catalog_product_id: "MLB-CAT999",
+      title: "Notebook Lenovo",
+      price: "2499.90"
+    }]);
+
+    expect(candidates).toEqual([expect.objectContaining({
+      id: "MLB-CAT999",
+      itemId: "MLB-CAT999",
+      productId: "MLB-CAT999",
+      currentPrice: 2499.9
+    })]);
+  });
+
   it("calls the existing official intent service once for one trend term", async () => {
     const calls: unknown[] = [];
     const candidates = await searchMercadoLivreForTrendTerm({
@@ -56,5 +82,33 @@ describe("Trend → Mercado Livre search adapter", () => {
 
     expect(calls).toEqual(["Britânia BELLA01 1300W", "Britânia BELLA01", "BELLA01"]);
     expect(candidates).toHaveLength(1);
+  });
+
+  it("passes bounded search options and limits fallback queries", async () => {
+    const calls: unknown[] = [];
+    const candidates = await searchMercadoLivreForTrendQueries({
+      runMercadoLivreOfficialIntentCoverage: async (input) => {
+        calls.push(input);
+        return { products: [{ item_id: input.keywords[0], title: input.keywords[0] }] };
+      }
+    }, ["A", "B", "C", "D"], "oauth-token", { maxQueries: 2, maxPerIntent: 7, delayMs: 50 });
+
+    expect(calls).toEqual([
+      { keywords: ["A"], accessToken: "oauth-token", maxPerIntent: 7, delayMs: 50 },
+      { keywords: ["B"], accessToken: "oauth-token", maxPerIntent: 7, delayMs: 50 }
+    ]);
+    expect(candidates.map((candidate) => candidate.id)).toEqual(["A", "B"]);
+  });
+
+  it("deduplicates by stable native identity even when the same item has different titles", async () => {
+    const candidates = await searchMercadoLivreForTrendQueries({
+      runMercadoLivreOfficialIntentCoverage: async () => ({ products: [{
+        item_id: "MLB777",
+        title: "Produto com título atualizado"
+      }] })
+    }, ["primeira busca", "segunda busca"], "oauth-token");
+
+    expect(candidates).toHaveLength(1);
+    expect(candidates[0].id).toBe("MLB777");
   });
 });

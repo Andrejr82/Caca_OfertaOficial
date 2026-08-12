@@ -3,6 +3,8 @@ import { fetchAndNormalizeDriveImage } from "@/lib/images/drive-upload";
 
 describe("fetchAndNormalizeDriveImage", () => {
   it("preserva uma imagem válida com assinatura reconhecida", async () => {
+    // sharp's package exports do not expose its declaration through bundler resolution.
+    // @ts-expect-error The runtime import is valid; this is a test-only package typing gap.
     const source = await import("sharp").then(({ default: sharp }) => sharp({ create: { width: 2, height: 2, channels: 3, background: "red" } }).png().toBuffer());
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(source, { status: 200, headers: { "content-type": "text/html" } })));
 

@@ -8,12 +8,13 @@ const pagePath = path.join(process.cwd(), "src/app/(dashboard)/trends/page.tsx")
 const queuePath = path.join(process.cwd(), "src/components/trends/trend-approval-queue.tsx");
 
 describe("Trend approval queue route contract", () => {
-  it("mantém um clique para Radar e preparação Shopee", () => {
+  it("mantém um clique para Radar e preparação da fila", () => {
     const source = fs.readFileSync(buttonPath, "utf8");
     expect(source).toContain('fetch("/api/trends/execute?refresh=1"');
     expect(source).toContain('fetch("/api/trends/approval-queue/execute"');
     expect(source).toContain("runId: radar.runId");
-    expect(source).toContain("pronto(s) para aprovar");
+    expect(source).toContain("Shopee:");
+    expect(source).toContain("Mercado Livre:");
   });
 
   it("exige Radar concluído do usuário antes da descoberta e persistência", () => {
@@ -21,8 +22,10 @@ describe("Trend approval queue route contract", () => {
     expect(source).toContain("client.auth.getUser()");
     expect(source).toContain('.eq("user_id", user.id)');
     expect(source).toContain('run.status !== "completed"');
-    expect(source).toContain("discoverTrendShopeeApprovalCandidates");
-    expect(source).toContain("persistTrendShopeeApprovalCandidates");
+    expect(source).toContain("discoverTrendMarketplaceCandidates");
+    expect(source).toContain("persistTrendMarketplaceApprovalCandidates");
+    expect(source).toContain("persistTrendMercadoLivreApprovalCandidates");
+    expect(source).toContain("counters");
     expect(source).toContain("automaticPublication: false");
   });
 
@@ -32,8 +35,8 @@ describe("Trend approval queue route contract", () => {
     expect(page).toContain("listTrendApprovalQueueOffers(latestSnapshot?.id)");
     expect(page).toContain("<TrendApprovalQueue offers={approvalQueueOffers} />");
     expect(queue).toContain("Pronto para aprovar");
-    expect(queue).toContain("approveTrendShopeeOfferAction");
-    expect(queue).toContain("rejectTrendShopeeOfferAction");
+    expect(queue).toContain("approveTrendOfferAction");
+    expect(queue).toContain("rejectTrendOfferAction");
     expect(queue).toContain("nenhuma publicação é automática");
   });
 });

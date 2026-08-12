@@ -1,4 +1,5 @@
 import type { ExecutiveRadarRankingItem } from "@/core/trends/executive-radar-ranking";
+import { calculateTrendScore } from "@/core/trends/trend-score";
 import type { TrendRadarProductSnapshotInput } from "@/lib/trends/radar-snapshots";
 
 export function toTrendRadarSnapshotProducts(
@@ -12,6 +13,15 @@ export function toTrendRadarSnapshotProducts(
     marketplace: result.marketplaces[0] ?? null,
     evidenceStatus: result.evidence_status,
     sourceCount: result.source_count,
+    trendScore: calculateTrendScore(
+      (result.source_types.length > 0 ? result.source_types : ["trend_signal"]).map((sourceName) => ({
+        sourceName,
+        observedAt: result.observed_at ?? `${result.radar_date}T00:00:00.000Z`,
+        trendDirection: result.trending_flag === true ? "rising" : null,
+        sourcePosition: result.rank_position,
+      })),
+      { now: `${result.radar_date}T23:59:59.999Z` },
+    ).trendScore,
     commercialScore: score.total,
     confidence: result.confidence,
     directEvidence: result.direct_evidence,

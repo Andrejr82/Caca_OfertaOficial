@@ -21,7 +21,11 @@ export async function POST() {
     if (!accessToken) return NextResponse.json({ ok: false, message: "Conecte o Mercado Livre para consultar tendências oficiais." }, { status: 503 });
 
     const signals = await fetchMercadoLivreTrendSignals(accessToken);
-    const persisted = await persistTrendSignals(client, user.id, signals);
+    const persisted = await persistTrendSignals(
+      client as unknown as Parameters<typeof persistTrendSignals>[0],
+      user.id,
+      signals,
+    );
     return NextResponse.json({ ok: true, collected: signals.length, persisted, source: "mercado_livre_trends", region: "BR" });
   } catch (error) {
     console.error("[MERCADO-LIVRE-TRENDS] Falha ao coletar sinais:", error);

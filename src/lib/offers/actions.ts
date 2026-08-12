@@ -13,7 +13,7 @@ import { assertShopeeSelected } from "@/lib/offers/shopee-manual-curation";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 
-async function transitionManualStatus(
+export async function transitionManualStatus(
   formData: FormData,
   marketplace: "Shopee" | "Mercado Livre" | "Amazon",
   action: "select" | "reject"

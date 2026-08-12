@@ -44,7 +44,7 @@ describe("radar persistence", () => {
   it("materializes only complete canonical offer data and isolates it from editorial", () => {
     expect(buildRadarOfferRow("user-1", radar, candidate)).toMatchObject({
       user_id: "user-1", platform: "Shopee", shopee_item_id: candidate.shopeeItemId,
-      product_name: candidate.productName, current_price: 94.9, status: "deferred"
+      product_name: candidate.productName, current_price: 94.9, status: "pending_manual_review"
     });
     expect(() => buildRadarOfferRow("user-1", radar, { ...candidate, permalink: null })).toThrow(/original_url/i);
   });
@@ -57,6 +57,27 @@ describe("radar persistence", () => {
     })).toMatchObject({
       user_id: "user-1", signal_id: "signal-1", offer_id: "offer-1", marketplace: "Shopee",
       match_status: "matched", status: "matched", experiment_id: null
+    });
+  });
+
+  it("builds a Mercado Livre row with native item identity", () => {
+    const mercadoLivreCandidate: RadarPersistenceCandidate = {
+      id: "MLB-123",
+      marketplace: "Mercado Livre",
+      productName: "Notebook Lenovo",
+      currentPrice: 2499,
+      itemId: "MLB-123",
+      productId: "MLB-CAT-1",
+      permalink: "https://mercadolivre.com.br/MLB-123",
+      marketplaceMetrics: { imageUrl: "https://img.example/MLB-123.jpg", sellerId: "seller-1" }
+    };
+
+    expect(buildRadarOfferRow("user-1", { ...radar, marketplaces: ["Mercado Livre"] }, mercadoLivreCandidate)).toMatchObject({
+      platform: "Mercado Livre",
+      item_id: "MLB-123",
+      product_id: "MLB-CAT-1",
+      image_url: "https://img.example/MLB-123.jpg",
+      status: "pending_manual_review"
     });
   });
 });
