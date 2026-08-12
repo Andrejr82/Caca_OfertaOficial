@@ -29,6 +29,19 @@ describe("Trend approval queue route contract", () => {
     expect(source).toContain("automaticPublication: false");
   });
 
+  it("considera ofertas existentes para não reapresentar produtos antigos", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+    expect(source).toContain('from("offers")');
+    expect(source).toContain("existingOffers");
+    expect(source).toContain("exposed.add");
+  });
+
+  it("redireciona a aprovação para o canal recomendado após criar o draft", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/lib/trends/approval-actions.ts"), "utf8");
+    expect(source).toContain('import { redirect } from "next/navigation"');
+    expect(source).toContain("redirect(`/${channel.toLocaleLowerCase");
+  });
+
   it("renderiza a fila Pronto para aprovar dentro da Trends", () => {
     const page = fs.readFileSync(pagePath, "utf8");
     const queue = fs.readFileSync(queuePath, "utf8");

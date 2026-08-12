@@ -79,6 +79,18 @@ export async function POST(request: Request) {
       .in("exposure_status", ["exposed", "pending", "approved", "rejected", "published"]);
     if (exposureError) return NextResponse.json({ ok: false, message: "Não foi possível validar a rotação de ofertas." }, { status: 502 });
     const exposed = new Set((priorExposure || []).map((item: { marketplace: string; native_product_id: string }) => `${item.marketplace}:${item.native_product_id}`));
+    const { data: existingOffers, error: existingOffersError } = await admin
+      .from("offers")
+      .select("platform,item_id,product_id,shopee_item_id")
+      .eq("user_id", user.id)
+      .in("platform", ["Shopee", "Mercado Livre"]);
+    if (existingOffersError) return NextResponse.json({ ok: false, message: "Não foi possível validar ofertas já conhecidas." }, { status: 502 });
+    for (const offer of existingOffers || []) {
+      const nativeId = offer.platform === "Shopee"
+        ? offer.shopee_item_id || offer.item_id
+        : offer.item_id || offer.product_id;
+      if (nativeId) exposed.add(`${offer.platform}:${nativeId}`);
+    }
     const freshCandidates = discovery.candidates.filter((candidate) => {
       const native = candidateNativeIdentity(candidate);
       return !exposed.has(`${native.marketplace}:${native.nativeProductId}`);

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction, transitionManualStatus } from "@/lib/offers/actions";
 import { OfficialAIProviderRegistry } from "@/lib/ai/official/create-official-ai-service";
 import { recommendTrendChannelAndFormat } from "@/core/ai/trend-channel-format-recommender";
@@ -15,17 +16,18 @@ export async function approveTrendOfferAction(formData: FormData) {
   if (platform === "Shopee") await selectShopeeCandidateAction(formData);
   else if (platform === "Mercado Livre") await selectMercadoLivreCandidateAction(formData);
   else throw new Error("Marketplace inválido para aprovação.");
-  await createDraftAfterTrendApproval(formData);
+  const channel = await createDraftAfterTrendApproval(formData);
+  if (channel) redirect(`/${channel.toLocaleLowerCase("pt-BR")}`);
 }
 
 async function createDraftAfterTrendApproval(formData: FormData) {
   const offerId = String(formData.get("offer_id") || "");
   const client = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
-  if (!client || !userId || !offerId) return;
+  if (!client || !userId || !offerId) return null;
   const { data: offer } = await client.from("offers").select("id,platform,product_name,current_price,old_price,score,original_url,image_url,category").eq("id", offerId).eq("user_id", userId).maybeSingle();
   const { data: opportunity } = await client.from("trend_opportunities").select("*").eq("user_id", userId).eq("offer_id", offerId).eq("match_status", "matched").order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  if (!offer) return;
+  if (!offer) return null;
   const normalizedOpportunity: TrendOpportunity = opportunity ? {
     id: opportunity.id,
     signalId: opportunity.signal_id,
@@ -69,13 +71,18 @@ async function createDraftAfterTrendApproval(formData: FormData) {
     category: offer.category,
     matchReason: normalizedOpportunity.matchReason
   }, provider);
-  if (!recommendation) return;
+  if (!recommendation) return null;
   if (opportunity) await persistTrendRecommendation(client, userId, normalizedOpportunity, recommendation);
   const affiliateUrl = offer.platform === "Mercado Livre"
     ? (await import("@/lib/platforms/mercadolivre")).generateMLAffiliateLink(offer.original_url, userId)
     : offer.original_url;
   await createTrendAffiliateLinkAndDraft(client, { userId, offer, recommendation }, affiliateUrl);
   revalidatePath("/trends");
+  return channelKeyForRedirect(recommendation.channel);
+}
+
+function channelKeyForRedirect(channel: string): "whatsapp" | "telegram" | "instagram" | "facebook" {
+  return channel.toLocaleLowerCase("pt-BR") as "whatsapp" | "telegram" | "instagram" | "facebook";
 }
 
 export async function rejectTrendOfferAction(formData: FormData) {
