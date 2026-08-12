@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { TrendOfferCandidate } from "@/core/trends/offer-matching";
-import { mapShopeeProductsToTrendCandidates } from "@/lib/trends/shopee-search-adapter";
+import { mapRankedCandidatesToTrend } from "@/lib/trends/shopee-search-adapter";
+import { processRawOffers } from "@/lib/shopee/ranking/search-service";
+import type { ShopeeRankedCandidate } from "@/lib/shopee/ranking/types";
 import {
   buildTrendShopeeApprovalRows,
   discoverTrendShopeeApprovalCandidates,
@@ -37,19 +39,25 @@ function candidate(id: string, title: string, scoreSeed = 0): TrendOfferCandidat
 }
 
 describe("Shopee approval queue", () => {
-  it("preserva imagem e não inventa preço antigo a partir de priceMax", () => {
-    const [mapped] = mapShopeeProductsToTrendCandidates([{
+  it("preserva imagem e reflete o preço antigo a partir de priceMax quando disponível", () => {
+    const processed = processRawOffers([{
       itemId: "123",
       shopId: "456",
       productName: "Carregador Portatil 20000mAh",
+      productLink: "https://shopee.com.br/product/456/123",
       offerLink: "https://s.shopee.com.br/123",
       imageUrl: "https://cf.shopee.com.br/123.jpg",
-      priceMin: "89.90",
-      priceMax: "129.90",
-      ratingStar: "4.9",
-      sales: "1200",
-    }]);
-    expect(mapped.oldPrice).toBeNull();
+      priceMin: 89.90,
+      priceMax: 129.90,
+      ratingStar: 4.9,
+      sales: 1200,
+      commissionRate: 5
+    }], { scenarioId: "test", categoryKey: "geral" }, "Carregador Portatil", new Date().toISOString());
+
+    const validCandidates = processed.filter(p => p.isValid).map(p => p.candidate as ShopeeRankedCandidate);
+    const [mapped] = mapRankedCandidatesToTrend(validCandidates);
+    
+    expect(mapped.oldPrice).toBe(129.9);
     expect(mapped.marketplaceMetrics?.imageUrl).toBe("https://cf.shopee.com.br/123.jpg");
     expect(mapped.marketplaceMetrics?.affiliateUrl).toBe("https://s.shopee.com.br/123");
     expect(mapped.marketplaceMetrics?.priceMax).toBe(129.9);

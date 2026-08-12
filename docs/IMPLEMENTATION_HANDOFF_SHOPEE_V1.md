@@ -625,3 +625,16 @@ Handoff recriado em: 2026-08-12
 Branch: feat/shopee-search-engine-v1-v2
 Commit-base: d0969de (origin/main)
 Tasks mapeadas: 39 (T00-T55 + TO01-TO15)
+
+ # #   2 4 .   S t a t u s   F i n a l   ( 2 0 2 6 - 0 8 - 1 2 ) 
+ 
+ |   V a l i d a ç ã o   |   S t a t u s   |   D e t a l h e s   | 
+ | - - - | - - - | - - - | 
+ |   * * T e s t e s   D i r e c i o n a d o s   S h o p e e   V 1 * *   |   P A S S   |   8   t e s t e s   e m   s h o p e e - e v i d e n c e - c o l l e c t o r ,   1   e m   s h o p e e - s e a r c h - a d a p t e r ,   7   e m   s h o p e e - a p p r o v a l - q u e u e .   | 
+ |   * * R e g r e s s õ e s   N o v a s * *   |   0   |   N e n h u m a   r e g r e s s ã o   f o i   i n t r o d u z i d a   p e l a   b r a n c h   i s o l a d a .   | 
+ |   * * T y p e c h e c k   G l o b a l * *   |   F A I L   |   D í v i d a   p r e e x i s t e n t e   r e p r o d u z i d a   n o   b a s e l i n e   ( d 0 9 6 9 d e ) .   ( 1 5   e r r o s )   | 
+ |   * * S u í t e   G l o b a l * *   |   F A I L   |   D í v i d a   p r e e x i s t e n t e   r e p r o d u z i d a   n o   b a s e l i n e   ( d 0 9 6 9 d e ) .   ( 2 1   f a l h a s   e m   a r q u i v o s   f o r a   d o   e s c o p o ,   e x :   g e m i n i - p r o m p t . t e s t . t s )   | 
+ |   * * I m p l a n t a ç ã o   P r o d u t i v a * *   |   N Ã O   E X E C U T A D A   |   P r o t e ç ã o   a b s o l u t a   m a n t i d a .   | 
+ |   * * M e r g e * *   |   N Ã O   E X E C U T A D O   |   P r o t e ç ã o   a b s o l u t a   m a n t i d a .   | 
+  
+ 
