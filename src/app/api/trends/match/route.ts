@@ -23,7 +23,7 @@ export async function POST() {
     const summary = await matchTrendSignalsForUser(client, user.id, async (classification) => {
       const term = classification.normalizedProductTerm ?? "";
       const [shopee, mercadoLivreResult] = await Promise.all([
-        discoverMarketplaceCandidates({ marketplace: "Shopee", normalizedProductTerm: term, productIdentity: term, searchShopee: searchShopeeOfficialV1 }),
+        discoverMarketplaceCandidates({ marketplace: "Shopee", normalizedProductTerm: term, productIdentity: term, searchShopee: (query) => searchShopeeOfficialV1(query, classification.categoryHint ?? "geral") }),
         accessToken
           ? discoverMarketplaceCandidates({ marketplace: "Mercado Livre", normalizedProductTerm: term, productIdentity: term, searchMercadoLivre: (query) => searchMercadoLivreForTrendQueries(mercadoLivre, [query], accessToken) })
           : Promise.resolve(null)
