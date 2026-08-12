@@ -3,10 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { rejectShopeeCandidateAction, selectShopeeCandidateAction, transitionManualStatus } from "@/lib/offers/actions";
-import { OfficialAIProviderRegistry } from "@/lib/ai/official/create-official-ai-service";
+import { generateOfficialAI, type OfficialAIChannel } from "@/core/ai";
+import { createOfficialAIServiceDependencies, OfficialAIProviderRegistry } from "@/lib/ai/official/create-official-ai-service";
 import { recommendTrendChannelAndFormat } from "@/core/ai/trend-channel-format-recommender";
 import { persistTrendRecommendation } from "@/lib/trends/recommendation-persistence";
-import { createTrendAffiliateLinkAndDraft } from "@/lib/trends/social-drafts";
+import { buildTrendAffiliateLinkInput } from "@/lib/trends/social-drafts";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getCurrentUserId } from "@/lib/offers/queries";
 import type { TrendOpportunity } from "@/core/trends/types";
@@ -76,9 +77,36 @@ async function createDraftAfterTrendApproval(formData: FormData) {
   const affiliateUrl = offer.platform === "Mercado Livre"
     ? (await import("@/lib/platforms/mercadolivre")).generateMLAffiliateLink(offer.original_url, userId)
     : offer.original_url;
-  await createTrendAffiliateLinkAndDraft(client, { userId, offer, recommendation }, affiliateUrl);
+  const channel = recommendation.channel.toLocaleLowerCase("pt-BR") as OfficialAIChannel;
+  const affiliateLinkInput = buildTrendAffiliateLinkInput(userId, offer, recommendation.channel, affiliateUrl);
+  const { error: affiliateLinkError } = await client
+    .from("affiliate_links")
+    .upsert(affiliateLinkInput, { onConflict: "offer_id,channel" })
+    .select("id")
+    .single();
+  if (affiliateLinkError) throw new Error(`Falha ao preparar link rastreado do Radar: ${affiliateLinkError.message}`);
+
+  const copyResult = await generateOfficialAI(
+    {
+      contractVersion: "pmav5.ai/v1",
+      commandId: `trend-approval:${offer.id}:${channel}`,
+      idempotencyKey: `ai:copy-v2:${offer.id}:trend-${channel}-v1`,
+      correlationId: `trend-approval:${offer.id}`,
+      causationId: null,
+      offerId: offer.id,
+      tenantId: userId,
+      channels: [channel],
+      requestedAt: new Date().toISOString(),
+      actor: { type: "user", id: userId, service: "trends-approval" },
+      origin: "trends.approval",
+      reason: { code: "GENERATE_OFFICIAL_CONTENT" },
+      metadata: { copyV2: true, copyV2Regenerate: true }
+    },
+    createOfficialAIServiceDependencies(client, userId)
+  );
+  if (copyResult.status === "rejected") throw new Error(`Official AI não gerou o draft: ${copyResult.message}`);
   revalidatePath("/trends");
-  return channelKeyForRedirect(recommendation.channel);
+  return channelKeyForRedirect(channel);
 }
 
 function channelKeyForRedirect(channel: string): "whatsapp" | "telegram" | "instagram" | "facebook" {

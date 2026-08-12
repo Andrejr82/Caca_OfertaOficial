@@ -42,6 +42,15 @@ describe("Trend approval queue route contract", () => {
     expect(source).toContain("redirect(`/${channel.toLocaleLowerCase");
   });
 
+  it("conecta a aprovação do Radar ao motor central Official AI/Copy V3", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/lib/trends/approval-actions.ts"), "utf8");
+    expect(source).toContain("generateOfficialAI(");
+    expect(source).toContain("createOfficialAIServiceDependencies(client, userId)");
+    expect(source).toContain('metadata: { copyV2: true, copyV2Regenerate: true }');
+    expect(source).toContain('origin: "trends.approval"');
+    expect(source).not.toContain("createTrendAffiliateLinkAndDraft");
+  });
+
   it("renderiza a fila Pronto para aprovar dentro da Trends", () => {
     const page = fs.readFileSync(pagePath, "utf8");
     const queue = fs.readFileSync(queuePath, "utf8");
