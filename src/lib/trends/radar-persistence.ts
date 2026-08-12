@@ -2,6 +2,7 @@ import type { TrendOfferCandidate } from "@/core/trends/offer-matching";
 
 export interface RadarPersistenceResult {
   radar_date: string;
+  radar_run_id?: string;
   product_term: string;
   normalized_product_term: string;
   evidence_status: "verified" | "partial" | "unverified" | "rejected";
@@ -92,6 +93,8 @@ export function buildRadarOfferRow(userId: string, radar: RadarPersistenceResult
     explainability: {
       provenance: "external_radar",
       radar_date: radar.radar_date,
+      radar_run_id: radar.radar_run_id ?? null,
+      product_term: radar.product_term,
       evidence_status: radar.evidence_status,
       strategy_version: radar.strategy_version,
       discovery_source: candidate.marketplace === "Shopee" ? "shopee_v1_official" : "mercado_livre_official",

@@ -25,6 +25,7 @@ interface ApprovalClient {
 function radarInput(runId: string, product: MultimarketplaceApprovalProduct): RadarPersistenceResult {
   return {
     radar_date: new Date().toISOString().slice(0, 10),
+    radar_run_id: runId,
     product_term: product.product_term,
     normalized_product_term: product.normalized_product_term || product.product_term,
     evidence_status: product.evidence_status,
