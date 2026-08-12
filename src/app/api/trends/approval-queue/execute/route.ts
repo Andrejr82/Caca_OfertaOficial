@@ -90,6 +90,7 @@ export async function POST(request: Request) {
       return product ? [{ radarProduct: product, candidate }] : [];
     });
     const persisted = await persistTrendMarketplaceApprovalCandidates(admin, user.id, runId, entries);
+    const persistenceFailures = Object.values(persisted).reduce((total, item) => total + item.failed, 0);
     const exposureRows = entries.flatMap((entry) => {
       const native = candidateNativeIdentity(entry.candidate);
       const preparedIds = persisted[entry.candidate.marketplace as "Shopee" | "Mercado Livre"].preparedNativeProductIds;
@@ -120,6 +121,7 @@ export async function POST(request: Request) {
       repeatedCandidatesSkipped: discovery.candidates.length - freshCandidates.length,
       candidateCounts: discovery.candidateCounts,
       errors: discovery.errors.length,
+      persistenceFailures,
       counters: discovery.counters,
       persisted,
       socialDraftsCreated: 0,

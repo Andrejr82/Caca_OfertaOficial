@@ -89,7 +89,9 @@ export function buildRadarOfferRow(userId: string, radar: RadarPersistenceResult
     image_url: typeof candidate.marketplaceMetrics?.imageUrl === "string" ? candidate.marketplaceMetrics.imageUrl : null,
     current_price: requirePrice(candidate.currentPrice),
     old_price: candidate.oldPrice == null ? null : Number(candidate.oldPrice),
-    score: calculateCommercialScore(candidate).commercialScore,
+    // `offers.score` uses the operational scale 0–10, while the Radar
+    // commercial score is calculated on a 0–100 scale.
+    score: Number((calculateCommercialScore(candidate).commercialScore / 10).toFixed(2)),
     status: "pending_manual_review",
     explainability: {
       provenance: "external_radar",

@@ -29,6 +29,7 @@ export function DailyRadarRefreshButton() {
         errors?: number;
         counters?: Record<string, { found?: number }>;
         candidateCounts?: Record<string, { raw?: number; accepted?: number }>;
+        persistenceFailures?: number;
         persisted?: Record<string, { readyOfferIds?: string[] }>;
       }>(queueResponse);
       if (!queueResponse.ok || !queue.ok) {
@@ -39,8 +40,10 @@ export function DailyRadarRefreshButton() {
       const mercadoLivre = queue.candidateCounts?.["Mercado Livre"] ?? { raw: 0 };
       const readyShopee = queue.persisted?.Shopee?.readyOfferIds?.length ?? 0;
       const readyMercadoLivre = queue.persisted?.["Mercado Livre"]?.readyOfferIds?.length ?? 0;
-      const partial = Number(queue.errors ?? 0) > 0 ? " · resultado parcial" : "";
-      setMessage(`Radar concluído · Shopee: ${shopee.raw ?? 0} encontrados / ${readyShopee} prontos · Mercado Livre: ${mercadoLivre.raw ?? 0} encontrados / ${readyMercadoLivre} prontos${partial}.`);
+      const failures = Number(queue.persistenceFailures ?? 0);
+      const partial = Number(queue.errors ?? 0) > 0 || failures > 0 ? " · resultado parcial" : "";
+      const failureText = failures > 0 ? ` · ${failures} falha(s) de persistência` : "";
+      setMessage(`Radar concluído · Shopee: ${shopee.raw ?? 0} encontrados / ${readyShopee} prontos · Mercado Livre: ${mercadoLivre.raw ?? 0} encontrados / ${readyMercadoLivre} prontos${failureText}${partial}.`);
       router.refresh();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Falha ao executar Radar.");

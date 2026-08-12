@@ -46,6 +46,7 @@ describe("radar persistence", () => {
       user_id: "user-1", platform: "Shopee", shopee_item_id: candidate.shopeeItemId,
       product_name: candidate.productName, current_price: 94.9, status: "pending_manual_review"
     });
+    expect(buildRadarOfferRow("user-1", radar, candidate).score).toBeLessThanOrEqual(10);
     expect(() => buildRadarOfferRow("user-1", radar, { ...candidate, permalink: null })).toThrow(/original_url/i);
   });
 

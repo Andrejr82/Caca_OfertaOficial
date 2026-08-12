@@ -24,6 +24,6 @@ describe("Radar Mercado Livre credentials", () => {
   it("configures Supabase Admin for Node 20 WebSocket transport", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/lib/supabase/admin.ts"), "utf8");
     expect(source).toContain('import WebSocket from "ws"');
-    expect(source).toContain("realtime: { transport: WebSocket }");
+    expect(source).toContain("realtime: { transport: WebSocket as never }");
   });
 });
