@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
+import { getOperationalMLAccessToken } from "@/lib/platforms/mercadolivre";
 import { searchShopeeOfficialV1Paginated } from "@/lib/trends/shopee-search-adapter";
 import { createMercadoLivreOfficialSearchService, searchMercadoLivreForTrendQueries } from "@/lib/trends/mercado-livre-search-adapter";
 import { discoverTrendMarketplaceCandidates } from "@/lib/trends/multimarketplace-discovery";
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   if (productsError) return NextResponse.json({ ok: false, message: "Não foi possível carregar o ranking do Radar." }, { status: 502 });
 
   try {
-    const accessToken = await getValidMLAccessToken(user.id) || process.env.MERCADO_LIVRE_ACCESS_TOKEN || await getAppMLAccessToken();
+    const accessToken = await getOperationalMLAccessToken(user.id);
     const mercadoLivre = createMercadoLivreOfficialSearchService();
     const products = selectApprovalQueueProducts((radarProducts || []) as MultimarketplaceApprovalProduct[]);
     const discovery = await discoverTrendMarketplaceCandidates({

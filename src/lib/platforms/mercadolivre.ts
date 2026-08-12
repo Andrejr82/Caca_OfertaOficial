@@ -230,6 +230,18 @@ async function refreshMLTokenFromEnvironment(): Promise<string | null> {
   return null;
 }
 
+/** Token operacional para buscas do Radar, renovando o refresh token quando necessário. */
+export async function getOperationalMLAccessToken(userId: string): Promise<string | null> {
+  const userToken = await getValidMLAccessToken(userId);
+  if (userToken) return userToken;
+
+  const environmentToken = process.env.MERCADO_LIVRE_ACCESS_TOKEN;
+  const environmentExpiresAt = Number(process.env.MERCADO_LIVRE_EXPIRES_AT || 0);
+  if (environmentToken && (!environmentExpiresAt || environmentExpiresAt > Date.now())) return environmentToken;
+
+  return (await refreshMLTokenFromEnvironment()) || await getAppMLAccessToken();
+}
+
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
 async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
   const supabase = await createServerSupabaseClient();
