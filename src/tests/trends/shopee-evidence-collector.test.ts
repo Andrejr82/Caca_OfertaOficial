@@ -19,7 +19,8 @@ const officialNode = {
   priceMax: 349.9,
   ratingStar: 4.8,
   sales: 321,
-  priceDiscountRate: 14
+  priceDiscountRate: 14,
+  commissionRate: 5
 };
 
 describe("Shopee Evidence Collector", () => {
@@ -63,7 +64,7 @@ describe("Shopee Evidence Collector", () => {
       trending_flag: null,
       sold_quantity: 321,
       price: 299.9,
-      old_price: null,
+      old_price: 349.9,
       discount_percent: 14,
       rating: 4.8,
       review_count: null,
@@ -76,22 +77,29 @@ describe("Shopee Evidence Collector", () => {
     });
   });
 
-  it("mantém métricas comerciais ausentes como null", () => {
+  it("mantém métricas opcionais ausentes como null, desde que cumpra os filtros mínimos comerciais", () => {
     const result = normalizeShopeeProductOfferEvidence([{
       itemId: "789",
       shopId: "321",
-      productName: "Organizador",
+      productName: "Organizador de mesa",
       productLink: "https://shopee.com.br/product/321/789",
-      priceMin: 49.9
+      offerLink: "https://shope.ee/organizador",
+      priceMin: 49.9,
+      sales: 15, // required
+      ratingStar: 4.6, // required
+      commissionRate: 5 // required
+      // missing: priceMax, priceDiscountRate, shopName
     }], { query: "organizador", observedAt, capturedAt: observedAt });
 
     expect(result.signals[0].evidence.direct_evidence?.[0]).toMatchObject({
-      sold_quantity: null,
       old_price: null,
-      discount_percent: null,
-      rating: null,
+      discount_percent: 0,
       review_count: null,
       shipping: null
+    });
+    
+    expect(result.signals[0].evidence).toMatchObject({
+      shop_name: null
     });
   });
 
