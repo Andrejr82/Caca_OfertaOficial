@@ -4,7 +4,7 @@ import { matchTrendSignalsForUser } from "@/lib/trends/matching";
 import { discoverMarketplaceCandidates } from "@/lib/trends/targeted-marketplace-discovery";
 import { searchShopeeOfficialV1 } from "@/lib/trends/shopee-search-adapter";
 import { searchMercadoLivreForTrendQueries, type ExistingMercadoLivreProduct } from "@/lib/trends/mercado-livre-search-adapter";
-import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
+import { getOperationalMLAccessToken } from "@/lib/platforms/mercadolivre";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export async function POST() {
     if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
-    const accessToken = await getValidMLAccessToken(user.id) || process.env.MERCADO_LIVRE_ACCESS_TOKEN || await getAppMLAccessToken();
+    const accessToken = await getOperationalMLAccessToken(user.id);
     // The maintained official intent service remains the ML client boundary.
     const mercadoLivre = require("../../../../../scripts/mercadolivre-official-intents-v5.cjs") as {
       runMercadoLivreOfficialIntentCoverage(input: { keywords: string[]; accessToken: string; maxPerIntent: number; delayMs: number }): Promise<{ products?: ExistingMercadoLivreProduct[] }>;

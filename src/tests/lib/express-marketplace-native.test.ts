@@ -77,8 +77,12 @@ describe("extração nativa da Publicação Expressa", () => {
 
     await expect(fetchShopeeOfficialProduct("375201738", "21163105419", "Balança Digital Medidora Corporal"))
       .resolves.toMatchObject({ title: "Balança Digital Medidora Corporal", price: 89.9 });
-    expect(JSON.parse(String(fetchMock.mock.calls[2][1]?.body)).variables.keyword)
-      .toBe("Balança Digital Medidora Corporal");
+    const shopeeRequest = fetchMock.mock.calls
+      .map(([, init]) => {
+        try { return JSON.parse(String(init?.body)); } catch { return null; }
+      })
+      .find((body) => body?.variables?.keyword === "Balança Digital Medidora Corporal");
+    expect(shopeeRequest?.variables.keyword).toBe("Balança Digital Medidora Corporal");
   });
 
   it("extrai título, preço e imagem da página Amazon sem provedor externo", async () => {

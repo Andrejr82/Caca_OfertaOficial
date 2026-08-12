@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
+import { getOperationalMLAccessToken } from "@/lib/platforms/mercadolivre";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { fetchMercadoLivreTrendSignals } from "@/lib/trends/mercado-livre-trends-adapter";
 import { persistTrendSignals } from "@/lib/trends/persistence";
@@ -15,9 +15,7 @@ export async function POST() {
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    const accessToken = await getValidMLAccessToken(user.id)
-      || process.env.MERCADO_LIVRE_ACCESS_TOKEN
-      || await getAppMLAccessToken();
+    const accessToken = await getOperationalMLAccessToken(user.id);
     if (!accessToken) return NextResponse.json({ ok: false, message: "Conecte o Mercado Livre para consultar tendências oficiais." }, { status: 503 });
 
     const signals = await fetchMercadoLivreTrendSignals(accessToken);

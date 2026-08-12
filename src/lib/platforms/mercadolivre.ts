@@ -235,17 +235,10 @@ export async function getOperationalMLAccessToken(userId: string): Promise<strin
   const userToken = await getValidMLAccessToken(userId);
   if (userToken) return userToken;
 
-  const environmentToken = process.env.MERCADO_LIVRE_ACCESS_TOKEN;
-  const rawEnvironmentExpiresAt = String(process.env.MERCADO_LIVRE_EXPIRES_AT || "").trim();
-  const numericEnvironmentExpiresAt = Number(rawEnvironmentExpiresAt);
-  const parsedEnvironmentExpiresAt = rawEnvironmentExpiresAt && Number.isNaN(numericEnvironmentExpiresAt)
-    ? Date.parse(rawEnvironmentExpiresAt)
-    : numericEnvironmentExpiresAt;
-  const environmentTokenIsUsable = !rawEnvironmentExpiresAt
-    || (Number.isFinite(parsedEnvironmentExpiresAt) && parsedEnvironmentExpiresAt > Date.now());
-  if (environmentToken && environmentTokenIsUsable) return environmentToken;
-
-  return (await refreshMLTokenFromEnvironment()) || await getAppMLAccessToken();
+  // A credencial operacional deve nascer do refresh_token persistido ou da
+  // credencial de bootstrap com refresh_token. Nunca reutilizamos um access
+  // token fixo de ambiente, pois ele pode estar revogado antes do vencimento.
+  return await refreshMLTokenFromEnvironment();
 }
 
 /** Força a renovação quando a API rejeita um token ainda marcado como válido. */
@@ -416,16 +409,14 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
     accessToken = await getValidMLAccessToken(userId);
   }
 
-  // O fluxo nativo/Oracle mantém um token oficial de usuário no ambiente.
-  // Priorizá-lo evita consultar a API com client-credentials, que não possui
-  // permissão para o endpoint de item e retorna 401/403.
-  if (!accessToken) {
-    accessToken = process.env.MERCADO_LIVRE_ACCESS_TOKEN || null;
+  // Sem OAuth do usuário, tenta renovar a credencial operacional configurada
+  // com refresh_token. O client-credentials fica somente como último recurso
+  // para endpoints públicos que não exigem identidade do vendedor.
+  if (!accessToken && process.env.MERCADO_LIVRE_REFRESH_TOKEN) {
+    accessToken = await refreshMLTokenFromEnvironment();
   }
-
-  // Último fallback: token genérico da aplicação.
   if (!accessToken) {
-    console.log(`[ML API] Usuário sem token OAuth. Utilizando fallback App Token (Client Credentials).`);
+    console.log(`[ML API] Sem credencial OAuth renovável. Utilizando fallback App Token (Client Credentials).`);
     accessToken = await getAppMLAccessToken();
   }
 

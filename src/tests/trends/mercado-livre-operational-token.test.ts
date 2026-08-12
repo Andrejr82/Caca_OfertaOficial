@@ -10,4 +10,14 @@ describe("Radar Mercado Livre credentials", () => {
     );
     expect(source).toContain("getOperationalMLAccessToken");
   });
+
+  it("does not bypass refresh credentials with a fixed access token", () => {
+    const sources = [
+      "src/app/api/trends/execute/route.ts",
+      "src/app/api/trends/mercadolivre/route.ts",
+      "src/app/api/trends/match/route.ts",
+      "src/app/api/trends/approval-queue/execute/route.ts",
+    ].map((file) => fs.readFileSync(path.join(process.cwd(), file), "utf8"));
+    for (const source of sources) expect(source).not.toContain("MERCADO_LIVRE_ACCESS_TOKEN");
+  });
 });
