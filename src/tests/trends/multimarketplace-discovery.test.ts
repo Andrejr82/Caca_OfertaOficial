@@ -6,8 +6,8 @@ describe("multimarketplace trend discovery", () => {
     const result = await discoverTrendMarketplaceCandidates({
       runId: "run-1",
       intents: [{ normalizedProductTerm: "Air Fryer 4L", productIdentity: "Air Fryer 4L" }],
-      searchShopee: async () => [{ id: "S-1", marketplace: "Shopee", productName: "Air Fryer 4L", shopeeItemId: "S-1", currentPrice: 299, marketplaceMetrics: { imageUrl: "https://img.example/S-1.jpg", affiliateUrl: "https://s.shopee.com.br/S-1" } }],
-      searchMercadoLivre: async () => [{ id: "M-1", marketplace: "Mercado Livre", productName: "Air Fryer 4L", itemId: "M-1", currentPrice: 299, marketplaceMetrics: { imageUrl: "https://img.example/M-1.jpg", affiliateUrl: "https://mercadolivre.com.br/M-1?aff=1" } }]
+      searchShopee: async () => [{ id: "S-1", marketplace: "Shopee", productName: "Air Fryer 4L", shopeeItemId: "S-1", currentPrice: 299, marketplaceMetrics: { imageUrl: "https://img.example/S-1.jpg", affiliateUrl: "https://s.shopee.com.br/S-1", rating: 4.8, sales: 100 } }],
+      searchMercadoLivre: async () => [{ id: "M-1", marketplace: "Mercado Livre", productName: "Air Fryer 4L", itemId: "M-1", currentPrice: 299, marketplaceMetrics: { imageUrl: "https://img.example/M-1.jpg", affiliateUrl: "https://mercadolivre.com.br/M-1?aff=1", rating: 4.8, sales: 100 } }]
     });
 
     expect(result.runId).toBe("run-1");
@@ -23,7 +23,7 @@ describe("multimarketplace trend discovery", () => {
       runId: "run-2",
       intents: [{ normalizedProductTerm: "Notebook", productIdentity: "Notebook" }],
       searchShopee: async () => { throw new Error("secret token should not leak"); },
-      searchMercadoLivre: async () => [{ id: "M-2", marketplace: "Mercado Livre", productName: "Notebook", itemId: "M-2", currentPrice: 100, marketplaceMetrics: { imageUrl: "https://img.example/M-2.jpg", affiliateUrl: "https://mercadolivre.com.br/M-2?aff=1" } }]
+      searchMercadoLivre: async () => [{ id: "M-2", marketplace: "Mercado Livre", productName: "Notebook", itemId: "M-2", currentPrice: 100, marketplaceMetrics: { imageUrl: "https://img.example/M-2.jpg", affiliateUrl: "https://mercadolivre.com.br/M-2?aff=1", rating: 4.8, sales: 100 } }]
     });
 
     expect(result.candidates.map((candidate) => candidate.id)).toEqual(["M-2"]);

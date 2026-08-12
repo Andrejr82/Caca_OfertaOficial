@@ -45,4 +45,15 @@ describe("common commercial candidate filters", () => {
 
     expect(result.rejected.map((item) => item.reason)).toEqual(["image_invalid", "image_invalid", "price_invalid", "term_mismatch"]);
   });
+
+  it("rejects accessory and personalization variants for a trend product", () => {
+    const result = filterTrendCommercialCandidates("calendario 2026", [
+      candidate({ id: "magnet", productName: "Imã de geladeira com calendário 2026 personalizado" }),
+      candidate({ id: "chair-part", productName: "Kit rodizios para cadeira gamer" }),
+      candidate({ id: "calendar", productName: "Calendário de parede 2026" }),
+    ]);
+
+    expect(result.accepted.map((item) => item.id)).toEqual(["calendar"]);
+    expect(result.rejected.map((item) => item.reason)).toEqual(["accessory_or_variant", "accessory_or_variant"]);
+  });
 });

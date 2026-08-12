@@ -65,7 +65,7 @@ export function calculateCommercialScore(candidate: TrendOfferCandidate): Commer
     breakdown,
     evidenceCount,
     minimumEvidenceMet,
-    queueEligible: minimumEvidenceMet && commercialScore >= 40,
-    exclusionReason: minimumEvidenceMet && commercialScore >= 40 ? null : "evidencia_comercial_minima_insuficiente"
+    queueEligible: minimumEvidenceMet && commercialScore >= 20,
+    exclusionReason: minimumEvidenceMet && commercialScore >= 20 ? null : "evidencia_comercial_minima_insuficiente"
   };
 }

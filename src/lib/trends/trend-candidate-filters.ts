@@ -17,7 +17,7 @@ const BLOCKED_RULES = [
   ["regulated_medication", /\b(?:remedio|remédio|medicamento|minoxidil|anabolizante|injetavel|injetável)\b/i],
   ["adult_product", /\b(?:vibrador|dildo|masturbador|sex shop)\b/i]
 ] as const;
-const ACCESSORY_RULE = /\b(?:capa|capinha|pelicula|película|case|cabo|carregador|suporte|peca|peça|display|tela)\b/i;
+const ACCESSORY_RULE = /\b(?:capa|capinha|pelicula|case|cabo|carregador|suporte|peca|display|tela|pistao|rodizio|rodizios|rodinhas|ima|cartao|tag|personalizad[oa]?)\b/i;
 const GENERIC_TERMS = new Set(["produto", "oferta", "novo", "nova", "kit"]);
 
 function normalize(value: unknown): string {

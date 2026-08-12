@@ -22,4 +22,14 @@ describe("commercial score", () => {
     expect(result.queueEligible).toBe(false);
     expect(result.exclusionReason).toBe("evidencia_comercial_minima_insuficiente");
   });
+
+  it("does not allow a candidate with no commercial evidence into the queue", () => {
+    const result = calculateCommercialScore({
+      id: "S-3", marketplace: "Shopee", productName: "Calendário 2026", shopeeItemId: "S-3", currentPrice: 20,
+      marketplaceMetrics: { imageUrl: "https://img.example/calendar.jpg", affiliateUrl: "https://shopee.example/calendar" },
+    });
+
+    expect(result.commercialScore).toBe(5);
+    expect(result.queueEligible).toBe(false);
+  });
 });

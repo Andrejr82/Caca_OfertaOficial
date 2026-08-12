@@ -1,4 +1,5 @@
 import type { TrendOfferCandidate } from "@/core/trends/offer-matching";
+import { calculateCommercialScore } from "@/core/trends/commercial-score";
 
 export interface RadarPersistenceResult {
   radar_date: string;
@@ -88,7 +89,7 @@ export function buildRadarOfferRow(userId: string, radar: RadarPersistenceResult
     image_url: typeof candidate.marketplaceMetrics?.imageUrl === "string" ? candidate.marketplaceMetrics.imageUrl : null,
     current_price: requirePrice(candidate.currentPrice),
     old_price: candidate.oldPrice == null ? null : Number(candidate.oldPrice),
-    score: 0,
+    score: calculateCommercialScore(candidate).commercialScore,
     status: "pending_manual_review",
     explainability: {
       provenance: "external_radar",

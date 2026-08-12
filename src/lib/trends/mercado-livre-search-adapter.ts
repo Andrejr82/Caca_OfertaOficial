@@ -22,6 +22,7 @@ export interface ExistingMercadoLivreProduct {
   source_position?: number | null;
   best_seller?: boolean | null;
   ranking?: number | null;
+  sold_quantity?: number | null;
 }
 
 export interface ExistingMercadoLivreSearchService {
@@ -61,6 +62,7 @@ export function createMercadoLivreOfficialSearchService(): ExistingMercadoLivreS
             permalink: text(item.permalink),
             image_url: text(item.thumbnail),
             seller_id: text(item.seller_id),
+            sold_quantity: numeric(item.sold_quantity),
             source_position: index + 1
           });
         }
@@ -132,6 +134,7 @@ export function mapMercadoLivreProductsToTrendCandidates(
         sourcePosition: product.source_position ?? null,
         bestSeller: product.best_seller ?? null,
         ranking: product.ranking ?? null,
+        sales: product.sold_quantity ?? null,
         imageUrl: text(product.imageUrl) || text(product.image_url),
         affiliateUrl: text(product.affiliateUrl) || text(product.affiliate_url) || text(product.permalink) || text(product.product_url),
         normalizedProductTerm

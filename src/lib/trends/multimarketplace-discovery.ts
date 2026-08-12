@@ -1,6 +1,7 @@
 import type { TrendMatchingMarketplace, TrendOfferCandidate } from "@/core/trends/offer-matching";
 import { discoverMarketplaceCandidates, type MarketplaceDiscoveryStatus } from "@/lib/trends/targeted-marketplace-discovery";
 import { filterTrendCommercialCandidates } from "@/lib/trends/trend-candidate-filters";
+import { calculateCommercialScore } from "@/core/trends/commercial-score";
 
 export interface TrendMarketplaceIntent {
   normalizedProductTerm: string;
@@ -106,14 +107,14 @@ export async function discoverTrendMarketplaceCandidates(
           errors.push({ marketplace: job.marketplace, code: "discovery_failed", correlationId, message: "Falha na descoberta comercial." });
         }
         const filtered = filterTrendCommercialCandidates(job.intent.normalizedProductTerm, discovery.candidates);
-        candidates.push(...filtered.accepted);
+        candidates.push(...filtered.accepted.filter((candidate) => calculateCommercialScore(candidate).queueEligible));
         results.push({
           marketplace: job.marketplace,
           normalizedProductTerm: job.intent.normalizedProductTerm,
           queryUsed: discovery.query_used,
           status: discovery.discovery_status,
-          candidateCount: filtered.accepted.length,
-          rejectedCandidateCount: filtered.rejected.length,
+          candidateCount: filtered.accepted.filter((candidate) => calculateCommercialScore(candidate).queueEligible).length,
+          rejectedCandidateCount: filtered.rejected.length + filtered.accepted.filter((candidate) => !calculateCommercialScore(candidate).queueEligible).length,
           correlationId
         });
       } catch {
