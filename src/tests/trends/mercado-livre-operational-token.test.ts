@@ -20,4 +20,10 @@ describe("Radar Mercado Livre credentials", () => {
     ].map((file) => fs.readFileSync(path.join(process.cwd(), file), "utf8"));
     for (const source of sources) expect(source).not.toContain("MERCADO_LIVRE_ACCESS_TOKEN");
   });
+
+  it("configures Supabase Admin for Node 20 WebSocket transport", () => {
+    const source = fs.readFileSync(path.join(process.cwd(), "src/lib/supabase/admin.ts"), "utf8");
+    expect(source).toContain('import WebSocket from "ws"');
+    expect(source).toContain("realtime: { transport: WebSocket }");
+  });
 });

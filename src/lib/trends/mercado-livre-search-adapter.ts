@@ -34,40 +34,23 @@ export interface ExistingMercadoLivreSearchService {
   }): Promise<{ products?: ExistingMercadoLivreProduct[] }>;
 }
 
-interface MercadoLivreSearchResponse {
-  results?: Array<Record<string, unknown>>;
-}
-
 export function createMercadoLivreOfficialSearchService(): ExistingMercadoLivreSearchService {
   return {
     async runMercadoLivreOfficialIntentCoverage({ keywords, accessToken, maxPerIntent, delayMs }) {
-      const products: ExistingMercadoLivreProduct[] = [];
-      for (const keyword of keywords.slice(0, 10)) {
-        if (delayMs > 0 && products.length > 0) await new Promise((resolve) => setTimeout(resolve, delayMs));
-        const url = new URL("https://api.mercadolibre.com/sites/MLB/search");
-        url.searchParams.set("q", keyword);
-        url.searchParams.set("limit", String(Math.min(50, Math.max(1, Math.trunc(maxPerIntent)))));
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" },
-          signal: AbortSignal.timeout(15_000)
-        });
-        if (!response.ok) throw new Error(`Mercado Livre search failed with status ${response.status}`);
-        const payload = await response.json() as MercadoLivreSearchResponse;
-        for (const [index, item] of (payload.results ?? []).entries()) {
-          products.push({
-            item_id: text(item.id),
-            title: text(item.title),
-            price: numeric(item.price),
-            original_price: numeric(item.original_price),
-            permalink: text(item.permalink),
-            image_url: text(item.thumbnail),
-            seller_id: text(item.seller_id),
-            sold_quantity: numeric(item.sold_quantity),
-            source_position: index + 1
-          });
-        }
-      }
-      return { products };
+      const official = require("../../../scripts/mercadolivre-official-intents-v5.cjs") as {
+        runMercadoLivreOfficialIntentCoverage(input: {
+          keywords: string[];
+          accessToken: string;
+          maxPerIntent: number;
+          delayMs: number;
+        }): Promise<{ products?: ExistingMercadoLivreProduct[] }>;
+      };
+      return official.runMercadoLivreOfficialIntentCoverage({
+        keywords: keywords.slice(0, 10),
+        accessToken,
+        maxPerIntent: Math.min(50, Math.max(1, Math.trunc(maxPerIntent))),
+        delayMs
+      });
     }
   };
 }

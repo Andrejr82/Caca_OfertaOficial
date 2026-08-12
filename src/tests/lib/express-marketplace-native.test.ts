@@ -61,6 +61,7 @@ describe("extração nativa da Publicação Expressa", () => {
     const fetchMock = vi.spyOn(global, "fetch")
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { productOfferV2: { nodes: [] } } }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ data: { productOfferV2: { nodes: [] } } }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: { productOfferV2: { nodes: [] } } }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         data: {
           productOfferV2: {

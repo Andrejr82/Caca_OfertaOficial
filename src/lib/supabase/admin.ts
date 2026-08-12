@@ -1,4 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
 
 export function createSupabaseAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -13,7 +14,11 @@ export function createSupabaseAdminClient() {
     auth: {
       autoRefreshToken: false,
       persistSession: false
-    }
+    },
+    // Vercel e o ambiente local usam Node 20, que não possui WebSocket
+    // nativo. Sem este transporte, a criação do cliente falha antes de o
+    // refresh_token do Mercado Livre ser persistido.
+    realtime: { transport: WebSocket as never }
   });
 }
 

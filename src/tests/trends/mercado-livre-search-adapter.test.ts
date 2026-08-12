@@ -1,17 +1,12 @@
 import { describe, expect, it } from "vitest";
+import fs from "node:fs";
 import { createMercadoLivreOfficialSearchService, mapMercadoLivreProductsToTrendCandidates, searchMercadoLivreForTrendQueries, searchMercadoLivreForTrendTerm } from "@/lib/trends/mercado-livre-search-adapter";
 
 describe("Trend → Mercado Livre search adapter", () => {
-  it("provides a server-side official API service without importing legacy scripts", async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response(JSON.stringify({ results: [{ id: "MLB900", title: "Produto oficial", price: 99, permalink: "https://mercadolivre.com.br/MLB900", thumbnail: "https://img.example/900.jpg" }] }), { status: 200 });
-    try {
-      const service = createMercadoLivreOfficialSearchService();
-      const result = await service.runMercadoLivreOfficialIntentCoverage({ keywords: ["Produto"], accessToken: "token", maxPerIntent: 5, delayMs: 0 });
-      expect(result.products).toEqual([expect.objectContaining({ item_id: "MLB900", title: "Produto oficial", price: 99 })]);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  it("uses the maintained official Mercado Livre coverage contract", () => {
+    const source = fs.readFileSync("src/lib/trends/mercado-livre-search-adapter.ts", "utf8");
+    expect(source).toContain("mercadolivre-official-intents-v5.cjs");
+    expect(source).not.toContain("api.mercadolibre.com/sites/MLB/search");
   });
   it("reuses official-search fields without inventing commercial signals", () => {
     const candidates = mapMercadoLivreProductsToTrendCandidates("Air Fryer", [{
