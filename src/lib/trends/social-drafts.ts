@@ -35,7 +35,7 @@ export function buildTrendSocialDraftRow(input: TrendSocialDraftInput) {
     offer_id: input.offer.id,
     affiliate_link_id: input.affiliateLinkId,
     channel: channelKey(input.recommendation.channel),
-    content: `${input.offer.product_name}\n\n${price}\n\n${input.recommendation.rationale}\n\n${input.trackedUrl}`,
+    content: `${input.offer.product_name}\n\n${price}\n\nConfira preço, fotos e detalhes no anúncio:\n${input.trackedUrl}`,
     status: "draft" as const,
     deleted_at: null
   };

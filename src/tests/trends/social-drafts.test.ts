@@ -13,8 +13,24 @@ describe("trend social drafts", () => {
   });
 
   it("creates only draft content and never a published status", () => {
-    const row = buildTrendSocialDraftRow({ userId: "user-1", offer, recommendation, trackedUrl: "https://tracked.example/1", affiliateLinkId: "link-1" });
+    const row = buildTrendSocialDraftRow({
+      userId: "user-1",
+      offer,
+      recommendation: {
+        ...recommendation,
+        rationale: "Imagens de alta qualidade mostram o item em uso e destacam suas vantagens.",
+      },
+      trackedUrl: "https://tracked.example/1",
+      affiliateLinkId: "link-1",
+    });
     expect(row).toMatchObject({ channel: "instagram", status: "draft", offer_id: "offer-1" });
+    expect(row.content).toContain("Air Fryer 4L");
+    expect(row.content).toContain("R$ 299,00");
+    expect(row.content).toContain("Confira preço, fotos e detalhes no anúncio:");
+    expect(row.content).toContain("https://tracked.example/1");
+    expect(row.content).not.toContain("Imagens de alta qualidade");
+    expect(row.content).not.toContain("em uso");
+    expect(row.content).not.toContain("suas vantagens");
     expect(row.content).not.toMatch(/ctr|conversão|vendas|roas/i);
   });
 
