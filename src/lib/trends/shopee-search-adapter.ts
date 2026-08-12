@@ -101,6 +101,7 @@ export function mapRankedCandidatesToTrend(candidates: ShopeeRankedCandidate[]):
 
 /** Thin Radar adapter over the existing signed Shopee OpenAPI V1 contract. */
 export async function searchShopeeOfficialV1(query: string, categoryKey: string = 'geral'): Promise<TrendOfferCandidate[]> {
+  const startMs = Date.now();
   const appId = process.env.SHOPEE_APP_ID;
   const appSecret = process.env.SHOPEE_APP_SECRET;
   
@@ -147,6 +148,32 @@ export async function searchShopeeOfficialV1(query: string, categoryKey: string 
     capturedAt
   );
   
+  const durationMs = Date.now() - startMs;
+  const approved = processed.filter(p => p.isValid).length;
+  const rejected = processed.filter(p => !p.isValid).length;
+  const rejectionCounts = processed.reduce((acc, p) => {
+    if (!p.isValid && p.rejectionCode) {
+      acc[p.rejectionCode] = (acc[p.rejectionCode] || 0) + 1;
+    }
+    return acc;
+  }, {} as Record<string, number>);
+  const top_rejection_codes = Object.entries(rejectionCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(e => e[0]);
+
+  console.log(JSON.stringify({
+    event: "shopee_search_completed",
+    strategy_version: "shopee-ranking-v1",
+    scenario_id: query,
+    category_key: categoryKey,
+    received: processed.length,
+    approved,
+    rejected,
+    top_rejection_codes,
+    duration_ms: durationMs
+  }));
+
   const ranked = rankAndSelectTop(processed, 2);
   return mapRankedCandidatesToTrend(ranked);
 }
