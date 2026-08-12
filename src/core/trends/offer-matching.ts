@@ -1,4 +1,6 @@
 import type { TrendSignalClassification } from "@/core/trends/types";
+import { evaluateSemanticConfidence } from "@/lib/shopee/ranking/semantic-validator";
+import { getPolicyForCategory } from "@/lib/shopee/ranking/category-policies";
 
 export type TrendMatchingMarketplace = "Shopee" | "Mercado Livre";
 export type TrendMatchStatus = "matched" | "no_match";
@@ -44,10 +46,7 @@ export interface TrendMatchResult {
   rejectedCandidates: TrendRejectedMatchCandidate[];
 }
 
-const BLOCKED_ACCESSORY_TERMS = [
-  "capa", "capinha", "pelicula", "película", "case", "carregador", "cabo", "suporte",
-  "bateria", "peca", "peça", "display", "tela", "adesivo", "protecao", "proteção"
-];
+// Removido BLOCKED_ACCESSORY_TERMS em favor do semantic-validator do Motor V1
 
 function normalize(value: unknown): string {
   return String(value ?? "").toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
@@ -80,17 +79,34 @@ function candidateText(candidate: TrendOfferCandidate) {
   return [candidate.productName, candidate.category, metrics.brand, metrics.model, metrics.productName, metrics.title].filter(Boolean).join(" ");
 }
 
-function isAccessoryOrVariant(candidate: TrendOfferCandidate, normalizedTerm: string) {
-  const title = normalize(candidate.productName);
-  const term = normalize(normalizedTerm);
-  if (BLOCKED_ACCESSORY_TERMS.some((blocked) => title.includes(normalize(blocked)))) return true;
-  return title.includes(`para ${term}`) || title.includes(`p/ ${term}`);
-}
+function candidateReason(
+  candidate: TrendOfferCandidate,
+  classification: TrendSignalClassification
+): string | null {
+  const normalizedTerm = classification.normalizedProductTerm?.trim() ?? "";
 
-function candidateReason(candidate: TrendOfferCandidate, normalizedTerm: string): string | null {
   if (candidate.marketplace !== "Shopee" && candidate.marketplace !== "Mercado Livre") return "Marketplace fora do escopo 1D.";
   if (!hasNativeIdentity(candidate)) return "Oferta sem identidade nativa verificável.";
-  if (isAccessoryOrVariant(candidate, normalizedTerm)) return "Acessório, peça ou variante incompatível com o produto principal.";
+  
+  // Se veio do motor Shopee V1 ranqueado, a defesa semântica contextual já atuou
+  if (candidate.marketplace === "Shopee" && candidate.marketplaceMetrics?.strategy_version === "shopee-ranking-v1") {
+    // Validar se o motor reprovou internamente (se o score for 0 ou confidence baixo, etc)
+    // Mas no adapter nós só mapeamos os válidos pro radar. Então confiamos.
+    return null;
+  }
+
+  // Defesa semântica do Motor Shopee V1 (substitui isAccessoryOrVariant e BLOCKED_ACCESSORY_TERMS)
+  const policy = classification.categoryHint ? getPolicyForCategory(classification.categoryHint) : undefined;
+  const semanticResult = evaluateSemanticConfidence(candidate.productName, normalizedTerm, policy);
+  
+  if (!semanticResult.isValid) {
+    if (semanticResult.rejectionCode === 'accessory_mismatch') {
+      return "Acessório, peça ou variante incompatível com o produto principal (Bloqueio V1).";
+    }
+    return "Título não corresponde à intenção do produto (Bloqueio V1).";
+  }
+
+  // Defesa em profundidade: confirmar presença dos termos esperados no texto do candidato
   const expected = words(normalizedTerm);
   const available = new Set(words(candidateText(candidate)));
   if (expected.length === 0 || expected.some((word) => !available.has(word))) return "Título e metadata não comprovam a identidade do produto.";
@@ -109,7 +125,7 @@ export function matchTrendClassification(
   const validCandidates: TrendValidatedMatch[] = [];
   const rejectedCandidates: TrendRejectedMatchCandidate[] = [];
   for (const candidate of candidates) {
-    const rejection = candidateReason(candidate, normalizedTerm);
+    const rejection = candidateReason(candidate, classification);
     if (rejection) {
       rejectedCandidates.push({ offerId: candidate.id, marketplace: candidate.marketplace, reason: rejection });
       continue;

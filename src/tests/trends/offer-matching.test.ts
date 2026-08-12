@@ -9,7 +9,7 @@ const classification: TrendSignalClassification = {
   commercialRelevance: 80,
   isProductIntent: true,
   normalizedProductTerm: "Galaxy S26 FE",
-  categoryHint: "Eletrônicos",
+  categoryHint: "celulares",
   decision: "eligible",
   reason: "Produto identificável.",
   aiModel: "test",
