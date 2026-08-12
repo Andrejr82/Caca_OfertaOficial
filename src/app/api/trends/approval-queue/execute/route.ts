@@ -15,6 +15,17 @@ export const maxDuration = 60;
 
 const MAX_REQUEST_BYTES = 8 * 1024;
 
+function rotationPage(runId: string, query: string): number {
+  let hash = 2166136261;
+  for (const character of `${runId}\u0000${query}`) {
+    hash ^= character.codePointAt(0) ?? 0;
+    hash = Math.imul(hash, 16777619);
+  }
+  // A página varia por execução/termo; os candidatos já expostos continuam
+  // bloqueados pela identidade nativa antes da persistência.
+  return (hash >>> 0) % 10 + 1;
+}
+
 export async function POST(request: Request) {
   const client = await createServerSupabaseClient();
   if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
@@ -61,7 +72,11 @@ export async function POST(request: Request) {
       })),
       maxConcurrentJobs: 2,
       searchShopee: async (query) => {
-        const result = await searchShopeeOfficialV1Paginated(query, { maxPages: 1, limit: 10 });
+        const result = await searchShopeeOfficialV1Paginated(query, {
+          page: rotationPage(runId, query),
+          maxPages: 1,
+          limit: 20
+        });
         return result.candidates.map((candidate) => ({
           ...candidate,
           marketplaceMetrics: { ...candidate.marketplaceMetrics, normalizedProductTerm: query }

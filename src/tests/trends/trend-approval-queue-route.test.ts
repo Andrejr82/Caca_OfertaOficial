@@ -36,6 +36,13 @@ describe("Trend approval queue route contract", () => {
     expect(source).toContain("exposed.add");
   });
 
+  it("varia a página da busca para evitar repetir sempre o primeiro lote", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+    expect(source).toContain("function rotationPage");
+    expect(source).toContain("page: rotationPage(runId, query)");
+    expect(source).toContain("limit: 20");
+  });
+
   it("redireciona a aprovação para o canal recomendado após criar o draft", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/lib/trends/approval-actions.ts"), "utf8");
     expect(source).toContain('import { redirect } from "next/navigation"');
