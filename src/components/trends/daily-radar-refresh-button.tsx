@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { readApiJson } from "@/lib/http/read-api-json";
 
 export function DailyRadarRefreshButton() {
   const router = useRouter();
@@ -14,7 +15,7 @@ export function DailyRadarRefreshButton() {
     setMessage(null);
     try {
       const radarResponse = await fetch("/api/trends/execute?refresh=1", { method: "POST" });
-      const radar = await radarResponse.json();
+      const radar = await readApiJson<{ ok?: boolean; runId?: string; message?: string }>(radarResponse);
       if (!radarResponse.ok || !radar.ok) throw new Error(radar.message || "Falha ao executar Radar.");
 
       const queueResponse = await fetch("/api/trends/approval-queue/execute", {
@@ -22,7 +23,13 @@ export function DailyRadarRefreshButton() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ runId: radar.runId }),
       });
-      const queue = await queueResponse.json();
+      const queue = await readApiJson<{
+        ok?: boolean;
+        message?: string;
+        errors?: number;
+        counters?: Record<string, { found?: number }>;
+        persisted?: Record<string, { readyOfferIds?: string[] }>;
+      }>(queueResponse);
       if (!queueResponse.ok || !queue.ok) {
         throw new Error(`Radar concluído, mas a fila multimarketplace falhou: ${queue.message || "erro desconhecido"}`);
       }

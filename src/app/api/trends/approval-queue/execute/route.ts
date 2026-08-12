@@ -6,6 +6,7 @@ import { searchShopeeOfficialV1Paginated } from "@/lib/trends/shopee-search-adap
 import { createMercadoLivreOfficialSearchService, searchMercadoLivreForTrendQueries } from "@/lib/trends/mercado-livre-search-adapter";
 import { discoverTrendMarketplaceCandidates } from "@/lib/trends/multimarketplace-discovery";
 import { persistTrendMarketplaceApprovalCandidates, persistTrendMercadoLivreApprovalCandidates, type MultimarketplaceApprovalProduct } from "@/lib/trends/multimarketplace-approval-queue";
+import { selectApprovalQueueProducts } from "@/lib/trends/approval-queue-budget";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
   try {
     const accessToken = await getValidMLAccessToken(user.id) || process.env.MERCADO_LIVRE_ACCESS_TOKEN || await getAppMLAccessToken();
     const mercadoLivre = createMercadoLivreOfficialSearchService();
-    const products = (radarProducts || []) as MultimarketplaceApprovalProduct[];
+    const products = selectApprovalQueueProducts((radarProducts || []) as MultimarketplaceApprovalProduct[]);
     const discovery = await discoverTrendMarketplaceCandidates({
       runId,
       intents: products.filter((product) => ["verified", "partial"].includes(product.evidence_status)).map((product) => ({
@@ -59,13 +60,13 @@ export async function POST(request: Request) {
       })),
       maxConcurrentJobs: 2,
       searchShopee: async (query) => {
-        const result = await searchShopeeOfficialV1Paginated(query, { maxPages: 3 });
+        const result = await searchShopeeOfficialV1Paginated(query, { maxPages: 1, limit: 10 });
         return result.candidates.map((candidate) => ({
           ...candidate,
           marketplaceMetrics: { ...candidate.marketplaceMetrics, normalizedProductTerm: query }
         }));
       },
-      searchMercadoLivre: accessToken ? (query) => searchMercadoLivreForTrendQueries(mercadoLivre, [query], accessToken, { maxQueries: 1 }) : undefined
+      searchMercadoLivre: accessToken ? (query) => searchMercadoLivreForTrendQueries(mercadoLivre, [query], accessToken, { maxQueries: 1, maxPerIntent: 10 }) : undefined
     });
     const entries = discovery.candidates.flatMap((candidate) => {
       const term = String(candidate.marketplaceMetrics?.normalizedProductTerm || "").toLocaleLowerCase("pt-BR");
