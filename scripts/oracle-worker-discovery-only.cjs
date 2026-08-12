@@ -20,6 +20,42 @@ const {
   deriveMarketplaceTerminalStatus,
 } = require('./discovery-funnel-contract.cjs');
 
+// --- BRIDGE COMMONJS ⇄ TYPESCRIPT (Motor Shopee V1) ---
+let oracleAdapterTs = null;
+let oracleAdapterLoadAttempted = false;
+
+function getOracleAdapter() {
+  if (oracleAdapterLoadAttempted) return oracleAdapterTs;
+  oracleAdapterLoadAttempted = true;
+  try {
+    require('tsx/cjs');
+    oracleAdapterTs = require('../src/lib/shopee/ranking/oracle-adapter.ts');
+    console.log('[ORACLE-WORKER] Bridge TypeScript (Motor Shopee V1) carregada com sucesso.');
+  } catch (error) {
+    console.warn('[ORACLE-WORKER] Falha ao carregar bridge TypeScript do Motor Shopee V1:', error.message);
+  }
+  return oracleAdapterTs;
+}
+
+/**
+ * Preparação da chamada ao Motor Shopee V1.
+ * O fallback ou bloqueio ocorre internamente via adapter.
+ */
+function safeEvaluateShopeeOracleCandidate(candidate) {
+  const adapter = getOracleAdapter();
+  if (!adapter || typeof adapter.evaluateShopeeOracleCandidate !== 'function') {
+    return null;
+  }
+  try {
+    return adapter.evaluateShopeeOracleCandidate(candidate);
+  } catch (error) {
+    console.warn('[ORACLE-WORKER] Erro na execução do Motor Shopee V1:', error.message);
+    return null;
+  }
+}
+// ------------------------------------------------------
+
+
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
@@ -92,6 +128,7 @@ function queueCategory(product) {
 }
 
 function queueScore(product) {
+  if (product._v1Score !== undefined) return product._v1Score;
   return scoreCandidate(product);
 }
 
@@ -318,10 +355,37 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     }
   }
 
+  const isShadowMode = process.argv.includes('--shopee-v4-dry-run');
+
   const ranked = Array.from(allCandidates.values())
     .map((product) => {
       const candidate = product.marketplace ? product : { ...product, marketplace: limits.marketplace };
-      return { product: candidate, gate: qualityGate(candidate) };
+      let finalGate = qualityGate(candidate);
+
+      if (String(candidate.marketplace || '').toLowerCase() === 'shopee') {
+        const v1Result = safeEvaluateShopeeOracleCandidate(candidate);
+        if (v1Result) {
+          candidate.strategyVersion = v1Result.strategyVersion;
+          candidate.scoreBreakdown = v1Result.scoreBreakdown || { finalScore: v1Result.score };
+          candidate.determiningReasons = v1Result.reasons || [];
+          
+          const v1Gate = {
+            eligible: v1Result.eligible,
+            reasons: v1Result.reasons || [],
+            warnings: []
+          };
+
+          if (isShadowMode) {
+            candidate._v1ShadowGate = v1Gate;
+            candidate._v1Score = v1Result.score;
+          } else {
+            finalGate = v1Gate;
+            candidate._v1Score = v1Result.score;
+          }
+        }
+      }
+
+      return { product: candidate, gate: finalGate };
     })
     .sort((a, b) => {
       const scoreDiff = queueScore(b.product) - queueScore(a.product);
@@ -485,6 +549,9 @@ function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
     category: Object.freeze({ ...product.category }),
     marketplaceMetrics: Object.freeze({ ...(product.marketplaceMetrics || {}) }),
     deterministicScore: Number(product.deterministicScore),
+    strategyVersion: product.strategyVersion || null,
+    scoreBreakdown: product.scoreBreakdown ? Object.freeze({ ...product.scoreBreakdown }) : null,
+    determiningReasons: product.determiningReasons ? Object.freeze([...product.determiningReasons]) : null,
     discoveryEvidence: Object.freeze({
       position: product.marketplaceMetrics?.sourcePosition ?? product.marketplaceMetrics?.position ?? null,
       category: product.category.name,
@@ -1051,4 +1118,5 @@ module.exports = {
   runDiscoveryOnlyCycle,
   validateCanonicalUrl,
   validateNativeIdentity,
+  safeEvaluateShopeeOracleCandidate,
 };
