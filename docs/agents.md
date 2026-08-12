@@ -3,7 +3,7 @@
 A plataforma conta com motores (ou "agentes") que correm de forma independente da requisição da interface web. O conceito de Agente neste projeto refere-se ao worker ou sistema autônomo.
 
 ## 1. Scraper Agent (Motor Quente)
-Responsável pela aquisição autônoma. Através da Inngest API (`runUserScrapingBackground` em `src/lib/inngest/functions.ts`), este agente lê trends do Mercado Livre ou Shopee.
+Responsável pela aquisição autônoma. O Discovery contínuo pertence ao Oracle Worker; o job legado `runUserScrapingBackground` não integra mais o registro ativo do Inngest.
 - **Filtro de Ruído:** O agente simula uma curadoria humana ignorando ofertas sem desconto real, usando o `score-v2`.
 
 ## 2. Copywriter Agent (LLM)

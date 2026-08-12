@@ -42,7 +42,7 @@ flowchart LR
 
 | Componente | Responsabilidade verificada | Fonte principal |
 |---|---|---|
-| Next.js/Vercel | UI, autenticação, APIs, serviços de estado/AI/publicação e cron de polling Instagram configurado | `src/app`, `src/core`, `src/lib`, `vercel.json` |
+| Next.js/Vercel | UI, autenticação, APIs e serviços de estado/AI/publicação | `src/app`, `src/core`, `src/lib`, `vercel.json` |
 | Oracle Worker | Discovery dos três marketplaces, contrato Candidate/Ingestion V1, persistência e disparo da Official AI | `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs` |
 | Oracle API | Gateway Express em `:3002`; `POST /api/scrape` busca HTML e devolve conteúdo normalizado | `scripts/oracle-api.cjs` |
 | WhatsApp Engine | Express/Baileys em `:3001`, status e envio autenticado | `scripts/whatsapp-engine.cjs` |
@@ -91,9 +91,9 @@ As migrations mais recentes adicionam contratos V5 de marketplaces, índices nat
 
 ## APIs do Next.js
 
-Rotas de negócio confirmadas incluem `/api/ai/generate`, `/api/ai/regenerate`, `/api/scraper/import`, `/api/scraper/trends`, `/api/scraper/cron`, `/api/scraper/coupons`, `/api/telegram/publish`, `/api/instagram/publish`, `/api/whatsapp/publish`, `/api/facebook/publish`, `/api/publish/extension`, `/api/posts/reject`, `/api/posts/bulk-reject`, `/api/webhooks/instagram`, `/api/instagram/poll-comments`, `/api/auth/ml/*`, `/api/go/[...subId]` e `/api/health`/`/api/readiness`. Há também rotas utilitárias de imagens, settings e teste de integração; a lista física completa está em `src/app/api`.
+Rotas de negócio confirmadas incluem `/api/ai/generate`, `/api/ai/regenerate`, `/api/scraper/import`, `/api/scraper/trends`, `/api/scraper/coupons`, `/api/telegram/publish`, `/api/instagram/publish`, `/api/whatsapp/publish`, `/api/facebook/publish`, `/api/publish/extension`, `/api/posts/reject`, `/api/posts/bulk-reject`, `/api/webhooks/instagram`, `/api/instagram/poll-comments`, `/api/auth/ml/*`, `/api/go/[...subId]` e `/api/health`/`/api/readiness`. Há também rotas utilitárias de imagens, settings e teste de integração; a lista física completa está em `src/app/api`. `/api/instagram/poll-comments` permanece como limite legado `410`, mas não possui cron Vercel.
 
-Inngest está integrado em `/api/inngest` e em `src/lib/inngest/functions.ts` como executor assíncrono delegado. As funções `publishPostBackground` e `processOfferBackground` chamam os serviços oficiais de publicação/IA; funções de scraping, analytics e polling marcadas como `disabledJob` não devem ser descritas como automações ativas.
+Inngest está integrado em `/api/inngest` e em `src/lib/inngest/functions.ts` como executor assíncrono delegado. As funções `publishPostBackground` e `processOfferBackground` chamam os serviços oficiais de publicação/IA; jobs mortos de scraping, analytics e polling não fazem parte do registro ativo.
 
 ## Marketplaces e integrações
 

@@ -19,6 +19,7 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 - Executa o painel Next.js, APIs e integrações server-side.
 - Validar build, variáveis, cron declarado em `vercel.json`, `/api/health` e `/api/readiness`.
 - Confirmar que rotas de publicação exigem autenticação e entidades oficiais.
+- Builds Git automáticos prosseguem somente para `main`; branches deliberadas podem ser publicadas manualmente com `vercel --build-env VERCEL_FORCE_BUILD=1`.
 
 ## Supabase
 

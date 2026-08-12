@@ -1,7 +1,7 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: 61ce6d2 -->
+<!-- verified-against: 3cf179c -->
 <!-- verified-on: 2026-08-11 -->
 
 ## Princípios

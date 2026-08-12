@@ -3,17 +3,5 @@
   "version": 2,
   "buildCommand": "next build",
   "installCommand": "npm install",
-  "git": {
-    "deploymentEnabled": {
-      "*": false,
-      "main": true,
-      "staging": true
-    }
-  },
-  "crons": [
-    {
-      "path": "/api/instagram/poll-comments",
-      "schedule": "0 0 * * *"
-    }
-  ]
+  "ignoreCommand": "node -e \"const ref=process.env.VERCEL_GIT_COMMIT_REF;const force=process.env.VERCEL_FORCE_BUILD==='1';process.exit(force||!ref||ref==='main'?1:0)\""
 }
