@@ -89,13 +89,6 @@ function qualityGate(product) {
   const accessoryAllowedByScenario = product?.allowAccessory === true;
   if (!accessoryAllowedByScenario && ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
 
-  if (marketplace === 'shopee') {
-    const rating = Number(metrics.rating || 0);
-    const sales = Number(metrics.sales || 0);
-    if (rating > 0 && rating < 4.7) reasons.push('AVALIACAO_SHOPEE_BAIXA');
-    if (sales > 0 && sales < 100) reasons.push('VENDAS_SHOPEE_BAIXAS');
-  }
-
   const hasCommercialData = Boolean(product?.originalPrice != null || metrics.rating != null || metrics.reviewCount != null || hasVerifiedCommercialSignal);
 
   if (marketplace === 'amazon') {
