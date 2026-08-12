@@ -45,7 +45,7 @@ Critério usado aqui: existe no repositório, mas está em scripts de teste/lega
 
 ## Componentes ativos (existem e são usados por fluxos principais)
 
-- Vercel: app Next.js (UI + `/api/*`) e cron (`vercel.json`).
+- Vercel: app Next.js (UI + `/api/*`), sem cron declarado em `vercel.json`.
 - Supabase: PostgreSQL/Auth/Storage; tabelas e migrações em `supabase/*`.
 - Oracle (VPS): WhatsApp Engine (`:3001`), Oracle API (`:3002`) e Oracle Scraper (processo longo).
 
@@ -56,7 +56,7 @@ Critério usado aqui: existe no repositório, mas está em scripts de teste/lega
 
 ## Pendências conhecidas (evidências no código/config)
 
-- `vercel.json` agenda `GET /api/instagram/poll-comments` como `0 0 * * *`, mas o comentário no código do endpoint menciona outra periodicidade (`src/app/api/instagram/poll-comments/route.ts`).
+- `/api/instagram/poll-comments` permanece como limite legado `410`, mas não é agendada por `vercel.json`.
 - A rota `POST /api/instagram/publish` atualiza `posts.status` para `"processing"`, enquanto o `schema.sql` define o check constraint de `posts.status` com valores `('draft','published','failed','deleted')`.
 - IP da Oracle está hardcoded no app em chamadas de scraping remoto (`src/lib/affiliates/scraper.ts` usa `http://193.122.242.178:3002/api/scrape`).
 - `.env.example` contém entradas duplicadas (o arquivo repete blocos).

@@ -14,7 +14,6 @@ const officialClients = {
 
 const blockedComponents = [
   "src/lib/publish/actions.ts",
-  "src/app/api/scraper/cron/route.ts",
   "src/app/api/scraper/import/route.ts",
   "src/app/api/instagram/poll-comments/route.ts"
 ] as const;
@@ -87,7 +86,6 @@ describe("PMAV5-009 parallel component subordination", () => {
 
   it("removes Next.js and auxiliary jobs from Discovery authority", () => {
     for (const path of [
-      "src/app/api/scraper/cron/route.ts",
       "src/app/api/scraper/trends/route.ts",
       "src/app/api/scraper/coupons/route.ts",
       "src/app/api/scraper/import/route.ts",

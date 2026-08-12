@@ -53,26 +53,4 @@ export async function uploadImageAndGenerateVideo(
   }
 }
 
-/**
- * Helper para construir a URL dinâmica do Vercel OG que criamos no Passo 1.
- * Isso garante que todas as URLs da imagem fiquem centralizadas na mesma lógica.
- */
-export function getOgImageUrl(
-  title: string,
-  price: string,
-  oldPrice: string | null,
-  imageUrl: string,
-  platform: string,
-  baseUrl: string = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-) {
-  const url = new URL('/api/og', baseUrl);
-  url.searchParams.set('title', title);
-  url.searchParams.set('price', price);
-  if (oldPrice) url.searchParams.set('oldPrice', oldPrice);
-  url.searchParams.set('imageUrl', imageUrl);
-  url.searchParams.set('platform', platform);
-  
-  return url.toString();
-}
-
 export default cloudinary;

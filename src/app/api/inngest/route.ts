@@ -3,8 +3,6 @@ import { inngest } from "@/lib/inngest/client";
 import { 
   publishPostBackground, 
   processOfferBackground, 
-  syncAnalyticsBackground,
-  runUserScrapingBackground,
   processClickBackground,
   sendTelegramCycleIntro,
   publishTelegramEditorialTop30
@@ -15,8 +13,6 @@ export const { GET, POST, PUT } = serve({
   functions: [
     publishPostBackground,
     processOfferBackground,
-    syncAnalyticsBackground,
-    runUserScrapingBackground,
     processClickBackground,
     sendTelegramCycleIntro,
     publishTelegramEditorialTop30

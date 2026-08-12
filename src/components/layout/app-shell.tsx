@@ -126,6 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     <li key={item.href}>
                       <Link
                         href={item.href}
+                        prefetch={false}
                         title={!isOpen ? item.label : undefined}
                         className={`
                           group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-semibold
@@ -236,6 +237,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 onClick={closeMobileMenu}
                 className={`flex min-h-14 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[11px] font-semibold ${active ? "text-emerald-400" : "text-white/50"}`}
                 aria-current={active ? "page" : undefined}
