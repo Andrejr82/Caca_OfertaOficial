@@ -1064,6 +1064,9 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       correlation_id: correlationId,
       discovery_evidence: candidate.discoveryEvidence,
       marketplace_metrics: metrics,
+      strategy_version: candidate.strategyVersion ?? null,
+      score_breakdown: candidate.scoreBreakdown ?? null,
+      determining_reasons: candidate.determiningReasons ?? null,
     };
     if (persistenceContext) {
       explainability = {
