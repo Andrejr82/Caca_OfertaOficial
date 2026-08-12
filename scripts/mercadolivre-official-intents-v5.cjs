@@ -144,6 +144,30 @@ function catalogFallbackProducts(items, searchTerm) {
   }).map((item) => item.id).filter(Boolean).slice(0, 20);
 }
 
+function normalizedSearchTokens(searchTerm) {
+  return searchTerm
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .split(/\s+/)
+    .filter((token) => token.length >= 3);
+}
+
+function catalogTitleMatches(value, searchTerm) {
+  const name = String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR');
+  const tokens = normalizedSearchTokens(searchTerm);
+  return tokens.length > 0 && tokens.every((token) => name.includes(token));
+}
+
+function catalogExactProducts(items, searchTerm) {
+  return (items || []).filter((item) => {
+    return catalogTitleMatches(item.name, searchTerm);
+  }).map((item) => item.id).filter(Boolean).slice(0, 20);
+}
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function persistRefreshedCredentials(data, { env = process.env, supabaseClient } = {}) {
@@ -236,6 +260,13 @@ async function runMercadoLivreOfficialIntentCoverage({
       const searchTerms = SEARCH_ALIASES[intent] || [intent];
       for (const searchTerm of searchTerms) {
         if (intentProducts.length >= maxPerIntent) break;
+        let directCatalogProductIds = [];
+        try {
+          const catalogSearch = await apiGet(`/products/search?status=active&site_id=MLB&q=${encodeURIComponent(searchTerm)}&limit=100`, { fetchImpl, accessToken }); calls += 1;
+          directCatalogProductIds = catalogExactProducts(catalogSearch.results, searchTerm);
+        } catch (error) {
+          lastError = error;
+        }
         let domains = categoryCache.get(searchTerm);
         if (!domains) {
           domains = await apiGet(`/sites/MLB/domain_discovery/search?q=${encodeURIComponent(searchTerm)}`, { fetchImpl, accessToken }); calls += 1;
@@ -244,7 +275,11 @@ async function runMercadoLivreOfficialIntentCoverage({
           domains = [...preferredDomains, ...domains.filter((entry) => !preferredDomains.some((preferred) => preferred.domain_id === entry.domain_id))];
           categoryCache.set(searchTerm, domains);
         }
-        for (const domain of rankDomains(domains, intent)) {
+        const rankedDomains = rankDomains(domains, intent);
+        const domainsToProcess = directCatalogProductIds.length
+          ? [{ ...(rankedDomains[0] || {}), directProductIds: directCatalogProductIds }, ...rankedDomains]
+          : rankedDomains;
+        for (const domain of domainsToProcess) {
           if (intentProducts.length >= maxPerIntent) break;
           try {
             let highlights = { content: [] };
@@ -253,7 +288,7 @@ async function runMercadoLivreOfficialIntentCoverage({
             } catch {
               // O fallback de catálogo abaixo continua sendo oficial.
             }
-            let productIds = (highlights.content || []).filter((entry) => entry.type === 'PRODUCT').map((entry) => entry.id).slice(0, 20);
+            let productIds = domain.directProductIds || (highlights.content || []).filter((entry) => entry.type === 'PRODUCT').map((entry) => entry.id).slice(0, 20);
             // Alguns domínios (principalmente moda/fitness) não expõem
             // highlights. A busca oficial de catálogo por q + domain_id é o
             // fallback documentado pelo Mercado Livre.
@@ -303,7 +338,9 @@ async function runMercadoLivreOfficialIntentCoverage({
                 permalink: productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`
               }));
               const detailById = new Map(details.map((item) => [item.id, item]));
-              const enriched = catalogFallback.map((item) => ({ ...item, ...(detailById.get(item.id) || {}) }));
+              const enriched = catalogFallback
+                .map((item) => ({ ...item, ...(detailById.get(item.id) || {}) }))
+                .filter((item) => catalogTitleMatches(item.title || productMeta.name, searchTerm));
               intentProducts.push(...normalizeItems(enriched, {
                 intent, domain_id: domain.domain_id, category_id: domain.category_id, category_name: domain.category_name,
                 product_id: productId,
@@ -358,6 +395,7 @@ module.exports = {
   normalizeItems,
   runMercadoLivreOfficialIntentCoverage,
   catalogFallbackProducts,
+  catalogExactProducts,
   MIN_PRODUCTS_PER_INTENT,
   SEARCH_ALIASES
 };

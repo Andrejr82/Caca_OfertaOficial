@@ -9,6 +9,7 @@ runMercadoLivreOfficialIntentCoverage({
   delayMs: 0,
   fetchImpl: async (url) => {
     if (url.includes('/domain_discovery/search')) return json([{ domain_id: 'MLB-CELLPHONES', category_id: 'MLB1055', category_name: 'Celulares e Smartphones' }]);
+    if (url.includes('/products/search?status=active')) return json({ results: [] });
     if (url.includes('/highlights/')) return json({ content: [{ id: 'MLBPRODUCT1', type: 'PRODUCT' }] });
     if (url.includes('/products/MLBPRODUCT1/items')) return json({ results: [{ item_id: 'MLBITEM1' }] });
     if (url.endsWith('/products/MLBPRODUCT1')) return json({ name: 'Smartphone Fixture', pictures: [{ url: 'https://img.example/product.jpg' }], permalink: 'https://mercadolivre.com.br/fixture' });

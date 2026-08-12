@@ -43,6 +43,13 @@ describe("Trend approval queue route contract", () => {
     expect(source).toContain("limit: 20");
   });
 
+  it("pagina as ofertas existentes além do limite padrão do Supabase", () => {
+    const source = fs.readFileSync(routePath, "utf8");
+    expect(source).toContain("loadExistingOfferIdentities");
+    expect(source).toContain("SUPABASE_PAGE_SIZE = 1000");
+    expect(source).toContain(".range(offset, offset + SUPABASE_PAGE_SIZE - 1)");
+  });
+
   it("redireciona a aprovação para o canal recomendado após criar o draft", () => {
     const source = fs.readFileSync(path.join(process.cwd(), "src/lib/trends/approval-actions.ts"), "utf8");
     expect(source).toContain('import { redirect } from "next/navigation"');

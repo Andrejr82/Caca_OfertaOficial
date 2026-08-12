@@ -14,6 +14,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_REQUEST_BYTES = 8 * 1024;
+const SUPABASE_PAGE_SIZE = 1000;
 
 function rotationPage(runId: string, query: string): number {
   let hash = 2166136261;
@@ -24,6 +25,23 @@ function rotationPage(runId: string, query: string): number {
   // A página varia por execução/termo; os candidatos já expostos continuam
   // bloqueados pela identidade nativa antes da persistência.
   return (hash >>> 0) % 10 + 1;
+}
+
+async function loadExistingOfferIdentities(admin: ReturnType<typeof createSupabaseAdminClient>, userId: string) {
+  if (!admin) throw new Error("Persistência server-side não configurada.");
+  const rows: Array<{ platform: string; item_id: string | null; product_id: string | null; shopee_item_id: string | null }> = [];
+  for (let offset = 0; offset < 100_000; offset += SUPABASE_PAGE_SIZE) {
+    const { data, error } = await admin
+      .from("offers")
+      .select("platform,item_id,product_id,shopee_item_id")
+      .eq("user_id", userId)
+      .in("platform", ["Shopee", "Mercado Livre"])
+      .range(offset, offset + SUPABASE_PAGE_SIZE - 1);
+    if (error) throw error;
+    rows.push(...(data || []));
+    if (!data || data.length < SUPABASE_PAGE_SIZE) break;
+  }
+  return rows;
 }
 
 export async function POST(request: Request) {
@@ -94,13 +112,13 @@ export async function POST(request: Request) {
       .in("exposure_status", ["exposed", "pending", "approved", "rejected", "published"]);
     if (exposureError) return NextResponse.json({ ok: false, message: "Não foi possível validar a rotação de ofertas." }, { status: 502 });
     const exposed = new Set((priorExposure || []).map((item: { marketplace: string; native_product_id: string }) => `${item.marketplace}:${item.native_product_id}`));
-    const { data: existingOffers, error: existingOffersError } = await admin
-      .from("offers")
-      .select("platform,item_id,product_id,shopee_item_id")
-      .eq("user_id", user.id)
-      .in("platform", ["Shopee", "Mercado Livre"]);
-    if (existingOffersError) return NextResponse.json({ ok: false, message: "Não foi possível validar ofertas já conhecidas." }, { status: 502 });
-    for (const offer of existingOffers || []) {
+    let existingOffers;
+    try {
+      existingOffers = await loadExistingOfferIdentities(admin, user.id);
+    } catch {
+      return NextResponse.json({ ok: false, message: "Não foi possível validar ofertas já conhecidas." }, { status: 502 });
+    }
+    for (const offer of existingOffers) {
       const nativeId = offer.platform === "Shopee"
         ? offer.shopee_item_id || offer.item_id
         : offer.item_id || offer.product_id;
