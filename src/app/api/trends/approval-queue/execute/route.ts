@@ -7,6 +7,7 @@ import { createMercadoLivreOfficialSearchService, searchMercadoLivreForTrendQuer
 import { discoverTrendMarketplaceCandidates } from "@/lib/trends/multimarketplace-discovery";
 import { persistTrendMarketplaceApprovalCandidates, persistTrendMercadoLivreApprovalCandidates, type MultimarketplaceApprovalProduct } from "@/lib/trends/multimarketplace-approval-queue";
 import { selectApprovalQueueProducts } from "@/lib/trends/approval-queue-budget";
+import { candidateNativeIdentity } from "@/lib/trends/candidate-rotation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,21 +69,56 @@ export async function POST(request: Request) {
       },
       searchMercadoLivre: accessToken ? (query) => searchMercadoLivreForTrendQueries(mercadoLivre, [query], accessToken, { maxQueries: 1, maxPerIntent: 10 }) : undefined
     });
-    const entries = discovery.candidates.flatMap((candidate) => {
+    const admin = createSupabaseAdminClient();
+    if (!admin) return NextResponse.json({ ok: false, message: "Persistência server-side não configurada." }, { status: 503 });
+
+    const { data: priorExposure, error: exposureError } = await admin
+      .from("trend_offer_exposure_history")
+      .select("marketplace,native_product_id,exposure_status")
+      .eq("user_id", user.id)
+      .in("exposure_status", ["exposed", "pending", "approved", "rejected", "published"]);
+    if (exposureError) return NextResponse.json({ ok: false, message: "Não foi possível validar a rotação de ofertas." }, { status: 502 });
+    const exposed = new Set((priorExposure || []).map((item: { marketplace: string; native_product_id: string }) => `${item.marketplace}:${item.native_product_id}`));
+    const freshCandidates = discovery.candidates.filter((candidate) => {
+      const native = candidateNativeIdentity(candidate);
+      return !exposed.has(`${native.marketplace}:${native.nativeProductId}`);
+    });
+    const entries = freshCandidates.flatMap((candidate) => {
       const term = String(candidate.marketplaceMetrics?.normalizedProductTerm || "").toLocaleLowerCase("pt-BR");
       const product = products.find((item) => (item.normalized_product_term || item.product_term).toLocaleLowerCase("pt-BR") === term)
         || products.find((item) => candidate.productName.toLocaleLowerCase("pt-BR").includes(item.product_term.toLocaleLowerCase("pt-BR")));
       return product ? [{ radarProduct: product, candidate }] : [];
     });
-    const admin = createSupabaseAdminClient();
-    if (!admin) return NextResponse.json({ ok: false, message: "Persistência server-side não configurada." }, { status: 503 });
     const persisted = await persistTrendMarketplaceApprovalCandidates(admin, user.id, runId, entries);
+    const exposureRows = entries.flatMap((entry) => {
+      const native = candidateNativeIdentity(entry.candidate);
+      const preparedIds = persisted[entry.candidate.marketplace as "Shopee" | "Mercado Livre"].preparedNativeProductIds;
+      if (!preparedIds.includes(native.nativeProductId)) return [];
+      return [{
+        user_id: user.id,
+        radar_run_id: runId,
+        marketplace: native.marketplace,
+        native_product_id: native.nativeProductId,
+        offer_id: null,
+        product_term: entry.radarProduct.product_term,
+        exposure_status: "exposed",
+        metadata: { source: "trend_approval_queue" },
+        last_exposed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }];
+    });
+    if (exposureRows.length) {
+      await admin.from("trend_offer_exposure_history").upsert(exposureRows, { onConflict: "user_id,radar_run_id,marketplace,native_product_id" });
+    }
     const mlPersisted = persistTrendMercadoLivreApprovalCandidates === persistTrendMarketplaceApprovalCandidates;
     return NextResponse.json({
       ok: true,
       runId,
       automaticPublication: false,
       discoveredCandidates: discovery.candidates.length,
+      freshCandidates: freshCandidates.length,
+      repeatedCandidatesSkipped: discovery.candidates.length - freshCandidates.length,
+      candidateCounts: discovery.candidateCounts,
       errors: discovery.errors.length,
       counters: discovery.counters,
       persisted,

@@ -1,5 +1,6 @@
 import type { TrendOfferCandidate } from "@/core/trends/offer-matching";
 import { persistRadarOffer, type RadarPersistenceCandidate, type RadarPersistenceResult } from "@/lib/trends/radar-persistence";
+import { candidateNativeIdentity } from "@/lib/trends/candidate-rotation";
 
 export interface MultimarketplaceApprovalProduct {
   id: string;
@@ -48,13 +49,14 @@ export async function persistTrendMarketplaceApprovalCandidates(
   candidates: MarketplaceApprovalCandidate[],
 ) {
   const byMarketplace = {
-    Shopee: { inserted: 0, updated: 0, failed: 0, readyOfferIds: [] as string[] },
-    "Mercado Livre": { inserted: 0, updated: 0, failed: 0, readyOfferIds: [] as string[] }
+    Shopee: { inserted: 0, updated: 0, failed: 0, readyOfferIds: [] as string[], preparedNativeProductIds: [] as string[] },
+    "Mercado Livre": { inserted: 0, updated: 0, failed: 0, readyOfferIds: [] as string[], preparedNativeProductIds: [] as string[] }
   };
   for (const entry of candidates) {
     try {
       const offerId = await persistRadarOffer(client, userId, radarInput(runId, entry.radarProduct), entry.candidate as RadarPersistenceCandidate);
       byMarketplace[entry.candidate.marketplace as "Shopee" | "Mercado Livre"].readyOfferIds.push(offerId);
+      byMarketplace[entry.candidate.marketplace as "Shopee" | "Mercado Livre"].preparedNativeProductIds.push(candidateNativeIdentity(entry.candidate).nativeProductId);
       byMarketplace[entry.candidate.marketplace as "Shopee" | "Mercado Livre"].inserted += 1;
     } catch {
       byMarketplace[entry.candidate.marketplace as "Shopee" | "Mercado Livre"].failed += 1;

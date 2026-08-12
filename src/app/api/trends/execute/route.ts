@@ -6,7 +6,7 @@ import { buildExecutiveRadarRanking } from "@/core/trends/executive-radar-rankin
 import { buildStrongestNiches7d } from "@/core/trends/strongest-niches-7d";
 import { buildInternalPerformanceByProduct } from "@/core/trends/internal-performance-score";
 import type { TrendSignal, TrendSignalListItem } from "@/core/trends/types";
-import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
+import { getOperationalMLAccessToken } from "@/lib/platforms/mercadolivre";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { fetchGoogleTrendSignals } from "@/lib/trends/google-trends-adapter";
 import { loadInternalClickSignals } from "@/lib/trends/internal-click-performance";
@@ -124,9 +124,7 @@ export async function POST(request: Request) {
       sourceHealth.google_trends = { status: "degraded" };
     }
 
-    const accessToken = await getValidMLAccessToken(user.id)
-      || process.env.MERCADO_LIVRE_ACCESS_TOKEN
-      || await getAppMLAccessToken();
+    const accessToken = await getOperationalMLAccessToken(user.id);
 
     if (accessToken) {
       try {

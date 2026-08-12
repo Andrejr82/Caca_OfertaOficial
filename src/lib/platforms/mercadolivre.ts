@@ -236,8 +236,14 @@ export async function getOperationalMLAccessToken(userId: string): Promise<strin
   if (userToken) return userToken;
 
   const environmentToken = process.env.MERCADO_LIVRE_ACCESS_TOKEN;
-  const environmentExpiresAt = Number(process.env.MERCADO_LIVRE_EXPIRES_AT || 0);
-  if (environmentToken && (!environmentExpiresAt || environmentExpiresAt > Date.now())) return environmentToken;
+  const rawEnvironmentExpiresAt = String(process.env.MERCADO_LIVRE_EXPIRES_AT || "").trim();
+  const numericEnvironmentExpiresAt = Number(rawEnvironmentExpiresAt);
+  const parsedEnvironmentExpiresAt = rawEnvironmentExpiresAt && Number.isNaN(numericEnvironmentExpiresAt)
+    ? Date.parse(rawEnvironmentExpiresAt)
+    : numericEnvironmentExpiresAt;
+  const environmentTokenIsUsable = !rawEnvironmentExpiresAt
+    || (Number.isFinite(parsedEnvironmentExpiresAt) && parsedEnvironmentExpiresAt > Date.now());
+  if (environmentToken && environmentTokenIsUsable) return environmentToken;
 
   return (await refreshMLTokenFromEnvironment()) || await getAppMLAccessToken();
 }

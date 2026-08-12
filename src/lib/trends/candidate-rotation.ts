@@ -35,12 +35,17 @@ function positiveInteger(value: number | undefined, fallback: number, max: numbe
   return Math.min(max, Math.max(1, Math.trunc(value as number)));
 }
 
-function identity(candidate: TrendOfferCandidate): string {
+export function candidateNativeIdentity(candidate: TrendOfferCandidate): { marketplace: string; nativeProductId: string } {
   const metrics = candidate.marketplaceMetrics ?? {};
   const nativeId = candidate.marketplace === "Shopee"
     ? candidate.shopeeItemId || candidate.itemId || metrics.shopee_item_id || metrics.itemId || candidate.id
     : candidate.itemId || candidate.productId || metrics.itemId || metrics.item_id || metrics.productId || candidate.id;
-  return `${candidate.marketplace}:${String(nativeId)}`;
+  return { marketplace: candidate.marketplace, nativeProductId: String(nativeId) };
+}
+
+function identity(candidate: TrendOfferCandidate): string {
+  const native = candidateNativeIdentity(candidate);
+  return `${native.marketplace}:${native.nativeProductId}`;
 }
 
 function hash(value: string): number {

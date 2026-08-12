@@ -29,7 +29,7 @@ function numeric(value: unknown): number | null {
 }
 
 export function mapShopeeProductsToTrendCandidates(products: ShopeeOfficialNode[]): TrendOfferCandidate[] {
-  return products.flatMap((product) => {
+  return products.flatMap((product, index) => {
     const itemId = text(product.itemId);
     const productName = text(product.productName);
     if (!itemId || !productName) return [];
@@ -57,6 +57,7 @@ export function mapShopeeProductsToTrendCandidates(products: ShopeeOfficialNode[
         commissionRate: numeric(product.commissionRate),
         shopeeCommissionRate: numeric(product.shopeeCommissionRate),
         sellerCommissionRate: numeric(product.sellerCommissionRate),
+        sourcePosition: index + 1,
       }
     }];
   });

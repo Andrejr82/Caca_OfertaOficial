@@ -38,6 +38,7 @@ export interface MarketplaceDiscoveryResult {
   runId: string;
   candidates: TrendOfferCandidate[];
   counters: Record<TrendMatchingMarketplace, MarketplaceDiscoveryCounter>;
+  candidateCounts: Record<TrendMatchingMarketplace, { raw: number; accepted: number; rejected: number }>;
   errors: MarketplaceDiscoveryError[];
   results: Array<{
     marketplace: TrendMatchingMarketplace;
@@ -74,6 +75,10 @@ export async function discoverTrendMarketplaceCandidates(
     Shopee: emptyCounter(),
     "Mercado Livre": emptyCounter()
   };
+  const candidateCounts: MarketplaceDiscoveryResult["candidateCounts"] = {
+    Shopee: { raw: 0, accepted: 0, rejected: 0 },
+    "Mercado Livre": { raw: 0, accepted: 0, rejected: 0 }
+  };
   const candidates: TrendOfferCandidate[] = [];
   const errors: MarketplaceDiscoveryError[] = [];
   const results: MarketplaceDiscoveryResult["results"] = [];
@@ -107,14 +112,18 @@ export async function discoverTrendMarketplaceCandidates(
           errors.push({ marketplace: job.marketplace, code: "discovery_failed", correlationId, message: "Falha na descoberta comercial." });
         }
         const filtered = filterTrendCommercialCandidates(job.intent.normalizedProductTerm, discovery.candidates);
-        candidates.push(...filtered.accepted.filter((candidate) => calculateCommercialScore(candidate).queueEligible));
+        const eligible = filtered.accepted.filter((candidate) => calculateCommercialScore(candidate).queueEligible);
+        candidateCounts[job.marketplace].raw += discovery.candidates.length;
+        candidateCounts[job.marketplace].accepted += eligible.length;
+        candidateCounts[job.marketplace].rejected += filtered.rejected.length + filtered.accepted.length - eligible.length;
+        candidates.push(...eligible);
         results.push({
           marketplace: job.marketplace,
           normalizedProductTerm: job.intent.normalizedProductTerm,
           queryUsed: discovery.query_used,
           status: discovery.discovery_status,
-          candidateCount: filtered.accepted.filter((candidate) => calculateCommercialScore(candidate).queueEligible).length,
-          rejectedCandidateCount: filtered.rejected.length + filtered.accepted.filter((candidate) => !calculateCommercialScore(candidate).queueEligible).length,
+          candidateCount: eligible.length,
+          rejectedCandidateCount: filtered.rejected.length + filtered.accepted.length - eligible.length,
           correlationId
         });
       } catch {
@@ -136,6 +145,7 @@ export async function discoverTrendMarketplaceCandidates(
       return true;
     }),
     counters,
+    candidateCounts,
     errors,
     results
   };

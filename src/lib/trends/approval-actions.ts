@@ -23,10 +23,10 @@ async function createDraftAfterTrendApproval(formData: FormData) {
   const client = await createServerSupabaseClient();
   const userId = await getCurrentUserId();
   if (!client || !userId || !offerId) return;
-  const { data: offer } = await client.from("offers").select("id,platform,product_name,current_price,original_url,image_url,category").eq("id", offerId).eq("user_id", userId).maybeSingle();
+  const { data: offer } = await client.from("offers").select("id,platform,product_name,current_price,old_price,score,original_url,image_url,category").eq("id", offerId).eq("user_id", userId).maybeSingle();
   const { data: opportunity } = await client.from("trend_opportunities").select("*").eq("user_id", userId).eq("offer_id", offerId).eq("match_status", "matched").order("updated_at", { ascending: false }).limit(1).maybeSingle();
-  if (!offer || !opportunity) return;
-  const normalizedOpportunity: TrendOpportunity = {
+  if (!offer) return;
+  const normalizedOpportunity: TrendOpportunity = opportunity ? {
     id: opportunity.id,
     signalId: opportunity.signal_id,
     classificationId: opportunity.classification_id ?? null,
@@ -43,17 +43,34 @@ async function createDraftAfterTrendApproval(formData: FormData) {
     experimentId: opportunity.experiment_id,
     strategyVersion: opportunity.strategy_version,
     finalDecision: opportunity.final_decision
+  } : {
+    id: `trend-radar:${offer.id}`,
+    signalId: "trend-radar",
+    classificationId: null,
+    offerId: offer.id,
+    marketplace: offer.platform === "Shopee" || offer.platform === "Mercado Livre" ? offer.platform : null,
+    normalizedProductTerm: offer.product_name,
+    matchStatus: "matched",
+    matchReason: "Oferta validada pelo Radar multimarketplace.",
+    matchConfidence: 100,
+    currentPrice: Number(offer.current_price),
+    oldPrice: offer.old_price == null ? null : Number(offer.old_price),
+    score: Number(offer.score ?? 0),
+    status: "matched",
+    experimentId: null,
+    strategyVersion: "daily-commercial-radar-v1",
+    finalDecision: null
   };
   const provider = new OfficialAIProviderRegistry().resolve();
   const recommendation = await recommendTrendChannelAndFormat(normalizedOpportunity, {
     offerTitle: offer.product_name,
-    evidenceStatus: "verified",
+    evidenceStatus: "partial",
     provenance: "external_radar",
     category: offer.category,
     matchReason: normalizedOpportunity.matchReason
   }, provider);
   if (!recommendation) return;
-  await persistTrendRecommendation(client, userId, normalizedOpportunity, recommendation);
+  if (opportunity) await persistTrendRecommendation(client, userId, normalizedOpportunity, recommendation);
   const affiliateUrl = offer.platform === "Mercado Livre"
     ? (await import("@/lib/platforms/mercadolivre")).generateMLAffiliateLink(offer.original_url, userId)
     : offer.original_url;
