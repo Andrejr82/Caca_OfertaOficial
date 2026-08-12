@@ -1053,7 +1053,161 @@ Usar `promote` para levar a produção exatamente o artefato já testado, em vez
 
 ---
 
-## 22. Referências do projeto
+## 22. VPS Oracle: impacto e implantação
+
+### 22.1 Decisão
+
+**A VPS Oracle deve fazer parte desta implantação.** O repositório confirma que o processo `oracle-scraper` é o executor contínuo e autoritativo da descoberta dos marketplaces, inclusive da Shopee. Ele consulta a Open API, aplica cenários e filtros, calcula score, persiste candidatos no Supabase e dispara a Official AI na Vercel. Alterar somente o Next.js/Vercel produziria resultados diferentes entre a busca manual e o ciclo automático.
+
+Esta conclusão é baseada no código e na documentação versionados. O estado operacional atual da VPS, do PM2 e dos timers não foi consultado por SSH e deve ser certificado no preflight.
+
+### 22.2 Estrutura atual identificada
+
+| Componente | Responsabilidade atual | Evidência principal |
+|---|---|---|
+| `oracle-scraper` | Worker Discovery-Only, execução imediata e ciclos agendados | `scripts/oracle-scraper.cjs` |
+| Shopee OpenAPI V1 | Consulta `productOfferV2`, normalização e persistência controlada | adapters e engines em `scripts/shopee-openapi-*` |
+| `oracle-api` | Gateway técnico de scraping na porta 3002 | `scripts/oracle-api.cjs` |
+| PM2 | Supervisiona `oracle-scraper`, `oracle-api` e `whatsapp-bot` | `docs/oracle.md` |
+| Capacity Hunter | Monitora PM2, recursos, heartbeat e SHA sem reiniciar os serviços | `apps/oracle-capacity-hunter` |
+| Supabase | Estado central de ofertas, links, posts, logs e checkpoints | worker e migrations |
+| Vercel | Official AI, painel, aprovação e publicação | `/api/ai/generate` e rotas de canal |
+| Deploy Oracle | Copia conjunto explícito de arquivos por SSH/SCP, cria backup, manifesto e reinicia PM2 | `scripts/update-oracle.js` |
+
+Fluxo certificado:
+
+```mermaid
+flowchart TD
+    A["Shopee Open API"] --> B["Oracle Worker"]
+    B --> C["Filtro e ranking V1"]
+    C --> D[("Supabase")]
+    D --> E["Vercel / Official AI"]
+    E --> F["Revisão e publicação"]
+```
+
+### 22.3 Pontos que interferem no novo motor
+
+1. O ranking atual existe dentro do worker e usa pesos/faixas próprios; ele precisa ser substituído ou redirecionado para o mesmo módulo canônico da nova estrutura.
+2. O deploy da Oracle usa uma lista fechada `DEPLOY_FILES`. Todo novo módulo de política, taxonomia, contrato ou teste de sanidade necessário em runtime deve ser incluído nela.
+3. A configuração efetiva é formada por `.env.local` mais `config/oracle-runtime-overlay.env`; flags divergentes podem manter o caminho legado ou bloquear a persistência.
+4. `oracle-scraper` e `oracle-api` são reiniciados após o deploy e precisam receber o mesmo overlay fail-closed.
+5. A documentação apresenta agendas diferentes: o código auditado contém mais de uma referência de cron. O schedule efetivo deve ser certificado no runtime e consolidado em uma única constante antes do rollout.
+6. O Worker chama a Vercel em lotes e usa Supabase como checkpoint. Mudanças de contrato não podem quebrar idempotência, `pending_manual_review` ou paginação.
+7. PM2 é supervisor externo; não há `ecosystem.config` versionado nem política de restart completa no repositório. O procedimento operacional precisa registrar comando, usuário, diretório e versão Node sem guardar segredos.
+8. O script de deploy referencia uma chave SSH por caminho local e contém defaults de infraestrutura. Migrar esses dados para variáveis seguras é requisito de hardening; nenhum segredo deve permanecer versionado.
+
+### 22.4 Arquitetura alvo compartilhada
+
+Criar um núcleo determinístico e versionado, consumido pela busca manual/Vercel e pelo worker Oracle:
+
+```text
+shopee-search-core/
+  contract          # candidato normalizado e resultado de decisão
+  taxonomy          # categorias, intenção, bloqueios e acessórios
+  metrics           # preço, desconto, rating, vendas e confiança
+  policy            # aceita/rejeita com códigos explicáveis
+  ranking           # score e desempate estável
+  strategy-version  # shopee-ranking-v1
+```
+
+O núcleo não acessa rede, Supabase, Vercel ou PM2. Os adapters ficam nas bordas:
+
+- Oracle: Open API → normalização → núcleo → persistência/checkpoint;
+- Vercel: requisição manual → adapter → núcleo → resposta/fila;
+- publicação: revalida preço e disponibilidade, sem recalcular silenciosamente a intenção;
+- observabilidade: registra a mesma `strategy_version` nos dois runtimes.
+
+### 22.5 Alterações obrigatórias no deploy Oracle
+
+| Área | Alteração |
+|---|---|
+| Pacote comum | Incluir todos os arquivos do núcleo na lista de deploy e no manifesto SHA-256 |
+| Configuração | Adicionar flags e limites ao overlay versionado, com validação fail-closed |
+| Pré-validação | Executar sintaxe, testes unitários e contrato antes de copiar arquivos |
+| Instalação | Manter staging, backup e instalação atômica já existentes |
+| Sanidade | Validar hash de todos os arquivos críticos, não apenas `oracle-scraper.cjs` |
+| Runtime | Confirmar versão Node, dependências e diretório de trabalho do PM2 |
+| Reinício | Reiniciar apenas processos afetados e aguardar estado `online` estável |
+| Healthcheck | Rodar ciclo dry-run/shadow sem persistência e conferir telemetria |
+| Rollback | Restaurar backup, overlay e manifesto anteriores e reiniciar PM2 |
+| Segurança | Remover IP e caminho de chave como defaults do código; exigir variáveis do operador |
+
+### 22.6 Flags e parâmetros mínimos
+
+Os nomes finais devem seguir o padrão já usado pelo projeto, mas a implantação precisa controlar explicitamente:
+
+| Controle | Função | Default inicial |
+|---|---|---|
+| engine V1 | habilita consulta e avaliação | `false` até shadow |
+| persistência V1 | permite gravar aprovados | `false` até aceite |
+| strategy version | identifica política aplicada | `shopee-ranking-v1` |
+| limites por ciclo/categoria | impede explosão de volume | valores atuais certificados |
+| atraso e jitter | respeita limites da Open API | valores conservadores |
+| timeout do ciclo | encerra execução presa | valor abaixo do próximo ciclo |
+| write lock | bloqueio emergencial de escrita | `true` no preflight/shadow |
+
+Valores sensíveis permanecem apenas no ambiente da VPS/Vercel. A documentação registra somente nomes, escopos e presença.
+
+### 22.7 Plano de implantação Oracle
+
+1. **Certificar runtime:** PM2, processos, versão Node, diretório, branch/SHA, agenda efetiva, overlay e presença das variáveis.
+2. **Eliminar divergência:** extrair score/política/taxonomia para o núcleo compartilhado e remover cálculo duplicado do worker.
+3. **Testar localmente:** contrato Open API, normalização, categorias negativas, acessórios, score, desempate e idempotência.
+4. **Preparar deploy:** ampliar `DEPLOY_FILES`, manifesto e verificação de hashes; validar ausência de segredos.
+5. **Shadow na Oracle:** consultar a Shopee e produzir decisões/logs sem persistir nem publicar.
+6. **Comparar:** medir aprovação, rejeição por motivo, distribuição por categoria/preço e divergência contra o fluxo atual.
+7. **Canário:** habilitar persistência para uma categoria e um volume reduzido, sempre em `pending_manual_review`.
+8. **Expandir gradualmente:** aumentar categorias e volume somente após os gates.
+9. **Estabilizar:** observar pelo menos dois ciclos completos, incluindo chamada à Official AI e filas.
+10. **Concluir:** manter backup e versão anterior disponíveis durante a janela de rollback.
+
+### 22.8 Novas tasks Oracle
+
+| ID | Task | Entrega |
+|---|---|---|
+| TO01 | Inventariar PM2/runtime sem expor segredos | Baseline operacional certificado |
+| TO02 | Consolidar o schedule do worker | Uma única agenda documentada e testada |
+| TO03 | Extrair núcleo compartilhado | Política/ranking únicos para Oracle e Vercel |
+| TO04 | Integrar núcleo ao `oracle-scraper` | Worker sem score duplicado |
+| TO05 | Atualizar `DEPLOY_FILES` | Todos os módulos runtime incluídos |
+| TO06 | Fortalecer manifesto e hashes | Integridade de todos os arquivos críticos |
+| TO07 | Validar overlay fail-closed | Flags coerentes em scraper e API |
+| TO08 | Remover defaults sensíveis do deploy | Host, usuário e chave somente por configuração segura |
+| TO09 | Criar testes de contrato Oracle | Open API → candidato → decisão |
+| TO10 | Criar dry-run/shadow verificável | Zero escrita e relatório comparativo |
+| TO11 | Validar idempotência/checkpoints | Sem ofertas ou jobs duplicados |
+| TO12 | Validar integração Oracle→Vercel | Lotes e autenticação funcionando |
+| TO13 | Executar canário por categoria | Persistência limitada e reversível |
+| TO14 | Documentar runbook PM2 | Deploy, healthcheck, logs e rollback |
+| TO15 | Observar dois ciclos completos | Evidência de estabilidade operacional |
+
+### 22.9 Critérios de aceite Oracle
+
+- `oracle-scraper`, `oracle-api` e processos não afetados permanecem `online` e estáveis.
+- Uma única agenda efetiva está documentada, com proteção contra sobreposição.
+- Oracle e Vercel registram a mesma `strategy_version` e retornam a mesma decisão para o mesmo fixture.
+- Acessórios e categorias incorretas são rejeitados com códigos explicáveis.
+- Shadow mode não grava, não cria drafts e não publica.
+- Canário grava somente itens aprovados, idempotentes e em `pending_manual_review`.
+- Manifesto, hashes e commit implantado correspondem ao artefato testado.
+- Nenhuma credencial ou valor sensível aparece no Git, logs ou manifesto.
+- Timeout, retry, jitter e limites da Shopee permanecem dentro do orçamento.
+- O disparo Oracle→Vercel completa todos os lotes sem duplicação.
+- Rollback restaura arquivos, overlay e processos para a versão anterior.
+- Capacity Hunter e logs não indicam regressão após dois ciclos completos.
+
+### 22.10 Fronteira de responsabilidade final
+
+| Runtime | Deve fazer | Não deve fazer |
+|---|---|---|
+| Oracle | descoberta contínua, normalização, política/ranking, persistência e checkpoint | publicar automaticamente ou manter regra paralela |
+| Vercel | busca manual, Official AI, painel, revisão e rotas de publicação | duplicar o scheduler autoritativo sem ADR |
+| Supabase | estado, idempotência, filas, auditoria e métricas | decidir sozinho categoria ou score |
+| PM2/systemd | supervisão e monitoramento operacional | alterar regras de negócio |
+
+---
+
+## 23. Referências do projeto
 
 - `docs/Shopee_OpenAPI_Docs_Analysis.md`
 - `docs/Shopee_OpenAPI_Docs_Analysis_Oracle`
@@ -1064,3 +1218,12 @@ Usar `promote` para levar a produção exatamente o artefato já testado, em vez
 - `src/lib/trends/shopee-evidence-collector.ts`
 - `src/core/trends/offer-matching.ts`
 - `src/app/api/trends/match/route.ts`
+- `scripts/update-oracle.js`
+- `scripts/oracle-scraper.cjs`
+- `scripts/oracle-runtime-overlay.cjs`
+- `scripts/oracle-worker-discovery-only.cjs`
+- `scripts/oracle-api.cjs`
+- `config/oracle-runtime-overlay.env`
+- `docs/oracle.md`
+- `docs/architecture-current.md`
+- `.env.example`
