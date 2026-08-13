@@ -64,27 +64,18 @@ function normalizeTechnicalSpecsForSpeech(name: string): string {
 function simplifyCommercialNameForSpeech(name: string): string {
   return name
     .replace(/\bfritadeira\s+air\s*fryer\b/gi, "Air Fryer")
-    // Códigos técnicos mistos com letras e números (ex.: BAF95A, XJ900, SM-A556E).
-    // Preserva nomes comerciais reconhecíveis; a etapa linguística converte números falados por extenso.
     .replace(/\b(?=[A-Z0-9-]{5,}\b)(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9-]+\b/g, " ")
     .replace(/\s{2,}/g, " ")
     .replace(/\s*[,;:]\s*$/g, "")
     .trim();
 }
 
-/**
- * Corrige erros linguísticos evidentes de títulos de marketplace e prepara o nome para locução.
- * Esta função altera somente o nome falável do vídeo; product_name/short_name permanecem intactos.
- */
 function normalizeLinguisticSpeech(name: string): string {
   return name
-    // Erros recorrentes de digitação/OCR observados em títulos de marketplace.
     .replace(/\b(?:be|d[e3])\s+[lI]mpacto\b/gi, "de Impacto")
     .replace(/\b[lI]mpacto\b/g, "Impacto")
-    // Evita construções comerciais truncadas na locução.
     .replace(/\bparafusadeira\s+furadeira\b/gi, "Parafusadeira e Furadeira")
     .replace(/\bImpacto\s+(\d+)\s+baterias?\b/gi, "Impacto com $1 baterias")
-    // Todo número que permanecer na fala é pronunciado por extenso.
     .replace(/\b\d{1,6}\b/g, (raw) => numeroPorExtenso(Number(raw)))
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
@@ -113,43 +104,84 @@ function wordCount(text: string): number {
     .filter(Boolean).length;
 }
 
-function productInteraction(offer: GeminiPromptOffer): string {
+type VisualDirection = {
+  scene: string;
+  interaction: string;
+  composition: string;
+};
+
+function visualDirectionByCategory(offer: GeminiPromptOffer): VisualDirection {
   const searchable = `${offer.product_name} ${offer.category ?? ""}`.toLowerCase();
 
-  if (/(cadeira|poltrona|sofa|sofá|banco\s*gamer)/i.test(searchable)) {
-    return "sentada confortavelmente no produto da imagem de referência, mantendo perfeitamente seu design e cores originais. O produto está apoiado no chão do estúdio";
+  if (/(parafusadeira|furadeira|martelete|serra\s*(?:circular|tico|mármore)?|esmerilhadeira|lixadeira|soprador|ferramenta|chave\s+de\s+impacto)/i.test(searchable)) {
+    return {
+      scene: "oficina contemporânea premium, organizada e sofisticada, com bancada robusta de madeira escura e metal, painel de ferramentas e elementos discretos de marcenaria suavemente desfocados ao fundo. Iluminação cinematográfica quente e contrastada, com luz principal suave sobre a apresentadora, luz de recorte valorizando o produto e pequenos pontos de luz âmbar criando profundidade. Estética de campanha profissional de ferramentas elétricas, sem aparência de oficina suja, depósito ou ambiente improvisado",
+      interaction: "ao lado de uma bancada, apresentando o produto com um gesto natural das mãos em direção a ele, sem segurar, operar ou acionar a ferramenta",
+      composition: "O produto deve permanecer apoiado e estável sobre a bancada. Mostrar exclusivamente o produto e os componentes que estiverem realmente visíveis na imagem de referência. Não adicionar maleta, brocas, soquetes, carregadores, baterias extras, ferramentas, acessórios, peças ou consumíveis que não apareçam na referência. O título da oferta não autoriza criar componentes visuais ausentes na imagem de referência",
+    };
   }
-  if (/(tênis|tenis|calçado|calcado|sapato|sandalia|bota)/i.test(searchable)) {
-    return "ao lado do produto da imagem de referência, exibido sobre um expositor minimalista ao chão";
+
+  if (/(pneu|automotivo|carro|moto|capacete|compressor|aspirador\s+automotivo|politriz|lavadora)/i.test(searchable)) {
+    return {
+      scene: "garagem de detailing automotivo premium, extremamente limpa e organizada, com superfícies grafite, concreto polido e detalhes metálicos, iluminação linear quente e reflexos controlados. Fundo desfocado com elementos automotivos discretos, estética de comercial sofisticado e sem poluição visual",
+      interaction: "ao lado do produto em uma superfície de exposição adequada, fazendo um gesto de apresentação sem utilizá-lo",
+      composition: "Exibir somente o produto e os componentes realmente presentes na imagem de referência. Não adicionar veículos, acessórios automotivos, cabos, adaptadores, ferramentas ou peças extras como se fizessem parte da oferta",
+    };
   }
-  if (/(celular|smartphone|controle|gamepad|headset|fone|notebook|tablet)/i.test(searchable)) {
-    return "segurando o produto da imagem de referência com as mãos, exibindo-o para a câmera, mantendo perfeitamente seu design e cores originais";
+
+  if (/(tv|televisor|televisão)/i.test(searchable)) {
+    return {
+      scene: "sala contemporânea premium com estética de home theater, mobiliário minimalista, paredes neutras, iluminação indireta quente e acabamento sofisticado. O fundo deve ter profundidade suave e aparência residencial realista, sem neon gamer excessivo",
+      interaction: "ao lado do produto, apresentando-o com gesto discreto e mantendo distância suficiente para não encobrir a tela",
+      composition: "Preservar exatamente tela, moldura, base, controles e acessórios somente quando estiverem visíveis na referência. Não inventar soundbar, console, controle remoto, rack ou elementos vendidos separadamente",
+    };
   }
-  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|fritadeira)/i.test(searchable)) {
-    return "ao lado do produto da imagem de referência sobre uma bancada, com a mão gesticulando em direção a ele";
+
+  if (/(roteador|celular|smartphone|notebook|pc|gamer|wi-fi|tecnologia|eletrônico|controle|gamepad|headset|fone|tablet)/i.test(searchable)) {
+    return {
+      scene: "estúdio de tecnologia contemporâneo premium, com superfícies escuras acetinadas, detalhes metálicos e iluminação de recorte azul suave combinada com luz quente no rosto. Fundo minimalista e desfocado, elegante e moderno, evitando aparência de cenário gamer genérico",
+      interaction: "apresentando o produto para a câmera de forma natural; quando o formato permitir, segurando-o cuidadosamente sem cobrir detalhes importantes da referência",
+      composition: "Exibir somente o produto e os acessórios realmente presentes na imagem de referência. Não adicionar cabos, carregadores, capas, controles, suportes, periféricos ou outros itens não mostrados na referência",
+    };
   }
+
+  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|fritadeira|cozinha|panela|forno|micro-ondas)/i.test(searchable)) {
+    return {
+      scene: "cozinha residencial contemporânea premium, com bancada limpa de pedra clara ou madeira sofisticada, armários modernos, detalhes em metal escovado e iluminação quente e aconchegante. Fundo com profundidade suave, aparência de campanha de eletrodomésticos e sem excesso de objetos decorativos",
+      interaction: "ao lado do produto sobre a bancada, com a mão gesticulando em direção a ele sem operá-lo",
+      composition: "O produto deve ser o protagonista da bancada. Mostrar somente componentes, recipientes, tampas e acessórios realmente visíveis na imagem de referência. Não adicionar alimentos, utensílios, cápsulas, copos, bandejas ou acessórios inexistentes na referência",
+    };
+  }
+
   if (/(shampoo|máscara|kit|beleza|maquiagem|perfume|creme|cabelo|pele)/i.test(searchable)) {
-    return "segurando o produto da imagem de referência com as mãos, exibindo-o para a câmera";
+    return {
+      scene: "beauty studio premium, clean e sofisticado, com tons neutros rosados e dourados discretos, bancada elegante e iluminação difusa suave semelhante a campanha de cosméticos de luxo. Fundo minimalista, organizado e levemente desfocado",
+      interaction: "apresentando o produto próximo ao corpo ou sobre uma bancada, com gesto delicado e natural",
+      composition: "Preservar quantidade, embalagens, tampas e frascos exatamente como na referência. Não criar itens extras de kit, pincéis, flores, espelhos, cosméticos adicionais ou embalagens não presentes na imagem original",
+    };
   }
-  return "ao lado do produto da imagem de referência, gesticulando em direção a ele";
-}
 
-function studioBackground(offer: GeminiPromptOffer): string {
-  const searchable = `${offer.product_name} ${offer.category ?? ""}`.toLowerCase();
+  if (/(tênis|tenis|roupa|moda|vestuário|calçado|calcado|sapato|sandalia|bota)/i.test(searchable)) {
+    return {
+      scene: "fashion studio contemporâneo premium com arquitetura minimalista, superfícies neutras, iluminação editorial suave e detalhes de luz quente. Fundo elegante, limpo e desfocado, com estética de campanha de moda profissional",
+      interaction: "ao lado do produto exibido em um expositor minimalista, apontando discretamente para ele sem alterar sua forma",
+      composition: "Mostrar somente a peça ou o par exatamente como aparece na referência. Não adicionar caixa, cadarços extras, meias, bolsas, acessórios ou variações de cor inexistentes",
+    };
+  }
 
-  if (/(roteador|celular|smartphone|notebook|pc|gamer|wi-fi|tecnologia|eletrônico|controle|gamepad|headset|cadeira\s*gamer|tv|televisor)/i.test(searchable)) {
-    return "estúdio escuro com luzes suaves de neon azul e roxo, estética gamer premium";
+  if (/(cadeira|poltrona|sofá|sofa|mesa|estante|armário|armario|móvel|movel|decoração|decoracao)/i.test(searchable)) {
+    return {
+      scene: "interior residencial sofisticado e contemporâneo, com arquitetura clean, materiais naturais, iluminação quente indireta e composição editorial de decoração. Fundo com profundidade suave e poucos elementos complementares, todos neutros e sem competir com o produto",
+      interaction: "ao lado do produto em posição natural de apresentação; sentada nele apenas quando a própria categoria e a imagem de referência indicarem claramente que isso é apropriado",
+      composition: "Manter dimensões, quantidade e configuração visual do produto conforme a referência. Não adicionar almofadas, mesas laterais, objetos decorativos ou módulos extras como parte da oferta",
+    };
   }
-  if (/(batedor|batedeira|cafeteira|liquidificador|air\s*fryer|fritadeira|cozinha)/i.test(searchable)) {
-    return "estúdio com bancada de cozinha moderna, luz quente e aconchegante, tons de madeira e metal escovado";
-  }
-  if (/(shampoo|máscara|kit|beleza|maquiagem|cabelo|pele)/i.test(searchable)) {
-    return "estúdio clean com tons rosados e dourados suaves, iluminação difusa de spa premium";
-  }
-  if (/(tênis|tenis|roupa|moda|vestuário|calcado|calçado|sapato|sandalia|bota)/i.test(searchable)) {
-    return "estúdio esportivo premium com paredes escuras e detalhes de luz neon laranja e cinza";
-  }
-  return "estúdio escuro com iluminação volumétrica suave e elegante, estética publicitária premium";
+
+  return {
+    scene: "estúdio publicitário contemporâneo premium, com arquitetura minimalista, superfícies neutras, iluminação cinematográfica quente e elegante, profundidade de campo suave e elementos de fundo discretos coerentes com a categoria do produto. Evitar cenário vazio, genérico ou visualmente cru",
+    interaction: "ao lado do produto da imagem de referência, gesticulando naturalmente em direção a ele",
+    composition: "Exibir exclusivamente o produto e os componentes realmente visíveis na imagem de referência. Não inventar acessórios, peças, embalagens, kits ou objetos complementares que não estejam presentes na referência",
+  };
 }
 
 function speechScript8Seconds(offer: GeminiPromptOffer): string {
@@ -174,9 +206,8 @@ export function formatLongPriceForSpeech(valor: number | string | null | undefin
 }
 
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
-  const interaction = productInteraction(offer);
-  const background = studioBackground(offer);
+  const direction = visualDirectionByCategory(offer);
   const speech = speechScript8Seconds(offer);
 
-  return `Crie um vídeo publicitário fotorrealista de exatamente ${VIDEO_DURATION_SECONDS} segundos.\n\nPERSONAGEM:\nUse exclusivamente a imagem de referência oficial identificada como ${OFFICIAL_AVATAR_REFERENCE} como referência visual obrigatória e principal da personagem. Preserve rigorosamente a mesma mulher da imagem de referência: mesmos traços faciais, formato do rosto, tom de pele morena, cabelo escuro liso na altura dos ombros, proporções corporais e aparência geral. Preserve exatamente o figurino oficial da referência: camiseta azul-marinho, calça jeans escura e tênis branco. A estampa original da camiseta faz parte da identidade visual da personagem e deve permanecer idêntica à imagem de referência durante todo o vídeo. Preserve exatamente o logotipo e os elementos gráficos já existentes na camiseta, incluindo o texto \"CAÇA OFERTA\", a chama, o carrinho e a etiqueta de desconto. Não recriar, reinterpretar, traduzir, corrigir, substituir, deformar ou inventar letras, palavras, logotipos, símbolos ou elementos gráficos da camiseta. Não substituir \"CAÇA OFERTA\" por qualquer outro nome ou marca. Não alterar rosto, cabelo, idade aparente, corpo, roupa, estampa, cores ou identidade visual da personagem durante o vídeo.\n\nPRODUTO:\nUse a imagem do produto selecionado como referência visual obrigatória. A personagem está ${interaction}. Preserve fielmente formato, proporções, cores, textos, logotipos e características visuais originais do produto. Não modificar, deformar, traduzir, substituir ou inventar partes, marcas ou textos do produto.\n\nCENA:\nO fundo é um ${background}. Iluminação cinematográfica suave e realista, valorizando naturalmente o rosto da apresentadora e o produto.\n\nATUAÇÃO:\nA personagem olha diretamente para a câmera e apresenta a oferta de maneira simpática, espontânea e entusiasmada. Enquanto fala, realiza pequenos movimentos naturais de cabeça e gestos suaves com as mãos. Ao mencionar o produto, faz um gesto discreto em direção a ele. Evitar movimentos exagerados, repetitivos ou artificiais.\n\nCÂMERA:\nPlano médio. Câmera fixa. Um único take contínuo durante os ${VIDEO_DURATION_SECONDS} segundos. Sem cortes. Sem zoom. Sem transições. Sem mudança de enquadramento.\n\nÁUDIO E LIPSYNC:\nVoz feminina adulta em português brasileiro. Tom comercial natural, simpático e entusiasmado. Dicção clara e ritmo fluido. Pronunciar todas as palavras em português brasileiro correto. Todos os números presentes na fala devem ser pronunciados integralmente por extenso. Valores monetários devem ser pronunciados usando \"reais\" e \"centavos\" quando aplicável. Não pronunciar algarismos, abreviações técnicas, símbolos ou códigos como parte da locução. Lipsync preciso e sincronizado com cada palavra. A fala deve começar imediatamente e ser pronunciada integralmente. Nenhuma palavra pode ser cortada, omitida ou interrompida. Não acelerar artificialmente a voz. A última palavra deve terminar antes do fim do vídeo. Após a última palavra, manter aproximadamente 0,3 segundo de imagem antes do encerramento.\n\nFALA EXATA:\n${speech}\n\nQUALIDADE:\nFotorrealista. Estética de publicidade profissional. Pele com textura natural. Expressões faciais realistas. Movimentos humanos naturais. Iluminação cinematográfica. Alta definição com aparência 4K.\n\nRESTRIÇÕES:\nVídeo completamente limpo. Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem. Não adicionar legendas. Não adicionar números ou preços escritos. Não adicionar elementos gráficos novos. Não adicionar marca d'água. Sem movimentos artificiais. Sem deformações no rosto, mãos ou produto. Sem alteração da identidade da personagem. Sem alteração do figurino oficial. Sem alteração, substituição ou invenção do nome, logotipo ou estampa existente na camiseta. Sem alteração do produto de referência.`;
+  return `Crie um vídeo publicitário fotorrealista de exatamente ${VIDEO_DURATION_SECONDS} segundos.\n\nPERSONAGEM:\nUse exclusivamente a imagem de referência oficial identificada como ${OFFICIAL_AVATAR_REFERENCE} como referência visual obrigatória e principal da personagem. Preserve rigorosamente a mesma mulher da imagem de referência: mesmos traços faciais, formato do rosto, tom de pele morena, cabelo escuro liso na altura dos ombros, proporções corporais e aparência geral. Preserve exatamente o figurino oficial da referência: camiseta azul-marinho, calça jeans escura e tênis branco. A estampa original da camiseta faz parte da identidade visual da personagem e deve permanecer idêntica à imagem de referência durante todo o vídeo. Preserve exatamente o logotipo e os elementos gráficos já existentes na camiseta, incluindo o texto \"CAÇA OFERTA\", a chama, o carrinho e a etiqueta de desconto. Não recriar, reinterpretar, traduzir, corrigir, substituir, deformar ou inventar letras, palavras, logotipos, símbolos ou elementos gráficos da camiseta. Não substituir \"CAÇA OFERTA\" por qualquer outro nome ou marca. Não alterar rosto, cabelo, idade aparente, corpo, roupa, estampa, cores ou identidade visual da personagem durante o vídeo.\n\nPRODUTO:\nUse a imagem do produto selecionado como referência visual obrigatória. A personagem está ${direction.interaction}. Preserve fielmente formato, proporções, cores, textos, logotipos e características visuais originais do produto. Não modificar, deformar, traduzir, substituir ou inventar partes, marcas ou textos do produto.\n\nCOMPOSIÇÃO DO PRODUTO:\n${direction.composition}. A imagem de referência é a autoridade visual: informações do título, descrição ou fala não autorizam adicionar componentes que não estejam visíveis nela.\n\nCENA:\nO ambiente é uma ${direction.scene}. Valorizar naturalmente o rosto da apresentadora e o produto, mantendo separação visual clara entre primeiro plano e fundo.\n\nATUAÇÃO:\nA personagem olha diretamente para a câmera e apresenta a oferta de maneira simpática, espontânea e entusiasmada. Enquanto fala, realiza pequenos movimentos naturais de cabeça e gestos suaves com as mãos. Ao mencionar o produto, faz um gesto discreto em direção a ele. Evitar movimentos exagerados, repetitivos ou artificiais.\n\nCÂMERA:\nPlano médio. Câmera fixa. Um único take contínuo durante os ${VIDEO_DURATION_SECONDS} segundos. Sem cortes. Sem zoom. Sem transições. Sem mudança de enquadramento.\n\nÁUDIO E LIPSYNC:\nVoz feminina adulta em português brasileiro. Tom comercial natural, simpático e entusiasmado. Dicção clara e ritmo fluido. Pronunciar todas as palavras em português brasileiro correto. Todos os números presentes na fala devem ser pronunciados integralmente por extenso. Valores monetários devem ser pronunciados usando \"reais\" e \"centavos\" quando aplicável. Não pronunciar algarismos, abreviações técnicas, símbolos ou códigos como parte da locução. Lipsync preciso e sincronizado com cada palavra. A fala deve começar imediatamente e ser pronunciada integralmente. Nenhuma palavra pode ser cortada, omitida ou interrompida. Não acelerar artificialmente a voz. A última palavra deve terminar antes do fim do vídeo. Após a última palavra, manter aproximadamente 0,3 segundo de imagem antes do encerramento.\n\nFALA EXATA:\n${speech}\n\nQUALIDADE:\nFotorrealista. Estética de publicidade profissional. Pele com textura natural. Expressões faciais realistas. Movimentos humanos naturais. Iluminação cinematográfica. Alta definição com aparência 4K.\n\nRESTRIÇÕES:\nVídeo completamente limpo. Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem. Não adicionar legendas. Não adicionar números ou preços escritos. Não adicionar elementos gráficos novos. Não adicionar marca d'água. Não adicionar acessórios, componentes, peças, embalagens, ferramentas, baterias, cabos, carregadores, consumíveis ou objetos como parte da oferta se eles não estiverem visíveis na imagem de referência do produto. Não transformar o produto em um kit maior do que a referência visual. Sem movimentos artificiais. Sem deformações no rosto, mãos ou produto. Sem alteração da identidade da personagem. Sem alteração do figurino oficial. Sem alteração, substituição ou invenção do nome, logotipo ou estampa existente na camiseta. Sem alteração do produto de referência.`;
 }
