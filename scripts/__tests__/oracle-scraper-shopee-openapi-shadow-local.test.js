@@ -85,4 +85,29 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
     expect(result.persistCalls).toBe(1);
     expect(result.writeAudit).toMatchObject({ postsWrites: 0, publishCalls: 0, oracleCalls: 0 });
   });
+
+  it('continua até encontrar o limite de novos após mais de cinco existentes ranqueados', async () => {
+    const persisted = [];
+    const top = topCandidates(9).map((candidate, index) => ({ ...candidate, itemId: String(700 + index) }));
+    const existingItemIds = top.slice(0, 6).map((candidate) => candidate.itemId);
+    const result = await runOracleScraperShopeeShadowLocal({
+      scenarioId: 'casa_cozinha_editorial',
+      runScenario: async () => ({
+        enabled: true, mode: 'shadow',
+        result: { scenarios: { casa_cozinha_editorial: { top, metrics: { final: 9, imageLink100: true } } } },
+        writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 },
+      }),
+      persistRunner: async (ingestions) => {
+        persisted.push(...ingestions);
+        return { accepted: ingestions.length, inserted: 3, updated: 5, offerIds: ingestions.map((item) => item.candidate.sourceItemId), writeAudit: { supabaseWrites: ingestions.length, offersWrites: ingestions.length, postsWrites: 0, publishCalls: 0, oracleCalls: 0 } };
+      },
+      lookupExistingItemIds: async () => existingItemIds,
+      copyQueueOptions: { maxPerMarketplace: 3 },
+      env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true', NO_POSTS: '1', NO_PUBLISH: '1' },
+    });
+
+    expect(result.controlledPersist).toMatchObject({ enabled: true, maxCandidates: 3 });
+    expect(persisted).toHaveLength(8);
+    expect(persisted.slice(-3).map((item) => item.candidate.sourceItemId)).toEqual(['706', '707', '708']);
+  });
 });

@@ -128,7 +128,6 @@ const { assertEditorialScheduleValid } = require('./editorial-scenario-config.cj
 const { runShopeeOpenApiV1OfficialForScenario } = require('./shopee-openapi-v1-adapter.cjs');
 const {
   getControlledPersistDecision,
-  CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES,
   buildControlledPersistIngestions,
 } = require('./shopee-openapi-v1-controlled-persist.cjs');
 
@@ -1562,7 +1561,7 @@ function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger
   return async ({ discovery, scenario, tenantId, correlationId, requestedAt, limit }) => {
     const decision = getControlledPersistDecision(scenario, env, { maxCandidates: limit });
     if (!decision.enabled) return { accepted: 0, inserted: 0, updated: 0, failed: 0, state: FINAL_STATE, offerIds: [] };
-    const candidatePool = (Array.isArray(discovery.top) ? discovery.top : []).slice(0, decision.maxCandidates + CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES);
+    const candidatePool = Array.isArray(discovery.top) ? discovery.top : [];
     const itemIds = [...new Set(candidatePool.map((product) => String(product?.itemId || '').trim()).filter((itemId) => /^\d+$/.test(itemId)))];
     let existingItemIds = [];
     if (itemIds.length > 0) {
