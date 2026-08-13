@@ -19,7 +19,7 @@ A alteração permanece centralizada no builder de prompt para não duplicar reg
 
 A implementação anterior concatenava título do produto, marketplace, preço por extenso e CTA em uma única locução. Em produtos com nomes comerciais longos, a fala ultrapassava o que cabe naturalmente em 8 segundos, causando aceleração, omissão ou corte das últimas palavras.
 
-Além disso, o prompt visual era escrito como um único parágrafo e não dava prioridade explícita à duração, ao timing da fala e à finalização antes do encerramento do vídeo.
+Além disso, títulos de marketplace carregam especificações técnicas como `9,5L`, `1800W`, `256GB`, `50\"`, `5G`, `4K`, `QLED`, `HDR`, `Wi-Fi` e `Bluetooth`. Esses tokens são úteis na ficha da oferta, mas pouco naturais para uma locução curta e aumentam o risco de pronúncia ruim e lipsync instável.
 
 ## Estratégia adotada
 
@@ -32,9 +32,21 @@ Além disso, o prompt visual era escrito como um único parágrafo e não dava p
 
 ### 2. Nome falável do produto
 
-A locução usa `short_name` quando disponível. Se ele não existir, o sistema usa `product_name` com uma normalização básica para remover especificações que costumam alongar a fala, como tensão elétrica (`127V`, `220V`), conteúdo entre parênteses e separadores finais.
+A locução usa `short_name` quando disponível. Se ele não existir, o sistema usa `product_name`.
 
-O nome completo do produto continua disponível para card, banco, publicação e demais fluxos.
+Antes de montar a fala, `normalizeTechnicalSpecsForSpeech()` remove especificações dispensáveis para a locução, preservando o núcleo comercial do nome do produto.
+
+Exemplos removidos da fala:
+
+- capacidade e volume: `9,5L`, `500ml`;
+- potência e tensão: `1800W`, `127V`, `220V`, `bivolt`;
+- memória e armazenamento: `16GB`, `256GB`, `512GB`, `1TB`;
+- tela e resolução: `50\"`, `Full HD`, `4K`, `8K`, `HDR`, `LED`, `QLED`, `OLED`;
+- conectividade: `Wi-Fi`, `Bluetooth`, `3G`, `4G`, `5G`;
+- frequência e outras unidades técnicas: `Hz`, `MHz`, `GHz`, `mAh`, `BTU`, `MP`;
+- descritores pouco úteis para 8 segundos, como `Painel Digital`.
+
+O nome completo do produto continua disponível para card, banco, publicação e demais fluxos. A normalização afeta apenas a fala do vídeo.
 
 Para títulos ainda longos, a fala tenta versões com 8, 6 e 4 palavras do nome e possui um fallback mínimo de 3 palavras.
 
@@ -56,7 +68,7 @@ O limite adotado é uma proteção de produto; ele não garante sozinho o timing
 
 ### 5. Prompt estruturado
 
-O prompt final passa a ser dividido em blocos semânticos:
+O prompt final é dividido em blocos semânticos:
 
 - PERSONAGEM
 - PRODUTO
@@ -70,13 +82,14 @@ O prompt final passa a ser dividido em blocos semânticos:
 
 Isso facilita a leitura humana e reduz conflito entre instruções visuais e de áudio.
 
-### 6. Inteligência visual existente preservada
+### 6. Inteligência visual preservada e ampliada
 
 As regras por categoria continuam válidas:
 
-- produto em bancada para cafeteira, liquidificador, air fryer etc.;
-- produto nas mãos para smartphone, controle, headset etc.;
-- ambientes coerentes com cozinha, tecnologia, beleza, moda e demais categorias.
+- produto em bancada para cafeteira, liquidificador, air fryer e fritadeira;
+- produto nas mãos para smartphone, controle, headset e notebook;
+- ambientes coerentes com cozinha, tecnologia, beleza, moda e demais categorias;
+- TV e televisor passam a usar o cenário de tecnologia.
 
 ## Arquitetura do módulo
 
@@ -89,6 +102,7 @@ numeroPorExtenso()
 precoPorExtenso()
 precoFalavelCurto()
   ↓
+normalizeTechnicalSpecsForSpeech()
 getSpeakableProductName()
 compactProductName()
 wordCount()
@@ -101,7 +115,9 @@ speechScript8Seconds()
 buildGeminiVideoPrompt()
 ```
 
-## Exemplo
+## Exemplos
+
+### Cafeteira
 
 Produto:
 
@@ -109,25 +125,52 @@ Produto:
 3 Corações TRES Cafeteira Espresso e Multibebida Passione Branca - 127V
 ```
 
-Nome falável esperado, quando `short_name` estiver preenchido:
+Nome falável preferencial via `short_name`:
 
 ```text
 Cafeteira Três Corações Passione
 ```
 
-Preço:
+### Air Fryer
+
+Produto:
 
 ```text
-R$ 471,80
+Fritadeira Air Fryer Britânia 9,5L Painel Digital 1800W
 ```
 
-Locução preferencial:
+Nome falável após normalização:
 
 ```text
-Olha esse achado! Cafeteira Três Corações Passione, por quatrocentos e setenta e um e oitenta. Confira na publicação!
+Fritadeira Air Fryer Britânia
 ```
 
-Caso a contagem exceda o teto configurado, o prefixo é removido e o nome do produto é progressivamente compactado.
+Locução esperada:
+
+```text
+Olha esse achado! Fritadeira Air Fryer Britânia, por quinhentos e quarenta e nove reais. Confira na publicação!
+```
+
+### Smartphone
+
+```text
+Smartphone Samsung Galaxy A55 256GB 5G Bluetooth
+→ Smartphone Samsung Galaxy A55
+```
+
+### TV
+
+```text
+Smart TV Samsung 50\" 4K QLED HDR
+→ Smart TV Samsung
+```
+
+### Notebook
+
+```text
+Notebook Lenovo IdeaPad Slim 3 512GB 16GB Full HD Wi-Fi
+→ Notebook Lenovo IdeaPad Slim 3
+```
 
 ## Compatibilidade com o fluxo atual
 
@@ -152,25 +195,27 @@ O prompt usado continua sendo salvo no job e em `metadata.prompt`.
 
 ## Validação de duração
 
-Nesta primeira versão, **não é imposto um bloqueio rígido de 8 segundos no backend**. A validação técnica existente permanece ampla para evitar quebra de vídeos legados e tolerar pequenas diferenças de duração produzidas pelo gerador.
+Não é imposto um bloqueio rígido de 8 segundos no backend. A validação técnica existente permanece ampla para evitar quebra de vídeos legados e tolerar pequenas diferenças de duração produzidas pelo gerador.
 
-O padrão de 8 segundos é aplicado no próprio prompt. Uma etapa futura poderá atualizar a interface e aplicar uma tolerância específica, por exemplo de 7 a 10 segundos, para novos vídeos.
+O padrão de 8 segundos é aplicado no próprio prompt.
 
 ## Testes automatizados
 
-O arquivo `src/tests/videos/gemini-prompt.test.ts` foi atualizado para refletir o novo contrato e cobre:
+O arquivo `src/tests/videos/gemini-prompt.test.ts` cobre:
 
 - prompt estruturado de 8 segundos;
 - uso prioritário de `short_name`;
 - preço falável curto;
-- limite máximo de 22 palavras no caso representativo;
+- limite máximo de 22 palavras nos casos representativos;
 - remoção de tensão elétrica em título sem `short_name`;
+- normalização de `9,5L`, `1800W` e `Painel Digital` em air fryer;
+- normalização de `256GB`, `5G` e `Bluetooth` em smartphone;
+- normalização de polegadas, `4K`, `QLED` e `HDR` em TV;
+- normalização de `512GB`, `16GB`, `Full HD` e `Wi-Fi` em notebook;
 - compactação automática de títulos longos;
 - cenário e interação específicos para cozinha e tecnologia;
 - instrução para concluir a fala antes do fim do vídeo;
 - manutenção da forma longa do preço para usos futuros.
-
-O projeto possui `npm run test`, `npm run typecheck`, `npm run build` e `npm run verify` configurados em `package.json`.
 
 ## Critérios de aceite
 
@@ -179,15 +224,16 @@ O projeto possui `npm run test`, `npm run typecheck`, `npm run build` e `npm run
 - O produto deve permanecer fiel à imagem de referência.
 - O cenário e a interação devem continuar dinâmicos por categoria.
 - A locução deve priorizar `short_name`.
+- Especificações técnicas dispensáveis devem ser removidas apenas da fala, nunca dos dados da oferta.
 - A locução deve utilizar preço falável curto.
 - A locução deve possuir fallback automático quando ultrapassar o teto de palavras.
 - O prompt deve proibir texto, legenda, números e marca d'água na tela.
 - A fala deve ser instruída a terminar antes do fim do vídeo.
 - O contrato público de `buildGeminiVideoPrompt(offer)` não deve mudar.
 - O backend de importação não deve exigir alterações.
-- Os testes do gerador devem validar o novo contrato em vez do template legado.
+- Os testes do gerador devem validar o contrato de 8 segundos e a normalização técnica.
 
-## Arquivos alterados nesta implementação
+## Arquivos alterados
 
 - `docs/VIDEO_PROMPT_8S_IMPLEMENTATION.md`
 - `src/lib/videos/gemini-prompt.ts`
