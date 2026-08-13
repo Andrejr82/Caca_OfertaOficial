@@ -1,8 +1,8 @@
 # Troubleshooting atual
 
 <!-- docs-status: current -->
-<!-- verified-against: 3cf179c -->
-<!-- verified-on: 2026-08-11 -->
+<!-- verified-against: a79fbd4 -->
+<!-- verified-on: 2026-08-13 -->
 
 ## Sequência de diagnóstico
 

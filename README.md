@@ -1,8 +1,8 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 3cf179c -->
-<!-- verified-on: 2026-08-11 -->
+<!-- verified-against: a79fbd4 -->
+<!-- verified-on: 2026-08-13 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
