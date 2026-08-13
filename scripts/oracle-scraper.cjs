@@ -1634,7 +1634,7 @@ async function runScrapingCycleCore() {
   return result;
 }
 
-async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
+async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId = ADMIN_USER_ID, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
   const activeScenario = scenarioId || getActiveMarketplaceScenario('Shopee')?.scenarioId || getActiveMarketplaceScenario('Shopee')?.id || 'casa_cozinha_editorial';
   const controlledPersistDecision = getControlledPersistDecision(activeScenario, env);
   const scenario = getMarketplaceScenarioContract(activeScenario, 'Shopee') || getActiveMarketplaceScenario('Shopee');
@@ -1650,7 +1650,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     env, request: shadowRequest, engine: runScenario, includeDelta: false, includeAuxiliary: false,
   });
   const result = await runDiscoveryOnlyCycle({
-    tenantId: 'local-shopee-openapi-shadow',
+    tenantId,
     correlationId,
     requestedAt,
     marketplaces: ['Shopee'],
