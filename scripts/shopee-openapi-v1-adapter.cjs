@@ -57,6 +57,7 @@ async function defaultShadowEngine(scenarioId, options = {}) {
     request: options.request,
     maxKeywords: options.maxKeywords,
     maxCategories: options.maxCategories,
+    signal: options.signal,
     includeDelta: options.includeDelta ?? true,
     includeAuxiliary: options.includeAuxiliary ?? true,
     sharedSources: options.sharedSources || {},

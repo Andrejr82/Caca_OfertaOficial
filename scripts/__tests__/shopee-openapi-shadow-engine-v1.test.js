@@ -304,14 +304,14 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(peak).toBeLessThanOrEqual(3);
   });
 
-  it('encerra uma fonte quando o cursor da paginação se repete', async () => {
+  it('encerra uma fonte no limite seguro antes de depender de cursor repetido', async () => {
     const request = async (operation, query, variables) => ({
       status: 200,
       data: { data: { productOfferV2: { nodes: [product({ itemId: String(8100 + variables.page) })], pageInfo: { hasNextPage: true, endCursor: 'cursor-igual' } } } },
     });
     const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
     expect(result.queryEvidence.calls).toHaveLength(2);
-    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('cursor_repeated');
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('page_limit');
   });
 
   it('encerra uma fonte em página vazia mesmo quando a API informa próxima página', async () => {
@@ -321,14 +321,46 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(result.queryEvidence.calls[0].stopReason).toBe('empty_page');
   });
 
-  it('continua enquanto o cursor avança e encerra no último pageInfo', async () => {
+  it('encerra no limite seguro mesmo quando o cursor continua avançando', async () => {
     const request = async (operation, query, variables) => ({
       status: 200,
       data: { data: { productOfferV2: { nodes: [product({ itemId: String(8200 + variables.page), shopId: String(9200 + variables.page), productLink: `https://shopee.com.br/product/${9200 + variables.page}/${8200 + variables.page}`, offerLink: `https://s.shopee.com.br/${8200 + variables.page}` })], pageInfo: { hasNextPage: variables.page < 3, endCursor: `cursor-${variables.page}` } } } },
     });
     const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
-    expect(result.queryEvidence.calls).toHaveLength(3);
-    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('has_next_page_false');
+    expect(result.queryEvidence.calls).toHaveLength(2);
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('page_limit');
+  });
+
+  it('propaga abort externo e não inicia nova página', async () => {
+    const abortController = new AbortController();
+    const calls = [];
+    const request = async (operation, query, variables, options = {}) => {
+      calls.push({ variables, signal: options.signal });
+      abortController.abort();
+      return { status: 200, data: { data: { productOfferV2: { nodes: [product({ itemId: '8401' })], pageInfo: { hasNextPage: true, endCursor: 'next' } } } } };
+    };
+    const result = await runScenarioPlan('casa_cozinha_editorial', {
+      request, signal: abortController.signal, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false,
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].signal).toBeInstanceOf(AbortSignal);
+    expect(calls[0].signal.aborted).toBe(true);
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('aborted');
+  });
+
+  it('interrompe novas fontes em rate limit e preserva candidatos obtidos', async () => {
+    const calls = [];
+    const request = async (operation, query, variables) => {
+      calls.push(variables);
+      if (variables.page === 1) return { status: 200, data: { data: { productOfferV2: { nodes: [product({ itemId: '8501' })], pageInfo: { hasNextPage: true, endCursor: 'next' } } } } };
+      return { status: 200, data: { errors: [{ message: 'error [10030]: Rate limit exceeded' }] } };
+    };
+    const result = await runScenarioPlan('casa_cozinha_editorial', {
+      request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false,
+    });
+    expect(calls).toHaveLength(2);
+    expect(result.queryEvidence.productOffers).toBe(1);
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('rate_limit');
   });
 
   it('preserva resultados de outra fonte quando uma excede seu orçamento técnico', async () => {

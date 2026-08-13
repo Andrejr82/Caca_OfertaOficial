@@ -41,14 +41,28 @@ describe('Shopee OpenAPI V1 resilience', () => {
   });
 
   it('timeout total encerra somente a etapa Shopee', async () => {
+    let requests = 0;
+    let requestsAfterAbort = 0;
+    let requestSignal;
     const discovery = createShopeeOpenApiV1OfficialDiscovery({
       env: { ...BASE_ENV, SHOPEE_OPENAPI_STAGE_TIMEOUT_MS: '25' },
-      request: () => new Promise(() => {}),
+      request: async (operation, query, variables, options = {}) => {
+        requests += 1;
+        requestSignal = options.signal;
+        if (options.signal?.aborted) requestsAfterAbort += 1;
+        await new Promise((resolve) => options.signal?.addEventListener('abort', resolve, { once: true }));
+        return { status: 499, data: { errors: [{ message: 'aborted' }] } };
+      },
     });
     const startedAt = Date.now();
     const result = await discovery({ scenario: 'beleza_editorial' });
     expect(result).toMatchObject({ engine: 'shopee_openapi_v1', decision: 'timeout' });
     expect(Date.now() - startedAt).toBeLessThan(500);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(requests).toBe(3);
+    expect(requestsAfterAbort).toBe(0);
+    expect(requestSignal).toBeInstanceOf(AbortSignal);
+    expect(requestSignal.aborted).toBe(true);
   });
 
   it('erro HTTP Shopee is reported as source failure, never as an empty result', async () => {
