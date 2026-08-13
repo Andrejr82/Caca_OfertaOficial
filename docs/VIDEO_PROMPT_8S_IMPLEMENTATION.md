@@ -13,7 +13,7 @@ Padronizar os prompts da página **Vídeos de ofertas** para gerar vídeos publi
 5. O vídeo gerado é salvo no Google Drive e importado pela página.
 6. `POST /api/videos/jobs` recebe o prompt efetivamente utilizado e o persiste no job/metadata.
 
-A alteração deve permanecer centralizada no builder de prompt para não duplicar regras na interface.
+A alteração permanece centralizada no builder de prompt para não duplicar regras na interface.
 
 ## Problema identificado
 
@@ -32,9 +32,11 @@ Além disso, o prompt visual era escrito como um único parágrafo e não dava p
 
 ### 2. Nome falável do produto
 
-A locução usa `short_name` quando disponível. Se ele não existir, o sistema usa `product_name` com uma normalização básica para remover especificações que costumam alongar a fala, como tensão elétrica (`127V`, `220V`) e separadores finais.
+A locução usa `short_name` quando disponível. Se ele não existir, o sistema usa `product_name` com uma normalização básica para remover especificações que costumam alongar a fala, como tensão elétrica (`127V`, `220V`), conteúdo entre parênteses e separadores finais.
 
 O nome completo do produto continua disponível para card, banco, publicação e demais fluxos.
+
+Para títulos ainda longos, a fala tenta versões com 8, 6 e 4 palavras do nome e possui um fallback mínimo de 3 palavras.
 
 ### 3. Preço falável curto
 
@@ -48,9 +50,9 @@ A forma longa permanece disponível no módulo para usos futuros.
 
 ### 4. Limite de palavras
 
-A geração usa um teto de palavras para a locução de 8 segundos. O roteiro tenta primeiro uma versão comercial completa e, se exceder o limite, usa uma versão compacta.
+A geração usa um teto de **22 palavras** para a locução principal de 8 segundos. O roteiro tenta primeiro uma versão comercial completa e, se exceder o limite, remove o gancho inicial e reduz progressivamente o nome falável do produto.
 
-O limite adotado é conservador e serve como proteção de produto; ele não substitui o comportamento do modelo de vídeo, mas reduz bastante a chance de fala cortada.
+O limite adotado é uma proteção de produto; ele não garante sozinho o timing do modelo de vídeo, mas reduz significativamente a chance de fala cortada.
 
 ### 5. Prompt estruturado
 
@@ -78,7 +80,7 @@ As regras por categoria continuam válidas:
 
 ## Arquitetura do módulo
 
-`src/lib/videos/gemini-prompt.ts` passa a seguir a sequência:
+`src/lib/videos/gemini-prompt.ts` segue a sequência:
 
 ```text
 GeminiPromptOffer
@@ -88,6 +90,7 @@ precoPorExtenso()
 precoFalavelCurto()
   ↓
 getSpeakableProductName()
+compactProductName()
 wordCount()
   ↓
 productInteraction()
@@ -124,13 +127,13 @@ Locução preferencial:
 Olha esse achado! Cafeteira Três Corações Passione, por quatrocentos e setenta e um e oitenta. Confira na publicação!
 ```
 
-Caso a contagem exceda o teto configurado, o prefixo é removido e uma locução compacta é usada.
+Caso a contagem exceda o teto configurado, o prefixo é removido e o nome do produto é progressivamente compactado.
 
 ## Compatibilidade com o fluxo atual
 
 ### `VideosClient.tsx`
 
-Continua chamando `buildGeminiVideoPrompt(selectedOffer)` sem mudança de contrato. Apenas o texto de orientação da importação é atualizado para indicar 8 segundos como formato recomendado.
+Continua chamando `buildGeminiVideoPrompt(selectedOffer)` sem mudança de contrato. Nenhuma alteração de interface é necessária para o novo formato do prompt.
 
 ### `POST /api/videos/jobs`
 
@@ -149,15 +152,9 @@ O prompt usado continua sendo salvo no job e em `metadata.prompt`.
 
 ## Validação de duração
 
-Nesta primeira versão, **não será imposto um bloqueio rígido de 8 segundos no backend**. A validação técnica existente permanece ampla para evitar quebra de vídeos legados e tolerar pequenas diferenças de duração produzidas pelo gerador.
+Nesta primeira versão, **não é imposto um bloqueio rígido de 8 segundos no backend**. A validação técnica existente permanece ampla para evitar quebra de vídeos legados e tolerar pequenas diferenças de duração produzidas pelo gerador.
 
-A interface passa a recomendar:
-
-```text
-MP4 vertical 9:16 · 8 segundos
-```
-
-Uma etapa futura poderá aplicar tolerância específica, por exemplo de 7 a 10 segundos, para novos vídeos.
+O padrão de 8 segundos é aplicado no próprio prompt. Uma etapa futura poderá atualizar a interface e aplicar uma tolerância específica, por exemplo de 7 a 10 segundos, para novos vídeos.
 
 ## Critérios de aceite
 
@@ -173,9 +170,15 @@ Uma etapa futura poderá aplicar tolerância específica, por exemplo de 7 a 10 
 - O contrato público de `buildGeminiVideoPrompt(offer)` não deve mudar.
 - O backend de importação não deve exigir alterações.
 
+## Arquivos alterados nesta implementação
+
+- `docs/VIDEO_PROMPT_8S_IMPLEMENTATION.md`
+- `src/lib/videos/gemini-prompt.ts`
+
 ## Próximos passos possíveis
 
 - Gerar `short_name` automaticamente na ingestão de ofertas quando o marketplace não fornecer um nome adequado.
 - Criar testes unitários para nomes longos, preços com e sem centavos e diferentes categorias.
 - Registrar no metadata a contagem de palavras e a versão de template usada.
+- Atualizar a orientação visual da página para destacar 8 segundos como duração recomendada.
 - Criar presets futuros de 8, 15 e 30 segundos mantendo a mesma arquitetura.
