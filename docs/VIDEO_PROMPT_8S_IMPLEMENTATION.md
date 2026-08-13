@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Padronizar os prompts da página **Vídeos de ofertas** para gerar vídeos publicitários fotorrealistas de aproximadamente 8 segundos, com consistência visual da avatar oficial, fidelidade ao produto e locução em português brasileiro natural, curta e integral.
+Padronizar os prompts da página **Vídeos de ofertas** para gerar vídeos publicitários fotorrealistas de aproximadamente 8 segundos, com consistência visual da avatar oficial, fidelidade ao produto, locução em português brasileiro natural e direção de arte coerente com cada família de produto.
 
 ## Fluxo atual
 
@@ -36,7 +36,9 @@ controle de até 22 palavras
     ↓
 fallback de nome 8 → 6 → 4 → 3 palavras
     ↓
-cena dinâmica por categoria
+direção de arte premium por família de produto
+    ↓
+composição visual anti-alucinação baseada na imagem de referência
     ↓
 lipsync + finalização antes dos 8s
 
@@ -53,100 +55,123 @@ documenta toda a arquitetura
 
 `Avatar_Silvia` é a referência visual oficial e obrigatória para os vídeos desta página. O operador deve fornecer ao gerador a imagem oficial correspondente a essa referência.
 
-O prompt determina a preservação rigorosa de:
-
-- identidade facial, tom de pele, cabelo e proporções corporais;
-- camiseta azul-marinho, calça jeans escura e tênis branco;
-- estampa original da camiseta;
-- texto **CAÇA OFERTA**;
-- chama, carrinho e etiqueta de desconto presentes na estampa.
+O prompt determina a preservação rigorosa de identidade facial, tom de pele, cabelo, proporções corporais, camiseta azul-marinho, calça jeans escura, tênis branco e da estampa original da camiseta com **CAÇA OFERTA**, chama, carrinho e etiqueta de desconto.
 
 O gerador não deve recriar, traduzir, reinterpretar ou substituir a marca da camiseta. Em especial, **CAÇA OFERTA não pode ser trocado por outro nome**.
 
-## Nome falável do produto
+## Nome falável e normalização linguística
 
 A locução usa `short_name` quando disponível. Se ele não existir, utiliza `product_name`.
 
-O nome passa por três camadas antes de entrar na fala.
+O nome passa por três camadas antes de entrar na fala:
 
-### 1. Normalização técnica
+1. `normalizeTechnicalSpecsForSpeech()` remove informações dispensáveis como `1800W`, `127V`, `256GB`, `5G`, `4K`, `50"` e descritores técnicos.
+2. `simplifyCommercialNameForSpeech()` reduz redundâncias e remove códigos técnicos como `BAF95A`.
+3. `normalizeLinguisticSpeech()` corrige a forma falada sem alterar os dados originais da oferta.
 
-`normalizeTechnicalSpecsForSpeech()` remove informações dispensáveis para uma locução de 8 segundos, sem alterar os dados originais da oferta.
-
-Exemplos removidos:
-
-- capacidade e volume: `9,5L`, `500ml`;
-- potência e tensão: `1800W`, `127V`, `220V`, `bivolt`;
-- memória e armazenamento: `16GB`, `256GB`, `512GB`, `1TB`;
-- tela e resolução: `50"`, `Full HD`, `4K`, `8K`, `HDR`, `LED`, `QLED`, `OLED`;
-- conectividade: `Wi-Fi`, `Bluetooth`, `3G`, `4G`, `5G`;
-- frequência e outras unidades técnicas: `Hz`, `MHz`, `GHz`, `mAh`, `BTU`, `MP`;
-- descritores pouco úteis para 8 segundos, como `Painel Digital`.
-
-### 2. Simplificação comercial
-
-`simplifyCommercialNameForSpeech()`:
-
-- reduz `Fritadeira Air Fryer` para `Air Fryer`;
-- remove códigos técnicos como `BAF95A`, `XJ900` e `SM-A556E`;
-- mantém o núcleo comercial reconhecível do produto.
-
-### 3. Normalização linguística
-
-`normalizeLinguisticSpeech()` corrige a forma falada sem alterar `product_name` ou `short_name` armazenados.
-
-Exemplos:
+Exemplo real:
 
 ```text
 Parafusadeira Furadeira be lmpacto 2 Baterias 21V
 → Parafusadeira e Furadeira de Impacto com duas baterias
 ```
 
-A camada também converte números que permanecerem no nome comercial para sua forma falada:
-
-```text
-iPhone 15 → iPhone quinze
-IdeaPad Slim 3 → IdeaPad Slim três
-2 Baterias → duas baterias
-```
-
-O objetivo é impedir algarismos, abreviações técnicas e erros evidentes de marketplace na `FALA EXATA`.
+A camada também converte números que permanecerem na fala para sua forma por extenso.
 
 ## Preço monetário completo
 
-O padrão oficial voltou a ser a forma monetária completa em português brasileiro.
+O padrão oficial da locução usa a forma monetária completa em português brasileiro:
 
 ```text
 R$ 123,90
 → cento e vinte e três reais e noventa centavos
-
-R$ 471,80
-→ quatrocentos e setenta e um reais e oitenta centavos
 ```
 
-A fala não utiliza mais a forma curta `cento e vinte e três e noventa`.
-
-`formatLongPriceForSpeech()` continua disponível e representa o mesmo formato monetário oficial usado pela locução.
+A forma curta sem `reais` e `centavos` não é mais utilizada.
 
 ## Controle de 8 segundos
 
-A geração mantém teto de **22 palavras** para a locução principal.
-
-A ordem de tentativa é:
+A geração mantém teto de **22 palavras** para a locução principal. A ordem de tentativa é:
 
 1. gancho + nome + preço completo + CTA;
 2. nome + preço completo + CTA;
 3. redução progressiva do nome para 8, 6 e 4 palavras;
 4. fallback mínimo de 3 palavras com CTA reduzido.
 
-Como o preço completo possui mais palavras, ofertas com nomes maiores podem perder o gancho `Olha esse achado!` para preservar a fala integral dentro do limite.
+Como o preço completo possui mais palavras, produtos com nomes maiores podem perder o gancho `Olha esse achado!` para preservar a fala integral.
+
+## Direção de arte premium por família
+
+A antiga função de cenário genérico foi substituída conceitualmente por `visualDirectionByCategory()`, que retorna três elementos juntos:
+
+- `scene`: ambiente, materiais, iluminação e linguagem visual;
+- `interaction`: como a Avatar_Silvia apresenta o produto;
+- `composition`: regras específicas de composição e anti-alucinação.
+
+### Ferramentas
+
+Parafusadeiras, furadeiras, marteletes, serras, lixadeiras e ferramentas similares usam:
+
+- oficina contemporânea premium, limpa e organizada;
+- bancada robusta de madeira escura e metal;
+- painel de ferramentas e marcenaria discretos e desfocados;
+- iluminação quente e contrastada, com luz de recorte e pontos âmbar;
+- estética de campanha profissional de ferramentas elétricas;
+- apresentadora ao lado da bancada, sem segurar, operar ou acionar a ferramenta.
+
+A composição proíbe adicionar maleta, brocas, soquetes, carregadores, baterias extras, ferramentas, acessórios, peças ou consumíveis ausentes na imagem de referência.
+
+### Automotivo
+
+Usa garagem/detailing premium, concreto polido, superfícies grafite, iluminação linear e fundo automotivo discreto. Não cria veículos, cabos, adaptadores ou peças extras como parte da oferta.
+
+### TV / Home theater
+
+TVs usam sala contemporânea premium com estética de home theater, iluminação indireta quente e aparência residencial sofisticada. O prompt proíbe inventar soundbar, console, controle remoto, rack ou acessórios vendidos separadamente.
+
+### Tecnologia
+
+Smartphones, notebooks, tablets, headsets e similares usam estúdio tech contemporâneo premium, superfícies escuras acetinadas, detalhes metálicos e iluminação de recorte azul suave com luz quente no rosto. Evita o antigo visual gamer genérico.
+
+### Cozinha e eletrodomésticos
+
+Air Fryer, cafeteira, liquidificador, panela e similares usam cozinha residencial contemporânea premium, bancada limpa, materiais sofisticados e iluminação quente. Não cria alimentos, utensílios, cápsulas, copos ou acessórios inexistentes.
+
+### Beleza
+
+Beauty studio premium, clean e sofisticado, com iluminação difusa e estética de cosméticos de luxo. Não cria itens extras de kit ou embalagens adicionais.
+
+### Moda e calçados
+
+Fashion studio contemporâneo premium, minimalista e editorial. Não adiciona caixa, meias, bolsas, cadarços extras ou variações não presentes na referência.
+
+### Casa e móveis
+
+Interior residencial sofisticado, com materiais naturais, iluminação indireta e composição editorial. Não cria almofadas, mesas laterais ou módulos extras como parte da oferta.
+
+### Fallback
+
+Produtos sem família identificada usam estúdio publicitário contemporâneo premium, evitando cenário vazio, cru ou genérico.
+
+## Autoridade visual e anti-alucinação
+
+Foi criado o bloco **COMPOSIÇÃO DO PRODUTO**.
+
+A regra central é:
+
+> **A imagem de referência é a autoridade visual. Informações do título, descrição ou fala não autorizam adicionar componentes que não estejam visíveis nela.**
+
+Isso significa que `2 baterias` no título não obriga o vídeo a mostrar duas baterias se a imagem de referência não as mostrar. A fala pode mencionar a característica comercial, mas a composição visual continua subordinada à referência.
+
+O prompt também proíbe transformar a oferta em um kit maior do que aquele mostrado visualmente.
 
 ## Prompt estruturado
 
-O prompt final permanece dividido nos blocos:
+O prompt final é dividido em:
 
 - PERSONAGEM;
 - PRODUTO;
+- COMPOSIÇÃO DO PRODUTO;
 - CENA;
 - ATUAÇÃO;
 - CÂMERA;
@@ -155,41 +180,13 @@ O prompt final permanece dividido nos blocos:
 - QUALIDADE;
 - RESTRIÇÕES.
 
-A estrutura visual, câmera, atuação, cenas dinâmicas e timing de 8 segundos foram preservados.
-
-## Áudio e lipsync
-
-O prompt agora explicita que:
-
-- a voz é feminina adulta em português brasileiro;
-- todas as palavras devem ser pronunciadas em português correto;
-- todos os números presentes na fala devem ser pronunciados por extenso;
-- valores monetários usam `reais` e `centavos` quando aplicável;
-- algarismos, abreviações técnicas, símbolos e códigos não devem ser pronunciados;
-- nenhuma palavra pode ser cortada ou omitida;
-- a última palavra termina antes do fim do vídeo;
-- aproximadamente 0,3 segundo de imagem permanece após a última palavra.
-
 ## Texto e identidade visual nas referências
 
-A regra antiga `Sem texto na tela` foi removida por conflitar com textos legítimos existentes nas imagens de referência.
-
-A regra oficial agora é:
+A regra oficial é:
 
 > **Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem.**
 
-Isso permite preservar a marca **CAÇA OFERTA** na camiseta e textos/logotipos reais do produto, ao mesmo tempo que continua proibindo legendas, preços escritos, overlays, elementos gráficos novos e marcas d'água.
-
-## Inteligência visual
-
-As regras por categoria continuam válidas:
-
-- cozinha: produto em bancada e cenário de cozinha;
-- tecnologia portátil: produto nas mãos;
-- TV/televisor e tecnologia: cenário tecnológico;
-- beleza: cenário clean/spa;
-- moda/calçados: cenário esportivo correspondente;
-- fallback: estúdio publicitário premium.
+Isso preserva **CAÇA OFERTA** na camiseta e textos reais do produto enquanto continua proibindo legendas, preços escritos, overlays, elementos gráficos novos e marcas d'água.
 
 ## Arquitetura do módulo
 
@@ -206,102 +203,52 @@ getSpeakableProductName()
 compactProductName()
 wordCount()
   ↓
-productInteraction()
-studioBackground()
+visualDirectionByCategory()
+  ├─ scene
+  ├─ interaction
+  └─ composition
   ↓
 speechScript8Seconds()
   ↓
 buildGeminiVideoPrompt()
 ```
 
-## Exemplos
+## Compatibilidade
 
-### Parafusadeira
+`VideosClient.tsx` continua chamando `buildGeminiVideoPrompt(selectedOffer)` sem mudança de contrato. `POST /api/videos/jobs` também não exige mudança.
 
-```text
-Parafusadeira Furadeira be lmpacto 2 Baterias 21V
-→ Parafusadeira e Furadeira de Impacto com duas baterias
-```
-
-Com `R$ 123,90`, a fala utiliza:
-
-```text
-cento e vinte e três reais e noventa centavos
-```
-
-### Air Fryer
-
-```text
-Fritadeira Air Fryer Britânia BAF95A 9,5L Painel Digital 1800W
-→ Air Fryer Britânia
-```
-
-### Smartphone
-
-```text
-Smartphone Samsung Galaxy A55 256GB 5G Bluetooth
-→ Smartphone Samsung Galaxy A55
-```
-
-### iPhone
-
-```text
-Apple iPhone 15 128GB 5G
-→ Apple iPhone quinze
-```
-
-### TV
-
-```text
-Smart TV Samsung 50" 4K QLED HDR
-→ Smart TV Samsung
-```
-
-### Notebook
-
-```text
-Notebook Lenovo IdeaPad Slim 3 512GB 16GB Full HD Wi-Fi
-→ Notebook Lenovo IdeaPad Slim três
-```
-
-## Compatibilidade com o fluxo atual
-
-`VideosClient.tsx` continua chamando `buildGeminiVideoPrompt(selectedOffer)` sem mudança de contrato. `POST /api/videos/jobs` também não exige mudança e continua persistindo o prompt efetivamente utilizado.
-
-Nenhum dado original da oferta é reescrito pela normalização de fala.
+Nenhum dado original da oferta é reescrito pela normalização de fala ou pela direção de arte.
 
 ## Testes automatizados
 
 `src/tests/videos/gemini-prompt.test.ts` cobre:
 
 - estrutura de 8 segundos e limite de 22 palavras;
-- referência oficial `Avatar_Silvia`;
-- preservação explícita de `CAÇA OFERTA` e da estampa da camiseta;
-- proibição de texto novo sem apagar textos originais das referências;
-- prioridade de `short_name`;
-- preço monetário completo com reais e centavos;
-- correção `be lmpacto` → `de Impacto`;
-- correção `Parafusadeira Furadeira` → `Parafusadeira e Furadeira`;
-- conversão `2 Baterias` → `duas baterias`;
-- remoção de especificações técnicas de Air Fryer, smartphone, TV e notebook;
-- remoção de código técnico `BAF95A`;
-- simplificação `Fritadeira Air Fryer` → `Air Fryer`;
-- pronúncia por extenso de números de modelos comerciais;
-- cenários e interações por categoria.
+- referência oficial `Avatar_Silvia` e preservação de `CAÇA OFERTA`;
+- preço monetário completo;
+- normalização linguística da parafusadeira;
+- oficina premium para ferramentas;
+- proibição de segurar/operar ferramenta;
+- proibição de maleta, brocas, soquetes, carregadores e baterias extras não presentes na referência;
+- autoridade visual da imagem de referência;
+- cozinha premium para Air Fryer;
+- tech studio premium para smartphone/notebook;
+- sala premium de home theater para TV;
+- preservação de textos e logotipos originais sem permitir texto novo;
+- remoção de especificações técnicas e códigos comerciais dispensáveis.
 
 ## Critérios de aceite
 
 - O prompt deve declarar vídeo de 8 segundos.
-- `Avatar_Silvia` deve ser declarada como referência visual oficial e obrigatória.
-- A estampa **CAÇA OFERTA** deve ser preservada e nunca substituída por outra marca.
-- A locução deve priorizar `short_name`.
-- Especificações e códigos técnicos dispensáveis devem ser removidos apenas da fala.
-- Erros linguísticos evidentes cobertos pela normalização devem ser corrigidos somente na fala.
-- Todos os números que permanecerem na fala devem aparecer por extenso.
-- O preço deve usar a forma monetária completa com `reais` e `centavos` quando aplicável.
-- A locução deve respeitar o fallback do limite de 22 palavras.
-- O prompt deve proibir texto novo, legendas, preços escritos, overlays e marca d'água.
-- Textos e logotipos originais das imagens de referência devem ser preservados.
+- `Avatar_Silvia` deve ser a referência visual oficial e obrigatória.
+- A estampa **CAÇA OFERTA** deve ser preservada.
+- A locução deve priorizar `short_name` e usar preço monetário completo.
+- A fala deve respeitar o limite/fallback de 22 palavras.
+- O cenário deve refletir a família real do produto com direção de arte premium.
+- Produtos de ferramenta não devem ser segurados ou operados durante a apresentação.
+- A imagem de referência deve prevalecer sobre título/descrição para a composição visual.
+- O gerador não deve inventar acessórios ou transformar o produto em um kit maior.
+- Textos e logotipos originais devem ser preservados e nenhum texto novo deve ser adicionado.
 - A fala deve terminar antes do fim do vídeo.
 - O contrato público de `buildGeminiVideoPrompt(offer)` e o backend de importação não devem mudar.
 
@@ -313,7 +260,7 @@ Nenhum dado original da oferta é reescrito pela normalização de fala.
 
 ## Próximos passos possíveis
 
-- ampliar o dicionário de correções linguísticas apenas com erros reais observados em produção;
-- gerar `short_name` automaticamente na ingestão quando o marketplace não fornecer nome adequado;
-- registrar no metadata a contagem de palavras e a versão do template;
+- ampliar a matriz de direção de arte com novas famílias conforme surgirem casos reais;
+- criar presets visuais por marketplace ou campanha sem afetar a fala;
+- registrar no metadata a família visual escolhida e a versão do template;
 - criar presets futuros de 8, 15 e 30 segundos mantendo a mesma arquitetura.
