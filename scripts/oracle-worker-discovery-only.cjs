@@ -20,6 +20,42 @@ const {
   deriveMarketplaceTerminalStatus,
 } = require('./discovery-funnel-contract.cjs');
 
+// --- BRIDGE COMMONJS ⇄ TYPESCRIPT (Motor Shopee V1) ---
+let oracleAdapterTs = null;
+let oracleAdapterLoadAttempted = false;
+
+function getOracleAdapter() {
+  if (oracleAdapterLoadAttempted) return oracleAdapterTs;
+  oracleAdapterLoadAttempted = true;
+  try {
+    require('tsx/cjs');
+    oracleAdapterTs = require('../src/lib/shopee/ranking/oracle-adapter.ts');
+    console.log('[ORACLE-WORKER] Bridge TypeScript (Motor Shopee V1) carregada com sucesso.');
+  } catch (error) {
+    console.warn('[ORACLE-WORKER] Falha ao carregar bridge TypeScript do Motor Shopee V1:', error.message);
+  }
+  return oracleAdapterTs;
+}
+
+/**
+ * Preparação da chamada ao Motor Shopee V1.
+ * O fallback ou bloqueio ocorre internamente via adapter.
+ */
+function safeEvaluateShopeeOracleCandidate(candidate) {
+  const adapter = getOracleAdapter();
+  if (!adapter || typeof adapter.evaluateShopeeOracleCandidate !== 'function') {
+    return null;
+  }
+  try {
+    return adapter.evaluateShopeeOracleCandidate(candidate);
+  } catch (error) {
+    console.warn('[ORACLE-WORKER] Erro na execução do Motor Shopee V1:', error.message);
+    return null;
+  }
+}
+// ------------------------------------------------------
+
+
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'pending_manual_review';
@@ -92,6 +128,7 @@ function queueCategory(product) {
 }
 
 function queueScore(product) {
+  if (product._v1Score !== undefined) return product._v1Score;
   return scoreCandidate(product);
 }
 
@@ -318,10 +355,39 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     }
   }
 
+  // --shopee-ranking-v1-shadow: flag oficial do Shadow Mode do Motor Shopee V1.
+  // NÃO usar --shopee-v4-dry-run (flag legada aposentada em oracle-scraper.cjs).
+  const isShadowMode = process.argv.includes('--shopee-ranking-v1-shadow');
+
   const ranked = Array.from(allCandidates.values())
     .map((product) => {
       const candidate = product.marketplace ? product : { ...product, marketplace: limits.marketplace };
-      return { product: candidate, gate: qualityGate(candidate) };
+      let finalGate = qualityGate(candidate);
+
+      if (String(candidate.marketplace || '').toLowerCase() === 'shopee') {
+        const v1Result = safeEvaluateShopeeOracleCandidate(candidate);
+        if (v1Result) {
+          candidate.strategyVersion = v1Result.strategyVersion;
+          candidate.scoreBreakdown = v1Result.scoreBreakdown || { finalScore: v1Result.score };
+          candidate.determiningReasons = v1Result.reasons || [];
+          
+          const v1Gate = {
+            eligible: v1Result.eligible,
+            reasons: v1Result.reasons || [],
+            warnings: []
+          };
+
+          if (isShadowMode) {
+            candidate._v1ShadowGate = v1Gate;
+            candidate._v1Score = v1Result.score;
+          } else {
+            finalGate = v1Gate;
+            candidate._v1Score = v1Result.score;
+          }
+        }
+      }
+
+      return { product: candidate, gate: finalGate };
     })
     .sort((a, b) => {
       const scoreDiff = queueScore(b.product) - queueScore(a.product);
@@ -485,6 +551,9 @@ function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
     category: Object.freeze({ ...product.category }),
     marketplaceMetrics: Object.freeze({ ...(product.marketplaceMetrics || {}) }),
     deterministicScore: Number(product.deterministicScore),
+    strategyVersion: product.strategyVersion || null,
+    scoreBreakdown: product.scoreBreakdown ? Object.freeze({ ...product.scoreBreakdown }) : null,
+    determiningReasons: product.determiningReasons ? Object.freeze([...product.determiningReasons]) : null,
     discoveryEvidence: Object.freeze({
       position: product.marketplaceMetrics?.sourcePosition ?? product.marketplaceMetrics?.position ?? null,
       category: product.category.name,
@@ -588,7 +657,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           if (typeof persistV2Metadata === 'function') {
             await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: [], queue: { selected: [], skipped: [], deferred: [], limits: { engine: 'shopee_openapi_v1', persistenceCap: null } }, funnel: funnel.snapshot() });
           }
-          const summary = Object.freeze({ marketplace, discovered: Number(metrics.raw ?? 0), duplicatesRejected: 0, freshnessRejected: 0, freshnessReasons: {}, queueSelected: 0, queueSkipped: 0, queueDeferred: 0, queueLimits: { engine: 'shopee_openapi_v1', persistenceCap: null }, funnel: { extracted: Number(metrics.raw ?? 0), persisted: 0, contractVersion: funnel.snapshot().contractVersion, status: funnel.snapshot().status, counters: funnel.snapshot().counters, rejectionReasons: funnel.snapshot().rejectionReasons }, rejected: 0, classificationCoverage: {}, persisted: 0, inserted: 0, updated: 0, state: FINAL_STATE, funnelContract: funnel.snapshot(), shopeeV1: discovery });
+          const summary = Object.freeze({ marketplace, discovered: Number(metrics.raw ?? 0), duplicatesRejected: 0, freshnessRejected: 0, freshnessReasons: {}, queueSelected: 0, queueSkipped: 0, queueDeferred: 0, queueLimits: { engine: 'shopee_openapi_v1', persistenceCap: null }, funnel: { extracted: Number(metrics.raw ?? 0), persisted: 0, contractVersion: funnel.snapshot().contractVersion, status: funnel.snapshot().status, counters: funnel.snapshot().counters, rejectionReasons: funnel.snapshot().rejectionReasons }, rejected: 0, classificationCoverage: {}, persisted: 0, inserted: 0, updated: 0, state: FINAL_STATE, funnelContract: funnel.snapshot(), shopeeV1: discovery, shadow: discovery });
           summaries.push(summary);
           await safeObserve('discovery.marketplace.completed', { marketplace, finalState: FINAL_STATE, funnelStatus: funnel.snapshot().status, durationMs: Date.now() - marketplaceStartedAt, metadata: summary });
           continue;
@@ -596,7 +665,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         const v1Candidates = top.map((product, index) => ({
           ...product, sourceItemId: String(product.itemId || '').trim(), title: product.productName || product.title,
           sourceUrl: product.offerLink || product.productLink, imageUrl: product.imageUrl,
-          currentPrice: product.price, originalPrice: product.originalPrice, discoveredAt: requestedAt, correlationId, intent: scenario,
+          currentPrice: product.currentPrice ?? product.price ?? product.priceMin,
+          originalPrice: product.originalPrice ?? product.priceMax,
+          discoveredAt: requestedAt, correlationId, intent: scenario,
           category: { id: String(product.productCatIds?.[0] || 'unknown'), name: scenario, source: 'Shopee OpenAPI V1' },
           marketplaceMetrics: { ...(product.marketplaceMetrics || {}), itemId: product.itemId, shopId: product.shopId, shopee_item_id: product.itemId, shopee_shop_id: product.shopId, sourcePosition: index + 1, productCatId: String(product.productCatIds?.[0] || 'unknown') },
           deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
@@ -615,7 +686,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         }
         funnel.setTerminalStatus(deriveMarketplaceTerminalStatus({ counters: funnel.snapshot().counters, sourceStatus: freshness.accepted.length === 0 && Number(metrics.raw ?? top.length) === 0 ? 'empty' : undefined }));
         if (typeof persistV2Metadata === 'function') await persistV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products: freshness.accepted, queue, funnel: funnel.snapshot() });
-        const summary = Object.freeze({ marketplace, discovered: Number(metrics.raw ?? top.length), duplicatesRejected: Number(metrics.duplicates || 0), freshnessRejected: freshness.rejected?.length || 0, freshnessReasons: (freshness.rejected || []).reduce((all, item) => ({ ...all, [item.reason]: Number(all[item.reason] || 0) + 1 }), {}), queueSelected: freshness.accepted.length, queueSkipped: 0, queueDeferred: 0, queueLimits: queue.limits, funnel: { extracted: Number(metrics.raw ?? top.length), searchQualityAccepted: Number(metrics.final ?? top.length), freshnessAccepted: freshness.accepted.length, unique: Number(metrics.scoreable ?? top.length), classified: freshness.accepted.length, candidatesBeforeQueue: freshness.accepted.length, queueSelected: freshness.accepted.length, persisted: Number(persistedAll.accepted || 0), contractVersion: funnel.snapshot().contractVersion, status: funnel.snapshot().status, counters: funnel.snapshot().counters, rejectionReasons: funnel.snapshot().rejectionReasons }, rejected: Number(metrics.technicalRejected || 0) + Number(metrics.intentRejected || 0) + Number(metrics.duplicates || 0) + (freshness.rejected?.length || 0), classificationCoverage: {}, persisted: Number(persistedAll.accepted || 0), inserted: persistedAll.inserted || 0, updated: persistedAll.updated || 0, state: FINAL_STATE, funnelContract: funnel.snapshot(), shopeeV1: discovery });
+          const summary = Object.freeze({ marketplace, discovered: Number(metrics.raw ?? top.length), duplicatesRejected: Number(metrics.duplicates || 0), freshnessRejected: freshness.rejected?.length || 0, freshnessReasons: (freshness.rejected || []).reduce((all, item) => ({ ...all, [item.reason]: Number(all[item.reason] || 0) + 1 }), {}), queueSelected: freshness.accepted.length, queueSkipped: 0, queueDeferred: 0, queueLimits: queue.limits, funnel: { extracted: Number(metrics.raw ?? top.length), searchQualityAccepted: Number(metrics.final ?? top.length), freshnessAccepted: freshness.accepted.length, unique: Number(metrics.scoreable ?? top.length), classified: freshness.accepted.length, candidatesBeforeQueue: freshness.accepted.length, queueSelected: freshness.accepted.length, persisted: Number(persistedAll.accepted || 0), contractVersion: funnel.snapshot().contractVersion, status: funnel.snapshot().status, counters: funnel.snapshot().counters, rejectionReasons: funnel.snapshot().rejectionReasons }, rejected: Number(metrics.technicalRejected || 0) + Number(metrics.intentRejected || 0) + Number(metrics.duplicates || 0) + (freshness.rejected?.length || 0), classificationCoverage: {}, persisted: Number(persistedAll.accepted || 0), inserted: persistedAll.inserted || 0, updated: persistedAll.updated || 0, state: FINAL_STATE, funnelContract: funnel.snapshot(), shopeeV1: discovery, shadow: discovery });
         summaries.push(summary);
         await safeObserve('discovery.marketplace.completed', { marketplace, finalState: FINAL_STATE, funnelStatus: summary.funnelContract.status, durationMs: Date.now() - marketplaceStartedAt, metadata: summary });
         continue;
@@ -806,8 +877,8 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         countRejection(`classification_${candidate.classification.status || 'unknown'}`);
       }
       let deferredForQueue = previouslyDeferred;
-      const shopeeV1Enabled = marketplace === 'Shopee'
-        && String(process.env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED || '').trim().toLowerCase() === 'true';
+    const shopeeV1Enabled = marketplace === 'Shopee'
+        && require('./shopee-v1-flags.cjs').getShopeeV1Flags().engine;
       const noCommercialCap = Number.MAX_SAFE_INTEGER;
       const effectiveCopyQueueOptions = shopeeV1Enabled
         ? { ...(copyQueueOptions || {}), maxTotal: noCommercialCap, maxPerMarketplace: noCommercialCap, maxPerCategory: noCommercialCap }
@@ -1051,4 +1122,5 @@ module.exports = {
   runDiscoveryOnlyCycle,
   validateCanonicalUrl,
   validateNativeIdentity,
+  safeEvaluateShopeeOracleCandidate,
 };

@@ -2,6 +2,7 @@ const {
   CONTROLLED_PERSIST_SCENARIOS,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
+  CONTROLLED_PERSIST_MAX_CANDIDATES,
 } = require('../shopee-openapi-v1-controlled-persist.cjs');
 
 const baseEnv = {
@@ -45,6 +46,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
         enabled: true,
         mode: 'controlled-persist',
         scenarioId: scenario,
+        maxCandidates: CONTROLLED_PERSIST_MAX_CANDIDATES,
       });
     }
   });
@@ -77,7 +79,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       .toMatchObject({ enabled: true, mode: 'controlled-persist' });
   });
 
-  it('persists every approved traceable V1 ingestion without a commercial cap', () => {
+  it('applies the explicit deterministic canary cap', () => {
     const top = Array.from({ length: 67 }, (_, index) => ({
       itemId: String(1000 + index),
       shopId: String(2000 + index),
@@ -102,8 +104,9 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       requestedAt: '2026-08-08T00:00:00.000Z',
     });
 
-    expect(ingestions).toHaveLength(67);
+    expect(ingestions).toHaveLength(CONTROLLED_PERSIST_MAX_CANDIDATES);
 
+    expect(ingestions.map((item) => item.candidate.sourceItemId)).toEqual(['1000', '1001', '1002', '1003', '1004']);
     for (const ingestion of ingestions) {
       expect(ingestion.correlationId).toBe('abc-123');
       expect(ingestion.candidate.persistenceMetadata).toMatchObject({
@@ -134,7 +137,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       tenantId: 'tenant-test',
       correlationId: 'few-new',
       requestedAt: '2026-08-08T00:00:00.000Z',
-    })).toHaveLength(7);
+    })).toHaveLength(CONTROLLED_PERSIST_MAX_CANDIDATES);
   });
 
   it('não persiste priceMax como originalPrice em payload V1', () => {

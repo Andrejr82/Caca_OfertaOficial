@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { normalizePriceIntegrity } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const { getShopeeV1Flags, isShopeeV1Shadow } = require('./shopee-v1-flags.cjs');
 
 const CONTROLLED_PERSIST_SCENARIOS = new Set([
   'casa_cozinha_editorial',
@@ -21,10 +22,7 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
 
 const CONTROLLED_PERSIST_SCENARIO = 'casa_cozinha_editorial';
 const BLOCKED_SCENARIO = 'grandes_ofertas_editorial';
-
-function isTrue(value) {
-  return String(value ?? '').trim().toLowerCase() === 'true';
-}
+const CONTROLLED_PERSIST_MAX_CANDIDATES = 5;
 
 function isOne(value) {
   return String(value ?? '').trim() === '1';
@@ -37,11 +35,12 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
     return { enabled: false, reason: 'blocked_v1_scenario', next: 'manual_or_v2' };
   }
 
-  if (!isTrue(env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED)) {
+  const flags = getShopeeV1Flags(env);
+  if (!flags.engine) {
     return { enabled: false, reason: 'feature_flag_disabled' };
   }
 
-  if (!isTrue(env.SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED)) {
+  if (!flags.persistence) {
     return { enabled: false, reason: 'persist_flag_disabled' };
   }
 
@@ -52,6 +51,10 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
   if (isOne(env.DRY_RUN)) return { enabled: false, reason: 'dry_run_enabled' };
   if (isOne(env.NO_DB_WRITE)) return { enabled: false, reason: 'no_db_write_enabled' };
 
+  if (isShopeeV1Shadow(env.ARGV || process.argv)) {
+    return { enabled: false, reason: 'shadow_mode_enabled' };
+  }
+
   if (!isOne(env.NO_PUBLISH)) {
     return { enabled: false, reason: 'publish_flags_required' };
   }
@@ -60,6 +63,7 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
     enabled: true,
     mode: 'controlled-persist',
     scenarioId: normalizedScenario,
+    maxCandidates: CONTROLLED_PERSIST_MAX_CANDIDATES,
   };
 }
 
@@ -82,7 +86,8 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
   // Keep its correlation id identical to discovery_runs and explainability.
   const v1CorrelationId = correlationId;
 
-  return (Array.isArray(top) ? top : []).map((product, index) => {
+  const boundedTop = (Array.isArray(top) ? top : []).slice(0, CONTROLLED_PERSIST_MAX_CANDIDATES);
+  return boundedTop.map((product, index) => {
     const sourceItemId = String(product.itemId || '').trim();
     const shopId = String(product.shopId || '').trim();
     const title = String(product.productName || product.title || '').trim();
@@ -186,6 +191,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
 module.exports = {
   CONTROLLED_PERSIST_SCENARIO,
   CONTROLLED_PERSIST_SCENARIOS,
+  CONTROLLED_PERSIST_MAX_CANDIDATES,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
 };

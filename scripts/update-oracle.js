@@ -26,12 +26,13 @@ require('dotenv').config({ path: '.env.local' });
  *   → validar boot
  */
 
-const SERVER_IP = process.env.ORACLE_SERVER_IP || '193.122.242.178';
-const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';
-const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '/home/ubuntu/Caca_OfertaOficial';
+const SERVER_IP = process.env.ORACLE_SERVER_IP;
+const SERVER_USER = process.env.ORACLE_SERVER_USER;
+const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR;
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
 const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
-const SSH_KEY_PATH = path.resolve(__dirname, '../keys/ssh-key-2026-06-25.key');
+const SSH_PORT = process.env.ORACLE_SSH_PORT || '22';
+const SSH_KEY_PATH = process.env.ORACLE_SSH_KEY_PATH && path.resolve(process.env.ORACLE_SSH_KEY_PATH);
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const RUNTIME_OVERLAY_FILE = 'config/oracle-runtime-overlay.env';
 const DEPLOY_FILES = [
@@ -44,7 +45,9 @@ const DEPLOY_FILES = [
   'scripts/shopee-scenario-config.cjs',
   'scripts/shopee-native-discovery-v5.cjs',
   'scripts/shopee-openapi-shadow-engine-v1.cjs',
+  'scripts/shopee-ranking-v1-oracle-bridge.cjs',
   'scripts/shopee-openapi-v1-adapter.cjs',
+  'scripts/shopee-v1-flags.cjs',
   'scripts/shopee-openapi-v1-controlled-persist.cjs',
   'scripts/shopee-openapi-v1-discovery-shadow.cjs',
   'scripts/shopee-trends-miner.cjs',
@@ -65,19 +68,30 @@ const DEPLOY_FILES = [
   'scripts/official-editorial-grid.cjs',
   'scripts/offer-quality-shadow-runtime.cjs',
   'scripts/offer-quality-queue-runtime.cjs',
-  'scripts/oracle-api.cjs',
   'scripts/telegram-auto-publisher.cjs',
   'scripts/facebook-auto-publisher.cjs',
-  'scripts/video-dubber.cjs',
+  'src/lib/shopee/ranking/types.ts',
+  'src/lib/shopee/ranking/normalization.ts',
+  'src/lib/shopee/ranking/category-policies.ts',
+  'src/lib/shopee/ranking/semantic-validator.ts',
+  'src/lib/shopee/ranking/commercial-filters.ts',
+  'src/lib/shopee/ranking/score.ts',
+  'src/lib/shopee/ranking/oracle-adapter.ts',
 ];
+const DEPLOY_DIRS = [...new Set(DEPLOY_FILES.map((relativeFile) => relativeFile.split('/').slice(0, -1).join('/')).filter(Boolean))];
 
-if (!fs.existsSync(SSH_KEY_PATH)) throw new Error(`Chave SSH não encontrada: ${SSH_KEY_PATH}`);
+if (!SERVER_IP || !SERVER_USER || !PROJECT_DIR || !SSH_KEY_PATH) throw new Error('ORACLE_SERVER_IP, ORACLE_SERVER_USER, ORACLE_PROJECT_DIR e ORACLE_SSH_KEY_PATH são obrigatórios.');
+if (!/^[A-Za-z0-9._:-]+$/.test(SERVER_IP)) throw new Error('ORACLE_SERVER_IP inválido.');
+if (!/^[A-Za-z0-9._-]+$/.test(SERVER_USER)) throw new Error('ORACLE_SERVER_USER inválido.');
+if (!/^\d{1,5}$/.test(SSH_PORT) || Number(SSH_PORT) < 1 || Number(SSH_PORT) > 65535) throw new Error('ORACLE_SSH_PORT inválido.');
+if (!fs.existsSync(SSH_KEY_PATH)) throw new Error('Chave SSH configurada não encontrada.');
 if (!/^[A-Za-z0-9._/-]+$/.test(PM2_SCRAPER_NAME)) throw new Error('Nome PM2 inválido.');
 if (!/^[A-Za-z0-9._/-]+$/.test(PM2_API_NAME)) throw new Error('Nome PM2 API inválido.');
 if (!/^\/[A-Za-z0-9._/-]+$/.test(PROJECT_DIR)) throw new Error('ORACLE_PROJECT_DIR deve ser um caminho absoluto seguro.');
 
 const ssh = (command) => execFileSync('ssh', [
   '-i', SSH_KEY_PATH,
+  '-p', SSH_PORT,
   '-o', 'BatchMode=yes',
   '-o', 'StrictHostKeyChecking=no',
   '-o', 'ConnectTimeout=15',
@@ -87,6 +101,7 @@ const ssh = (command) => execFileSync('ssh', [
 
 const scp = (localFile, remoteFile) => execFileSync('scp', [
   '-i', SSH_KEY_PATH,
+  '-P', SSH_PORT,
   '-o', 'BatchMode=yes',
   '-o', 'StrictHostKeyChecking=no',
   '-o', 'ConnectTimeout=15',
@@ -147,7 +162,8 @@ try {
   parseOverlay(overlayText);
   fs.writeFileSync(overlayTransferPath, overlayText, 'utf8');
   console.log(`Conectando à Oracle ${TARGET}...`);
-  ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteStage}/config' '${remoteBackup}/scripts'`);
+  const deployDirs = DEPLOY_DIRS.map((relativeDir) => `'${remoteStage}/${relativeDir}' '${remoteBackup}/${relativeDir}' '${PROJECT_DIR}/${relativeDir}'`).join(' ');
+  ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteStage}/config' '${remoteBackup}/scripts' ${deployDirs}`);
 
   // ─── Passo 1: backup remoto ───────────────────────────────────────────────
   const backupFiles = DEPLOY_FILES.map((relativeFile) => {
@@ -183,7 +199,7 @@ try {
   const commit = getLocalCommit();
   const fileHashes = Object.fromEntries(
     DEPLOY_FILES.map((relativeFile) => [
-      path.basename(relativeFile),
+      relativeFile,
       computeSha256(path.resolve(__dirname, '..', relativeFile)),
     ])
   );
@@ -196,13 +212,12 @@ try {
   scp(localManifestPath, `${PROJECT_DIR}/.runtime-release.json`);
   console.log('Manifesto .runtime-release.json enviado ao servidor.');
 
-  // ─── Passo 6: validar hash remoto de um arquivo ───────────────────────────
-  // Valida apenas oracle-scraper.cjs como representante do deploy
-  const localHash = fileHashes['oracle-scraper.cjs'];
-  if (localHash) {
-    ssh(`set -eu; sha256sum '${PROJECT_DIR}/scripts/oracle-scraper.cjs' | awk '{print $1}' | grep -qx '${localHash}'`);
-    console.log(`Hash validado: oracle-scraper.cjs = ${localHash.slice(0, 12)}...`);
+  // ─── Passo 6: validar hash remoto de todos os arquivos implantados ────────
+  for (const relativeFile of DEPLOY_FILES) {
+    const localHash = fileHashes[relativeFile];
+    ssh(`set -eu; sha256sum '${PROJECT_DIR}/${relativeFile}' | awk '{print $1}' | grep -qx '${localHash}'`);
   }
+  console.log(`Hashes validados: ${DEPLOY_FILES.length} arquivos.`);
 
   // ─── Passo 7: restart somente do scraper, carregando o overlay ──────────
   ssh(buildScraperRestartCommand(PM2_SCRAPER_NAME, overlayFlags));

@@ -888,6 +888,9 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
 }
 
 async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue, funnel = null }, stageLogger = null) {
+  if (process.env.NO_DB_WRITE === '1' || process.env.DRY_RUN === '1') {
+    return { skipped: true, reason: 'write_blocked_by_runtime_flags', supabaseWrites: 0 };
+  }
   let stageStartedAt;
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryV2Metadata', products.length);
 
@@ -1047,6 +1050,10 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryIngestionV1', ingestions.length);
 
   try {
+    if (process.env.NO_DB_WRITE === '1' || process.env.DRY_RUN === '1') {
+      if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
+      return { accepted: 0, inserted: 0, updated: 0, failed: 0, offerIds: [], state: targetStatus, skipped: true, reason: 'write_blocked_by_runtime_flags', supabaseWrites: 0 };
+    }
     if (!ingestions.length) {
       if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
       return { accepted: 0, offerIds: [], state: targetStatus };
@@ -1064,6 +1071,9 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       correlation_id: correlationId,
       discovery_evidence: candidate.discoveryEvidence,
       marketplace_metrics: metrics,
+      strategy_version: candidate.strategyVersion ?? null,
+      score_breakdown: candidate.scoreBreakdown ?? null,
+      determining_reasons: candidate.determiningReasons ?? null,
     };
     if (persistenceContext) {
       explainability = {
@@ -1631,7 +1641,7 @@ async function runScrapingCycleCore() {
   return result;
 }
 
-async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
+async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId = ADMIN_USER_ID, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
   const activeScenario = scenarioId || getActiveMarketplaceScenario('Shopee')?.scenarioId || getActiveMarketplaceScenario('Shopee')?.id || 'casa_cozinha_editorial';
   const controlledPersistDecision = getControlledPersistDecision(activeScenario, env);
   const scenario = getMarketplaceScenarioContract(activeScenario, 'Shopee') || getActiveMarketplaceScenario('Shopee');
@@ -1647,7 +1657,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     env, request: shadowRequest, engine: runScenario, includeDelta: false, includeAuxiliary: false,
   });
   const result = await runDiscoveryOnlyCycle({
-    tenantId: 'local-shopee-openapi-shadow',
+    tenantId,
     correlationId,
     requestedAt,
     marketplaces: ['Shopee'],
@@ -1655,7 +1665,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     shopeeDiscovery: async (input) => {
       const response = await shadowDiscovery(input);
       const result = response?.result?.scenarios?.[input.scenario] || {};
-      return { engine: 'shopee_openapi_v1', mode: 'local-diagnostic', decision: response?.enabled ? 'official' : 'blocked', top: result.top || [], metrics: result.metrics || {} };
+      return { engine: 'shopee_openapi_v1', mode: 'official', decision: response?.enabled ? 'official' : (response?.reason || 'blocked'), top: result.top || [], metrics: result.metrics || {} };
     },
     persistShopee: controlledPersistDecision.enabled ? async (payload) => {
       persistCalls += 1;
