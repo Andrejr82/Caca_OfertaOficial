@@ -39,16 +39,18 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(countWords(speech)).toBeLessThanOrEqual(22);
   });
 
-  it("remove especificações técnicas de uma air fryer", () => {
+  it("simplifica air fryer, remove especificações e código técnico de modelo", () => {
     const prompt = buildGeminiVideoPrompt({
-      product_name: "Fritadeira Air Fryer Britânia 9,5L Painel Digital 1800W",
+      product_name: "Fritadeira Air Fryer Britânia BAF95A 9,5L Painel Digital 1800W",
       current_price: 549,
       category: "Cozinha",
     });
 
     const speech = extractSpeech(prompt);
 
-    expect(speech).toContain("Fritadeira Air Fryer Britânia");
+    expect(speech).toContain("Air Fryer Britânia");
+    expect(speech).not.toMatch(/fritadeira air fryer/i);
+    expect(speech).not.toMatch(/BAF95A/i);
     expect(speech).not.toMatch(/9,5\s*l/i);
     expect(speech).not.toMatch(/1800\s*w/i);
     expect(speech).not.toMatch(/painel digital/i);
@@ -57,7 +59,7 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(prompt).toContain("bancada de cozinha moderna");
   });
 
-  it("remove armazenamento e conectividade do nome falável de smartphone", () => {
+  it("remove armazenamento e conectividade sem apagar linha comercial de smartphone", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Smartphone Samsung Galaxy A55 256GB 5G Bluetooth",
       current_price: 1999,
@@ -72,6 +74,20 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/bluetooth/i);
     expect(prompt).toContain("segurando o produto da imagem de referência com as mãos");
     expect(prompt).toContain("neon azul e roxo");
+  });
+
+  it("preserva modelo comercial com número separado", () => {
+    const prompt = buildGeminiVideoPrompt({
+      product_name: "Apple iPhone 15 128GB 5G",
+      current_price: 4299,
+      category: "Tecnologia",
+    });
+
+    const speech = extractSpeech(prompt);
+
+    expect(speech).toContain("Apple iPhone 15");
+    expect(speech).not.toMatch(/128\s*gb/i);
+    expect(speech).not.toMatch(/\b5g\b/i);
   });
 
   it("remove polegadas, resolução e painel do nome falável de TV", () => {
