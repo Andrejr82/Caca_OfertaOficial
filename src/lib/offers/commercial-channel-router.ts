@@ -64,10 +64,13 @@ export function selectOperationalTopCandidates(candidates: RoutedCommercialCandi
 }
 
 /** Operational panel boundary: discovery remains broad; only rendered candidates are capped. */
-export function selectOperationalPanelTop30(offers: Offer[], limit = 30, now = new Date(), options: { allowRecentFallback?: boolean } = {}): RoutedCommercialCandidate[] {
+export function selectOperationalPanelTop30(offers: Offer[], limit = 30, now = new Date(), options: { allowRecentFallback?: boolean; allowApproved?: boolean } = {}): RoutedCommercialCandidate[] {
   const eligible = filterOperationalPanelOffers(offers, now, options);
   const candidates = buildCommercialQueue(eligible);
-  const routed = routeCommercialCandidates(candidates.filter((candidate) => !candidate.rejected && Boolean(candidate.image_url)));
+  const routed = routeCommercialCandidates(candidates.filter((candidate) => !candidate.rejected && Boolean(candidate.image_url)))
+    .map((candidate) => options.allowApproved === true && candidate.status === "approved"
+      ? { ...candidate, targetQueue: "telegram" as const }
+      : candidate);
   return selectOperationalTopCandidates(routed, { channel: "operational", limit, diversity: true });
 }
 
@@ -76,6 +79,6 @@ export function isManualExpressOffer(offer: Partial<Offer>): boolean {
 }
 
 /** Editorial Top30 boundary. Manual Express offers are rendered separately and never rank here. */
-export function selectEditorialTop30(offers: Offer[], limit = 30, now = new Date(), options: { allowRecentFallback?: boolean } = {}): RoutedCommercialCandidate[] {
+export function selectEditorialTop30(offers: Offer[], limit = 30, now = new Date(), options: { allowRecentFallback?: boolean; allowApproved?: boolean } = {}): RoutedCommercialCandidate[] {
   return selectOperationalPanelTop30(offers.filter((offer) => !isManualExpressOffer(offer)), limit, now, options);
 }

@@ -106,10 +106,10 @@ export function identifyLatestDiscoveryCohort(offers: Offer[], now = new Date(),
   return latest.filter((row) => (row.discoveredAt === null ? brtDayKey(row.createdAt) : brtDayKey(row.discoveredAt)) === latestKey).map((row) => row.offer);
 }
 
-export function filterOperationalPanelOffers(offers: Offer[], now = new Date(), options: { allowRecentFallback?: boolean } = {}): Offer[] {
+export function filterOperationalPanelOffers(offers: Offer[], now = new Date(), options: { allowRecentFallback?: boolean; allowApproved?: boolean } = {}): Offer[] {
   return identifyLatestDiscoveryCohort(offers, now, options).filter((offer) => {
     const status = String((offer as Offer & { status?: string }).status || "").toLowerCase();
-    return !PROTECTED_OPERATIONAL_STATUSES.has(status);
+    return !PROTECTED_OPERATIONAL_STATUSES.has(status) || (options.allowApproved === true && status === "approved");
   });
 }
 
