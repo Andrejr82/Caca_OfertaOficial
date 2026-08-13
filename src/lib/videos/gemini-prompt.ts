@@ -73,9 +73,20 @@ function normalizeTechnicalSpecsForSpeech(name: string): string {
     .trim();
 }
 
+function simplifyCommercialNameForSpeech(name: string): string {
+  return name
+    .replace(/\bfritadeira\s+air\s*fryer\b/gi, "Air Fryer")
+    // Códigos técnicos mistos com letras e números (ex.: BAF95A, XJ900, SM-A556E).
+    // Preserva nomes comerciais comuns como iPhone 15, Galaxy A55 e IdeaPad Slim 3.
+    .replace(/\b(?=[A-Z0-9-]{5,}\b)(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9-]+\b/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s*[,;:]\s*$/g, "")
+    .trim();
+}
+
 function getSpeakableProductName(offer: GeminiPromptOffer): string {
   const source = offer.short_name?.trim() || offer.product_name.trim();
-  const normalized = normalizeTechnicalSpecsForSpeech(source);
+  const normalized = simplifyCommercialNameForSpeech(normalizeTechnicalSpecsForSpeech(source));
   return normalized || source;
 }
 
