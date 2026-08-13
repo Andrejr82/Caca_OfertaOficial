@@ -18,6 +18,8 @@ test('accepts exactly the versioned non-secret Oracle flags', () => {
     'SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=false',
     'NO_POSTS=1',
     'NO_PUBLISH=1',
+    'NO_DB_WRITE=1',
+    'DRY_RUN=1',
     'TREND_EXECUTIVE_MODE=off',
   ].join('\n'));
 
@@ -44,6 +46,8 @@ test('keeps Trend Executive production activation disabled in the deploy overlay
     'SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=false',
     'NO_POSTS=1',
     'NO_PUBLISH=1',
+    'NO_DB_WRITE=1',
+    'DRY_RUN=1',
   ];
   assert.throws(() => parseOverlay([...base, 'TREND_EXECUTIVE_MODE=shadow'].join('\n')), /invalid.*TREND_EXECUTIVE_MODE/i);
   assert.throws(() => parseOverlay([...base, 'TREND_EXECUTIVE_MODE=active'].join('\n')), /invalid.*TREND_EXECUTIVE_MODE/i);
@@ -58,6 +62,8 @@ test('merges only allowlisted flags and leaves secrets untouched', () => {
   assert.match(merged, /^SUPABASE_SERVICE_ROLE_KEY=kept-secret$/m);
   assert.match(merged, /^OTHER_SETTING=preserved$/m);
   assert.match(merged, /^NO_POSTS=1$/m);
+  assert.match(merged, /^NO_DB_WRITE=1$/m);
+  assert.match(merged, /^DRY_RUN=1$/m);
   assert.match(merged, /^SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=false$/m);
   assert.match(merged, /^TREND_EXECUTIVE_MODE=off$/m);
   assert.doesNotMatch(merged, /^TREND_EXECUTIVE_MODE=shadow$/m);

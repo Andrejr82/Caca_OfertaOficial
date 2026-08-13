@@ -5,6 +5,8 @@ const ORACLE_RUNTIME_FLAGS = Object.freeze({
   SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'false',
   NO_POSTS: '1',
   NO_PUBLISH: '1',
+  NO_DB_WRITE: '1',
+  DRY_RUN: '1',
   TREND_EXECUTIVE_MODE: 'off',
 });
 
@@ -14,6 +16,8 @@ const ALLOWED_VALUES = Object.freeze({
   SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: new Set(['false', 'true']),
   NO_POSTS: new Set(['0', '1']),
   NO_PUBLISH: new Set(['1']),
+  NO_DB_WRITE: new Set(['1']),
+  DRY_RUN: new Set(['1']),
   TREND_EXECUTIVE_MODE: new Set(['off']),
 });
 
