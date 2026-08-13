@@ -14,7 +14,7 @@ function countWords(text: string) {
 }
 
 describe("Gemini video prompt de 8 segundos", () => {
-  it("gera prompt estruturado e locução curta para cafeteira", () => {
+  it("gera prompt estruturado, preço monetário completo e avatar oficial para cafeteira", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "3 Corações TRES Cafeteira Espresso e Multibebida Passione Branca - 127V",
       short_name: "Cafeteira Três Corações Passione",
@@ -31,11 +31,30 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(prompt).toContain("ÁUDIO E LIPSYNC:");
     expect(prompt).toContain("FALA EXATA:");
     expect(prompt).toContain("RESTRIÇÕES:");
+    expect(prompt).toContain("Avatar_Silvia");
+    expect(prompt).toContain('texto "CAÇA OFERTA"');
     expect(prompt).toContain("bancada de cozinha moderna");
     expect(prompt).toContain("produto da imagem de referência sobre uma bancada");
     expect(speech).toContain("Cafeteira Três Corações Passione");
-    expect(speech).toContain("quatrocentos e setenta e um e oitenta");
+    expect(speech).toContain("quatrocentos e setenta e um reais e oitenta centavos");
     expect(speech).not.toContain("127V");
+    expect(countWords(speech)).toBeLessThanOrEqual(22);
+  });
+
+  it("corrige português, converte número por extenso e usa preço completo na parafusadeira", () => {
+    const prompt = buildGeminiVideoPrompt({
+      product_name: "Parafusadeira Furadeira be lmpacto 2 Baterias 21V",
+      current_price: 123.9,
+      category: "Ferramentas",
+    });
+
+    const speech = extractSpeech(prompt);
+
+    expect(speech).toContain("Parafusadeira e Furadeira de Impacto com duas baterias");
+    expect(speech).not.toMatch(/\b2\b/);
+    expect(speech).not.toMatch(/be lmpacto/i);
+    expect(speech).not.toMatch(/21\s*v/i);
+    expect(speech).toContain("cento e vinte e três reais e noventa centavos");
     expect(countWords(speech)).toBeLessThanOrEqual(22);
   });
 
@@ -76,7 +95,7 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(prompt).toContain("neon azul e roxo");
   });
 
-  it("preserva modelo comercial com número separado", () => {
+  it("pronuncia modelo comercial numérico por extenso", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Apple iPhone 15 128GB 5G",
       current_price: 4299,
@@ -85,7 +104,8 @@ describe("Gemini video prompt de 8 segundos", () => {
 
     const speech = extractSpeech(prompt);
 
-    expect(speech).toContain("Apple iPhone 15");
+    expect(speech).toContain("Apple iPhone quinze");
+    expect(speech).not.toMatch(/\b15\b/);
     expect(speech).not.toMatch(/128\s*gb/i);
     expect(speech).not.toMatch(/\b5g\b/i);
   });
@@ -107,7 +127,7 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(prompt).toContain("neon azul e roxo");
   });
 
-  it("remove memória e especificações técnicas de notebook", () => {
+  it("remove memória e pronuncia número do modelo de notebook por extenso", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Notebook Lenovo IdeaPad Slim 3 512GB 16GB Full HD Wi-Fi",
       current_price: 3299.9,
@@ -116,7 +136,7 @@ describe("Gemini video prompt de 8 segundos", () => {
 
     const speech = extractSpeech(prompt);
 
-    expect(speech).toContain("Notebook Lenovo IdeaPad Slim 3");
+    expect(speech).toContain("Notebook Lenovo IdeaPad Slim três");
     expect(speech).not.toMatch(/512\s*gb/i);
     expect(speech).not.toMatch(/16\s*gb/i);
     expect(speech).not.toMatch(/full hd/i);
@@ -139,7 +159,21 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(prompt).toContain("0,3 segundo");
   });
 
-  it("mantém preço longo disponível para usos futuros", () => {
+  it("preserva textos e logotipos originais sem permitir texto novo", () => {
+    const prompt = buildGeminiVideoPrompt({
+      product_name: "Air Fryer Britânia 5L 1500W",
+      current_price: 399,
+      category: "Cozinha",
+    });
+
+    expect(prompt).toContain("Não adicionar texto novo na tela");
+    expect(prompt).toContain("devem ser preservados exatamente como aparecem");
+    expect(prompt).toContain("Não substituir \"CAÇA OFERTA\" por qualquer outro nome ou marca");
+    expect(prompt).not.toContain("Sem texto na tela.");
+  });
+
+  it("mantém preço monetário completo como formato oficial da fala", () => {
     expect(formatLongPriceForSpeech(471.8)).toBe("quatrocentos e setenta e um reais e oitenta centavos");
+    expect(formatLongPriceForSpeech(123.9)).toBe("cento e vinte e três reais e noventa centavos");
   });
 });
