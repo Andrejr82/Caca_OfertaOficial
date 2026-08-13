@@ -32,11 +32,25 @@
     for (const candidate of valid) {
       const score = AUTHORITY_CONTEXT.test(candidate.context) ? 2 : 0;
       const current = byValue.get(candidate.value);
-      if (!current || score > current.score) byValue.set(candidate.value, { ...candidate, score });
+      if (!current) {
+        byValue.set(candidate.value, { ...candidate, score, occurrences: 1 });
+      } else {
+        current.occurrences += 1;
+        if (score > current.score) Object.assign(current, candidate, { score });
+      }
     }
 
-    const ranked = [...byValue.values()].sort((a, b) => b.score - a.score);
-    if (ranked.length > 1 && ranked[0].score === ranked[1].score) return null;
+    const ranked = [...byValue.values()].sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      return b.occurrences - a.occurrences;
+    });
+
+    if (ranked.length > 1
+      && ranked[0].score === ranked[1].score
+      && ranked[0].occurrences === ranked[1].occurrences) {
+      return null;
+    }
+
     const selected = ranked[0];
     return { raw: selected.raw, value: selected.value, source: 'dom.primary-price' };
   }
