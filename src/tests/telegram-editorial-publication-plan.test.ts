@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { buildTelegramEditorialPublicationPlan } from "@/lib/inngest/telegram-editorial-publication";
+import {
+  buildTelegramEditorialPublicationPlan,
+  selectEnabledTelegramAutomationUserIds,
+} from "@/lib/inngest/telegram-editorial-publication";
 
 describe("Telegram editorial publication plan", () => {
+  it("does not let one tenant's setting enable another tenant", () => {
+    const enabledUserIds = selectEnabledTelegramAutomationUserIds([
+      { user_id: "user-a", value: { telegram_automation_enabled: true } },
+      { user_id: "user-b", value: { telegram_automation_enabled: false } },
+      { user_id: "user-c", value: null },
+    ]);
+
+    expect(enabledUserIds).toEqual(["user-a"]);
+  });
+
   it("does not dispatch the historical backlog when automation is activated", () => {
     const historical = Array.from({ length: 500 }, (_, index) => ({
       id: `old-post-${index}`,

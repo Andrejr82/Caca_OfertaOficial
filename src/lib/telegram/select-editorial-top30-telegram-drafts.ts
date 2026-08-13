@@ -5,6 +5,7 @@ import { normalizeDiscoveryCorrelationId } from "@/lib/offers/commercial-curatio
 export type TelegramEditorialDraftRow = {
   id: string;
   offer_id: string;
+  user_id?: string;
   channel: "telegram";
   status: string;
   content: string;
@@ -116,7 +117,7 @@ export function selectEditorialTop30TelegramSelection(
 
 export async function loadTelegramEditorialDraftRows(
   client: { from: (table: string) => any },
-  options: { pageSize?: number; maxPages?: number; createdAfter?: string } = {},
+  options: { pageSize?: number; maxPages?: number; createdAfter?: string; userId?: string } = {},
 ): Promise<TelegramEditorialDraftRow[]> {
   const pageSize = options.pageSize || TELEGRAM_POST_PAGE_SIZE;
   const maxPages = options.maxPages || TELEGRAM_POST_MAX_PAGES;
@@ -128,6 +129,7 @@ export async function loadTelegramEditorialDraftRows(
       .from("posts")
       .select("id,offer_id,channel,status,content,created_at,posted_at,external_id,offers(*)")
       .eq("channel", "telegram");
+    if (options.userId) query = query.eq("user_id", options.userId);
     if (options.createdAfter && typeof query.gte === "function") query = query.gte("created_at", options.createdAfter);
     const { data, error } = await query
       .order("created_at", { ascending: true })
@@ -144,6 +146,7 @@ export async function loadTelegramEditorialDraftRows(
 async function loadProtectedTelegramOfferIds(
   client: { from: (table: string) => any },
   offerIds: readonly string[],
+  userId?: string,
 ): Promise<Set<string>> {
   if (offerIds.length === 0) return new Set();
   const protectedOfferIds = new Set<string>();
@@ -154,6 +157,7 @@ async function loadProtectedTelegramOfferIds(
       .from("posts")
       .select("offer_id,status,posted_at,external_id")
       .eq("channel", "telegram");
+    if (userId) query = query.eq("user_id", userId);
     if (typeof query.in !== "function") return protectedOfferIds;
     query = query.in("offer_id", [...offerIds]);
     const { data, error } = await query.range(from, to);
@@ -167,11 +171,11 @@ async function loadProtectedTelegramOfferIds(
   throw new Error(`Telegram publication evidence pagination exceeded technical maxPages=${TELEGRAM_POST_MAX_PAGES}`);
 }
 
-export async function loadEditorialTop30TelegramSelection(client: { from: (table: string) => any }, now = new Date()): Promise<TelegramEditorialSelection> {
+export async function loadEditorialTop30TelegramSelection(client: { from: (table: string) => any }, now = new Date(), userId?: string): Promise<TelegramEditorialSelection> {
   const createdAfter = new Date(now.getTime() - TELEGRAM_EDITORIAL_WINDOW_MS).toISOString();
-  const rows = await loadTelegramEditorialDraftRows(client, { createdAfter });
+  const rows = await loadTelegramEditorialDraftRows(client, { createdAfter, userId });
   const candidateOfferIds = [...new Set(rows.filter((post) => post.status === "draft").map((post) => post.offer_id))];
-  const historicallyProtectedOfferIds = await loadProtectedTelegramOfferIds(client, candidateOfferIds);
+  const historicallyProtectedOfferIds = await loadProtectedTelegramOfferIds(client, candidateOfferIds, userId);
   return selectEditorialTop30TelegramSelection(rows, now, historicallyProtectedOfferIds);
 }
 

@@ -6,6 +6,19 @@ export type TelegramEditorialPostCandidate = {
   created_at: string;
 };
 
+export type TelegramAutomationSetting = {
+  user_id?: string | null;
+  value?: { telegram_automation_enabled?: boolean } | null;
+};
+
+export function selectEnabledTelegramAutomationUserIds(
+  settings: readonly TelegramAutomationSetting[],
+): string[] {
+  return [...new Set(settings
+    .filter((setting) => Boolean(setting.user_id) && setting.value?.telegram_automation_enabled === true)
+    .map((setting) => setting.user_id as string))];
+}
+
 export function buildTelegramEditorialPublicationPlan(
   posts: readonly TelegramEditorialPostCandidate[],
   selectedOfferIds: readonly string[],
