@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
 import { advanceCycleCheckpoint, loadCycleCheckpoint } from "@/lib/ai/official/official-ai-cycle-checkpoint";
+import { hasFacebookEnv } from "@/lib/env";
 import { publishOfficialPost } from "@/core/publication";
 import { createOfficialPublicationServiceDependencies } from "@/lib/publication/official/create-official-publication-service";
 
@@ -26,7 +27,9 @@ interface GenerateAIRequest {
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
 
 function resolveOfficialAIChannels(): readonly OfficialAIChannel[] {
-  return ["telegram", "whatsapp"];
+  return hasFacebookEnv()
+    ? ["telegram", "instagram", "whatsapp", "facebook"]
+    : ["telegram", "instagram", "whatsapp"];
 }
 
 /**
