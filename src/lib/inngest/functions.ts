@@ -134,7 +134,10 @@ export const publishTelegramEditorialTop30 = inngest.createFunction(
           reason: { code: "EDITORIAL_TOP30_AUTOMATION" },
           metadata: { requestSource: "telegram-editorial-top30" }
         };
-        results.push(await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, post.user_id)));
+        results.push(await step.run(`publish-official-post:${commandId}`, () => publishOfficialPost(
+          command,
+          createOfficialPublicationServiceDependencies(client, userId)
+        )));
       }
     }
     return { result: "completed", selectedEditorialTop30OfferIds: [...new Set(selectedEditorialTop30OfferIds)], planSize, results };
