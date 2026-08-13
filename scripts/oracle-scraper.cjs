@@ -1520,6 +1520,7 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       const response = await Promise.race([runShopeeOpenApiV1OfficialForScenario(scenarioId, {
         env,
         request: boundedRequest,
+        signal: controller.signal,
         includeDelta: false,
         includeAuxiliary: false,
       }), stageTimeout]);
