@@ -85,3 +85,9 @@ test('dubber normal chama análise e montagem antes da geração de copy', () =>
   assert.match(dubberSource, /const assembly = await analyzeAndAssemble/u);
   assert.ok(dubberSource.indexOf('analyzeAndAssemble') < dubberSource.indexOf('generateDubbingCopy(title, price, durationSecs'));
 });
+
+test('montagem sem áudio prepara vídeo para a dublagem posterior', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'video-auto-assembly.cjs'), 'utf8');
+  assert.match(source, /concat=n=\$\{plan\.segments\.length\}:v=1:a=0\[vout\]/u);
+  assert.match(source, /'-an'/u);
+});

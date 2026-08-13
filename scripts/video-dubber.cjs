@@ -10,7 +10,6 @@ const {
   buildFinalRenderPlan,
   createJobWorkspace,
   getMediaInfo,
-  shouldRegenerateSpeech,
 } = require('./video-auto-assembly.cjs');
 
 // Se o edge-tts não estiver no PATH global do sistema, usaremos este atalho validado:
@@ -55,6 +54,10 @@ const UNSUPPORTED_DUBBING_CLAIMS = [
   /\bdur(?:a|abilidade|ável)/iu,
   /\b(?:superior|alta|excelente)\s+qualidade\b/iu,
   /\b(?:confortável|conforto|confort|eficiente|eficiência)\b/iu,
+  /\bcompre\b/iu,
+  /\b(?:ideal|perfeito|perfeita)\s+para\b/iu,
+  /\b(?:para\s+ter|ter\s+um(?:a)?\s+(?:look|resultado|benefício))\b/iu,
+  /\b(?:look|visual)\s+(?:moderno|moderna)\b/iu,
 ];
 
 const SPECIFIC_DUBBING_FACTS = [
@@ -173,6 +176,7 @@ function extractDubbingFacts(title) {
   const category = [
     ['calça', 'uma calça', 'compor looks do dia a dia', 'ter uma peça para diferentes combinações'],
     ['mixer', 'um mixer', 'preparar e triturar alimentos', 'deixar o preparo mais prático'],
+    ['air fryer', 'uma Air Fryer', 'preparar alimentos', 'ter um eletrodoméstico para a cozinha'],
     ['potes', 'um conjunto de potes de vidro herméticos', 'organizar e armazenar alimentos', 'deixar os alimentos visíveis e a cozinha mais organizada'],
     ['tênis', 'um tênis casual', 'compor produções do dia a dia', 'combinar com diferentes looks casuais'],
     ['camisetas', 'um kit de camisetas', 'montar opções para o dia a dia', 'ter peças básicas para variar as combinações'],
@@ -190,6 +194,9 @@ function extractDubbingFacts(title) {
   }
   else if (/\bcalça\b|\bpantalona\b/iu.test(normalized)) {
     features = [/pantalona/iu.test(normalized) ? 'pantalona' : null, /bolso/iu.test(normalized) ? 'bolso' : null, /cintura alta/iu.test(normalized) ? 'cintura alta' : null].filter(Boolean);
+  }
+  else if (/air fryer/iu.test(normalized)) {
+    features = [];
   }
   else if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
     const quantityMatch = normalized.match(/\b(\d+)\s+potes?/iu);
@@ -232,9 +239,10 @@ function buildFallbackDubbingScript(title, durationSecs = 15) {
   if (facts.key === 'torneira' && facts.features.includes('bica móvel')) detail = ` O modelo tem ${facts.features.includes('gourmet') ? 'acabamento gourmet e ' : ''}bica móvel.`;
   if (facts.key === 'aspirador' && facts.features.length) detail = ` O modelo tem ${facts.features.filter((feature) => feature !== 'portátil').join(' e ')}.`;
   if (facts.key === 'calça' && facts.features.length) detail = ` A peça tem ${facts.features.join(' e ')}.`;
-  if (!['calça', 'mixer', 'potes', 'tênis', 'camisetas', 'cafeteira', 'parafusadeira', 'ferramentas', 'torneira', 'aspirador'].includes(facts.key)) {
+  if (!['calça', 'mixer', 'air fryer', 'potes', 'tênis', 'camisetas', 'cafeteira', 'parafusadeira', 'ferramentas', 'torneira', 'aspirador'].includes(facts.key)) {
     detail = ' O título apresenta este produto para você conferir os detalhes.';
   }
+  if (facts.key === 'produto') throw new Error('Identidade do produto insuficiente para gerar roteiro factual.');
   const categoryLabel = facts.category.replace(/^um |^uma /iu, '');
   if (Number(durationSecs) < 13) {
     return `Olha essa ${categoryLabel}.${detail} Você encontra na Shopee. Acesse o link na publicação.`;
@@ -325,6 +333,46 @@ function sanitizeDubbingScript(script, title, durationSecs = 15) {
   return safe ? cleaned : buildFallbackDubbingScript(title, durationSecs);
 }
 
+function removeDubbingCta(script) {
+  return String(script || '')
+    .replace(/\s*Você encontra na Shopee\. Acesse o link na publicação\.?\s*$/iu, '')
+    .trim();
+}
+
+function buildTtsFitCandidates(script, title, maxDuration) {
+  const candidates = [String(script || '').trim()];
+  try {
+    candidates.push(buildFallbackDubbingScript(title, Math.min(Number(maxDuration) || 12, 12)));
+  } catch {
+    // Fallback factual indisponível: fitting permanece fechado.
+  }
+  candidates.push(removeDubbingCta(candidates[candidates.length - 1]));
+  try {
+    const facts = extractDubbingFacts(title);
+    if (facts.key === 'produto') throw new Error('Identidade insuficiente.');
+    const identity = facts.category.replace(/^um |^uma /iu, '');
+    candidates.push(`Olha essa ${identity}.`);
+  } catch {
+    // Sem identidade, fitting permanece fechado.
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+async function fitDubbingScriptToDuration(script, title, maxDuration, measureTtsDuration, maxAttempts = 3) {
+  if (typeof measureTtsDuration !== 'function') throw new TypeError('measureTtsDuration obrigatório.');
+  const limit = Math.max(1, Math.floor(Number(maxAttempts) || 3));
+  const candidates = buildTtsFitCandidates(script, title, maxDuration);
+  let lastDuration = null;
+  for (let index = 0; index < Math.min(limit, candidates.length); index += 1) {
+    const duration = await measureTtsDuration(candidates[index]);
+    lastDuration = typeof duration === 'number' ? duration : Number.NaN;
+    if (Number.isFinite(lastDuration) && lastDuration > 0 && lastDuration <= Number(maxDuration)) {
+      return { text: candidates[index], duration: lastDuration, attempts: index + 1 };
+    }
+  }
+  throw new Error(`TTS_FIT_FAILED: roteiro excede ${Number(maxDuration).toFixed(2)}s após ${Math.min(limit, candidates.length)} tentativas (última duração: ${Number.isFinite(lastDuration) ? lastDuration.toFixed(2) : 'indisponível'}s).`);
+}
+
 // --- ETAPA 1: Gerar roteiro persuasivo com gênero correto ---
 async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MASCULINO', visualPlan = null) {
   const apiKey = process.env.GROQ_API_KEY;
@@ -399,19 +447,16 @@ function mergeAudioVideo(videoPath, audioPath, outputPath, finalDuration) {
       .input(videoPath)
       .input(audioPath);
     const duration = Number(finalDuration);
-    if (Number.isFinite(duration) && duration > 0) {
-      command.complexFilter(`[0:v]trim=duration=${duration},setpts=PTS-STARTPTS[vout]`);
-    }
     command.outputOptions([
-        Number.isFinite(duration) && duration > 0 ? '-map [vout]' : '-map 0:v',
+        Number.isFinite(duration) && duration > 0 ? '-t' : null,
+        Number.isFinite(duration) && duration > 0 ? String(duration) : null,
+        '-map 0:v',
         '-map 1:a',
-        '-c:v libx264',
-        '-preset medium',
-        '-crf 18',
+        '-c:v copy',
         '-c:a aac',
         '-b:a 128k',
         '-movflags +faststart'
-      ])
+      ].filter(Boolean))
       .save(outputPath)
       .on('end', resolve)
       .on('error', reject);
@@ -502,46 +547,19 @@ async function processShopeeVideoDubbing(videoUrl, title, price, options = {}) {
     copy = copy.replace(/Chopí/gi, 'Shopee');
     let ttsText = normalizeSpeechForTTS(copy);
 
-    // 5. Gerar áudio inicial (sem ajuste de rate) com pitch +5Hz para entusiasmo
+    // 5. Ajustar texto para TTS sem acelerar a voz.
     const PITCH = '+10Hz';
-    console.log(`[Job ${jobId}] Gerando áudio TTS inicial (pitch: ${PITCH})...`);
-    await generateTTS(ttsText, audioPath, '+0%', PITCH);
-
-    // 6. Medir duração do áudio gerado
-    const audioDuration = await getAudioDuration(audioPath);
-    let finalAudioDuration = audioDuration;
-    console.log(`[Job ${jobId}] Áudio inicial: ${audioDuration ? audioDuration.toFixed(1) : '?'}s | Vídeo: ${durationSecs}s`);
-
-    // 7. Se temos a duração, calcular rate exato e regenerar
-    if (audioDuration !== null) {
-      if (shouldRegenerateSpeech(audioDuration, durationSecs)) {
-        const rate = calculateRateAdjustment(audioDuration, durationSecs);
-        console.log(`[Job ${jobId}] Diferença: ${((audioDuration - durationSecs) > 0 ? '+' : '')}${(audioDuration - durationSecs).toFixed(1)}s. Ajustando rate para: ${rate}`);
-
-        try { fs.unlinkSync(audioPath); } catch(e) {}
-        await generateTTS(ttsText, audioPath, rate, PITCH);
-
-        finalAudioDuration = await getAudioDuration(audioPath);
-        console.log(`[Job ${jobId}] ✅ Áudio ajustado: ${finalAudioDuration ? finalAudioDuration.toFixed(1) : '?'}s (rate: ${rate})`);
-        if (finalAudioDuration !== null && shouldRegenerateSpeech(finalAudioDuration, durationSecs)) {
-          console.log(`[Job ${jobId}] Regenerando roteiro factual mais curto para caber na montagem...`);
-          copy = buildFallbackDubbingScript(title, durationSecs);
-          ttsText = normalizeSpeechForTTS(copy);
-          try { fs.unlinkSync(audioPath); } catch (e) {}
-          await generateTTS(ttsText, audioPath, '+0%', PITCH);
-          finalAudioDuration = await getAudioDuration(audioPath);
-        }
-        if (finalAudioDuration !== null && shouldRegenerateSpeech(finalAudioDuration, durationSecs)) {
-          throw new Error(`TTS excede a duração útil após regeneração: ${finalAudioDuration.toFixed(2)}s > ${durationSecs.toFixed(2)}s`);
-        }
-      } else {
-        console.log(`[Job ${jobId}] ✅ Áudio cabe na duração da montagem (${audioDuration.toFixed(1)}s/${durationSecs.toFixed(1)}s).`);
-      }
-    }
-
-    if (finalAudioDuration === null) {
-      throw new Error('Não foi possível medir a duração real do TTS. Renderização interrompida para evitar cauda ou corte de áudio.');
-    }
+    console.log(`[Job ${jobId}] Ajustando texto para TTS (pitch: ${PITCH})...`);
+    const fit = await fitDubbingScriptToDuration(copy, title, durationSecs, async (candidate) => {
+      ttsText = normalizeSpeechForTTS(candidate);
+      try { fs.unlinkSync(audioPath); } catch (e) {}
+      await generateTTS(ttsText, audioPath, '+0%', PITCH);
+      return getAudioDuration(audioPath);
+    }, 3);
+    copy = fit.text;
+    ttsText = normalizeSpeechForTTS(copy);
+    const finalAudioDuration = fit.duration;
+    console.log(`[Job ${jobId}] ✅ TTS ajustado em ${fit.attempts} tentativa(s): ${finalAudioDuration.toFixed(1)}s/${durationSecs.toFixed(1)}s.`);
     const finalRender = buildFinalRenderPlan({
       visualDuration: durationSecs,
       audioDuration: finalAudioDuration,
@@ -592,4 +610,5 @@ module.exports = {
   sanitizeDubbingScript,
   isSafeDubbingScript,
   normalizeSpeechForTTS,
+  fitDubbingScriptToDuration,
 };

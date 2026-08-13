@@ -139,17 +139,12 @@ function renderAutoAssembly(inputPath, outputPath, plan, { hasAudio = true, fps 
       const videoLabel = `v${index}`;
       filters.push(`[0:v]trim=start=${segment.start}:end=${segment.end},setpts=PTS-STARTPTS[${videoLabel}]`);
       concatLabels.push(`[${videoLabel}]`);
-      if (hasAudio) {
-        const audioLabel = `a${index}`;
-        filters.push(`[0:a]atrim=start=${segment.start}:end=${segment.end},asetpts=PTS-STARTPTS[${audioLabel}]`);
-        concatLabels.push(`[${audioLabel}]`);
-      }
     });
     const concatInputs = concatLabels.join('');
-    filters.push(`${concatInputs}concat=n=${plan.segments.length}:v=1:a=${hasAudio ? 1 : 0}[vout]${hasAudio ? '[aout]' : ''}`);
+    filters.push(`${concatInputs}concat=n=${plan.segments.length}:v=1:a=0[vout]`);
     command
       .complexFilter(filters)
-      .outputOptions(['-map [vout]', ...(hasAudio ? ['-map [aout]'] : []), '-c:v libx264', '-preset medium', '-crf 18', ...(fps ? ['-r', String(fps)] : []), ...(hasAudio ? ['-c:a aac', '-b:a 128k'] : []), '-movflags +faststart'])
+      .outputOptions(['-map [vout]', '-c:v libx264', '-preset medium', '-crf 18', ...(fps ? ['-r', String(fps)] : []), '-an', '-movflags +faststart'])
       .on('end', () => resolve(outputPath))
       .on('error', reject)
       .save(outputPath);
