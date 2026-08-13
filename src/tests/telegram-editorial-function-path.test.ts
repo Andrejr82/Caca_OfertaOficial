@@ -56,12 +56,15 @@ describe("Telegram editorial function path", () => {
   });
 
   it("reaches publishOfficialPost with a mocked transport path", async () => {
+    const stepRun = vi.fn((_name: string, work: () => unknown) => work());
     const result = await (publishTelegramEditorialTop30 as any).fn({
-      step: { run: (_name: string, work: () => unknown) => work() },
+      step: { run: stepRun },
     });
 
     expect(result).toMatchObject({ result: "completed", planSize: 1 });
     expect(approveOfficialOfferForPublication).toHaveBeenCalledOnce();
     expect(publishOfficialPost).toHaveBeenCalledOnce();
+    expect(stepRun).toHaveBeenLastCalledWith(expect.stringContaining("publish-official-post:telegram-editorial:post-1"), expect.any(Function));
+    expect(() => JSON.stringify(result)).not.toThrow();
   });
 });
