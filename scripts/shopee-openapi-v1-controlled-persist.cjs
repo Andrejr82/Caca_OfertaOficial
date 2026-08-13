@@ -22,15 +22,13 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
 
 const CONTROLLED_PERSIST_SCENARIO = 'casa_cozinha_editorial';
 const BLOCKED_SCENARIO = 'grandes_ofertas_editorial';
-const CONTROLLED_PERSIST_MAX_CANDIDATES = 5;
 const CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES = 5;
-const CONTROLLED_PERSIST_SCAN_LIMIT = CONTROLLED_PERSIST_MAX_CANDIDATES + CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES;
 
 function isOne(value) {
   return String(value ?? '').trim() === '1';
 }
 
-function getControlledPersistDecision(scenarioId, env = process.env) {
+function getControlledPersistDecision(scenarioId, env = process.env, { maxCandidates } = {}) {
   const normalizedScenario = String(scenarioId || '').trim();
 
   if (normalizedScenario === BLOCKED_SCENARIO) {
@@ -61,11 +59,16 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
     return { enabled: false, reason: 'publish_flags_required' };
   }
 
+  const operationalLimit = Number(maxCandidates);
+  if (!Number.isInteger(operationalLimit) || operationalLimit < 1) {
+    return { enabled: false, reason: 'controlled_persist_limit_missing' };
+  }
+
   return {
     enabled: true,
     mode: 'controlled-persist',
     scenarioId: normalizedScenario,
-    maxCandidates: CONTROLLED_PERSIST_MAX_CANDIDATES,
+    maxCandidates: operationalLimit,
   };
 }
 
@@ -73,7 +76,9 @@ function stableId(prefix, value) {
   return `${prefix}-${crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 32)}`;
 }
 
-function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCandidates = CONTROLLED_PERSIST_MAX_CANDIDATES, maxExistingCandidates = CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES } = {}) {
+function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCandidates, maxExistingCandidates = CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES } = {}) {
+  const newLimit = Number(maxNewCandidates);
+  if (!Number.isInteger(newLimit) || newLimit < 1) return [];
   const existing = new Set((Array.isArray(existingItemIds) ? existingItemIds : []).map((itemId) => String(itemId).trim()).filter(Boolean));
   const selected = [];
   let newCount = 0;
@@ -85,16 +90,16 @@ function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCa
       if (existingCount >= maxExistingCandidates) continue;
       existingCount += 1;
     } else {
-      if (newCount >= maxNewCandidates) continue;
+      if (newCount >= newLimit) continue;
       newCount += 1;
     }
     selected.push(product);
-    if (newCount >= maxNewCandidates && existingCount >= maxExistingCandidates) break;
+    if (newCount >= newLimit && existingCount >= maxExistingCandidates) break;
   }
   return selected;
 }
 
-function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlationId, requestedAt, existingItemIds = [] }) {
+function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlationId, requestedAt, existingItemIds = [], maxNewCandidates }) {
   const normalizedScenario = String(scenarioId || '').trim();
 
   if (!CONTROLLED_PERSIST_SCENARIOS.has(normalizedScenario)) {
@@ -109,7 +114,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
   // Keep its correlation id identical to discovery_runs and explainability.
   const v1CorrelationId = correlationId;
 
-  const boundedTop = selectControlledPersistCandidates(top, { existingItemIds });
+  const boundedTop = selectControlledPersistCandidates(top, { existingItemIds, maxNewCandidates });
   return boundedTop.map((product, index) => {
     const originalIndex = Array.isArray(top) ? top.indexOf(product) : -1;
     const rankingPosition = originalIndex >= 0 ? originalIndex + 1 : index + 1;
@@ -216,9 +221,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
 module.exports = {
   CONTROLLED_PERSIST_SCENARIO,
   CONTROLLED_PERSIST_SCENARIOS,
-  CONTROLLED_PERSIST_MAX_CANDIDATES,
   CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES,
-  CONTROLLED_PERSIST_SCAN_LIMIT,
   getControlledPersistDecision,
   selectControlledPersistCandidates,
   buildControlledPersistIngestions,

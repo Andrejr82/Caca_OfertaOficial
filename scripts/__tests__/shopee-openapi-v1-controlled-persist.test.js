@@ -3,8 +3,9 @@ const {
   getControlledPersistDecision,
   buildControlledPersistIngestions,
   selectControlledPersistCandidates,
-  CONTROLLED_PERSIST_MAX_CANDIDATES,
 } = require('../shopee-openapi-v1-controlled-persist.cjs');
+
+const CONTROLLED_TEST_LIMIT = 5;
 
 const baseEnv = {
   SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true',
@@ -58,10 +59,26 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
 
     const selected = selectControlledPersistCandidates(top, {
       existingItemIds: ['9100', '9101', '9102', '9103', '9104'],
+      maxNewCandidates: CONTROLLED_TEST_LIMIT,
     });
 
     expect(selected).toHaveLength(10);
     expect(selected.slice(5).map((item) => item.itemId)).toEqual(['9105', '9106', '9107', '9108', '9109']);
+  });
+
+  it('respects an operational new-insert limit different from five', () => {
+    const top = Array.from({ length: 12 }, (_, index) => ({
+      itemId: String(9150 + index), shopId: String(9250 + index), productName: `Novo ${index}`,
+      offerLink: `https://s.shopee.com.br/limit-${index}`, imageUrl: `https://cf.shopee.com.br/limit-${index}.jpg`,
+      price: 20 + index, productCatIds: ['100010'], score: 100 - index,
+    }));
+    const selected = buildControlledPersistIngestions(top, {
+      scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-test', correlationId: 'corr-limit',
+      requestedAt: '2026-08-08T00:00:00.000Z', maxNewCandidates: 7,
+    });
+
+    expect(selected).toHaveLength(7);
+    expect(selected.at(-1).candidate.sourceItemId).toBe('9156');
   });
 
   it('keeps ranking payload and deterministic identity unchanged for new offers', () => {
@@ -71,7 +88,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       price: 49.9, priceMin: 49.9, priceMax: 59.9, productCatIds: ['100010'],
       score: 82, rankingV1: { score: 82, reasons: ['vendas'] },
     };
-    const args = { scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-test', correlationId: 'corr-1', requestedAt: '2026-08-08T00:00:00.000Z' };
+    const args = { scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-test', correlationId: 'corr-1', requestedAt: '2026-08-08T00:00:00.000Z', maxNewCandidates: CONTROLLED_TEST_LIMIT };
     const first = buildControlledPersistIngestions([product], args)[0];
     const second = buildControlledPersistIngestions([product], args)[0];
 
@@ -88,7 +105,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     }));
     const ingestions = buildControlledPersistIngestions(top, {
       scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-test', correlationId: 'corr-rank',
-      requestedAt: '2026-08-08T00:00:00.000Z', existingItemIds: ['9400', '9401', '9402', '9403', '9404', '9405'],
+      requestedAt: '2026-08-08T00:00:00.000Z', existingItemIds: ['9400', '9401', '9402', '9403', '9404', '9405'], maxNewCandidates: CONTROLLED_TEST_LIMIT,
     });
 
     expect(ingestions).toHaveLength(6);
@@ -107,11 +124,11 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     expect(Array.from(CONTROLLED_PERSIST_SCENARIOS)).toEqual(expectedScenarios);
 
     for (const scenario of expectedScenarios) {
-      expect(getControlledPersistDecision(scenario, baseEnv)).toEqual({
+      expect(getControlledPersistDecision(scenario, baseEnv, { maxCandidates: CONTROLLED_TEST_LIMIT })).toEqual({
         enabled: true,
         mode: 'controlled-persist',
         scenarioId: scenario,
-        maxCandidates: CONTROLLED_PERSIST_MAX_CANDIDATES,
+        maxCandidates: CONTROLLED_TEST_LIMIT,
       });
     }
   });
@@ -140,7 +157,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
   });
 
   it('allows posts generation with NO_POSTS=0 while publication remains blocked', () => {
-    expect(getControlledPersistDecision('casa_cozinha_editorial', { ...baseEnv, NO_POSTS: '0' }))
+    expect(getControlledPersistDecision('casa_cozinha_editorial', { ...baseEnv, NO_POSTS: '0' }, { maxCandidates: CONTROLLED_TEST_LIMIT }))
       .toMatchObject({ enabled: true, mode: 'controlled-persist' });
   });
 
@@ -167,9 +184,10 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       tenantId: 'tenant-test',
       correlationId: 'abc-123',
       requestedAt: '2026-08-08T00:00:00.000Z',
+      maxNewCandidates: CONTROLLED_TEST_LIMIT,
     });
 
-    expect(ingestions).toHaveLength(CONTROLLED_PERSIST_MAX_CANDIDATES);
+    expect(ingestions).toHaveLength(CONTROLLED_TEST_LIMIT);
 
     expect(ingestions.map((item) => item.candidate.sourceItemId)).toEqual(['1000', '1001', '1002', '1003', '1004']);
     for (const ingestion of ingestions) {
@@ -202,7 +220,8 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       tenantId: 'tenant-test',
       correlationId: 'few-new',
       requestedAt: '2026-08-08T00:00:00.000Z',
-    })).toHaveLength(CONTROLLED_PERSIST_MAX_CANDIDATES);
+      maxNewCandidates: CONTROLLED_TEST_LIMIT,
+    })).toHaveLength(CONTROLLED_TEST_LIMIT);
   });
 
   it('não persiste priceMax como originalPrice em payload V1', () => {
@@ -211,7 +230,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       productLink: 'https://shopee.com.br/product/9001/81255167', offerLink: 'https://s.shopee.com.br/range',
       imageUrl: 'https://cf.shopee.com.br/range.jpg', price: 17.05, priceMin: 17.05, priceMax: 90.20,
       priceDiscountRate: 41, originalPrice: 90.20, productCatIds: ['100010'],
-    }], { scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-1', correlationId: 'corr-1', requestedAt: '2026-08-09T00:00:00.000Z' });
+    }], { scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-1', correlationId: 'corr-1', requestedAt: '2026-08-09T00:00:00.000Z', maxNewCandidates: CONTROLLED_TEST_LIMIT });
     expect(ingestion.candidate.currentPrice).toBe(17.05);
     expect(ingestion.candidate.originalPrice).toBeNull();
     expect(ingestion.candidate.persistenceMetadata.payload_v1.originalPrice).toBeNull();

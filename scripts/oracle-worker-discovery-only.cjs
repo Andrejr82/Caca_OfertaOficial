@@ -676,11 +676,11 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         const freshness = filterFreshCandidates('Shopee', v1Candidates, history);
         funnel.count('afterNovelty', freshness.accepted.length).count('afterClassification', freshness.accepted.length).count('queueSelected', freshness.accepted.length);
         for (const item of freshness.rejected || []) funnel.reject(item?.reason || 'freshness_rejected');
-        const queue = { selected: freshness.accepted, skipped: [], deferred: [], limits: { engine: 'shopee_openapi_v1', persistenceCap: null, selection: 'all_v1_rule_survivors' } };
+        const queue = { selected: freshness.accepted, skipped: [], deferred: [], limits: { engine: 'shopee_openapi_v1', persistenceCap: null, maxPerMarketplace: Number(copyQueueOptions?.maxPerMarketplace || 0), selection: 'all_v1_rule_survivors' } };
         funnel.recordQueueSelection({ groupKeyVersion: 'shopee-openapi-v1', candidatesReceived: freshness.accepted.length, candidatesSelected: freshness.accepted.length });
         let persistedAll = { accepted: 0, inserted: 0, updated: 0, ignored: 0, offerIds: [] };
         if (freshness.accepted.length > 0 && typeof persistShopee === 'function') {
-          persistedAll = await persistShopee({ discovery: { ...discovery, top: top.filter((product) => freshness.accepted.some((candidate) => candidate.sourceItemId === String(product.itemId || ''))) }, candidates: freshness.accepted, marketplace, scenario, tenantId, correlationId, requestedAt });
+          persistedAll = await persistShopee({ discovery: { ...discovery, top: top.filter((product) => freshness.accepted.some((candidate) => candidate.sourceItemId === String(product.itemId || ''))) }, candidates: freshness.accepted, marketplace, scenario, tenantId, correlationId, requestedAt, limit: queue.limits.maxPerMarketplace });
           funnel.count('rpcSent', Math.max(0, freshness.accepted.length - Number(persistedAll?.rpcSent || 0))).mergeRpc(persistedAll || {});
           for (const offerId of persistedAll?.offerIds || []) if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
         }
