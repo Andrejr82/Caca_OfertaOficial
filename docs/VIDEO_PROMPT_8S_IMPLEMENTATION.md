@@ -46,7 +46,7 @@ O preço do vídeo usa uma forma mais compacta. Exemplo:
 - forma longa: `quatrocentos e setenta e um reais e oitenta centavos`
 - forma curta: `quatrocentos e setenta e um e oitenta`
 
-A forma longa permanece disponível no módulo para usos futuros.
+A forma longa permanece disponível no módulo para usos futuros por meio de `formatLongPriceForSpeech()`.
 
 ### 4. Limite de palavras
 
@@ -156,6 +156,22 @@ Nesta primeira versão, **não é imposto um bloqueio rígido de 8 segundos no b
 
 O padrão de 8 segundos é aplicado no próprio prompt. Uma etapa futura poderá atualizar a interface e aplicar uma tolerância específica, por exemplo de 7 a 10 segundos, para novos vídeos.
 
+## Testes automatizados
+
+O arquivo `src/tests/videos/gemini-prompt.test.ts` foi atualizado para refletir o novo contrato e cobre:
+
+- prompt estruturado de 8 segundos;
+- uso prioritário de `short_name`;
+- preço falável curto;
+- limite máximo de 22 palavras no caso representativo;
+- remoção de tensão elétrica em título sem `short_name`;
+- compactação automática de títulos longos;
+- cenário e interação específicos para cozinha e tecnologia;
+- instrução para concluir a fala antes do fim do vídeo;
+- manutenção da forma longa do preço para usos futuros.
+
+O projeto possui `npm run test`, `npm run typecheck`, `npm run build` e `npm run verify` configurados em `package.json`.
+
 ## Critérios de aceite
 
 - O prompt deve declarar vídeo de 8 segundos.
@@ -169,16 +185,17 @@ O padrão de 8 segundos é aplicado no próprio prompt. Uma etapa futura poderá
 - A fala deve ser instruída a terminar antes do fim do vídeo.
 - O contrato público de `buildGeminiVideoPrompt(offer)` não deve mudar.
 - O backend de importação não deve exigir alterações.
+- Os testes do gerador devem validar o novo contrato em vez do template legado.
 
 ## Arquivos alterados nesta implementação
 
 - `docs/VIDEO_PROMPT_8S_IMPLEMENTATION.md`
 - `src/lib/videos/gemini-prompt.ts`
+- `src/tests/videos/gemini-prompt.test.ts`
 
 ## Próximos passos possíveis
 
 - Gerar `short_name` automaticamente na ingestão de ofertas quando o marketplace não fornecer um nome adequado.
-- Criar testes unitários para nomes longos, preços com e sem centavos e diferentes categorias.
 - Registrar no metadata a contagem de palavras e a versão de template usada.
 - Atualizar a orientação visual da página para destacar 8 segundos como duração recomendada.
 - Criar presets futuros de 8, 15 e 30 segundos mantendo a mesma arquitetura.
