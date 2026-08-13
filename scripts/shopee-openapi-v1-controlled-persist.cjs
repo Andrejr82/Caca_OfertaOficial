@@ -22,6 +22,7 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
 
 const CONTROLLED_PERSIST_SCENARIO = 'casa_cozinha_editorial';
 const BLOCKED_SCENARIO = 'grandes_ofertas_editorial';
+const CONTROLLED_PERSIST_MAX_CANDIDATES = 5;
 
 function isOne(value) {
   return String(value ?? '').trim() === '1';
@@ -62,6 +63,7 @@ function getControlledPersistDecision(scenarioId, env = process.env) {
     enabled: true,
     mode: 'controlled-persist',
     scenarioId: normalizedScenario,
+    maxCandidates: CONTROLLED_PERSIST_MAX_CANDIDATES,
   };
 }
 
@@ -84,7 +86,8 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
   // Keep its correlation id identical to discovery_runs and explainability.
   const v1CorrelationId = correlationId;
 
-  return (Array.isArray(top) ? top : []).map((product, index) => {
+  const boundedTop = (Array.isArray(top) ? top : []).slice(0, CONTROLLED_PERSIST_MAX_CANDIDATES);
+  return boundedTop.map((product, index) => {
     const sourceItemId = String(product.itemId || '').trim();
     const shopId = String(product.shopId || '').trim();
     const title = String(product.productName || product.title || '').trim();
@@ -188,6 +191,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
 module.exports = {
   CONTROLLED_PERSIST_SCENARIO,
   CONTROLLED_PERSIST_SCENARIOS,
+  CONTROLLED_PERSIST_MAX_CANDIDATES,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
 };

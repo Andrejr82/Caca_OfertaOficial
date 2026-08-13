@@ -2,6 +2,7 @@
 
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
 const { runOracleScraperShopeeShadowLocal, persistDiscoveryIngestionV1 } = require('../oracle-scraper.cjs');
+const { CONTROLLED_PERSIST_MAX_CANDIDATES } = require('../shopee-openapi-v1-controlled-persist.cjs');
 
 describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
   it('bloqueia o persist genérico antes de qualquer chamada quando write flags estão ativas', async () => {
@@ -76,7 +77,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       },
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
-    expect(persisted).toHaveLength(35);
+    expect(persisted).toHaveLength(CONTROLLED_PERSIST_MAX_CANDIDATES);
     expect(persisted.every((item) => /^[0-9a-f-]{36}$/.test(item.correlationId))).toBe(true);
     expect(persisted.every((item) => item.candidate.persistenceMetadata.mode === 'controlled-persist')).toBe(true);
     expect(result.persistCalls).toBe(1);
