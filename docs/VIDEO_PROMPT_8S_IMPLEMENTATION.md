@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-Padronizar os prompts da página **Vídeos de ofertas** para gerar vídeos publicitários fotorrealistas de aproximadamente 8 segundos, com maior consistência visual da avatar e do produto e, principalmente, com uma locução curta o suficiente para não ser cortada pelo gerador.
+Padronizar os prompts da página **Vídeos de ofertas** para gerar vídeos publicitários fotorrealistas de aproximadamente 8 segundos, com consistência visual da avatar oficial, fidelidade ao produto e locução em português brasileiro natural, curta e integral.
 
 ## Fluxo atual
 
@@ -13,70 +13,183 @@ Padronizar os prompts da página **Vídeos de ofertas** para gerar vídeos publi
 5. O vídeo gerado é salvo no Google Drive e importado pela página.
 6. `POST /api/videos/jobs` recebe o prompt efetivamente utilizado e o persiste no job/metadata.
 
-A alteração permanece centralizada no builder de prompt para não duplicar regras na interface.
+A inteligência permanece centralizada no builder de prompt para não duplicar regras na interface.
 
-## Problema identificado
+## Contrato atual
 
-A implementação anterior concatenava título do produto, marketplace, preço por extenso e CTA em uma única locução. Em produtos com nomes comerciais longos, a fala ultrapassava o que cabe naturalmente em 8 segundos, causando aceleração, omissão ou corte das últimas palavras.
+```text
+src/lib/videos/gemini-prompt.ts
+    ↓
+prompt realista de 8 segundos
+    ↓
+Avatar_Silvia oficial + preservação da identidade visual
+    ↓
+short_name prioritário
+    ↓
+remoção de especificações técnicas e códigos
+    ↓
+normalização linguística do nome falável
+    ↓
+preço monetário completo por extenso
+    ↓
+controle de até 22 palavras
+    ↓
+fallback de nome 8 → 6 → 4 → 3 palavras
+    ↓
+cena dinâmica por categoria
+    ↓
+lipsync + finalização antes dos 8s
 
-Além disso, títulos de marketplace carregam especificações técnicas e códigos de modelo que são úteis na ficha da oferta, mas pouco naturais para uma locução curta e podem aumentar o risco de pronúncia ruim e lipsync instável.
+src/tests/videos/gemini-prompt.test.ts
+    ↓
+valida esse contrato
 
-## Estratégia adotada
+docs/VIDEO_PROMPT_8S_IMPLEMENTATION.md
+    ↓
+documenta toda a arquitetura
+```
 
-### 1. Duração alvo
+## Avatar oficial
 
-- Duração declarada no prompt: **8 segundos**.
-- A fala deve começar imediatamente.
-- A última palavra deve terminar antes do final do vídeo.
-- Reserva visual de aproximadamente 0,3 segundo após a última palavra.
+`Avatar_Silvia` é a referência visual oficial e obrigatória para os vídeos desta página. O operador deve fornecer ao gerador a imagem oficial correspondente a essa referência.
 
-### 2. Nome falável do produto
+O prompt determina a preservação rigorosa de:
 
-A locução usa `short_name` quando disponível. Se ele não existir, o sistema usa `product_name`.
+- identidade facial, tom de pele, cabelo e proporções corporais;
+- camiseta azul-marinho, calça jeans escura e tênis branco;
+- estampa original da camiseta;
+- texto **CAÇA OFERTA**;
+- chama, carrinho e etiqueta de desconto presentes na estampa.
 
-Antes de montar a fala, `normalizeTechnicalSpecsForSpeech()` remove especificações dispensáveis para a locução, preservando o núcleo comercial do nome do produto.
+O gerador não deve recriar, traduzir, reinterpretar ou substituir a marca da camiseta. Em especial, **CAÇA OFERTA não pode ser trocado por outro nome**.
 
-Exemplos removidos da fala:
+## Nome falável do produto
+
+A locução usa `short_name` quando disponível. Se ele não existir, utiliza `product_name`.
+
+O nome passa por três camadas antes de entrar na fala.
+
+### 1. Normalização técnica
+
+`normalizeTechnicalSpecsForSpeech()` remove informações dispensáveis para uma locução de 8 segundos, sem alterar os dados originais da oferta.
+
+Exemplos removidos:
 
 - capacidade e volume: `9,5L`, `500ml`;
 - potência e tensão: `1800W`, `127V`, `220V`, `bivolt`;
 - memória e armazenamento: `16GB`, `256GB`, `512GB`, `1TB`;
-- tela e resolução: `50\"`, `Full HD`, `4K`, `8K`, `HDR`, `LED`, `QLED`, `OLED`;
+- tela e resolução: `50"`, `Full HD`, `4K`, `8K`, `HDR`, `LED`, `QLED`, `OLED`;
 - conectividade: `Wi-Fi`, `Bluetooth`, `3G`, `4G`, `5G`;
 - frequência e outras unidades técnicas: `Hz`, `MHz`, `GHz`, `mAh`, `BTU`, `MP`;
 - descritores pouco úteis para 8 segundos, como `Painel Digital`.
 
-Em seguida, `simplifyCommercialNameForSpeech()` faz uma segunda limpeza exclusivamente comercial:
+### 2. Simplificação comercial
 
-- reduz redundâncias como `Fritadeira Air Fryer` para `Air Fryer`;
-- remove códigos técnicos alfanuméricos longos como `BAF95A`, `XJ900` e `SM-A556E`;
-- preserva linhas comerciais com número separado, como `iPhone 15`, `Galaxy A55` e `IdeaPad Slim 3`.
+`simplifyCommercialNameForSpeech()`:
 
-O nome completo do produto continua disponível para card, banco, publicação e demais fluxos. Essas normalizações afetam apenas a fala do vídeo.
+- reduz `Fritadeira Air Fryer` para `Air Fryer`;
+- remove códigos técnicos como `BAF95A`, `XJ900` e `SM-A556E`;
+- mantém o núcleo comercial reconhecível do produto.
 
-Para títulos ainda longos, a fala tenta versões com 8, 6 e 4 palavras do nome e possui um fallback mínimo de 3 palavras.
+### 3. Normalização linguística
 
-### 3. Preço falável curto
+`normalizeLinguisticSpeech()` corrige a forma falada sem alterar `product_name` ou `short_name` armazenados.
 
-O preço do vídeo usa uma forma mais compacta. Exemplo:
+Exemplos:
 
-- `R$ 471,80`
-- forma longa: `quatrocentos e setenta e um reais e oitenta centavos`
-- forma curta: `quatrocentos e setenta e um e oitenta`
+```text
+Parafusadeira Furadeira be lmpacto 2 Baterias 21V
+→ Parafusadeira e Furadeira de Impacto com duas baterias
+```
 
-A forma longa permanece disponível no módulo para usos futuros por meio de `formatLongPriceForSpeech()`.
+A camada também converte números que permanecerem no nome comercial para sua forma falada:
 
-### 4. Limite de palavras
+```text
+iPhone 15 → iPhone quinze
+IdeaPad Slim 3 → IdeaPad Slim três
+2 Baterias → duas baterias
+```
 
-A geração usa um teto de **22 palavras** para a locução principal de 8 segundos. O roteiro tenta primeiro uma versão comercial completa e, se exceder o limite, remove o gancho inicial e reduz progressivamente o nome falável do produto.
+O objetivo é impedir algarismos, abreviações técnicas e erros evidentes de marketplace na `FALA EXATA`.
 
-### 5. Prompt estruturado
+## Preço monetário completo
 
-O prompt final é dividido em blocos semânticos: PERSONAGEM, PRODUTO, CENA, ATUAÇÃO, CÂMERA, ÁUDIO E LIPSYNC, FALA EXATA, QUALIDADE e RESTRIÇÕES.
+O padrão oficial voltou a ser a forma monetária completa em português brasileiro.
 
-### 6. Inteligência visual preservada e ampliada
+```text
+R$ 123,90
+→ cento e vinte e três reais e noventa centavos
 
-As regras por categoria continuam válidas: produto em bancada para cozinha; produto nas mãos para tecnologia portátil; ambientes coerentes com cozinha, tecnologia, beleza e moda; TV/televisor usam cenário de tecnologia.
+R$ 471,80
+→ quatrocentos e setenta e um reais e oitenta centavos
+```
+
+A fala não utiliza mais a forma curta `cento e vinte e três e noventa`.
+
+`formatLongPriceForSpeech()` continua disponível e representa o mesmo formato monetário oficial usado pela locução.
+
+## Controle de 8 segundos
+
+A geração mantém teto de **22 palavras** para a locução principal.
+
+A ordem de tentativa é:
+
+1. gancho + nome + preço completo + CTA;
+2. nome + preço completo + CTA;
+3. redução progressiva do nome para 8, 6 e 4 palavras;
+4. fallback mínimo de 3 palavras com CTA reduzido.
+
+Como o preço completo possui mais palavras, ofertas com nomes maiores podem perder o gancho `Olha esse achado!` para preservar a fala integral dentro do limite.
+
+## Prompt estruturado
+
+O prompt final permanece dividido nos blocos:
+
+- PERSONAGEM;
+- PRODUTO;
+- CENA;
+- ATUAÇÃO;
+- CÂMERA;
+- ÁUDIO E LIPSYNC;
+- FALA EXATA;
+- QUALIDADE;
+- RESTRIÇÕES.
+
+A estrutura visual, câmera, atuação, cenas dinâmicas e timing de 8 segundos foram preservados.
+
+## Áudio e lipsync
+
+O prompt agora explicita que:
+
+- a voz é feminina adulta em português brasileiro;
+- todas as palavras devem ser pronunciadas em português correto;
+- todos os números presentes na fala devem ser pronunciados por extenso;
+- valores monetários usam `reais` e `centavos` quando aplicável;
+- algarismos, abreviações técnicas, símbolos e códigos não devem ser pronunciados;
+- nenhuma palavra pode ser cortada ou omitida;
+- a última palavra termina antes do fim do vídeo;
+- aproximadamente 0,3 segundo de imagem permanece após a última palavra.
+
+## Texto e identidade visual nas referências
+
+A regra antiga `Sem texto na tela` foi removida por conflitar com textos legítimos existentes nas imagens de referência.
+
+A regra oficial agora é:
+
+> **Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem.**
+
+Isso permite preservar a marca **CAÇA OFERTA** na camiseta e textos/logotipos reais do produto, ao mesmo tempo que continua proibindo legendas, preços escritos, overlays, elementos gráficos novos e marcas d'água.
+
+## Inteligência visual
+
+As regras por categoria continuam válidas:
+
+- cozinha: produto em bancada e cenário de cozinha;
+- tecnologia portátil: produto nas mãos;
+- TV/televisor e tecnologia: cenário tecnológico;
+- beleza: cenário clean/spa;
+- moda/calçados: cenário esportivo correspondente;
+- fallback: estúdio publicitário premium.
 
 ## Arquitetura do módulo
 
@@ -85,10 +198,10 @@ GeminiPromptOffer
   ↓
 numeroPorExtenso()
 precoPorExtenso()
-precoFalavelCurto()
   ↓
 normalizeTechnicalSpecsForSpeech()
 simplifyCommercialNameForSpeech()
+normalizeLinguisticSpeech()
 getSpeakableProductName()
 compactProductName()
 wordCount()
@@ -103,17 +216,24 @@ buildGeminiVideoPrompt()
 
 ## Exemplos
 
+### Parafusadeira
+
+```text
+Parafusadeira Furadeira be lmpacto 2 Baterias 21V
+→ Parafusadeira e Furadeira de Impacto com duas baterias
+```
+
+Com `R$ 123,90`, a fala utiliza:
+
+```text
+cento e vinte e três reais e noventa centavos
+```
+
 ### Air Fryer
 
 ```text
 Fritadeira Air Fryer Britânia BAF95A 9,5L Painel Digital 1800W
 → Air Fryer Britânia
-```
-
-Locução esperada:
-
-```text
-Olha esse achado! Air Fryer Britânia, por quinhentos e quarenta e nove reais. Confira na publicação!
 ```
 
 ### Smartphone
@@ -127,13 +247,13 @@ Smartphone Samsung Galaxy A55 256GB 5G Bluetooth
 
 ```text
 Apple iPhone 15 128GB 5G
-→ Apple iPhone 15
+→ Apple iPhone quinze
 ```
 
 ### TV
 
 ```text
-Smart TV Samsung 50\" 4K QLED HDR
+Smart TV Samsung 50" 4K QLED HDR
 → Smart TV Samsung
 ```
 
@@ -141,51 +261,59 @@ Smart TV Samsung 50\" 4K QLED HDR
 
 ```text
 Notebook Lenovo IdeaPad Slim 3 512GB 16GB Full HD Wi-Fi
-→ Notebook Lenovo IdeaPad Slim 3
+→ Notebook Lenovo IdeaPad Slim três
 ```
 
 ## Compatibilidade com o fluxo atual
 
 `VideosClient.tsx` continua chamando `buildGeminiVideoPrompt(selectedOffer)` sem mudança de contrato. `POST /api/videos/jobs` também não exige mudança e continua persistindo o prompt efetivamente utilizado.
 
-## Validação de duração
-
-Não é imposto um bloqueio rígido de 8 segundos no backend. O padrão de 8 segundos é aplicado no próprio prompt, preservando compatibilidade com vídeos legados e pequenas variações do gerador.
+Nenhum dado original da oferta é reescrito pela normalização de fala.
 
 ## Testes automatizados
 
 `src/tests/videos/gemini-prompt.test.ts` cobre:
 
-- estrutura de 8 segundos e limite de palavras;
-- prioridade de `short_name` e preço falável curto;
-- normalização de especificações técnicas de Air Fryer, smartphone, TV e notebook;
+- estrutura de 8 segundos e limite de 22 palavras;
+- referência oficial `Avatar_Silvia`;
+- preservação explícita de `CAÇA OFERTA` e da estampa da camiseta;
+- proibição de texto novo sem apagar textos originais das referências;
+- prioridade de `short_name`;
+- preço monetário completo com reais e centavos;
+- correção `be lmpacto` → `de Impacto`;
+- correção `Parafusadeira Furadeira` → `Parafusadeira e Furadeira`;
+- conversão `2 Baterias` → `duas baterias`;
+- remoção de especificações técnicas de Air Fryer, smartphone, TV e notebook;
 - remoção de código técnico `BAF95A`;
 - simplificação `Fritadeira Air Fryer` → `Air Fryer`;
-- preservação de modelos comerciais como `Galaxy A55`, `iPhone 15` e `IdeaPad Slim 3`;
-- cenários e interações por categoria;
-- manutenção da forma longa do preço para usos futuros.
+- pronúncia por extenso de números de modelos comerciais;
+- cenários e interações por categoria.
 
 ## Critérios de aceite
 
 - O prompt deve declarar vídeo de 8 segundos.
-- A avatar e o produto devem permanecer visualmente consistentes.
+- `Avatar_Silvia` deve ser declarada como referência visual oficial e obrigatória.
+- A estampa **CAÇA OFERTA** deve ser preservada e nunca substituída por outra marca.
 - A locução deve priorizar `short_name`.
-- Especificações e códigos técnicos dispensáveis devem ser removidos apenas da fala, nunca dos dados da oferta.
-- Nomes comerciais reconhecíveis devem ser preservados quando agregam identificação ao produto.
-- Redundâncias comerciais devem ser simplificadas quando economizam tempo sem perder identidade.
-- A locução deve utilizar preço falável curto e fallback por limite de palavras.
-- O prompt deve proibir texto, legenda, números e marca d'água na tela.
+- Especificações e códigos técnicos dispensáveis devem ser removidos apenas da fala.
+- Erros linguísticos evidentes cobertos pela normalização devem ser corrigidos somente na fala.
+- Todos os números que permanecerem na fala devem aparecer por extenso.
+- O preço deve usar a forma monetária completa com `reais` e `centavos` quando aplicável.
+- A locução deve respeitar o fallback do limite de 22 palavras.
+- O prompt deve proibir texto novo, legendas, preços escritos, overlays e marca d'água.
+- Textos e logotipos originais das imagens de referência devem ser preservados.
 - A fala deve terminar antes do fim do vídeo.
 - O contrato público de `buildGeminiVideoPrompt(offer)` e o backend de importação não devem mudar.
 
 ## Arquivos alterados
 
-- `docs/VIDEO_PROMPT_8S_IMPLEMENTATION.md`
 - `src/lib/videos/gemini-prompt.ts`
 - `src/tests/videos/gemini-prompt.test.ts`
+- `docs/VIDEO_PROMPT_8S_IMPLEMENTATION.md`
 
 ## Próximos passos possíveis
 
-- Gerar `short_name` automaticamente na ingestão de ofertas quando o marketplace não fornecer um nome adequado.
-- Registrar no metadata a contagem de palavras e a versão de template usada.
-- Criar presets futuros de 8, 15 e 30 segundos mantendo a mesma arquitetura.
+- ampliar o dicionário de correções linguísticas apenas com erros reais observados em produção;
+- gerar `short_name` automaticamente na ingestão quando o marketplace não fornecer nome adequado;
+- registrar no metadata a contagem de palavras e a versão do template;
+- criar presets futuros de 8, 15 e 30 segundos mantendo a mesma arquitetura.
