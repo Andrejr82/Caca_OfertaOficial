@@ -94,7 +94,7 @@ export function selectEditorialTop30TelegramSelection(
     cohortOffers.filter((offer) => offer.platform === "Shopee"),
     30,
     now,
-    { allowRecentFallback: true },
+    { allowRecentFallback: true, allowApproved: true },
   ).map((candidate) => candidate.id);
   const nonShopeeIds = cohortOffers
     .filter((offer) => offer.platform === "Amazon" || offer.platform === "Mercado Livre")
