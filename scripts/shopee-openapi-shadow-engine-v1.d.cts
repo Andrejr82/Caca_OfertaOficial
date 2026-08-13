@@ -29,7 +29,6 @@ export declare function createSignedRequest(v: {
   request: (args: { body: string; headers: Record<string, string> }) => Promise<{ status: number; data: any }>;
 }): (operationName: string, query: string, variables: Record<string, unknown>) => Promise<{ status: number; data: any }>;
 export declare function familyKey(v: unknown): unknown;
-export declare function scoreProduct(v: unknown): unknown;
 export declare function buildFixtureSources(v: unknown): unknown;
 export declare function collectLiveSources(v: unknown): unknown;
 export declare function runCli(v: unknown): unknown;

@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const GRAPHQL_CONTRACTS = require('./contracts/shopee-openapi-v1/index.cjs');
+const { evaluateShopeeOracleCandidate } = require('./shopee-ranking-v1-oracle-bridge.cjs');
 
 function queryPlan(keywords, categoryIds, overrides = {}) {
   return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxPagesPerQuery: 100, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
@@ -224,15 +225,25 @@ function dedupe(products) {
   return { unique: products.filter((product) => !duplicates.some((duplicate) => duplicate.itemId === product.itemId)), duplicates };
 }
 
-function scoreProduct(product, contract, intent) {
-  const salesScore = Math.min(15, Math.log10(Math.max(1, product.sales)) * 3);
-  const ratingScore = Math.min(10, Math.max(0, product.ratingStar - 4) * 10);
-  const discountScore = Math.min(10, product.priceDiscountRate / 5);
-  const commissionScore = Math.min(12, product.commissionPercent);
-  const shopScore = product.shopType.includes(1) ? 6 : product.shopType.some((type) => [2,3,4].includes(type)) ? 4 : 0;
-  const technicalScore = product.imageUrl && (product.offerLink || product.productLink) ? 6 : 0;
-  const unresolvedPenalty = product.commissionUnresolved ? 4 : 0;
-  return Number((35 + salesScore + ratingScore + discountScore + commissionScore + shopScore + technicalScore - unresolvedPenalty).toFixed(4));
+function resolveCanonicalIntent(product, scenarioId, contract) {
+  const title = text(product.productName);
+  const scenarioKey = String(scenarioId || '').replace(/_editorial$/u, '').replace(/_/g, '-');
+  const matchingClass = (contract.requiredProductClass || []).find((term) => title.includes(text(term)));
+  return matchingClass || scenarioKey;
+}
+
+function evaluateCanonicalRanking(product, scenarioId, contract) {
+  const intent = resolveCanonicalIntent(product, scenarioId, contract);
+  return evaluateShopeeOracleCandidate({
+    marketplace: 'Shopee', sourceItemId: product.itemId, title: product.productName,
+    sourceUrl: product.offerLink || product.productLink, currentPrice: product.currentPrice,
+    originalPrice: product.originalPrice, category: { id: product.productCatIds?.[0], name: scenarioId },
+    marketplaceMetrics: {
+      rating: product.ratingStar, sales: product.sales, shopId: product.shopId,
+      shopType: product.shopType, commissionRate: product.commissionPercent,
+    },
+    intent,
+  });
 }
 
 function processDeltaRows(rows = [], options = {}) {
@@ -382,7 +393,10 @@ function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20
     const technicalEligible = eligible.filter((product) => product.technicalAccepted);
     const technicalRejected = intentResults.filter((product) => !product.technicalAccepted);
     const deduped = dedupe(technicalEligible);
-    const scoreable = deduped.unique.map((product) => ({ ...product, familyKey: familyKey(product), score: scoreProduct(product, contract, product.intent) }));
+    const scoreable = deduped.unique.map((product) => {
+      const rankingV1 = evaluateCanonicalRanking(product, scenarioId, contract);
+      return { ...product, familyKey: familyKey(product), rankingV1, score: rankingV1.score };
+    }).filter((product) => product.rankingV1.eligible);
     const familyCount = new Map(); const shopCount = new Map(); const top = [];
     for (const product of scoreable.sort((a, b) => b.score - a.score || b.sales - a.sales || a.itemId.localeCompare(b.itemId))) {
       const family = familyCount.get(product.familyKey) || 0; const shop = shopCount.get(product.shopId) || 0;
@@ -465,4 +479,4 @@ if (require.main === module) {
   runCli().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => { console.error(`[Shopee Shadow V1] ${error.message}`); process.exitCode = 1; });
 }
 
-module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, scoreProduct, buildFixtureSources, collectLiveSources, runCli };
+module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, buildFixtureSources, collectLiveSources, runCli };
