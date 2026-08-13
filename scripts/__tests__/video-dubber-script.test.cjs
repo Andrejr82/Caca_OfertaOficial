@@ -8,6 +8,7 @@ const {
   buildDubbingPrompt,
   generateDubbingCopy,
   normalizeSpeechForTTS,
+  fitDubbingScriptToDuration,
 } = require('../video-dubber.cjs');
 
 const FORBIDDEN = [
@@ -198,4 +199,40 @@ test('Air Fryer recebe pronúncia segura somente no texto do TTS', () => {
 test('normalização de pronúncia não altera palavras não relacionadas', () => {
   const text = 'Fritadeira elétrica para preparar alimentos.';
   assert.equal(normalizeSpeechForTTS(text), text);
+});
+
+test('fitting de TTS tenta fallbacks determinísticos e retorna o primeiro que cabe', async () => {
+  const durations = [20, 10];
+  const result = await fitDubbingScriptToDuration(
+    'roteiro muito longo para o vídeo',
+    'Cafeteira Elétrica Compacta',
+    12,
+    async () => durations.shift(),
+    3,
+  );
+
+  assert.equal(result.attempts, 2);
+  assert.equal(result.duration, 10);
+  assert.match(result.text, /cafeteira/iu);
+});
+
+test('fallback fecha quando a identidade do produto é insuficiente', () => {
+  assert.throws(
+    () => buildFallbackDubbingScript('Produto genérico em promoção', 15),
+    /identidade do produto insuficiente/iu,
+  );
+});
+
+test('fitting fecha quando não há identidade factual para fallback', async () => {
+  await assert.rejects(
+    () => fitDubbingScriptToDuration('roteiro longo', 'Produto genérico', 12, async () => 20, 3),
+    /TTS_FIT_FAILED/iu,
+  );
+});
+
+test('fitting fecha quando a medição do TTS é inválida', async () => {
+  await assert.rejects(
+    () => fitDubbingScriptToDuration('roteiro longo', 'Cafeteira Elétrica Compacta', 12, async () => null, 3),
+    /TTS_FIT_FAILED/iu,
+  );
 });
