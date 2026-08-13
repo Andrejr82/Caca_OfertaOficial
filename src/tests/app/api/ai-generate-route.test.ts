@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { generateOfficialAI, createOfficialAIServiceDependencies, getUser, supabase, auditInsert, adminSupabase, loadCycleCheckpoint, advanceCycleCheckpoint } = vi.hoisted(() => {
+const { generateOfficialAI, publishOfficialPost, createOfficialAIServiceDependencies, createOfficialPublicationServiceDependencies, getUser, supabase, auditInsert, adminSupabase, loadCycleCheckpoint, advanceCycleCheckpoint } = vi.hoisted(() => {
   const getUser = vi.fn();
   const auditInsert = vi.fn().mockResolvedValue({ error: null });
   return {
     generateOfficialAI: vi.fn(),
+    publishOfficialPost: vi.fn(),
     createOfficialAIServiceDependencies: vi.fn().mockReturnValue({ dependency: true }),
+    createOfficialPublicationServiceDependencies: vi.fn().mockReturnValue({ publicationDependency: true }),
     getUser,
     supabase: { auth: { getUser } },
     adminSupabase: { auth: { getUser }, from: vi.fn(() => ({ insert: auditInsert })) },
@@ -16,7 +18,9 @@ const { generateOfficialAI, createOfficialAIServiceDependencies, getUser, supaba
 });
 
 vi.mock("@/core/ai", () => ({ generateOfficialAI }));
+vi.mock("@/core/publication", () => ({ publishOfficialPost }));
 vi.mock("@/lib/ai/official/create-official-ai-service", () => ({ createOfficialAIServiceDependencies }));
+vi.mock("@/lib/publication/official/create-official-publication-service", () => ({ createOfficialPublicationServiceDependencies }));
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabaseClient: vi.fn().mockResolvedValue(supabase) }));
 vi.mock("@/lib/supabase/admin", () => ({ createSupabaseAdminClient: vi.fn(() => adminSupabase) }));
 vi.mock("@/lib/ai/official/official-ai-cycle-checkpoint", () => ({ loadCycleCheckpoint, advanceCycleCheckpoint }));
@@ -30,6 +34,7 @@ describe("POST /api/ai/generate", () => {
     generateOfficialAI.mockResolvedValue({
       status: "approved", commandId: "command-1", offerId: "offer-1", offerState: "approved"
     });
+    publishOfficialPost.mockResolvedValue({ status: "published", receiptId: "receipt-1" });
     loadCycleCheckpoint.mockResolvedValue({ nextPage: 1, status: "pending", metrics: { pagesProcessed: 0 } });
     advanceCycleCheckpoint.mockImplementation(async (_client, _tenant, checkpoint, result) => ({
       ...checkpoint,
@@ -65,6 +70,51 @@ describe("POST /api/ai/generate", () => {
       providerPreference: "cerebras",
       channels: ["telegram", "instagram", "whatsapp"]
     }), { dependency: true });
+  });
+
+  it("inclui Facebook somente quando o contrato de transporte está configurado", async () => {
+    vi.stubEnv("FACEBOOK_PAGE_ID", "page-1");
+    vi.stubEnv("FACEBOOK_ACCESS_TOKEN", "token-1");
+
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ offerId: "offer-1" })
+    }));
+
+    expect(response.status).toBe(200);
+    expect(generateOfficialAI).toHaveBeenCalledWith(expect.objectContaining({
+      channels: ["telegram", "instagram", "whatsapp", "facebook"]
+    }), { dependency: true });
+    vi.unstubAllEnvs();
+  });
+
+  it("promove os três drafts sociais pelo serviço oficial após a aprovação", async () => {
+    vi.stubEnv("FACEBOOK_PAGE_ID", "page-1");
+    vi.stubEnv("FACEBOOK_ACCESS_TOKEN", "token-1");
+    generateOfficialAI.mockResolvedValue({
+      status: "approved", commandId: "command-social", offerId: "offer-1", offerState: "approved",
+      drafts: ["instagram", "whatsapp", "facebook"].map((channel) => ({
+        postId: `post-${channel}`, offerId: "offer-1", channel, offerStatus: "approved", state: "draft"
+      }))
+    });
+
+    const response = await POST(new Request("http://localhost/api/ai/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ offerId: "offer-1" })
+    }));
+
+    expect(response.status).toBe(200);
+    expect(publishOfficialPost).toHaveBeenCalledTimes(3);
+    expect(publishOfficialPost.mock.calls.map(([command]) => command.channel)).toEqual([
+      "instagram", "whatsapp", "facebook"
+    ]);
+    expect(publishOfficialPost.mock.calls.every(([command]) => (
+      command.expectedOfferState === "approved" && command.expectedPostState === "draft"
+    ))).toBe(true);
+    expect(createOfficialPublicationServiceDependencies).toHaveBeenCalledWith(supabase, "tenant-1");
+    vi.unstubAllEnvs();
   });
 
   it("processa somente uma página e devolve checkpoint para a próxima invocação", async () => {
