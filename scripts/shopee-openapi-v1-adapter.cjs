@@ -1,6 +1,7 @@
 'use strict';
 
 const { runScenarioPlan } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const { getShopeeV1Flags } = require('./shopee-v1-flags.cjs');
 
 const APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS = Object.freeze([
   'casa_cozinha_editorial',
@@ -29,7 +30,7 @@ const ZERO_WRITE_AUDIT = Object.freeze({
 });
 
 function isShopeeOpenApiV1Enabled(env = process.env) {
-  return String(env?.SHOPEE_OPENAPI_ENGINE_V1_ENABLED ?? '').trim().toLowerCase() === 'true';
+  return getShopeeV1Flags(env).engine;
 }
 
 function isShopeeOpenApiV1Scenario(scenarioId) {

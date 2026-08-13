@@ -1,4 +1,6 @@
 import type { TrendDirectEvidence, TrendSignal } from "@/core/trends/types";
+import { processRawOffers, RawShopeeOffer } from "@/lib/shopee/ranking/search-service";
+import * as shopeeEngineModule from "../../../scripts/shopee-openapi-shadow-engine-v1.cjs";
 
 export type ShopeeEvidenceSource = "shopee_product_offer" | "shopee_campaign";
 export type ShopeeEvidenceStatus = "ok" | "empty" | "failed";
@@ -15,6 +17,8 @@ interface ShopeeProductOfferNode {
   ratingStar?: unknown;
   sales?: unknown;
   priceDiscountRate?: unknown;
+  commissionRate?: unknown;
+  shopType?: unknown;
 }
 
 interface ShopeeCampaignNode {
@@ -171,26 +175,42 @@ export function normalizeShopeeProductOfferEvidence(
   if (!capturedAt) return failed("shopee_product_offer", "invalid_captured_at");
   if (!query) return failed("shopee_product_offer", "invalid_query");
 
-  const signals = nodes.flatMap((node): TrendSignal[] => {
-    const itemId = text(node.itemId);
-    const shopId = text(node.shopId);
-    const productName = text(node.productName);
-    const sourceUrl = validUrl(node.productLink) ?? validUrl(node.offerLink);
+  const rawOffers = nodes as unknown as RawShopeeOffer[];
+  const processed = processRawOffers(
+    rawOffers,
+    { scenarioId: 'evidence_collection', categoryKey: 'geral' },
+    query,
+    capturedAt
+  );
+
+  const signals = processed.flatMap((processedNode): TrendSignal[] => {
+    if (!processedNode.isValid) return [];
+    
+    const candidate = processedNode.candidate;
+    const itemId = text(candidate.itemId);
+    const shopId = text(candidate.shopId);
+    const productName = text(candidate.productName);
+    const sourceUrl = validUrl(candidate.productUrl) ?? validUrl(candidate.affiliateUrl);
+    
     if (!itemId || !shopId || !productName || !sourceUrl) return [];
 
     const evidence = emptyDirectEvidence({
-      claim: `Produto observado via Shopee Affiliate OpenAPI productOfferV2: ${productName}.`,
+      claim: `Produto observado via Motor Shopee V1: ${productName}.`,
       evidenceType: "shopee_product_offer",
       sourceUrl,
       observedAt,
       marketplaceIdentity: { marketplace: "shopee", shop_id: shopId, item_id: itemId }
     });
-    evidence.sold_quantity = nonNegativeInteger(node.sales);
-    evidence.price = positiveNumber(node.priceMin) ?? positiveNumber(node.priceMax);
-    evidence.discount_percent = discountPercent(node.priceDiscountRate);
-    evidence.rating = rating(node.ratingStar);
+    
+    evidence.sold_quantity = nonNegativeInteger(candidate.sales);
+    evidence.price = positiveNumber(candidate.currentPrice);
+    evidence.old_price = positiveNumber(candidate.maximumPrice);
+    evidence.discount_percent = discountPercent(candidate.discountPercent);
+    evidence.rating = rating(candidate.rating);
 
     const externalId = `shopee:${shopId}:${itemId}`;
+    const originalNode = nodes.find(n => String(n.itemId) === itemId && String(n.shopId) === shopId);
+    
     return [{
       id: externalId,
       sourceType: "external",
@@ -204,7 +224,18 @@ export function normalizeShopeeProductOfferEvidence(
         source_urls: [sourceUrl],
         direct_evidence: [evidence],
         marketplace_identity: evidence.marketplace_identity,
-        shop_name: text(node.shopName)
+        shop_name: originalNode ? text(originalNode.shopName) : null,
+        score: candidate.score,
+        scoreBreakdown: candidate.scoreBreakdown,
+        determiningReasons: candidate.determiningReasons,
+        strategyVersion: candidate.strategyVersion,
+        semanticConfidence: candidate.semanticConfidence,
+        commercialMetrics: {
+          commissionPercent: candidate.commissionPercent,
+          shopeeCommissionPercent: candidate.shopeeCommissionPercent,
+          sellerCommissionPercent: candidate.sellerCommissionPercent,
+          shopTypes: candidate.shopTypes
+        }
       },
       observedAt,
       capturedAt,
@@ -264,7 +295,7 @@ export function normalizeShopeeCampaignEvidence(
 }
 
 function getShopeeEngine(): ShopeeEngine {
-  return require("../../../scripts/shopee-openapi-shadow-engine-v1.cjs") as ShopeeEngine;
+  return shopeeEngineModule as unknown as ShopeeEngine;
 }
 
 async function signedShopeeRequest(
