@@ -68,6 +68,7 @@ describe("Gemini video prompt de 8 segundos", () => {
 
     expect(speech).toContain("Smartphone Samsung Galaxy A55");
     expect(speech).not.toMatch(/256\s*gb/i);
+    expect(speech).not.toMatch(/\b5g\b/i);
     expect(speech).not.toMatch(/bluetooth/i);
     expect(prompt).toContain("segurando o produto da imagem de referência com as mãos");
     expect(prompt).toContain("neon azul e roxo");
