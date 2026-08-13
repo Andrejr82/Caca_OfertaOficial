@@ -68,7 +68,8 @@ async function runShopeeOpenApiV1ShadowForScenario(scenarioId, options = {}) {
   const decision = getShopeeOpenApiV1Decision(scenarioId, env);
   if (!decision.enabled) return decision;
   const engine = options.engine || defaultShadowEngine;
-  const result = await engine(decision.scenarioId, options);
+  const engineResult = await engine(decision.scenarioId, options);
+  const result = engineResult?.result?.scenarios ? engineResult.result : engineResult;
   return { ...decision, result, writeAudit: { ...ZERO_WRITE_AUDIT } };
 }
 

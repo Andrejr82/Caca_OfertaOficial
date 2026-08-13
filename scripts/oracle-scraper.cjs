@@ -1658,7 +1658,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, request, l
     shopeeDiscovery: async (input) => {
       const response = await shadowDiscovery(input);
       const result = response?.result?.scenarios?.[input.scenario] || {};
-      return { engine: 'shopee_openapi_v1', mode: 'official', decision: response?.enabled ? 'official' : 'blocked', top: result.top || [], metrics: result.metrics || {} };
+      return { engine: 'shopee_openapi_v1', mode: 'official', decision: response?.enabled ? 'official' : (response?.reason || 'blocked'), top: result.top || [], metrics: result.metrics || {} };
     },
     persistShopee: controlledPersistDecision.enabled ? async (payload) => {
       persistCalls += 1;

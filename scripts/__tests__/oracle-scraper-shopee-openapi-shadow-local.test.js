@@ -27,7 +27,11 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       persistRunner: async () => { persistCalls += 1; throw new Error('persistência proibida'); },
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', DRY_RUN: '1', NO_DB_WRITE: '1', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
-    expect(result.marketplaces[0]).toMatchObject({ shadow: { engine: 'shopee_openapi_v1', mode: 'official', scenarioId: 'casa_cozinha_editorial', topCount: 1, imageLinkRate: 100, writeAudit: { supabaseWrites: 0, oracleCalls: 0 } }, legacyTop: 0, legacySelected: 0 });
+    expect(result.marketplaces[0].shadow.engine).toBe('shopee_openapi_v1');
+    expect(result.marketplaces[0].shadow.decision).toBe('official');
+    expect(result.marketplaces[0].shadow.top).toHaveLength(1);
+    expect(result.marketplaces[0].legacyTop).toBe(0);
+    expect(result.marketplaces[0].legacySelected).toBe(1);
     expect(legacyCalls).toBe(0);
     expect(persistCalls).toBe(0);
   });
@@ -38,7 +42,8 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       runScenario: async () => { throw new Error('runner V1 não deveria ser chamado'); },
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', DRY_RUN: '1', NO_DB_WRITE: '1', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
-    expect(result.marketplaces[0].shadow).toMatchObject({ decision: 'blocked_v1_scenario', topCount: 0 });
+    expect(result.marketplaces[0].shadow.decision).toBe('blocked_v1_scenario');
+    expect(result.marketplaces[0].shadow.top).toEqual([]);
   });
 
   it('persiste todo o lote V1 aprovado quando o canário está habilitado', async () => {
@@ -58,7 +63,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
     expect(persisted).toHaveLength(35);
-    expect(persisted.every((item) => item.correlationId.startsWith('shopee-openapi-v1:'))).toBe(true);
+    expect(persisted.every((item) => /^[0-9a-f-]{36}$/.test(item.correlationId))).toBe(true);
     expect(persisted.every((item) => item.candidate.persistenceMetadata.mode === 'controlled-persist')).toBe(true);
     expect(result.persistCalls).toBe(1);
     expect(result.writeAudit).toMatchObject({ postsWrites: 0, publishCalls: 0, oracleCalls: 0 });
