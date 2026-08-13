@@ -13,6 +13,7 @@ export type GeminiPromptOffer = {
 const VIDEO_DURATION_SECONDS = 8;
 const MAX_SPEECH_WORDS = 22;
 const PRODUCT_NAME_WORD_LIMITS = [8, 6, 4];
+const OFFICIAL_AVATAR_REFERENCE = "Avatar_Silvia";
 
 function numeroPorExtenso(num: number): string {
   if (num === 0) return "zero";
@@ -46,19 +47,6 @@ function precoPorExtenso(valor: number | string | null | undefined): string {
   return extenso || "zero reais";
 }
 
-function precoFalavelCurto(valor: number | string | null | undefined): string {
-  if (valor === null || valor === undefined || valor === "") return "preço especial";
-  const num = Number(valor);
-  if (!Number.isFinite(num)) return String(valor);
-
-  const reais = Math.floor(num);
-  const centavos = Math.round((num - reais) * 100);
-  const reaisTexto = numeroPorExtenso(reais);
-
-  if (!centavos) return `${reaisTexto} reais`;
-  return `${reaisTexto} e ${numeroPorExtenso(centavos)}`;
-}
-
 function normalizeTechnicalSpecsForSpeech(name: string): string {
   return name
     .replace(/\([^)]*\)/g, " ")
@@ -77,16 +65,37 @@ function simplifyCommercialNameForSpeech(name: string): string {
   return name
     .replace(/\bfritadeira\s+air\s*fryer\b/gi, "Air Fryer")
     // Códigos técnicos mistos com letras e números (ex.: BAF95A, XJ900, SM-A556E).
-    // Preserva nomes comerciais comuns como iPhone 15, Galaxy A55 e IdeaPad Slim 3.
+    // Preserva nomes comerciais reconhecíveis; a etapa linguística converte números falados por extenso.
     .replace(/\b(?=[A-Z0-9-]{5,}\b)(?=[A-Z0-9-]*[A-Z])(?=[A-Z0-9-]*\d)[A-Z0-9-]+\b/g, " ")
     .replace(/\s{2,}/g, " ")
     .replace(/\s*[,;:]\s*$/g, "")
     .trim();
 }
 
+/**
+ * Corrige erros linguísticos evidentes de títulos de marketplace e prepara o nome para locução.
+ * Esta função altera somente o nome falável do vídeo; product_name/short_name permanecem intactos.
+ */
+function normalizeLinguisticSpeech(name: string): string {
+  return name
+    // Erros recorrentes de digitação/OCR observados em títulos de marketplace.
+    .replace(/\b(?:be|d[e3])\s+[lI]mpacto\b/gi, "de Impacto")
+    .replace(/\b[lI]mpacto\b/g, "Impacto")
+    // Evita construções comerciais truncadas na locução.
+    .replace(/\bparafusadeira\s+furadeira\b/gi, "Parafusadeira e Furadeira")
+    .replace(/\bImpacto\s+(\d+)\s+baterias?\b/gi, "Impacto com $1 baterias")
+    // Todo número que permanecer na fala é pronunciado por extenso.
+    .replace(/\b\d{1,6}\b/g, (raw) => numeroPorExtenso(Number(raw)))
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
+}
+
 function getSpeakableProductName(offer: GeminiPromptOffer): string {
   const source = offer.short_name?.trim() || offer.product_name.trim();
-  const normalized = simplifyCommercialNameForSpeech(normalizeTechnicalSpecsForSpeech(source));
+  const normalized = normalizeLinguisticSpeech(
+    simplifyCommercialNameForSpeech(normalizeTechnicalSpecsForSpeech(source))
+  );
   return normalized || source;
 }
 
@@ -145,7 +154,7 @@ function studioBackground(offer: GeminiPromptOffer): string {
 
 function speechScript8Seconds(offer: GeminiPromptOffer): string {
   const baseProductName = getSpeakableProductName(offer);
-  const price = precoFalavelCurto(offer.current_price);
+  const price = precoPorExtenso(offer.current_price);
 
   for (const maxProductWords of PRODUCT_NAME_WORD_LIMITS) {
     const productName = compactProductName(baseProductName, maxProductWords);
@@ -169,5 +178,5 @@ export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
   const background = studioBackground(offer);
   const speech = speechScript8Seconds(offer);
 
-  return `Crie um vídeo publicitário fotorrealista de exatamente ${VIDEO_DURATION_SECONDS} segundos.\n\nPERSONAGEM:\nUse Avatar_Silvia como referência visual obrigatória. Preserve rigorosamente a identidade da mesma mulher da imagem: mesmos traços faciais, formato do rosto, pele morena, cabelo escuro liso na altura dos ombros e aparência geral. Preserve o figurino: camiseta azul-marinho e calça jeans escura. Não alterar rosto, cabelo, idade aparente, corpo ou roupa durante o vídeo.\n\nPRODUTO:\nUse a imagem do produto selecionado como referência visual obrigatória. A personagem está ${interaction}. Preserve fielmente formato, proporções, cores e características visuais do produto. Não modificar, deformar ou inventar partes do produto.\n\nCENA:\nO fundo é um ${background}. Iluminação cinematográfica suave e realista, valorizando naturalmente o rosto da apresentadora e o produto.\n\nATUAÇÃO:\nA personagem olha diretamente para a câmera e apresenta a oferta de maneira simpática, espontânea e entusiasmada. Enquanto fala, realiza pequenos movimentos naturais de cabeça e gestos suaves com as mãos. Ao mencionar o produto, faz um gesto discreto em direção a ele. Evitar movimentos exagerados, repetitivos ou artificiais.\n\nCÂMERA:\nPlano médio. Câmera fixa. Um único take contínuo durante os ${VIDEO_DURATION_SECONDS} segundos. Sem cortes. Sem zoom. Sem transições. Sem mudança de enquadramento.\n\nÁUDIO E LIPSYNC:\nVoz feminina adulta em português brasileiro. Tom comercial natural, simpático e entusiasmado. Dicção clara e ritmo fluido. Lipsync preciso e sincronizado com cada palavra. A fala deve começar imediatamente e ser pronunciada integralmente. Nenhuma palavra pode ser cortada, omitida ou interrompida. Não acelerar artificialmente a voz. A última palavra deve terminar antes do fim do vídeo. Após a última palavra, manter aproximadamente 0,3 segundo de imagem antes do encerramento.\n\nFALA EXATA:\n${speech}\n\nQUALIDADE:\nFotorrealista. Estética de publicidade profissional. Pele com textura natural. Expressões faciais realistas. Movimentos humanos naturais. Iluminação cinematográfica. Alta definição com aparência 4K.\n\nRESTRIÇÕES:\nVídeo completamente limpo. Sem texto na tela. Sem legendas. Sem números na tela. Sem preço escrito. Sem elementos gráficos. Sem marca d'água. Sem movimentos artificiais. Sem deformações no rosto, mãos ou produto. Sem alteração da identidade da personagem. Sem alteração do produto de referência.`;
+  return `Crie um vídeo publicitário fotorrealista de exatamente ${VIDEO_DURATION_SECONDS} segundos.\n\nPERSONAGEM:\nUse exclusivamente a imagem de referência oficial identificada como ${OFFICIAL_AVATAR_REFERENCE} como referência visual obrigatória e principal da personagem. Preserve rigorosamente a mesma mulher da imagem de referência: mesmos traços faciais, formato do rosto, tom de pele morena, cabelo escuro liso na altura dos ombros, proporções corporais e aparência geral. Preserve exatamente o figurino oficial da referência: camiseta azul-marinho, calça jeans escura e tênis branco. A estampa original da camiseta faz parte da identidade visual da personagem e deve permanecer idêntica à imagem de referência durante todo o vídeo. Preserve exatamente o logotipo e os elementos gráficos já existentes na camiseta, incluindo o texto \"CAÇA OFERTA\", a chama, o carrinho e a etiqueta de desconto. Não recriar, reinterpretar, traduzir, corrigir, substituir, deformar ou inventar letras, palavras, logotipos, símbolos ou elementos gráficos da camiseta. Não substituir \"CAÇA OFERTA\" por qualquer outro nome ou marca. Não alterar rosto, cabelo, idade aparente, corpo, roupa, estampa, cores ou identidade visual da personagem durante o vídeo.\n\nPRODUTO:\nUse a imagem do produto selecionado como referência visual obrigatória. A personagem está ${interaction}. Preserve fielmente formato, proporções, cores, textos, logotipos e características visuais originais do produto. Não modificar, deformar, traduzir, substituir ou inventar partes, marcas ou textos do produto.\n\nCENA:\nO fundo é um ${background}. Iluminação cinematográfica suave e realista, valorizando naturalmente o rosto da apresentadora e o produto.\n\nATUAÇÃO:\nA personagem olha diretamente para a câmera e apresenta a oferta de maneira simpática, espontânea e entusiasmada. Enquanto fala, realiza pequenos movimentos naturais de cabeça e gestos suaves com as mãos. Ao mencionar o produto, faz um gesto discreto em direção a ele. Evitar movimentos exagerados, repetitivos ou artificiais.\n\nCÂMERA:\nPlano médio. Câmera fixa. Um único take contínuo durante os ${VIDEO_DURATION_SECONDS} segundos. Sem cortes. Sem zoom. Sem transições. Sem mudança de enquadramento.\n\nÁUDIO E LIPSYNC:\nVoz feminina adulta em português brasileiro. Tom comercial natural, simpático e entusiasmado. Dicção clara e ritmo fluido. Pronunciar todas as palavras em português brasileiro correto. Todos os números presentes na fala devem ser pronunciados integralmente por extenso. Valores monetários devem ser pronunciados usando \"reais\" e \"centavos\" quando aplicável. Não pronunciar algarismos, abreviações técnicas, símbolos ou códigos como parte da locução. Lipsync preciso e sincronizado com cada palavra. A fala deve começar imediatamente e ser pronunciada integralmente. Nenhuma palavra pode ser cortada, omitida ou interrompida. Não acelerar artificialmente a voz. A última palavra deve terminar antes do fim do vídeo. Após a última palavra, manter aproximadamente 0,3 segundo de imagem antes do encerramento.\n\nFALA EXATA:\n${speech}\n\nQUALIDADE:\nFotorrealista. Estética de publicidade profissional. Pele com textura natural. Expressões faciais realistas. Movimentos humanos naturais. Iluminação cinematográfica. Alta definição com aparência 4K.\n\nRESTRIÇÕES:\nVídeo completamente limpo. Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem. Não adicionar legendas. Não adicionar números ou preços escritos. Não adicionar elementos gráficos novos. Não adicionar marca d'água. Sem movimentos artificiais. Sem deformações no rosto, mãos ou produto. Sem alteração da identidade da personagem. Sem alteração do figurino oficial. Sem alteração, substituição ou invenção do nome, logotipo ou estampa existente na camiseta. Sem alteração do produto de referência.`;
 }
