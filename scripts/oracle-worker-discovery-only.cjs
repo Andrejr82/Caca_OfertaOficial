@@ -355,7 +355,9 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     }
   }
 
-  const isShadowMode = process.argv.includes('--shopee-v4-dry-run');
+  // --shopee-ranking-v1-shadow: flag oficial do Shadow Mode do Motor Shopee V1.
+  // NÃO usar --shopee-v4-dry-run (flag legada aposentada em oracle-scraper.cjs).
+  const isShadowMode = process.argv.includes('--shopee-ranking-v1-shadow');
 
   const ranked = Array.from(allCandidates.values())
     .map((product) => {
