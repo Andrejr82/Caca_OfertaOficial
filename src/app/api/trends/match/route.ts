@@ -22,8 +22,11 @@ export async function POST() {
     };
     const summary = await matchTrendSignalsForUser(client, user.id, async (classification) => {
       const term = classification.normalizedProductTerm ?? "";
+      const shopeeEnabled = process.env.SHOPEE_RANKING_V1_ENABLED === "true";
       const [shopee, mercadoLivreResult] = await Promise.all([
-        discoverMarketplaceCandidates({ marketplace: "Shopee", normalizedProductTerm: term, productIdentity: term, searchShopee: (query) => searchShopeeOfficialV1(query, classification.categoryHint ?? "geral") }),
+        shopeeEnabled
+          ? discoverMarketplaceCandidates({ marketplace: "Shopee", normalizedProductTerm: term, productIdentity: term, searchShopee: (query) => searchShopeeOfficialV1(query, classification.categoryHint ?? "geral") })
+          : Promise.resolve({ candidates: [] }),
         accessToken
           ? discoverMarketplaceCandidates({ marketplace: "Mercado Livre", normalizedProductTerm: term, productIdentity: term, searchMercadoLivre: (query) => searchMercadoLivreForTrendQueries(mercadoLivre, [query], accessToken) })
           : Promise.resolve(null)

@@ -39,6 +39,22 @@ export async function POST(request: Request) {
   if (productsError) return NextResponse.json({ ok: false, message: "Não foi possível carregar o ranking do Radar." }, { status: 502 });
 
   try {
+    const shopeeEnabled = process.env.SHOPEE_RANKING_V1_ENABLED === "true";
+    if (!shopeeEnabled) {
+      return NextResponse.json({
+        ok: true,
+        runId,
+        searchedIntents: 0,
+        candidatesFound: 0,
+        inserted: 0,
+        updated: 0,
+        failed: 0,
+        readyOfferIds: [],
+        message: "Shopee search is disabled (SHOPEE_RANKING_V1_ENABLED != true)",
+        rejectedRadarProducts: [],
+      });
+    }
+
     const discovery = await discoverTrendShopeeApprovalCandidates((radarProducts || []) as TrendRadarApprovalProduct[]);
     const admin = createSupabaseAdminClient();
     if (!admin) return NextResponse.json({ ok: false, message: "Persistência server-side não configurada." }, { status: 503 });
