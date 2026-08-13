@@ -1557,15 +1557,34 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
   };
 }
 
-function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env } = {}) {
-  return async ({ discovery, scenario, tenantId, correlationId, requestedAt }) => {
-    const decision = getControlledPersistDecision(scenario, env);
+function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env, lookupExistingItemIds } = {}) {
+  return async ({ discovery, scenario, tenantId, correlationId, requestedAt, limit }) => {
+    const decision = getControlledPersistDecision(scenario, env, { maxCandidates: limit });
     if (!decision.enabled) return { accepted: 0, inserted: 0, updated: 0, failed: 0, state: FINAL_STATE, offerIds: [] };
-    const ingestions = buildControlledPersistIngestions(discovery.top, {
+    const candidatePool = Array.isArray(discovery.top) ? discovery.top : [];
+    const itemIds = [...new Set(candidatePool.map((product) => String(product?.itemId || '').trim()).filter((itemId) => /^\d+$/.test(itemId)))];
+    let existingItemIds = [];
+    if (itemIds.length > 0) {
+      if (typeof lookupExistingItemIds === 'function') {
+        existingItemIds = await lookupExistingItemIds({ tenantId: tenantId || ADMIN_USER_ID, itemIds });
+      } else {
+        const { data, error } = await getSupabase()
+          .from('offers')
+          .select('shopee_item_id')
+          .eq('user_id', tenantId || ADMIN_USER_ID)
+          .eq('platform', 'Shopee')
+          .in('shopee_item_id', itemIds);
+        if (error) throw new Error(`Consulta de identidade Shopee falhou: ${error.message}`);
+        existingItemIds = (data || []).map((row) => String(row.shopee_item_id));
+      }
+    }
+    const ingestions = buildControlledPersistIngestions(candidatePool, {
       scenarioId: decision.scenarioId,
       tenantId: tenantId || ADMIN_USER_ID,
       correlationId,
       requestedAt,
+      existingItemIds,
+      maxNewCandidates: decision.maxCandidates,
     });
     const persisted = typeof persistRunner === 'function'
       ? await persistRunner(ingestions, 'Shopee', FINAL_STATE)
@@ -1642,9 +1661,9 @@ async function runScrapingCycleCore() {
   return result;
 }
 
-async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId = ADMIN_USER_ID, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
+async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId = ADMIN_USER_ID, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, lookupExistingItemIds, copyQueueOptions = { maxTotal: 0, maxPerMarketplace: 0, maxPerCategory: 0 }, env = process.env, requestedAt = new Date().toISOString() } = {}) {
   const activeScenario = scenarioId || getActiveMarketplaceScenario('Shopee')?.scenarioId || getActiveMarketplaceScenario('Shopee')?.id || 'casa_cozinha_editorial';
-  const controlledPersistDecision = getControlledPersistDecision(activeScenario, env);
+  const controlledPersistDecision = getControlledPersistDecision(activeScenario, env, { maxCandidates: copyQueueOptions.maxPerMarketplace });
   const scenario = getMarketplaceScenarioContract(activeScenario, 'Shopee') || getActiveMarketplaceScenario('Shopee');
   const correlationId = crypto.randomUUID();
   let legacyTop = 0;
@@ -1670,7 +1689,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId =
     },
     persistShopee: controlledPersistDecision.enabled ? async (payload) => {
       persistCalls += 1;
-      const persisted = await createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, env })(payload);
+      const persisted = await createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, lookupExistingItemIds, env })(payload);
       controlledPersistAudit = {
         ...controlledPersistAudit,
         ...(persisted?.writeAudit || {}),
@@ -1689,7 +1708,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId =
       if (typeof persistRunner === 'function') return persistRunner(...args);
       throw new Error('Persistência bloqueada no Oracle Scraper Shopee shadow local');
     },
-    copyQueueOptions: { maxTotal: 0, maxPerMarketplace: 0, maxPerCategory: 0 },
+    copyQueueOptions,
     scenarioResolver: () => activeScenario,
     scenarioRuntimeResolver: () => ({ scenarioId: activeScenario, mode: 'shadow-local' }),
   });
