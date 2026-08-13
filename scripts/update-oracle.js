@@ -47,6 +47,7 @@ const DEPLOY_FILES = [
   'scripts/shopee-openapi-shadow-engine-v1.cjs',
   'scripts/shopee-ranking-v1-oracle-bridge.cjs',
   'scripts/shopee-openapi-v1-adapter.cjs',
+  'scripts/shopee-v1-flags.cjs',
   'scripts/shopee-openapi-v1-controlled-persist.cjs',
   'scripts/shopee-openapi-v1-discovery-shadow.cjs',
   'scripts/shopee-trends-miner.cjs',
