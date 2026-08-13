@@ -1,21 +1,14 @@
 import { generateOfficialAI, type OfficialAICommand } from "@/core/ai";
-import { publishOfficialPost, type OfficialPublicationCommand } from "@/core/publication";
+import { approveOfficialOfferForPublication, publishOfficialPost, type OfficialPublicationApprovalCommand, type OfficialPublicationCommand } from "@/core/publication";
 import { createOfficialAIServiceDependencies } from "@/lib/ai/official/create-official-ai-service";
-import { createOfficialPublicationServiceDependencies } from "@/lib/publication/official/create-official-publication-service";
+import { createOfficialPublicationApprovalDependencies } from "@/lib/publication/official/create-official-publication-approval";
+import { createOfficialPublicationServiceDependencies, publicationIdempotencyKey, publicationPayloadReference } from "@/lib/publication/official/create-official-publication-service";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { buildTelegramEditorialPublicationPlan } from "./telegram-editorial-publication";
 import { inngest } from "./client";
 import { TELEGRAM_CYCLE_INTROS } from "@/config/cycle-intros";
 import { sendTelegramMessage } from "@/lib/telegram/client";
 import { loadEditorialTop30TelegramSelection } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
-
-type TelegramPublisherFactory = {
-  createTelegramPublisher: (options: { supabase: unknown }) => { processQueue: (options: { selectedEditorialTop30OfferIds: string[] }) => Promise<unknown> };
-};
-
-function loadTelegramPublisher(supabase: unknown) {
-  const { createTelegramPublisher } = require("../../../scripts/telegram-auto-publisher.cjs") as TelegramPublisherFactory;
-  return createTelegramPublisher({ supabase });
-}
 
 function adminClient() {
   const client = createSupabaseAdminClient();
@@ -70,13 +63,74 @@ export const publishTelegramEditorialTop30 = inngest.createFunction(
     triggers: [{ cron: "*/5 * * * *", tz: "America/Sao_Paulo" }]
   },
   async ({ step }: any) => {
-    if (process.env.TELEGRAM_AUTO_PUBLISH !== "1") {
-      return { result: "disabled", reason: "TELEGRAM_AUTO_PUBLISH!=1" };
-    }
+    if (process.env.TELEGRAM_AUTO_PUBLISH !== "1") return { result: "disabled", reason: "TELEGRAM_AUTO_PUBLISH!=1" };
+    if (process.env.NO_PUBLISH === "1" || process.env.NO_POSTS === "1") return { result: "disabled", reason: "publication_guard" };
     const client = adminClient();
+    const { data: settings, error: settingsError } = await client
+      .from("app_settings")
+      .select("value")
+      .eq("key", "general_settings")
+      .limit(1);
+    if (settingsError) throw settingsError;
+    if (settings?.[0]?.value?.telegram_automation_enabled !== true) return { result: "disabled", reason: "telegram_automation_enabled!=true" };
     const selection = await step.run("select-editorial-top30", () => loadEditorialTop30TelegramSelection(client));
     if (selection.offerIds.length === 0) return { result: "empty", selectedEditorialTop30OfferIds: [], selection: selection.diagnostics };
-    return step.run("publish-editorial-top30", () => loadTelegramPublisher(client).processQueue({ selectedEditorialTop30OfferIds: selection.offerIds }));
+    const { data: posts, error: postsError } = await client
+      .from("posts")
+      .select("id,offer_id,user_id,status,created_at")
+      .eq("channel", "telegram")
+      .eq("status", "draft")
+      .in("offer_id", selection.offerIds)
+      .order("created_at", { ascending: true });
+    if (postsError) throw postsError;
+    const plan = buildTelegramEditorialPublicationPlan(posts ?? [], selection.offerIds);
+    const results = [];
+    for (const post of plan) {
+      if (!post.user_id) continue;
+      const commandId = `telegram-editorial:${post.id}`;
+      const requestedAt = new Date().toISOString();
+      const approvalCommand: OfficialPublicationApprovalCommand = {
+        commandId,
+        correlationId: commandId,
+        causationId: null,
+        tenantId: post.user_id,
+        offerId: post.offer_id,
+        postId: post.id,
+        channel: "telegram",
+        requestedAt
+      };
+      const approval = await approveOfficialOfferForPublication(
+        approvalCommand,
+        createOfficialPublicationApprovalDependencies(client, post.user_id)
+      );
+      if (approval.status !== "approved") {
+        results.push(approval);
+        continue;
+      }
+      const command: OfficialPublicationCommand = {
+        contractVersion: "pmav5.publication/v1",
+        commandId,
+        idempotencyKey: publicationIdempotencyKey(post.id, "telegram", "editorial-top30"),
+        correlationId: commandId,
+        causationId: null,
+        offerId: post.offer_id,
+        postId: post.id,
+        tenantId: post.user_id,
+        channel: "telegram",
+        expectedOfferState: "approved",
+        expectedOfferVersion: 2,
+        expectedPostState: "draft",
+        expectedPostVersion: 0,
+        payloadReference: publicationPayloadReference(post.id),
+        requestedAt,
+        actor: { type: "service", id: "telegram-editorial-scheduler", service: "official-publication-scheduler" },
+        origin: "publication.telegram.editorial",
+        reason: { code: "EDITORIAL_TOP30_AUTOMATION" },
+        metadata: { requestSource: "telegram-editorial-top30" }
+      };
+      results.push(await publishOfficialPost(command, createOfficialPublicationServiceDependencies(client, post.user_id)));
+    }
+    return { result: "completed", selectedEditorialTop30OfferIds: selection.offerIds, planSize: plan.length, results };
   }
 );
 
