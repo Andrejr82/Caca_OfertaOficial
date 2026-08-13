@@ -7,6 +7,6 @@ if (!(encoded instanceof Uint8Array)) {
   globalThis.TextEncoder = TextEncoder;
   globalThis.TextDecoder = TextDecoder;
 }
-require('tsx/cjs');
-
+const runtimeRequire = eval('require');
+runtimeRequire('tsx/cjs');
 module.exports = require('../src/lib/shopee/ranking/oracle-adapter.ts');
