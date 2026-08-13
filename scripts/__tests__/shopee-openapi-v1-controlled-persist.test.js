@@ -2,6 +2,7 @@ const {
   CONTROLLED_PERSIST_SCENARIOS,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
+  selectControlledPersistCandidates,
   CONTROLLED_PERSIST_MAX_CANDIDATES,
 } = require('../shopee-openapi-v1-controlled-persist.cjs');
 
@@ -31,6 +32,70 @@ const expectedScenarios = [
 ];
 
 describe('Shopee OpenAPI V1 controlled persistence', () => {
+  it('keeps ranked existing offers while selecting up to five new offers', () => {
+    const top = Array.from({ length: 12 }, (_, index) => ({
+      itemId: String(9000 + index),
+      score: 100 - index,
+    }));
+
+    const selected = selectControlledPersistCandidates(top, {
+      existingItemIds: ['9000', '9001', '9002', '9003', '9004'],
+      maxNewCandidates: 5,
+      maxExistingCandidates: 5,
+    });
+
+    expect(selected.map((item) => item.itemId)).toEqual([
+      '9000', '9001', '9002', '9003', '9004',
+      '9005', '9006', '9007', '9008', '9009',
+    ]);
+  });
+
+  it('does not let existing offers consume the new-insert cap', () => {
+    const top = Array.from({ length: 10 }, (_, index) => ({
+      itemId: String(9100 + index),
+      score: 100 - index,
+    }));
+
+    const selected = selectControlledPersistCandidates(top, {
+      existingItemIds: ['9100', '9101', '9102', '9103', '9104'],
+    });
+
+    expect(selected).toHaveLength(10);
+    expect(selected.slice(5).map((item) => item.itemId)).toEqual(['9105', '9106', '9107', '9108', '9109']);
+  });
+
+  it('keeps ranking payload and deterministic identity unchanged for new offers', () => {
+    const product = {
+      itemId: '9200', shopId: '9300', productName: 'Novo',
+      offerLink: 'https://s.shopee.com.br/novo', imageUrl: 'https://cf.shopee.com.br/novo.jpg',
+      price: 49.9, priceMin: 49.9, priceMax: 59.9, productCatIds: ['100010'],
+      score: 82, rankingV1: { score: 82, reasons: ['vendas'] },
+    };
+    const args = { scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-test', correlationId: 'corr-1', requestedAt: '2026-08-08T00:00:00.000Z' };
+    const first = buildControlledPersistIngestions([product], args)[0];
+    const second = buildControlledPersistIngestions([product], args)[0];
+
+    expect(first.candidate.idempotencyKey).toBe(second.candidate.idempotencyKey);
+    expect(first.candidate.persistenceMetadata.payload_v1.rankingV1).toEqual(product.rankingV1);
+    expect(first.candidate.persistenceMetadata.payload_v1.price).toBe(49.9);
+  });
+
+  it('preserves original ranking position after bounded existing updates', () => {
+    const top = Array.from({ length: 7 }, (_, index) => ({
+      itemId: String(9400 + index), shopId: String(9500 + index), productName: `Produto ${index}`,
+      offerLink: `https://s.shopee.com.br/rank-${index}`, imageUrl: `https://cf.shopee.com.br/rank-${index}.jpg`,
+      price: 20 + index, productCatIds: ['100010'], score: 80,
+    }));
+    const ingestions = buildControlledPersistIngestions(top, {
+      scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-test', correlationId: 'corr-rank',
+      requestedAt: '2026-08-08T00:00:00.000Z', existingItemIds: ['9400', '9401', '9402', '9403', '9404', '9405'],
+    });
+
+    expect(ingestions).toHaveLength(6);
+    expect(ingestions.at(-1).candidate.sourceItemId).toBe('9406');
+    expect(ingestions.at(-1).candidate.discoveryEvidence.position).toBe(7);
+  });
+
   it('keeps persistence disabled by default', () => {
     expect(getControlledPersistDecision('casa_cozinha_editorial', {
       ...baseEnv,

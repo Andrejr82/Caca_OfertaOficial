@@ -128,6 +128,7 @@ const { assertEditorialScheduleValid } = require('./editorial-scenario-config.cj
 const { runShopeeOpenApiV1OfficialForScenario } = require('./shopee-openapi-v1-adapter.cjs');
 const {
   getControlledPersistDecision,
+  CONTROLLED_PERSIST_SCAN_LIMIT,
   buildControlledPersistIngestions,
 } = require('./shopee-openapi-v1-controlled-persist.cjs');
 
@@ -1557,15 +1558,33 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
   };
 }
 
-function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env } = {}) {
+function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env, lookupExistingItemIds } = {}) {
   return async ({ discovery, scenario, tenantId, correlationId, requestedAt }) => {
     const decision = getControlledPersistDecision(scenario, env);
     if (!decision.enabled) return { accepted: 0, inserted: 0, updated: 0, failed: 0, state: FINAL_STATE, offerIds: [] };
-    const ingestions = buildControlledPersistIngestions(discovery.top, {
+    const candidatePool = (Array.isArray(discovery.top) ? discovery.top : []).slice(0, CONTROLLED_PERSIST_SCAN_LIMIT);
+    const itemIds = [...new Set(candidatePool.map((product) => String(product?.itemId || '').trim()).filter((itemId) => /^\d+$/.test(itemId)))];
+    let existingItemIds = [];
+    if (itemIds.length > 0) {
+      if (typeof lookupExistingItemIds === 'function') {
+        existingItemIds = await lookupExistingItemIds({ tenantId: tenantId || ADMIN_USER_ID, itemIds });
+      } else {
+        const { data, error } = await getSupabase()
+          .from('offers')
+          .select('shopee_item_id')
+          .eq('user_id', tenantId || ADMIN_USER_ID)
+          .eq('platform', 'Shopee')
+          .in('shopee_item_id', itemIds);
+        if (error) throw new Error(`Consulta de identidade Shopee falhou: ${error.message}`);
+        existingItemIds = (data || []).map((row) => String(row.shopee_item_id));
+      }
+    }
+    const ingestions = buildControlledPersistIngestions(candidatePool, {
       scenarioId: decision.scenarioId,
       tenantId: tenantId || ADMIN_USER_ID,
       correlationId,
       requestedAt,
+      existingItemIds,
     });
     const persisted = typeof persistRunner === 'function'
       ? await persistRunner(ingestions, 'Shopee', FINAL_STATE)
@@ -1642,7 +1661,7 @@ async function runScrapingCycleCore() {
   return result;
 }
 
-async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId = ADMIN_USER_ID, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, env = process.env, requestedAt = new Date().toISOString() } = {}) {
+async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId = ADMIN_USER_ID, request, legacyRunner = executeShopeeNativeDiscoveryV5, runScenario, persistRunner, lookupExistingItemIds, env = process.env, requestedAt = new Date().toISOString() } = {}) {
   const activeScenario = scenarioId || getActiveMarketplaceScenario('Shopee')?.scenarioId || getActiveMarketplaceScenario('Shopee')?.id || 'casa_cozinha_editorial';
   const controlledPersistDecision = getControlledPersistDecision(activeScenario, env);
   const scenario = getMarketplaceScenarioContract(activeScenario, 'Shopee') || getActiveMarketplaceScenario('Shopee');
@@ -1670,7 +1689,7 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId =
     },
     persistShopee: controlledPersistDecision.enabled ? async (payload) => {
       persistCalls += 1;
-      const persisted = await createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, env })(payload);
+      const persisted = await createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, lookupExistingItemIds, env })(payload);
       controlledPersistAudit = {
         ...controlledPersistAudit,
         ...(persisted?.writeAudit || {}),

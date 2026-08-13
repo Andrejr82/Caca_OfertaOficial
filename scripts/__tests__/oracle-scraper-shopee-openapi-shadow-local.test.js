@@ -75,6 +75,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
         persisted.push(...ingestions);
         return { accepted: ingestions.length, inserted: ingestions.length, updated: 0, offerIds: ingestions.map((item) => item.candidate.sourceItemId), writeAudit: { supabaseWrites: ingestions.length, offersWrites: ingestions.length, affiliateLinkWrites: ingestions.length * 4, postsWrites: 0, publishCalls: 0, oracleCalls: 0 } };
       },
+      lookupExistingItemIds: async () => [],
       env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true', SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true', NO_POSTS: '1', NO_PUBLISH: '1' },
     });
     expect(persisted).toHaveLength(CONTROLLED_PERSIST_MAX_CANDIDATES);

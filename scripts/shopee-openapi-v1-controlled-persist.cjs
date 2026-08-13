@@ -23,6 +23,8 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
 const CONTROLLED_PERSIST_SCENARIO = 'casa_cozinha_editorial';
 const BLOCKED_SCENARIO = 'grandes_ofertas_editorial';
 const CONTROLLED_PERSIST_MAX_CANDIDATES = 5;
+const CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES = 5;
+const CONTROLLED_PERSIST_SCAN_LIMIT = CONTROLLED_PERSIST_MAX_CANDIDATES + CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES;
 
 function isOne(value) {
   return String(value ?? '').trim() === '1';
@@ -71,7 +73,28 @@ function stableId(prefix, value) {
   return `${prefix}-${crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 32)}`;
 }
 
-function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlationId, requestedAt }) {
+function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCandidates = CONTROLLED_PERSIST_MAX_CANDIDATES, maxExistingCandidates = CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES } = {}) {
+  const existing = new Set((Array.isArray(existingItemIds) ? existingItemIds : []).map((itemId) => String(itemId).trim()).filter(Boolean));
+  const selected = [];
+  let newCount = 0;
+  let existingCount = 0;
+  for (const product of Array.isArray(top) ? top : []) {
+    const itemId = String(product?.itemId || '').trim();
+    const isExisting = existing.has(itemId);
+    if (isExisting) {
+      if (existingCount >= maxExistingCandidates) continue;
+      existingCount += 1;
+    } else {
+      if (newCount >= maxNewCandidates) continue;
+      newCount += 1;
+    }
+    selected.push(product);
+    if (newCount >= maxNewCandidates && existingCount >= maxExistingCandidates) break;
+  }
+  return selected;
+}
+
+function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlationId, requestedAt, existingItemIds = [] }) {
   const normalizedScenario = String(scenarioId || '').trim();
 
   if (!CONTROLLED_PERSIST_SCENARIOS.has(normalizedScenario)) {
@@ -86,8 +109,10 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
   // Keep its correlation id identical to discovery_runs and explainability.
   const v1CorrelationId = correlationId;
 
-  const boundedTop = (Array.isArray(top) ? top : []).slice(0, CONTROLLED_PERSIST_MAX_CANDIDATES);
+  const boundedTop = selectControlledPersistCandidates(top, { existingItemIds });
   return boundedTop.map((product, index) => {
+    const originalIndex = Array.isArray(top) ? top.indexOf(product) : -1;
+    const rankingPosition = originalIndex >= 0 ? originalIndex + 1 : index + 1;
     const sourceItemId = String(product.itemId || '').trim();
     const shopId = String(product.shopId || '').trim();
     const title = String(product.productName || product.title || '').trim();
@@ -144,7 +169,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
         source: 'Shopee OpenAPI V1',
       },
       marketplaceMetrics: {
-        sourcePosition: index + 1,
+        sourcePosition: rankingPosition,
         itemId: sourceItemId,
         shopId,
         productCatId: String(product.productCatIds?.[0] || 'unknown'),
@@ -156,7 +181,7 @@ function buildControlledPersistIngestions(top, { scenarioId, tenantId, correlati
       },
       deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
       discoveryEvidence: {
-        position: index + 1,
+        position: rankingPosition,
         category: normalizedScenario,
         provider: 'Shopee OpenAPI V1',
         discoveredAt: requestedAt,
@@ -192,6 +217,9 @@ module.exports = {
   CONTROLLED_PERSIST_SCENARIO,
   CONTROLLED_PERSIST_SCENARIOS,
   CONTROLLED_PERSIST_MAX_CANDIDATES,
+  CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES,
+  CONTROLLED_PERSIST_SCAN_LIMIT,
   getControlledPersistDecision,
+  selectControlledPersistCandidates,
   buildControlledPersistIngestions,
 };
