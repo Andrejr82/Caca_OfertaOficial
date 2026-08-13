@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { normalizePrice, normalizePercent, normalizeText, isValidHttpsUrl } from '../../lib/shopee/ranking/normalization';
 import { evaluateSemanticConfidence } from '../../lib/shopee/ranking/semantic-validator';
 import { getPolicyForCategory } from '../../lib/shopee/ranking/category-policies';

@@ -6,6 +6,7 @@ import {
   persistTrendShopeeApprovalCandidates,
   type TrendRadarApprovalProduct,
 } from "@/lib/trends/shopee-approval-queue";
+import { isShopeeV1EnabledFor } from "../../../../../../scripts/shopee-v1-rollout-manager.cjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
   if (productsError) return NextResponse.json({ ok: false, message: "Não foi possível carregar o ranking do Radar." }, { status: 502 });
 
   try {
-    const shopeeEnabled = process.env.SHOPEE_RANKING_V1_ENABLED === "true";
+    const shopeeEnabled = isShopeeV1EnabledFor(runId);
     if (!shopeeEnabled) {
       return NextResponse.json({
         ok: true,

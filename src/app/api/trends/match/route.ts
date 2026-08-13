@@ -5,6 +5,7 @@ import { discoverMarketplaceCandidates } from "@/lib/trends/targeted-marketplace
 import { searchShopeeOfficialV1 } from "@/lib/trends/shopee-search-adapter";
 import { searchMercadoLivreForTrendQueries, type ExistingMercadoLivreProduct } from "@/lib/trends/mercado-livre-search-adapter";
 import { getAppMLAccessToken, getValidMLAccessToken } from "@/lib/platforms/mercadolivre";
+import { isShopeeV1EnabledFor } from "../../../../../scripts/shopee-v1-rollout-manager.cjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,7 +23,7 @@ export async function POST() {
     };
     const summary = await matchTrendSignalsForUser(client, user.id, async (classification) => {
       const term = classification.normalizedProductTerm ?? "";
-      const shopeeEnabled = process.env.SHOPEE_RANKING_V1_ENABLED === "true";
+      const shopeeEnabled = isShopeeV1EnabledFor(user.id);
       const [shopee, mercadoLivreResult] = await Promise.all([
         shopeeEnabled
           ? discoverMarketplaceCandidates({ marketplace: "Shopee", normalizedProductTerm: term, productIdentity: term, searchShopee: (query) => searchShopeeOfficialV1(query, classification.categoryHint ?? "geral") })

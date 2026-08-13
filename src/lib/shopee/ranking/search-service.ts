@@ -52,15 +52,12 @@ export function processRawOffers(
     const identity = buildIdentity(shopId, itemId);
     
     if (!identity || seenIdentities.has(identity)) {
-      if (identity) {
-        // Create a dummy rejected candidate for duplicate
-        processed.push({
-          candidate: createBaseCandidate(raw, request, queryTerm, capturedAt, shopId, itemId),
-          isValid: false,
-          rejectionCode: 'duplicate_product',
-          reason: 'Produto duplicado no lote'
-        });
-      }
+      processed.push({
+        candidate: createBaseCandidate(raw, request, queryTerm, capturedAt, shopId, itemId),
+        isValid: false,
+        rejectionCode: !identity ? 'missing_native_identity' : 'duplicate_product',
+        reason: !identity ? 'Identidade nativa ausente' : 'Produto duplicado no lote'
+      });
       continue;
     }
     seenIdentities.add(identity);
