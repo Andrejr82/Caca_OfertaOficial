@@ -28,20 +28,21 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(prompt).toContain("exatamente 8 segundos");
     expect(prompt).toContain("PERSONAGEM:");
     expect(prompt).toContain("PRODUTO:");
+    expect(prompt).toContain("COMPOSIÇÃO DO PRODUTO:");
     expect(prompt).toContain("ÁUDIO E LIPSYNC:");
     expect(prompt).toContain("FALA EXATA:");
     expect(prompt).toContain("RESTRIÇÕES:");
     expect(prompt).toContain("Avatar_Silvia");
-    expect(prompt).toContain('texto "CAÇA OFERTA"');
-    expect(prompt).toContain("bancada de cozinha moderna");
-    expect(prompt).toContain("produto da imagem de referência sobre uma bancada");
+    expect(prompt).toContain('texto \"CAÇA OFERTA\"');
+    expect(prompt).toContain("cozinha residencial contemporânea premium");
+    expect(prompt).toContain("produto sobre a bancada");
     expect(speech).toContain("Cafeteira Três Corações Passione");
     expect(speech).toContain("quatrocentos e setenta e um reais e oitenta centavos");
     expect(speech).not.toContain("127V");
     expect(countWords(speech)).toBeLessThanOrEqual(22);
   });
 
-  it("corrige português, converte número por extenso e usa preço completo na parafusadeira", () => {
+  it("usa oficina premium e composição anti-alucinação para ferramentas", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Parafusadeira Furadeira be lmpacto 2 Baterias 21V",
       current_price: 123.9,
@@ -56,9 +57,17 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/21\s*v/i);
     expect(speech).toContain("cento e vinte e três reais e noventa centavos");
     expect(countWords(speech)).toBeLessThanOrEqual(22);
+
+    expect(prompt).toContain("oficina contemporânea premium");
+    expect(prompt).toContain("bancada robusta de madeira escura e metal");
+    expect(prompt).toContain("painel de ferramentas");
+    expect(prompt).toContain("sem segurar, operar ou acionar a ferramenta");
+    expect(prompt).toContain("Não adicionar maleta, brocas, soquetes, carregadores, baterias extras");
+    expect(prompt).toContain("A imagem de referência é a autoridade visual");
+    expect(prompt).toContain("Não transformar o produto em um kit maior do que a referência visual");
   });
 
-  it("simplifica air fryer, remove especificações e código técnico de modelo", () => {
+  it("simplifica air fryer, remove especificações e usa cozinha premium", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Fritadeira Air Fryer Britânia BAF95A 9,5L Painel Digital 1800W",
       current_price: 549,
@@ -75,10 +84,11 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/painel digital/i);
     expect(speech).toContain("quinhentos e quarenta e nove reais");
     expect(countWords(speech)).toBeLessThanOrEqual(22);
-    expect(prompt).toContain("bancada de cozinha moderna");
+    expect(prompt).toContain("cozinha residencial contemporânea premium");
+    expect(prompt).toContain("Não adicionar alimentos, utensílios, cápsulas, copos, bandejas ou acessórios inexistentes");
   });
 
-  it("remove armazenamento e conectividade sem apagar linha comercial de smartphone", () => {
+  it("usa estúdio tech contemporâneo e preserva apenas acessórios da referência", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Smartphone Samsung Galaxy A55 256GB 5G Bluetooth",
       current_price: 1999,
@@ -91,8 +101,9 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/256\s*gb/i);
     expect(speech).not.toMatch(/\b5g\b/i);
     expect(speech).not.toMatch(/bluetooth/i);
-    expect(prompt).toContain("segurando o produto da imagem de referência com as mãos");
-    expect(prompt).toContain("neon azul e roxo");
+    expect(prompt).toContain("estúdio de tecnologia contemporâneo premium");
+    expect(prompt).toContain("evitando aparência de cenário gamer genérico");
+    expect(prompt).toContain("Não adicionar cabos, carregadores, capas, controles, suportes, periféricos");
   });
 
   it("pronuncia modelo comercial numérico por extenso", () => {
@@ -110,7 +121,7 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/\b5g\b/i);
   });
 
-  it("remove polegadas, resolução e painel do nome falável de TV", () => {
+  it("usa sala premium de home theater para TV", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Smart TV Samsung 50\" 4K QLED HDR",
       current_price: 2799,
@@ -124,7 +135,8 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/4k/i);
     expect(speech).not.toMatch(/qled/i);
     expect(speech).not.toMatch(/hdr/i);
-    expect(prompt).toContain("neon azul e roxo");
+    expect(prompt).toContain("sala contemporânea premium com estética de home theater");
+    expect(prompt).toContain("Não inventar soundbar, console, controle remoto, rack");
   });
 
   it("remove memória e pronuncia número do modelo de notebook por extenso", () => {
