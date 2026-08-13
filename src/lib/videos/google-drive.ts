@@ -8,10 +8,37 @@ type DriveFile = {
 };
 
 const DEFAULT_FOLDER_ID = "1tj6S-Gr7hxt5RNRIAd7BkpR8_2tuGaFB";
+const REQUIRED_DRIVE_ENV = [
+  "GOOGLE_DRIVE_CLIENT_ID",
+  "GOOGLE_DRIVE_CLIENT_SECRET",
+  "GOOGLE_DRIVE_REFRESH_TOKEN",
+] as const;
 
-function required(name: string) {
+export type GoogleDriveIntegrationStatus = {
+  configured: boolean;
+  missing: string[];
+  folderId: string;
+};
+
+export class GoogleDriveIntegrationError extends Error {
+  constructor(public readonly code: "missing_config" | "token_failed" | "drive_http", message: string, public readonly status?: number) {
+    super(message);
+    this.name = "GoogleDriveIntegrationError";
+  }
+}
+
+export function getGoogleDriveIntegrationStatus(): GoogleDriveIntegrationStatus {
+  const missing = REQUIRED_DRIVE_ENV.filter((name) => !process.env[name]?.trim());
+  return {
+    configured: missing.length === 0,
+    missing: [...missing],
+    folderId: process.env.GOOGLE_DRIVE_FOLDER_ID?.trim() || DEFAULT_FOLDER_ID,
+  };
+}
+
+function required(name: (typeof REQUIRED_DRIVE_ENV)[number]) {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`GOOGLE_DRIVE_CONFIG_MISSING:${name}`);
+  if (!value) throw new GoogleDriveIntegrationError("missing_config", `Configuração do Google Drive ausente: ${name}.`);
   return value;
 }
 
@@ -23,8 +50,11 @@ async function accessToken() {
     grant_type: "refresh_token"
   });
   const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body, cache: "no-store" });
-  const data = await response.json() as { access_token?: string; error?: string };
-  if (!response.ok || !data.access_token) throw new Error(`GOOGLE_DRIVE_TOKEN_FAILED:${data.error ?? response.status}`);
+  const data = await response.json() as { access_token?: string; error?: string; error_description?: string };
+  if (!response.ok || !data.access_token) {
+    const detail = data.error_description || data.error || String(response.status);
+    throw new GoogleDriveIntegrationError("token_failed", `Não foi possível renovar a autorização do Google Drive (${detail}).`, response.status);
+  }
   return data.access_token;
 }
 
@@ -34,12 +64,12 @@ async function driveFetch(path: string, init?: RequestInit) {
     headers: { Authorization: `Bearer ${await accessToken()}`, ...(init?.headers ?? {}) },
     cache: "no-store"
   });
-  if (!response.ok) throw new Error(`GOOGLE_DRIVE_HTTP_${response.status}`);
+  if (!response.ok) throw new GoogleDriveIntegrationError("drive_http", `Google Drive respondeu com HTTP ${response.status}.`, response.status);
   return response;
 }
 
 export async function listDriveVideos(): Promise<DriveFile[]> {
-  const folderId = process.env.GOOGLE_DRIVE_FOLDER_ID || DEFAULT_FOLDER_ID;
+  const folderId = getGoogleDriveIntegrationStatus().folderId;
   const query = encodeURIComponent(`'${folderId}' in parents and trashed = false and mimeType contains 'video/'`);
   const fields = encodeURIComponent("files(id,name,mimeType,size,webViewLink,videoMediaMetadata(width,height,durationMillis)),nextPageToken");
   const response = await driveFetch(`files?q=${query}&pageSize=100&orderBy=modifiedTime%20desc&fields=${fields}`);
