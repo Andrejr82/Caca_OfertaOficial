@@ -62,9 +62,10 @@ function precoFalavelCurto(valor: number | string | null | undefined): string {
 function normalizeTechnicalSpecsForSpeech(name: string): string {
   return name
     .replace(/\([^)]*\)/g, " ")
-    .replace(/\b\d+(?:[.,]\d+)?\s*(?:l|litros?|ml|w|watts?|kw|v|volts?|mah|gb|tb|hz|khz|mhz|ghz|mp|mpx|polegadas?|\")\b/gi, " ")
+    .replace(/\b\d+(?:[.,]\d+)?\s*["”″]/g, " ")
+    .replace(/\b\d+(?:[.,]\d+)?\s*(?:l|litros?|ml|w|watts?|kw|v|volts?|mah|gb|tb|hz|khz|mhz|ghz|mp|mpx|polegadas?)\b/gi, " ")
     .replace(/\b\d+(?:[.,]\d+)?\s*btus?\b/gi, " ")
-    .replace(/\b(?:127|220)\s*v\b/gi, " ")
+    .replace(/\b(?:3g|4g|5g)\b/gi, " ")
     .replace(/\b(?:painel\s+digital|digital|bivolt|inox|wifi|wi-fi|bluetooth|full\s+hd|ultra\s+hd|4k|8k|hdr|led|qled|oled)\b/gi, " ")
     .replace(/\s*[-–—]\s*/g, " ")
     .replace(/\s{2,}/g, " ")
