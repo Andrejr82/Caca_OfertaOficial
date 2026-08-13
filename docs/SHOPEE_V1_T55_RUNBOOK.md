@@ -40,6 +40,16 @@ Não remover colunas ou executar migration reversa durante incidente. Não promo
 - Amazon/ML sem regressão;
 - logs sem credenciais e sem resposta bruta desnecessária.
 
+## Runbook Oracle/PM2 (TO14)
+
+- Processos autorizados: `oracle-scraper` e `oracle-api`; não reiniciar `whatsapp-bot` ou `shopee-feed-sync` neste fluxo.
+- Agenda autoritativa do scraper: `0 6-20 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
+- Antes de restart: registrar release, `pm2 jlist`, status, PID, restart count e backup remoto versionado.
+- Após restart: confirmar `online`, `unstable_restarts=0`, release esperado no boot e ausência de erro/module-not-found nos logs sanitizados.
+- Preflight/shadow: `SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED=false`, `NO_DB_WRITE=1`, `DRY_RUN=1`, `NO_POSTS=1`, `NO_PUBLISH=1`.
+- Canary: somente `casa_cozinha_editorial`, cap determinístico de cinco candidatos, estado `pending_manual_review`; restaurar o preflight após a execução.
+- Rollback: parar avanço, restaurar arquivos/`.env.local` do backup do release, reiniciar somente os dois processos alvo e repetir os gates de saúde.
+
 ## Evidência T54/T55
 
 - Branch: `fix/shopee-v1-reconcile-main`
