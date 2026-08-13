@@ -5,7 +5,7 @@ const GRAPHQL_CONTRACTS = require('./contracts/shopee-openapi-v1/index.cjs');
 const { evaluateShopeeOracleCandidate } = require('./shopee-ranking-v1-oracle-bridge.cjs');
 
 function queryPlan(keywords, categoryIds, overrides = {}) {
-  return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxPagesPerQuery: 100, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
+  return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxPagesPerQuery: 2, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
 }
 
 const SCENARIO_CONTRACTS = Object.freeze({
@@ -285,28 +285,43 @@ function auxiliaryNode(source, node) {
   return { source, requiresProductResolution: true, resolved: Boolean(node.resolvedProduct), offerLink: node.offerLink || null, imageUrl: node.imageUrl || null, commissionRate: node.commissionRate ?? null, raw: node, resolvedProduct: node.resolvedProduct || null };
 }
 
-async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
+async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
   const plan = SCENARIO_QUERY_PLANS[scenarioId];
   if (!plan) throw new Error(`Plano Shopee ausente para ${scenarioId}`);
   if (typeof request !== 'function') throw new Error('runScenarioPlan requer request injetado');
   const keywords = plan.keywords.slice(0, maxKeywords ?? plan.keywords.length); const categoryIds = plan.categoryIds.slice(0, maxCategories ?? plan.categoryIds.length); const productOffers = []; const calls = [];
+  const stopState = { reason: null, controllers: new Set() };
+  const stopAll = (reason) => {
+    stopState.reason ||= reason;
+    for (const controller of stopState.controllers) controller.abort();
+  };
   const callProduct = async (variables, sourcePlan) => {
     const pageSize = plan.limits.productOfferV2PerQuery;
     const maxPages = plan.limits.maxPagesPerQuery;
     const controller = new AbortController();
+    stopState.controllers.add(controller);
+    const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     const timeoutId = setTimeout(() => controller.abort(), Math.max(1, Number(sourceTimeoutMs) || 25_000));
     const seenCursors = new Set();
     try {
       for (let page = 1; page <= maxPages; page += 1) {
-        let response;
-        try {
-          response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true }, { signal: controller.signal });
-        } catch (error) {
-          calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: controller.signal.aborted ? 'source_timeout' : 'source_error', error: error?.message || String(error) });
+        if (stopState.reason || signal?.aborted) {
+          calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: stopState.reason || 'aborted' });
           break;
         }
-        if (Number(response?.status || 0) >= 400 || Array.isArray(response?.data?.errors) && response.data.errors.length > 0) {
-          calls.push({ source: sourcePlan, page, status: response?.status || 0, requested: variables, returned: 0, acceptedShopType: 0, stopReason: 'source_error', error: response?.data?.errors?.map((item) => item?.message).filter(Boolean).join('; ') || `HTTP ${response?.status || 0}` });
+        let response;
+        try {
+          response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true }, { signal: requestSignal });
+        } catch (error) {
+          calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: stopState.reason || signal?.aborted ? (stopState.reason || 'aborted') : controller.signal.aborted ? 'source_timeout' : 'source_error', error: error?.message || String(error) });
+          break;
+        }
+        const apiErrors = Array.isArray(response?.data?.errors) ? response.data.errors : [];
+        const errorMessage = apiErrors.map((item) => item?.message).filter(Boolean).join('; ') || `HTTP ${response?.status || 0}`;
+        const rateLimited = apiErrors.some((item) => /10030|rate limit/i.test(String(item?.message || '')));
+        if (Number(response?.status || 0) >= 400 || apiErrors.length > 0) {
+          if (rateLimited) stopAll('rate_limit');
+          calls.push({ source: sourcePlan, page, status: response?.status || 0, requested: variables, returned: 0, acceptedShopType: 0, stopReason: rateLimited ? 'rate_limit' : 'source_error', error: errorMessage });
           break;
         }
         const nodes = response.data?.data?.productOfferV2?.nodes || [];
@@ -316,6 +331,7 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
         productOffers.push(...filtered);
         if (nodes.length === 0) { calls.push({ ...evidence, stopReason: 'empty_page' }); break; }
         if (!pageInfo || pageInfo.hasNextPage !== true) { calls.push({ ...evidence, stopReason: 'has_next_page_false' }); break; }
+        if (page >= maxPages) { calls.push({ ...evidence, stopReason: 'page_limit' }); break; }
         const cursor = pageInfo.endCursor ?? pageInfo.nextCursor ?? pageInfo.cursor ?? pageInfo.page ?? null;
         if (cursor == null) { calls.push({ ...evidence, stopReason: 'cursor_missing' }); break; }
         if (pageInfo.page != null && Number(pageInfo.page) < page) { calls.push({ ...evidence, stopReason: 'cursor_not_advanced' }); break; }
@@ -326,6 +342,7 @@ async function runScenarioPlan(scenarioId, { request, maxKeywords, maxCategories
       }
     } finally {
       clearTimeout(timeoutId);
+      stopState.controllers.delete(controller);
     }
   };
   const queryTasks = [

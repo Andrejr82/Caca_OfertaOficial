@@ -1649,8 +1649,8 @@ async function runOracleScraperShopeeShadowLocal({ scenarioId = null, tenantId =
   let legacyTop = 0;
   let persistCalls = 0;
   let controlledPersistAudit = { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 };
-  const shadowRequest = request || (async (operationName, query, variables = {}) => {
-    const response = await callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }));
+  const shadowRequest = request || (async (operationName, query, variables = {}, requestOptions = {}) => {
+    const response = await callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }), requestOptions);
     return { status: response?.status || 0, data: response?.data || {} };
   });
   const shadowDiscovery = async ({ scenario }) => runShopeeOpenApiV1OfficialForScenario(scenario, {
