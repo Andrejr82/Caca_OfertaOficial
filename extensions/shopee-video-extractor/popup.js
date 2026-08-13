@@ -35,9 +35,13 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
       currentShopId = data.shopId || null;
       currentItemId = data.itemId || null;
       window.currentImageUrl = data.imageUrl || "";
-      window.currentPrice = data.price || "0";
-      
-      document.getElementById('status').innerText = `Vídeo encontrado!\nProduto: ${currentTitle}\nPreço: R$ ${window.currentPrice}`;
+      window.currentPrice = data.price || null;
+      window.currentPriceStatus = data.priceStatus || 'not_found';
+
+      const priceOk = window.currentPriceStatus === 'validated' && Boolean(window.currentPrice);
+      document.getElementById('status').innerText = priceOk
+        ? `Vídeo encontrado!\nProduto: ${currentTitle}\nPreço: ${window.currentPrice}`
+        : `Vídeo encontrado, mas o preço principal não foi identificado com segurança.\nProduto: ${currentTitle}\nAtualize a página e tente novamente.`;
       
       const resultDiv = document.getElementById('result');
       resultDiv.style.display = 'block';
@@ -45,6 +49,7 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
       
       const dubBtn = document.getElementById('dubBtn');
       dubBtn.style.display = 'block';
+      dubBtn.disabled = !priceOk;
     } else {
       document.getElementById('status').innerText = "Nenhum vídeo encontrado. (Dica: tente dar Play no vídeo primeiro).";
       document.getElementById('result').style.display = 'none';
@@ -54,6 +59,11 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('dubBtn').addEventListener('click', async () => {
+  if (window.currentPriceStatus !== 'validated' || !window.currentPrice) {
+    document.getElementById('status').innerText = "Preço principal não identificado. Atualize a página e tente novamente antes de enviar para a Oracle.";
+    return;
+  }
+
   if (currentVideoUrl) {
     const statusEl = document.getElementById('status');
     const dubBtn = document.getElementById('dubBtn');

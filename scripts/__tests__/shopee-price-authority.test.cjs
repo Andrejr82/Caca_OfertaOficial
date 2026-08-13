@@ -20,6 +20,25 @@ test('seleciona preço principal e ignora parcela, cupom e frete', () => {
   assert.deepEqual(result, { raw: 'R$ 2.830,39', value: 2830.39, source: 'dom.primary-price' });
 });
 
+test('desempata preço atual repetido sem escolher menor valor por heurística', () => {
+  const result = selectPrimaryPrice([
+    { text: 'R$ 129,90', className: 'price' },
+    { text: 'R$ 99,90', className: 'price' },
+    { text: 'R$ 99,90', className: 'price' },
+  ]);
+
+  assert.deepEqual(result, { raw: 'R$ 99,90', value: 99.9, source: 'dom.primary-price' });
+});
+
+test('mantém preço ambíguo bloqueado quando sinais têm a mesma força', () => {
+  const result = selectPrimaryPrice([
+    { text: 'R$ 129,90', className: 'price' },
+    { text: 'R$ 99,90', className: 'price' },
+  ]);
+
+  assert.equal(result, null);
+});
+
 test('não promove parcela isolada a preço principal', () => {
   assert.equal(selectPrimaryPrice([{ text: '12x de R$ 2,69 sem juros', className: 'installment' }]), null);
 });

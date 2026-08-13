@@ -1,7 +1,8 @@
 function extractVideoAndTitle() {
   let videoUrl = null;
   let imageUrl = null;
-  let price = "0";
+  let price = null;
+  let priceStatus = 'not_found';
   let shopId = null;
   let itemId = null;
   let title = document.title.replace(' | Shopee Brasil', '').replace(/[\\/:*?"<>|]/g, '').trim();
@@ -14,7 +15,6 @@ function extractVideoAndTitle() {
   );
   if (sharedCandidate) videoUrl = sharedCandidate.videoUrl;
 
-  // Tenta pegar o título puro do elemento de nome do produto se possível
   const titleElement = document.querySelector('div[class*="product-briefing"] span, meta[property="og:title"]');
   if (titleElement) {
     if (titleElement.content) {
@@ -24,10 +24,8 @@ function extractVideoAndTitle() {
     }
   }
 
-  // Encurtar título muito longo para o arquivo
   if (title.length > 80) title = title.substring(0, 80).trim();
 
-  // 1. Tentar achar uma tag <video>
   if (!videoUrl) {
     const videoElements = document.querySelectorAll('video');
     for (let vid of videoElements) {
@@ -46,7 +44,6 @@ function extractVideoAndTitle() {
     }
   }
 
-  // 2. Tentar achar em scripts se não achou na tag <video>
   if (!videoUrl) {
     const scripts = document.querySelectorAll('script');
     for (let script of scripts) {
@@ -71,17 +68,15 @@ function extractVideoAndTitle() {
       }
     }
   }
-  // 3. Pescar Imagem Principal (Instantâneo)
+
   const ogImage = document.querySelector('meta[property="og:image"]');
   if (ogImage && ogImage.content) {
     imageUrl = ogImage.content;
   } else {
-    // Fallback: tentar achar a primeira imagem grande
     const firstImg = document.querySelector('div[class*="product-image"] img, img.ApG0zU');
     if (firstImg && firstImg.src) imageUrl = firstImg.src;
   }
 
-  // 4. Pescar preço somente com parser que exclui parcela, cupom e frete.
   try {
     const candidates = Array.from(document.querySelectorAll('div, span'))
       .filter((el) => el.innerText && el.innerText.includes('R$') && el.innerText.length < 120)
@@ -92,10 +87,17 @@ function extractVideoAndTitle() {
         ariaLabel: el.getAttribute?.('aria-label') || '',
       }));
     const selected = globalThis.shopeePriceParser?.selectPrimaryPrice(candidates);
-    if (selected) price = selected.raw;
-  } catch(e) {}
+    if (selected) {
+      price = selected.raw;
+      priceStatus = 'validated';
+    } else if (candidates.length > 0) {
+      priceStatus = 'ambiguous';
+    }
+  } catch(e) {
+    priceStatus = 'parser_error';
+  }
 
-  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price, shopId, itemId };
+  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price, priceStatus, shopId, itemId };
 }
 
 extractVideoAndTitle();
