@@ -6,7 +6,10 @@ const {
   getShopeeOpenApiV1Decision,
   runShopeeOpenApiV1OfficialForScenario,
 } = require('../shopee-openapi-v1-adapter.cjs');
-const { getControlledPersistDecision } = require('../shopee-openapi-v1-controlled-persist.cjs');
+const {
+  getControlledPersistDecision,
+  buildControlledPersistIngestions,
+} = require('../shopee-openapi-v1-controlled-persist.cjs');
 
 test('OpenAPI contract is allowlisted and fail-closed when disabled', () => {
   assert.equal(getShopeeOpenApiV1Decision('casa_cozinha_editorial', {
@@ -44,4 +47,25 @@ test('controlled persistence rejects shadow and missing write guards', () => {
   assert.equal(getControlledPersistDecision('casa_cozinha_editorial', {
     ...safe, NO_PUBLISH: '0',
   }).reason, 'publish_flags_required');
+});
+
+test('controlled persistence produces deterministic idempotency and checkpoint identities', () => {
+  const product = {
+    itemId: '1001', shopId: '10', productName: 'Liquidificador potente',
+    productLink: 'https://shopee.com.br/product/10/1001', offerLink: 'https://s.shopee.com.br/example',
+    imageUrl: 'https://cf.shopee.com.br/image.jpg', currentPrice: 99, originalPrice: 149,
+    priceMin: null, priceMax: null, ratingStar: 4.8, sales: 1000, commissionPercent: 8,
+    score: 77,
+  };
+  const context = {
+    scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-1', correlationId: 'run-1',
+    requestedAt: '2026-08-13T16:00:00.000Z',
+  };
+  const first = buildControlledPersistIngestions([product], context);
+  const second = buildControlledPersistIngestions([product], context);
+
+  assert.equal(first[0].idempotencyKey, second[0].idempotencyKey);
+  assert.equal(first[0].ingestionId, second[0].ingestionId);
+  assert.equal(first[0].candidate.candidateId, second[0].candidate.candidateId);
+  assert.equal(first[0].correlationId, 'run-1');
 });
