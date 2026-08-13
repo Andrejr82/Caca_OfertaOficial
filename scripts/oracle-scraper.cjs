@@ -888,6 +888,9 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
 }
 
 async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt, marketplace, products, queue, funnel = null }, stageLogger = null) {
+  if (process.env.NO_DB_WRITE === '1' || process.env.DRY_RUN === '1') {
+    return { skipped: true, reason: 'write_blocked_by_runtime_flags', supabaseWrites: 0 };
+  }
   let stageStartedAt;
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryV2Metadata', products.length);
 
@@ -1047,6 +1050,10 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
   if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryIngestionV1', ingestions.length);
 
   try {
+    if (process.env.NO_DB_WRITE === '1' || process.env.DRY_RUN === '1') {
+      if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
+      return { accepted: 0, inserted: 0, updated: 0, failed: 0, offerIds: [], state: targetStatus, skipped: true, reason: 'write_blocked_by_runtime_flags', supabaseWrites: 0 };
+    }
     if (!ingestions.length) {
       if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
       return { accepted: 0, offerIds: [], state: targetStatus };

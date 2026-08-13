@@ -1,9 +1,23 @@
 'use strict';
 
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
-const { runOracleScraperShopeeShadowLocal } = require('../oracle-scraper.cjs');
+const { runOracleScraperShopeeShadowLocal, persistDiscoveryIngestionV1 } = require('../oracle-scraper.cjs');
 
 describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
+  it('bloqueia o persist genérico antes de qualquer chamada quando write flags estão ativas', async () => {
+    const previousDryRun = process.env.DRY_RUN;
+    const previousNoDbWrite = process.env.NO_DB_WRITE;
+    process.env.DRY_RUN = '1';
+    process.env.NO_DB_WRITE = '1';
+    try {
+      const result = await persistDiscoveryIngestionV1([{ candidate: {}, ingestionId: 'ing-1', correlationId: 'run-1' }], 'Amazon');
+      expect(result).toMatchObject({ skipped: true, supabaseWrites: 0, accepted: 0 });
+    } finally {
+      if (previousDryRun === undefined) delete process.env.DRY_RUN; else process.env.DRY_RUN = previousDryRun;
+      if (previousNoDbWrite === undefined) delete process.env.NO_DB_WRITE; else process.env.NO_DB_WRITE = previousNoDbWrite;
+    }
+  });
+
   function topCandidates(count = 35) {
     return Array.from({ length: count }, (_, index) => ({
       itemId: String(500 + index), shopId: String(600 + index), productName: `Casa ${index}`,
