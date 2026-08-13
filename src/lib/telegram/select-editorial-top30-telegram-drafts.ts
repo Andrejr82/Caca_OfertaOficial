@@ -12,7 +12,7 @@ export type TelegramEditorialDraftRow = {
   created_at: string;
   posted_at: string | null;
   external_id: string | null;
-  offers: Offer | null;
+  offers: Offer | Offer[] | null;
 };
 
 type TelegramPublicationEvidenceRow = Pick<TelegramEditorialDraftRow, "offer_id" | "status" | "posted_at" | "external_id">;
@@ -71,9 +71,10 @@ export function selectEditorialTop30TelegramSelection(
   for (const post of rows) {
     const createdAt = new Date(post.created_at).getTime();
     if (post.status !== "draft" || hasPublicationEvidence(post) || protectedOfferIds.has(post.offer_id)) continue;
-    if (!Number.isFinite(createdAt) || createdAt < fallbackStart || createdAt > now.getTime() || !post.offers) continue;
-    if (post.offers.explainability?.manual_source === true) continue;
-    if (!eligibleDraftOffers.has(post.offer_id)) eligibleDraftOffers.set(post.offer_id, post.offers);
+    const offer = Array.isArray(post.offers) ? (post.offers.length === 1 ? post.offers[0] : null) : post.offers;
+    if (!Number.isFinite(createdAt) || createdAt < fallbackStart || createdAt > now.getTime() || !offer) continue;
+    if (offer.explainability?.manual_source === true) continue;
+    if (!eligibleDraftOffers.has(post.offer_id)) eligibleDraftOffers.set(post.offer_id, offer);
   }
 
   const eligibleOffers = [...eligibleDraftOffers.values()];
