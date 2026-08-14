@@ -209,7 +209,7 @@ function extractDubbingFacts(title) {
   else if (/air fryer/iu.test(normalized)) {
     features = [];
   }
-  else if (/\bpote|vidro|hermético|bambu/iu.test(normalized)) {
+  else if (/\bpotes?\b/iu.test(normalized)) {
     const quantityMatch = normalized.match(/\b(\d+)\s+potes?/iu);
     const quantity = quantityMatch ? `${numberWord(quantityMatch[1], false)} ` : '';
     features = [`${quantity}potes de vidro herméticos${/bambu/iu.test(normalized) ? ' com tampa de bambu' : ''}`];
