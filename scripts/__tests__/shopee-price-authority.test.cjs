@@ -59,6 +59,41 @@ test('mantém preço ambíguo bloqueado quando sinais têm a mesma força', () =
   assert.equal(result, null);
 });
 
+test('diagnóstico do fail-closed não altera o resultado do parser', () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (_message, diagnostic) => warnings.push(diagnostic);
+  try {
+    const result = selectPrimaryPrice([
+      { text: 'R$ 129,90', className: 'price' },
+      { text: 'R$ 99,90', className: 'price' },
+    ]);
+
+    assert.equal(result, null);
+    assert.equal(warnings.length, 1);
+    assert.equal(warnings[0].reason, 'ambiguous_finalists');
+    assert.equal(warnings[0].candidates.length, 2);
+    assert.ok(warnings[0].candidates.every((candidate) => 'normalizedContext' in candidate && 'score' in candidate && 'rejection' in candidate));
+    assert.equal('cookies' in warnings[0], false);
+    assert.equal('token' in warnings[0], false);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
+test('diagnóstico registra ausência de candidatos válidos sem promover valor', () => {
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (_message, diagnostic) => warnings.push(diagnostic);
+  try {
+    assert.equal(selectPrimaryPrice([{ text: '12x de R$ 2,69 sem juros', className: 'installment' }]), null);
+    assert.equal(warnings[0].reason, 'no_valid_candidates');
+    assert.equal(warnings[0].candidates[0].rejection, 'suspicious_context');
+  } finally {
+    console.warn = originalWarn;
+  }
+});
+
 test('não promove parcela isolada a preço principal', () => {
   assert.equal(selectPrimaryPrice([{ text: '12x de R$ 2,69 sem juros', className: 'installment' }]), null);
 });

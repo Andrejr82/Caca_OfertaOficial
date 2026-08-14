@@ -7,8 +7,38 @@
   const AUTHORITY_CONTEXT = /(?:^|[-_\s])(?:current|principal|product|offer|price|pre[cç]o)(?:$|[-_\s])/iu;
 
   function hasAuthorityContext(value) {
-    const normalized = String(value || '').replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ');
+    const normalized = normalizeContext(value);
     return AUTHORITY_CONTEXT.test(normalized);
+  }
+
+  function normalizeContext(value) {
+    return String(value || '').replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ').replace(/\s+/gu, ' ').trim();
+  }
+
+  function summarize(value) {
+    return String(value || '').replace(/\s+/gu, ' ').trim().slice(0, 160);
+  }
+
+  function logFailClosed(reason, candidates, ranked = []) {
+    const finalistValues = new Set(ranked.slice(0, 2).map((candidate) => candidate.value));
+    const diagnostic = {
+      reason,
+      candidates: candidates.map((candidate) => ({
+        value: candidate.value,
+        raw: summarize(candidate.raw),
+        context: summarize(candidate.context),
+        normalizedContext: summarize(normalizeContext(candidate.context)),
+        score: candidate.value == null || SUSPICIOUS_CONTEXT.test(candidate.context) ? null : (hasAuthorityContext(candidate.context) ? 2 : 0),
+        authority: candidate.value != null && !SUSPICIOUS_CONTEXT.test(candidate.context) && hasAuthorityContext(candidate.context),
+        rejection: candidate.value == null
+          ? 'unparseable'
+          : SUSPICIOUS_CONTEXT.test(candidate.context)
+            ? 'suspicious_context'
+            : finalistValues.has(candidate.value) ? 'finalist' : 'not_finalist',
+      })),
+      finalists: ranked.slice(0, 2).map((candidate) => ({ value: candidate.value, score: candidate.score, occurrences: candidate.occurrences })),
+    };
+    console.warn('[ShopeePriceParser] price selection fail-closed', diagnostic);
   }
 
   function parseBrazilPrice(value) {
@@ -23,15 +53,19 @@
   }
 
   function selectPrimaryPrice(candidates) {
-    const valid = (candidates || [])
+    const observed = (candidates || [])
       .map((candidate) => {
         const text = String(candidate?.text || '').replace(/\s+/gu, ' ').trim();
         const context = [text, candidate?.className, candidate?.id, candidate?.ariaLabel].filter(Boolean).join(' ');
         return { raw: text.match(/R\$[^\n]*/iu)?.[0]?.trim() || text, text, context, value: parseBrazilPrice(text) };
-      })
+      });
+    const valid = observed
       .filter((candidate) => candidate.value != null && !SUSPICIOUS_CONTEXT.test(candidate.context));
 
-    if (!valid.length) return null;
+    if (!valid.length) {
+      logFailClosed('no_valid_candidates', observed);
+      return null;
+    }
 
     const byValue = new Map();
     for (const candidate of valid) {
@@ -53,6 +87,7 @@
     if (ranked.length > 1
       && ranked[0].score === ranked[1].score
       && ranked[0].occurrences === ranked[1].occurrences) {
+      logFailClosed('ambiguous_finalists', observed, ranked);
       return null;
     }
 
