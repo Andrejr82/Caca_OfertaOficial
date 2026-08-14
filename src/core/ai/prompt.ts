@@ -57,6 +57,9 @@ export interface CopyV3Fields {
 }
 
 const ATTRIBUTE_PATTERNS = [
+  { pattern: /\bkit\s+bolsa\s+feminina\b/iu, emoji: "👜", hook: "Kit com bolsa feminina" },
+  { pattern: /\bconjunto\s+camiseta\s*\+\s*bermuda\b/iu, emoji: "👕", hook: "Conjunto com camiseta + bermuda" },
+  { pattern: /\bmoletom\s+flanelado\s+com\s+zíper\s+e\s+capuz\b/iu, emoji: "🧥", hook: "Moletom flanelado com zíper e capuz" },
   { pattern: /\b\d+(?:[.,]\d+)?\s*(?:TB|GB)(?:\s+PCIe\s+\d(?:\.\d)?)?\b/iu, emoji: "💾" },
   { pattern: /\bBluetooth\s+\d(?:\.\d)?\b/iu, emoji: "🎧" },
   { pattern: /\b(?:Bivolt(?:\s+110V\/220V)?|110V\/220V)\b/iu, emoji: "🔌" },
@@ -82,7 +85,7 @@ function objectiveAttribute(facts: CopyV2Facts) {
   for (const source of sources) {
     for (const candidate of ATTRIBUTE_PATTERNS) {
       const match = source.match(candidate.pattern)?.[0];
-      if (match) return { text: match.replace(/\s+/gu, " ").trim(), emoji: candidate.emoji };
+      if (match) return { text: match.replace(/\s+/gu, " ").trim(), emoji: candidate.emoji, hook: candidate.hook };
     }
   }
   return null;
@@ -331,7 +334,7 @@ export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegener
   });
 }
 
-const COPY_V3_FORBIDDEN = /\b(?:R\$|preço|desconto|frete|cupom|estoque|parcelad|avaliaç|vendas?|%|marketplace|shopee|amazon|mercado livre)\b|https?:\/\/|www\.|\[[^\]]*link[^\]]*\]/iu;
+const COPY_V3_FORBIDDEN = /\b(?:R\$|preço|desconto|frete|cupom|estoque|parcelad|avaliaç|vendas?|%|marketplace|shopee|amazon|mercado livre)\b|(?:R\$\s*)?\d{1,4}[,.]\d{2}\b|https?:\/\/|www\.|\[[^\]]*link[^\]]*\]/iu;
 const COPY_V3_UNSUPPORTED_ATTRIBUTE = /\b(?:sabor|voltagem|capacidade|material|potente|resistente|impermeável|bluetooth|jarra|filtro|frost\s+free)\b/iu;
 const WEAK_CONVERSION_OPENING = /^(?:se\s+você\s+procura\b|olha\s+esse(?:s)?\b|olha\s+essa(?:s)?\b|confira\s+esta\s+oferta\b)/iu;
 
@@ -393,7 +396,7 @@ function deduplicateSemanticSlots(blocks: string[], facts: CopyV3Facts) {
   const titleBlock = blocks.find((block) => block.trimStart().startsWith("🛍️"));
   if (attributeKey && titleBlock && semanticText(titleBlock).includes(attributeKey)) seenSpecs.add(attributeKey);
   const output: string[] = [];
-  for (const block of blocks) {
+  for (const [index, block] of blocks.entries()) {
     const text = semanticText(block);
     if (!text) continue;
     const isTitle = block.trimStart().startsWith("🛍️");
@@ -412,12 +415,16 @@ function deduplicateSemanticSlots(blocks: string[], facts: CopyV3Facts) {
       continue;
     }
     if (attributeKey && (text === attributeKey || text.includes(attributeKey))) {
+      if (text === productKey) continue;
       if (seenSpecs.has(attributeKey)) continue;
       seenSpecs.add(attributeKey);
       output.push(block);
       continue;
     }
-    if (text === productKey) continue;
+    if (text === productKey) {
+      if (index === 0 && !titleBlock) output.push(block);
+      continue;
+    }
     const narrativeKey = semanticNarrativeKey(block);
     if (narrativeKey && seenNarratives.has(narrativeKey)) continue;
     if (narrativeKey) seenNarratives.add(narrativeKey);
@@ -442,24 +449,11 @@ function conversionOffer(facts: CopyV3Facts) {
 function conversionHook(facts: CopyV3Facts, product: string, fields?: CopyV3Fields) {
   const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
   if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !WEAK_CONVERSION_OPENING.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate)) return candidate;
-  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
-  if (discount !== null) {
-    const hooks = [
-      `💥 ${product} com ${discount}% de desconto confirmado.`,
-      `✨ ${product}: ${discount}% de desconto confirmado.`,
-      `🔥 ${product} com ${discount}% de desconto.`
-    ];
-    return hooks[stableIndex(`${facts.marketplace}|${facts.productName}|discount`, hooks.length)];
-  }
-  if (facts.currentPrice > 0) {
-    const hooks = [
-      `✨ ${product} por ${formatBRL(facts.currentPrice)}.`,
-      `💡 ${product}: ${formatBRL(facts.currentPrice)}.`,
-      `🛍️ ${product} por ${formatBRL(facts.currentPrice)}.`
-    ];
-    return hooks[stableIndex(`${facts.marketplace}|${facts.productName}|price`, hooks.length)];
-  }
-  return `✨ Conheça ${product}.`;
+  const attribute = objectiveAttribute(facts);
+  if (attribute) return `${attribute.emoji} ${attribute.hook ?? `${product} com ${attribute.text}`}.`;
+  const benefit = v3DerivedBenefit(facts);
+  if (benefit) return `✨ ${product}: ${benefit}`;
+  return `✨ ${product}.`;
 }
 
 export function buildConversionCopyContract(facts: CopyV3Facts, fields?: CopyV3Fields): OfficialConversionCopyContract {
@@ -486,7 +480,8 @@ export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAICh
   const marketplace = marketplaceLabel(facts.marketplace);
   const freight = shippingLine(facts);
   const product = channel === "whatsapp" ? contract.product : cleanProductName(facts.shortName?.trim() || facts.productName);
-  const hookContainsProduct = semanticText(contract.hook).includes(semanticText(contract.product));
+  const hookContainsProduct = semanticText(contract.hook).includes(semanticText(contract.product))
+    || semanticNarrativeKey(contract.hook) === semanticNarrativeKey(contract.product);
   const commercial = [
     contract.hook,
     ...(hookContainsProduct ? [] : [`🛍️ ${product}`]),
