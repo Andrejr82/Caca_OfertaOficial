@@ -32,6 +32,10 @@ function numeroPorExtenso(num: number): string {
   return num.toString();
 }
 
+function numeroFemininoPorExtenso(num: number): string {
+  return num === 1 ? "uma" : num === 2 ? "duas" : numeroPorExtenso(num);
+}
+
 function precoPorExtenso(valor: number | string | null | undefined): string {
   if (valor === null || valor === undefined || valor === "") return "preço não informado";
   const num = Number(valor);
@@ -76,6 +80,7 @@ function normalizeLinguisticSpeech(name: string): string {
     .replace(/\b[lI]mpacto\b/g, "Impacto")
     .replace(/\bparafusadeira\s+furadeira\b/gi, "Parafusadeira e Furadeira")
     .replace(/\bImpacto\s+(\d+)\s+baterias?\b/gi, "Impacto com $1 baterias")
+    .replace(/\b(\d{1,6})\s+(baterias?|camisetas?|calças?|peças?)\b/gi, (_, raw, noun) => `${numeroFemininoPorExtenso(Number(raw))} ${noun}`)
     .replace(/\b\d{1,6}\b/g, (raw) => numeroPorExtenso(Number(raw)))
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
@@ -187,18 +192,23 @@ function visualDirectionByCategory(offer: GeminiPromptOffer): VisualDirection {
 function speechScript8Seconds(offer: GeminiPromptOffer): string {
   const baseProductName = getSpeakableProductName(offer);
   const price = precoPorExtenso(offer.current_price);
+  const article = /^(?:air fryer|cafeteira|fritadeira|parafusadeira|furadeira|torneira|calça|camiseta|camisa|sandália|bota)\b/iu.test(baseProductName) ? "uma" : "um";
+  const templates = [
+    (productName: string) => `Se você procura ${article} ${productName}, confira esta oferta por ${price}. Acesse a publicação!`,
+    (productName: string) => `Para quem busca ${article} ${productName}, vale conferir esta oferta por ${price}. Acesse a publicação!`
+  ];
 
   for (const maxProductWords of PRODUCT_NAME_WORD_LIMITS) {
     const productName = compactProductName(baseProductName, maxProductWords);
-    const full = `Olha esse achado! ${productName}, por ${price}. Confira na publicação!`;
+    const full = templates[wordCount(productName) % templates.length](productName);
     if (wordCount(full) <= MAX_SPEECH_WORDS) return `"${full}"`;
 
-    const compact = `${productName}, por ${price}. Confira na publicação!`;
+    const compact = `${article} ${productName}, por ${price}. Acesse a publicação!`;
     if (wordCount(compact) <= MAX_SPEECH_WORDS) return `"${compact}"`;
   }
 
   const minimumProductName = compactProductName(baseProductName, 3);
-  return `"${minimumProductName}, por ${price}. Confira!"`;
+  return `"${article} ${minimumProductName}, por ${price}. Confira!"`;
 }
 
 export function formatLongPriceForSpeech(valor: number | string | null | undefined): string {

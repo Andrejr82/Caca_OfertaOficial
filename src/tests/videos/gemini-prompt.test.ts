@@ -188,4 +188,19 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(formatLongPriceForSpeech(471.8)).toBe("quatrocentos e setenta e um reais e oitenta centavos");
     expect(formatLongPriceForSpeech(123.9)).toBe("cento e vinte e três reais e noventa centavos");
   });
+
+  it("gera fala natural para tênis sem artigo ou abertura fraca", () => {
+    const speech = extractSpeech(buildGeminiVideoPrompt({
+      product_name: "Tênis Casual Masculino Caminhada",
+      current_price: 89.9,
+      category: "Moda"
+    }));
+
+    expect(speech).toContain("um Tênis Casual Masculino");
+    expect(speech).not.toMatch(/olha\s+ess[ae]/iu);
+    expect(speech).not.toMatch(/uma\s+Tênis/iu);
+    expect(speech).not.toMatch(/confortável|antiderrapante/iu);
+    expect(speech).toContain("Acesse a publicação");
+    expect(countWords(speech)).toBeLessThanOrEqual(22);
+  });
 });
