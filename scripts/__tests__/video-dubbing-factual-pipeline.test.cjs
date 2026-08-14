@@ -96,6 +96,31 @@ test('copy certificada usa somente fatos validados, preço, marketplace e CTA pe
   assert.equal(certifyCopy(input, extraction, copy).ok, true);
 });
 
+test('copy não repete atributo já contido na identidade extraída', () => {
+  const input = buildTrustedInput({
+    title: 'Tênis Masculino Feminino Calce Fácil Sem Cadarço Shopee Brasil',
+    price: 29.9,
+    marketplace: 'Shopee',
+    durationSecs: 12,
+  });
+  const extraction = validateExtraction(input, {
+    product: 'Tênis Masculino Feminino',
+    attributes: ['Masculino', 'Feminino', 'Calce Fácil', 'Sem Cadarço'],
+    quantities: [],
+    measures: [],
+    brand: null,
+  });
+  const copy = composeCertifiedCopy(input, extraction, {
+    selectedAttributes: ['Masculino', 'Feminino', 'Calce Fácil'],
+    hookId: 0,
+    ctaId: 1,
+  });
+
+  assert.equal(copy, 'Olha esse achado! Tênis Masculino Feminino Calce Fácil por vinte e nove reais e noventa centavos na Shopee. Curtiu? Corre pra conferir!');
+  assert.doesNotMatch(copy, /Masculino Feminino Masculino/iu);
+  assert.equal(certifyCopy(input, extraction, copy).ok, true);
+});
+
 test('certificação remove fatos sobrepostos do maior para o menor', () => {
   const input = buildTrustedInput({
     title: 'Tênis Shopee Brasil',
