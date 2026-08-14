@@ -277,7 +277,7 @@ function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
     .filter((feature) => !categoryLabel.toLowerCase().includes(feature.toLowerCase()))
     .slice(0, 3);
   const normalizedFeatures = extraFeatures.map((feature) => feature.toLowerCase() === 'gourmet' ? 'acabamento gourmet' : feature);
-  const adjective = normalizedFeatures.length === 1 && /^(?:compacta|casual|elétrica)$/iu.test(normalizedFeatures[0]);
+  const adjective = normalizedFeatures.length === 1 && /^(?:compacta|casual|elétrica|portátil|inflável)$/iu.test(normalizedFeatures[0]);
   const featureText = normalizedFeatures.length
     ? adjective ? ` ${normalizedFeatures[0]}` : ` com ${normalizedFeatures.join(' e ')}`
     : '';
@@ -285,7 +285,8 @@ function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
   const hooks = ['Olha esse achado!', 'Dá uma olhada nisso!', 'Encontramos essa opção na Shopee!'];
   const hook = hooks[hashText(normalizeDubbingTitle(title)) % hooks.length];
   const offer = priceText ? ` por ${priceText}` : '';
-  return `${hook} ${capitalizeSentence(categoryLabel)}${featureText}${offer} na Shopee. ${buildUniversalDubbingCta(title)}`;
+  const marketplace = /na Shopee[!.]?$/iu.test(hook) ? '' : ' na Shopee';
+  return `${hook} ${capitalizeSentence(categoryLabel)}${featureText}${offer}${marketplace}. ${buildUniversalDubbingCta(title)}`;
 }
 
 function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO', visualPlan = null, price = null) {
