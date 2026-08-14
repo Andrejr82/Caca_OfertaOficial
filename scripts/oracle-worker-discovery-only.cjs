@@ -673,7 +673,17 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
         }));
         const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];
+        const stageTelemetry = {
+          relevance: {
+            input: Number(metrics.parsed ?? top.length),
+            accepted: Number(metrics.approvedContract ?? top.length),
+          },
+          novelty: { input: top.length, evaluated: top.length > 0, accepted: 0, rejected: 0 },
+        };
         const freshness = filterFreshCandidates('Shopee', v1Candidates, history);
+        stageTelemetry.novelty.accepted = freshness.accepted.length;
+        stageTelemetry.novelty.rejected = freshness.rejected?.length || 0;
+        funnel.setStageTelemetry(stageTelemetry);
         funnel.count('afterNovelty', freshness.accepted.length).count('afterClassification', freshness.accepted.length).count('queueSelected', freshness.accepted.length);
         for (const item of freshness.rejected || []) funnel.reject(item?.reason || 'freshness_rejected');
         const queue = { selected: freshness.accepted, skipped: [], deferred: [], limits: { engine: 'shopee_openapi_v1', persistenceCap: null, maxPerMarketplace: Number(copyQueueOptions?.maxPerMarketplace || 0), selection: 'all_v1_rule_survivors' } };

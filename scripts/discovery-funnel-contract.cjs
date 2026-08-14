@@ -159,6 +159,7 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
   let terminalStatus = null;
   let runtime = scenarioRuntime && typeof scenarioRuntime === 'object' ? { ...scenarioRuntime } : null;
   let sourceTelemetry = null;
+  let stageTelemetry = null;
 
   return {
     contractVersion: DISCOVERY_FUNNEL_CONTRACT_VERSION,
@@ -212,6 +213,10 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
       sourceTelemetry = value && typeof value === 'object' ? { ...value } : null;
       return this;
     },
+    setStageTelemetry(value) {
+      stageTelemetry = value && typeof value === 'object' ? { ...value } : null;
+      return this;
+    },
     setFinalByCategory(value) {
       categorySummary = normalizeFinalByCategory(value);
       return this;
@@ -250,6 +255,7 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
         }) : null,
         counters: Object.freeze({ ...counters }),
         rejectionReasons: Object.freeze({ ...rejectionReasons }),
+        stageTelemetry: stageTelemetry ? Object.freeze({ ...stageTelemetry }) : null,
         finalByCategory: Object.freeze({ ...categorySummary }),
         queueSelection: Object.freeze({
           ...queueSelection,

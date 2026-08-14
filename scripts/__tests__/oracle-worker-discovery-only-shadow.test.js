@@ -56,6 +56,31 @@ describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {
     expect(failed.status).toBe('failed');
   });
 
+  it('identifica quando a relevância zerou antes de novelty', async () => {
+    let metadata = null;
+    await runDiscoveryOnlyCycle({
+      tenantId: 'tenant-test', correlationId: 'correlation-relevance-zero', requestedAt: '2026-08-08T00:00:00.000Z', marketplaces: ['Shopee'],
+      discover: async () => { throw new Error('legacy discover must not run'); },
+      shopeeDiscovery: async () => ({
+        decision: 'official',
+        top: [],
+        metrics: { raw: 20, parsed: 20, approvedContract: 0, scoreable: 0, final: 0 },
+        rejectionReasons: { positive_domain_missing: 20 },
+      }),
+      persistShopee: async () => { throw new Error('relevance-zero must not persist'); },
+      persist: async () => ({ accepted: 0 }),
+      persistV2Metadata: async (value) => { metadata = value; },
+      scenarioResolver: () => 'ferramentas_editorial',
+    });
+
+    expect(metadata.funnel.counters).toMatchObject({ extracted: 20, afterParse: 20, afterRelevance: 0, afterNovelty: 0 });
+    expect(metadata.funnel.rejectionReasons).toEqual({ positive_domain_missing: 20 });
+    expect(metadata.funnel.stageTelemetry).toEqual({
+      relevance: { input: 20, accepted: 0 },
+      novelty: { input: 0, evaluated: false, accepted: 0, rejected: 0 },
+    });
+  });
+
   it('keeps recent Shopee identities out before controlled persistence', async () => {
     let candidates = null;
     await runDiscoveryOnlyCycle({
