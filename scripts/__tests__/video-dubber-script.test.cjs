@@ -112,6 +112,20 @@ test('identidade preserva preposições naturais do nome do produto', () => {
   }
 });
 
+test('fallback de poltrona preserva identidade, atributo e marketplace naturalmente', () => {
+  const script = buildFallbackDubbingScript(
+    'Conjunto Poltrona e Puff Inflável Ultra Lounge Portátil',
+    12,
+    80.9,
+  );
+
+  assert.match(script, /Conjunto Poltrona e Puff Inflável/iu);
+  assert.doesNotMatch(script, /com portátil/iu);
+  assert.equal((script.match(/Shopee/giu) || []).length, 1);
+  assert.match(script, /oitenta reais e noventa centavos/iu);
+  assert.match(script, /(?:Gostou\? Corre pra conferir esse achado!|Curtiu\? Corre pra conferir!|Vale a pena dar uma olhada\. Corre pra conferir!)$/u);
+});
+
 test('sanitização troca saída insegura pelo fallback factual', () => {
   const title = 'Kit Ferramentas 129 Peças com Maleta';
   const unsafe = 'Esse produto é um absurdo e vai revolucionar sua rotina. Você vai amar!';
