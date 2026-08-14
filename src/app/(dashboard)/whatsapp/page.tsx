@@ -68,7 +68,7 @@ export default async function WhatsappDashboardPage() {
       .eq("status", "draft")
       .order("created_at", { ascending: false });
 
-    draftPosts = mergePanelDrafts(drafts || [], selectedOfferIds, todayStart, currentCohortOfferIds);
+    draftPosts = mergePanelDrafts(drafts || [], selectedOfferIds, todayStart, currentCohortOfferIds, true);
   }
 
   const historyData = await getPostHistory("whatsapp");

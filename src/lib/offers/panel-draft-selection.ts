@@ -24,13 +24,14 @@ export function isManualExpressDraft(post: PanelDraftPost): boolean {
   return post.offers?.explainability?.manual_source === true;
 }
 
-function isActiveDraft(post: PanelDraftPost): boolean {
+function isActiveDraft(post: PanelDraftPost, allowApprovedOfferDrafts: boolean): boolean {
   const offerStatus = String(post.offers?.status || "").toLowerCase();
   return post.status === "draft"
     && !post.deleted_at
     && !post.posted_at
     && !post.external_id
-    && !["posted", "approved", "rejected", "deferred"].includes(offerStatus);
+    && !["posted", "rejected", "deferred"].includes(offerStatus)
+    && (allowApprovedOfferDrafts || offerStatus !== "approved");
 }
 
 export function mergePanelDrafts<T extends PanelDraftPost>(
@@ -38,10 +39,11 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
   _editorialOfferIds: ReadonlySet<string>,
   editorialDayStart: Date,
   authoritativeCohortOfferIds?: ReadonlySet<string>,
+  allowApprovedOfferDrafts = false,
 ): T[] {
   const currentCohortOfferIds = authoritativeCohortOfferIds ?? getCurrentCohortOfferIds(drafts, editorialDayStart);
   const selected = drafts.filter((post) => {
-    if (!isActiveDraft(post)) return false;
+    if (!isActiveDraft(post, allowApprovedOfferDrafts)) return false;
     if (isManualExpressDraft(post)) return true;
     if (!currentCohortOfferIds.has(post.offer_id)) return false;
     const postCreatedAt = new Date(post.created_at).getTime();
