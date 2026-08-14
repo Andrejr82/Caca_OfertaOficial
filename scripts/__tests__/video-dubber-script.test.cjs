@@ -99,6 +99,19 @@ test('fallback deriva quantidade e mantém concordância do produto', () => {
   assert.doesNotMatch(potes, /este cafeteira|este torneira|este potes/iu);
 });
 
+test('identidade preserva preposições naturais do nome do produto', () => {
+  const regressions = [
+    ['Calça Masculina', /calça/iu],
+    ['Limpa Estofados', /limpa estofados/iu],
+    ['Chapinha 3 em 1', /chapinha 3 em 1/iu],
+    ['Panela de Pressão Elétrica multifuncional', /panela de pressão elétrica multifuncional/iu],
+  ];
+
+  for (const [title, identity] of regressions) {
+    assert.match(buildFallbackDubbingScript(title, 12), identity, title);
+  }
+});
+
 test('sanitização troca saída insegura pelo fallback factual', () => {
   const title = 'Kit Ferramentas 129 Peças com Maleta';
   const unsafe = 'Esse produto é um absurdo e vai revolucionar sua rotina. Você vai amar!';
