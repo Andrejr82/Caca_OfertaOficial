@@ -25,7 +25,7 @@ test('fallback mantém identidade e fatos de três produtos diferentes', () => {
   assert.match(scripts[1], /kit.*camisetas/iu);
   assert.match(scripts[1], /quatro|algodão/iu);
   assert.match(scripts[2], /cafeteira/iu);
-  assert.match(scripts[2], /compacto/iu);
+  assert.match(scripts[2], /compacta/iu);
 });
 
 test('título sem categoria conhecida não cai em texto universal', () => {
@@ -36,13 +36,13 @@ test('título sem categoria conhecida não cai em texto universal', () => {
   assert.notEqual(facts.key, 'produto');
   assert.match(script, /bermuda/iu);
   assert.doesNotMatch(script, /resolver uma tarefa do dia a dia|opção prática para essa tarefa/iu);
-  assert.match(script, /Acesse o link na publicação\.$/u);
+  assert.match(script, /Corre pra conferir!$/u);
 });
 
 test('sanitização preserva identidade válida e rejeita claim inventada', () => {
   const title = TITLES.eletroportatil;
-  const valid = 'Olha essa cafeteira elétrica compacta. O modelo tem quinze cafés. Você encontra na Shopee. Acesse o link na publicação.';
-  const unsafe = 'Olha essa cafeteira elétrica compacta. Ela é confortável e vai revolucionar sua rotina. Você encontra na Shopee. Acesse o link na publicação.';
+  const valid = 'Olha essa cafeteira elétrica compacta. O modelo tem quinze cafés. Você encontra na Shopee. Corre pra conferir!';
+  const unsafe = 'Olha essa cafeteira elétrica compacta. Ela é confortável e vai revolucionar sua rotina. Você encontra na Shopee. Corre pra conferir!';
 
   assert.equal(sanitizeDubbingScript(valid, title, 15), valid);
   assert.doesNotMatch(sanitizeDubbingScript(unsafe, title, 15), /confortável|revolucionar/iu);
@@ -54,7 +54,7 @@ test('geração passa contexto específico ao Groq e mantém resposta específic
   let prompt = '';
   axios.post = async (_url, body) => {
     prompt = body.messages[0].content;
-    return { data: { choices: [{ message: { content: 'Olha essa cafeteira elétrica compacta. O modelo tem quinze cafés. Você encontra na Shopee. Acesse o link na publicação.' } }] } };
+    return { data: { choices: [{ message: { content: 'Olha essa cafeteira elétrica compacta. O modelo tem quinze cafés. Você encontra na Shopee. Corre pra conferir!' } }] } };
   };
   process.env.GROQ_API_KEY = 'test-only';
 
