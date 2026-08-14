@@ -149,7 +149,8 @@ function capitalize(value) {
 
 function composeCertifiedCopy(input, extraction, rawSelection) {
   const selection = validateSelection(extraction, rawSelection);
-  const attributes = selection.selectedAttributes.length ? ` ${selection.selectedAttributes.join(', ')}` : '';
+  const selectedAttributes = selection.selectedAttributes.filter((fact) => !sourceContains(extraction.product, fact));
+  const attributes = selectedAttributes.length ? ` ${selectedAttributes.join(', ')}` : '';
   return `${HOOKS[selection.hookId]} ${capitalize(extraction.product)}${attributes} por ${spokenPrice(input.price)} na ${input.marketplace}. ${CTAS[selection.ctaId]}`;
 }
 
@@ -172,12 +173,18 @@ function certifyCopy(input, extraction, copy) {
   if (!normalizeForMatch(text).includes(normalizeForMatch(spokenPrice(input.price)))) return { ok: false, reason: 'PRECO_DIVERGENTE' };
 
   let residue = ` ${normalizeForMatch(text)} `;
-  for (const phrase of [hook, cta, extraction.product, input.marketplace, spokenPrice(input.price)]) {
-    residue = removePhrase(residue, phrase);
-  }
-  const allFacts = [...extraction.attributes, ...extraction.quantities, ...extraction.measures, ...(extraction.brand ? [extraction.brand] : [])]
-    .sort((a, b) => b.length - a.length);
-  for (const fact of allFacts) residue = removePhrase(residue, fact);
+  const removable = [
+    hook,
+    cta,
+    extraction.product,
+    input.marketplace,
+    spokenPrice(input.price),
+    ...extraction.attributes,
+    ...extraction.quantities,
+    ...extraction.measures,
+    ...(extraction.brand ? [extraction.brand] : []),
+  ].sort((a, b) => normalizeForMatch(b).length - normalizeForMatch(a).length);
+  for (const phrase of removable) residue = removePhrase(residue, phrase);
 
   const allowedStructure = new Set(['por', 'na', 'no', 'em', 'e', 'com', 'de', 'da', 'do', 'das', 'dos', 'para']);
   const unexpected = normalizeForMatch(residue).split(/\s+/u).filter(Boolean).filter((token) => !allowedStructure.has(token));
@@ -198,15 +205,54 @@ function parseJsonObject(value) {
 }
 
 function extractionPrompt(input) {
-  return `Extraia fatos LITERAIS do título abaixo. Nunca use sinônimos, inferências, benefícios ou características implícitas. Cada valor textual deve ser um trecho que exista literalmente no título.\n\nTÍTULO: ${input.title}\n\nRetorne APENAS JSON neste formato:\n{"product":"trecho literal que nomeia o produto","attributes":["trechos literais"],"quantities":["trechos literais"],"measures":["trechos literais"],"brand":null}\n\nRegras: product obrigatório; arrays podem ser vazios; brand somente se a marca estiver explícita no título.`;
+  return `Extraia fatos LITERAIS do título abaixo. Nunca use sinônimos, inferências, benefícios ou características implícitas. Cada valor textual deve ser um trecho que exista literalmente no título.\n\nTÍTULO: ${input.title}\n\nRetorne somente os campos solicitados. product obrigatório; arrays podem ser vazios; brand somente se a marca estiver explícita no título.`;
 }
 
 function selectionPrompt(input, extraction, maxAttributes = 3) {
-  return `Selecione a identidade falada mais natural usando SOMENTE os fatos certificados abaixo. Não reescreva fatos e não crie palavras novas.\nProduto: ${extraction.product}\nAtributos permitidos: ${JSON.stringify(extraction.attributes)}\nDuração: ${input.durationSecs}s\n\nEscolha até ${maxAttributes} atributos EXATAMENTE como aparecem na lista. hookId e ctaId devem ser 0, 1 ou 2.\nRetorne APENAS JSON:\n{"selectedAttributes":[],"hookId":0,"ctaId":0}`;
+  return `Selecione a identidade falada mais natural usando SOMENTE os fatos certificados abaixo. Não reescreva fatos e não crie palavras novas.\nProduto: ${extraction.product}\nAtributos permitidos: ${JSON.stringify(extraction.attributes)}\nDuração: ${input.durationSecs}s\n\nEscolha até ${maxAttributes} atributos EXATAMENTE como aparecem na lista. hookId e ctaId devem ser 0, 1 ou 2.`;
 }
 
 function reductionPrompt(input, extraction, currentSelection, maxAttributes) {
-  return `O áudio ficou longo para ${input.durationSecs}s. Reduza a copy removendo atributos, sem reescrever nenhum fato.\nProduto fixo: ${extraction.product}\nAtributos certificados: ${JSON.stringify(extraction.attributes)}\nAtributos atuais: ${JSON.stringify(currentSelection.selectedAttributes)}\n\nEscolha no máximo ${maxAttributes} atributo(s), sempre EXATAMENTE da lista certificada. Preserve hookId=${currentSelection.hookId} e ctaId=${currentSelection.ctaId}.\nRetorne APENAS JSON:\n{"selectedAttributes":[],"hookId":${currentSelection.hookId},"ctaId":${currentSelection.ctaId}}`;
+  return `O áudio ficou longo para ${input.durationSecs}s. Reduza a copy removendo atributos, sem reescrever nenhum fato.\nProduto fixo: ${extraction.product}\nAtributos certificados: ${JSON.stringify(extraction.attributes)}\nAtributos atuais: ${JSON.stringify(currentSelection.selectedAttributes)}\n\nEscolha no máximo ${maxAttributes} atributo(s), sempre EXATAMENTE da lista certificada. Preserve hookId=${currentSelection.hookId} e ctaId=${currentSelection.ctaId}.`;
+}
+
+function groqResponseFormat(stage, context) {
+  const schema = stage === 'extract'
+    ? {
+        type: 'object',
+        properties: {
+          product: { type: 'string' },
+          attributes: { type: 'array', items: { type: 'string' } },
+          quantities: { type: 'array', items: { type: 'string' } },
+          measures: { type: 'array', items: { type: 'string' } },
+          brand: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+        },
+        required: ['product', 'attributes', 'quantities', 'measures', 'brand'],
+        additionalProperties: false,
+      }
+    : {
+        type: 'object',
+        properties: {
+          selectedAttributes: {
+            type: 'array',
+            items: { type: 'string' },
+            maxItems: stage === 'reduce' ? context.maxAttributes : 3,
+          },
+          hookId: { type: 'integer', enum: [0, 1, 2] },
+          ctaId: { type: 'integer', enum: [0, 1, 2] },
+        },
+        required: ['selectedAttributes', 'hookId', 'ctaId'],
+        additionalProperties: false,
+      };
+
+  return {
+    type: 'json_schema',
+    json_schema: {
+      name: `video_dubbing_${stage}`,
+      strict: true,
+      schema,
+    },
+  };
 }
 
 function createGroqAiClient({ apiKey = process.env.GROQ_API_KEY, model = 'openai/gpt-oss-120b' } = {}) {
@@ -221,6 +267,7 @@ function createGroqAiClient({ apiKey = process.env.GROQ_API_KEY, model = 'openai
     const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
       model,
       messages: [{ role: 'user', content: prompt }],
+      response_format: groqResponseFormat(stage, context),
       temperature: 0,
       max_completion_tokens: 500,
     }, { headers: { Authorization: `Bearer ${apiKey}` } });

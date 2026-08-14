@@ -1,11 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const axios = require('axios');
 
 const {
   buildTrustedInput,
   validateExtraction,
   composeCertifiedCopy,
   certifyCopy,
+  createGroqAiClient,
   runFactualDubbingSimulation,
 } = require('../video-dubbing-factual-pipeline.cjs');
 const { resolveEdgeTtsBin } = require('../video-dubbing-runtime-paths.cjs');
@@ -92,6 +94,96 @@ test('copy certificada usa somente fatos validados, preço, marketplace e CTA pe
   assert.match(copy, /Shopee/iu);
   assert.doesNotMatch(copy, /casual|confortável|leve/iu);
   assert.equal(certifyCopy(input, extraction, copy).ok, true);
+});
+
+test('copy não repete atributo já contido na identidade extraída', () => {
+  const input = buildTrustedInput({
+    title: 'Tênis Masculino Feminino Calce Fácil Sem Cadarço Shopee Brasil',
+    price: 29.9,
+    marketplace: 'Shopee',
+    durationSecs: 12,
+  });
+  const extraction = validateExtraction(input, {
+    product: 'Tênis Masculino Feminino',
+    attributes: ['Masculino', 'Feminino', 'Calce Fácil', 'Sem Cadarço'],
+    quantities: [],
+    measures: [],
+    brand: null,
+  });
+  const copy = composeCertifiedCopy(input, extraction, {
+    selectedAttributes: ['Masculino', 'Feminino', 'Calce Fácil'],
+    hookId: 0,
+    ctaId: 1,
+  });
+
+  assert.equal(copy, 'Olha esse achado! Tênis Masculino Feminino Calce Fácil por vinte e nove reais e noventa centavos na Shopee. Curtiu? Corre pra conferir!');
+  assert.doesNotMatch(copy, /Masculino Feminino Masculino/iu);
+  assert.equal(certifyCopy(input, extraction, copy).ok, true);
+});
+
+test('certificação remove fatos sobrepostos do maior para o menor', () => {
+  const input = buildTrustedInput({
+    title: 'Tênis Shopee Brasil',
+    price: 29.9,
+    marketplace: 'Shopee',
+    durationSecs: 12,
+  });
+  const extraction = validateExtraction(input, {
+    product: 'Tênis',
+    attributes: ['Shopee Brasil'],
+    quantities: [],
+    measures: [],
+    brand: null,
+  });
+  const copy = composeCertifiedCopy(input, extraction, {
+    selectedAttributes: ['Shopee Brasil'],
+    hookId: 0,
+    ctaId: 0,
+  });
+
+  assert.equal(certifyCopy(input, extraction, copy).ok, true);
+});
+
+test('Groq usa JSON Schema estrito para extração', async () => {
+  const originalPost = axios.post;
+  let payload;
+  axios.post = async (_url, body) => {
+    payload = body;
+    return {
+      data: {
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              product: 'Tênis',
+              attributes: ['Calce Fácil', 'Sem Cadarço'],
+              quantities: [],
+              measures: [],
+              brand: null,
+            }),
+          },
+        }],
+      },
+    };
+  };
+
+  try {
+    const client = createGroqAiClient({ apiKey: 'test-key' });
+    const result = await client('extract', {
+      input: buildTrustedInput({
+        title: 'Tênis Calce Fácil Sem Cadarço',
+        price: 29.9,
+        marketplace: 'Shopee',
+        durationSecs: 12,
+      }),
+    });
+
+    assert.equal(payload.response_format.type, 'json_schema');
+    assert.equal(payload.response_format.json_schema.strict, true);
+    assert.equal(payload.response_format.json_schema.schema.additionalProperties, false);
+    assert.equal(result.product, 'Tênis');
+  } finally {
+    axios.post = originalPost;
+  }
 });
 
 test('simulação executa IA -> validação -> seleção -> copy -> TTS -> ajuste -> certificação', async () => {
