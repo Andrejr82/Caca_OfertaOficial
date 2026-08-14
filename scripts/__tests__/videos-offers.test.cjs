@@ -29,7 +29,7 @@ test('vídeos: botão remove somente o job confirmado e atualiza a lista', () =>
 });
 
 test('vídeos: seletor usa short_name antes do título completo', () => {
-  assert.match(videosClient, /offer\.short_name \|\| offer\.product_name/u);
+  assert.match(videosClient, /getVideoOfferDisplayName\(offer\)/u);
 });
 
 test('extrator: caso real rejeita título institucional e aceita produto real', () => {

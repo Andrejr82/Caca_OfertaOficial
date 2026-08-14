@@ -32,6 +32,10 @@ function numeroPorExtenso(num: number): string {
   return num.toString();
 }
 
+function numeroFemininoPorExtenso(num: number): string {
+  return num === 1 ? "uma" : num === 2 ? "duas" : numeroPorExtenso(num);
+}
+
 function precoPorExtenso(valor: number | string | null | undefined): string {
   if (valor === null || valor === undefined || valor === "") return "preço não informado";
   const num = Number(valor);
@@ -76,6 +80,7 @@ function normalizeLinguisticSpeech(name: string): string {
     .replace(/\b[lI]mpacto\b/g, "Impacto")
     .replace(/\bparafusadeira\s+furadeira\b/gi, "Parafusadeira e Furadeira")
     .replace(/\bImpacto\s+(\d+)\s+baterias?\b/gi, "Impacto com $1 baterias")
+    .replace(/\b(\d{1,6})\s+(baterias?|camisetas?|calças?|peças?)\b/gi, (_, raw, noun) => `${numeroFemininoPorExtenso(Number(raw))} ${noun}`)
     .replace(/\b\d{1,6}\b/g, (raw) => numeroPorExtenso(Number(raw)))
     .replace(/\s{2,}/g, " ")
     .replace(/\s+([,.;:!?])/g, "$1")
@@ -186,19 +191,24 @@ function visualDirectionByCategory(offer: GeminiPromptOffer): VisualDirection {
 
 function speechScript8Seconds(offer: GeminiPromptOffer): string {
   const baseProductName = getSpeakableProductName(offer);
-  const price = precoPorExtenso(offer.current_price);
+  const numericPrice = Number(offer.current_price);
+  const price = Number.isFinite(numericPrice) && numericPrice > 0 ? precoPorExtenso(numericPrice) : "";
+  const article = /^(?:air fryer|cafeteira|fritadeira|parafusadeira|furadeira|torneira|calça|camiseta|camisa|sandália|bota)\b/iu.test(baseProductName) ? "uma" : "um";
 
-  for (const maxProductWords of PRODUCT_NAME_WORD_LIMITS) {
-    const productName = compactProductName(baseProductName, maxProductWords);
-    const full = `Olha esse achado! ${productName}, por ${price}. Confira na publicação!`;
+  if (wordCount(baseProductName) <= 4) {
+    const productName = compactProductName(baseProductName, 4);
+    const full = `Encontre ${article} ${productName}${price ? ` por ${price}` : ""}. Acesse!`;
     if (wordCount(full) <= MAX_SPEECH_WORDS) return `"${full}"`;
-
-    const compact = `${productName}, por ${price}. Confira na publicação!`;
-    if (wordCount(compact) <= MAX_SPEECH_WORDS) return `"${compact}"`;
   }
 
-  const minimumProductName = compactProductName(baseProductName, 3);
-  return `"${minimumProductName}, por ${price}. Confira!"`;
+  const priceWords = price ? wordCount(price) + 1 : 0;
+  const maxProductWords = Math.max(1, MAX_SPEECH_WORDS - priceWords - 1);
+  const productName = compactProductName(baseProductName, maxProductWords);
+  const compact = `${productName}${price ? ` por ${price}` : ""}. Acesse a publicação!`;
+  if (wordCount(compact) <= MAX_SPEECH_WORDS) return `"${compact}"`;
+
+  const shortCompact = `${productName}${price ? ` por ${price}` : ""}. Acesse!`;
+  return `"${shortCompact}"`;
 }
 
 export function formatLongPriceForSpeech(valor: number | string | null | undefined): string {
