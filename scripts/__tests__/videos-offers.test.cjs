@@ -74,4 +74,5 @@ test('extrator: R$ 0 não passa quando existe preço principal positivo', () => 
   ]), { raw: 'R$ 2.830,39', value: 2830.39, source: 'dom.primary-price' });
   assert.match(content, /priceValue/u);
   assert.match(popup, /Number\(data\.priceValue\) > 0/u);
+  assert.match(popup, /title: currentTitle[\s\S]*price: window\.currentPrice[\s\S]*shopId: currentShopId[\s\S]*itemId: currentItemId/u);
 });

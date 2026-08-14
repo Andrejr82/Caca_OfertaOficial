@@ -3,8 +3,13 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = parser;
   if (root) root.shopeePriceParser = parser;
 })(typeof globalThis === 'undefined' ? this : globalThis, () => {
-  const SUSPICIOUS_CONTEXT = /\b(?:x\s*de|parcelas?|sem\s+juros|cupom|frete|envio|shipping|desconto|cashback|por\s+(?:m[eê]s|dia)|a\s+partir\s+de)\b/iu;
+  const SUSPICIOUS_CONTEXT = /\b(?:x\s*de|parcelas?|sem\s+juros|cupom|frete|envio|shipping|desconto|cashback|por\s+(?:m[eê]s|dia)|a\s+partir\s+de|recomend\w*|recommend\w*|suggest\w*|similar\w*|related\w*)\b/iu;
   const AUTHORITY_CONTEXT = /(?:^|[-_\s])(?:current|principal|product|offer|price|pre[cç]o)(?:$|[-_\s])/iu;
+
+  function hasAuthorityContext(value) {
+    const normalized = String(value || '').replace(/([a-z])([A-Z])/gu, '$1 $2').replace(/[_-]+/gu, ' ');
+    return AUTHORITY_CONTEXT.test(normalized);
+  }
 
   function parseBrazilPrice(value) {
     const text = String(value || '').replace(/\s+/gu, ' ').trim();
@@ -30,7 +35,7 @@
 
     const byValue = new Map();
     for (const candidate of valid) {
-      const score = AUTHORITY_CONTEXT.test(candidate.context) ? 2 : 0;
+      const score = hasAuthorityContext(candidate.context) ? 2 : 0;
       const current = byValue.get(candidate.value);
       if (!current) {
         byValue.set(candidate.value, { ...candidate, score, occurrences: 1 });
