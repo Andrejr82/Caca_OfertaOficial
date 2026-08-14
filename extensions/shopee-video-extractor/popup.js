@@ -17,7 +17,7 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 
   chrome.scripting.executeScript({
     target: { tabId: tab.id },
-    files: ['video-parser.js', 'price-parser.js', 'content.js']
+    files: ['video-parser.js', 'price-parser.js', 'product-parser.js', 'content.js']
   }, (results) => {
     document.getElementById('extractBtn').disabled = false;
     
@@ -28,17 +28,18 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 
     const data = results[0].result;
     
-    if (data && data.videoUrl) {
+    if (data && data.videoUrl && data.title && data.shopId && data.itemId) {
       currentVideoUrl = data.videoUrl;
-      currentTitle = data.title || "Shopee_Video";
+      currentTitle = data.title;
       currentOriginalUrl = data.originalUrl || "";
       currentShopId = data.shopId || null;
       currentItemId = data.itemId || null;
       window.currentImageUrl = data.imageUrl || "";
       window.currentPrice = data.price || null;
+      window.currentPriceValue = data.priceValue || null;
       window.currentPriceStatus = data.priceStatus || 'not_found';
 
-      const priceOk = window.currentPriceStatus === 'validated' && Boolean(window.currentPrice);
+      const priceOk = window.currentPriceStatus === 'validated' && Number(data.priceValue) > 0 && Boolean(window.currentPrice);
       document.getElementById('status').innerText = priceOk
         ? `Vídeo encontrado!\nProduto: ${currentTitle}\nPreço: ${window.currentPrice}`
         : `Vídeo encontrado, mas o preço principal não foi identificado com segurança.\nProduto: ${currentTitle}\nAtualize a página e tente novamente.`;
@@ -50,6 +51,10 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
       const dubBtn = document.getElementById('dubBtn');
       dubBtn.style.display = 'block';
       dubBtn.disabled = !priceOk;
+    } else if (data && data.videoUrl) {
+      document.getElementById('status').innerText = "Vídeo encontrado, mas o produto não foi identificado com segurança. Abra a página do produto correto e tente novamente.";
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('dubBtn').style.display = 'none';
     } else {
       document.getElementById('status').innerText = "Nenhum vídeo encontrado. (Dica: tente dar Play no vídeo primeiro).";
       document.getElementById('result').style.display = 'none';
@@ -59,7 +64,7 @@ document.getElementById('extractBtn').addEventListener('click', async () => {
 });
 
 document.getElementById('dubBtn').addEventListener('click', async () => {
-  if (window.currentPriceStatus !== 'validated' || !window.currentPrice) {
+  if (window.currentPriceStatus !== 'validated' || Number(window.currentPriceValue) <= 0 || !window.currentPrice) {
     document.getElementById('status').innerText = "Preço principal não identificado. Atualize a página e tente novamente antes de enviar para a Oracle.";
     return;
   }
