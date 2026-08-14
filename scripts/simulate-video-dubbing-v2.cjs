@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 
+const path = require('path');
+const dotenv = require('dotenv');
 const { resolveEdgeTtsBin } = require('./video-dubbing-runtime-paths.cjs');
+
+dotenv.config({ path: path.resolve(process.cwd(), '.env.local'), quiet: true });
+dotenv.config({ path: path.resolve(process.cwd(), '.env'), quiet: true });
 
 if (!process.env.EDGE_TTS_BIN) {
   process.env.EDGE_TTS_BIN = resolveEdgeTtsBin();
