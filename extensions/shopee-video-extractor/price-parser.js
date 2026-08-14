@@ -3,7 +3,7 @@
   if (typeof module !== 'undefined' && module.exports) module.exports = parser;
   if (root) root.shopeePriceParser = parser;
 })(typeof globalThis === 'undefined' ? this : globalThis, () => {
-  const SUSPICIOUS_CONTEXT = /\b(?:x\s*de|parcelas?|sem\s+juros|cupom|frete|envio|shipping|desconto|cashback|por\s+(?:m[eê]s|dia)|a\s+partir\s+de|recomend\w*|recommend\w*|suggest\w*|similar\w*|related\w*)\b/iu;
+  const SUSPICIOUS_CONTEXT = /\b(?:x\s*de|parcelas?|sem\s+juros|cupom|frete|envio|shipping|desconto|cashback|por\s+(?:m[eê]s|dia)|a\s+partir\s+de|recomend\w*|recommend\w*|suggest\w*|similar\w*|related\w*|old\w*|original\w*|line-through|strikethrough|compare\w*)\b/iu;
   const AUTHORITY_CONTEXT = /(?:^|[-_\s])(?:current|principal|product|offer|price|pre[cç]o)(?:$|[-_\s])/iu;
 
   function hasAuthorityContext(value) {
