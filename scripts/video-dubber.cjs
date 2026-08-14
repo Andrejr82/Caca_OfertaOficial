@@ -257,6 +257,15 @@ function capitalizeSentence(value) {
   return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
 }
 
+function buildUniversalDubbingCta(title) {
+  const ctas = [
+    'Gostou? Corre pra conferir esse achado!',
+    'Curtiu? Corre pra conferir!',
+    'Vale a pena dar uma olhada. Corre pra conferir!',
+  ];
+  return ctas[hashText(normalizeDubbingTitle(title)) % ctas.length];
+}
+
 function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
   const facts = extractDubbingFacts(title);
   if (facts.key === 'produto') throw new Error('Identidade do produto insuficiente para gerar roteiro factual.');
@@ -276,7 +285,7 @@ function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
   const hooks = ['Olha esse achado!', 'Dá uma olhada nisso!', 'Encontramos essa opção na Shopee!'];
   const hook = hooks[hashText(normalizeDubbingTitle(title)) % hooks.length];
   const offer = priceText ? ` por ${priceText}` : '';
-  return `${hook} ${capitalizeSentence(categoryLabel)}${featureText}${offer} na Shopee. Corre pra conferir!`;
+  return `${hook} ${capitalizeSentence(categoryLabel)}${featureText}${offer} na Shopee. ${buildUniversalDubbingCta(title)}`;
 }
 
 function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO', visualPlan = null, price = null) {
@@ -297,7 +306,7 @@ ESTRUTURA:
 2. Nome curto do produto, sem repetir o título completo.
 3. Uma a três características sustentadas pelo título.
 4. Um benefício concreto e seguro, sem extrapolar os fatos.
-5. CTA final curto, energético e falável: Corre pra conferir!
+5. CTA final universal, curto, energético e falável. Use uma destas formas: Gostou? Corre pra conferir esse achado!; Curtiu? Corre pra conferir!; Vale a pena dar uma olhada. Corre pra conferir!
 
 IDENTIDADE DO PRODUTO:
 - Mencione exatamente uma identificação curta, natural e factual do produto.
@@ -331,7 +340,7 @@ function isSafeDubbingScript(script, price = null) {
     && !/\b(?:R\$|desconto|estoque|últim|economia|economiz)/iu.test(text)
     && (!hasPrice || Boolean(expectedPrice && text.toLowerCase().includes(expectedPrice.toLowerCase())))
     && !/confira os detalhes|acesse a publicação|acesse o link na publicação|título apresenta|para você conferir/iu.test(text)
-    && /Corre pra conferir!$/u.test(text);
+    && /(?:Gostou\? Corre pra conferir esse achado!|Curtiu\? Corre pra conferir!|Vale a pena dar uma olhada\. Corre pra conferir!|Corre pra conferir!)$/u.test(text);
 }
 
 function hasUnsupportedSpecificFact(script, title) {
@@ -627,6 +636,7 @@ module.exports = {
   processShopeeVideoDubbing,
   generateDubbingCopy,
   buildDubbingPrompt,
+  buildUniversalDubbingCta,
   buildFallbackDubbingScript,
   extractDubbingFacts,
   sanitizeDubbingScript,

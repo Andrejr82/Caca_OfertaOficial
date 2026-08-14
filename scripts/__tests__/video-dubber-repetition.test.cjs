@@ -36,7 +36,7 @@ test('título sem categoria conhecida não cai em texto universal', () => {
   assert.notEqual(facts.key, 'produto');
   assert.match(script, /bermuda/iu);
   assert.doesNotMatch(script, /resolver uma tarefa do dia a dia|opção prática para essa tarefa/iu);
-  assert.match(script, /Corre pra conferir!$/u);
+  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
 });
 
 test('sanitização preserva identidade válida e rejeita claim inventada', () => {
