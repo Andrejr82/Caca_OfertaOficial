@@ -3,6 +3,9 @@ import type { StateActor, StateReason } from "@/core/state";
 export const OFFICIAL_AI_CHANNELS = ["telegram", "instagram", "whatsapp", "facebook"] as const;
 export type OfficialAIChannel = (typeof OFFICIAL_AI_CHANNELS)[number];
 
+/** Stable semantic identity for the current conversion-copy contract. */
+export const OFFICIAL_CONVERSION_COPY_CONTRACT_VERSION = "official-conversion-copy/v1" as const;
+
 /**
  * Comando enviado à Official AI.
  * O modo de operação (Draft Generation ou Approval) é determinado internamente pela IA

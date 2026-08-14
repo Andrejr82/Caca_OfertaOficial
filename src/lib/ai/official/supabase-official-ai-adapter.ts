@@ -360,7 +360,16 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     // Rejeições são recuperáveis. Antes desta distinção, uma falha transitória de provider
     // ficava gravada na chave v2 e cada novo clique apenas devolvia o erro antigo.
     if (stored.status === "completed" && stored.result) {
-      if (stored.result.status !== "rejected") return { status: "replay" as const, result: stored.result };
+      if (stored.result.status !== "rejected") {
+        if (stored.fingerprint === fingerprint) return { status: "replay" as const, result: stored.result };
+        const restartedAt = new Date().toISOString();
+        const { error: restartError } = await this.client.from("app_settings")
+          .update({ value: { fingerprint, status: "pending", startedAt: restartedAt } satisfies StoredAIIdempotency })
+          .eq("user_id", this.tenantId)
+          .eq("key", key);
+        if (restartError) throw new Error(`Official AI semantic-version retry failed: ${restartError.message}`);
+        return { status: "started" as const };
+      }
 
       const restartedAt = new Date().toISOString();
       const { error: retryError } = await this.client.from("app_settings")
