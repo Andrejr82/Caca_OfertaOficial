@@ -1,3 +1,6 @@
+import { identifyLatestDiscoveryCohort, normalizeDiscoveryCorrelationId } from "@/lib/offers/commercial-curation-queue";
+import type { Offer } from "@/types/domain";
+
 type PanelDraftOffer = {
   id?: string;
   platform?: string | null;
@@ -38,14 +41,16 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
   authoritativeCohortOfferIds?: ReadonlySet<string>,
   allowApprovedOfferDrafts = false,
 ): T[] {
-  const currentCohortOfferIds = authoritativeCohortOfferIds ?? getCurrentCohortOfferIds(drafts, editorialDayStart);
+  const currentCohortOfferIds = authoritativeCohortOfferIds ?? getCurrentCohortOfferIds(drafts, editorialDayStart, allowApprovedOfferDrafts);
   const selected = drafts.filter((post) => {
     if (!isActiveDraft(post, allowApprovedOfferDrafts)) return false;
     if (isManualExpressDraft(post)) return true;
     if (!currentCohortOfferIds.has(post.offer_id)) return false;
     const postCreatedAt = new Date(post.created_at).getTime();
+    const offerCreatedAt = new Date(post.offers?.created_at || "").getTime();
     return Number.isFinite(postCreatedAt)
-      && postCreatedAt >= editorialDayStart.getTime();
+      && postCreatedAt >= editorialDayStart.getTime()
+      && (allowApprovedOfferDrafts || (Number.isFinite(offerCreatedAt) && offerCreatedAt >= editorialDayStart.getTime()));
   });
 
   const byOfferId = new Map<string, T>();
@@ -55,7 +60,19 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
   return [...byOfferId.values()];
 }
 
-function getCurrentCohortOfferIds<T extends PanelDraftPost>(drafts: readonly T[], editorialDayStart: Date): Set<string> {
+function getCurrentCohortOfferIds<T extends PanelDraftPost>(drafts: readonly T[], editorialDayStart: Date, useDiscoveryEvidence: boolean): Set<string> {
+  if (!useDiscoveryEvidence) {
+    const cohortAnchor = new Date(editorialDayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
+    const offers = drafts
+      .filter((post) => !isManualExpressDraft(post) && post.offers?.id && post.offers.created_at)
+      .map((post) => ({
+        id: post.offers?.id || post.offer_id,
+        created_at: post.offers?.created_at || post.created_at,
+        explainability: post.offers?.explainability || null,
+      })) as Offer[];
+    return new Set(identifyLatestDiscoveryCohort(offers, cohortAnchor).map((offer) => offer.id));
+  }
+
   const dayEnd = editorialDayStart.getTime() + 24 * 60 * 60 * 1000;
   const rows = drafts
     .filter((post) => !isManualExpressDraft(post))
@@ -84,4 +101,3 @@ function getCurrentCohortOfferIds<T extends PanelDraftPost>(drafts: readonly T[]
     .sort((left, right) => (right.discoveredAt || right.createdAt) - (left.discoveredAt || left.createdAt))[0].correlationId;
   return new Set(correlatedRows.filter((row) => row.correlationId === latestCorrelation).map((row) => row.post.offer_id));
 }
-import { normalizeDiscoveryCorrelationId } from "@/lib/offers/commercial-curation-queue";
