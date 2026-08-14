@@ -20,6 +20,15 @@ test('seleciona preço principal e ignora parcela, cupom e frete', () => {
   assert.deepEqual(result, { raw: 'R$ 2.830,39', value: 2830.39, source: 'dom.primary-price' });
 });
 
+test('reconhece preço atual em contexto camelCase e rejeita recomendado', () => {
+  const result = selectPrimaryPrice([
+    { text: 'R$ 1.899,90', className: 'currentPrice productPrice' },
+    { text: 'R$ 899,90', className: 'recommendationPrice' },
+  ]);
+
+  assert.deepEqual(result, { raw: 'R$ 1.899,90', value: 1899.9, source: 'dom.primary-price' });
+});
+
 test('desempata preço atual repetido sem escolher menor valor por heurística', () => {
   const result = selectPrimaryPrice([
     { text: 'R$ 129,90', className: 'price' },
