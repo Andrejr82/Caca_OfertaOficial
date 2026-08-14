@@ -36,10 +36,12 @@ interface PostWithOffer {
 
 export function BatchApprovalList({ 
   posts, 
-  channel 
+  channel,
+  onPostApproved
 }: { 
   posts: PostWithOffer[], 
-  channel: "telegram" | "instagram" | "whatsapp" | "facebook" 
+  channel: "telegram" | "instagram" | "whatsapp" | "facebook",
+  onPostApproved?: (postId: string) => void
 }) {
   const router = useRouter();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -152,10 +154,10 @@ export function BatchApprovalList({
 
               {/* Card Específico do Canal */}
               <div className={`transition-all ${isSelected ? "ring-2 ring-red-500/50 rounded-lg opacity-60" : ""}`}>
-                {channel === "telegram" && <TelegramPostApprovalCard post={post} />}
-                {channel === "instagram" && <InstagramPostApprovalCard post={post} />}
+                {channel === "telegram" && <TelegramPostApprovalCard post={post} onApproved={onPostApproved} />}
+                {channel === "instagram" && <InstagramPostApprovalCard post={post} onApproved={onPostApproved} />}
                 {channel === "whatsapp" && <WhatsappPostApprovalCard post={post} />}
-                {channel === "facebook" && <FacebookPostApprovalCard post={post} />}
+                {channel === "facebook" && <FacebookPostApprovalCard post={post} onApproved={onPostApproved} />}
               </div>
             </div>
           );

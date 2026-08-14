@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Facebook, Image as ImageIcon, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -25,7 +26,8 @@ interface PostWithOffer {
   };
 }
 
-export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
+export function FacebookPostApprovalCard({ post, onApproved }: { post: PostWithOffer; onApproved?: (postId: string) => void }) {
+  const router = useRouter();
   const [caption, setCaption] = useState(post.content);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null);
@@ -52,8 +54,9 @@ export function FacebookPostApprovalCard({ post }: { post: PostWithOffer }) {
       });
       const data = await response.json();
       if (response.ok && data.ok) {
+        onApproved?.(post.id);
         setStatus({ success: true, message: "Publicação enviada para a Página do Facebook." });
-        setTimeout(() => window.location.reload(), 1200);
+        router.refresh();
       } else {
         setStatus({ success: false, message: data.message || "Não foi possível publicar no Facebook." });
       }
