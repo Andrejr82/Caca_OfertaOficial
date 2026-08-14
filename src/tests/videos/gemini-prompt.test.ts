@@ -200,7 +200,19 @@ describe("Gemini video prompt de 8 segundos", () => {
     expect(speech).not.toMatch(/olha\s+ess[ae]/iu);
     expect(speech).not.toMatch(/uma\s+Tênis/iu);
     expect(speech).not.toMatch(/confortável|antiderrapante/iu);
-    expect(speech).toContain("Acesse a publicação");
-    expect(countWords(speech)).toBeLessThanOrEqual(22);
+    expect(speech).toMatch(/Acesse(?: a publicação)?/u);
+    expect(countWords(speech)).toBeGreaterThanOrEqual(15);
+    expect(countWords(speech)).toBeLessThanOrEqual(17);
+  });
+
+  it("não fala preço quando o valor não é confiável", () => {
+    const speech = extractSpeech(buildGeminiVideoPrompt({
+      product_name: "Tênis Casual Masculino",
+      current_price: "indisponível",
+      category: "Moda"
+    }));
+
+    expect(speech).not.toMatch(/preço não informado|R\$/iu);
+    expect(countWords(speech)).toBeLessThanOrEqual(17);
   });
 });

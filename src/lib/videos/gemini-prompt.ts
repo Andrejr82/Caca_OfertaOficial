@@ -191,24 +191,24 @@ function visualDirectionByCategory(offer: GeminiPromptOffer): VisualDirection {
 
 function speechScript8Seconds(offer: GeminiPromptOffer): string {
   const baseProductName = getSpeakableProductName(offer);
-  const price = precoPorExtenso(offer.current_price);
+  const numericPrice = Number(offer.current_price);
+  const price = Number.isFinite(numericPrice) && numericPrice > 0 ? precoPorExtenso(numericPrice) : "";
   const article = /^(?:air fryer|cafeteira|fritadeira|parafusadeira|furadeira|torneira|calça|camiseta|camisa|sandália|bota)\b/iu.test(baseProductName) ? "uma" : "um";
-  const templates = [
-    (productName: string) => `Se você procura ${article} ${productName}, confira esta oferta por ${price}. Acesse a publicação!`,
-    (productName: string) => `Para quem busca ${article} ${productName}, vale conferir esta oferta por ${price}. Acesse a publicação!`
-  ];
 
-  for (const maxProductWords of PRODUCT_NAME_WORD_LIMITS) {
-    const productName = compactProductName(baseProductName, maxProductWords);
-    const full = templates[wordCount(productName) % templates.length](productName);
+  if (wordCount(baseProductName) <= 4) {
+    const productName = compactProductName(baseProductName, 4);
+    const full = `Encontre ${article} ${productName}${price ? ` por ${price}` : ""}. Acesse!`;
     if (wordCount(full) <= MAX_SPEECH_WORDS) return `"${full}"`;
-
-    const compact = `${article} ${productName}, por ${price}. Acesse a publicação!`;
-    if (wordCount(compact) <= MAX_SPEECH_WORDS) return `"${compact}"`;
   }
 
-  const minimumProductName = compactProductName(baseProductName, 3);
-  return `"${article} ${minimumProductName}, por ${price}. Confira!"`;
+  const priceWords = price ? wordCount(price) + 1 : 0;
+  const maxProductWords = Math.max(1, MAX_SPEECH_WORDS - priceWords - 1);
+  const productName = compactProductName(baseProductName, maxProductWords);
+  const compact = `${productName}${price ? ` por ${price}` : ""}. Acesse a publicação!`;
+  if (wordCount(compact) <= MAX_SPEECH_WORDS) return `"${compact}"`;
+
+  const shortCompact = `${productName}${price ? ` por ${price}` : ""}. Acesse!`;
+  return `"${shortCompact}"`;
 }
 
 export function formatLongPriceForSpeech(valor: number | string | null | undefined): string {
