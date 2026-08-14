@@ -29,6 +29,17 @@ test('reconhece preço atual em contexto camelCase e rejeita recomendado', () =>
   assert.deepEqual(result, { raw: 'R$ 1.899,90', value: 1899.9, source: 'dom.primary-price' });
 });
 
+test('seleciona o preço Pix da bicicleta e ignora preço riscado, cupom e frete', () => {
+  const result = selectPrimaryPrice([
+    { text: 'R$ 2.016,00', className: 'product-price pix-price' },
+    { text: 'R$ 3.600,00', className: 'originalPrice line-through' },
+    { text: 'ou R$ 2.299,99 sem cupom em outros métodos de pagamento', className: 'payment-option' },
+    { text: 'Frete de R$ 53,04 R$ 13,04 com cupom', className: 'shipping' },
+  ]);
+
+  assert.deepEqual(result, { raw: 'R$ 2.016,00', value: 2016, source: 'dom.primary-price' });
+});
+
 test('desempata preço atual repetido sem escolher menor valor por heurística', () => {
   const result = selectPrimaryPrice([
     { text: 'R$ 129,90', className: 'price' },
