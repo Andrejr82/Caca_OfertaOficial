@@ -155,7 +155,7 @@ describe("panel draft selection", () => {
     expect(mergePanelDrafts([manual], new Set(), new Date("2026-08-08T03:00:00.000Z"), new Set())).toEqual([manual]);
   });
 
-  it("mantém protegidos fora do painel mesmo sem activeOfferIds", () => {
+  it("mantém draft de oferta approved visível, mas protege publicados e rejeitados", () => {
     const protectedDrafts = [
       post(1, { status: "posted" }),
       post(2, { status: "approved" }),
@@ -164,6 +164,22 @@ describe("panel draft selection", () => {
       { ...post(5), deleted_at: "2026-08-08T13:00:00.000Z" },
     ];
 
+    expect(mergePanelDrafts(protectedDrafts, new Set(), new Date("2026-08-08T03:00:00.000Z"), undefined, true)).toEqual([protectedDrafts[1]]);
     expect(mergePanelDrafts(protectedDrafts, new Set(), new Date("2026-08-08T03:00:00.000Z"))).toEqual([]);
+  });
+
+  it("exibe os 6 drafts approved da coorte WhatsApp", () => {
+    const drafts = Array.from({ length: 6 }, (_, index) => post(index, {
+      status: "approved",
+      explainability: { correlation_id: "cycle-whatsapp" },
+    }));
+
+    expect(mergePanelDrafts(
+      drafts,
+      new Set(),
+      new Date("2026-08-08T03:00:00.000Z"),
+      new Set(drafts.map((item) => item.offer_id)),
+      true,
+    )).toHaveLength(6);
   });
 });
