@@ -3,6 +3,7 @@ import type { BatchCursor } from "./ports";
 import { inspectOfficialAIHook, isCopyV2TextSafe } from "./content-schema";
 import { buildCopyV3ChannelCopy, buildOfficialPrompt } from "./prompt";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
+import { OFFICIAL_CONVERSION_COPY_CONTRACT_VERSION } from "./types";
 import type {
   OfficialAIAuditRecord,
   OfficialAICommand,
@@ -73,6 +74,7 @@ function buildOfficialAIFingerprint(command: OfficialAICommand): string {
   // manualmente pelo usuário no painel — ambas são a mesma operação semântica.
   const stable = {
     contractVersion: command.contractVersion,
+    copyContractVersion: OFFICIAL_CONVERSION_COPY_CONTRACT_VERSION,
     idempotencyKey: command.idempotencyKey,
     offerId: command.offerId,
     tenantId: command.tenantId,

@@ -1,5 +1,5 @@
 export { generateOfficialAI } from "./official-ai-service";
-export { OFFICIAL_AI_CHANNELS } from "./types";
+export { OFFICIAL_AI_CHANNELS, OFFICIAL_CONVERSION_COPY_CONTRACT_VERSION } from "./types";
 export { buildOfficialPrompt } from "./prompt";
 export { buildOfficialRegenerationPrompt } from "./prompt";
 export { buildCopyV2ChannelCopy } from "./prompt";
