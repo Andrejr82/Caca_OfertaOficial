@@ -22,6 +22,15 @@ type AttemptSummary = {
 
 const RETRYABLE_STATUSES = new Set([401, 403, 408, 429, 500, 502, 503, 504]);
 const credentialCooldowns = new Map<string, number>();
+const GROQ_MODEL = "openai/gpt-oss-120b";
+const CEREBRAS_MODEL = "gpt-oss-120b";
+
+function resolveModel(provider: ProviderName, configured: string | undefined) {
+  const value = configured?.trim();
+  if (provider === "groq" && (!value || value === "llama-3.3-70b-versatile")) return GROQ_MODEL;
+  if (provider === "cerebras" && !value) return CEREBRAS_MODEL;
+  return value ?? (provider === "groq" ? GROQ_MODEL : CEREBRAS_MODEL);
+}
 
 export class OfficialAIProvidersExhaustedError extends Error {
   readonly code = "OFFICIAL_AI_PROVIDERS_EXHAUSTED";
@@ -68,7 +77,7 @@ export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
       const provider = name === "cerebras"
         ? new CerebrasOfficialAIProvider({
             apiKey,
-            model: env.CEREBRAS_MODEL || "gpt-oss-120b",
+            model: resolveModel("cerebras", env.CEREBRAS_MODEL),
             baseUrl: `${(env.CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1").replace(/\/$/, "")}/chat/completions`,
             fetcher: options.fetcher,
             now,
@@ -76,7 +85,7 @@ export class OfficialAIProviderRegistry implements AIProviderRegistryPort {
           })
         : new GroqOfficialAIProvider({
             apiKey,
-            model: env.GROQ_MODEL || "llama-3.3-70b-versatile",
+            model: resolveModel("groq", env.GROQ_MODEL),
             fetcher: options.fetcher,
             now,
             telemetry: options.telemetry

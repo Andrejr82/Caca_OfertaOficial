@@ -76,11 +76,11 @@ function createDependencies(overrides: Partial<OfficialAIServiceDependencies> = 
     providers: {
       resolve: vi.fn().mockReturnValue({
         name: "groq",
-        model: "llama-3.3-70b-versatile",
+        model: "openai/gpt-oss-120b",
         generate: vi.fn().mockResolvedValue({
           content,
           provider: "groq",
-          model: "llama-3.3-70b-versatile",
+          model: "openai/gpt-oss-120b",
           latencyMs: 25,
           usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
           finishReason: "stop"

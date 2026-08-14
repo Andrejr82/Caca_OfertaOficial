@@ -110,7 +110,7 @@ export async function regenerateOfficialDrafts(
         correlationId: command.correlationId,
         timeoutMs: 30_000,
         temperature: 0.1,
-        maxTokens: 1_200,
+        maxTokens: 512,
         metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft" }
       });
       const fields = providerFields(inference.content, draft.channel);

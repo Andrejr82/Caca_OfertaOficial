@@ -21,12 +21,12 @@ async function classifyProductGender(title, apiKey) {
     const response = await axios.post(
       'https://api.groq.com/openai/v1/chat/completions',
       {
-        model: 'llama-3.3-70b-versatile',
+        model: 'openai/gpt-oss-120b',
         messages: [{
           role: 'user',
           content: `Você é um especialista em gramática portuguesa. Analise o título abaixo e identifique o SUBSTANTIVO PRINCIPAL do produto (a palavra que nomeia o objeto em si, ignorando adjetivos, marcas e especificações técnicas).\nDepois, responda APENAS com uma palavra: MASCULINO ou FEMININO, de acordo com o gênero gramatical desse substantivo principal em português.\nExemplos: "Torneira Elétrica Slim" → substantivo: torneira → FEMININO. "Copo Stanley 900ml" → substantivo: copo → MASCULINO. "Panela de Pressão" → substantivo: panela → FEMININO. "Aspirador Robô" → substantivo: aspirador → MASCULINO.\nTítulo: ${title}`
         }],
-        max_tokens: 10,
+        max_completion_tokens: 10,
         temperature: 0,
       },
       { headers: { Authorization: `Bearer ${apiKey}` } }
@@ -385,9 +385,9 @@ async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MA
   const response = await axios.post(
     'https://api.groq.com/openai/v1/chat/completions',
     {
-      model: 'llama-3.3-70b-versatile',
+      model: 'openai/gpt-oss-120b',
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: dynamicMaxTokens,
+      max_completion_tokens: dynamicMaxTokens,
       temperature: 0.75,
     },
     { headers: { Authorization: `Bearer ${apiKey}` } }

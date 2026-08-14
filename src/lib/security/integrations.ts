@@ -26,7 +26,7 @@ export function getIntegrationStatuses(): IntegrationStatus[] {
     {
       name: "Groq AI",
       status: process.env.GROQ_API_KEY ? "configured" : "missing",
-      detail: "Llama-3.3-70b-versatile"
+      detail: "OpenAI GPT-OSS 120B"
     },
     {
       name: "WhatsApp",

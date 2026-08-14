@@ -637,6 +637,7 @@ export async function generateOfficialAI(
   ].find((value): value is boolean => typeof value === "boolean");
   const copyV3Facts = {
     productName: offer!.productName,
+    shortName: offer!.shortName,
     marketplace: offer!.marketplace,
     category: offer!.category,
     currentPrice: offer!.currentPrice,
