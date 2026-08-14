@@ -7,11 +7,20 @@
     return String(value || '').replace(/\s+/gu, ' ').trim();
   }
 
+  function normalizeInstitutionalTitle(value) {
+    return clean(value)
+      .toLocaleLowerCase('pt-BR')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/gu, '')
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .replace(/\s+/gu, ' ')
+      .trim();
+  }
+
   function isGenericShopeeTitle(value) {
-    const title = clean(value).toLocaleLowerCase('pt-BR');
+    const title = normalizeInstitutionalTitle(value);
     return title === 'shopee brasil'
-      || title === 'shopee brasil ofertas incríveis. melhores preços do mercado'
-      || title === 'shopee ofertas incríveis. melhores preços do mercado';
+      || /^shopee(?: brasil)? ofertas incriveis melhores precos do mercado(?: shopee)?$/u.test(title);
   }
 
   function selectProductTitle(candidates) {
