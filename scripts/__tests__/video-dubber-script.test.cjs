@@ -108,6 +108,15 @@ test('fallback do rodo não transforma vidro em potes de vidro herméticos', () 
   assert.match(script, /vinte e quatro reais e noventa e seis centavos/iu);
 });
 
+test('fallback não deixa conectivo órfão antes do preço', () => {
+  const title = 'Lencol Impermeavel Matelado Com Elastico Em Toda Volta Casal Queen King e Soltei';
+  const script = buildFallbackDubbingScript(title, 12, 13.9);
+
+  assert.match(script, /Lencol Impermeavel Matelado Elastico/iu);
+  assert.doesNotMatch(script, /\b(?:com|em|de|para|e)\s+por\b/iu);
+  assert.match(script, /treze reais e noventa centavos/iu);
+});
+
 test('identidade preserva preposições naturais do nome do produto', () => {
   const regressions = [
     ['Calça Masculina', /calça/iu],
@@ -161,7 +170,7 @@ test('gerador aplica sanitização ao retorno do provedor antes de entregar o sc
   try {
     const script = await generateDubbingCopy('Cafeteira Elétrica Compacta', 'não usar', 15);
     assert.doesNotMatch(script.toLowerCase(), /absurdo|inox/u);
-  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
+    assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
   } finally {
     axios.post = originalPost;
     if (previousKey === undefined) delete process.env.GROQ_API_KEY;
@@ -177,7 +186,7 @@ test('timeout do provider usa fallback factual seguro', async () => {
   try {
     const script = await generateDubbingCopy('Limpa Estofados 300ml - Spray Zip Shopee Brasil', 'não informado', 8);
     assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
-  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
+    assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
     assert.doesNotMatch(script, /acesse a publicação|título apresenta|detalhes/iu);
   } finally {
     axios.post = originalPost;
