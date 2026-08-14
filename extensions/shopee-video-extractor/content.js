@@ -2,10 +2,11 @@ function extractVideoAndTitle() {
   let videoUrl = null;
   let imageUrl = null;
   let price = null;
+  let priceValue = null;
   let priceStatus = 'not_found';
   let shopId = null;
   let itemId = null;
-  let title = document.title.replace(' | Shopee Brasil', '').replace(/[\\/:*?"<>|]/g, '').trim();
+  let title = '';
   const identityMatch = window.location.pathname.match(/\/product\/(\d+)\/(\d+)/u)
     || window.location.pathname.match(/-i\.(\d+)\.(\d+)/u);
   if (identityMatch) [, shopId, itemId] = identityMatch;
@@ -15,14 +16,12 @@ function extractVideoAndTitle() {
   );
   if (sharedCandidate) videoUrl = sharedCandidate.videoUrl;
 
-  const titleElement = document.querySelector('div[class*="product-briefing"] span, meta[property="og:title"]');
-  if (titleElement) {
-    if (titleElement.content) {
-      title = titleElement.content.replace(/[\\/:*?"<>|]/g, '').trim();
-    } else if (titleElement.innerText) {
-      title = titleElement.innerText.replace(/[\\/:*?"<>|]/g, '').trim();
-    }
-  }
+  const titleCandidates = [document.title];
+  document.querySelectorAll('div[class*="product-briefing"] span, meta[property="og:title"]').forEach((element) => {
+    titleCandidates.push(element.content || element.innerText || '');
+  });
+  const selectedTitle = globalThis.shopeeProductParser?.selectProductTitle(titleCandidates);
+  if (selectedTitle) title = selectedTitle.replace(/[\\/:*?"<>|]/g, '').trim();
 
   if (title.length > 80) title = title.substring(0, 80).trim();
 
@@ -89,6 +88,7 @@ function extractVideoAndTitle() {
     const selected = globalThis.shopeePriceParser?.selectPrimaryPrice(candidates);
     if (selected) {
       price = selected.raw;
+      priceValue = selected.value;
       priceStatus = 'validated';
     } else if (candidates.length > 0) {
       priceStatus = 'ambiguous';
@@ -97,7 +97,7 @@ function extractVideoAndTitle() {
     priceStatus = 'parser_error';
   }
 
-  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price, priceStatus, shopId, itemId };
+  return { videoUrl, title, originalUrl: window.location.href, imageUrl, price, priceValue, priceStatus, shopId, itemId };
 }
 
 extractVideoAndTitle();

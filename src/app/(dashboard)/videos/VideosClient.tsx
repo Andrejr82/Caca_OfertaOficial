@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
-import { Check, CheckCircle2, CloudUpload, Copy, Download, FileVideo, RefreshCw, ScissorsLineDashed, ShieldCheck } from "lucide-react";
+import { Check, CheckCircle2, CloudUpload, Copy, Download, FileVideo, RefreshCw, ScissorsLineDashed, ShieldCheck, Trash2 } from "lucide-react";
 import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
 
 type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string; category?: string | null; shipping_free?: boolean | null; coupon?: string | null; original_url?: string; short_name?: string | null };
@@ -121,6 +121,7 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
   useEffect(() => { if (selectedOffer) setPrompt(buildGeminiVideoPrompt(selectedOffer)); }, [selectedOffer]);
   useEffect(() => { void loadDrive(); }, []);
@@ -195,6 +196,20 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
     setJobs((current) => current.map((job) => job.id === jobId ? { ...job, video_url: newUrl } : job));
   }
 
+  async function deleteJob(id: string) {
+    if (!window.confirm("Excluir este vídeo da página?")) return;
+    setDeletingJobId(id); setMessage(null);
+    try {
+      const response = await fetch(`/api/videos/jobs/${id}`, { method: "DELETE" });
+      const data = await response.json();
+      if (!response.ok) return setMessage({ text: data.error ?? "Não foi possível excluir o vídeo.", error: true });
+      setJobs((current) => current.filter((job) => job.id !== id));
+      setMessage({ text: "Vídeo excluído." });
+    } catch {
+      setMessage({ text: "Não foi possível excluir o vídeo.", error: true });
+    } finally { setDeletingJobId(null); }
+  }
+
   return <div className="mx-auto max-w-7xl space-y-8">
     <header><p className="text-xs font-bold uppercase tracking-[0.18em] text-emerald-400">Gemini · Google Drive</p><h1 className="mt-2 text-3xl font-black tracking-tight text-white">Vídeos de ofertas</h1><p className="mt-2 max-w-3xl text-sm text-white/45">Selecione uma oferta, copie o prompt para o Gemini, gere o vídeo, salve-o na pasta configurada e importe-o para revisão social.</p></header>
     <section className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
@@ -219,6 +234,7 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
       {job.error_message && <p className="mt-3 text-xs text-red-300">{job.error_message}</p>}
       {job.status === "ready" && <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => approve(job.id)} className="inline-flex items-center gap-2 rounded-lg bg-violet-500/15 px-3 py-2 text-xs font-bold text-violet-200"><CheckCircle2 size={14} /> Aprovar vídeo</button></div>}
       {job.status === "approved" && <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => approve(job.id)} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white"><RefreshCw size={14} /> Sincronizar drafts sociais</button></div>}
+      <div className="mt-4 flex flex-wrap gap-2"><button onClick={() => deleteJob(job.id)} disabled={deletingJobId === job.id} className="inline-flex items-center gap-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-xs font-bold text-red-200 hover:bg-red-500/20 disabled:opacity-40"><Trash2 size={14} /> {deletingJobId === job.id ? "Excluindo…" : "Excluir vídeo"}</button></div>
     </article>)}</div>}</section>
   </div>;
 }
