@@ -68,6 +68,7 @@ const SPECIFIC_DUBBING_FACTS = [
 function normalizeDubbingTitle(title) {
   return String(title || '')
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
+    .replace(/\s*(?:[-|–—]\s*)?Shopee(?:\s+Brasil)?\s*$/iu, '')
     .replace(/\b(?:direct selling|oficial|original|promoção|oferta)\b/giu, '')
     .replace(/\s+/gu, ' ')
     .trim();
@@ -162,11 +163,21 @@ function deriveTitleProductIdentity(normalized) {
   if (!first) return null;
 
   const normalizedFirst = first.replace(/[.,;:]+$/gu, '');
+  if (/^(?:produto|genérico|generico)$/iu.test(normalizedFirst)) return null;
   const singular = normalizedFirst.endsWith('s') && normalizedFirst.length > 4
     ? normalizedFirst.slice(0, -1)
     : normalizedFirst;
   const combination = normalized.match(/\b(\d+)\s*em\s*(\d+)\b/iu);
-  return combination ? `${singular} ${combination[1]} em ${combination[2]}` : singular;
+  if (combination) return `${singular} ${combination[1]} em ${combination[2]}`;
+
+  const identityTokens = normalized
+    .split(/\s+/u)
+    .filter((token) => /[A-Za-zÀ-ÿ]/u.test(token) || /^\d+(?:ml|l|g|kg)$/iu.test(token))
+    .filter((token) => !ignored.has(token.toLowerCase()))
+    .slice(0, 5);
+  const numericToken = identityTokens.find((token) => /^\d+(?:ml|l|g|kg)$/iu.test(token));
+  const words = identityTokens.filter((token) => token !== numericToken);
+  return [...words.slice(0, 4), numericToken].filter(Boolean).join(' ') || singular;
 }
 
 function extractDubbingFacts(title) {
@@ -228,30 +239,47 @@ function extractDubbingFacts(title) {
   return { key: category[0], category: categoryName, useCase: category[2], benefit: category[3], features: features.slice(0, 3) };
 }
 
-function buildFallbackDubbingScript(title, durationSecs = 15) {
-  const facts = extractDubbingFacts(title);
-  let detail = ` O produto é apresentado para ${facts.useCase}.`;
-  if (facts.key === 'potes' && facts.features.length) detail = ` O kit reúne ${facts.features[0]}.`;
-  if (facts.key === 'camisetas' && facts.features.length) detail = ` O kit reúne ${facts.features[0]}.`;
-  if (facts.key === 'parafusadeira' && facts.features.length) detail = ` O conjunto traz ${facts.features.join(', ')}.`;
-  if (facts.key === 'ferramentas' && facts.features.length) detail = ` O kit reúne ${facts.features.join(' e ')}.`;
-  if (facts.key === 'cafeteira' && facts.features.includes('compacta')) detail = ' O modelo tem formato compacto.';
-  if (facts.key === 'torneira' && facts.features.includes('bica móvel')) detail = ` O modelo tem ${facts.features.includes('gourmet') ? 'acabamento gourmet e ' : ''}bica móvel.`;
-  if (facts.key === 'aspirador' && facts.features.length) detail = ` O modelo tem ${facts.features.filter((feature) => feature !== 'portátil').join(' e ')}.`;
-  if (facts.key === 'calça' && facts.features.length) detail = ` A peça tem ${facts.features.join(' e ')}.`;
-  if (!['calça', 'mixer', 'air fryer', 'potes', 'tênis', 'camisetas', 'cafeteira', 'parafusadeira', 'ferramentas', 'torneira', 'aspirador'].includes(facts.key)) {
-    detail = ' O título apresenta este produto para você conferir os detalhes.';
-  }
-  if (facts.key === 'produto') throw new Error('Identidade do produto insuficiente para gerar roteiro factual.');
-  const categoryLabel = facts.category.replace(/^um |^uma /iu, '');
-  if (Number(durationSecs) < 13) {
-    return `Olha essa ${categoryLabel}.${detail} Você encontra na Shopee. Acesse o link na publicação.`;
-  }
-  const benefit = Number(durationSecs) < 12 ? '' : ` É uma alternativa prática para ${facts.benefit}.`;
-  return `Olha essa ${categoryLabel} em destaque para ${facts.useCase}.${detail}${benefit} Você encontra na Shopee. Acesse o link na publicação.`;
+function spokenPrice(price) {
+  const raw = String(price ?? '').replace(/R\$\s*/iu, '').trim();
+  const normalized = raw.includes(',') ? raw.replace(/\./gu, '').replace(',', '.') : raw;
+  const numeric = typeof price === 'number' ? price : Number(normalized);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  const cents = Math.round(numeric * 100) % 100;
+  const reais = Math.floor(numeric);
+  return `${integerToPortuguese(reais)} reais${cents ? ` e ${integerToPortuguese(cents)} centavos` : ''}`;
 }
 
-function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO', visualPlan = null) {
+function hashText(value) {
+  return [...String(value)].reduce((hash, char) => ((hash * 31) + char.codePointAt(0)) >>> 0, 0);
+}
+
+function capitalizeSentence(value) {
+  return value ? `${value[0].toUpperCase()}${value.slice(1)}` : value;
+}
+
+function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
+  const facts = extractDubbingFacts(title);
+  if (facts.key === 'produto') throw new Error('Identidade do produto insuficiente para gerar roteiro factual.');
+  let categoryLabel = facts.category.replace(/^um |^uma /iu, '').trim();
+  if (facts.key === 'potes' && facts.features[0]) categoryLabel = `conjunto de ${facts.features[0]}`;
+  if (facts.key === 'camisetas' && facts.features[0]) categoryLabel = `kit de ${facts.features[0]}`;
+  categoryLabel = categoryLabel.replace(/\bEm\b/gu, 'em');
+  const extraFeatures = facts.features
+    .filter((feature) => !categoryLabel.toLowerCase().includes(feature.toLowerCase()))
+    .slice(0, 3);
+  const normalizedFeatures = extraFeatures.map((feature) => feature.toLowerCase() === 'gourmet' ? 'acabamento gourmet' : feature);
+  const adjective = normalizedFeatures.length === 1 && /^(?:compacta|casual|elétrica)$/iu.test(normalizedFeatures[0]);
+  const featureText = normalizedFeatures.length
+    ? adjective ? ` ${normalizedFeatures[0]}` : ` com ${normalizedFeatures.join(' e ')}`
+    : '';
+  const priceText = spokenPrice(price);
+  const hooks = ['Olha esse achado!', 'Dá uma olhada nisso!', 'Encontramos essa opção na Shopee!'];
+  const hook = hooks[hashText(normalizeDubbingTitle(title)) % hooks.length];
+  const offer = priceText ? ` por ${priceText}` : '';
+  return `${hook} ${capitalizeSentence(categoryLabel)}${featureText}${offer} na Shopee. Corre pra conferir!`;
+}
+
+function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO', visualPlan = null, price = null) {
   const targetWords = Math.round(durationSecs * 3.5);
   const visualContext = visualPlan ? `\nSEQUÊNCIA VISUAL DEFINIDA:\n${buildVisualSpeechContext(visualPlan)}\nA fala deve acompanhar essa sequência e comentar somente o que o título sustenta.` : '';
   return `Você escreve roteiro falado curto, natural e comercial em português do Brasil.
@@ -260,6 +288,7 @@ function buildDubbingPrompt(title, durationSecs = 15, gender = 'MASCULINO', visu
 
 TÍTULO DO PRODUTO: ${normalizeDubbingTitle(title)}
 DURAÇÃO: ${durationSecs} segundos
+PREÇO CONFIÁVEL: ${spokenPrice(price) || 'indisponível; não mencione preço'}
 TAMANHO: aproximadamente ${targetWords} palavras, preferencialmente 45 a 80 palavras quando a duração permitir.
 CONCORDÂNCIA: use gênero e número naturais, sem forçar pronomes ou adjetivos.
 
@@ -268,7 +297,7 @@ ESTRUTURA:
 2. Nome curto do produto, sem repetir o título completo.
 3. Uma a três características sustentadas pelo título.
 4. Um benefício concreto e seguro, sem extrapolar os fatos.
-5. CTA final claro: Você encontra na Shopee. Acesse o link na publicação.
+5. CTA final curto, energético e falável: Corre pra conferir!
 
 IDENTIDADE DO PRODUTO:
 - Mencione exatamente uma identificação curta, natural e factual do produto.
@@ -285,20 +314,24 @@ REGRAS DE ESTILO:
 - Expresse números e unidades em forma natural de fala.
 - Não invente pronúncia de marcas, não traduza marcas e omita especificação técnica redundante.
 - Persuasão por clareza, ritmo e especificidade; sem exagero de propaganda.
-- Não mencione preço, desconto, economia ou estoque.
+- Só mencione o preço confiável fornecido acima; nunca invente preço, desconto, economia ou estoque.
 - Não use emojis, aspas, títulos ou numeração.
 - Não use urgência falsa, superlativos genéricos ou promessas pessoais.
 - Retorne apenas o texto do roteiro.${visualContext}`;
 }
 
-function isSafeDubbingScript(script) {
+function isSafeDubbingScript(script, price = null) {
   const text = String(script || '').trim();
   const lower = text.toLowerCase();
+  const expectedPrice = spokenPrice(price);
+  const hasPrice = /\b(?:R\$|reais?|centavos?)\b/iu.test(text);
   return text && text.split(/\s+/u).length <= 95
     && !FORBIDDEN_DUBBING_PHRASES.some((phrase) => lower.includes(phrase))
     && !UNSUPPORTED_DUBBING_CLAIMS.some((pattern) => pattern.test(text))
     && !/\b(?:R\$|desconto|estoque|últim|economia|economiz)/iu.test(text)
-    && /Você encontra na Shopee\. Acesse o link na publicação\.$/u.test(text);
+    && (!hasPrice || Boolean(expectedPrice && text.toLowerCase().includes(expectedPrice.toLowerCase())))
+    && !/confira os detalhes|acesse a publicação|acesse o link na publicação|título apresenta|para você conferir/iu.test(text)
+    && /Corre pra conferir!$/u.test(text);
 }
 
 function hasUnsupportedSpecificFact(script, title) {
@@ -320,48 +353,33 @@ function repeatsProductName(script, title) {
   return category.length > 3 && String(script || '').toLowerCase().split(category).length - 1 > 1;
 }
 
-function sanitizeDubbingScript(script, title, durationSecs = 15) {
+function sanitizeDubbingScript(script, title, durationSecs = 15, price = null) {
   const cleaned = String(script || '')
     .replace(/["“”]/gu, '')
     .replace(/\s+/gu, ' ')
     .replace(/\s+([,.!?])/gu, '$1')
     .trim();
-  const safe = isSafeDubbingScript(cleaned)
+  const safe = isSafeDubbingScript(cleaned, price)
     && hasProductIdentity(cleaned, title)
     && !hasUnsupportedSpecificFact(cleaned, title)
     && !repeatsProductName(cleaned, title);
-  return safe ? cleaned : buildFallbackDubbingScript(title, durationSecs);
+  return safe ? cleaned : buildFallbackDubbingScript(title, durationSecs, price);
 }
 
-function removeDubbingCta(script) {
-  return String(script || '')
-    .replace(/\s*Você encontra na Shopee\. Acesse o link na publicação\.?\s*$/iu, '')
-    .trim();
-}
-
-function buildTtsFitCandidates(script, title, maxDuration) {
+function buildTtsFitCandidates(script, title, maxDuration, price = null) {
   const candidates = [String(script || '').trim()];
   try {
-    candidates.push(buildFallbackDubbingScript(title, Math.min(Number(maxDuration) || 12, 12)));
+    candidates.push(buildFallbackDubbingScript(title, Math.min(Number(maxDuration) || 12, 12), price));
   } catch {
     // Fallback factual indisponível: fitting permanece fechado.
-  }
-  candidates.push(removeDubbingCta(candidates[candidates.length - 1]));
-  try {
-    const facts = extractDubbingFacts(title);
-    if (facts.key === 'produto') throw new Error('Identidade insuficiente.');
-    const identity = facts.category.replace(/^um |^uma /iu, '');
-    candidates.push(`Olha essa ${identity}.`);
-  } catch {
-    // Sem identidade, fitting permanece fechado.
   }
   return [...new Set(candidates.filter(Boolean))];
 }
 
-async function fitDubbingScriptToDuration(script, title, maxDuration, measureTtsDuration, maxAttempts = 3) {
+async function fitDubbingScriptToDuration(script, title, maxDuration, measureTtsDuration, maxAttempts = 3, price = null) {
   if (typeof measureTtsDuration !== 'function') throw new TypeError('measureTtsDuration obrigatório.');
   const limit = Math.max(1, Math.floor(Number(maxAttempts) || 3));
-  const candidates = buildTtsFitCandidates(script, title, maxDuration);
+  const candidates = buildTtsFitCandidates(script, title, maxDuration, price);
   let lastDuration = null;
   for (let index = 0; index < Math.min(limit, candidates.length); index += 1) {
     const duration = await measureTtsDuration(candidates[index]);
@@ -380,20 +398,24 @@ async function generateDubbingCopy(title, price, durationSecs = 15, gender = 'MA
 
   const targetWords = Math.round(durationSecs * 3.5);
   const dynamicMaxTokens = Math.max(350, Math.round(targetWords * 2.5) + 100);
-  const prompt = buildDubbingPrompt(title, durationSecs, gender, visualPlan);
+  const prompt = buildDubbingPrompt(title, durationSecs, gender, visualPlan, price);
 
-  const response = await axios.post(
-    'https://api.groq.com/openai/v1/chat/completions',
-    {
-      model: 'openai/gpt-oss-120b',
-      messages: [{ role: 'user', content: prompt }],
-      max_completion_tokens: dynamicMaxTokens,
-      temperature: 0.75,
-    },
-    { headers: { Authorization: `Bearer ${apiKey}` } }
-  );
+  try {
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/chat/completions',
+      {
+        model: 'openai/gpt-oss-120b',
+        messages: [{ role: 'user', content: prompt }],
+        max_completion_tokens: dynamicMaxTokens,
+        temperature: 0.75,
+      },
+      { headers: { Authorization: `Bearer ${apiKey}` } }
+    );
 
-  return sanitizeDubbingScript(response.data.choices[0].message.content, title, durationSecs);
+    return sanitizeDubbingScript(response.data.choices[0].message.content, title, durationSecs, price);
+  } catch {
+    return buildFallbackDubbingScript(title, durationSecs, price);
+  }
 }
 
 // --- ETAPA 2: Gerar TTS com parâmetros de rate e pitch ---
@@ -555,7 +577,7 @@ async function processShopeeVideoDubbing(videoUrl, title, price, options = {}) {
       try { fs.unlinkSync(audioPath); } catch (e) {}
       await generateTTS(ttsText, audioPath, '+0%', PITCH);
       return getAudioDuration(audioPath);
-    }, 3);
+    }, 3, price);
     copy = fit.text;
     ttsText = normalizeSpeechForTTS(copy);
     const finalAudioDuration = fit.duration;

@@ -34,8 +34,8 @@ test('fallback gera roteiro factual e CTA para oito categorias', () => {
   for (const [name, title, facts] of PRODUCTS) {
     const script = buildFallbackDubbingScript(title, 15);
     const lower = script.toLowerCase();
-    assert.match(script, /Você encontra na Shopee\. Acesse o link na publicação\.$/u, name);
-    assert.ok(script.split(/\s+/u).length >= 35 && script.split(/\s+/u).length <= 90, name);
+    assert.match(script, /Corre pra conferir!$/u, name);
+    assert.ok(script.split(/\s+/u).length >= 10 && script.split(/\s+/u).length <= 35, name);
     for (const phrase of FORBIDDEN) assert.equal(lower.includes(phrase), false, `${name}: ${phrase}`);
     for (const fact of facts) assert.match(lower, new RegExp(fact.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'u'), `${name}: ${fact}`);
   }
@@ -46,6 +46,34 @@ test('fallback não inventa fatos ausentes no título', () => {
   for (const invented of ['duas xícaras', 'inox', 'filtro permanente', '900 watts', 'econômica']) {
     assert.equal(script.includes(invented), false, invented);
   }
+});
+
+test('fallback do limpa estofados preserva identidade e CTA falável', () => {
+  const title = 'Limpa Estofados 300ml - Spray Zip Shopee Brasil';
+  const script = buildFallbackDubbingScript(title, 8);
+
+  assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
+  assert.match(script, /Corre pra conferir!$/u);
+  assert.doesNotMatch(script, /Limpa o título|O título apresenta|este para você|detalhes|acesse a publicação|Acesse a publicação/iu);
+  assert.doesNotMatch(script, /Shopee Brasil/iu);
+  assert.ok(script.split(/\s+/u).length <= 28);
+});
+
+test('fallback falável inclui preço somente quando confiável', () => {
+  const withPrice = buildFallbackDubbingScript('Chapinha 3 em 1', 8, 39.9);
+  const withoutPrice = buildFallbackDubbingScript('Chapinha 3 em 1', 8, 'não informado');
+
+  assert.match(withPrice, /trinta e nove reais/iu);
+  assert.doesNotMatch(withoutPrice, /reais|R\$/iu);
+});
+
+test('resposta inválida do provider cai em fallback factual sem texto interno', () => {
+  const title = 'Limpa Estofados 300ml - Spray Zip Shopee Brasil';
+  const script = sanitizeDubbingScript('resposta inválida do provider', title, 8);
+
+  assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
+  assert.doesNotMatch(script, /provider|prompt|título apresenta|acesse a publicação/iu);
+  assert.match(script, /Corre pra conferir!$/u);
 });
 
 test('fallback deriva quantidade e mantém concordância do produto', () => {
@@ -62,12 +90,12 @@ test('sanitização troca saída insegura pelo fallback factual', () => {
   assert.notEqual(script, unsafe);
   assert.doesNotMatch(script.toLowerCase(), /absurdo|revolucionar|você vai amar/u);
   assert.match(script, /129|maleta/u);
-  assert.match(script, /Acesse o link na publicação\.$/u);
+  assert.match(script, /Corre pra conferir!$/u);
 });
 
 test('sanitização rejeita característica específica ausente e repetição do nome', () => {
   const title = 'Cafeteira Elétrica Compacta';
-  const unsafe = 'Olha esta cafeteira elétrica com acabamento inox e filtro permanente. Você encontra na Shopee. Acesse o link na publicação.';
+  const unsafe = 'Olha esta cafeteira elétrica com acabamento inox e filtro permanente. Você encontra na Shopee. Corre pra conferir!';
   const script = sanitizeDubbingScript(unsafe, title, 15);
   assert.doesNotMatch(script.toLowerCase(), /inox|filtro permanente/u);
   assert.ok((script.toLowerCase().match(/cafeteira/g) || []).length <= 2);
@@ -76,12 +104,29 @@ test('sanitização rejeita característica específica ausente e repetição do
 test('gerador aplica sanitização ao retorno do provedor antes de entregar o script', async () => {
   const originalPost = axios.post;
   const previousKey = process.env.GROQ_API_KEY;
-  axios.post = async () => ({ data: { choices: [{ message: { content: 'Esse produto é um absurdo, com acabamento inox. Você encontra na Shopee. Acesse o link na publicação.' } }] } });
+  axios.post = async () => ({ data: { choices: [{ message: { content: 'Esse produto é um absurdo, com acabamento inox. Você encontra na Shopee. Corre pra conferir!' } }] } });
   process.env.GROQ_API_KEY = 'test-only';
   try {
     const script = await generateDubbingCopy('Cafeteira Elétrica Compacta', 'não usar', 15);
     assert.doesNotMatch(script.toLowerCase(), /absurdo|inox/u);
-    assert.match(script, /Acesse o link na publicação\.$/u);
+    assert.match(script, /Corre pra conferir!$/u);
+  } finally {
+    axios.post = originalPost;
+    if (previousKey === undefined) delete process.env.GROQ_API_KEY;
+    else process.env.GROQ_API_KEY = previousKey;
+  }
+});
+
+test('timeout do provider usa fallback factual seguro', async () => {
+  const originalPost = axios.post;
+  const previousKey = process.env.GROQ_API_KEY;
+  axios.post = async () => { throw new Error('timeout'); };
+  process.env.GROQ_API_KEY = 'test-only';
+  try {
+    const script = await generateDubbingCopy('Limpa Estofados 300ml - Spray Zip Shopee Brasil', 'não informado', 8);
+    assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
+    assert.match(script, /Corre pra conferir!$/u);
+    assert.doesNotMatch(script, /acesse a publicação|título apresenta|detalhes/iu);
   } finally {
     axios.post = originalPost;
     if (previousKey === undefined) delete process.env.GROQ_API_KEY;
@@ -140,14 +185,14 @@ test('normalizador transforma separadores técnicos em pausas faláveis', () => 
 });
 
 test('copy permanece comercial e normal enquanto TTS recebe texto falável', () => {
-  const copy = 'Monitor Gamer 27" QHD 180Hz. Você encontra na Shopee. Acesse o link na publicação.';
+  const copy = 'Monitor Gamer 27" QHD 180Hz. Você encontra na Shopee. Corre pra conferir!';
   const ttsText = normalizeSpeechForTTS(copy);
 
-  assert.equal(copy, 'Monitor Gamer 27" QHD 180Hz. Você encontra na Shopee. Acesse o link na publicação.');
+  assert.equal(copy, 'Monitor Gamer 27" QHD 180Hz. Você encontra na Shopee. Corre pra conferir!');
   assert.match(copy, /27"/u);
   assert.match(ttsText, /vinte e sete polegadas/u);
   assert.match(ttsText, /cento e oitenta hertz/u);
-  assert.match(ttsText, /Acesse o link na publicação\.$/u);
+  assert.match(ttsText, /Corre pra conferir!$/u);
   assert.doesNotMatch(ttsText, /27"|180Hz/u);
 });
 
@@ -159,7 +204,7 @@ test('fallback preserva identidade curta do Mixer com e sem marca', () => {
     const copy = buildFallbackDubbingScript(title, 15);
     assert.match(copy, /Mixer/iu);
     assert.match(copy, /(?:3 em 1|três em um)/iu);
-    assert.match(copy, /Acesse o link na publicação\.$/u);
+    assert.match(copy, /Corre pra conferir!$/u);
   }
 });
 
@@ -174,14 +219,14 @@ test('sanitização usa fallback quando Mixer não tem identidade mínima', () =
 });
 
 test('Shopee permanece na copy e vira Chopí somente no TTS', () => {
-  const copy = 'Você encontra na Shopee. Acesse o link na publicação.';
+  const copy = 'Você encontra na Shopee. Corre pra conferir!';
   const ttsText = normalizeSpeechForTTS(copy);
 
   assert.match(copy, /Shopee/u);
   assert.doesNotMatch(copy, /Chopí/u);
   assert.match(ttsText, /Chopí/u);
   assert.doesNotMatch(ttsText, /Shopee/u);
-  assert.match(ttsText, /Acesse o link na publicação\.$/u);
+  assert.match(ttsText, /Corre pra conferir!$/u);
 });
 
 test('Air Fryer recebe pronúncia segura somente no texto do TTS', () => {
