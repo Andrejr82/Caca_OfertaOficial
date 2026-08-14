@@ -67,6 +67,25 @@ describe("Official AI Copy V3", () => {
     expect(hook).not.toMatch(/R\$|%|desconto/iu);
   });
 
+  it.each([
+    ["Kit Bolsa Feminina", /kit.*bolsa feminina/iu],
+    ["Conjunto Camiseta + Bermuda", /camiseta.*bermuda/iu],
+    ["Moletom Flanelado com Zíper e Capuz", /flanelado.*zíper.*capuz/iu]
+  ])("usa no gancho os fatos disponíveis em %s", (productName, expectedFact) => {
+    const contract = buildConversionCopyContract({
+      productName,
+      shortName: productName,
+      marketplace: "Shopee",
+      category: "Moda",
+      currentPrice: 0,
+      originalPrice: null,
+      evidence: {}
+    });
+
+    expect(contract.hook).toMatch(expectedFact);
+    expect(contract.hook).not.toMatch(/conheça|em destaque|confira|se você procura/iu);
+  });
+
   it("omite preço e benefício quando não há autoridade factual", () => {
     const contract = buildConversionCopyContract({
       productName: "Tênis Casual Masculino",
@@ -243,6 +262,7 @@ describe("Official AI Copy V3", () => {
 
     expect(copy.match(new RegExp(productName, "g")) ?? []).toHaveLength(1);
     expect(copy).toContain("Produto simples sem atributos");
+    expect(copy).not.toMatch(/Conheça|Em destaque|Confira|Se você procura/iu);
     expect(copy).not.toMatch(/Oferta em destaque|Boa opção para sua rotina|Seleção oficial do dia|Uma opção para sua rotina/iu);
   });
 
