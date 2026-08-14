@@ -86,6 +86,16 @@ export interface OfficialAIContent {
   channelCopies: Partial<Record<OfficialAIChannel, string>>;
 }
 
+export interface OfficialConversionCopyContract {
+  product: string;
+  hook: string;
+  benefit: string | null;
+  context: string | null;
+  offer: string | null;
+  cta: string;
+  shortSpeech: string;
+}
+
 export interface OfficialAIRegenerationFilters {
   marketplace?: string;
   channel?: OfficialAIChannel;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCopyV2ChannelCopy, buildCopyV3ChannelCopy, type CopyV2Facts, type CopyV3Facts } from "@/core/ai/prompt";
+import { buildConversionCopyContract, buildCopyV2ChannelCopy, buildCopyV3ChannelCopy, type CopyV2Facts, type CopyV3Facts } from "@/core/ai/prompt";
 import { marketplaceLabel } from "@/core/ai/icon-catalog";
 
 const coffeeMaker: CopyV3Facts = {
@@ -14,6 +14,79 @@ const coffeeMaker: CopyV3Facts = {
 const channels = ["instagram", "facebook", "whatsapp", "telegram"] as const;
 
 describe("Official AI Copy V3", () => {
+  it("cria contrato de conversão com identidade, oferta confiável, benefício comprovado e fala curta", () => {
+    const contract = buildConversionCopyContract({
+      ...coffeeMaker,
+      shortName: "Cafeteira com jarra de vidro",
+      currentPrice: 99.9,
+      originalPrice: 129.9,
+      evidence: { attributes: ["jarra de vidro"] }
+    }, { benefitLine: "Jarra de vidro para acompanhar o preparo." });
+
+    expect(contract.product).toBe("Cafeteira com jarra de vidro");
+    expect(contract.hook).toContain("Cafeteira");
+    expect(contract.benefit).toMatch(/jarra de vidro/iu);
+    expect(contract.offer).toContain("R$ 99,90");
+    expect(contract.offer).toContain("23% OFF");
+    expect(contract.cta).toMatch(/Confira|Veja|Corre pra conferir/iu);
+    expect(contract.shortSpeech).toContain("Cafeteira");
+  });
+
+  it("omite preço e benefício quando não há autoridade factual", () => {
+    const contract = buildConversionCopyContract({
+      productName: "Tênis Casual Masculino",
+      shortName: "Tênis Casual Masculino",
+      marketplace: "Shopee",
+      category: "Moda",
+      currentPrice: 0,
+      originalPrice: null,
+      evidence: {}
+    }, { benefitLine: "Ideal para criar um look moderno." });
+
+    expect(contract.offer).toBeNull();
+    expect(contract.benefit).toBeNull();
+    expect(contract.shortSpeech).not.toMatch(/ideal|look moderno|R\$/iu);
+  });
+
+  it.each(["instagram", "facebook", "whatsapp", "telegram"] as const)("renderiza uma estratégia própria para %s sem abertura de catálogo", (channel) => {
+    const copy = buildCopyV3ChannelCopy({ ...coffeeMaker, shortName: "Cafeteira Electrolux" }, channel);
+
+    expect(copy).toContain("Cafeteira Electrolux");
+    expect(copy).not.toMatch(/^\s*Se você procura/iu);
+    expect(copy).not.toContain("Acesse a publicação");
+    expect(copy).toMatch(/Confira|Veja|Corre pra conferir/iu);
+  });
+
+  it("mantém variação entre canais sem perder fatos", () => {
+    const instagram = buildCopyV3ChannelCopy(coffeeMaker, "instagram");
+    const whatsapp = buildCopyV3ChannelCopy(coffeeMaker, "whatsapp");
+    const telegram = buildCopyV3ChannelCopy(coffeeMaker, "telegram");
+    const facebook = buildCopyV3ChannelCopy(coffeeMaker, "facebook");
+
+    expect(new Set([instagram, whatsapp, telegram, facebook]).size).toBe(4);
+    for (const copy of [instagram, whatsapp, telegram, facebook]) {
+      expect(copy).toContain("Cafeteira Electrolux ECM10");
+      expect(copy).toContain("R$ 114,63");
+    }
+  });
+
+  it("rejeita a abertura fraca de tênis e preserva produto e CTA", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Tênis Casual Masculino",
+      shortName: "Tênis Casual Masculino",
+      marketplace: "Shopee",
+      category: "Moda",
+      currentPrice: 89.9,
+      originalPrice: null,
+      evidence: {}
+    }, "whatsapp", { hook: "Se você procura um Tênis Casual Masculino, confira esta oferta" });
+
+    expect(copy).not.toMatch(/^\s*Se você procura/iu);
+    expect(copy).toContain("Tênis Casual Masculino");
+    expect(copy).toMatch(/Confira|Veja|Corre pra conferir/iu);
+    expect(copy).not.toMatch(/moderno|qualidade superior|ideal para/iu);
+  });
+
   it.each([
     ["Amazon", "Calça Legging Suplex Goodbest Fitness Academia", "📦"],
     ["Shopee", "Cama para cachorro com almofada", "🛒"],
@@ -134,7 +207,7 @@ describe("Official AI Copy V3", () => {
     }, "whatsapp");
 
     expect(copy.match(new RegExp(productName, "g")) ?? []).toHaveLength(1);
-    expect(copy).toContain("🛍️ Produto simples sem atributos");
+    expect(copy).toContain("Produto simples sem atributos");
     expect(copy).not.toMatch(/Oferta em destaque|Boa opção para sua rotina|Seleção oficial do dia|Uma opção para sua rotina/iu);
   });
 

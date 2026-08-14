@@ -1,4 +1,4 @@
-import type { OfficialAIChannel, OfficialAIDraftForRegeneration, OfficialAIOffer } from "./types";
+import type { OfficialAIChannel, OfficialAIDraftForRegeneration, OfficialAIOffer, OfficialConversionCopyContract } from "./types";
 import { marketplaceLabel } from "./icon-catalog";
 import { renderSocialHashtags } from "./social-hashtags";
 import { resolveSemanticDomain, semanticContextLine } from "./semantic-context";
@@ -8,7 +8,7 @@ Você não conversa, não introduz a mensagem e não escreve a copy final. Produ
 
 Regras obrigatórias:
 - Gere somente hook, benefitLine e contextLine. Nunca gere produto, preço, desconto, marketplace, frete, cupom, estoque, urgência, parcelamento, avaliação, vendas, CTA, hashtags ou URL.
-- O gancho (hook) deve focar no produto ou em um benefício explicitamente comprovado nos dados. Só mencione urgência, prazo ou escassez quando houver evidência persistida para isso.
+- O gancho (hook) deve ser uma abertura comercial humana, focada no produto ou em um benefício explicitamente comprovado nos dados; não escreva uma descrição burocrática de catálogo nem comece com “Se você procura”, “Olha esse” ou “Olha essa”. Só mencione urgência, prazo ou escassez quando houver evidência persistida para isso.
 - O gancho não pode passar de 90 caracteres.
 - Escreva como uma recomendação curta de uma pessoa: varie a abertura, evite repetir “oferta” e “achado” em toda mensagem e prefira o benefício comercial comprovado.
 - Use somente fatos presentes nos dados de entrada. Nunca invente preço, desconto, frete, cupom, estoque, parcelamento, marca, especificação, atributo ou benefício.
@@ -40,6 +40,7 @@ function discountPercentage(currentPrice: number, originalPrice: number | null) 
 
 export interface CopyV3Facts {
   productName: string;
+  shortName?: string | null;
   marketplace: string;
   category: string | null;
   currentPrice: number;
@@ -333,6 +334,7 @@ export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegener
 
 const COPY_V3_FORBIDDEN = /\b(?:R\$|preço|desconto|frete|cupom|estoque|parcelad|avaliaç|vendas?|%|marketplace|shopee|amazon|mercado livre)\b|https?:\/\/|www\.|\[[^\]]*link[^\]]*\]/iu;
 const COPY_V3_UNSUPPORTED_ATTRIBUTE = /\b(?:sabor|voltagem|capacidade|material|potente|resistente|impermeável|bluetooth|jarra|filtro|frost\s+free)\b/iu;
+const WEAK_CONVERSION_OPENING = /^(?:se\s+você\s+procura\b|olha\s+esse(?:s)?\b|olha\s+essa(?:s)?\b|confira\s+esta\s+oferta\b)/iu;
 
 function v3Words(value: string) {
   return value.normalize("NFD").replace(/[\u0300-\u036f]/gu, "").toLocaleLowerCase("pt-BR").match(/[\p{L}\p{N}]{4,}/gu) ?? [];
@@ -360,14 +362,6 @@ function v3DerivedBenefit(facts: CopyV3Facts) {
   }
   if (/controle|joystick/iu.test(text) && /computador|pc/iu.test(text)) return "Controle para usar no computador.";
   return null;
-}
-
-function v3Hook(facts: CopyV3Facts, channel: OfficialAIChannel, fields: CopyV3Fields | undefined, attribute: ReturnType<typeof objectiveAttribute>) {
-  const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
-  if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate) && !/^(?:oferta em destaque|boa opção para sua rotina|seleção oficial do dia|uma opção para sua rotina)$/iu.test(candidate)) return candidate;
-  if (channel === "whatsapp" && v3DerivedBenefit(facts)) return "🎮 Jogue no computador com controle sem fio ou com fio";
-  if (attribute) return `${attribute.emoji} ${attribute.text}`;
-  return v3Context(facts) ?? `✨ Destaque do dia na ${facts.marketplace}`;
 }
 
 function semanticText(value: string) {
@@ -437,31 +431,89 @@ function deduplicateSemanticSlots(blocks: string[], facts: CopyV3Facts) {
   return output;
 }
 
-/** Copy V3: provider fields are validated first; all commercial facts remain deterministic. */
-export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAIChannel, fields?: CopyV3Fields) {
+function conversionProduct(facts: CopyV3Facts) {
+  return compactProductName(facts.shortName?.trim() || facts.productName);
+}
+
+function conversionOffer(facts: CopyV3Facts) {
+  if (!(facts.currentPrice > 0)) return null;
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
+  if (discount !== null && facts.originalPrice !== null) {
+    return `De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`;
+  }
+  return formatBRL(facts.currentPrice);
+}
+
+function conversionHook(facts: CopyV3Facts, product: string, fields?: CopyV3Fields) {
+  const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
+  if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !WEAK_CONVERSION_OPENING.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate)) return candidate;
+  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
+  if (discount !== null) {
+    const hooks = [
+      `💥 ${product} com ${discount}% de desconto confirmado`,
+      `✨ ${product} com economia verificada`,
+      `🔥 ${product} em oferta com ${discount}% OFF`
+    ];
+    return hooks[stableIndex(`${facts.marketplace}|${facts.productName}|discount`, hooks.length)];
+  }
+  if (facts.currentPrice > 0) {
+    const hooks = [
+      `✨ ${product} por ${formatBRL(facts.currentPrice)}`,
+      `💡 ${product} com preço conferido`,
+      `⭐ ${product} em destaque`
+    ];
+    return hooks[stableIndex(`${facts.marketplace}|${facts.productName}|price`, hooks.length)];
+  }
+  return `✨ ${product} em destaque`;
+}
+
+export function buildConversionCopyContract(facts: CopyV3Facts, fields?: CopyV3Fields): OfficialConversionCopyContract {
+  const product = conversionProduct(facts);
   const attribute = objectiveAttribute(facts);
-  const benefit = validateV3Field(facts, fields?.benefitLine) ?? v3DerivedBenefit(facts) ?? (attribute ? `✨ ${attribute.text}.` : null);
+  const benefit = validateV3Field(facts, fields?.benefitLine) ?? v3DerivedBenefit(facts);
   const context = validateV3Field(facts, fields?.contextLine) ?? v3Context(facts);
+  const offer = conversionOffer(facts);
+  const hook = conversionHook(facts, product, fields);
+  const cta = offer ? "Confira a oferta" : "Confira os detalhes";
+  const shortSpeechOffer = /R\$|%\s*OFF/iu.test(hook) ? null : offer;
+  const shortSpeech = [hook.replace(/^[^\p{L}\p{N}]+/u, ""), benefit ?? attribute?.text, shortSpeechOffer, `${cta}.`]
+    .filter(Boolean)
+    .join(" ");
+  return { product, hook, benefit: benefit ?? (attribute ? attribute.text : null), context, offer, cta, shortSpeech };
+}
+
+function channelCta(facts: CopyV3Facts, channel: OfficialAIChannel) {
+  const index = stableIndex(`${facts.marketplace}|${facts.productName}|${channel}`, 2);
+  const options = {
+    instagram: ["🔎 Confira a oferta. Link na bio ou nos Stories. 👇", "🔎 Veja a oferta. Link na bio ou nos Stories. 👇"],
+    facebook: ["👉 Confira a oferta no primeiro comentário. 👇", "👉 Veja a oferta no primeiro comentário. 👇"],
+    whatsapp: ["👉 Corre pra conferir.", "👉 Confira os detalhes no link."],
+    telegram: ["👉 Confira a oferta.", "👉 Veja os detalhes da oferta."]
+  } as const;
+  return options[channel]?.[index] ?? "🛒 Confira a oferta.";
+}
+
+/** Copy V3: the conversion contract owns commercial intelligence; this function only renders a channel. */
+export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAIChannel, fields?: CopyV3Fields) {
+  const contract = buildConversionCopyContract(facts, fields);
+  const attribute = objectiveAttribute(facts);
   const marketplace = marketplaceLabel(facts.marketplace);
   const freight = shippingLine(facts);
-  const product = channel === "whatsapp" ? compactProductName(facts.productName) : cleanProductName(facts.productName);
-  const price = discount && facts.originalPrice
-    ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
-    : facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : "💰 Consulte o preço atual no link!";
+  const product = channel === "whatsapp" ? contract.product : cleanProductName(facts.shortName?.trim() || facts.productName);
+  const hookContainsProduct = semanticText(contract.hook).includes(semanticText(contract.product));
   const commercial = [
-    `🛍️ ${product}`,
+    contract.hook,
+    ...(hookContainsProduct ? [] : [`🛍️ ${product}`]),
     `${marketplace.icon} ${marketplace.text}`,
     ...(freight ? [freight] : []),
-    ...(benefit ? [benefit] : []),
-    ...(context ? [context] : []),
-    price
+    ...(contract.benefit ? [`✨ ${contract.benefit}`] : []),
+    ...(contract.context ? [contract.context] : []),
+    ...(attribute && contract.benefit !== attribute.text ? [`✨ ${attribute.text}`] : []),
+    ...(contract.offer ? [`💰 ${contract.offer}`] : [])
   ];
-  const slots = deduplicateSemanticSlots([v3Hook(facts, channel, fields, attribute), ...commercial], facts);
+  const slots = deduplicateSemanticSlots(commercial, facts);
 
-  if (channel === "instagram") return [...slots, "🔎 Link na bio ou nos Stories para consultar a oferta. 👇", renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
-  if (channel === "facebook") return [...slots, "👉 Link de compra no primeiro comentário! 👇", renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
-  if (channel === "whatsapp") return [...slots, "👉"].join("\n\n");
-  if (channel === "telegram") return [...slots, "👉"].join("\n\n");
-  return [...slots, "🛒 Ver oferta 👇"].join("\n\n");
+  if (channel === "instagram") return [...slots, channelCta(facts, channel), renderSocialHashtags(facts, "instagram")].filter(Boolean).join("\n\n");
+  if (channel === "facebook") return [...slots, channelCta(facts, channel), renderSocialHashtags(facts, "facebook")].filter(Boolean).join("\n\n");
+  return [...slots, channelCta(facts, channel)].join("\n\n");
 }
