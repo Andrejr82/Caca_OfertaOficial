@@ -29,7 +29,8 @@ describe("Official AI Copy V3", () => {
     expect(contract.offer).toContain("R$ 99,90");
     expect(contract.offer).toContain("23% OFF");
     expect(contract.cta).toMatch(/Confira|Veja|Corre pra conferir/iu);
-    expect(contract.shortSpeech).toContain("Cafeteira");
+    expect(contract).not.toHaveProperty("shortSpeech");
+    expect(contract.cta).toBe("Corre pra conferir.");
   });
 
   it("omite preço e benefício quando não há autoridade factual", () => {
@@ -45,7 +46,7 @@ describe("Official AI Copy V3", () => {
 
     expect(contract.offer).toBeNull();
     expect(contract.benefit).toBeNull();
-    expect(contract.shortSpeech).not.toMatch(/ideal|look moderno|R\$/iu);
+    expect(contract).not.toHaveProperty("shortSpeech");
   });
 
   it.each(["instagram", "facebook", "whatsapp", "telegram"] as const)("renderiza uma estratégia própria para %s sem abertura de catálogo", (channel) => {
@@ -189,7 +190,7 @@ describe("Official AI Copy V3", () => {
     expect(copy.match(new RegExp(productName, "g")) ?? []).toHaveLength(0);
     expect(copy).toContain("sem fio/com fio");
     expect(copy).toContain("Sem fio ou com fio para usar no computador.");
-    expect(copy).toContain("Para jogar no computador");
+    expect(copy).not.toContain("Para jogar no computador");
     expect(copy).toContain("R$ 59,98");
     expect(copy).toContain("51% OFF");
     expect(copy).not.toMatch(/Oferta em destaque|Boa opção para sua rotina|Seleção oficial do dia|Uma opção para sua rotina/iu);
@@ -231,9 +232,9 @@ describe("Official AI Copy V3", () => {
     ["Tênis Casual Nike", "Moda", "compor o dia a dia"],
     ["Ração para gatos", "Pet", "rotina do pet"],
     ["Celular Samsung Galaxy", "Tecnologia", "rotina conectada"]
-  ])("deriva contexto coerente para %s", (productName, category, expectedContext) => {
+  ])("não inventa contexto de uso para %s", (productName, category, expectedContext) => {
     const copy = buildCopyV3ChannelCopy({ ...coffeeMaker, productName, category, evidence: {} }, "instagram");
-    expect(copy).toContain(expectedContext);
+    expect(copy).not.toContain(expectedContext);
     expect(copy).not.toContain("Automotivo");
   });
 
@@ -262,7 +263,7 @@ describe("Official AI Copy V3", () => {
       evidence: {}
     }, "facebook");
 
-    expect(copy.match(/Para jogar no computador/giu) ?? []).toHaveLength(1);
+    expect(copy.match(/Para jogar no computador/giu) ?? []).toHaveLength(0);
     expect(copy.match(/Oferta na Amazon/giu) ?? []).toHaveLength(1);
   });
 
@@ -284,8 +285,8 @@ describe("Official AI Copy V3", () => {
       evidence: {}
     }, "telegram");
 
-    expect(pet).toContain("Para a rotina do pet");
-    expect(kitchen).toContain("Para o preparo na cozinha");
+    expect(pet).not.toContain("Para a rotina do pet");
+    expect(kitchen).not.toContain("Para o preparo na cozinha");
     expect(kitchen).not.toMatch(/pet|🐾/iu);
   });
 
@@ -327,7 +328,7 @@ describe("Official AI Copy V3", () => {
       evidence: {}
     }, channel);
 
-    expect(copy.match(/Para compor o dia a dia/giu) ?? []).toHaveLength(1);
+    expect(copy).not.toContain("Para compor o dia a dia");
     expect(copy.match(/Oferta no Mercado Livre/giu) ?? []).toHaveLength(1);
   });
 
@@ -339,5 +340,50 @@ describe("Official AI Copy V3", () => {
     });
 
     expect(copy.match(/Cafeteira Electrolux deixa o café simples/giu) ?? []).toHaveLength(1);
+  });
+
+  it("usa gancho factual sem fórmulas promocionais legadas", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Tênis Casual Masculino",
+      shortName: "Tênis Casual Masculino",
+      marketplace: "Shopee",
+      category: "Moda",
+      currentPrice: 89.9,
+      originalPrice: null,
+      evidence: {}
+    }, "whatsapp");
+
+    expect(copy).toContain("Tênis Casual Masculino");
+    expect(copy).toContain("R$ 89,90");
+    expect(copy).toContain("Corre pra conferir.");
+    expect(copy).not.toMatch(/preço conferido|em destaque|Se você procura|Acesse a publicação/iu);
+  });
+
+  it("não publica benefício inferido quando a oferta não o comprova", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Air Fryer Britânia",
+      shortName: "Air Fryer Britânia",
+      marketplace: "Shopee",
+      category: "Cozinha",
+      currentPrice: 299.9,
+      originalPrice: null,
+      evidence: {}
+    }, "telegram");
+
+    expect(copy).toContain("Air Fryer Britânia");
+    expect(copy).toContain("R$ 299,90");
+    expect(copy).not.toMatch(/preparo na cozinha|compor o dia a dia|ideal|perfeito/iu);
+  });
+
+  it("mantém uma única CTA sem shortSpeech especulativo", () => {
+    const facts = {
+      productName: "Organizador de Mesa", shortName: "Organizador de Mesa", marketplace: "Shopee",
+      category: "Casa", currentPrice: 0, originalPrice: null, evidence: {}
+    } satisfies CopyV3Facts;
+    const contract = buildConversionCopyContract(facts);
+
+    expect(contract.cta).toBe("Confira os detalhes no link.");
+    expect(contract).not.toHaveProperty("shortSpeech");
+    expect(buildCopyV3ChannelCopy(facts, "whatsapp")).toContain(contract.cta);
   });
 });

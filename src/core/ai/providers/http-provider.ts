@@ -90,7 +90,7 @@ export async function generateOpenAICompatible(
           { role: "user", content: request.prompt.user }
         ],
         temperature: request.temperature,
-        max_tokens: request.maxTokens,
+        max_completion_tokens: request.maxTokens,
         response_format: { type: "json_object" }
       }),
       signal: AbortSignal.timeout(request.timeoutMs)

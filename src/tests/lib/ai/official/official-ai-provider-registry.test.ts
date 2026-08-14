@@ -128,6 +128,22 @@ describe("OfficialAIProviderRegistry", () => {
     expect(calledKeys(fetcher)).toEqual(["cerebras-primary-secret"]);
   });
 
+  it("usa os modelos Production atuais por padrão e remapeia o Groq legado", async () => {
+    const fetcher = vi.fn().mockResolvedValue(success());
+    await registry(canonicalEnv({ CEREBRAS_MODEL: undefined, GROQ_MODEL: "llama-3.3-70b-versatile" }), fetcher).registry.resolve().generate(request);
+    const body = JSON.parse(fetcher.mock.calls[0][1].body as string) as { model: string; max_completion_tokens?: number; max_tokens?: number };
+    expect(body.model).toBe("gpt-oss-120b");
+    expect(body.max_completion_tokens).toBe(100);
+    expect(body.max_tokens).toBeUndefined();
+  });
+
+  it("mantém o alvo Groq Production quando configurado explicitamente", async () => {
+    const fetcher = vi.fn().mockResolvedValue(success());
+    await registry(canonicalEnv({ LLM_PROVIDER: "groq", LLM_FALLBACK: "", CEREBRAS_API_KEY: "", GROQ_MODEL: "openai/gpt-oss-120b" }), fetcher).registry.resolve().generate(request);
+    const body = JSON.parse(fetcher.mock.calls[0][1].body as string) as { model: string };
+    expect(body.model).toBe("openai/gpt-oss-120b");
+  });
+
   it("avança da primeira para segunda credencial em 429", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(httpError(429)).mockResolvedValueOnce(success());
     await registry(canonicalEnv(), fetcher).registry.resolve().generate(request);

@@ -26,8 +26,8 @@ const opportunity: TrendOpportunity = {
 function providerWith(content: unknown): AIProviderPort {
   return {
     name: "groq",
-    model: "llama-3.3-70b-versatile",
-    generate: async () => ({ content, provider: "groq", model: "llama-3.3-70b-versatile", latencyMs: 1 })
+    model: "openai/gpt-oss-120b",
+    generate: async () => ({ content, provider: "groq", model: "openai/gpt-oss-120b", latencyMs: 1 })
   };
 }
 
@@ -35,11 +35,11 @@ function providerWithSequence(contents: unknown[], prompts: string[]) : AIProvid
   let index = 0;
   return {
     name: "groq",
-    model: "llama-3.3-70b-versatile",
+    model: "openai/gpt-oss-120b",
     generate: async (request) => {
       prompts.push(request.prompt.system);
       const content = contents[index++];
-      return { content, provider: "groq", model: "llama-3.3-70b-versatile", latencyMs: 1 };
+      return { content, provider: "groq", model: "openai/gpt-oss-120b", latencyMs: 1 };
     }
   };
 }
@@ -66,7 +66,7 @@ describe("trend channel and format recommendation", () => {
       confidence: 82,
       strategyVersion: "trend-channel-format-v1",
       provider: "groq",
-      model: "llama-3.3-70b-versatile"
+      model: "openai/gpt-oss-120b"
     });
   });
 
@@ -142,7 +142,7 @@ describe("trend channel and format recommendation", () => {
   it("fails closed when provider fails or opportunity is not matched", async () => {
     const failingProvider: AIProviderPort = {
       name: "groq",
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       generate: async () => { throw new Error("provider unavailable"); }
     };
     await expect(recommendTrendChannelAndFormat(opportunity, {
@@ -166,7 +166,7 @@ describe("trend channel and format recommendation", () => {
       confidence: 76,
       strategyVersion: "trend-channel-format-v1",
       provider: "groq",
-      model: "llama-3.3-70b-versatile"
+      model: "openai/gpt-oss-120b"
     });
 
     expect(row).toMatchObject({
@@ -176,7 +176,7 @@ describe("trend channel and format recommendation", () => {
       status: "recommended",
       strategy_version: "trend-channel-format-v1",
       ai_provider: "groq",
-      ai_model: "llama-3.3-70b-versatile"
+      ai_model: "openai/gpt-oss-120b"
     });
   });
 
