@@ -331,7 +331,7 @@ export function buildOfficialRegenerationPrompt(draft: OfficialAIDraftForRegener
   });
 }
 
-const COPY_V3_FORBIDDEN = /\b(?:R\$|preço|desconto|frete|cupom|estoque|parcelad|avaliaç|vendas?|%|marketplace|shopee|amazon|mercado livre)\b|https?:\/\/|www\.|\[[^\]]*link[^\]]*\]/iu;
+const COPY_V3_FORBIDDEN = /\b(?:R\$|preço|desconto|frete|cupom|estoque|parcelad|avaliaç|vendas?|%|marketplace|shopee|amazon|mercado livre)\b|(?:R\$\s*)?\d{1,4}[,.]\d{2}\b|https?:\/\/|www\.|\[[^\]]*link[^\]]*\]/iu;
 const COPY_V3_UNSUPPORTED_ATTRIBUTE = /\b(?:sabor|voltagem|capacidade|material|potente|resistente|impermeável|bluetooth|jarra|filtro|frost\s+free)\b/iu;
 const WEAK_CONVERSION_OPENING = /^(?:se\s+você\s+procura\b|olha\s+esse(?:s)?\b|olha\s+essa(?:s)?\b|confira\s+esta\s+oferta\b)/iu;
 
@@ -442,23 +442,10 @@ function conversionOffer(facts: CopyV3Facts) {
 function conversionHook(facts: CopyV3Facts, product: string, fields?: CopyV3Fields) {
   const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
   if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !WEAK_CONVERSION_OPENING.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate)) return candidate;
-  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
-  if (discount !== null) {
-    const hooks = [
-      `💥 ${product} com ${discount}% de desconto confirmado.`,
-      `✨ ${product}: ${discount}% de desconto confirmado.`,
-      `🔥 ${product} com ${discount}% de desconto.`
-    ];
-    return hooks[stableIndex(`${facts.marketplace}|${facts.productName}|discount`, hooks.length)];
-  }
-  if (facts.currentPrice > 0) {
-    const hooks = [
-      `✨ ${product} por ${formatBRL(facts.currentPrice)}.`,
-      `💡 ${product}: ${formatBRL(facts.currentPrice)}.`,
-      `🛍️ ${product} por ${formatBRL(facts.currentPrice)}.`
-    ];
-    return hooks[stableIndex(`${facts.marketplace}|${facts.productName}|price`, hooks.length)];
-  }
+  const attribute = objectiveAttribute(facts);
+  if (attribute) return `${attribute.emoji} ${product} com ${attribute.text}.`;
+  const benefit = v3DerivedBenefit(facts);
+  if (benefit) return `✨ ${product}: ${benefit}`;
   return `✨ Conheça ${product}.`;
 }
 

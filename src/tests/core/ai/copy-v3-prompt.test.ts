@@ -33,6 +33,40 @@ describe("Official AI Copy V3", () => {
     expect(contract.cta).toBe("Corre pra conferir.");
   });
 
+  it("mantém preço e desconto somente no bloco comercial de uma oferta", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Kit Bolsa Transversal",
+      shortName: "Kit Bolsa Transversal",
+      marketplace: "Shopee",
+      category: "Moda",
+      currentPrice: 51.08,
+      originalPrice: 78.9,
+      evidence: {}
+    }, "instagram");
+
+    const hook = copy.split("\n\n")[0];
+    expect(copy.match(/R\$ 51,08/g) ?? []).toHaveLength(1);
+    expect(copy.match(/R\$ 78,90/g) ?? []).toHaveLength(1);
+    expect(copy.match(/35%/g) ?? []).toHaveLength(1);
+    expect(hook).not.toMatch(/R\$|%|desconto/iu);
+  });
+
+  it("mantém preço somente no bloco comercial quando não há desconto", () => {
+    const copy = buildCopyV3ChannelCopy({
+      productName: "Conjunto Camiseta Básica",
+      shortName: "Conjunto Camiseta Básica",
+      marketplace: "Amazon",
+      category: "Moda",
+      currentPrice: 29.99,
+      originalPrice: null,
+      evidence: {}
+    }, "whatsapp");
+
+    const hook = copy.split("\n\n")[0];
+    expect(copy.match(/R\$/g) ?? []).toHaveLength(1);
+    expect(hook).not.toMatch(/R\$|%|desconto/iu);
+  });
+
   it("omite preço e benefício quando não há autoridade factual", () => {
     const contract = buildConversionCopyContract({
       productName: "Tênis Casual Masculino",
