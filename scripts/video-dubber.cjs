@@ -157,7 +157,7 @@ function deriveTitleProductIdentity(normalized) {
   const ignored = new Set([
     'masculina', 'masculino', 'feminina', 'feminino', 'unissex', 'adulto', 'adulta',
     'academia', 'corrida', 'fitness', 'treino', 'casual', 'brasil', 'shopee',
-    'original', 'premium', 'novo', 'nova', 'kit', 'ou', 'para', 'com', 'sem', 'de', 'da', 'do',
+    'original', 'premium', 'novo', 'nova', 'kit', 'ou', 'para', 'com', 'sem',
   ]);
   const first = tokens.find((token) => /[a-zá-ú]/iu.test(token) && !/^\d/iu.test(token) && !ignored.has(token));
   if (!first) return null;
@@ -174,10 +174,10 @@ function deriveTitleProductIdentity(normalized) {
     .split(/\s+/u)
     .filter((token) => /[A-Za-zÀ-ÿ]/u.test(token) || /^\d+(?:ml|l|g|kg)$/iu.test(token))
     .filter((token) => !ignored.has(token.toLowerCase()))
-    .slice(0, 5);
+    .slice(0, 6);
   const numericToken = identityTokens.find((token) => /^\d+(?:ml|l|g|kg)$/iu.test(token));
   const words = identityTokens.filter((token) => token !== numericToken);
-  return [...words.slice(0, 4), numericToken].filter(Boolean).join(' ') || singular;
+  return [...words.slice(0, 5), numericToken].filter(Boolean).join(' ') || singular;
 }
 
 function extractDubbingFacts(title) {
