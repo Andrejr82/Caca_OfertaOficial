@@ -10,6 +10,7 @@ const {
   runShopeeOpenApiV1ShadowForScenario,
   createShopeeOpenApiV1Dispatcher,
 } = require('../shopee-openapi-v1-adapter.cjs');
+const { mergeShopeeOpenApiV1RejectionReasons } = require('../oracle-scraper.cjs');
 
 describe('Shopee OpenAPI V1 adapter', () => {
   it('trata flag ausente, false, vazia e inválida como Shopee V1 desabilitada', () => {
@@ -61,6 +62,13 @@ describe('Shopee OpenAPI V1 adapter', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0].scenarioId).toBe('tv_audio_editorial');
     expect(result).toMatchObject({ enabled: true, mode: 'official', scenarioId: 'tv_audio_editorial', result: { scenarios: { tv_audio_editorial: { metrics: { final: 3 } } } }, writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 } });
+  });
+
+  it('expõe as rejeições de relevância fornecidas nas métricas do engine', async () => {
+    expect(mergeShopeeOpenApiV1RejectionReasons({
+      metrics: { rejections: { positive_domain_missing: 20 } },
+      scenarioResult: {},
+    })).toEqual({ positive_domain_missing: 20 });
   });
 
   it('não possui dependência de Supabase, Oracle, publicação ou canais', () => {

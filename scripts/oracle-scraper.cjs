@@ -1532,11 +1532,12 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       const sourceErrors = calls.filter((call) => call.stopReason === 'source_error' || call.stopReason === 'source_timeout' || Number(call.status || 0) >= 400);
       const metrics = scenarioResult.metrics || {};
       const decision = sourceErrors.length > 0 && Number(metrics.raw || 0) === 0 ? 'failed' : 'official';
+      const rejectionReasons = mergeShopeeOpenApiV1RejectionReasons({ metrics, scenarioResult });
       return {
         engine: 'shopee_openapi_v1', mode: 'official', scenarioId, decision,
         top: Array.isArray(scenarioResult.top) ? scenarioResult.top : [], topCount: Number(scenarioResult.top?.length || 0),
         rejectedCount: Number(scenarioResult.rejected?.length || 0), metrics,
-        rejectionReasons: scenarioResult.rejectionReasons || {}, queryEvidence: response.result?.queryEvidence || {},
+        rejectionReasons, queryEvidence: response.result?.queryEvidence || {},
         ...(sourceErrors.length > 0 ? { error: `Shopee OpenAPI returned ${sourceErrors.length} source error(s)` } : {}),
         writeAudit: response.writeAudit,
       };
@@ -1555,6 +1556,10 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       controller.abort();
     }
   };
+}
+
+function mergeShopeeOpenApiV1RejectionReasons({ metrics = {}, scenarioResult = {} } = {}) {
+  return { ...(metrics.rejections || {}), ...(scenarioResult.rejectionReasons || {}) };
 }
 
 function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env, lookupExistingItemIds } = {}) {
@@ -1873,6 +1878,7 @@ module.exports = {
   buildAffiliateLinkRows,
   createQualityAdmissionRunner,
   createShopeeOpenApiV1OfficialDiscovery,
+  mergeShopeeOpenApiV1RejectionReasons,
   callShopeeAffiliateApi,
   SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS,
   SHOPEE_OPENAPI_MAX_RETRIES,
