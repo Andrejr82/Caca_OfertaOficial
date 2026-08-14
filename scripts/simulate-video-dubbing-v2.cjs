@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+const { resolveEdgeTtsBin } = require('./video-dubbing-runtime-paths.cjs');
+
+if (!process.env.EDGE_TTS_BIN) {
+  process.env.EDGE_TTS_BIN = resolveEdgeTtsBin();
+}
+
 const { runFactualDubbingSimulation } = require('./video-dubbing-factual-pipeline.cjs');
 
 function readArg(name) {
