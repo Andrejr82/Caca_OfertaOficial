@@ -65,6 +65,16 @@ const SPECIFIC_DUBBING_FACTS = [
   'baterias', 'maleta', 'peças', 'funções', 'hermético', 'gourmet', 'compacto',
 ];
 
+const TRAILING_DUBBING_CONNECTOR = /\s+\b(?:a|ao|aos|as|com|da|das|de|do|dos|e|em|na|nas|no|nos|para|pela|pelas|pelo|pelos|por|sem)\b[.,;:]*$/iu;
+
+function trimTrailingDubbingConnector(value) {
+  let output = String(value || '').trim();
+  while (TRAILING_DUBBING_CONNECTOR.test(output)) {
+    output = output.replace(TRAILING_DUBBING_CONNECTOR, '').trim();
+  }
+  return output;
+}
+
 function normalizeDubbingTitle(title) {
   return String(title || '')
     .replace(/[\u0000-\u001F\u007F]/g, ' ')
@@ -177,7 +187,8 @@ function deriveTitleProductIdentity(normalized) {
     .slice(0, 6);
   const numericToken = identityTokens.find((token) => /^\d+(?:ml|l|g|kg)$/iu.test(token));
   const words = identityTokens.filter((token) => token !== numericToken);
-  return [...words.slice(0, 5), numericToken].filter(Boolean).join(' ') || singular;
+  const identity = [...words.slice(0, 5), numericToken].filter(Boolean).join(' ');
+  return trimTrailingDubbingConnector(identity) || singular;
 }
 
 function extractDubbingFacts(title) {
@@ -272,7 +283,7 @@ function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
   let categoryLabel = facts.category.replace(/^um |^uma /iu, '').trim();
   if (facts.key === 'potes' && facts.features[0]) categoryLabel = `conjunto de ${facts.features[0]}`;
   if (facts.key === 'camisetas' && facts.features[0]) categoryLabel = `kit de ${facts.features[0]}`;
-  categoryLabel = categoryLabel.replace(/\bEm\b/gu, 'em');
+  categoryLabel = trimTrailingDubbingConnector(categoryLabel.replace(/\bEm\b/gu, 'em'));
   const extraFeatures = facts.features
     .filter((feature) => !categoryLabel.toLowerCase().includes(feature.toLowerCase()))
     .slice(0, 3);
