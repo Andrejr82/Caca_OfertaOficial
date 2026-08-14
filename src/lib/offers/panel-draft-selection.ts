@@ -1,6 +1,3 @@
-import { identifyLatestDiscoveryCohort } from "@/lib/offers/commercial-curation-queue";
-import type { Offer } from "@/types/domain";
-
 type PanelDraftOffer = {
   id?: string;
   platform?: string | null;
@@ -47,11 +44,8 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
     if (isManualExpressDraft(post)) return true;
     if (!currentCohortOfferIds.has(post.offer_id)) return false;
     const postCreatedAt = new Date(post.created_at).getTime();
-    const offerCreatedAt = new Date(post.offers?.created_at || "").getTime();
     return Number.isFinite(postCreatedAt)
-      && postCreatedAt >= editorialDayStart.getTime()
-      && Number.isFinite(offerCreatedAt)
-      && offerCreatedAt >= editorialDayStart.getTime();
+      && postCreatedAt >= editorialDayStart.getTime();
   });
 
   const byOfferId = new Map<string, T>();
@@ -62,13 +56,32 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
 }
 
 function getCurrentCohortOfferIds<T extends PanelDraftPost>(drafts: readonly T[], editorialDayStart: Date): Set<string> {
-  const cohortAnchor = new Date(editorialDayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
-  const offers = drafts
-    .filter((post) => !isManualExpressDraft(post) && post.offers?.id && post.offers.created_at)
-    .map((post) => ({
-      id: post.offers?.id || post.offer_id,
-      created_at: post.offers?.created_at || post.created_at,
-      explainability: post.offers?.explainability || null,
-    })) as Offer[];
-  return new Set(identifyLatestDiscoveryCohort(offers, cohortAnchor).map((offer) => offer.id));
+  const dayEnd = editorialDayStart.getTime() + 24 * 60 * 60 * 1000;
+  const rows = drafts
+    .filter((post) => !isManualExpressDraft(post))
+    .map((post) => {
+      const explainability = post.offers?.explainability || {};
+      const correlationId = normalizeDiscoveryCorrelationId(
+        typeof explainability.correlation_id === "string" ? explainability.correlation_id : null,
+      );
+      const evidence = explainability.discovery_evidence;
+      const discoveredAt = evidence && typeof evidence === "object" && "discoveredAt" in evidence
+        ? new Date(String(evidence.discoveredAt)).getTime()
+        : NaN;
+      const createdAt = new Date(post.offers?.created_at || "").getTime();
+      return { post, correlationId, discoveredAt, createdAt };
+    });
+
+  const evidenced = rows.filter((row) => row.discoveredAt >= editorialDayStart.getTime() && row.discoveredAt < dayEnd);
+  const legacyRows = rows.filter((row) => row.createdAt >= editorialDayStart.getTime()
+    && row.createdAt < dayEnd);
+  const sourceRows = evidenced.length > 0 ? evidenced : legacyRows;
+  if (sourceRows.length === 0) return new Set();
+
+  const correlatedRows = sourceRows.filter((row) => row.correlationId);
+  if (correlatedRows.length === 0) return new Set(sourceRows.map((row) => row.post.offer_id));
+  const latestCorrelation = correlatedRows
+    .sort((left, right) => (right.discoveredAt || right.createdAt) - (left.discoveredAt || left.createdAt))[0].correlationId;
+  return new Set(correlatedRows.filter((row) => row.correlationId === latestCorrelation).map((row) => row.post.offer_id));
 }
+import { normalizeDiscoveryCorrelationId } from "@/lib/offers/commercial-curation-queue";
