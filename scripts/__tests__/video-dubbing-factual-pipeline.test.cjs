@@ -8,6 +8,7 @@ const {
   certifyCopy,
   runFactualDubbingSimulation,
 } = require('../video-dubbing-factual-pipeline.cjs');
+const { resolveEdgeTtsBin } = require('../video-dubbing-runtime-paths.cjs');
 
 test('entrada confiável normaliza campos obrigatórios sem inventar dados', () => {
   const input = buildTrustedInput({
@@ -21,6 +22,32 @@ test('entrada confiável normaliza campos obrigatórios sem inventar dados', () 
   assert.equal(input.price, 29.9);
   assert.equal(input.marketplace, 'Amazon');
   assert.equal(input.durationSecs, 12);
+});
+
+test('simulação resolve Edge TTS pelo override, runtime conhecido e PATH', () => {
+  assert.equal(resolveEdgeTtsBin({
+    env: { EDGE_TTS_BIN: '/custom/edge-tts' },
+    platform: 'linux',
+    existsSync: () => false,
+  }), '/custom/edge-tts');
+
+  assert.equal(resolveEdgeTtsBin({
+    env: {},
+    platform: 'linux',
+    existsSync: (candidate) => candidate === '/home/ubuntu/.local/bin/edge-tts',
+  }), '/home/ubuntu/.local/bin/edge-tts');
+
+  assert.equal(resolveEdgeTtsBin({
+    env: {},
+    platform: 'win32',
+    existsSync: (candidate) => candidate.includes('pythoncore-3.14-64'),
+  }), 'C:\\Users\\André\\AppData\\Local\\Python\\pythoncore-3.14-64\\Scripts\\edge-tts.exe');
+
+  assert.equal(resolveEdgeTtsBin({
+    env: {},
+    platform: 'darwin',
+    existsSync: () => false,
+  }), 'edge-tts');
 });
 
 test('validação factual rejeita atributo que não existe no título', () => {
