@@ -182,4 +182,36 @@ describe("panel draft selection", () => {
       true,
     )).toHaveLength(6);
   });
+
+  it("exibe Shopee 24594406921 redescoberta no ciclo atual", () => {
+    const correlationId = "cycle-current";
+    const current = post(1, {
+      platform: "Amazon",
+      explainability: {
+        correlation_id: correlationId,
+        discovery_evidence: { discoveredAt: "2026-08-08T15:00:00.000Z" },
+      },
+    });
+    const rediscovered = post(2, {
+      platform: "Shopee",
+      created_at: "2026-08-01T12:00:00.000Z",
+      explainability: {
+        correlation_id: correlationId,
+        discovery_evidence: { discoveredAt: "2026-08-08T15:00:00.000Z" },
+      },
+    });
+    rediscovered.offer_id = "offer-24594406921";
+    rediscovered.created_at = "2026-08-08T15:02:00.000Z";
+
+    expect(mergePanelDrafts([current, rediscovered], new Set(), new Date("2026-08-08T03:00:00.000Z"), undefined, true)).toEqual([current, rediscovered]);
+  });
+
+  it("bloqueia oferta antiga sem evidência do ciclo atual", () => {
+    const historical = post(1, {
+      created_at: "2026-08-01T12:00:00.000Z",
+      explainability: { correlation_id: "old-cycle", discovery_evidence: { discoveredAt: "2026-08-07T15:00:00.000Z" } },
+    });
+
+    expect(mergePanelDrafts([historical], new Set(), new Date("2026-08-08T03:00:00.000Z"), undefined, true)).toEqual([]);
+  });
 });
