@@ -6,10 +6,26 @@ const {
   buildFallbackDubbingScript,
   sanitizeDubbingScript,
   buildDubbingPrompt,
+  buildUniversalDubbingCta,
   generateDubbingCopy,
   normalizeSpeechForTTS,
   fitDubbingScriptToDuration,
 } = require('../video-dubber.cjs');
+
+test('CTA da dublagem é universal, variado e independente de canal', () => {
+  const cta = buildUniversalDubbingCta('Limpa Estofados 300ml - Spray Zip Shopee Brasil');
+
+  assert.match(cta, /(?:Gostou\? Corre pra conferir esse achado!|Curtiu\? Corre pra conferir!|Vale a pena dar uma olhada\. Corre pra conferir!)/u);
+  assert.doesNotMatch(cta, /link na publicação|primeiro comentário|bio|vitrine|Stories|acesse a publicação|confira os detalhes/iu);
+});
+
+test('sanitização aceita CTA universal variado sem CTA de canal', () => {
+  const title = 'Limpa Estofados 300ml - Spray Zip Shopee Brasil';
+  const script = 'Olha esse achado! Limpa Estofados Spray Zip 300ml na Shopee. Gostou? Corre pra conferir esse achado!';
+
+  assert.equal(sanitizeDubbingScript(script, title, 8), script);
+  assert.doesNotMatch(script, /link na publicação|primeiro comentário|bio|vitrine|Stories/iu);
+});
 
 const FORBIDDEN = [
   'absurdo', 'mudou minha vida', 'revolucionário', 'vai revolucionar',
@@ -34,7 +50,7 @@ test('fallback gera roteiro factual e CTA para oito categorias', () => {
   for (const [name, title, facts] of PRODUCTS) {
     const script = buildFallbackDubbingScript(title, 15);
     const lower = script.toLowerCase();
-    assert.match(script, /Corre pra conferir!$/u, name);
+    assert.match(script, /Corre pra conferir(?: esse achado)?!$/u, name);
     assert.ok(script.split(/\s+/u).length >= 10 && script.split(/\s+/u).length <= 35, name);
     for (const phrase of FORBIDDEN) assert.equal(lower.includes(phrase), false, `${name}: ${phrase}`);
     for (const fact of facts) assert.match(lower, new RegExp(fact.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'u'), `${name}: ${fact}`);
@@ -53,7 +69,7 @@ test('fallback do limpa estofados preserva identidade e CTA falável', () => {
   const script = buildFallbackDubbingScript(title, 8);
 
   assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
-  assert.match(script, /Corre pra conferir!$/u);
+  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
   assert.doesNotMatch(script, /Limpa o título|O título apresenta|este para você|detalhes|acesse a publicação|Acesse a publicação/iu);
   assert.doesNotMatch(script, /Shopee Brasil/iu);
   assert.ok(script.split(/\s+/u).length <= 28);
@@ -73,7 +89,7 @@ test('resposta inválida do provider cai em fallback factual sem texto interno',
 
   assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
   assert.doesNotMatch(script, /provider|prompt|título apresenta|acesse a publicação/iu);
-  assert.match(script, /Corre pra conferir!$/u);
+  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
 });
 
 test('fallback deriva quantidade e mantém concordância do produto', () => {
@@ -90,7 +106,7 @@ test('sanitização troca saída insegura pelo fallback factual', () => {
   assert.notEqual(script, unsafe);
   assert.doesNotMatch(script.toLowerCase(), /absurdo|revolucionar|você vai amar/u);
   assert.match(script, /129|maleta/u);
-  assert.match(script, /Corre pra conferir!$/u);
+  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
 });
 
 test('sanitização rejeita característica específica ausente e repetição do nome', () => {
@@ -109,7 +125,7 @@ test('gerador aplica sanitização ao retorno do provedor antes de entregar o sc
   try {
     const script = await generateDubbingCopy('Cafeteira Elétrica Compacta', 'não usar', 15);
     assert.doesNotMatch(script.toLowerCase(), /absurdo|inox/u);
-    assert.match(script, /Corre pra conferir!$/u);
+  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
   } finally {
     axios.post = originalPost;
     if (previousKey === undefined) delete process.env.GROQ_API_KEY;
@@ -125,7 +141,7 @@ test('timeout do provider usa fallback factual seguro', async () => {
   try {
     const script = await generateDubbingCopy('Limpa Estofados 300ml - Spray Zip Shopee Brasil', 'não informado', 8);
     assert.match(script, /Limpa Estofados Spray Zip 300ml/iu);
-    assert.match(script, /Corre pra conferir!$/u);
+  assert.match(script, /Corre pra conferir(?: esse achado)?!$/u);
     assert.doesNotMatch(script, /acesse a publicação|título apresenta|detalhes/iu);
   } finally {
     axios.post = originalPost;
