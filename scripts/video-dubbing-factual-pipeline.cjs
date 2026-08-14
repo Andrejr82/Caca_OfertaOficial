@@ -149,7 +149,8 @@ function capitalize(value) {
 
 function composeCertifiedCopy(input, extraction, rawSelection) {
   const selection = validateSelection(extraction, rawSelection);
-  const attributes = selection.selectedAttributes.length ? ` ${selection.selectedAttributes.join(', ')}` : '';
+  const selectedAttributes = selection.selectedAttributes.filter((fact) => !sourceContains(extraction.product, fact));
+  const attributes = selectedAttributes.length ? ` ${selectedAttributes.join(', ')}` : '';
   return `${HOOKS[selection.hookId]} ${capitalize(extraction.product)}${attributes} por ${spokenPrice(input.price)} na ${input.marketplace}. ${CTAS[selection.ctaId]}`;
 }
 
