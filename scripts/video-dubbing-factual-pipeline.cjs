@@ -122,8 +122,7 @@ function integerToPortuguese(value) {
   const units = ['zero', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
   const teens = ['dez', 'onze', 'doze', 'treze', 'quatorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
   const tens = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
-  const hundreds = ['', 'cento', 'duzentos', 'trezentos', 'trezentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
-  hundreds[4] = 'quatrocentos';
+  const hundreds = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
   if (number < 10) return units[number];
   if (number < 20) return teens[number - 10];
   if (number < 100) return `${tens[Math.floor(number / 10)]}${number % 10 ? ` e ${units[number % 10]}` : ''}`;
