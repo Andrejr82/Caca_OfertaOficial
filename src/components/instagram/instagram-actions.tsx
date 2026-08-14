@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Bot, Send, CheckCircle2, AlertTriangle, Image as ImageIcon, Trash2, Ticket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -78,7 +79,8 @@ interface PostWithOffer {
   };
 }
 
-export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
+export function InstagramPostApprovalCard({ post, onApproved }: { post: PostWithOffer; onApproved?: (postId: string) => void }) {
+  const router = useRouter();
   const [caption, setCaption] = useState(post.content);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null);
@@ -120,13 +122,12 @@ export function InstagramPostApprovalCard({ post }: { post: PostWithOffer }) {
       const data = await response.json();
 
       if (response.ok && data.ok) {
+        onApproved?.(post.id);
         setStatus({
           success: true,
           message: "Post publicado com sucesso no Instagram!"
         });
-        setTimeout(() => {
-          window.location.reload();
-        }, 1500);
+        router.refresh();
       } else {
         setStatus({
           success: false,

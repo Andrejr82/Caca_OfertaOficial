@@ -106,6 +106,7 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
   const [activeFilter, setActiveFilter] = useState<MarketplaceFilterKey>("all");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [subcategoryFilter, setSubcategoryFilter] = useState("");
+  const [approvedDraftIds, setApprovedDraftIds] = useState<Set<string>>(new Set());
   const [filtersHydrated, setFiltersHydrated] = useState(false);
   const storageKey = `caca-oferta:panel-filters:social:${channel}:v1`;
   const selectedCategory = getCategoryOptions().find((category) => category.value === categoryFilter);
@@ -146,6 +147,11 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
     localStorage.setItem(storageKey, JSON.stringify({ activeFilter, categoryFilter, subcategoryFilter }));
   }, [filtersHydrated, storageKey, activeFilter, categoryFilter, subcategoryFilter]);
 
+  const visibleDraftPosts = useMemo(
+    () => draftPosts.filter((post) => !approvedDraftIds.has(post.id)),
+    [approvedDraftIds, draftPosts],
+  );
+
   const filterCounts = useMemo(() => {
     const uniquePosts = new Map<
       string,
@@ -156,7 +162,7 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
       }
     >();
 
-    for (const post of draftPosts) {
+    for (const post of visibleDraftPosts) {
       uniquePosts.set(post.id, {
         platform: post.offers?.platform,
         marketplace: post.offers?.marketplace,
@@ -170,16 +176,16 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
       ).length;
       return acc;
     }, {} as Record<MarketplaceFilterKey, number>);
-  }, [draftPosts]);
+  }, [visibleDraftPosts]);
 
   const filteredDraftPosts = useMemo(
     () =>
-      draftPosts.filter((post) =>
+      visibleDraftPosts.filter((post) =>
         matchesMarketplaceFilter(activeFilter, post.offers, post.offers?.platform, post.offers?.category)
         && (!categoryFilter || classifyOfferForPanel(post.offers || {}).category === categoryFilter)
         && (!subcategoryFilter || classifyOfferForPanel(post.offers || {}).subcategory === subcategoryFilter),
       ),
-    [activeFilter, categoryFilter, draftPosts, subcategoryFilter],
+    [activeFilter, categoryFilter, subcategoryFilter, visibleDraftPosts],
   );
 
   const filteredHistoryData = useMemo(
@@ -263,7 +269,11 @@ export function SocialChannelPostsView<TDraftPost extends DraftPostItem>({
             {filteredDraftPosts.length}
           </span>
         </div>
-        <BatchApprovalList posts={filteredDraftPosts as any} channel={channel} />
+        <BatchApprovalList
+          posts={filteredDraftPosts as any}
+          channel={channel}
+          onPostApproved={(postId) => setApprovedDraftIds((current) => new Set(current).add(postId))}
+        />
       </section>
 
       <section className="grid gap-4">

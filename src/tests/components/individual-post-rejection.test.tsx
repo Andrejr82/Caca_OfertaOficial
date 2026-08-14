@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions";
 import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
+import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions";
+
+const { refresh } = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
 
 const post = {
   id: "post-1",
@@ -44,5 +48,27 @@ describe.each([
     })));
     await waitFor(() => expect(button).toHaveProperty("disabled", false));
     expect(screen.getByText("falha simulada")).toBeTruthy();
+  });
+});
+
+describe.each([
+  ["facebook", FacebookPostApprovalCard, /aprovar e publicar/i],
+  ["instagram", InstagramPostApprovalCard, /aprovar e publicar no instagram/i],
+  ["telegram", TelegramPostApprovalCard, /aprovar e publicar no telegram/i],
+] as const)("individual approval on %s", (channel, Component, buttonName) => {
+  it("notifies the list and refreshes without a full page reload", async () => {
+    const onApproved = vi.fn();
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue({ ok: true }) })
+      .mockResolvedValueOnce({ ok: true, json: vi.fn().mockResolvedValue({ ok: true }) });
+    vi.stubGlobal("fetch", fetchMock);
+    render(<Component post={{ ...post, offers: { ...post.offers, image_url: "https://example.com/image.jpg" } }} onApproved={onApproved} />);
+
+    fireEvent.click(screen.getByRole("button", { name: buttonName }));
+
+    await waitFor(() => expect(onApproved).toHaveBeenCalledWith("post-1"));
+    expect(refresh).toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/posts/update-content", expect.anything());
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `/api/${channel}/publish`, expect.anything());
   });
 });
