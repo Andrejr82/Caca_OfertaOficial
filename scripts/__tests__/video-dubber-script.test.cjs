@@ -99,6 +99,15 @@ test('fallback deriva quantidade e mantém concordância do produto', () => {
   assert.doesNotMatch(potes, /este cafeteira|este torneira|este potes/iu);
 });
 
+test('fallback do rodo não transforma vidro em potes de vidro herméticos', () => {
+  const title = 'Rodo Spray Limpa E Seca Vidros 3 Em 1 250ml Multiuso MOP Limpador';
+  const script = buildFallbackDubbingScript(title, 12, 24.96);
+
+  assert.match(script, /Rodo 3 em 1/iu);
+  assert.doesNotMatch(script, /potes de vidro herméticos|com potes/iu);
+  assert.match(script, /vinte e quatro reais e noventa e seis centavos/iu);
+});
+
 test('identidade preserva preposições naturais do nome do produto', () => {
   const regressions = [
     ['Calça Masculina', /calça/iu],
