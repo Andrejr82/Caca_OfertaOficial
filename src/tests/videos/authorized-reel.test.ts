@@ -4,6 +4,7 @@ import {
   MAX_AUTHORIZED_REEL_BYTES,
   authorizedReelFinalizeSchema,
   authorizedReelStartSchema,
+  authorizedReelVerificationSchema,
   buildAuthorizedReelStoragePath,
 } from "@/lib/videos/authorized-reel";
 
@@ -49,5 +50,30 @@ describe("authorized reel ingestion", () => {
 
     expect(path).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/reels/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.mp4");
     expect(authorizedReelFinalizeSchema.parse({ ...validInput, uploadId }).uploadId).toBe(uploadId);
+  });
+
+  it("accepts a bounded ffprobe verification result", () => {
+    const parsed = authorizedReelVerificationSchema.parse({
+      ok: true,
+      workerId: "oracle-authorized-reel",
+      width: 1080,
+      height: 1920,
+      durationSeconds: 11.4,
+      formatName: "mov,mp4,m4a,3gp,3g2,mj2",
+      videoCodec: "h264",
+      hasAudio: true,
+    });
+
+    expect(parsed.ok).toBe(true);
+  });
+
+  it("accepts a bounded fail-closed verification error", () => {
+    const parsed = authorizedReelVerificationSchema.parse({
+      ok: false,
+      workerId: "oracle-authorized-reel",
+      error: "Container inválido.",
+    });
+
+    expect(parsed.ok).toBe(false);
   });
 });
