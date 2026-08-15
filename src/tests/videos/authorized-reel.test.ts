@@ -5,6 +5,7 @@ import {
   authorizedReelFinalizeSchema,
   authorizedReelStartSchema,
   authorizedReelVerificationSchema,
+  buildAuthorizedReelJobId,
   buildAuthorizedReelStoragePath,
 } from "@/lib/videos/authorized-reel";
 
@@ -59,11 +60,12 @@ describe("authorized reel ingestion", () => {
     }).rightsStatus).toBe("owned");
   });
 
-  it("builds a user-scoped storage path and validates finalize payload", () => {
+  it("builds user-scoped storage and deterministic job identity", () => {
     const uploadId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const path = buildAuthorizedReelStoragePath("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", uploadId);
 
     expect(path).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/reels/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.mp4");
+    expect(buildAuthorizedReelJobId(uploadId)).toBe(uploadId);
     expect(authorizedReelFinalizeSchema.parse({ ...validInput, uploadId }).uploadId).toBe(uploadId);
   });
 
