@@ -3,9 +3,11 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import {
   AUTO_REEL_FLUX_MODEL,
   buildFluxMultipart,
+  canResumeAutoReelScenes,
   generateFluxScene,
   planAutoReelScenes,
   processAutoReelScenes,
+  scenesToGenerate,
 } from "@/lib/videos/auto-reel-scenes";
 
 const factualSnapshot = {
@@ -16,6 +18,11 @@ const factualSnapshot = {
   category: "Geral",
   imageUrl: "https://cdn.example.test/wap.jpg",
 };
+
+const persistedScene = (number: number) => ({
+  ...planAutoReelScenes(factualSnapshot)[number - 1],
+  storagePath: `auto-reels/offer-scenes-1/scene-${number}.jpg`,
+});
 
 describe("Auto Reel visual scenes contract", () => {
   beforeEach(() => vi.restoreAllMocks());
@@ -146,5 +153,63 @@ describe("Auto Reel visual scenes contract", () => {
       ["job-scenes-4", "generating_visual"],
       ["job-scenes-4", "scenes_ready"],
     ]);
+  });
+
+  it("resumes generating_visual with no persisted scenes", async () => {
+    const generate = vi.fn().mockResolvedValue({ bytes: new Uint8Array([1]), contentType: "image/jpeg", width: 768, height: 1024 });
+    const result = await processAutoReelScenes({
+      jobId: "job-resume-empty",
+      factualSnapshot,
+      sourceImage: new Blob(["image"], { type: "image/jpeg" }),
+      existingScenes: [],
+      generate,
+      persistScene: vi.fn().mockResolvedValue({ storagePath: "scene.jpg" }),
+      updateJob: vi.fn(),
+    });
+    expect(generate).toHaveBeenCalledTimes(4);
+    expect(result.status).toBe("scenes_ready");
+  });
+
+  it("resumes from the first missing scene", async () => {
+    const generate = vi.fn().mockResolvedValue({ bytes: new Uint8Array([1]), contentType: "image/jpeg", width: 768, height: 1024 });
+    await processAutoReelScenes({
+      jobId: "job-resume-two",
+      factualSnapshot,
+      sourceImage: new Blob(["image"], { type: "image/jpeg" }),
+      existingScenes: [persistedScene(1), persistedScene(2)],
+      generate,
+      persistScene: vi.fn().mockResolvedValue({ storagePath: "scene.jpg" }),
+      updateJob: vi.fn(),
+    });
+    expect(generate).toHaveBeenCalledTimes(2);
+    expect(generate.mock.calls.map(([scene]) => scene.number)).toEqual([3, 4]);
+  });
+
+  it("does not duplicate already persisted scenes", () => {
+    const planned = planAutoReelScenes(factualSnapshot);
+    expect(scenesToGenerate(planned, [persistedScene(1), persistedScene(2)])).toEqual(planned.slice(2));
+  });
+
+  it("does not regenerate scenes_ready or failed jobs", () => {
+    expect(canResumeAutoReelScenes("scenes_ready")).toBe(false);
+    expect(canResumeAutoReelScenes("failed")).toBe(false);
+    expect(canResumeAutoReelScenes("planning")).toBe(true);
+    expect(canResumeAutoReelScenes("generating_visual")).toBe(true);
+  });
+
+  it("marks a failed resume as failed without hiding the original error", async () => {
+    const updateJob = vi.fn();
+    const result = await processAutoReelScenes({
+      jobId: "job-resume-fail",
+      factualSnapshot,
+      sourceImage: new Blob(["image"], { type: "image/jpeg" }),
+      existingScenes: [persistedScene(1), persistedScene(2)],
+      generate: vi.fn().mockRejectedValue(new Error("Cloudflare HTTP 429")),
+      persistScene: vi.fn(),
+      updateJob,
+    });
+    expect(result.status).toBe("failed");
+    expect(result.error).toContain("Cloudflare HTTP 429");
+    expect(updateJob).toHaveBeenLastCalledWith("job-resume-fail", "failed", expect.objectContaining({ error: "Cloudflare HTTP 429" }));
   });
 });

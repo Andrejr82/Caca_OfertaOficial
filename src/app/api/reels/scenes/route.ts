@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { generateFluxScene, processAutoReelScenes, type AutoReelScenesSnapshot } from "@/lib/videos/auto-reel-scenes";
+import { canResumeAutoReelScenes, generateFluxScene, processAutoReelScenes, type AutoReelScene, type AutoReelScenesSnapshot } from "@/lib/videos/auto-reel-scenes";
 
 export const runtime = "nodejs";
 
@@ -26,9 +26,10 @@ export async function POST(request: Request) {
     .maybeSingle();
   if (error) return NextResponse.json({ error: "Não foi possível carregar o job." }, { status: 502 });
   if (!job) return NextResponse.json({ error: "Reel não encontrado." }, { status: 404 });
-  if (["generating_visual", "scenes_ready", "failed"].includes(job.stage)) return NextResponse.json({ job });
+  if (!canResumeAutoReelScenes(job.stage)) return NextResponse.json({ job });
 
   const metadata = (job.metadata && typeof job.metadata === "object" ? job.metadata : {}) as Record<string, unknown>;
+  const existingScenes = Array.isArray(metadata.visualScenes) ? metadata.visualScenes as Array<AutoReelScene & { storagePath: string; mediaUrl?: string }> : [];
   const factualSnapshot = metadata.factualSnapshot as AutoReelScenesSnapshot | undefined;
   if (!factualSnapshot?.imageUrl || !factualSnapshot.productName) return NextResponse.json({ error: "Snapshot factual incompleto." }, { status: 422 });
 
@@ -40,6 +41,7 @@ export async function POST(request: Request) {
     jobId: job.id,
     factualSnapshot,
     sourceImage: image,
+    existingScenes,
     generate: (scene, sourceImage) => generateFluxScene({
       image: sourceImage,
       prompt: scene.prompt,

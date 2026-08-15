@@ -41,6 +41,18 @@ export function planAutoReelScenes(snapshot: AutoReelScenesSnapshot): AutoReelSc
   }));
 }
 
+export function canResumeAutoReelScenes(stage: string) {
+  return !["scenes_ready", "failed"].includes(stage);
+}
+
+export function scenesToGenerate(
+  planned: AutoReelScene[],
+  existing: Array<Pick<AutoReelScene, "number">>,
+) {
+  const completed = new Set(existing.map((scene) => scene.number));
+  return planned.filter((scene) => !completed.has(scene.number));
+}
+
 export function buildFluxMultipart(input: { image: Blob; prompt: string; seed: number }): FormData {
   const form = new FormData();
   form.append("input_image_0", input.image, "product.jpg");
@@ -93,16 +105,19 @@ export async function processAutoReelScenes(input: {
   jobId: string;
   factualSnapshot: AutoReelScenesSnapshot;
   sourceImage: Blob;
+  existingScenes?: Array<AutoReelScene & PersistedScene>;
   generate: (scene: AutoReelScene, image: Blob) => Promise<GeneratedScene>;
   persistScene: (scene: AutoReelScene, generated: GeneratedScene) => Promise<PersistedScene>;
   updateJob: (jobId: string, stage: "planning" | "generating_visual" | "scenes_ready" | "failed", metadata?: Record<string, unknown>) => Promise<void> | void;
 }) {
   const scenes = planAutoReelScenes(input.factualSnapshot);
+  const existingScenes = input.existingScenes ?? [];
+  const missingScenes = scenesToGenerate(scenes, existingScenes);
   await input.updateJob(input.jobId, "planning");
-  const persisted: Array<AutoReelScene & PersistedScene> = [];
+  const persisted: Array<AutoReelScene & PersistedScene> = [...existingScenes];
   try {
     await input.updateJob(input.jobId, "generating_visual");
-    for (const scene of scenes) {
+    for (const scene of missingScenes) {
       const generated = await input.generate(scene, input.sourceImage);
       if (!generated.bytes?.length || generated.width !== 768 || generated.height !== 1024) throw new Error("Imagem visual inválida.");
       persisted.push({ ...scene, ...(await input.persistScene(scene, generated)) });
