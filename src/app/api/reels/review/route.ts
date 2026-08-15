@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { buildCleanAutoReelAttemptMetadata } from "@/lib/videos/auto-reel-completion";
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
@@ -22,7 +23,13 @@ export async function POST(request: Request) {
   }
   if (!["ready_for_review", "approved", "rejected", "failed"].includes(job.stage)) return NextResponse.json({ error: "Reel não pode ser regenerado neste estado." }, { status: 409 });
   const previousAttempt = Number(job.metadata?.attempt ?? 1);
-  const { data, error: insertError } = await admin.from("video_jobs").insert({ user_id: userData.user.id, offer_id: job.offer_id, status: "queued", stage: "queued", script: "Reel demonstrativo aguardando nova tentativa.", video_url: null, template_id: "auto-reel-v1", metadata: { ...(job.metadata ?? {}), attempt: previousAttempt + 1, previousAttemptId: job.id, completionRequested: false } }).select("*").single();
+  let metadata;
+  try {
+    metadata = buildCleanAutoReelAttemptMetadata({ id: job.id, attempt: previousAttempt, metadata: job.metadata ?? {} });
+  } catch {
+    return NextResponse.json({ error: "Snapshot factual ausente para regeneração." }, { status: 422 });
+  }
+  const { data, error: insertError } = await admin.from("video_jobs").insert({ user_id: userData.user.id, offer_id: job.offer_id, status: "queued", stage: "queued", script: "Reel demonstrativo aguardando nova tentativa.", video_url: null, audio_url: null, template_id: "auto-reel-v1", metadata }).select("*").single();
   if (insertError) return NextResponse.json({ error: "Não foi possível criar nova tentativa." }, { status: 500 });
   return NextResponse.json({ job: data }, { status: 201 });
 }

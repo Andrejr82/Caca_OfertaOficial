@@ -93,12 +93,35 @@ describe("Auto Reel completion contract", () => {
     expect(() => approveAutoReelCompletion(job)).toThrow();
   });
 
-  it("regenerates without deleting the previous attempt", async () => {
+  it("regenerates as a clean visual attempt without deleting the previous attempt", async () => {
     const { regenerateAutoReelCompletion } = await import("@/lib/videos/auto-reel-completion");
-    const next = regenerateAutoReelCompletion({ ...job, stage: "failed", videoUrl: "https://cdn/old.mp4" });
-    expect(next).toMatchObject({ offerId: snapshot.offerId, attempt: 2, stage: "queued", videoUrl: null });
+    const previous = {
+      ...job,
+      stage: "failed",
+      videoUrl: "https://cdn/old.mp4",
+      metadata: {
+        ...job.metadata,
+        style: "demonstrative-reel",
+        renderManifest: { scenes, audioUrl: "https://cdn/old.mp3" },
+        audioUrl: "https://cdn/old.mp3",
+        durationSeconds: 12,
+        rendered: true,
+        completionRequested: true,
+      },
+    };
+    const next = regenerateAutoReelCompletion(previous as any) as { id: string; offerId?: string; attempt: number; stage: string; videoUrl: string | null; metadata: Record<string, unknown> };
+    expect(next).toMatchObject({ offerId: snapshot.offerId, attempt: 2, status: "queued", stage: "queued", videoUrl: null });
     expect((next as { id: string }).id).not.toBe(job.id);
-    expect(job).toHaveProperty("metadata.visualScenes");
+    expect(next.metadata).toEqual({ factualSnapshot: snapshot, style: "demonstrative-reel", attempt: 2, previousAttemptId: job.id });
+    expect(next.metadata).not.toHaveProperty("visualScenes");
+    expect(next.metadata).not.toHaveProperty("renderManifest");
+    expect(next.metadata).not.toHaveProperty("audioUrl");
+    expect(next.metadata).not.toHaveProperty("durationSeconds");
+    expect(next.metadata).not.toHaveProperty("rendered");
+    expect(next.metadata).not.toHaveProperty("completionRequested");
+    expect(previous).toHaveProperty("metadata.visualScenes");
+    const { planAutoReelScenes } = await import("@/lib/videos/auto-reel-scenes");
+    expect(planAutoReelScenes(next.metadata.factualSnapshot as typeof snapshot)).toHaveLength(4);
   });
 
   it("keeps authorized-reel available", async () => {

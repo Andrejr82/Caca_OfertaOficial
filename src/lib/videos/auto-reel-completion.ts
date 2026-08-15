@@ -7,7 +7,7 @@ type CompletionJob = {
   stage: string;
   status: string;
   attempt: number;
-  metadata: { factualSnapshot?: Record<string, unknown>; visualScenes?: Array<Record<string, unknown>> };
+  metadata: Record<string, unknown> & { factualSnapshot?: Record<string, unknown>; visualScenes?: Array<Record<string, unknown>> };
   offerId?: string;
   videoUrl?: string | null;
 };
@@ -90,8 +90,19 @@ export function rejectAutoReelCompletion<T extends { stage: string }>(job: T) {
   return { ...job, status: "rejected" as const, published: false };
 }
 
+export function buildCleanAutoReelAttemptMetadata(input: { id: string; attempt: number; metadata: CompletionJob["metadata"] }) {
+  const factualSnapshot = input.metadata?.factualSnapshot;
+  if (!factualSnapshot) throw new Error("Snapshot factual ausente para regeneração.");
+  return {
+    factualSnapshot,
+    style: typeof input.metadata.style === "string" ? input.metadata.style : AUTO_REEL_STYLE,
+    attempt: input.attempt + 1,
+    previousAttemptId: input.id,
+  };
+}
+
 export function regenerateAutoReelCompletion<T extends CompletionJob>(job: T) {
   if (!["ready_for_review", "approved", "rejected", "failed"].includes(job.stage)) throw new Error("Job não está pronto para regeneração.");
   const offerId = job.offerId ?? job.metadata?.factualSnapshot?.offerId;
-  return { ...job, id: `${job.id}-attempt-${job.attempt + 1}`, offerId, attempt: job.attempt + 1, stage: "queued", status: "processing", videoUrl: null, metadata: { ...job.metadata, attempt: job.attempt + 1, previousAttemptId: job.id } };
+  return { ...job, id: `${job.id}-attempt-${job.attempt + 1}`, offerId, attempt: job.attempt + 1, stage: "queued", status: "queued", videoUrl: null, metadata: buildCleanAutoReelAttemptMetadata(job) };
 }
