@@ -5,6 +5,8 @@ const { execFile } = require('child_process');
 const { promisify } = require('util');
 const axios = require('axios');
 
+const GROQ_MAX_COMPLETION_TOKENS = 2048;
+
 const execFileAsync = promisify(execFile);
 
 const HOOKS = [
@@ -264,13 +266,23 @@ function createGroqAiClient({ apiKey = process.env.GROQ_API_KEY, model = 'openai
     else if (stage === 'reduce') prompt = reductionPrompt(context.input, context.extraction, context.selection, context.maxAttributes);
     else throw new Error(`IA_STAGE_INVALIDO: ${stage}`);
 
-    const response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      response_format: groqResponseFormat(stage, context),
-      temperature: 0,
-      max_completion_tokens: 500,
-    }, { headers: { Authorization: `Bearer ${apiKey}` } });
+    let response;
+    try {
+      response = await axios.post('https://api.groq.com/openai/v1/chat/completions', {
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: groqResponseFormat(stage, context),
+        temperature: 0,
+        max_completion_tokens: GROQ_MAX_COMPLETION_TOKENS,
+      }, { headers: { Authorization: `Bearer ${apiKey}` } });
+    } catch (error) {
+      const provider = error?.response?.data?.error ?? {};
+      throw new Error(JSON.stringify({
+        status: error?.response?.status ?? null,
+        code: provider.code ?? 'GROQ_REQUEST_FAILED',
+        message: provider.message ?? 'Falha no provider Groq.',
+      }));
+    }
     return parseJsonObject(response.data?.choices?.[0]?.message?.content);
   };
 }

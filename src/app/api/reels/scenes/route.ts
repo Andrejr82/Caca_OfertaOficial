@@ -61,11 +61,19 @@ export async function POST(request: Request) {
         upsert: false,
       });
       if (upload.error) {
-        const raced = await storage.download(storagePath);
-        if (!raced.error && raced.data) {
-          return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
+        const uploadError = upload.error as typeof upload.error & { code?: string; details?: string };
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+          const raced = await storage.download(storagePath);
+          if (!raced.error && raced.data) {
+            return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
+          }
+          if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 200));
         }
-        throw new Error("Falha ao persistir cena visual.");
+        throw new Error(JSON.stringify({
+          code: uploadError.code,
+          message: uploadError.message,
+          details: uploadError.details,
+        }));
       }
       return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
     },
@@ -78,7 +86,12 @@ export async function POST(request: Request) {
         error_message: stage === "failed" ? String(stageMetadata?.error ?? "Falha na geração visual.") : null,
         metadata: nextMetadata,
       }).eq("id", jobId).eq("user_id", userData.user.id);
-      if (updateError) throw new Error("Falha ao atualizar checkpoint visual.");
+      if (updateError) throw new Error(JSON.stringify({
+        code: updateError.code,
+        message: updateError.message,
+        details: updateError.details,
+        hint: updateError.hint,
+      }));
     },
   });
 
