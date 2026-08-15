@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { autoReelStatusLabel } from "@/lib/videos/auto-reel";
 import { CreativeCertificationPanel } from "@/app/(dashboard)/videos/CreativeCertificationPanel";
+import { AutoReelClient } from "./AutoReelClient";
 import { AuthorizedReelsClient } from "./AuthorizedReelsClient";
 
 function jobStatusLabel(job: any) {
@@ -14,15 +16,16 @@ export default async function AuthorizedReelsPage() {
   const supabase = await createServerSupabaseClient();
   let offers: any[] = [];
   let jobs: any[] = [];
+  let autoJobs: any[] = [];
 
   if (supabase) {
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
     if (user) {
-      const [{ data: offerData }, { data: jobData }] = await Promise.all([
+      const [{ data: offerData }, { data: jobData }, { data: autoJobData }] = await Promise.all([
         supabase
           .from("offers")
-          .select("id,product_name,platform,current_price")
+          .select("id,product_name,platform,current_price,image_url")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
           .limit(200),
@@ -33,9 +36,17 @@ export default async function AuthorizedReelsPage() {
           .contains("metadata", { source: "authorized-reel" })
           .order("created_at", { ascending: false })
           .limit(50),
+        supabase
+          .from("video_jobs")
+          .select("id,status,stage,metadata,created_at,offers(id,product_name,platform,current_price,image_url)")
+          .eq("user_id", user.id)
+          .eq("template_id", "auto-reel-v1")
+          .order("created_at", { ascending: false })
+          .limit(20),
       ]);
       offers = offerData ?? [];
       jobs = jobData ?? [];
+      autoJobs = autoJobData ?? [];
     }
   }
 
@@ -47,6 +58,15 @@ export default async function AuthorizedReelsPage() {
         <p className="mt-2 max-w-3xl text-sm text-white/45">Fluxo separado dos vídeos gerados por Gemini: importe um MP4 autorizado, associe ao produto e certifique antes da aprovação social.</p>
       </header>
 
+      <AutoReelClient offers={offers} />
+      {autoJobs.length > 0 && (
+        <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
+          <h2 className="font-bold text-white">Reels automáticos</h2>
+          <div className="mt-3 space-y-2">
+            {autoJobs.map((job) => <div key={job.id} className="flex items-center justify-between rounded-lg border border-white/[0.06] px-3 py-2 text-sm"><span className="text-white/70">{job.offers?.product_name ?? "Oferta"}</span><span className="text-fuchsia-200">{autoReelStatusLabel(job.stage ?? job.status)}</span></div>)}
+          </div>
+        </section>
+      )}
       <AuthorizedReelsClient offers={offers} />
       <CreativeCertificationPanel jobs={jobs} />
 
