@@ -104,7 +104,7 @@ describe("Reels Studio Automático — criação e estados", () => {
     const { transitionAutoReelJob } = await autoReel();
     let job = { status: "queued" };
 
-    for (const status of ["planning", "generating_visual", "analyzing", "dubbing", "rendering", "ready_for_review"]) {
+    for (const status of ["planning", "generating_visual", "scenes_ready", "analyzing", "dubbing", "rendering", "ready_for_review"]) {
       job = transitionAutoReelJob(job, status);
       expect(job.status).toBe(status);
     }

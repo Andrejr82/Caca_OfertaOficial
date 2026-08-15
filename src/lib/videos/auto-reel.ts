@@ -62,6 +62,7 @@ const pipelineStates = [
   "queued",
   "planning",
   "generating_visual",
+  "scenes_ready",
   "analyzing",
   "dubbing",
   "rendering",
@@ -145,7 +146,8 @@ export async function createAutoReelJob(input: CreateJobInput) {
 const transitions: Record<AutoReelState, AutoReelState | null> = {
   queued: "planning",
   planning: "generating_visual",
-  generating_visual: "analyzing",
+  generating_visual: "scenes_ready",
+  scenes_ready: "analyzing",
   analyzing: "dubbing",
   dubbing: "rendering",
   rendering: "ready_for_review",

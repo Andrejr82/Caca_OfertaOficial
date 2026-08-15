@@ -85,6 +85,7 @@ export async function generateFluxScene(input: {
   accountId: string;
   apiToken: string;
 }): Promise<GeneratedScene> {
+  if (!input.accountId || !input.apiToken) throw new Error("Cloudflare visual não configurado.");
   const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${input.accountId}/ai/run/${AUTO_REEL_FLUX_MODEL}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${input.apiToken}`, Accept: "application/json,image/*" },
@@ -121,6 +122,7 @@ export async function processAutoReelScenes(input: {
       const generated = await input.generate(scene, input.sourceImage);
       if (!generated.bytes?.length || generated.width !== 768 || generated.height !== 1024) throw new Error("Imagem visual inválida.");
       persisted.push({ ...scene, ...(await input.persistScene(scene, generated)) });
+      await input.updateJob(input.jobId, "generating_visual", { visualScenes: persisted.map((item) => ({ ...item })) });
     }
     await input.updateJob(input.jobId, "scenes_ready", { scenes: persisted });
     return { status: "scenes_ready" as const, scenes: persisted };

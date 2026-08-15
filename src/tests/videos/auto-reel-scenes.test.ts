@@ -151,8 +151,45 @@ describe("Auto Reel visual scenes contract", () => {
     expect(updateJob.mock.calls.map(([id, status]) => [id, status])).toEqual([
       ["job-scenes-4", "planning"],
       ["job-scenes-4", "generating_visual"],
+      ["job-scenes-4", "generating_visual"],
+      ["job-scenes-4", "generating_visual"],
+      ["job-scenes-4", "generating_visual"],
+      ["job-scenes-4", "generating_visual"],
       ["job-scenes-4", "scenes_ready"],
     ]);
+  });
+
+  it("saves a checkpoint after every persisted scene", async () => {
+    const updateJob = vi.fn();
+    await processAutoReelScenes({
+      jobId: "job-checkpoint",
+      factualSnapshot,
+      sourceImage: new Blob(["image"], { type: "image/jpeg" }),
+      generate: vi.fn().mockResolvedValue({ bytes: new Uint8Array([1]), contentType: "image/jpeg", width: 768, height: 1024 }),
+      persistScene: vi.fn().mockResolvedValue({ storagePath: "scene.jpg" }),
+      updateJob,
+    });
+    const checkpoints = updateJob.mock.calls
+      .filter(([, stage, metadata]) => stage === "generating_visual" && metadata?.visualScenes)
+      .map(([, , metadata]) => metadata.visualScenes.length);
+    expect(checkpoints).toEqual([1, 2, 3, 4]);
+  });
+
+  it.each([1, 2, 3])("resumes after %s persisted scene(s) without duplication", async (completed) => {
+    const generate = vi.fn().mockResolvedValue({ bytes: new Uint8Array([1]), contentType: "image/jpeg", width: 768, height: 1024 });
+    await processAutoReelScenes({
+      jobId: `job-resume-${completed}`,
+      factualSnapshot,
+      sourceImage: new Blob(["image"], { type: "image/jpeg" }),
+      existingScenes: Array.from({ length: completed }, (_, index) => persistedScene(index + 1)),
+      generate,
+      persistScene: vi.fn().mockResolvedValue({ storagePath: "scene.jpg" }),
+      updateJob: vi.fn(),
+    });
+    expect(generate).toHaveBeenCalledTimes(4 - completed);
+    expect(generate.mock.calls.map(([scene]) => scene.number)).toEqual(
+      Array.from({ length: 4 - completed }, (_, index) => completed + index + 1),
+    );
   });
 
   it("resumes generating_visual with no persisted scenes", async () => {
@@ -211,5 +248,15 @@ describe("Auto Reel visual scenes contract", () => {
     expect(result.status).toBe("failed");
     expect(result.error).toContain("Cloudflare HTTP 429");
     expect(updateJob).toHaveBeenLastCalledWith("job-resume-fail", "failed", expect.objectContaining({ error: "Cloudflare HTTP 429" }));
+  });
+
+  it("fails closed when Cloudflare credentials are missing", async () => {
+    await expect(generateFluxScene({
+      image: new Blob(["image"]),
+      prompt: "prompt",
+      seed: 101,
+      accountId: "",
+      apiToken: "",
+    })).rejects.toThrow("Cloudflare visual não configurado.");
   });
 });

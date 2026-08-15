@@ -51,24 +51,34 @@ export async function POST(request: Request) {
     }),
     persistScene: async (scene, generated) => {
       const storagePath = `auto-reels/${job.id}/scene-${scene.number}.jpg`;
-      const upload = await admin.storage.from("videos").upload(storagePath, Buffer.from(generated.bytes), {
+      const storage = admin.storage.from("videos");
+      const existing = await storage.download(storagePath);
+      if (!existing.error && existing.data) {
+        return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
+      }
+      const upload = await storage.upload(storagePath, Buffer.from(generated.bytes), {
         contentType: generated.contentType,
         upsert: false,
       });
-      if (upload.error) throw new Error("Falha ao persistir cena visual.");
-      const { data } = admin.storage.from("videos").getPublicUrl(storagePath);
-      return { storagePath, mediaUrl: data.publicUrl };
+      if (upload.error) {
+        const raced = await storage.download(storagePath);
+        if (!raced.error && raced.data) {
+          return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
+        }
+        throw new Error("Falha ao persistir cena visual.");
+      }
+      return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
     },
     updateJob: async (jobId, stage, stageMetadata) => {
-      const nextMetadata = stage === "scenes_ready" && stageMetadata?.scenes
-        ? { ...metadata, visualScenes: stageMetadata.scenes }
-        : metadata;
-      await admin.from("video_jobs").update({
+      const visualScenes = stageMetadata?.scenes ?? stageMetadata?.visualScenes;
+      const nextMetadata = visualScenes ? { ...metadata, visualScenes } : metadata;
+      const { error: updateError } = await admin.from("video_jobs").update({
         status: stage === "failed" ? "failed" : "processing",
         stage,
         error_message: stage === "failed" ? String(stageMetadata?.error ?? "Falha na geração visual.") : null,
         metadata: nextMetadata,
       }).eq("id", jobId).eq("user_id", userData.user.id);
+      if (updateError) throw new Error("Falha ao atualizar checkpoint visual.");
     },
   });
 
