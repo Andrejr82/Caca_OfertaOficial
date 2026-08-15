@@ -52,9 +52,9 @@ export async function POST(request: Request) {
   if (!stored || !Number.isFinite(storedSize) || storedSize <= 0 || storedSize > MAX_AUTHORIZED_REEL_BYTES) {
     return NextResponse.json({ error: "Arquivo de vídeo ausente ou fora do limite permitido." }, { status: 400 });
   }
-  if (storedMimeType && storedMimeType !== "video/mp4") {
+  if (storedSize !== parsed.data.fileSize || storedMimeType !== "video/mp4") {
     await admin.storage.from("videos").remove([path]);
-    return NextResponse.json({ error: "O arquivo armazenado não é um MP4 válido para este fluxo." }, { status: 400 });
+    return NextResponse.json({ error: "O arquivo armazenado não corresponde ao MP4 informado no upload." }, { status: 400 });
   }
 
   const { data: publicData } = admin.storage.from("videos").getPublicUrl(path);
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
       durationSeconds: parsed.data.durationSeconds,
     },
     validation: {
-      mimeType: storedMimeType || "video/mp4",
+      mimeType: storedMimeType,
       sizeBytes: storedSize,
       mediaVerified: false,
       measurementSource: "storage-object",
