@@ -14,7 +14,7 @@ const httpUrlSchema = z.string().trim().max(2048).refine((value) => {
   }
 }, "Use uma URL http(s) válida.");
 
-export const authorizedReelStartSchema = z.object({
+const authorizedReelBaseSchema = z.object({
   offerId: z.string().uuid(),
   fileName: z.string().trim().min(1).max(180).refine((name) => name.toLowerCase().endsWith(".mp4"), "Use um arquivo MP4."),
   fileSize: z.number().int().positive().max(MAX_AUTHORIZED_REEL_BYTES),
@@ -27,9 +27,21 @@ export const authorizedReelStartSchema = z.object({
   durationSeconds: z.number().positive().max(600),
 });
 
-export const authorizedReelFinalizeSchema = authorizedReelStartSchema.extend({
+function requireAuthorizationEvidence(data: z.infer<typeof authorizedReelBaseSchema>, ctx: z.RefinementCtx) {
+  if (data.rightsStatus !== "owned" && !data.sourceUrl && !data.sourceNote) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["sourceNote"],
+      message: "Informe a origem ou uma observação da autorização.",
+    });
+  }
+}
+
+export const authorizedReelStartSchema = authorizedReelBaseSchema.superRefine(requireAuthorizationEvidence);
+
+export const authorizedReelFinalizeSchema = authorizedReelBaseSchema.extend({
   uploadId: z.string().uuid(),
-});
+}).superRefine(requireAuthorizationEvidence);
 
 export const authorizedReelVerificationSchema = z.discriminatedUnion("ok", [
   z.object({
