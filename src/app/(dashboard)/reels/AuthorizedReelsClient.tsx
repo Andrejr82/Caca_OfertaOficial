@@ -103,7 +103,7 @@ export function AuthorizedReelsClient({ offers }: { offers: Offer[] }) {
       if (!finalizeResponse.ok) throw new Error(finalized.error ?? "Não foi possível registrar o criativo.");
 
       setFile(null); setVideoMeta(null); setRightsStatus(""); setSourceUrl(""); setSourceNote("");
-      setMessage({ text: "Criativo importado. Agora certifique os sinais visuais antes da aprovação." });
+      setMessage({ text: "Criativo importado. Aguardando verificação real do arquivo na Oracle antes de liberar a certificação." });
       router.refresh();
     } catch (error) {
       setMessage({ text: error instanceof Error ? error.message : "Falha ao importar o criativo.", error: true });
