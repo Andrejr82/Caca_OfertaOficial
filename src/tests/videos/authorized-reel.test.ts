@@ -44,6 +44,21 @@ describe("authorized reel ingestion", () => {
     })).toThrow();
   });
 
+  it("requires evidence for third-party authorization", () => {
+    expect(() => authorizedReelStartSchema.parse({
+      ...validInput,
+      sourceUrl: "",
+      sourceNote: "",
+    })).toThrow();
+
+    expect(authorizedReelStartSchema.parse({
+      ...validInput,
+      rightsStatus: "owned",
+      sourceUrl: "",
+      sourceNote: "",
+    }).rightsStatus).toBe("owned");
+  });
+
   it("builds a user-scoped storage path and validates finalize payload", () => {
     const uploadId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
     const path = buildAuthorizedReelStoragePath("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", uploadId);
