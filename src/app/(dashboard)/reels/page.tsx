@@ -17,14 +17,14 @@ export default async function AuthorizedReelsPage() {
           .select("id,product_name,platform,current_price")
           .eq("user_id", user.id)
           .order("created_at", { ascending: false })
-          .limit(1000),
+          .limit(200),
         supabase
           .from("video_jobs")
           .select("id,status,stage,video_url,metadata,created_at,offers(id,product_name,platform,current_price)")
           .eq("user_id", user.id)
           .contains("metadata", { source: "authorized-reel" })
           .order("created_at", { ascending: false })
-          .limit(100),
+          .limit(50),
       ]);
       offers = offerData ?? [];
       jobs = jobData ?? [];
