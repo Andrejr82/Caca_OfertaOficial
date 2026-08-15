@@ -2,6 +2,14 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { CreativeCertificationPanel } from "@/app/(dashboard)/videos/CreativeCertificationPanel";
 import { AuthorizedReelsClient } from "./AuthorizedReelsClient";
 
+function jobStatusLabel(job: any) {
+  if (job.stage === "awaiting_oracle_verification") return "Aguardando verificação do arquivo";
+  if (job.status === "ready") return "Pronto para certificação";
+  if (job.status === "approved") return "Aprovado";
+  if (job.status === "failed") return "Falhou";
+  return job.status;
+}
+
 export default async function AuthorizedReelsPage() {
   const supabase = await createServerSupabaseClient();
   let offers: any[] = [];
@@ -45,7 +53,7 @@ export default async function AuthorizedReelsPage() {
       <section className="space-y-3">
         <div>
           <h2 className="font-bold text-white">Criativos importados</h2>
-          <p className="mt-1 text-xs text-white/45">Somente itens deste fluxo autorizado.</p>
+          <p className="mt-1 text-xs text-white/45">O upload vai direto ao Supabase. A certificação só é liberada após a verificação real do arquivo fora da Vercel.</p>
         </div>
         {jobs.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-4 text-sm text-white/45">Nenhum criativo autorizado importado ainda.</div>
@@ -56,7 +64,7 @@ export default async function AuthorizedReelsPage() {
                 {job.video_url && <video src={job.video_url} controls playsInline preload="metadata" className="max-h-[420px] w-full rounded-xl bg-black" />}
                 <div className="mt-3">
                   <p className="text-sm font-semibold text-white">{job.offers?.product_name ?? "Produto associado"}</p>
-                  <p className="mt-1 text-xs text-white/45">Status: {job.status} · Direito declarado: {job.metadata?.rightsDeclaration?.status ?? "pendente"}</p>
+                  <p className="mt-1 text-xs text-white/45">{jobStatusLabel(job)} · Direito declarado: {job.metadata?.rightsDeclaration?.status ?? "pendente"}</p>
                 </div>
               </article>
             ))}
