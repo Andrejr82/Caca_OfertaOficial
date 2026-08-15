@@ -3,6 +3,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
+import { canApproveCreative } from "@/lib/videos/creative-candidate";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createServerSupabaseClient();
@@ -20,6 +21,9 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!current || !["ready", "approved"].includes(current.status)) return NextResponse.json({ error: "O vídeo precisa estar pronto para aprovação." }, { status: 409 });
+  if (!canApproveCreative(current.metadata)) {
+    return NextResponse.json({ error: "Certifique o direito de uso do criativo antes de aprovar." }, { status: 409 });
+  }
 
   const { data, error } = await supabase
     .from("video_jobs")
