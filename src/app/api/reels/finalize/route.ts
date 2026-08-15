@@ -31,6 +31,15 @@ export async function POST(request: Request) {
   if (!admin) return NextResponse.json({ error: "Upload de vídeos indisponível." }, { status: 503 });
 
   const path = buildAuthorizedReelStoragePath(user.id, parsed.data.uploadId);
+
+  const { data: existingJob } = await admin
+    .from("video_jobs")
+    .select("id,status,stage,video_url,metadata,created_at")
+    .eq("user_id", user.id)
+    .contains("metadata", { storagePath: path })
+    .maybeSingle();
+  if (existingJob) return NextResponse.json({ job: existingJob }, { status: 200 });
+
   const fileName = `${parsed.data.uploadId}.mp4`;
   const { data: files, error: listError } = await admin.storage
     .from("videos")
@@ -39,8 +48,13 @@ export async function POST(request: Request) {
 
   const stored = files?.find((file) => file.name === fileName);
   const storedSize = Number(stored?.metadata?.size ?? 0);
+  const storedMimeType = String(stored?.metadata?.mimetype ?? stored?.metadata?.contentType ?? "").toLowerCase();
   if (!stored || !Number.isFinite(storedSize) || storedSize <= 0 || storedSize > MAX_AUTHORIZED_REEL_BYTES) {
     return NextResponse.json({ error: "Arquivo de vídeo ausente ou fora do limite permitido." }, { status: 400 });
+  }
+  if (storedMimeType && storedMimeType !== "video/mp4") {
+    await admin.storage.from("videos").remove([path]);
+    return NextResponse.json({ error: "O arquivo armazenado não é um MP4 válido para este fluxo." }, { status: 400 });
   }
 
   const { data: publicData } = admin.storage.from("videos").getPublicUrl(path);
@@ -53,13 +67,18 @@ export async function POST(request: Request) {
       note: parsed.data.sourceNote || null,
       declaredAt: new Date().toISOString(),
     },
-    validation: {
-      mimeType: "video/mp4",
-      sizeBytes: storedSize,
+    browserClaim: {
+      mimeType: parsed.data.mimeType,
+      sizeBytes: parsed.data.fileSize,
       width: parsed.data.width,
       height: parsed.data.height,
       durationSeconds: parsed.data.durationSeconds,
-      measurementSource: "browser-metadata",
+    },
+    validation: {
+      mimeType: storedMimeType || "video/mp4",
+      sizeBytes: storedSize,
+      mediaVerified: false,
+      measurementSource: "storage-object",
     },
     storagePath: path,
   };
@@ -69,13 +88,12 @@ export async function POST(request: Request) {
     .insert({
       user_id: user.id,
       offer_id: parsed.data.offerId,
-      status: "ready",
-      stage: "ready_for_review",
+      status: "processing",
+      stage: "awaiting_oracle_verification",
       script: "Criativo externo autorizado",
       video_url: publicData.publicUrl,
       template_id: "authorized-reel-v1",
       metadata,
-      completed_at: new Date().toISOString(),
     })
     .select("id,status,stage,video_url,metadata,created_at")
     .single();
