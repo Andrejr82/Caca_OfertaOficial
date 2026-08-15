@@ -13,23 +13,30 @@ type Offer = {
   image_url: string | null;
 };
 
-type Job = { id: string; status: AutoReelStatus; stage: AutoReelStatus };
+type Job = { id: string; status: AutoReelStatus; stage: AutoReelStatus; video_url?: string | null; metadata?: Record<string, unknown>; offers?: { product_name?: string; current_price?: number; platform?: string } };
 
-export function AutoReelClient({ offers, pollingMs = 3000 }: { offers: Offer[]; pollingMs?: number }) {
+export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: { offers: Offer[]; initialJobs?: Job[]; pollingMs?: number }) {
   const [offerId, setOfferId] = useState(offers[0]?.id ?? "");
-  const [job, setJob] = useState<Job | null>(null);
+  const [jobs, setJobs] = useState<Job[]>(initialJobs);
+  const [job, setJob] = useState<Job | null>(initialJobs[0] ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedOffer = offers.find((offer) => offer.id === offerId) ?? null;
 
   useEffect(() => {
     if (!job || isAutoReelTerminal(job.status)) return;
+    if (job.stage === "scenes_ready") {
+      void fetch("/api/reels/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.id }) })
+        .then((response) => response.json() as Promise<{ job?: Job }>)
+        .then((payload) => { if (payload.job) { setJob(payload.job); setJobs((current) => [payload.job as Job, ...current.filter((item) => item.id !== payload.job?.id)]); } });
+      return;
+    }
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/reels/generate?jobId=${encodeURIComponent(job.id)}`);
         if (!response.ok) return;
         const payload = await response.json() as { job?: Job };
-        if (payload.job) setJob(payload.job);
+        if (payload.job) { setJob(payload.job); setJobs((current) => current.map((item) => item.id === payload.job?.id ? payload.job as Job : item)); }
       } catch {
         // A próxima janela de polling tenta novamente sem quebrar a tela.
       }
@@ -56,10 +63,32 @@ export function AutoReelClient({ offers, pollingMs = 3000 }: { offers: Offer[]; 
         body: JSON.stringify({ jobId: payload.job.id }),
       });
       const scenesPayload = await scenesResponse.json() as { job?: Job; error?: string };
-      if (scenesPayload.job) setJob(scenesPayload.job);
+      if (scenesPayload.job) { setJob(scenesPayload.job); setJobs((current) => [scenesPayload.job as Job, ...current.filter((item) => item.id !== scenesPayload.job?.id)]); }
       if (!scenesResponse.ok) throw new Error(scenesPayload.error ?? "Não foi possível gerar as cenas.");
+      if (scenesPayload.job?.stage === "scenes_ready") {
+        const completionResponse = await fetch("/api/reels/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: scenesPayload.job.id }) });
+        const completionPayload = await completionResponse.json() as { job?: Job; error?: string };
+        if (!completionResponse.ok) throw new Error(completionPayload.error ?? "Não foi possível enfileirar a montagem.");
+        if (completionPayload.job) { setJob(completionPayload.job); setJobs((current) => [completionPayload.job as Job, ...current.filter((item) => item.id !== completionPayload.job?.id)]); }
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível gerar o Reel.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function review(target: Job, action: "approve" | "reject" | "regenerate") {
+    if (busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const response = await fetch("/api/reels/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: target.id, action }) });
+      const payload = await response.json() as { job?: Job; error?: string };
+      if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível atualizar o Reel.");
+      setJob(payload.job); setJobs((current) => [payload.job as Job, ...current.filter((item) => item.id !== target.id)]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o Reel.");
     } finally {
       setBusy(false);
     }
@@ -72,7 +101,7 @@ export function AutoReelClient({ offers, pollingMs = 3000 }: { offers: Offer[]; 
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-300">Reels Studio Automático</p>
           <h2 className="mt-1 font-bold text-white">Gerar Reel demonstrativo</h2>
-          <p className="mt-1 text-xs text-white/50">O job é criado com os dados reais da oferta. A geração visual entra no próximo estágio.</p>
+          <p className="mt-1 text-xs text-white/50">O job usa os dados reais da oferta, cenas visuais e Dubbing V2 factual.</p>
         </div>
       </div>
 
@@ -99,6 +128,7 @@ export function AutoReelClient({ offers, pollingMs = 3000 }: { offers: Offer[]; 
         <Film size={14} /> {busy ? "Criando job…" : "Gerar Reel"}
       </button>
       {job && <p className="mt-3 text-sm text-fuchsia-100">Status: {autoReelStatusLabel(job.stage ?? job.status)}</p>}
+      {jobs.length > 0 && <div className="mt-4 space-y-3">{jobs.map((item) => <article key={item.id} className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-white">{item.offers?.product_name ?? "Reel automático"}</p><span className="text-xs text-fuchsia-200">{autoReelStatusLabel(item.stage ?? item.status)}</span></div>{item.video_url && <video src={item.video_url} controls playsInline preload="metadata" className="mt-3 max-h-[520px] w-full rounded-xl bg-black" />} {["ready_for_review", "approved", "rejected", "failed"].includes(item.stage) && <div className="mt-3 flex flex-wrap gap-2"><button onClick={() => void review(item, "approve")} disabled={item.stage !== "ready_for_review"} className="rounded-lg bg-emerald-500/20 px-3 py-2 text-xs font-bold text-emerald-100 disabled:opacity-40">Aprovar</button><button onClick={() => void review(item, "reject")} disabled={item.stage !== "ready_for_review"} className="rounded-lg bg-red-500/20 px-3 py-2 text-xs font-bold text-red-100 disabled:opacity-40">Rejeitar</button><button onClick={() => void review(item, "regenerate")} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white">Gerar novamente</button></div>}</article>)}</div>}
       {error && <p className="mt-3 text-xs text-red-300">{error}</p>}
     </section>
   );

@@ -34,7 +34,7 @@ export function autoReelStatusLabel(status: AutoReelStatus) {
 }
 
 export function isAutoReelTerminal(status: AutoReelStatus) {
-  return ["scenes_ready", "ready_for_review", "approved", "rejected", "failed"].includes(status);
+  return ["ready_for_review", "approved", "rejected", "failed"].includes(status);
 }
 
 export type FactualOffer = {
