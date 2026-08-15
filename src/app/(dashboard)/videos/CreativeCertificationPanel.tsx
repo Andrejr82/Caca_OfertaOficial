@@ -56,8 +56,6 @@ export function CreativeCertificationPanel({ jobs }: { jobs: Job[] }) {
     }
   }
 
-  if (candidates.length === 0) return null;
-
   return (
     <section className="mb-8 rounded-2xl border border-cyan-400/20 bg-cyan-500/[0.04] p-5">
       <div className="mb-4 flex items-center gap-2">
@@ -68,7 +66,14 @@ export function CreativeCertificationPanel({ jobs }: { jobs: Job[] }) {
         </div>
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-2">
+      {candidates.length === 0 && (
+        <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.03] p-4" role="status">
+          <p className="text-sm font-semibold text-white">Nenhum vídeo pronto para certificação no momento.</p>
+          <p className="mt-1 text-xs text-white/55">A certificação ficará disponível quando existir um vídeo com status <code>ready</code>.</p>
+        </div>
+      )}
+
+      <div className={candidates.length === 0 ? "hidden" : "grid gap-3 lg:grid-cols-2"}>
         <label className="text-xs text-white/60">
           Vídeo
           <select value={jobId} onChange={(event) => setJobId(event.target.value)} className="mt-1 w-full rounded-lg border border-white/10 bg-[#0b111d] px-3 py-2 text-sm text-white">
@@ -88,13 +93,13 @@ export function CreativeCertificationPanel({ jobs }: { jobs: Job[] }) {
         </label>
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-4 text-sm text-white/70">
+      <div className={candidates.length === 0 ? "hidden" : "mt-4 flex flex-wrap gap-4 text-sm text-white/70"}>
         <label className="flex items-center gap-2"><input type="checkbox" checked={productVisible} onChange={(event) => setProductVisible(event.target.checked)} /> Produto aparece claramente</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={demonstratesUse} onChange={(event) => setDemonstratesUse(event.target.checked)} /> Demonstra uso real</label>
         <label className="flex items-center gap-2"><input type="checkbox" checked={strongHook} onChange={(event) => setStrongHook(event.target.checked)} /> Gancho forte nos primeiros segundos</label>
       </div>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className={candidates.length === 0 ? "hidden" : "mt-4 flex items-center gap-3"}>
         <button onClick={certify} disabled={busy || !rightsStatus} className="rounded-lg bg-cyan-500/20 px-4 py-2 text-xs font-bold text-cyan-100 hover:bg-cyan-500/30 disabled:opacity-40">
           {busy ? "Certificando…" : "Certificar criativo"}
         </button>
