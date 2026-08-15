@@ -66,6 +66,7 @@ describe("authorized reel ingestion", () => {
 
     expect(path).toBe("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/reels/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb.mp4");
     expect(buildAuthorizedReelJobId(uploadId)).toBe(uploadId);
+    expect(buildAuthorizedReelJobId(uploadId)).toBe(buildAuthorizedReelJobId(uploadId));
     expect(authorizedReelFinalizeSchema.parse({ ...validInput, uploadId }).uploadId).toBe(uploadId);
   });
 
