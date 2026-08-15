@@ -27,7 +27,7 @@ export const authorizedReelStartSchema = z.object({
   durationSeconds: z.number().positive().max(600),
 });
 
-export const authorizedReelFinalizeSchema = z.object({
+export const authorizedReelFinalizeSchema = authorizedReelStartSchema.extend({
   uploadId: z.string().uuid(),
 });
 
