@@ -41,6 +41,6 @@ describe("CreativeCertificationPanel", () => {
     });
 
     expect(candidate.rightsCertified).toBe(false);
-    expect(canApproveCreative(candidate)).toBe(false);
+    expect(canApproveCreative({ creativeCandidate: candidate })).toBe(false);
   });
 });
