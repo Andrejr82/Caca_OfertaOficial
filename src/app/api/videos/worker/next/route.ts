@@ -19,7 +19,7 @@ export async function GET(request: Request) {
     .maybeSingle();
 
   if (claimError) return NextResponse.json({ error: claimError.message }, { status: 500 });
-  if (!claimed) return NextResponse.json({ job: null });
+  if (!claimed?.id) return NextResponse.json({ job: null });
 
   const { data: job, error: readError } = await supabase
     .from("video_jobs")
