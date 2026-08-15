@@ -5,8 +5,11 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
   MAX_AUTHORIZED_REEL_BYTES,
   authorizedReelFinalizeSchema,
+  buildAuthorizedReelJobId,
   buildAuthorizedReelStoragePath,
 } from "@/lib/videos/authorized-reel";
+
+const jobSelect = "id,status,stage,video_url,metadata,created_at";
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
@@ -30,13 +33,14 @@ export async function POST(request: Request) {
   const admin = createSupabaseAdminClient();
   if (!admin) return NextResponse.json({ error: "Upload de vídeos indisponível." }, { status: 503 });
 
+  const jobId = buildAuthorizedReelJobId(parsed.data.uploadId);
   const path = buildAuthorizedReelStoragePath(user.id, parsed.data.uploadId);
 
   const { data: existingJob } = await admin
     .from("video_jobs")
-    .select("id,status,stage,video_url,metadata,created_at")
+    .select(jobSelect)
+    .eq("id", jobId)
     .eq("user_id", user.id)
-    .contains("metadata", { storagePath: path })
     .maybeSingle();
   if (existingJob) return NextResponse.json({ job: existingJob }, { status: 200 });
 
@@ -86,6 +90,7 @@ export async function POST(request: Request) {
   const { data: job, error: insertError } = await admin
     .from("video_jobs")
     .insert({
+      id: jobId,
       user_id: user.id,
       offer_id: parsed.data.offerId,
       status: "processing",
@@ -95,10 +100,20 @@ export async function POST(request: Request) {
       template_id: "authorized-reel-v1",
       metadata,
     })
-    .select("id,status,stage,video_url,metadata,created_at")
+    .select(jobSelect)
     .single();
 
   if (insertError || !job) {
+    if (insertError?.code === "23505") {
+      const { data: concurrentJob } = await admin
+        .from("video_jobs")
+        .select(jobSelect)
+        .eq("id", jobId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (concurrentJob) return NextResponse.json({ job: concurrentJob }, { status: 200 });
+    }
+
     await admin.storage.from("videos").remove([path]);
     return NextResponse.json({ error: insertError?.message ?? "Não foi possível registrar o criativo." }, { status: 500 });
   }
