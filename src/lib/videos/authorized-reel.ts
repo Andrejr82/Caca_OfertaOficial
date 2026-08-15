@@ -31,6 +31,24 @@ export const authorizedReelFinalizeSchema = authorizedReelStartSchema.extend({
   uploadId: z.string().uuid(),
 });
 
+export const authorizedReelVerificationSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    workerId: z.string().trim().min(1).max(120),
+    width: z.number().int().positive().max(10000),
+    height: z.number().int().positive().max(10000),
+    durationSeconds: z.number().positive().max(600),
+    formatName: z.string().trim().min(1).max(120),
+    videoCodec: z.string().trim().min(1).max(120),
+    hasAudio: z.boolean(),
+  }),
+  z.object({
+    ok: z.literal(false),
+    workerId: z.string().trim().min(1).max(120),
+    error: z.string().trim().min(1).max(500),
+  }),
+]);
+
 export type AuthorizedReelStartInput = z.infer<typeof authorizedReelStartSchema>;
 
 export function buildAuthorizedReelStoragePath(userId: string, uploadId: string) {
