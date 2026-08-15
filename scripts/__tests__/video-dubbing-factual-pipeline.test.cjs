@@ -180,7 +180,39 @@ test('Groq usa JSON Schema estrito para extração', async () => {
     assert.equal(payload.response_format.type, 'json_schema');
     assert.equal(payload.response_format.json_schema.strict, true);
     assert.equal(payload.response_format.json_schema.schema.additionalProperties, false);
+    assert.equal(payload.max_completion_tokens, 2048);
     assert.equal(result.product, 'Tênis');
+  } finally {
+    axios.post = originalPost;
+  }
+});
+
+test('Groq propaga somente status, código e mensagem do provider sem segredos', async () => {
+  const originalPost = axios.post;
+  axios.post = async () => {
+    const error = new Error('Request failed with status code 400');
+    error.config = { headers: { Authorization: 'Bearer secret-groq-token' } };
+    error.response = {
+      status: 400,
+      data: { error: { code: 'json_validate_failed', message: 'max completion tokens reached before generating a valid document' } },
+    };
+    throw error;
+  };
+
+  try {
+    const client = createGroqAiClient({ apiKey: 'secret-groq-token' });
+    await assert.rejects(
+      () => client('extract', { input: buildTrustedInput({ title: 'Tênis Calce Fácil', price: 29.9, marketplace: 'Shopee', durationSecs: 12 }) }),
+      (error) => {
+        assert.deepEqual(JSON.parse(error.message), {
+          status: 400,
+          code: 'json_validate_failed',
+          message: 'max completion tokens reached before generating a valid document',
+        });
+        assert.doesNotMatch(error.message, /secret-groq-token|Authorization|Bearer/i);
+        return true;
+      },
+    );
   } finally {
     axios.post = originalPost;
   }
