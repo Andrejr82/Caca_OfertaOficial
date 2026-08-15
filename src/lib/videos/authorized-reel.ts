@@ -66,3 +66,7 @@ export type AuthorizedReelStartInput = z.infer<typeof authorizedReelStartSchema>
 export function buildAuthorizedReelStoragePath(userId: string, uploadId: string) {
   return `${userId}/reels/${uploadId}.mp4`;
 }
+
+export function buildAuthorizedReelJobId(uploadId: string) {
+  return uploadId;
+}
