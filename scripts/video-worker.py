@@ -50,6 +50,7 @@ TEMPLATE_PATH = Path(os.environ.get("VIDEO_TEMPLATE_PATH", Path(__file__).with_n
 WORKER_ID = os.environ.get("VIDEO_WORKER_ID", f"{socket.gethostname()}-{uuid.uuid4().hex[:12]}")
 VIDEO_OUTPUT_FPS = 25
 VIDEO_TAIL_PADDING_SECONDS = 60
+NODE_BIN = os.environ.get("VIDEO_NODE_BIN", "node")
 
 
 def load_templates() -> dict[str, dict]:
@@ -449,9 +450,73 @@ def signed_upload(job_id: str, kind: str, file_path: Path) -> str:
     return signed["publicUrl"]
 
 
+def run_auto_dubbing(snapshot: dict) -> dict:
+    runtime = Path(__file__).with_name("auto-reel-dubbing-runtime.cjs")
+    result = subprocess.run(
+        [NODE_BIN, str(runtime)], input=json.dumps(snapshot), capture_output=True, text=True, timeout=600,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"Dubbing V2 falhou: {result.stderr[-700:]}")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as error:
+        raise RuntimeError("Dubbing V2 retornou payload inválido.") from error
+    if not payload.get("certified") or not payload.get("audioFits") or not payload.get("copy"):
+        raise RuntimeError("Dubbing V2 não certificou a copy.")
+    return payload
+
+
+def render_auto_reel(scene_paths: list[Path], audio: Path, output: Path, workdir: Path) -> float:
+    clips = []
+    for index, scene_path in enumerate(scene_paths, start=1):
+        clip = workdir / f"scene-{index}.mp4"
+        subprocess.run([
+            "ffmpeg", "-y", "-loop", "1", "-i", str(scene_path), "-t", "3",
+            "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
+            "-r", str(VIDEO_OUTPUT_FPS), "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
+        ], check=True, timeout=180)
+        clips.append(clip)
+    concat = workdir / "scenes.txt"
+    concat.write_text("\n".join(f"file '{clip.as_posix()}'" for clip in clips), encoding="utf-8")
+    assembled = workdir / "scenes.mp4"
+    subprocess.run(["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", str(concat), "-c", "copy", str(assembled)], check=True, timeout=180)
+    subprocess.run(["ffmpeg", "-y", "-i", str(assembled), "-i", str(audio), "-shortest", "-c:v", "copy", "-c:a", "aac", "-movflags", "+faststart", str(output)], check=True, timeout=300)
+    return float(get_media_info(output)["duration"])
+
+
+def process_auto_reel(job: dict) -> None:
+    metadata = job.get("metadata") or {}
+    snapshot = metadata.get("factualSnapshot") or {}
+    scenes = sorted(metadata.get("visualScenes") or [], key=lambda scene: int(scene.get("number", 0)))
+    if not metadata.get("completionRequested") or len(scenes) != 4:
+        raise RuntimeError("Auto Reel sem manifest de conclusão válido.")
+    with tempfile.TemporaryDirectory(prefix=f"caca-auto-reel-{job['id'][:8]}-") as folder:
+        root = Path(folder)
+        scene_paths = []
+        for scene in scenes:
+            path = root / f"scene-{scene['number']}.jpg"
+            download(scene.get("mediaUrl") or scene.get("imageUrl"), path)
+            scene_paths.append(path)
+        heartbeat(job["id"], "analyzing")
+        dubbing = run_auto_dubbing(snapshot)
+        audio = root / "audio.mp3"
+        speak(dubbing["copy"], audio)
+        heartbeat(job["id"], "dubbing")
+        video = root / "video.mp4"
+        duration = render_auto_reel(scene_paths, audio, video, root)
+        heartbeat(job["id"], "rendering")
+        video_url = signed_upload(job["id"], "video", video)
+        audio_url = signed_upload(job["id"], "audio", audio)
+        api("POST", f"/api/videos/worker/{job['id']}/complete", {"videoUrl": video_url, "audioUrl": audio_url, "durationSeconds": duration, "workerId": WORKER_ID})
+        print(f"Auto Reel {job['id']} pronto: {video_url}", flush=True)
+
+
 def process(job: dict) -> None:
     job_id = job["id"]
     template_id = str(job.get("template_id") or "motion-v1")
+    if template_id == "auto-reel-v1":
+        process_auto_reel(job)
+        return
     if template_id not in TEMPLATES:
         raise RuntimeError(f"Template de vídeo não encontrado: {template_id}")
     template = TEMPLATES[template_id]

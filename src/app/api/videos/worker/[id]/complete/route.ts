@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
-const completionSchema = z.object({ videoUrl: z.string().url(), audioUrl: z.string().url().optional(), workerId: z.string().trim().min(1).max(120) });
+const completionSchema = z.object({ videoUrl: z.string().url(), audioUrl: z.string().url().optional(), durationSeconds: z.number().positive().max(60).optional(), workerId: z.string().trim().min(1).max(120) });
 
 function authorized(request: Request) {
   const token = process.env.VIDEO_WORKER_TOKEN;
@@ -23,9 +23,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({ error: "As URLs enviadas não pertencem ao storage deste job." }, { status: 400 });
   }
 
+  const { data: current } = await supabase.from("video_jobs").select("metadata").eq("id", id).eq("worker_id", parsed.data.workerId).maybeSingle();
+  const metadata = current?.metadata && typeof current.metadata === "object" ? current.metadata as Record<string, unknown> : {};
   const { data, error } = await supabase
     .from("video_jobs")
-    .update({ status: "ready", stage: "ready_for_review", video_url: parsed.data.videoUrl, audio_url: parsed.data.audioUrl ?? null, completed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), error_message: null })
+    .update({ status: "ready", stage: "ready_for_review", video_url: parsed.data.videoUrl, audio_url: parsed.data.audioUrl ?? null, completed_at: new Date().toISOString(), heartbeat_at: new Date().toISOString(), error_message: null, metadata: { ...metadata, audioUrl: parsed.data.audioUrl ?? null, durationSeconds: parsed.data.durationSeconds ?? null, rendered: true } })
     .eq("id", id)
     .eq("status", "processing")
     .eq("worker_id", parsed.data.workerId)
