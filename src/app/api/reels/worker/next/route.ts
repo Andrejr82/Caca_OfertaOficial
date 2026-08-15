@@ -18,6 +18,20 @@ export async function GET(request: Request) {
   const supabase = createSupabaseAdminClient();
   if (!supabase) return NextResponse.json({ error: "Supabase admin não configurado." }, { status: 503 });
 
+  const staleCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await supabase
+    .from("video_jobs")
+    .update({
+      stage: "awaiting_oracle_verification",
+      worker_id: null,
+      heartbeat_at: null,
+      error_message: "Verificação anterior expirou e foi recolocada na fila.",
+    })
+    .eq("template_id", "authorized-reel-v1")
+    .eq("status", "processing")
+    .eq("stage", "verifying_media")
+    .lt("heartbeat_at", staleCutoff);
+
   const { data: candidate, error: readError } = await supabase
     .from("video_jobs")
     .select("id,user_id,offer_id,status,stage,video_url,metadata,created_at,offers(id,product_name,platform,current_price)")
