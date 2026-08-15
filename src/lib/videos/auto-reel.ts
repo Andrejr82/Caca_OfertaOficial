@@ -137,8 +137,8 @@ export async function createAutoReelJob(input: CreateJobInput) {
     offerId: offer.id,
     productSnapshot: offer,
     style: AUTO_REEL_STYLE,
-    status: "queued" as const,
-    stage: "queued" as const,
+    status: "processing" as const,
+    stage: "planning" as const,
     attempt: 1,
   };
 }

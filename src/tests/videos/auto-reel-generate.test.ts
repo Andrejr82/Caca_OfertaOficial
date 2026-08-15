@@ -65,6 +65,10 @@ describe("POST /api/reels/generate", () => {
     const response = await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
     expect(response.status).toBe(201);
     expect(adminFrom).toHaveBeenCalledWith("video_jobs");
+    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({
+      status: "processing",
+      stage: "planning",
+    }));
   });
 
   it("rejeita oferta inexistente", async () => {
