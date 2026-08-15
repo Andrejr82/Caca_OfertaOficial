@@ -37,6 +37,7 @@ const navSections = [
       { href: "/publish", label: "Publicação Expressa", icon: Zap },
       { href: "/offers", label: "Ofertas", icon: ShoppingBag },
       { href: "/videos", label: "Vídeos de Ofertas", icon: Film },
+      { href: "/reels", label: "Reels", icon: Film },
       { href: "/tracking", label: "Tracking", icon: Link2 },
       { href: "/sales", label: "Vendas", icon: Wallet }
     ]
