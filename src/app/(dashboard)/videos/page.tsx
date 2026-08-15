@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getBrazilVideoOfferCutoff } from "@/lib/videos/offer-window";
 import { CreativeCertificationPanel } from "./CreativeCertificationPanel";
@@ -29,6 +31,11 @@ export default async function VideosPage() {
 
   return (
     <>
+      <div className="mb-6 flex justify-end">
+        <Link href="/reels" className="rounded-lg border border-emerald-400/30 bg-emerald-500/10 px-4 py-2 text-xs font-bold text-emerald-200 hover:bg-emerald-500/20">
+          Reels / Criativos autorizados
+        </Link>
+      </div>
       <CreativeCertificationPanel jobs={jobs as any[]} />
       <VideosClient offers={offers as any[]} initialJobs={jobs as any[]} cutoff={cutoff.toISOString()} />
     </>
