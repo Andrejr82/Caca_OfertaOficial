@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getBrazilVideoOfferCutoff } from "@/lib/videos/offer-window";
+import { CreativeCertificationPanel } from "./CreativeCertificationPanel";
 import { VideosClient } from "./VideosClient";
 
 export default async function VideosPage() {
@@ -26,5 +27,10 @@ export default async function VideosPage() {
     jobs = jobData ?? [];
   }
 
-  return <VideosClient offers={offers as any[]} initialJobs={jobs as any[]} cutoff={cutoff.toISOString()} />;
+  return (
+    <>
+      <CreativeCertificationPanel jobs={jobs as any[]} />
+      <VideosClient offers={offers as any[]} initialJobs={jobs as any[]} cutoff={cutoff.toISOString()} />
+    </>
+  );
 }
