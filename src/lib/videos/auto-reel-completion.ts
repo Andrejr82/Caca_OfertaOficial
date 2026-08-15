@@ -104,5 +104,5 @@ export function buildCleanAutoReelAttemptMetadata(input: { id: string; attempt: 
 export function regenerateAutoReelCompletion<T extends CompletionJob>(job: T) {
   if (!["ready_for_review", "approved", "rejected", "failed"].includes(job.stage)) throw new Error("Job não está pronto para regeneração.");
   const offerId = job.offerId ?? job.metadata?.factualSnapshot?.offerId;
-  return { ...job, id: `${job.id}-attempt-${job.attempt + 1}`, offerId, attempt: job.attempt + 1, stage: "queued", status: "queued", videoUrl: null, metadata: buildCleanAutoReelAttemptMetadata(job) };
+  return { ...job, id: `${job.id}-attempt-${job.attempt + 1}`, offerId, attempt: job.attempt + 1, stage: "planning", status: "processing", videoUrl: null, metadata: buildCleanAutoReelAttemptMetadata(job) };
 }

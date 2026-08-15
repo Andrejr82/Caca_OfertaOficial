@@ -76,8 +76,8 @@ export async function POST(request: Request) {
     .insert({
       user_id: user.id,
       offer_id: parsed.data.offerId,
-      status: "queued",
-      stage: "queued",
+      status: "processing",
+      stage: "planning",
       script: "Reel demonstrativo aguardando pipeline visual.",
       video_url: null,
       template_id: "auto-reel-v1",

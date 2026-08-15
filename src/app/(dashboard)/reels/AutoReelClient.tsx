@@ -87,6 +87,22 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       const payload = await response.json() as { job?: Job; error?: string };
       if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível atualizar o Reel.");
       setJob(payload.job); setJobs((current) => [payload.job as Job, ...current.filter((item) => item.id !== target.id)]);
+      if (action === "regenerate") {
+        const scenesResponse = await fetch("/api/reels/scenes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ jobId: payload.job.id }),
+        });
+        const scenesPayload = await scenesResponse.json() as { job?: Job; error?: string };
+        if (scenesPayload.job) { setJob(scenesPayload.job); setJobs((current) => [scenesPayload.job as Job, ...current.filter((item) => item.id !== payload.job?.id)]); }
+        if (!scenesResponse.ok) throw new Error(scenesPayload.error ?? "Não foi possível gerar as cenas.");
+        if (scenesPayload.job?.stage === "scenes_ready") {
+          const completionResponse = await fetch("/api/reels/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: scenesPayload.job.id }) });
+          const completionPayload = await completionResponse.json() as { job?: Job; error?: string };
+          if (!completionResponse.ok) throw new Error(completionPayload.error ?? "Não foi possível enfileirar a montagem.");
+          if (completionPayload.job) { setJob(completionPayload.job); setJobs((current) => [completionPayload.job as Job, ...current.filter((item) => item.id !== scenesPayload.job?.id)]); }
+        }
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o Reel.");
     } finally {

@@ -110,7 +110,7 @@ describe("Auto Reel completion contract", () => {
       },
     };
     const next = regenerateAutoReelCompletion(previous as any) as { id: string; offerId?: string; attempt: number; stage: string; videoUrl: string | null; metadata: Record<string, unknown> };
-    expect(next).toMatchObject({ offerId: snapshot.offerId, attempt: 2, status: "queued", stage: "queued", videoUrl: null });
+    expect(next).toMatchObject({ offerId: snapshot.offerId, attempt: 2, status: "processing", stage: "planning", videoUrl: null });
     expect((next as { id: string }).id).not.toBe(job.id);
     expect(next.metadata).toEqual({ factualSnapshot: snapshot, style: "demonstrative-reel", attempt: 2, previousAttemptId: job.id });
     expect(next.metadata).not.toHaveProperty("visualScenes");

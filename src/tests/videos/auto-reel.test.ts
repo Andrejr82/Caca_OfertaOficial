@@ -93,8 +93,8 @@ describe("Reels Studio Automático — criação e estados", () => {
       offerId: offer.id,
       productSnapshot: offer,
       style: "demonstrative-reel",
-      status: "queued",
-      stage: "queued",
+      status: "processing",
+      stage: "planning",
       attempt: 1,
     });
     expect(job.source).not.toBe("authorized-reel-v1");

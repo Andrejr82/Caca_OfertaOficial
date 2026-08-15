@@ -29,7 +29,7 @@ export async function POST(request: Request) {
   } catch {
     return NextResponse.json({ error: "Snapshot factual ausente para regeneração." }, { status: 422 });
   }
-  const { data, error: insertError } = await admin.from("video_jobs").insert({ user_id: userData.user.id, offer_id: job.offer_id, status: "queued", stage: "queued", script: "Reel demonstrativo aguardando nova tentativa.", video_url: null, audio_url: null, template_id: "auto-reel-v1", metadata }).select("*").single();
+  const { data, error: insertError } = await admin.from("video_jobs").insert({ user_id: userData.user.id, offer_id: job.offer_id, status: "processing", stage: "planning", script: "Reel demonstrativo aguardando nova tentativa.", video_url: null, audio_url: null, template_id: "auto-reel-v1", metadata }).select("*").single();
   if (insertError) return NextResponse.json({ error: "Não foi possível criar nova tentativa." }, { status: 500 });
   return NextResponse.json({ job: data }, { status: 201 });
 }
