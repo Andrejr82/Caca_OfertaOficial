@@ -13,7 +13,8 @@ const scenes = [1, 2, 3, 4].map((number) => ({
   kind: ["presentation", "start", "use", "result"][number - 1],
   seed: 100 + number,
   prompt: `scene ${number}`,
-  imageUrl: `https://cdn.example.test/scene-${number}.jpg`,
+  imageUrl: snapshot.imageUrl,
+  mediaUrl: `https://cdn.example.test/scene-${number}.jpg`,
   storagePath: `auto-reels/job-1/scene-${number}.jpg`,
 }));
 
@@ -55,11 +56,22 @@ describe("Auto Reel completion contract", () => {
     expect(buildAutoReelDubbingPayload(job)).not.toHaveProperty("visualConcept");
   });
 
+  it("requires four unique persisted visual scenes before completion", async () => {
+    const { buildAutoReelRenderPayload } = await import("@/lib/videos/auto-reel-completion");
+    const withoutMedia = scenes.map(({ mediaUrl: _mediaUrl, ...scene }) => scene);
+    expect(() => buildAutoReelRenderPayload({ ...job, metadata: { ...job.metadata, visualScenes: withoutMedia } }, { audioUrl: "https://cdn/audio.mp3", durationSeconds: 9 }))
+      .toThrow(/cena sem imagem persistida/i);
+    const duplicate = [scenes[0], scenes[0], scenes[2], scenes[3]];
+    expect(() => buildAutoReelRenderPayload({ ...job, metadata: { ...job.metadata, visualScenes: duplicate } }, { audioUrl: "https://cdn/audio.mp3", durationSeconds: 9 }))
+      .toThrow(/cenas 1, 2, 3 e 4/i);
+  });
+
   it("builds an ordered vertical render manifest with the existing CTA", async () => {
     const { buildAutoReelRenderPayload } = await import("@/lib/videos/auto-reel-completion");
     const payload = buildAutoReelRenderPayload(job, { audioUrl: "https://cdn/audio.mp3", durationSeconds: 9 });
     expect(payload).toMatchObject({ aspectRatio: "9:16", audioUrl: "https://cdn/audio.mp3", price: snapshot.currentPrice });
     expect(payload.scenes.map((scene) => scene.number)).toEqual([1, 2, 3, 4]);
+    expect(payload.scenes.map((scene) => scene.imageUrl)).toEqual(scenes.map((scene) => scene.mediaUrl));
     expect(payload.cta).toMatch(/Corre pra conferir/u);
   });
 
@@ -76,6 +88,16 @@ describe("Auto Reel completion contract", () => {
     const result = await processAutoReelCompletion({ job, updateJob, generateDubbing: vi.fn().mockRejectedValue(new Error("tts unavailable")), render: vi.fn(), persist: vi.fn() });
     expect(result.status).toBe("failed");
     expect(updateJob).toHaveBeenLastCalledWith(job.id, "failed", expect.objectContaining({ error: "tts unavailable" }));
+  });
+
+  it("preserves the original completion error if persisting failed also errors", async () => {
+    const { processAutoReelCompletion } = await import("@/lib/videos/auto-reel-completion");
+    const updateJob = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error("checkpoint denied"));
+    const result = await processAutoReelCompletion({ job, updateJob, generateDubbing: vi.fn().mockRejectedValue(new Error("tts unavailable")), render: vi.fn(), persist: vi.fn() });
+    expect(result).toEqual(expect.objectContaining({ status: "failed", error: "tts unavailable", failureUpdateError: "checkpoint denied" }));
   });
 
   it("marks render failure as failed", async () => {
