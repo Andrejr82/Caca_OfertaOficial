@@ -50,6 +50,37 @@ test('desempata preço atual repetido sem escolher menor valor por heurística',
   assert.deepEqual(result, { raw: 'R$ 99,90', value: 99.9, source: 'dom.primary-price' });
 });
 
+test('usa sinais visuais e escopo do produto quando a Shopee ofusca as classes', () => {
+  const result = selectPrimaryPrice([
+    {
+      text: 'R$ 399,90',
+      className: 'random-a',
+      productScope: true,
+      visible: true,
+      fontSize: 14,
+      textDecoration: 'line-through',
+    },
+    {
+      text: 'R$ 329,90',
+      className: 'random-b',
+      productScope: true,
+      visible: true,
+      fontSize: 30,
+      textDecoration: 'none',
+    },
+    {
+      text: 'R$ 89,90',
+      className: 'random-c',
+      productScope: false,
+      visible: true,
+      fontSize: 16,
+      textDecoration: 'none',
+    },
+  ]);
+
+  assert.deepEqual(result, { raw: 'R$ 329,90', value: 329.9, source: 'dom.primary-price' });
+});
+
 test('mantém preço ambíguo bloqueado quando sinais têm a mesma força', () => {
   const result = selectPrimaryPrice([
     { text: 'R$ 129,90', className: 'price' },
