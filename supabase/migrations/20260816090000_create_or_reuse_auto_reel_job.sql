@@ -4,7 +4,7 @@ create or replace function public.create_or_reuse_auto_reel_job(
   _script text,
   _metadata jsonb
 )
-returns public.video_jobs
+returns jsonb
 language plpgsql
 security definer
 set search_path = ''
@@ -23,7 +23,9 @@ begin
    order by created_at desc
    limit 1;
 
-  if found then return _job; end if;
+  if found then
+    return jsonb_build_object('job', to_jsonb(_job), 'created', false);
+  end if;
 
   insert into public.video_jobs (
     user_id,
@@ -46,7 +48,7 @@ begin
   )
   returning * into _job;
 
-  return _job;
+  return jsonb_build_object('job', to_jsonb(_job), 'created', true);
 end;
 $$;
 
