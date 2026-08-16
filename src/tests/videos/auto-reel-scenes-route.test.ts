@@ -137,12 +137,15 @@ describe("POST /api/reels/scenes storage persistence", () => {
     expect(JSON.parse(body.result.error)).toEqual({ code: "Duplicate", message: "object already exists", details: "race" });
   });
 
-  it("preserva o erro sanitizado do checkpoint", async () => {
-    const storage = {
-      download: vi.fn(), upload: vi.fn(), getPublicUrl: vi.fn(),
-    };
+  it("preserva o erro original quando o checkpoint e o estado failed também falham", async () => {
+    const storage = { download: vi.fn(), upload: vi.fn(), getPublicUrl: vi.fn() };
     configureAdmin(storage, { code: "42501", message: "checkpoint denied", details: "row policy", hint: "verify owner" });
 
-    await expect(POST(request())).rejects.toThrow('{"code":"42501","message":"checkpoint denied","details":"row policy","hint":"verify owner"}');
+    const response = await POST(request());
+    const body = await response.json();
+
+    expect(response.status).toBe(502);
+    expect(JSON.parse(body.result.error)).toEqual({ code: "42501", message: "checkpoint denied", details: "row policy", hint: "verify owner" });
+    expect(JSON.parse(body.result.failureUpdateError)).toEqual({ code: "42501", message: "checkpoint denied", details: "row policy", hint: "verify owner" });
   });
 });
