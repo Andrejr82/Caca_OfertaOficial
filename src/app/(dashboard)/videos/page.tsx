@@ -15,8 +15,8 @@ export default async function VideosPage() {
       supabase
         .from("offers")
         .select("*")
-        .gte("created_at", cutoff.toISOString())
-        .order("created_at", { ascending: false })
+        .gte("updated_at", cutoff.toISOString())
+        .order("updated_at", { ascending: false })
         .limit(2000),
       supabase
         .from("video_jobs")
