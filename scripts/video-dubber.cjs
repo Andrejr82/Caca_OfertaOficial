@@ -204,12 +204,14 @@ function deriveShortSpokenIdentity(normalized, categoryKey, fallbackIdentity) {
   const fallback = trimTrailingDubbingConnector(String(fallbackIdentity || '').replace(/^um |^uma /iu, '').trim());
   const requiredKey = String(categoryKey || '').toLowerCase().trim();
   if (!normalized || !fallback || !requiredKey) return fallback;
+  const derivedIdentity = deriveTitleProductIdentity(normalized);
+  if (derivedIdentity && derivedIdentity.toLowerCase() === fallback.toLowerCase()) return fallback;
 
   const selected = [];
   let meaningful = 0;
   for (const rawToken of String(normalized).split(/\s+/u)) {
     const token = rawToken.replace(/^[,.;:()[\]{}]+|[,.;:()[\]{}]+$/gu, '');
-    if (!token) continue;
+    if (!token || !/[A-Za-zÀ-ÿ]/u.test(token)) continue;
     const lower = token.toLowerCase();
     if (DUBBING_IDENTITY_NOISE.has(lower)) continue;
     if (/\d/u.test(token)) {
