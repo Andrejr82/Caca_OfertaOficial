@@ -466,6 +466,16 @@ def run_auto_dubbing(snapshot: dict) -> dict:
     return payload
 
 
+def get_media_info(path: Path) -> dict:
+    process = subprocess.run(
+        ["ffprobe", "-v", "error", "-print_format", "json", "-show_format", str(path)],
+        capture_output=True, text=True, timeout=60,
+    )
+    if process.returncode != 0:
+        raise RuntimeError("ffprobe falhou")
+    return json.loads(process.stdout)["format"]
+
+
 def render_auto_reel(scene_paths: list[Path], audio: Path, output: Path, workdir: Path) -> float:
     clips = []
     for index, scene_path in enumerate(scene_paths, start=1):
