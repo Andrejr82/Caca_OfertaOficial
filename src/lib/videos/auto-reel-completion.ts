@@ -24,7 +24,7 @@ function facts(job: CompletionJob) {
   if (orderedScenes.some((scene, index) => Number(scene.number) !== index + 1)) {
     throw new Error("Manifest visual inválido: cenas 1, 2, 3 e 4 são obrigatórias e únicas.");
   }
-  if (orderedScenes.some((scene) => typeof (scene.mediaUrl ?? scene.imageUrl) !== "string" || !String(scene.mediaUrl ?? scene.imageUrl).trim())) {
+  if (orderedScenes.some((scene) => typeof scene.mediaUrl !== "string" || !scene.mediaUrl.trim())) {
     throw new Error("Manifest visual inválido: cena sem imagem persistida.");
   }
   return { snapshot, scenes: orderedScenes };
@@ -56,7 +56,7 @@ export function buildAutoReelRenderPayload(job: CompletionJob, audio: Pick<Dubbi
     cta: CTA,
     audioUrl: audio.audioUrl,
     audioDurationSeconds: audio.durationSeconds,
-    scenes: scenes.map((scene) => ({ number: scene.number, kind: scene.kind, imageUrl: scene.mediaUrl ?? scene.imageUrl })),
+    scenes: scenes.map((scene) => ({ number: scene.number, kind: scene.kind, imageUrl: scene.mediaUrl })),
   };
 }
 
