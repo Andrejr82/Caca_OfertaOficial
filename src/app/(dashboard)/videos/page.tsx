@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { getBrazilVideoOfferCutoff } from "@/lib/videos/offer-window";
-import { CreativeCertificationPanel } from "./CreativeCertificationPanel";
 import { VideosClient } from "./VideosClient";
 
 export default async function VideosPage() {
@@ -20,10 +19,11 @@ export default async function VideosPage() {
         .order("created_at", { ascending: false })
         .limit(2000),
       supabase
-      .from("video_jobs")
-      .select("*, offers(id, product_name, image_url, current_price, old_price, platform, short_name)")
-      .order("created_at", { ascending: false })
-      .limit(200)
+        .from("video_jobs")
+        .select("*, offers(id, product_name, image_url, current_price, old_price, platform, short_name)")
+        .eq("template_id", "gemini-drive-v1")
+        .order("created_at", { ascending: false })
+        .limit(200)
     ]);
     offers = offerData ?? [];
     jobs = jobData ?? [];
@@ -36,7 +36,6 @@ export default async function VideosPage() {
           Reels / Criativos autorizados
         </Link>
       </div>
-      <CreativeCertificationPanel jobs={jobs as any[]} />
       <VideosClient offers={offers as any[]} initialJobs={jobs as any[]} cutoff={cutoff.toISOString()} />
     </>
   );
