@@ -15,7 +15,13 @@ const MAX_SPEECH_WORDS = 22;
 const PRODUCT_NAME_WORD_LIMITS = [8, 6, 4];
 const OFFICIAL_AVATAR_REFERENCE = "Avatar_Silvia";
 
-const PRODUCT_IDENTITY_RULES = `REGRA CRÍTICA — PRESERVAÇÃO EXATA DO PRODUTO
+const PRODUCT_IDENTITY_RULES = `REGRA CRÍTICA — SEGURANÇA E BRAND SAFETY
+
+É estritamente obrigatório que todos os prompts visuais gerados sejam 100% "Family Friendly", neutros e "Safe For Work" (SFW).
+NÃO gere, em hipótese alguma, palavras ambíguas que possam acionar filtros de conteúdo sensível (NSFW), de violência ou nudez (exemplo de palavras proibidas: "sensual", "flesh", "naked", "explosão", "violento", "sangue", "pele", "decote", "íntimo").
+Mantenha a descrição estritamente técnica, profissional e comercial.
+
+REGRA CRÍTICA — PRESERVAÇÃO EXATA DO PRODUTO
 
 A imagem anexada é a referência visual absoluta do produto.
 
