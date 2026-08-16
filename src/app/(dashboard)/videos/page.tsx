@@ -21,7 +21,7 @@ export default async function VideosPage() {
       supabase
         .from("video_jobs")
         .select("*, offers(id, product_name, image_url, current_price, old_price, platform, short_name)")
-        .eq("template_id", "gemini-drive-v1")
+        .in("template_id", ["gemini-drive-v1", "motion-v1"])
         .order("created_at", { ascending: false })
         .limit(200)
     ]);
