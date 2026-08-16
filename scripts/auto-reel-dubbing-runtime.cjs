@@ -9,7 +9,7 @@ async function main() {
     title: input.productName,
     price: input.currentPrice,
     marketplace: input.platform,
-    durationSecs: 12,
+    durationSecs: 15,
   }, { measureTts: (copy) => measureWithEdgeTts(copy, { edgeTtsBin: resolveEdgeTtsBin() }) });
   process.stdout.write(JSON.stringify({ copy: result.copy, audioDuration: result.audioDuration, certified: result.certified, audioFits: result.audioFits }));
 }

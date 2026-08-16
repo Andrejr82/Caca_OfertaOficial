@@ -298,7 +298,7 @@ async function measureWithEdgeTts(copy, options = {}) {
     await execFileAsync(edgeTtsBin, [
       '-f', txtPath,
       '--voice', options.voice || 'pt-BR-FranciscaNeural',
-      '--rate', options.rate || '+0%',
+      '--rate', options.rate || '+10%',
       '--pitch', options.pitch || '+10Hz',
       '--write-media', audioPath,
     ]);

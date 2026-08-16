@@ -471,7 +471,7 @@ def render_auto_reel(scene_paths: list[Path], audio: Path, output: Path, workdir
     for index, scene_path in enumerate(scene_paths, start=1):
         clip = workdir / f"scene-{index}.mp4"
         subprocess.run([
-            "ffmpeg", "-y", "-loop", "1", "-i", str(scene_path), "-t", "3",
+            "ffmpeg", "-y", "-loop", "1", "-i", str(scene_path), "-t", "3.75",
             "-vf", "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2,format=yuv420p",
             "-r", str(VIDEO_OUTPUT_FPS), "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(clip),
         ], check=True, timeout=180)
