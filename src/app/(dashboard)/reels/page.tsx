@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { getBrazilVideoOfferCutoff } from "@/lib/videos/offer-window";
 import { AutoReelClient } from "./AutoReelClient";
 import { AuthorizedReelsClient } from "./AuthorizedReelsClient";
 import { CreativeCertificationPanel } from "./CreativeCertificationPanel";
@@ -13,6 +14,7 @@ function jobStatusLabel(job: any) {
 
 export default async function AuthorizedReelsPage() {
   const supabase = await createServerSupabaseClient();
+  const cutoff = getBrazilVideoOfferCutoff();
   let offers: any[] = [];
   let jobs: any[] = [];
   let autoJobs: any[] = [];
@@ -26,7 +28,8 @@ export default async function AuthorizedReelsPage() {
           .from("offers")
           .select("id,product_name,platform,current_price,image_url")
           .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
+          .gte("updated_at", cutoff.toISOString())
+          .order("updated_at", { ascending: false })
           .limit(200),
         supabase
           .from("video_jobs")
