@@ -1,8 +1,8 @@
 # Troubleshooting atual
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 ## Sequência de diagnóstico
 
@@ -40,5 +40,8 @@ Prefira desativar a flag específica e preservar dados. Não reinicie processos 
 | Shadow sem intenção executável | snapshot `completed`, marketplace suportado e contrato Radar → Oracle |
 | Fonte bloqueada | status `healthy`, `trusted=true` e ausência de drift material |
 | Ativação recusada | readiness gate, amostra shadow mínima e autorização do operador |
+| Radar solicitado continua aguardando ciclo editorial | conferir se o runtime dedicado foi aprovado/implantado; enquanto `TRENDS_RADAR_DEDICATED_RUNTIME` estiver `false`, o comportamento legado é esperado |
+| Worker dedicado não processa | confirmar flag `TRENDS_RADAR_DEDICATED_RUNTIME=true`, processo PM2, credenciais de marketplace/Supabase e ausência de lock ativo |
+| `worker_locked` persistente | confirmar que não existe outro worker executando; só remover lock órfão após validar ausência de processo concorrente |
 
-Em qualquer anomalia, preserve `TREND_EXECUTIVE_MODE=off` e a autoridade `legacy_scenario` até identificar a causa.
+Em qualquer anomalia, preserve `TREND_EXECUTIVE_MODE=off` e a autoridade `legacy_scenario` até identificar a causa. Para o runtime dedicado do Radar, rollback seguro é desabilitar a flag e parar o processo dedicado, restaurando o consumo legado pelo scraper.

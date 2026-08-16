@@ -1,8 +1,8 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Oracle, PM2, Meta, Telegram, WhatsApp e marketplaces precisa ser confirmada no ambiente correspondente.
 
@@ -57,3 +57,12 @@ Este documento confirma capacidade versionada, não estado de produção. Antes 
 - Integração Radar → Oracle está preparada apenas para observação/controlada; `TREND_EXECUTIVE_MODE=off` é o estado seguro e `active` continua bloqueado.
 - Feedback experimental `SCALE | ADJUST | ABORT` é auditável, mas não altera pesos automaticamente.
 - Governança bloqueia fontes degradadas/drifted e exige revisão humana para mudanças de pesos ou ativação.
+
+## Runtime independente do Radar — preparado, não ativado
+
+- `scripts/oracle-trends-radar-engine.cjs` preserva o engine marketplace-first existente de Shopee + Mercado Livre.
+- `scripts/oracle-trends-radar-runner.cjs` atua como camada compatível de seleção de consumidor.
+- `scripts/oracle-trends-radar-worker.cjs` fornece entrypoint dedicado com polling sequencial e lock de processo no host.
+- `TRENDS_RADAR_DEDICATED_RUNTIME=false` mantém o comportamento produtivo atual: o `oracle-scraper` continua sendo o consumidor do Radar.
+- Quando a flag for habilitada em rollout Oracle aprovado, o consumidor legado se abstém e o worker dedicado passa a processar as solicitações sem depender temporalmente do ciclo editorial.
+- A capacidade versionada não comprova que o processo PM2 dedicado esteja criado ou ativo na Oracle; essa ativação pertence à próxima task operacional.
