@@ -24,25 +24,33 @@ function validHttps(value: unknown): string | null {
   }
 }
 
+function isShopeeAffiliateUrl(value: string): boolean {
+  return /(?:s\.shopee\.com\.br|shope\.ee|affiliates|ext_camp)/i.test(value);
+}
+
 async function findExactOffer(supabase: any, userId: string, marketplace: string, evidence: Evidence) {
   const identity = evidence.marketplace_identity ?? {};
   const itemId = String(identity.itemId ?? "").trim();
   const productId = String(identity.productId ?? "").trim();
-  if (!itemId && !productId) return null;
+  const columns = marketplace === "Shopee"
+    ? [["shopee_item_id", itemId], ["item_id", itemId], ["product_id", productId]]
+    : [["item_id", itemId], ["product_id", productId]];
 
-  const { data, error } = await supabase
-    .from("offers")
-    .select("id,status,platform,product_name,explainability,item_id,product_id,shopee_item_id")
-    .eq("user_id", userId)
-    .eq("platform", marketplace)
-    .order("updated_at", { ascending: false })
-    .limit(500);
-  if (error) throw new Error("Falha ao procurar oferta já existente.");
-
-  return (data ?? []).find((offer: any) => {
-    const ids = [offer.item_id, offer.product_id, offer.shopee_item_id].map((value) => String(value ?? "").trim()).filter(Boolean);
-    return (itemId && ids.includes(itemId)) || (productId && ids.includes(productId));
-  }) ?? null;
+  for (const [column, value] of columns) {
+    if (!value) continue;
+    const { data, error } = await supabase
+      .from("offers")
+      .select("id,status,platform,product_name,explainability")
+      .eq("user_id", userId)
+      .eq("platform", marketplace)
+      .eq(column, value)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error("Falha ao procurar oferta já existente.");
+    if (data) return data;
+  }
+  return null;
 }
 
 async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string, product: any, evidence: Evidence) {
@@ -52,8 +60,8 @@ async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string,
   const shopId = String(identity.shopId ?? "").trim();
   const affiliateUrl = validHttps(evidence.source_url);
   const price = Number(evidence.price ?? metrics.price ?? 0);
-  if (!/^\d+$/.test(itemId) || !affiliateUrl || !Number.isFinite(price) || price <= 0) {
-    throw new Error("Snapshot Shopee não possui identidade/link/preço suficientes para materializar a oferta com segurança.");
+  if (!/^\d+$/.test(itemId) || !affiliateUrl || !isShopeeAffiliateUrl(affiliateUrl) || !Number.isFinite(price) || price <= 0) {
+    throw new Error("Snapshot Shopee não possui identidade/link afiliado/preço suficientes para materializar a oferta com segurança.");
   }
 
   const row = {
@@ -158,6 +166,7 @@ async function approveAndBridge(formData: FormData) {
 
   await ensureOfferSelected(supabase, user.id, offer, product.id);
 
+  const approvedAt = new Date().toISOString();
   const executionContext = {
     origin: "trend",
     experiment_source: "trend_radar",
@@ -167,13 +176,13 @@ async function approveAndBridge(formData: FormData) {
     strategy_version: run.strategy_version,
     commercial_score: Number(product.commercial_score ?? 0),
     offer_id: offer.id,
-    approved_at: new Date().toISOString(),
+    approved_at: approvedAt,
     automatic_publication: false,
   };
 
   const { error: productUpdateError } = await supabase.from("trend_radar_products").update({
     selection_decision: "APROVAR_TESTE",
-    selection_decided_at: executionContext.approved_at,
+    selection_decided_at: approvedAt,
     selected_offer_id: offer.id,
     match_status: "matched",
     execution_context: executionContext,
