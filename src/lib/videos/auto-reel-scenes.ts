@@ -1,3 +1,4 @@
+// @ts-expect-error sharp exports its runtime types in a path TypeScript does not resolve in this project setup.
 import sharp from "sharp";
 
 export const AUTO_REEL_FLUX_MODEL = "@cf/black-forest-labs/flux-2-klein-4b" as const;

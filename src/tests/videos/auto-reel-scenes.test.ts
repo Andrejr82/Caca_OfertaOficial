@@ -1,4 +1,7 @@
+// @vitest-environment node
+
 import { describe, expect, it, vi, beforeEach } from "vitest";
+// @ts-expect-error sharp exports its runtime types in a path TypeScript does not resolve in this project setup.
 import sharp from "sharp";
 
 import {
