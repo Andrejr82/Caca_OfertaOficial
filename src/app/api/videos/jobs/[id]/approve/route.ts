@@ -3,7 +3,6 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
-import { canApproveCreative } from "@/lib/videos/creative-candidate";
 
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createServerSupabaseClient();
@@ -18,18 +17,17 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .select("*, offers(id,product_name,platform,category,current_price,old_price,original_url,image_url,shipping_free,explainability,marketplace_metrics)")
     .eq("id", id)
     .eq("user_id", userData.user.id)
+    .eq("template_id", "gemini-drive-v1")
     .maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!current || !["ready", "approved"].includes(current.status)) return NextResponse.json({ error: "O vídeo precisa estar pronto para aprovação." }, { status: 409 });
-  if (!canApproveCreative(current.metadata)) {
-    return NextResponse.json({ error: "Certifique o direito de uso do criativo antes de aprovar." }, { status: 409 });
-  }
 
   const { data, error } = await supabase
     .from("video_jobs")
     .update(current.status === "approved" ? {} : { status: "approved", approved_at: new Date().toISOString() })
     .eq("id", id)
     .eq("user_id", userData.user.id)
+    .eq("template_id", "gemini-drive-v1")
     .in("status", ["ready", "approved"])
     .select("*")
     .maybeSingle();
@@ -62,7 +60,6 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       channelCopies[channel] = content;
       const { data: draft } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "draft").maybeSingle();
       if (draft) {
-        // Atualiza o draft existente com a nova copy
         await admin.from("posts").update({ content }).eq("id", draft.id);
         draftIds[channel] = draft.id;
       } else {
@@ -74,7 +71,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         } else delete draftIds[channel];
       }
     }
-    const { error: metadataError } = await admin.from("video_jobs").update({ metadata: { ...metadata, draftIds, channelCopies } }).eq("id", job.id).eq("user_id", userData.user.id);
+    const { error: metadataError } = await admin.from("video_jobs").update({ metadata: { ...metadata, draftIds, channelCopies } }).eq("id", job.id).eq("user_id", userData.user.id).eq("template_id", "gemini-drive-v1");
     if (metadataError) return NextResponse.json({ error: `Falha ao vincular os drafts ao vídeo: ${metadataError.message}` }, { status: 502 });
   }
   return NextResponse.json({ job, drafts: syncedDraftIds });
