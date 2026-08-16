@@ -28,4 +28,16 @@ describe("AutoReelClient controlled failures", () => {
     await waitFor(() => expect(screen.getAllByText("Falhou").length).toBeGreaterThan(0));
     expect(screen.getByText(/input image too large/)).toBeTruthy();
   });
+
+  it("exibe erro controlado quando /scenes devolve HTML em vez de JSON", async () => {
+    const initialJob = { id: "job-html-scenes", status: "processing" as AutoReelStatus, stage: "planning" as AutoReelStatus };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<!DOCTYPE html><html><body>Internal Server Error</body></html>", {
+      status: 500,
+      headers: { "content-type": "text/html" },
+    }));
+
+    render(<AutoReelClient offers={offers} initialJobs={[initialJob]} />);
+
+    await waitFor(() => expect(screen.getByText("Falha HTTP 500: resposta inválida do servidor.")).toBeTruthy());
+  });
 });

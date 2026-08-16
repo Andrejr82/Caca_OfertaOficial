@@ -15,6 +15,15 @@ type Offer = {
 
 type Job = { id: string; status: AutoReelStatus; stage: AutoReelStatus; video_url?: string | null; metadata?: Record<string, unknown>; offers?: { product_name?: string; current_price?: number; platform?: string } };
 
+async function readApiPayload<T>(response: Response): Promise<T> {
+  const text = await response.text();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`Falha HTTP ${response.status}: resposta inválida do servidor.`);
+  }
+}
+
 export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: { offers: Offer[]; initialJobs?: Job[]; pollingMs?: number }) {
   const [offerId, setOfferId] = useState(offers[0]?.id ?? "");
   const [jobs, setJobs] = useState<Job[]>(initialJobs);
@@ -38,7 +47,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       const endpoint = job.stage === "scenes_ready" ? "/api/reels/complete" : "/api/reels/scenes";
       void fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.id }) })
         .then(async (response) => {
-          const payload = await response.json() as { job?: Job; error?: string };
+          const payload = await readApiPayload<{ job?: Job; error?: string }>(response);
           if (payload.job) applyJob(payload.job);
           if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível avançar o Reel.");
           setError(null);
@@ -51,7 +60,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       try {
         const response = await fetch(`/api/reels/generate?jobId=${encodeURIComponent(job.id)}`);
         if (!response.ok) return;
-        const payload = await response.json() as { job?: Job };
+        const payload = await readApiPayload<{ job?: Job }>(response);
         if (payload.job) { setJob(payload.job); setJobs((current) => current.map((item) => item.id === payload.job?.id ? payload.job as Job : item)); }
       } catch {
         // A próxima janela de polling tenta novamente sem quebrar a tela.
@@ -70,7 +79,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ offerId, style: "demonstrative-reel" }),
       });
-      const payload = await response.json() as { job?: Job; error?: string };
+      const payload = await readApiPayload<{ job?: Job; error?: string }>(response);
       if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível gerar o Reel.");
       applyJob(payload.job);
     } catch (cause) {
@@ -86,7 +95,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
     setError(null);
     try {
       const response = await fetch("/api/reels/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: target.id, action }) });
-      const payload = await response.json() as { job?: Job; error?: string };
+      const payload = await readApiPayload<{ job?: Job; error?: string }>(response);
       if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível atualizar o Reel.");
       applyJob(payload.job);
     } catch (cause) {
