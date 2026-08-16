@@ -58,7 +58,7 @@ export async function POST(request: Request) {
     .eq("user_id", user.id)
     .eq("offer_id", parsed.data.offerId)
     .eq("template_id", "auto-reel-v1")
-    .in("status", [...AUTO_REEL_PIPELINE_STATES])
+    .in("stage", [...AUTO_REEL_PIPELINE_STATES])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
