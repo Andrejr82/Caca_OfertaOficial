@@ -27,5 +27,23 @@ export async function GET(request: Request) {
     .eq("id", claimed.id)
     .maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
+
+  if (job) {
+    const appDomain = process.env.NEXT_PUBLIC_APP_URL || "https://caca-oferta-oficial.vercel.app";
+    
+    // Proxy the main offer image if available
+    if (job.offers?.image_url && !job.offers.image_url.includes("/api/images/proxy")) {
+      job.offers.image_url = `${appDomain}/api/images/proxy?url=${encodeURIComponent(job.offers.image_url)}`;
+    }
+
+    // Proxy the snapshot image inside metadata (used by Auto-Reel V1 templates)
+    if (job.metadata && typeof job.metadata === "object") {
+      const metadata = job.metadata as Record<string, any>;
+      if (metadata.factualSnapshot?.imageUrl && !metadata.factualSnapshot.imageUrl.includes("/api/images/proxy")) {
+        metadata.factualSnapshot.imageUrl = `${appDomain}/api/images/proxy?url=${encodeURIComponent(metadata.factualSnapshot.imageUrl)}`;
+      }
+    }
+  }
+
   return NextResponse.json({ job: job ?? null });
 }
