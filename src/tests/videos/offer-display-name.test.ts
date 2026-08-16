@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import { getVideoOfferDisplayName } from "@/lib/videos/offer-display-name";
 
 describe("nome exibido da oferta em Vídeos", () => {

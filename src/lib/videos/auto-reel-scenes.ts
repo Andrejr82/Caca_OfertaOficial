@@ -102,10 +102,15 @@ function sanitizeCloudflareErrorBody(value: unknown) {
   if (!value || typeof value !== "object") return { code: null, message: "Falha no provider Cloudflare." };
   const body = value as { errors?: Array<{ code?: number | string; message?: string }>; error?: { code?: number | string; message?: string }; message?: string };
   const first = Array.isArray(body.errors) ? body.errors[0] : undefined;
-  return {
-    code: first?.code ?? body.error?.code ?? null,
-    message: first?.message ?? body.error?.message ?? body.message ?? "Falha no provider Cloudflare.",
-  };
+  
+  const code = first?.code ?? body.error?.code ?? null;
+  let message = first?.message ?? body.error?.message ?? body.message ?? "Falha no provider Cloudflare.";
+
+  if (code === 3030 || message.includes("output has been flagged")) {
+    message = "Falha de Segurança (Cloudflare): A imagem do produto ou a descrição foram bloqueadas pelo filtro de conteúdo sensível da IA. Escolha outro produto.";
+  }
+
+  return { code, message };
 }
 
 async function cloudflareFailure(response: Response) {

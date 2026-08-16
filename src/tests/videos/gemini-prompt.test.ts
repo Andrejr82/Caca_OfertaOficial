@@ -1,3 +1,4 @@
+import { describe, it, expect } from "vitest";
 import { buildGeminiVideoPrompt, formatLongPriceForSpeech } from "@/lib/videos/gemini-prompt";
 
 function extractSpeech(prompt: string) {
