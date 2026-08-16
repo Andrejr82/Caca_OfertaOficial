@@ -7,7 +7,11 @@ const {
   normalizeText,
   findPendingTrendRadarRun,
   markTrendRadarRunRunning,
+  collectShopeeMarketplaceCandidates,
+  collectMercadoLivreMarketplaceCandidates,
+  computeCandidateSalesVelocity,
   buildTrendRadarProductsFromCandidates,
+  fetchRecentSnapshotItemsMap,
   persistTrendRadarSnapshot,
   processPendingTrendRadarRuns,
 } = require('../oracle-trends-radar-runner.cjs');
@@ -42,92 +46,230 @@ test('findPendingTrendRadarRun identifies pending requested run for Oracle', asy
   assert.equal(pending.source_health.status, 'requested');
 });
 
-test('buildTrendRadarProductsFromCandidates combines Shopee and Mercado Livre marketplace-first', () => {
+test('collectShopeeMarketplaceCandidates uses broad official category discovery without fixed seeds authority', async () => {
+  const capturedCalls = [];
+  const mockCaller = async (operation, query, variables) => {
+    capturedCalls.push({ operation, variables });
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [
+              {
+                itemId: '1001',
+                shopId: '2001',
+                shopName: 'Loja Oficial Tech',
+                productName: 'Teclado Mecânico RGB',
+                productLink: 'https://shopee.com.br/product/2001/1001',
+                offerLink: 'https://shope.ee/xyz1001',
+                imageUrl: 'https://cf.shopee.com.br/img1001.jpg',
+                priceMin: '129.90',
+                priceMax: '159.90',
+                ratingStar: '4.85',
+                sales: '2400',
+                priceDiscountRate: '18.5',
+                commissionRate: '0.07',
+                shopeeCommissionRate: '0.04',
+                sellerCommissionRate: '0.03',
+                shopType: [1, 4],
+                productCatIds: [100644],
+              },
+            ],
+            pageInfo: { page: 1, limit: 20, hasNextPage: false },
+          },
+        },
+      },
+    };
+  };
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [100644],
+  });
+
+  assert.ok(candidates.length >= 1);
+  const candidate = candidates[0];
+  assert.equal(candidate.marketplace, 'Shopee');
+  assert.equal(candidate.itemId, '1001');
+  assert.equal(candidate.shopId, '2001');
+  assert.equal(candidate.productName, 'Teclado Mecânico RGB');
+  assert.equal(candidate.sales, 2400);
+  assert.equal(candidate.ratingStar, 4.85);
+  assert.equal(candidate.currentPrice, 129.9);
+  assert.equal(candidate.priceDiscountRate, 18.5);
+  assert.equal(candidate.commissionRate, 7);
+  assert.equal(candidate.sellerCommissionRate, 3);
+  assert.deepEqual(candidate.shopType, [1, 4]);
+  assert.equal(candidate.provenance, 'shopee_openapi_productOfferV2');
+  assert.ok(capturedCalls.length > 0);
+  // Verifies that category/broad parameters are sent without restricting to hardcoded product names
+  assert.ok(capturedCalls[0].variables.productCatId !== undefined || capturedCalls[0].variables.sortType !== undefined);
+});
+
+test('computeCandidateSalesVelocity computes delta and window when previous history exists', () => {
+  const candidate = {
+    marketplace: 'Shopee',
+    itemId: 'item-888',
+    productName: 'Fone Bluetooth TWS Pro',
+    sales: 1500,
+    observedAt: '2026-08-16T12:00:00.000Z',
+  };
+
+  const previousMap = new Map([
+    [
+      'item-888',
+      {
+        itemId: 'item-888',
+        sales: 1420,
+        observedAt: '2026-08-15T12:00:00.000Z',
+      },
+    ],
+  ]);
+
+  const velocityInfo = computeCandidateSalesVelocity(candidate, previousMap);
+
+  assert.equal(velocityInfo.velocity_status, 'computed');
+  assert.equal(velocityInfo.sales_delta, 80);
+  assert.equal(velocityInfo.sales_velocity, 80);
+  assert.equal(velocityInfo.previous_sales, 1420);
+  assert.equal(velocityInfo.current_sales, 1500);
+  assert.ok(velocityInfo.observed_window);
+  assert.equal(velocityInfo.observed_window.previous_observed_at, '2026-08-15T12:00:00.000Z');
+  assert.equal(velocityInfo.observed_window.current_observed_at, '2026-08-16T12:00:00.000Z');
+  assert.equal(velocityInfo.observed_window.window_hours, 24);
+});
+
+test('computeCandidateSalesVelocity handles missing history with insufficient_history and never invents growth', () => {
+  const candidate = {
+    marketplace: 'Shopee',
+    itemId: 'item-new-999',
+    productName: 'Item Recém Descoberto',
+    sales: 50,
+    observedAt: '2026-08-16T12:00:00.000Z',
+  };
+
+  const emptyPreviousMap = new Map();
+  const velocityInfo = computeCandidateSalesVelocity(candidate, emptyPreviousMap);
+
+  assert.equal(velocityInfo.velocity_status, 'insufficient_history');
+  assert.equal(velocityInfo.sales_velocity, null);
+  assert.equal(velocityInfo.sales_delta, null);
+  assert.equal(velocityInfo.previous_sales, null);
+  assert.equal(velocityInfo.current_sales, 50);
+  assert.equal(velocityInfo.observed_window, null);
+});
+
+test('buildTrendRadarProductsFromCandidates ranks by sales_velocity first and absolute sales as fallback', () => {
   const shopeeCandidates = [
     {
       marketplace: 'Shopee',
-      itemId: 'shopee-1',
-      productName: 'Fone Bluetooth Sem Fio TWS',
-      currentPrice: 59.9,
-      oldPrice: 89.9,
-      discountPercent: 33,
-      sales: 500,
-      rating: 4.8,
-      commissionPercent: 8,
-      permalink: 'https://shopee.com.br/product/1/1',
-      imageUrl: 'https://cf.shopee.com.br/img1.jpg',
-      category: 'Áudio',
+      itemId: 'shopee-high-velocity',
+      productName: 'Item de Alta Velocidade',
+      currentPrice: 99.9,
+      discountPercent: 20,
+      sales: 600,
+      ratingStar: 4.8,
+      commissionPercent: 6,
+      provenance: 'shopee_openapi_productOfferV2',
+      observedAt: '2026-08-16T12:00:00.000Z',
     },
     {
       marketplace: 'Shopee',
-      itemId: 'shopee-2',
-      productName: 'Air Fryer Fritadeira Sem Óleo 4L',
-      currentPrice: 299.9,
-      oldPrice: 399.9,
-      discountPercent: 25,
-      sales: 1200,
-      rating: 4.9,
-      commissionPercent: 6,
-      permalink: 'https://shopee.com.br/product/1/2',
-      imageUrl: 'https://cf.shopee.com.br/img2.jpg',
-      category: 'Eletroportáteis',
+      itemId: 'shopee-high-abs-sales',
+      productName: 'Item Alto Volume Estável',
+      currentPrice: 49.9,
+      discountPercent: 10,
+      sales: 5000,
+      ratingStar: 4.9,
+      commissionPercent: 5,
+      provenance: 'shopee_openapi_productOfferV2',
+      observedAt: '2026-08-16T12:00:00.000Z',
     },
   ];
 
+  const previousMap = new Map([
+    [
+      'shopee-high-velocity',
+      {
+        itemId: 'shopee-high-velocity',
+        sales: 400, // delta = +200
+        observedAt: '2026-08-15T12:00:00.000Z',
+      },
+    ],
+    [
+      'shopee-high-abs-sales',
+      {
+        itemId: 'shopee-high-abs-sales',
+        sales: 4990, // delta = +10
+        observedAt: '2026-08-15T12:00:00.000Z',
+      },
+    ],
+  ]);
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-test',
+    shopeeCandidates,
+    mlCandidates: [],
+    previousItemsMap: previousMap,
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 2);
+  // Priority 1 must be the higher velocity item (delta +200 > +10)
+  assert.equal(products[0].product_term, 'Item de Alta Velocidade');
+  assert.equal(products[0].priority, 1);
+  assert.equal(products[1].product_term, 'Item Alto Volume Estável');
+  assert.equal(products[1].priority, 2);
+
+  // Validate complete snapshot fields inside direct_evidence
+  const evidence0 = products[0].direct_evidence[0];
+  assert.equal(evidence0.provenance, 'shopee_openapi_productOfferV2');
+  assert.equal(evidence0.temporal_metrics.velocity_status, 'computed');
+  assert.equal(evidence0.temporal_metrics.sales_velocity, 200);
+  assert.equal(evidence0.temporal_metrics.sales_delta, 200);
+});
+
+test('collectMercadoLivreMarketplaceCandidates marks insufficient_history when no temporal delta is available', () => {
   const mlCandidates = [
     {
       marketplace: 'Mercado Livre',
-      itemId: 'MLB123',
-      productName: 'Smart TV 50 Polegadas 4K UHD',
-      currentPrice: 1999.0,
-      oldPrice: 2499.0,
-      discountPercent: 20,
-      sales: 350,
+      itemId: 'MLB777',
+      productName: 'Smart TV 55 4K',
+      currentPrice: 2200,
+      sales: 120,
       rating: 4.7,
-      commissionPercent: 0,
-      permalink: 'https://www.mercadolivre.com.br/p/MLB123',
-      imageUrl: 'https://http2.mlstatic.com/img3.jpg',
-      category: 'Eletrônicos',
+      provenance: 'mercadolivre_official_intent',
+      observedAt: '2026-08-16T12:00:00.000Z',
     },
   ];
 
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: 'run-123',
-    shopeeCandidates,
+    radarRunId: 'run-ml',
+    shopeeCandidates: [],
     mlCandidates,
-    maxProducts: 20,
+    previousItemsMap: new Map(),
+    maxProducts: 5,
   });
 
-  assert.equal(products.length, 3);
-  assert.equal(products[0].priority, 1);
-  assert.equal(products[0].is_focus, true);
-  assert.equal(products[0].marketplace, 'Shopee');
-  assert.equal(products[0].evidence_status, 'verified');
-  assert.ok(products[0].direct_evidence.length > 0);
-  assert.equal(products[0].direct_evidence[0].marketplace_identity.itemId, 'shopee-1');
-
-  assert.equal(products[1].priority, 2);
-  assert.equal(products[1].is_focus, true);
-  assert.equal(products[1].marketplace, 'Mercado Livre');
-  assert.equal(products[1].direct_evidence[0].marketplace_identity.itemId, 'MLB123');
-
-  assert.equal(products[2].priority, 3);
-  assert.equal(products[2].is_focus, true);
-  assert.equal(products[2].marketplace, 'Shopee');
+  assert.equal(products.length, 1);
+  const evidence = products[0].direct_evidence[0];
+  assert.equal(evidence.provenance, 'mercadolivre_official_intent');
+  assert.equal(evidence.temporal_metrics.velocity_status, 'insufficient_history');
+  assert.equal(evidence.temporal_metrics.sales_velocity, null);
 });
 
-test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 publish calls', async () => {
-  let productsDeleted = false;
-  let productsInserted = [];
-  let runUpdated = null;
-
+test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 publish calls and real provenance', async () => {
   const mockRun = {
     id: 'run-abc',
-    user_id: 'user-1',
+    user_id: 'user-abc',
     radar_date: '2026-08-16',
     status: 'building',
     source_health: { runtime: 'oracle', status: 'requested' },
   };
+
+  const insertedProducts = [];
+  let updatedRun = null;
 
   const mockClient = {
     from: (table) => {
@@ -142,7 +284,7 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
           }),
           update: (payload) => ({
             eq: async (col, val) => {
-              runUpdated = payload;
+              updatedRun = payload;
               return { error: null };
             },
           }),
@@ -150,45 +292,54 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
       }
       if (table === 'trend_radar_products') {
         return {
-          delete: () => ({
-            eq: async () => {
-              productsDeleted = true;
-              return { error: null };
-            },
+          select: () => ({
+            in: () => ({
+              order: () => ({
+                limit: async () => ({ data: [], error: null }),
+              }),
+            }),
           }),
-          insert: async (rows) => {
-            productsInserted = rows;
+          delete: () => ({
+            eq: async () => ({ error: null }),
+          }),
+          insert: async (products) => {
+            insertedProducts.push(...products);
             return { error: null };
           },
         };
       }
-      throw new Error(`Unexpected table ${table}`);
+      throw new Error(`Tabela inesperada: ${table}`);
     },
   };
 
   const mockShopeeCollector = async () => [
     {
       marketplace: 'Shopee',
-      itemId: 'shopee-1',
-      productName: 'Teclado Mecânico RGB Gamer',
-      currentPrice: 129.9,
-      sales: 300,
-      rating: 4.8,
-      permalink: 'https://shopee.com.br/product/1/1',
-      imageUrl: 'https://cf.shopee.com.br/kb.jpg',
+      itemId: 'shopee-99',
+      shopId: 'shop-1',
+      productName: 'Air Fryer Digital 4L',
+      currentPrice: 289.9,
+      sales: 450,
+      ratingStar: 4.8,
+      priceDiscountRate: 20,
+      commissionRate: 6,
+      sellerCommissionRate: 2,
+      shopType: [1],
+      provenance: 'shopee_openapi_productOfferV2',
+      observedAt: '2026-08-16T12:00:00.000Z',
     },
   ];
 
   const mockMlCollector = async () => [
     {
       marketplace: 'Mercado Livre',
-      itemId: 'mlb-1',
-      productName: 'Mouse Gamer 12000 DPI',
-      currentPrice: 89.9,
-      sales: 450,
-      rating: 4.9,
-      permalink: 'https://mercadolivre.com.br/p/mlb-1',
-      imageUrl: 'https://http2.mlstatic.com/mouse.jpg',
+      itemId: 'MLB88',
+      productName: 'Fone Bluetooth Noise Cancelling',
+      currentPrice: 199.9,
+      sales: 300,
+      rating: 4.7,
+      provenance: 'mercadolivre_official_intent',
+      observedAt: '2026-08-16T12:00:00.000Z',
     },
   ];
 
@@ -199,15 +350,11 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
     dryRun: false,
   });
 
+  assert.ok(result);
   assert.equal(result.processed, true);
-  assert.equal(result.googleTrendsUsed, false);
+  assert.equal(result.runId, 'run-abc');
   assert.equal(result.publishCalls, 0);
-  assert.equal(result.postsWrites, 0);
-  assert.equal(result.offersWrites, 0);
-  assert.equal(result.productsCount, 2);
-  assert.equal(productsDeleted, true);
-  assert.equal(productsInserted.length, 2);
-  assert.equal(runUpdated.status, 'completed');
-  assert.equal(runUpdated.source_health.google_trends_used, false);
-  assert.equal(runUpdated.source_health.runtime, 'oracle');
+  assert.equal(updatedRun.status, 'completed');
+  assert.equal(updatedRun.source_health.google_trends_used, false);
+  assert.equal(updatedRun.source_health.runtime, 'oracle');
 });

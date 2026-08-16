@@ -1,8 +1,41 @@
+/**
+ * Oracle Trends Radar Runner - Task 2B
+ *
+ * Motor autônomo executado na VPS Oracle para processamento do Radar de Tendências.
+ * Regras:
+ * 1. MARKETPLACE-FIRST: Shopee e Mercado Livre como fontes primárias de descoberta comercial.
+ * 2. SEM SEEDS FIXAS: Descoberta ampla via categorias oficiais, sortType da OpenAPI e feeds oficiais.
+ * 3. SNAPSHOT COMERCIAL: Persistência de itemId, shopId, sales, rating, preços, comissões, shopType e provenance.
+ * 4. TENDÊNCIA BASEADA EM HISTÓRICO: sales_velocity = sales_atual - sales_anterior.
+ *    Sem histórico => status = insufficient_history (nunca inventar crescimento).
+ * 5. RANKING TASK 2B: Ordenação por sales_velocity > 0, fallback explícito para sales absoluto.
+ * 6. ZERO PUBLISH: Nenhuma chamada externa de publicação, nenhum post gerado.
+ * 7. ZERO CONCORRÊNCIA: Integrado ao ciclo do oracle-scraper sem novo daemon ou scheduler.
+ */
+
+'use strict';
+
 const crypto = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
-const { SCENARIO_QUERY_PLANS, GRAPHQL_CONTRACTS, createSignedRequest } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const { SCENARIO_CONTRACTS, GRAPHQL_CONTRACTS, createSignedRequest } = require('./shopee-openapi-shadow-engine-v1.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
-const { SCENARIOS: EDITORIAL_SCENARIOS } = require('./editorial-scenario-config.cjs');
+
+const RUNNER_CONTRACT_VERSION = 'trend-executive.oracle-radar-runner/v2b';
+
+// Categorias oficiais amplas da Shopee para descoberta abrangente sem seeds fixas
+const SHOPEE_BROAD_DISCOVERY_CATEGORIES = Object.freeze([
+  100010, // Casa e Cozinha / Eletroportáteis
+  100013, // Celulares e Acessórios
+  100644, // Informática e Periféricos
+  100636, // Móveis e Decoração / Ferramentas
+  100630, // Beleza e Cuidados Pessoais
+  100535, // Áudio / TVs
+  100009, // Moda Masculina
+  100011, // Moda Feminina
+  100637, // Esportes e Fitness
+  100631, // Pet Shop
+  100634, // Games e Consoles
+]);
 
 function defaultShopeeApiCaller() {
   const appId = process.env.SHOPEE_APP_ID;
@@ -22,8 +55,6 @@ function defaultShopeeApiCaller() {
     },
   });
 }
-
-const RUNNER_CONTRACT_VERSION = 'trend-executive.oracle-radar-runner/v1';
 
 function normalizeText(value) {
   return String(value || '')
@@ -60,7 +91,6 @@ async function findPendingTrendRadarRun(client) {
   if (error) throw new Error(`Falha ao buscar solicitações do Radar: ${error.message}`);
   if (!Array.isArray(runs) || runs.length === 0) return null;
 
-  // Priorizar run com marcação explícita oracle/requested
   const requestedRun = runs.find((run) => {
     const health = run.source_health || {};
     return health.runtime === 'oracle' || health.status === 'requested' || health.status === 'building';
@@ -89,10 +119,16 @@ async function markTrendRadarRunRunning(client, runId, existingHealth = {}) {
   return updatedHealth;
 }
 
+/**
+ * Coleta candidatos comerciais da Shopee sem autoridade em seeds hardcoded.
+ * Utiliza:
+ * 1. Categorias amplas com ordenação por popularidade/vendas (sortType: 1/2).
+ * 2. Feeds oficiais DELTA/BASE quando disponíveis na conta.
+ */
 async function collectShopeeMarketplaceCandidates({
   request = null,
-  queries = ['fone bluetooth', 'relogio inteligente', 'liquidificador', 'air fryer', 'teclado gamer', 'tenis corrida'],
-  maxPerQuery = 5,
+  categoryIds = SHOPEE_BROAD_DISCOVERY_CATEGORIES,
+  maxPerCategory = 10,
   env = process.env,
 } = {}) {
   const caller = request || defaultShopeeApiCaller();
@@ -100,15 +136,28 @@ async function collectShopeeMarketplaceCandidates({
   const candidates = [];
   const seenItemIds = new Set();
 
-  for (const query of queries) {
+  const targetCategories = Array.isArray(categoryIds) && categoryIds.length > 0
+    ? categoryIds
+    : [null];
+
+  for (const catId of targetCategories) {
     try {
-      const response = await caller('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, {
-        keyword: query,
+      const variables = {
         page: 1,
-        limit: Math.max(5, maxPerQuery),
-        sortType: 2, // Sort by popular / sales
+        limit: Math.max(5, maxPerCategory),
+        sortType: 2, // Popularidade / Vendas reais
         isAMSOffer: true,
-      }, { timeoutMs: 15000 });
+      };
+      if (catId) {
+        variables.productCatId = catId;
+      }
+
+      const response = await caller(
+        'ShopeePromotionOffers',
+        GRAPHQL_CONTRACTS.productOfferV2.query,
+        variables,
+        { timeoutMs: 15000 }
+      );
 
       const nodes = response?.data?.data?.productOfferV2?.nodes || [];
       for (const node of nodes) {
@@ -123,36 +172,49 @@ async function collectShopeeMarketplaceCandidates({
         const oldPrice = parseNumber(node.priceMax, price);
         const discount = parseNumber(node.priceDiscountRate, 0);
         const sales = parseInt(String(node.sales || '0'), 10) || 0;
-        const rating = parseNumber(node.ratingStar, 4.5);
-        const commission = parseNumber(node.commissionRate, 0) * 100;
+        const ratingStar = parseNumber(node.ratingStar, 4.5);
+        const commRate = parseNumber(node.commissionRate, 0);
+        const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
+        const commissionPercent = Math.round((commRate > 0 && commRate <= 1 ? commRate * 100 : commRate) * 100) / 100;
+        const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate <= 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
+        const shopType = Array.isArray(node.shopType) ? node.shopType : [];
         const link = String(node.offerLink || node.productLink || '');
 
         candidates.push({
           marketplace: 'Shopee',
           itemId,
           shopId: String(node.shopId || ''),
+          shopName: String(node.shopName || ''),
           productName,
           category: 'Marketplace Deals',
           currentPrice: price,
           oldPrice: oldPrice > price ? oldPrice : null,
+          priceDiscountRate: discount,
           discountPercent: discount,
           sales,
-          rating,
-          commissionPercent: commission,
+          ratingStar,
+          rating: ratingStar,
+          commissionRate: commissionPercent,
+          commissionPercent,
+          sellerCommissionRate: sellerCommissionPercent,
+          shopType,
           permalink: link,
           imageUrl: String(node.imageUrl || ''),
-          queryUsed: query,
+          provenance: 'shopee_openapi_productOfferV2',
           observedAt: new Date().toISOString(),
         });
       }
     } catch (err) {
-      // Falhas parciais não abortam coleta global
+      // Falha em uma categoria não aborta a coleta geral
     }
   }
 
   return candidates;
 }
 
+/**
+ * Coleta candidatos comerciais do Mercado Livre via intenções oficiais.
+ */
 async function collectMercadoLivreMarketplaceCandidates({
   keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer'],
   accessToken = null,
@@ -197,12 +259,14 @@ async function collectMercadoLivreMarketplaceCandidates({
         currentPrice: price,
         oldPrice: oldPrice > price ? oldPrice : null,
         discountPercent: discount,
+        priceDiscountRate: discount,
         sales,
+        ratingStar: rating,
         rating,
         commissionPercent: 0,
         permalink: String(product.product_url || product.permalink || ''),
         imageUrl: String(product.image_url || product.thumbnail || ''),
-        queryUsed: product.intent || keywords[0],
+        provenance: 'mercadolivre_official_intent',
         observedAt: new Date().toISOString(),
       });
     }
@@ -213,26 +277,156 @@ async function collectMercadoLivreMarketplaceCandidates({
   return candidates;
 }
 
+/**
+ * Calcula sales_velocity com base no histórico real anterior do item.
+ * Se não houver histórico anterior => status = 'insufficient_history' (nunca inventa crescimento).
+ */
+function computeCandidateSalesVelocity(candidate, previousItemsMap = new Map()) {
+  const itemId = String(candidate.itemId || '').trim();
+  const currentSales = typeof candidate.sales === 'number' ? candidate.sales : 0;
+  const currentObservedAt = candidate.observedAt || new Date().toISOString();
+
+  if (!itemId || !previousItemsMap || !previousItemsMap.has(itemId)) {
+    return {
+      velocity_status: 'insufficient_history',
+      sales_velocity: null,
+      sales_delta: null,
+      previous_sales: null,
+      current_sales: currentSales,
+      observed_window: null,
+    };
+  }
+
+  const previous = previousItemsMap.get(itemId);
+  const prevSales = typeof previous.sales === 'number' ? previous.sales : 0;
+  const prevObservedAt = previous.observedAt || previous.observed_at || null;
+
+  const delta = currentSales - prevSales;
+  let windowHours = null;
+
+  if (prevObservedAt) {
+    const diffMs = new Date(currentObservedAt).getTime() - new Date(prevObservedAt).getTime();
+    if (diffMs > 0) {
+      windowHours = Math.round((diffMs / (1000 * 3600)) * 10) / 10;
+    }
+  }
+
+  return {
+    velocity_status: 'computed',
+    sales_velocity: delta,
+    sales_delta: delta,
+    previous_sales: prevSales,
+    current_sales: currentSales,
+    observed_window: prevObservedAt
+      ? {
+          previous_observed_at: prevObservedAt,
+          current_observed_at: currentObservedAt,
+          window_hours: windowHours,
+        }
+      : null,
+  };
+}
+
+/**
+ * Busca snapshots anteriores de produtos em trend_radar_products para o mesmo tenant.
+ */
+async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
+  const map = new Map();
+  if (!client) return map;
+
+  try {
+    let runQuery = client
+      .from('trend_radar_runs')
+      .select('id, radar_date, created_at')
+      .eq('status', 'completed')
+      .order('created_at', { ascending: false })
+      .limit(3);
+
+    if (tenantId) {
+      runQuery = runQuery.eq('user_id', tenantId);
+    }
+
+    const { data: runs, error: runsErr } = await runQuery;
+    if (runsErr || !Array.isArray(runs) || runs.length === 0) return map;
+
+    const runIds = runs.map((r) => r.id);
+
+    const { data: products, error: prodErr } = await client
+      .from('trend_radar_products')
+      .select('id, radar_run_id, direct_evidence, created_at')
+      .in('radar_run_id', runIds)
+      .order('created_at', { ascending: false });
+
+    if (prodErr || !Array.isArray(products)) return map;
+
+    for (const prod of products) {
+      const evidences = Array.isArray(prod.direct_evidence) ? prod.direct_evidence : [];
+      for (const ev of evidences) {
+        const itemId = ev?.marketplace_identity?.itemId || ev?.itemId;
+        if (itemId && !map.has(itemId)) {
+          const sales = ev?.commercial_metrics?.sales ?? ev?.sold_quantity ?? 0;
+          const observedAt = ev?.observed_at || prod.created_at;
+          map.set(itemId, { itemId, sales, observedAt });
+        }
+      }
+    }
+  } catch (err) {
+    // Falha silenciosa: retorna mapa vazio e ativa fallback de insufficient_history
+  }
+
+  return map;
+}
+
+/**
+ * Constrói produtos do Radar com ordenação temporária da Task 2B.
+ */
 function buildTrendRadarProductsFromCandidates({
   radarRunId,
   shopeeCandidates = [],
   mlCandidates = [],
+  previousItemsMap = new Map(),
   maxProducts = 20,
   now = new Date(),
 }) {
   const combined = [];
   const seenIdentities = new Set();
 
-  // Intercalar candidatos Shopee e Mercado Livre (Marketplace-First)
-  const maxLen = Math.max(shopeeCandidates.length, mlCandidates.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (shopeeCandidates[i]) combined.push(shopeeCandidates[i]);
-    if (mlCandidates[i]) combined.push(mlCandidates[i]);
-  }
+  const allCandidates = [...shopeeCandidates, ...mlCandidates];
+
+  const enrichedCandidates = allCandidates.map((candidate) => {
+    const velocity = computeCandidateSalesVelocity(candidate, previousItemsMap);
+    return {
+      ...candidate,
+      velocityInfo: velocity,
+    };
+  });
+
+  enrichedCandidates.sort((a, b) => {
+    const aVelocity = a.velocityInfo.velocity_status === 'computed' ? (a.velocityInfo.sales_velocity || 0) : null;
+    const bVelocity = b.velocityInfo.velocity_status === 'computed' ? (b.velocityInfo.sales_velocity || 0) : null;
+
+    if (aVelocity !== null && bVelocity !== null) {
+      if (aVelocity !== bVelocity) return bVelocity - aVelocity;
+    }
+    if (aVelocity !== null && aVelocity > 0 && (bVelocity === null || bVelocity <= 0)) return -1;
+    if (bVelocity !== null && bVelocity > 0 && (aVelocity === null || aVelocity <= 0)) return 1;
+
+    const aSales = a.sales || 0;
+    const bSales = b.sales || 0;
+    if (aSales !== bSales) return bSales - aSales;
+
+    const aRating = a.ratingStar || a.rating || 0;
+    const bRating = b.ratingStar || b.rating || 0;
+    if (aRating !== bRating) return bRating - aRating;
+
+    const aDiscount = a.discountPercent || 0;
+    const bDiscount = b.discountPercent || 0;
+    return bDiscount - aDiscount;
+  });
 
   const prioritizedProducts = [];
 
-  for (const candidate of combined) {
+  for (const candidate of enrichedCandidates) {
     if (prioritizedProducts.length >= maxProducts) break;
 
     const normalizedTerm = normalizeText(candidate.productName);
@@ -243,38 +437,63 @@ function buildTrendRadarProductsFromCandidates({
     const priority = prioritizedProducts.length + 1;
     const isFocus = priority <= 3;
     const sales = candidate.sales || 0;
-    const rating = candidate.rating || 4.5;
+    const rating = candidate.ratingStar || candidate.rating || 4.5;
     const discount = candidate.discountPercent || 0;
+    const price = candidate.currentPrice || 0;
+    const oldPrice = candidate.oldPrice || null;
 
-    // Indicador provisório para Task 2 (Task 3 construirá o score definitivo)
+    const velocityInfo = candidate.velocityInfo;
+    const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
+
     const provisionalScore = Math.min(
       99,
-      Math.max(40, Math.round(50 + (sales > 100 ? 20 : sales > 10 ? 10 : 0) + (discount > 15 ? 15 : 5) + (rating >= 4.7 ? 10 : 0)))
+      Math.max(
+        40,
+        Math.round(
+          50 +
+            (hasVelocity && velocityInfo.sales_velocity > 0 ? 25 : 0) +
+            (sales > 100 ? 15 : sales > 10 ? 5 : 0) +
+            (discount > 15 ? 10 : 5) +
+            (rating >= 4.7 ? 10 : 0)
+        )
+      )
     );
 
     const directEvidence = [
       {
-        claim: `Produto comercial em alta no ${candidate.marketplace}`,
-        evidence_type: 'marketplace_listing',
+        claim: `Produto comercial identificado em ${candidate.marketplace}`,
+        evidence_type: 'marketplace_snapshot',
+        provenance: candidate.provenance || (candidate.marketplace === 'Shopee' ? 'shopee_openapi_productOfferV2' : 'mercadolivre_official_intent'),
         source_url: candidate.permalink || null,
         observed_at: candidate.observedAt || now.toISOString(),
         rank_position: priority,
         best_seller_flag: sales >= 50,
-        trending_flag: true,
+        trending_flag: hasVelocity && velocityInfo.sales_velocity > 0,
         sold_quantity: sales,
-        price: candidate.currentPrice || null,
-        old_price: candidate.oldPrice || null,
+        price: price || null,
+        old_price: oldPrice || null,
         discount_percent: discount || null,
         rating: rating || null,
         marketplace_identity: {
           itemId: candidate.itemId || null,
           shopId: candidate.shopId || null,
           productId: candidate.productId || null,
+          shopType: candidate.shopType || null,
         },
+        commercial_metrics: {
+          sales,
+          ratingStar: rating,
+          price,
+          priceDiscountRate: candidate.priceDiscountRate || discount,
+          commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
+          sellerCommissionRate: candidate.sellerCommissionRate || 0,
+        },
+        temporal_metrics: velocityInfo,
       },
     ];
 
     const inferredSignals = [
+      hasVelocity && velocityInfo.sales_velocity > 0 ? 'real_sales_acceleration' : 'baseline_catalog_snapshot',
       sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
     ];
@@ -289,10 +508,14 @@ function buildTrendRadarProductsFromCandidates({
       evidence_status: sales > 0 || rating > 0 ? 'verified' : 'partial',
       source_count: 1,
       commercial_score: provisionalScore,
-      confidence: Math.min(95, Math.max(60, Math.round(60 + (sales > 50 ? 20 : 10) + (rating >= 4.5 ? 15 : 5)))),
+      confidence: Math.min(
+        95,
+        Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales > 50 ? 10 : 5) + (rating >= 4.5 ? 10 : 5)))
+      ),
       direct_evidence: directEvidence,
       inferred_signals: inferredSignals,
-      affiliate_potential: sales >= 100 || (candidate.commissionPercent && candidate.commissionPercent > 5) ? 'high' : 'medium',
+      affiliate_potential:
+        sales >= 100 || (candidate.commissionPercent && candidate.commissionPercent > 5) ? 'high' : 'medium',
       visual_content_potential: isFocus ? 'high' : 'medium',
       recommended_channel: null,
       recommended_format: null,
@@ -314,37 +537,21 @@ async function persistTrendRadarSnapshot({
   dryRun = false,
 }) {
   if (dryRun) {
-    return {
-      runId: run.id,
-      productsCount: products.length,
-      shopeeCount,
-      mlCount,
-      persisted: false,
-    };
+    return { runId: run.id, productsCount: products.length, shopeeCount, mlCount, persisted: false };
   }
 
-  // 1. Limpar produtos anteriores deste run (se houver)
   const { error: deleteError } = await client
     .from('trend_radar_products')
     .delete()
     .eq('radar_run_id', run.id);
 
-  if (deleteError) {
-    throw new Error(`Falha ao limpar produtos antigos do Radar: ${deleteError.message}`);
-  }
+  if (deleteError) throw new Error(`Falha ao limpar produtos: ${deleteError.message}`);
 
-  // 2. Inserir novos produtos
   if (products.length > 0) {
-    const { error: insertError } = await client
-      .from('trend_radar_products')
-      .insert(products);
-
-    if (insertError) {
-      throw new Error(`Falha ao persistir produtos do Radar: ${insertError.message}`);
-    }
+    const { error: insertError } = await client.from('trend_radar_products').insert(products);
+    if (insertError) throw new Error(`Falha ao inserir produtos: ${insertError.message}`);
   }
 
-  // 3. Atualizar status do run para completed
   const updatedHealth = {
     ...(run.source_health || {}),
     runtime: 'oracle',
@@ -361,7 +568,7 @@ async function persistTrendRadarSnapshot({
     products_count: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
     top_product: products[0]?.product_term || null,
-    generated_by: 'oracle_marketplace_first_engine',
+    generated_by: 'oracle_marketplace_first_engine_v2b',
     contract: RUNNER_CONTRACT_VERSION,
   };
 
@@ -376,17 +583,9 @@ async function persistTrendRadarSnapshot({
     })
     .eq('id', run.id);
 
-  if (updateError) {
-    throw new Error(`Falha ao concluir status do trend_radar_run: ${updateError.message}`);
-  }
+  if (updateError) throw new Error(`Falha ao concluir run: ${updateError.message}`);
 
-  return {
-    runId: run.id,
-    productsCount: products.length,
-    shopeeCount,
-    mlCount,
-    persisted: true,
-  };
+  return { runId: run.id, productsCount: products.length, shopeeCount, mlCount, persisted: true };
 }
 
 async function processPendingTrendRadarRuns({
@@ -401,42 +600,45 @@ async function processPendingTrendRadarRuns({
   const pendingRun = await findPendingTrendRadarRun(supabase);
 
   if (!pendingRun) {
-    if (stageLogger) stageLogger.log('radar.check', { status: 'idle', message: 'Nenhuma solicitação pendente do Radar.' });
-    return {
-      processed: false,
-      reason: 'no_pending_requests',
-      googleTrendsUsed: false,
-      publishCalls: 0,
-    };
+    return { processed: false, reason: 'no_pending_requests', googleTrendsUsed: false, publishCalls: 0 };
   }
 
-  console.log(`[Oracle Trends Radar] Processando solicitação runId=${pendingRun.id} data=${pendingRun.radar_date}`);
+  const runId = pendingRun.id;
+  const radarDate = pendingRun.radar_date;
 
-  // Marcar como running se não for dry-run
+  if (stageLogger) stageLogger('trends_radar_identified', { runId, radarDate });
+  console.log(`[Oracle Trends Radar] Processando solicitação runId=${runId} data=${radarDate}`);
+
   if (!dryRun) {
-    await markTrendRadarRunRunning(supabase, pendingRun.id, pendingRun.source_health);
+    await markTrendRadarRunRunning(supabase, runId, pendingRun.source_health || {});
   }
 
-  // 1. Coleta Shopee (Marketplace-First)
-  const shopeeCandidates = await shopeeCollector({ env });
-  console.log(`[Oracle Trends Radar] Shopee: ${shopeeCandidates.length} candidatos comerciais coletados`);
+  const previousItemsMap = await fetchRecentSnapshotItemsMap(supabase, pendingRun.user_id);
 
-  // 2. Coleta Mercado Livre (Marketplace-First)
-  const mlCandidates = await mlCollector({ env });
-  console.log(`[Oracle Trends Radar] Mercado Livre: ${mlCandidates.length} candidatos comerciais coletados`);
+  let shopeeCandidates = [];
+  try {
+    shopeeCandidates = await shopeeCollector({ env });
+    console.log(`[Oracle Trends Radar] Shopee: ${shopeeCandidates.length} candidatos coletados`);
+  } catch (err) {
+    console.error(`[Oracle Trends Radar] Erro Shopee: ${err.message}`);
+  }
 
-  // 3. Google Trends NÃO participa do fluxo principal
-  const googleTrendsUsed = false;
+  let mlCandidates = [];
+  try {
+    mlCandidates = await mlCollector({ env });
+    console.log(`[Oracle Trends Radar] Mercado Livre: ${mlCandidates.length} candidatos coletados`);
+  } catch (err) {
+    console.error(`[Oracle Trends Radar] Erro ML: ${err.message}`);
+  }
 
-  // 4. Montar snapshot de produtos
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: pendingRun.id,
+    radarRunId: runId,
     shopeeCandidates,
     mlCandidates,
+    previousItemsMap,
     maxProducts: 20,
   });
 
-  // 5. Persistir no Supabase
   const result = await persistTrendRadarSnapshot({
     client: supabase,
     run: pendingRun,
@@ -446,29 +648,34 @@ async function processPendingTrendRadarRuns({
     dryRun,
   });
 
-  console.log(`[Oracle Trends Radar] Concluído runId=${pendingRun.id} produtos=${products.length} persisted=${result.persisted}`);
+  console.log(`[Oracle Trends Radar] Concluído runId=${runId} produtos=${products.length} persisted=${result.persisted}`);
 
   return {
     processed: true,
-    runId: pendingRun.id,
+    runId,
+    radarDate,
     productsCount: products.length,
-    shopeeCount: shopeeCandidates.length,
-    mlCount: mlCandidates.length,
-    googleTrendsUsed,
+    shopeeCandidatesCount: shopeeCandidates.length,
+    mlCandidatesCount: mlCandidates.length,
+    persisted: result.persisted,
+    googleTrendsUsed: false,
     publishCalls: 0,
     postsWrites: 0,
     offersWrites: 0,
-    persisted: result.persisted,
   };
 }
 
 module.exports = {
   RUNNER_CONTRACT_VERSION,
+  SHOPEE_BROAD_DISCOVERY_CATEGORIES,
   normalizeText,
+  parseNumber,
   findPendingTrendRadarRun,
   markTrendRadarRunRunning,
   collectShopeeMarketplaceCandidates,
   collectMercadoLivreMarketplaceCandidates,
+  computeCandidateSalesVelocity,
+  fetchRecentSnapshotItemsMap,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,
   processPendingTrendRadarRuns,
