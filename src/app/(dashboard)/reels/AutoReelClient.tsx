@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Film } from "lucide-react";
 
 import { autoReelStatusLabel, isAutoReelTerminal, type AutoReelStatus } from "@/lib/videos/auto-reel";
@@ -24,10 +24,10 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
   const activeOperation = useRef<string | null>(null);
   const selectedOffer = offers.find((offer) => offer.id === offerId) ?? null;
 
-  function applyJob(nextJob: Job) {
+  const applyJob = useCallback((nextJob: Job) => {
     setJob(nextJob);
     setJobs((current) => [nextJob, ...current.filter((item) => item.id !== nextJob.id)]);
-  }
+  }, []);
 
   useEffect(() => {
     if (!job || isAutoReelTerminal(job.status)) return;
@@ -58,7 +58,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       }
     }, pollingMs);
     return () => window.clearInterval(timer);
-  }, [job, pollingMs]);
+  }, [applyJob, job, pollingMs]);
 
   async function generate() {
     if (!offerId || busy) return;
