@@ -17,11 +17,32 @@ function extractVideoAndTitle() {
   if (sharedCandidate) videoUrl = sharedCandidate.videoUrl;
 
   const titleCandidates = [document.title];
-  document.querySelectorAll('div[class*="product-briefing"] span, meta[property="og:title"]').forEach((element) => {
-    titleCandidates.push(element.content || element.innerText || '');
+  const titleNodes = [];
+  document.querySelectorAll('div[class*="product-briefing"] span, meta[property="og:title"], h1').forEach((element) => {
+    const value = element.content || element.innerText || '';
+    titleCandidates.push(value);
+    if (element.nodeType === Node.ELEMENT_NODE && element.tagName !== 'META' && value) titleNodes.push(element);
   });
   const selectedTitle = globalThis.shopeeProductParser?.selectProductTitle(titleCandidates);
   if (selectedTitle) title = selectedTitle.replace(/[\\/:*?"<>|]/g, '').trim();
+
+  function findProductScope() {
+    const normalizedTitle = title.replace(/\s+/gu, ' ').trim().toLowerCase();
+    const titlePrefix = normalizedTitle.slice(0, 48);
+    const matchingNode = titleNodes.find((node) => {
+      const text = String(node.innerText || '').replace(/\s+/gu, ' ').trim().toLowerCase();
+      return titlePrefix && (text.includes(titlePrefix) || titlePrefix.includes(text.slice(0, 32)));
+    }) || document.querySelector('h1');
+
+    let scope = matchingNode?.parentElement || null;
+    for (let depth = 0; scope && depth < 7; depth += 1, scope = scope.parentElement) {
+      const text = String(scope.innerText || '');
+      if (text.includes('R$') && text.length <= 9000) return scope;
+    }
+    return document.querySelector('main');
+  }
+
+  const productScope = findProductScope();
 
   if (title.length > 80) title = title.substring(0, 80).trim();
 
@@ -79,12 +100,25 @@ function extractVideoAndTitle() {
   try {
     const candidates = Array.from(document.querySelectorAll('div, span'))
       .filter((el) => el.innerText && el.innerText.includes('R$') && el.innerText.length < 120)
-      .map((el) => ({
-        text: el.innerText,
-        className: typeof el.className === 'string' ? el.className : '',
-        id: el.id || '',
-        ariaLabel: el.getAttribute?.('aria-label') || '',
-      }));
+      .map((el) => {
+        const style = window.getComputedStyle(el);
+        const rect = el.getBoundingClientRect();
+        const opacity = Number(style.opacity);
+        return {
+          text: el.innerText,
+          className: typeof el.className === 'string' ? el.className : '',
+          id: el.id || '',
+          ariaLabel: el.getAttribute?.('aria-label') || '',
+          visible: style.display !== 'none'
+            && style.visibility !== 'hidden'
+            && (!Number.isFinite(opacity) || opacity > 0)
+            && rect.width > 0
+            && rect.height > 0,
+          fontSize: Number.parseFloat(style.fontSize) || 0,
+          textDecoration: style.textDecorationLine || style.textDecoration || '',
+          productScope: Boolean(productScope && productScope.contains(el)),
+        };
+      });
     const selected = globalThis.shopeePriceParser?.selectPrimaryPrice(candidates);
     if (selected) {
       price = selected.raw;
