@@ -62,7 +62,12 @@ export async function POST(request: Request) {
 
   let image: Blob;
   try {
-    const imageResponse = await fetch(factualSnapshot.imageUrl);
+    const imageResponse = await fetch(factualSnapshot.imageUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Accept": "image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+      }
+    });
     if (!imageResponse.ok) throw new Error(`Imagem factual HTTP ${imageResponse.status}.`);
     const bytes = await imageResponse.arrayBuffer();
     if (!bytes.byteLength) throw new Error("Imagem factual vazia.");
