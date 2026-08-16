@@ -43,12 +43,36 @@ function demandScore(candidate, velocityInfo) {
   return 0;
 }
 
+function demandReason(candidate, velocityInfo) {
+  const velocity = velocityInfo?.velocity_status === 'computed' ? finite(velocityInfo.sales_velocity) : null;
+  const sales = Math.max(0, finite(candidate?.sales) || 0);
+
+  if (velocity !== null && velocity > 0) {
+    return `Alta aceleração de vendas (velocity +${velocity})`;
+  }
+  if (sales >= 1000) {
+    return `Volume de vendas consolidado (${sales} vendas)`;
+  }
+  if (sales >= 100) {
+    return `Volume de vendas moderado (${sales} vendas)`;
+  }
+  return 'Histórico de vendas inicial ou insuficiente';
+}
+
 function identityScore(candidate) {
   let score = 0;
   if (String(candidate?.itemId || '').trim()) score += 12;
   if (String(candidate?.permalink || '').trim()) score += 5;
   if (String(candidate?.shopId || candidate?.productId || '').trim()) score += 3;
   return clamp(score, 0, WEIGHTS.identityQuality);
+}
+
+function identityReason(candidate) {
+  const hasItem = Boolean(String(candidate?.itemId || '').trim());
+  const hasLink = Boolean(String(candidate?.permalink || '').trim());
+  if (hasItem && hasLink) return 'Identidade de produto e link de marketplace verificados';
+  if (hasItem) return 'Identidade de item de marketplace verificada';
+  return 'Identidade de marketplace pendente ou parcial';
 }
 
 function priceScore(candidate) {
@@ -60,6 +84,13 @@ function priceScore(candidate) {
   if (discount >= 15) return 9;
   if (discount >= 5) return 5;
   return 2;
+}
+
+function priceReason(candidate) {
+  const discount = Math.max(0, finite(candidate?.discountPercent ?? candidate?.priceDiscountRate) || 0);
+  if (discount >= 25) return `Desconto competitivo de ${Math.round(discount)}%`;
+  if (discount > 0) return `Desconto promocional de ${Math.round(discount)}%`;
+  return 'Preço comercial regular sem desconto ativo';
 }
 
 function commissionScore(candidate) {
@@ -75,6 +106,15 @@ function commissionScore(candidate) {
   return 0;
 }
 
+function commissionReason(candidate) {
+  const base = Math.max(0, finite(candidate?.commissionRate ?? candidate?.commissionPercent) || 0);
+  const seller = Math.max(0, finite(candidate?.sellerCommissionRate) || 0);
+  const total = base + seller;
+  if (total >= 7) return `Comissão de afiliado expressiva (${total.toFixed(1)}%)`;
+  if (total > 0) return `Comissão de afiliado ativa (${total.toFixed(1)}%)`;
+  return 'Sem comissão de afiliado registrada';
+}
+
 function visualScore(candidate) {
   let score = 0;
   if (String(candidate?.imageUrl || '').trim()) score += 6;
@@ -83,9 +123,19 @@ function visualScore(candidate) {
   return clamp(score, 0, WEIGHTS.visualPotential);
 }
 
+function visualReason(candidate) {
+  if (String(candidate?.imageUrl || '').trim()) return 'Catálogo com imagem disponível para conversão';
+  return 'Imagem de catálogo ausente';
+}
+
 function historyScore(internalPerformance) {
   if (!internalPerformance || internalPerformance.verified !== true) return 0;
   return clamp(internalPerformance.score, 0, WEIGHTS.internalHistory);
+}
+
+function historyReason(internalPerformance) {
+  if (internalPerformance?.verified === true) return `Histórico interno verificado (${internalPerformance.score}/10)`;
+  return 'Sem histórico interno validado';
 }
 
 function reputationScore(candidate) {
@@ -98,6 +148,12 @@ function reputationScore(candidate) {
   return 0;
 }
 
+function reputationReason(candidate) {
+  const rating = finite(candidate?.ratingStar ?? candidate?.rating);
+  if (rating !== null && rating >= 4.5) return `Avaliação positiva do anunciante (${rating.toFixed(1)}★)`;
+  return 'Avaliação comercial padrão';
+}
+
 function classifyCommercialDecision(total) {
   if (total >= 80) return 'PRIORIDADE';
   if (total >= 60) return 'TESTAR';
@@ -105,13 +161,16 @@ function classifyCommercialDecision(total) {
 }
 
 function calculateCommercialOpportunityScoreV3(candidate, options = {}) {
+  const velocityInfo = options.velocityInfo || candidate?.velocityInfo;
+  const internalPerformance = options.internalPerformance || candidate?.internalPerformance;
+
   const breakdown = {
-    marketplaceDemand: demandScore(candidate, options.velocityInfo),
+    marketplaceDemand: demandScore(candidate, velocityInfo),
     identityQuality: identityScore(candidate),
     priceCompetitiveness: priceScore(candidate),
     commissionPotential: commissionScore(candidate),
     visualPotential: visualScore(candidate),
-    internalHistory: historyScore(options.internalPerformance),
+    internalHistory: historyScore(internalPerformance),
     reputation: reputationScore(candidate),
   };
 
@@ -121,11 +180,24 @@ function calculateCommercialOpportunityScoreV3(candidate, options = {}) {
     100,
   );
 
+  const determining_reasons = [
+    demandReason(candidate, velocityInfo),
+    identityReason(candidate),
+    priceReason(candidate),
+    commissionReason(candidate),
+    visualReason(candidate),
+    historyReason(internalPerformance),
+    reputationReason(candidate),
+  ].filter(Boolean);
+
   return {
     strategyVersion: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
     total,
+    commercial_score: total,
     decision: classifyCommercialDecision(total),
     breakdown,
+    score_breakdown: breakdown,
+    determining_reasons,
   };
 }
 

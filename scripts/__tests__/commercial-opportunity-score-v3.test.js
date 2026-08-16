@@ -4,9 +4,22 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+  WEIGHTS,
   calculateCommercialOpportunityScoreV3,
   classifyCommercialDecision,
 } = require('../../src/core/trends/commercial-opportunity-score-v3.cjs');
+
+test('weights sum to 100', () => {
+  const sum = Object.values(WEIGHTS).reduce((acc, val) => acc + val, 0);
+  assert.equal(sum, 100);
+  assert.equal(WEIGHTS.marketplaceDemand, 25);
+  assert.equal(WEIGHTS.identityQuality, 20);
+  assert.equal(WEIGHTS.priceCompetitiveness, 15);
+  assert.equal(WEIGHTS.commissionPotential, 15);
+  assert.equal(WEIGHTS.visualPotential, 10);
+  assert.equal(WEIGHTS.internalHistory, 10);
+  assert.equal(WEIGHTS.reputation, 5);
+});
 
 test('score v3 prioritizes real velocity, commission and exact marketplace identity', () => {
   const score = calculateCommercialOpportunityScoreV3({
@@ -80,9 +93,73 @@ test('score v3 gives zero internal history without verified attribution', () => 
   assert.equal(verified.breakdown.internalHistory, 10);
 });
 
+test('score v3 handles missing commission with 0 in commission component', () => {
+  const candidate = {
+    itemId: '123',
+    productName: 'Item sem comissão',
+    permalink: 'https://example.com/item',
+    currentPrice: 100,
+    commissionRate: 0,
+    commissionPercent: 0,
+    sellerCommissionRate: 0,
+  };
+
+  const score = calculateCommercialOpportunityScoreV3(candidate);
+  assert.equal(score.breakdown.commissionPotential, 0);
+});
+
+test('score v3 penalizes weak or missing match identity', () => {
+  const candidate = {
+    itemId: '',
+    productName: '',
+    permalink: '',
+    currentPrice: 50,
+  };
+
+  const score = calculateCommercialOpportunityScoreV3(candidate);
+  assert.equal(score.breakdown.identityQuality, 0);
+  assert.ok(score.total < 60);
+  assert.equal(score.decision, 'IGNORAR');
+});
+
+test('score v3 always clamps total between 0 and 100 and breakdown sum equals total', () => {
+  const candidate = {
+    itemId: 'perfect',
+    shopId: 'shop',
+    productName: 'Produto Top Perfeito Completo',
+    permalink: 'https://shopee.com.br/product/1/1',
+    imageUrl: 'https://cf.shopee.com.br/item.jpg',
+    sales: 50000,
+    currentPrice: 199.9,
+    discountPercent: 50,
+    commissionRate: 15,
+    sellerCommissionRate: 5,
+    ratingStar: 5.0,
+  };
+
+  const score = calculateCommercialOpportunityScoreV3(candidate, {
+    velocityInfo: {
+      velocity_status: 'computed',
+      sales_velocity: 1000,
+    },
+    internalPerformance: {
+      verified: true,
+      score: 10,
+    },
+  });
+
+  assert.equal(score.total, 100);
+  assert.equal(score.decision, 'PRIORIDADE');
+
+  const sumBreakdown = Object.values(score.breakdown).reduce((a, b) => a + b, 0);
+  assert.equal(sumBreakdown, score.total);
+});
+
 test('decision thresholds are deterministic', () => {
+  assert.equal(classifyCommercialDecision(100), 'PRIORIDADE');
   assert.equal(classifyCommercialDecision(80), 'PRIORIDADE');
   assert.equal(classifyCommercialDecision(79), 'TESTAR');
   assert.equal(classifyCommercialDecision(60), 'TESTAR');
   assert.equal(classifyCommercialDecision(59), 'IGNORAR');
+  assert.equal(classifyCommercialDecision(0), 'IGNORAR');
 });

@@ -216,11 +216,30 @@ test('buildTrendRadarProductsFromCandidates ranks by sales_velocity first and ab
   });
 
   assert.equal(products.length, 2);
-  // Priority 1 must be the higher velocity item (delta +200 > +10)
+  // Priority 1 must be the higher scored item
   assert.equal(products[0].product_term, 'Item de Alta Velocidade');
   assert.equal(products[0].priority, 1);
   assert.equal(products[1].product_term, 'Item Alto Volume Estável');
   assert.equal(products[1].priority, 2);
+
+  // Validate Commercial Opportunity Score V3 fields
+  assert.ok(typeof products[0].commercial_score === 'number');
+  assert.ok(products[0].commercial_score >= 0 && products[0].commercial_score <= 100);
+  assert.ok(products[0].score_breakdown);
+  assert.equal(typeof products[0].score_breakdown.marketplaceDemand, 'number');
+  assert.equal(typeof products[0].score_breakdown.identityQuality, 'number');
+  assert.equal(typeof products[0].score_breakdown.priceCompetitiveness, 'number');
+  assert.equal(typeof products[0].score_breakdown.commissionPotential, 'number');
+  assert.equal(typeof products[0].score_breakdown.visualPotential, 'number');
+  assert.equal(typeof products[0].score_breakdown.internalHistory, 'number');
+  assert.equal(typeof products[0].score_breakdown.reputation, 'number');
+
+  // Breakdown sum strictly equals commercial_score
+  const sumBreakdown = Object.values(products[0].score_breakdown).reduce((a, b) => a + b, 0);
+  assert.equal(sumBreakdown, products[0].commercial_score);
+
+  assert.ok(Array.isArray(products[0].determining_reasons));
+  assert.ok(products[0].determining_reasons.length > 0);
 
   // Validate complete snapshot fields inside direct_evidence
   const evidence0 = products[0].direct_evidence[0];
@@ -228,6 +247,8 @@ test('buildTrendRadarProductsFromCandidates ranks by sales_velocity first and ab
   assert.equal(evidence0.temporal_metrics.velocity_status, 'computed');
   assert.equal(evidence0.temporal_metrics.sales_velocity, 200);
   assert.equal(evidence0.temporal_metrics.sales_delta, 200);
+  assert.equal(evidence0.strategy_version, 'commercial-opportunity-v3');
+  assert.ok(['PRIORIDADE', 'TESTAR', 'IGNORAR'].includes(evidence0.decision));
 });
 
 test('collectMercadoLivreMarketplaceCandidates marks insufficient_history when no temporal delta is available', () => {

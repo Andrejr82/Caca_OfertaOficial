@@ -16,11 +16,17 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const path = require('node:path');
 const { createClient } = require('@supabase/supabase-js');
 const { SCENARIO_CONTRACTS, GRAPHQL_CONTRACTS, createSignedRequest } = require('./shopee-openapi-shadow-engine-v1.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
+const {
+  COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+  calculateCommercialOpportunityScoreV3,
+  classifyCommercialDecision,
+} = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
 
-const RUNNER_CONTRACT_VERSION = 'trend-executive.oracle-radar-runner/v2b';
+const RUNNER_CONTRACT_VERSION = 'trend-executive.oracle-radar-runner/v3';
 
 // Categorias oficiais amplas da Shopee para descoberta abrangente sem seeds fixas
 const SHOPEE_BROAD_DISCOVERY_CATEGORIES = Object.freeze([
@@ -388,25 +394,42 @@ function buildTrendRadarProductsFromCandidates({
   maxProducts = 20,
   now = new Date(),
 }) {
-  const combined = [];
   const seenIdentities = new Set();
-
   const allCandidates = [...shopeeCandidates, ...mlCandidates];
 
   const enrichedCandidates = allCandidates.map((candidate) => {
     const velocity = computeCandidateSalesVelocity(candidate, previousItemsMap);
+    const evidenceStatus =
+      candidate.evidenceStatus ||
+      candidate.evidence_status ||
+      (candidate.sales > 0 || candidate.ratingStar > 0 || candidate.rating > 0 ? 'verified' : 'partial');
+
+    // Pré-avaliação do score V3 com dados existentes
+    const scoreV3 = calculateCommercialOpportunityScoreV3({
+      ...candidate,
+      evidenceStatus,
+      velocityInfo: velocity,
+    });
+
     return {
       ...candidate,
+      evidenceStatus,
       velocityInfo: velocity,
+      scoreV3,
     };
   });
 
+  // Ranking único e determinístico pelo Commercial Opportunity Score V3
   enrichedCandidates.sort((a, b) => {
+    if (b.scoreV3.total !== a.scoreV3.total) {
+      return b.scoreV3.total - a.scoreV3.total;
+    }
+
     const aVelocity = a.velocityInfo.velocity_status === 'computed' ? (a.velocityInfo.sales_velocity || 0) : null;
     const bVelocity = b.velocityInfo.velocity_status === 'computed' ? (b.velocityInfo.sales_velocity || 0) : null;
 
-    if (aVelocity !== null && bVelocity !== null) {
-      if (aVelocity !== bVelocity) return bVelocity - aVelocity;
+    if (aVelocity !== null && bVelocity !== null && aVelocity !== bVelocity) {
+      return bVelocity - aVelocity;
     }
     if (aVelocity !== null && aVelocity > 0 && (bVelocity === null || bVelocity <= 0)) return -1;
     if (bVelocity !== null && bVelocity > 0 && (aVelocity === null || aVelocity <= 0)) return 1;
@@ -445,19 +468,13 @@ function buildTrendRadarProductsFromCandidates({
     const velocityInfo = candidate.velocityInfo;
     const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
 
-    const provisionalScore = Math.min(
-      99,
-      Math.max(
-        40,
-        Math.round(
-          50 +
-            (hasVelocity && velocityInfo.sales_velocity > 0 ? 25 : 0) +
-            (sales > 100 ? 15 : sales > 10 ? 5 : 0) +
-            (discount > 15 ? 10 : 5) +
-            (rating >= 4.7 ? 10 : 0)
-        )
-      )
-    );
+    // Avaliação definitiva do Commercial Opportunity Score V3 com foco visual atualizado
+    const finalScoreV3 = calculateCommercialOpportunityScoreV3({
+      ...candidate,
+      isFocus,
+      evidenceStatus: candidate.evidenceStatus,
+      velocityInfo,
+    });
 
     const directEvidence = [
       {
@@ -474,6 +491,8 @@ function buildTrendRadarProductsFromCandidates({
         old_price: oldPrice || null,
         discount_percent: discount || null,
         rating: rating || null,
+        decision: finalScoreV3.decision,
+        strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
         marketplace_identity: {
           itemId: candidate.itemId || null,
           shopId: candidate.shopId || null,
@@ -496,6 +515,7 @@ function buildTrendRadarProductsFromCandidates({
       hasVelocity && velocityInfo.sales_velocity > 0 ? 'real_sales_acceleration' : 'baseline_catalog_snapshot',
       sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
+      `v3_decision_${finalScoreV3.decision.toLowerCase()}`,
     ];
 
     prioritizedProducts.push({
@@ -505,9 +525,11 @@ function buildTrendRadarProductsFromCandidates({
       normalized_product_term: normalizedTerm,
       category: candidate.category || null,
       marketplace: candidate.marketplace,
-      evidence_status: sales > 0 || rating > 0 ? 'verified' : 'partial',
+      evidence_status: candidate.evidenceStatus,
       source_count: 1,
-      commercial_score: provisionalScore,
+      commercial_score: finalScoreV3.total,
+      score_breakdown: finalScoreV3.breakdown,
+      determining_reasons: finalScoreV3.determining_reasons,
       confidence: Math.min(
         95,
         Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales > 50 ? 10 : 5) + (rating >= 4.5 ? 10 : 5)))
@@ -558,6 +580,7 @@ async function persistTrendRadarSnapshot({
     status: 'completed',
     completed_at: new Date().toISOString(),
     google_trends_used: false,
+    strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
     marketplaces: ['Shopee', 'Mercado Livre'],
     shopee_candidates_found: shopeeCount,
     mercado_livre_candidates_found: mlCount,
@@ -568,7 +591,10 @@ async function persistTrendRadarSnapshot({
     products_count: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
     top_product: products[0]?.product_term || null,
-    generated_by: 'oracle_marketplace_first_engine_v2b',
+    top_product_score: products[0]?.commercial_score || null,
+    top_product_decision: products[0]?.direct_evidence?.[0]?.decision || null,
+    strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+    generated_by: 'oracle_marketplace_first_engine_v3',
     contract: RUNNER_CONTRACT_VERSION,
   };
 

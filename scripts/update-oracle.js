@@ -81,6 +81,7 @@ const DEPLOY_FILES = [
   'src/lib/shopee/ranking/commercial-filters.ts',
   'src/lib/shopee/ranking/score.ts',
   'src/lib/shopee/ranking/oracle-adapter.ts',
+  'src/core/trends/commercial-opportunity-score-v3.cjs',
 ];
 const DEPLOY_DIRS = [...new Set(DEPLOY_FILES.map((relativeFile) => relativeFile.split('/').slice(0, -1).join('/')).filter(Boolean))];
 
