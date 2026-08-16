@@ -4,7 +4,6 @@ import { z } from "zod";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import {
-  AUTO_REEL_PIPELINE_STATES,
   AUTO_REEL_SOURCE,
   AUTO_REEL_STYLE,
   buildFactualSnapshotFromOffer,
@@ -52,42 +51,23 @@ export async function POST(request: Request) {
   const admin = createSupabaseAdminClient();
   if (!admin) return NextResponse.json({ error: "Persistência de vídeo indisponível." }, { status: 503 });
 
-  const { data: existingJob, error: existingError } = await admin
-    .from("video_jobs")
-    .select(jobSelect)
-    .eq("user_id", user.id)
-    .eq("offer_id", parsed.data.offerId)
-    .eq("template_id", "auto-reel-v1")
-    .in("stage", [...AUTO_REEL_PIPELINE_STATES])
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (existingError) return NextResponse.json({ error: "Não foi possível verificar geração existente." }, { status: 502 });
-  if (existingJob) return NextResponse.json({ job: existingJob }, { status: 200 });
-
   const metadata = {
     source: AUTO_REEL_SOURCE,
     style: AUTO_REEL_STYLE,
     attempt: 1,
     factualSnapshot,
   };
-  const { data: job, error: insertError } = await admin
-    .from("video_jobs")
-    .insert({
-      user_id: user.id,
-      offer_id: parsed.data.offerId,
-      status: "processing",
-      stage: "planning",
-      script: "Reel demonstrativo aguardando pipeline visual.",
-      video_url: null,
-      template_id: "auto-reel-v1",
-      metadata,
+  const { data: job, error: createError } = await admin
+    .rpc("create_or_reuse_auto_reel_job", {
+      _user_id: user.id,
+      _offer_id: parsed.data.offerId,
+      _script: "Reel demonstrativo aguardando pipeline visual.",
+      _metadata: metadata,
     })
-    .select(jobSelect)
     .single();
 
-  if (insertError || !job) return NextResponse.json({ error: insertError?.message ?? "Não foi possível criar o Reel." }, { status: 500 });
-  return NextResponse.json({ job }, { status: 201 });
+  if (createError || !job) return NextResponse.json({ error: createError?.message ?? "Não foi possível criar o Reel." }, { status: 500 });
+  return NextResponse.json({ job }, { status: job.created_at ? 201 : 200 });
 }
 
 export async function GET(request: Request) {
