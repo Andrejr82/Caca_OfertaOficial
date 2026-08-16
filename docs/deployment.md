@@ -1,8 +1,8 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 ## Pré-deploy
 
@@ -32,6 +32,7 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 - Validar overlay allowlisted e flags fail-closed antes de reiniciar PM2.
 - Processos esperados incluem worker/scraper, API técnica e WhatsApp quando habilitado.
 - Confirmar scheduler único, `noOverlap`, reachability, logs e SHA do checkout.
+- O runtime dedicado do Radar está preparado no repositório, mas não deve ser iniciado até a task operacional correspondente. A ativação deve configurar `TRENDS_RADAR_DEDICATED_RUNTIME=true` no `oracle-scraper` e no novo processo de Radar na mesma janela, validar consumo exclusivo e manter rollback por flag.
 
 ## Liberação gradual
 
@@ -45,6 +46,8 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 ## Rollback
 
 Reverter o artefato/commit e as flags primeiro. Migrations destrutivas exigem plano próprio; não presumir rollback automático do banco. Preservar logs, correlation IDs e recibos para investigação.
+
+Para o Radar dedicado, o rollback operacional é parar o processo dedicado e remover/desabilitar `TRENDS_RADAR_DEDICATED_RUNTIME`; isso restaura o consumo pelo `oracle-scraper` sem alterar schema ou snapshots existentes.
 
 ## Trend Executive
 

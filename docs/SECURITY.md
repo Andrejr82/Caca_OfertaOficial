@@ -1,8 +1,8 @@
 # Segurança
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 ## Fronteiras de confiança
 
@@ -42,3 +42,10 @@ Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afeta
 - `TREND_EXECUTIVE_MODE=active` permanece inacessível no runtime atual.
 - Shadow não publica, não altera autoridade e não aplica pesos automaticamente.
 - Feedback de experimentos e sinais internos só usam venda/conversão quando a atribuição é explicitamente confiável.
+
+## Segurança do runtime dedicado do Radar
+
+- `TRENDS_RADAR_DEDICATED_RUNTIME` é fail-closed e permanece `false` por padrão.
+- O processo dedicado reutiliza o engine existente e não possui caminho de publicação, criação de posts ou ofertas durante a geração do snapshot.
+- Um lock de processo no host Oracle serializa execuções do worker dedicado; ele não deve ser usado como garantia distribuída entre múltiplos hosts.
+- A ativação deve manter apenas uma autoridade de consumo: com a flag habilitada, o consumidor legado do `oracle-scraper` se abstém e o worker dedicado assume o Radar.

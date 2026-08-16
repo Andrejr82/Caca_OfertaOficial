@@ -1,8 +1,8 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 ## Princípios
 
@@ -41,3 +41,7 @@ Depois do deploy, valide `/api/health`, `/api/readiness`, logs Oracle/PM2 e um s
 ## Trend Executive
 
 `TREND_EXECUTIVE_MODE` aceita o contrato `off | shadow | active`, porém o runtime e o overlay versionado permanecem fail-closed: `off` é o padrão e `active` está bloqueado até implementação/autorização futura. `shadow` nunca substitui a autoridade do cenário legado. Não altere esta flag em produção sem cumprir o readiness gate e o plano de rollback documentado.
+
+### Runtime dedicado do Radar
+
+`TRENDS_RADAR_DEDICATED_RUNTIME=false` é o padrão seguro. Com a flag desligada ou ausente, o `oracle-scraper` continua consumindo solicitações do Radar como no runtime atual. A flag só deve ser habilitada na Oracle junto com o processo dedicado `scripts/oracle-trends-radar-worker.cjs`, na mesma janela operacional, para que o consumidor legado se abstenha e exista uma única autoridade de execução. A ativação produtiva exige validação específica da Oracle antes de remover o acoplamento legado.
