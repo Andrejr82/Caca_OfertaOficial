@@ -9,7 +9,7 @@ const {
 } = require('./oracle-trends-radar-runner.cjs');
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
-const DEFAULT_LOCK_STALE_MS = 10 * 60_000;
+const DEFAULT_LOCK_STALE_MS = 30 * 60_000;
 const DEFAULT_LOCK_PATH = path.join(os.tmpdir(), 'caca-oferta-trends-radar.lock');
 
 function tryAcquireProcessLock({
