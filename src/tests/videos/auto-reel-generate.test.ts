@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { createServerSupabaseClient, createSupabaseAdminClient, getUser, serverFrom, adminFrom } = vi.hoisted(() => ({
+const { createServerSupabaseClient, createSupabaseAdminClient, getUser, serverFrom, adminRpc } = vi.hoisted(() => ({
   createServerSupabaseClient: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
   getUser: vi.fn(),
   serverFrom: vi.fn(),
-  adminFrom: vi.fn(),
+  adminRpc: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({ createServerSupabaseClient }));
@@ -24,13 +24,22 @@ const offer = {
   image_url: "https://cdn.example.com/tenis.jpg",
 };
 
+const createdJob = {
+  id: "job-1",
+  user_id: user.id,
+  offer_id: offer.id,
+  status: "processing",
+  stage: "planning",
+  video_url: null,
+  template_id: "auto-reel-v1",
+  metadata: {},
+  created_at: "2026-08-16T09:00:00Z",
+};
+
 function chain(result: unknown) {
   const builder: Record<string, ReturnType<typeof vi.fn>> = {};
-  for (const method of ["select", "eq", "in", "order", "limit", "insert"]) {
-    builder[method] = vi.fn(() => builder);
-  }
+  for (const method of ["select", "eq"]) builder[method] = vi.fn(() => builder);
   builder.maybeSingle = vi.fn().mockResolvedValue(result);
-  builder.single = vi.fn().mockResolvedValue(result);
   return builder;
 }
 
@@ -45,13 +54,11 @@ function request(body: unknown) {
 describe("POST /api/reels/generate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    adminFrom.mockReset();
     getUser.mockResolvedValue({ data: { user } });
     createServerSupabaseClient.mockResolvedValue({ auth: { getUser }, from: serverFrom });
-    createSupabaseAdminClient.mockReturnValue({ from: adminFrom });
+    createSupabaseAdminClient.mockReturnValue({ rpc: adminRpc });
     serverFrom.mockReturnValue(chain({ data: offer, error: null }));
-    adminFrom.mockImplementationOnce(() => chain({ data: null, error: null }));
-    adminFrom.mockImplementationOnce(() => chain({ data: { id: "job-1" }, error: null }));
+    adminRpc.mockResolvedValue({ data: { job: createdJob, created: true }, error: null });
   });
 
   it("exige autenticação", async () => {
@@ -61,13 +68,13 @@ describe("POST /api/reels/generate", () => {
     expect(serverFrom).not.toHaveBeenCalled();
   });
 
-  it("cria Auto Reel para oferta válida", async () => {
+  it("cria Auto Reel para oferta válida via operação atômica", async () => {
     const response = await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
     expect(response.status).toBe(201);
-    expect(adminFrom).toHaveBeenCalledWith("video_jobs");
-    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({
-      status: "processing",
-      stage: "planning",
+    expect(adminRpc).toHaveBeenCalledWith("create_or_reuse_auto_reel_job", expect.objectContaining({
+      _user_id: user.id,
+      _offer_id: offer.id,
+      _script: expect.any(String),
     }));
   });
 
@@ -85,11 +92,8 @@ describe("POST /api/reels/generate", () => {
 
   it("usa título, preço e imagem vindos do banco", async () => {
     await POST(request({ offerId: offer.id, style: "demonstrative-reel", title: "adulterado", currentPrice: 1, imageUrl: "fake" }));
-    const insert = adminFrom.mock.results[1]?.value.insert;
-    expect(insert).toHaveBeenCalledWith(expect.objectContaining({
-      user_id: user.id,
-      offer_id: offer.id,
-      metadata: expect.objectContaining({
+    expect(adminRpc).toHaveBeenCalledWith("create_or_reuse_auto_reel_job", expect.objectContaining({
+      _metadata: expect.objectContaining({
         factualSnapshot: {
           offerId: offer.id,
           productName: offer.product_name,
@@ -111,8 +115,8 @@ describe("POST /api/reels/generate", () => {
       imageUrl: "https://attacker.invalid/image.jpg",
       marketplace: "Outro",
     }));
-    const insert = adminFrom.mock.results[1]?.value.insert;
-    expect(insert.mock.calls[0][0].metadata.factualSnapshot).toEqual({
+    const args = adminRpc.mock.calls[0][1];
+    expect(args._metadata.factualSnapshot).toEqual({
       offerId: offer.id,
       productName: offer.product_name,
       currentPrice: offer.current_price,
@@ -121,44 +125,29 @@ describe("POST /api/reels/generate", () => {
     });
   });
 
-  it("persiste template auto-reel-v1", async () => {
+  it("persiste source, style e attempt na operação atômica", async () => {
     await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
-    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({ template_id: "auto-reel-v1" }));
-  });
-
-  it("persiste source auto-generated-reel", async () => {
-    await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
-    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: expect.objectContaining({ source: "auto-generated-reel" }),
+    expect(adminRpc.mock.calls[0][1]._metadata).toEqual(expect.objectContaining({
+      source: "auto-generated-reel",
+      style: "demonstrative-reel",
+      attempt: 1,
     }));
   });
 
-  it("persiste attempt inicial 1", async () => {
-    await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
-    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: expect.objectContaining({ attempt: 1 }),
-    }));
-  });
-
-  it("persiste style demonstrative-reel", async () => {
-    await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
-    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({
-      metadata: expect.objectContaining({ style: "demonstrative-reel" }),
-    }));
-  });
-
-  it("associa o job ao usuário autenticado", async () => {
-    await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
-    expect(adminFrom.mock.results[1]?.value.insert).toHaveBeenCalledWith(expect.objectContaining({ user_id: user.id }));
-  });
-
-  it("reutiliza job ativo em request repetido", async () => {
-    const existing = { data: { id: "existing-job", status: "queued" }, error: null };
-    adminFrom.mockReset();
-    adminFrom.mockImplementationOnce(() => chain(existing));
+  it("reutiliza o job ativo devolvido pela operação atômica", async () => {
+    const existing = { ...createdJob, id: "existing-job", stage: "generating_visual" };
+    adminRpc.mockResolvedValueOnce({ data: { job: existing, created: false }, error: null });
     const response = await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
     expect(response.status).toBe(200);
-    expect(adminFrom).toHaveBeenCalledTimes(1);
+    expect((await response.json()).job.id).toBe("existing-job");
+    expect(adminRpc).toHaveBeenCalledTimes(1);
+  });
+
+  it("propaga falha da operação atômica sem criar job parcial", async () => {
+    adminRpc.mockResolvedValueOnce({ data: null, error: { message: "database unavailable" } });
+    const response = await POST(request({ offerId: offer.id, style: "demonstrative-reel" }));
+    expect(response.status).toBe(500);
+    expect((await response.json()).error).toContain("database unavailable");
   });
 });
 

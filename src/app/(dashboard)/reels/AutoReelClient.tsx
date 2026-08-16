@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Film } from "lucide-react";
 
 import { autoReelStatusLabel, isAutoReelTerminal, type AutoReelStatus } from "@/lib/videos/auto-reel";
@@ -24,6 +24,11 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
   const activeOperation = useRef<string | null>(null);
   const selectedOffer = offers.find((offer) => offer.id === offerId) ?? null;
 
+  const applyJob = useCallback((nextJob: Job) => {
+    setJob(nextJob);
+    setJobs((current) => [nextJob, ...current.filter((item) => item.id !== nextJob.id)]);
+  }, []);
+
   useEffect(() => {
     if (!job || isAutoReelTerminal(job.status)) return;
     if (["planning", "generating_visual", "scenes_ready"].includes(job.stage)) {
@@ -34,9 +39,9 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       void fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.id }) })
         .then(async (response) => {
           const payload = await response.json() as { job?: Job; error?: string };
+          if (payload.job) applyJob(payload.job);
           if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível avançar o Reel.");
-          setJob(payload.job);
-          setJobs((current) => [payload.job as Job, ...current.filter((item) => item.id !== payload.job?.id)]);
+          setError(null);
         })
         .catch((cause) => setError(cause instanceof Error ? cause.message : "Não foi possível avançar o Reel."))
         .finally(() => { activeOperation.current = null; });
@@ -53,7 +58,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       }
     }, pollingMs);
     return () => window.clearInterval(timer);
-  }, [job, pollingMs]);
+  }, [applyJob, job, pollingMs]);
 
   async function generate() {
     if (!offerId || busy) return;
@@ -67,8 +72,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       });
       const payload = await response.json() as { job?: Job; error?: string };
       if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível gerar o Reel.");
-      setJob(payload.job);
-      setJobs((current) => [payload.job as Job, ...current.filter((item) => item.id !== payload.job?.id)]);
+      applyJob(payload.job);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível gerar o Reel.");
     } finally {
@@ -84,7 +88,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
       const response = await fetch("/api/reels/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: target.id, action }) });
       const payload = await response.json() as { job?: Job; error?: string };
       if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível atualizar o Reel.");
-      setJob(payload.job); setJobs((current) => [payload.job as Job, ...current.filter((item) => item.id !== target.id)]);
+      applyJob(payload.job);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Não foi possível atualizar o Reel.");
     } finally {

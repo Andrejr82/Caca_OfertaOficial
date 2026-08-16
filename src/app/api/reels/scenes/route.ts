@@ -6,6 +6,19 @@ import { canResumeAutoReelScenes, generateFluxScene, processAutoReelScenes, type
 
 export const runtime = "nodejs";
 
+type PersistedScene = AutoReelScene & { storagePath: string; mediaUrl?: string };
+
+function mergeVisualScenes(current: unknown, incoming: unknown) {
+  const merged = new Map<number, PersistedScene>();
+  for (const value of [current, incoming]) {
+    if (!Array.isArray(value)) continue;
+    for (const scene of value as PersistedScene[]) {
+      if (Number.isInteger(scene?.number) && scene.number >= 1 && scene.number <= 4) merged.set(scene.number, scene);
+    }
+  }
+  return [...merged.values()].sort((left, right) => left.number - right.number);
+}
+
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
@@ -29,13 +42,40 @@ export async function POST(request: Request) {
   if (!canResumeAutoReelScenes(job.stage)) return NextResponse.json({ job });
 
   const metadata = (job.metadata && typeof job.metadata === "object" ? job.metadata : {}) as Record<string, unknown>;
-  const existingScenes = Array.isArray(metadata.visualScenes) ? metadata.visualScenes as Array<AutoReelScene & { storagePath: string; mediaUrl?: string }> : [];
+  const existingScenes = Array.isArray(metadata.visualScenes) ? metadata.visualScenes as PersistedScene[] : [];
   const factualSnapshot = metadata.factualSnapshot as AutoReelScenesSnapshot | undefined;
   if (!factualSnapshot?.imageUrl || !factualSnapshot.productName) return NextResponse.json({ error: "Snapshot factual incompleto." }, { status: 422 });
 
-  const imageResponse = await fetch(factualSnapshot.imageUrl);
-  if (!imageResponse.ok) return NextResponse.json({ error: "Imagem factual indisponível." }, { status: 422 });
-  const image = new Blob([await imageResponse.arrayBuffer()], { type: imageResponse.headers.get("content-type") ?? "image/jpeg" });
+  const markFailed = async (message: string) => {
+    const { error: failError } = await admin.from("video_jobs").update({
+      status: "failed",
+      stage: "failed",
+      error_message: message.slice(0, 240),
+    }).eq("id", job.id).eq("user_id", userData.user.id);
+    if (failError) return { failedJob: null, failError };
+    const { data: failedJob } = await admin.from("video_jobs")
+      .select("id,status,stage,video_url,metadata,created_at")
+      .eq("id", job.id)
+      .maybeSingle();
+    return { failedJob, failError: null };
+  };
+
+  let image: Blob;
+  try {
+    const imageResponse = await fetch(factualSnapshot.imageUrl);
+    if (!imageResponse.ok) throw new Error(`Imagem factual HTTP ${imageResponse.status}.`);
+    const bytes = await imageResponse.arrayBuffer();
+    if (!bytes.byteLength) throw new Error("Imagem factual vazia.");
+    image = new Blob([bytes], { type: imageResponse.headers.get("content-type") ?? "image/jpeg" });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Imagem factual indisponível.";
+    const { failedJob, failError } = await markFailed(message);
+    return NextResponse.json({
+      job: failedJob,
+      error: message,
+      failureUpdateError: failError ? { code: failError.code, message: failError.message, details: failError.details, hint: failError.hint } : null,
+    }, { status: 502 });
+  }
 
   const result = await processAutoReelScenes({
     jobId: job.id,
@@ -78,8 +118,22 @@ export async function POST(request: Request) {
       return { storagePath, mediaUrl: storage.getPublicUrl(storagePath).data.publicUrl };
     },
     updateJob: async (jobId, stage, stageMetadata) => {
-      const visualScenes = stageMetadata?.scenes ?? stageMetadata?.visualScenes;
-      const nextMetadata = visualScenes ? { ...metadata, visualScenes } : metadata;
+      const { data: currentJob, error: currentError } = await admin.from("video_jobs")
+        .select("metadata")
+        .eq("id", jobId)
+        .eq("user_id", userData.user.id)
+        .maybeSingle();
+      if (currentError) throw new Error(JSON.stringify({
+        code: currentError.code,
+        message: currentError.message,
+        details: currentError.details,
+        hint: currentError.hint,
+      }));
+      const currentMetadata = (currentJob?.metadata && typeof currentJob.metadata === "object" ? currentJob.metadata : metadata) as Record<string, unknown>;
+      const incomingScenes = stageMetadata?.scenes ?? stageMetadata?.visualScenes;
+      const nextMetadata = incomingScenes
+        ? { ...currentMetadata, visualScenes: mergeVisualScenes(currentMetadata.visualScenes, incomingScenes) }
+        : currentMetadata;
       const { error: updateError } = await admin.from("video_jobs").update({
         status: stage === "failed" ? "failed" : "processing",
         stage,
@@ -96,5 +150,8 @@ export async function POST(request: Request) {
   });
 
   const { data: updated } = await admin.from("video_jobs").select("id,status,stage,video_url,metadata,created_at").eq("id", job.id).maybeSingle();
-  return NextResponse.json({ job: updated, result }, { status: result.status === "failed" ? 502 : 200 });
+  if (result.status === "failed") {
+    return NextResponse.json({ job: updated, result, error: result.error }, { status: 502 });
+  }
+  return NextResponse.json({ job: updated, result }, { status: 200 });
 }

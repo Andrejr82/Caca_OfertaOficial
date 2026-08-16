@@ -20,7 +20,14 @@ function facts(job: CompletionJob) {
   const scenes = job.metadata?.visualScenes;
   if (!snapshot || !snapshot.productName || !snapshot.currentPrice || !snapshot.platform || !snapshot.imageUrl) throw new Error("Snapshot factual incompleto.");
   if (!Array.isArray(scenes) || scenes.length !== 4) throw new Error("Quatro cenas visuais são obrigatórias.");
-  return { snapshot, scenes: [...scenes].sort((left, right) => Number(left.number) - Number(right.number)) };
+  const orderedScenes = [...scenes].sort((left, right) => Number(left.number) - Number(right.number));
+  if (orderedScenes.some((scene, index) => Number(scene.number) !== index + 1)) {
+    throw new Error("Manifest visual inválido: cenas 1, 2, 3 e 4 são obrigatórias e únicas.");
+  }
+  if (orderedScenes.some((scene) => typeof scene.mediaUrl !== "string" || !scene.mediaUrl.trim())) {
+    throw new Error("Manifest visual inválido: cena sem imagem persistida.");
+  }
+  return { snapshot, scenes: orderedScenes };
 }
 
 export function buildAutoReelDubbingPayload(job: CompletionJob) {
@@ -49,7 +56,7 @@ export function buildAutoReelRenderPayload(job: CompletionJob, audio: Pick<Dubbi
     cta: CTA,
     audioUrl: audio.audioUrl,
     audioDurationSeconds: audio.durationSeconds,
-    scenes: scenes.map((scene) => ({ number: scene.number, kind: scene.kind, imageUrl: scene.mediaUrl ?? scene.imageUrl })),
+    scenes: scenes.map((scene) => ({ number: scene.number, kind: scene.kind, imageUrl: scene.mediaUrl })),
   };
 }
 
@@ -75,8 +82,16 @@ export async function processAutoReelCompletion(input: {
     return { status: "ready_for_review" as const, videoUrl: rendered.videoUrl, audioUrl: dubbing.audioUrl, durationSeconds: rendered.durationSeconds };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Falha na conclusão do Reel.";
-    await input.updateJob(input.job.id, "failed", { error: message.slice(0, 240) });
-    return { status: "failed" as const, error: message };
+    try {
+      await input.updateJob(input.job.id, "failed", { error: message.slice(0, 240) });
+      return { status: "failed" as const, error: message };
+    } catch (failureUpdateError) {
+      return {
+        status: "failed" as const,
+        error: message,
+        failureUpdateError: failureUpdateError instanceof Error ? failureUpdateError.message : "Falha ao persistir estado failed.",
+      };
+    }
   }
 }
 
