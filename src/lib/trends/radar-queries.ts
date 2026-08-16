@@ -16,6 +16,19 @@ export interface TrendRadarSnapshotProductView {
   determiningReasons: string[];
   isFocus: boolean;
   opportunityId: string | null;
+  price: number | null;
+  discountPercent: number | null;
+  commissionPercent: number | null;
+  sellerCommissionPercent: number | null;
+  sales: number | null;
+  salesVelocity: number | null;
+  velocityStatus: string | null;
+  scoreDecision: string | null;
+  scoreStrategyVersion: string | null;
+  recommendedChannel: string | null;
+  recommendedFormat: string | null;
+  selectionDecision: string | null;
+  selectionDecidedAt: string | null;
 }
 
 export interface TrendRadarSnapshotView {
@@ -59,6 +72,10 @@ interface ProductRow {
   determining_reasons: unknown;
   is_focus: boolean;
   opportunity_id: string | null;
+  recommended_channel: string | null;
+  recommended_format: string | null;
+  selection_decision: string | null;
+  selection_decided_at: string | null;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -76,6 +93,18 @@ function numericObject(value: unknown): Record<string, number> {
 
 function strings(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
+}
+
+function finiteNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function directEvidence(value: unknown): Record<string, unknown> {
+  if (!Array.isArray(value)) return {};
+  const first = value.find((item) => item && typeof item === "object" && !Array.isArray(item));
+  return first ? first as Record<string, unknown> : {};
 }
 
 function directEvidenceSourceUrls(value: unknown): string[] {
@@ -101,23 +130,41 @@ export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): 
     sourceHealth: object(run.source_health),
     executiveSummary: object(run.executive_summary),
     products: products
-      .map((row) => ({
-        id: row.id,
-        priority: row.priority,
-        productTerm: row.product_term,
-        normalizedProductTerm: row.normalized_product_term,
-        category: row.category,
-        marketplace: row.marketplace,
-        evidenceStatus: row.evidence_status,
-        sourceCount: row.source_count,
-        commercialScore: row.commercial_score === null ? null : Number(row.commercial_score),
-        confidence: Number(row.confidence),
-        directEvidenceSourceUrls: directEvidenceSourceUrls(row.direct_evidence),
-        scoreBreakdown: numericObject(row.score_breakdown),
-        determiningReasons: strings(row.determining_reasons),
-        isFocus: row.is_focus,
-        opportunityId: row.opportunity_id,
-      }))
+      .map((row) => {
+        const evidence = directEvidence(row.direct_evidence);
+        const commercial = object(evidence.commercial_metrics);
+        const temporal = object(evidence.temporal_metrics);
+        return {
+          id: row.id,
+          priority: row.priority,
+          productTerm: row.product_term,
+          normalizedProductTerm: row.normalized_product_term,
+          category: row.category,
+          marketplace: row.marketplace,
+          evidenceStatus: row.evidence_status,
+          sourceCount: row.source_count,
+          commercialScore: row.commercial_score === null ? null : Number(row.commercial_score),
+          confidence: Number(row.confidence),
+          directEvidenceSourceUrls: directEvidenceSourceUrls(row.direct_evidence),
+          scoreBreakdown: numericObject(row.score_breakdown),
+          determiningReasons: strings(row.determining_reasons),
+          isFocus: row.is_focus,
+          opportunityId: row.opportunity_id,
+          price: finiteNumber(evidence.price ?? commercial.price),
+          discountPercent: finiteNumber(evidence.discount_percent ?? commercial.priceDiscountRate),
+          commissionPercent: finiteNumber(commercial.commissionRate),
+          sellerCommissionPercent: finiteNumber(commercial.sellerCommissionRate),
+          sales: finiteNumber(evidence.sold_quantity ?? commercial.sales),
+          salesVelocity: finiteNumber(temporal.sales_velocity),
+          velocityStatus: typeof temporal.velocity_status === "string" ? temporal.velocity_status : null,
+          scoreDecision: typeof evidence.decision === "string" ? evidence.decision : null,
+          scoreStrategyVersion: typeof evidence.strategy_version === "string" ? evidence.strategy_version : null,
+          recommendedChannel: row.recommended_channel,
+          recommendedFormat: row.recommended_format,
+          selectionDecision: row.selection_decision,
+          selectionDecidedAt: row.selection_decided_at,
+        };
+      })
       .sort((a, b) => a.priority - b.priority),
   };
 }
@@ -136,7 +183,7 @@ export async function listLatestTrendRadarSnapshot(): Promise<TrendRadarSnapshot
 
   const { data: products, error: productError } = await supabase
     .from("trend_radar_products")
-    .select("id,priority,product_term,normalized_product_term,category,marketplace,evidence_status,source_count,commercial_score,confidence,direct_evidence,score_breakdown,determining_reasons,is_focus,opportunity_id")
+    .select("id,priority,product_term,normalized_product_term,category,marketplace,evidence_status,source_count,commercial_score,confidence,direct_evidence,score_breakdown,determining_reasons,is_focus,opportunity_id,recommended_channel,recommended_format,selection_decision,selection_decided_at")
     .eq("radar_run_id", run.id)
     .order("priority", { ascending: true });
   if (productError) return null;
