@@ -13,24 +13,20 @@ export function DailyRadarRefreshButton() {
     setExecuting(true);
     setMessage(null);
     try {
-      const radarResponse = await fetch("/api/trends/execute?refresh=1", { method: "POST" });
-      const radar = await radarResponse.json();
-      if (!radarResponse.ok || !radar.ok) throw new Error(radar.message || "Falha ao executar Radar.");
+      const response = await fetch("/api/trends/execute?refresh=1", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok || !result.ok) throw new Error(result.message || "Falha ao solicitar Radar.");
 
-      const queueResponse = await fetch("/api/trends/approval-queue/execute", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ runId: radar.runId }),
-      });
-      const queue = await queueResponse.json();
-      if (!queueResponse.ok || !queue.ok) {
-        throw new Error(`Radar concluído, mas a fila Shopee falhou: ${queue.message || "erro desconhecido"}`);
+      if (result.status === "completed") {
+        setMessage("Radar desta janela já está concluído. Atualize a tela para consultar o snapshot.");
+      } else if (result.status === "running") {
+        setMessage("Radar já está pendente/em processamento na Oracle.");
+      } else {
+        setMessage("Radar solicitado. A Oracle fará o processamento pesado; atualize a tela depois para consultar o snapshot.");
       }
-
-      setMessage(`Radar concluído · ${queue.searchedIntents ?? 0} tendência(s) pesquisada(s) · ${queue.readyCount ?? 0} pronto(s) para aprovar.`);
       router.refresh();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Falha ao executar Radar.");
+      setMessage(error instanceof Error ? error.message : "Falha ao solicitar Radar.");
     } finally {
       setExecuting(false);
     }
@@ -50,7 +46,7 @@ export function DailyRadarRefreshButton() {
         disabled={executing}
         className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-bold text-slate-950 transition hover:bg-cyan-400 disabled:cursor-wait disabled:opacity-50"
       >
-        {executing ? "Pesquisando e preparando…" : "Executar Radar de Agora"}
+        {executing ? "Solicitando…" : "Solicitar Radar"}
       </button>
       <button
         type="button"
