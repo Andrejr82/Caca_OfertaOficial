@@ -33,9 +33,35 @@ export async function POST(request: Request) {
   const factualSnapshot = metadata.factualSnapshot as AutoReelScenesSnapshot | undefined;
   if (!factualSnapshot?.imageUrl || !factualSnapshot.productName) return NextResponse.json({ error: "Snapshot factual incompleto." }, { status: 422 });
 
-  const imageResponse = await fetch(factualSnapshot.imageUrl);
-  if (!imageResponse.ok) return NextResponse.json({ error: "Imagem factual indisponível." }, { status: 422 });
-  const image = new Blob([await imageResponse.arrayBuffer()], { type: imageResponse.headers.get("content-type") ?? "image/jpeg" });
+  const markFailed = async (message: string) => {
+    const { error: failError } = await admin.from("video_jobs").update({
+      status: "failed",
+      stage: "failed",
+      error_message: message.slice(0, 240),
+    }).eq("id", job.id).eq("user_id", userData.user.id);
+    const { data: failedJob } = await admin.from("video_jobs")
+      .select("id,status,stage,video_url,metadata,created_at")
+      .eq("id", job.id)
+      .maybeSingle();
+    return { failedJob, failError };
+  };
+
+  let image: Blob;
+  try {
+    const imageResponse = await fetch(factualSnapshot.imageUrl);
+    if (!imageResponse.ok) throw new Error(`Imagem factual HTTP ${imageResponse.status}.`);
+    const bytes = await imageResponse.arrayBuffer();
+    if (!bytes.byteLength) throw new Error("Imagem factual vazia.");
+    image = new Blob([bytes], { type: imageResponse.headers.get("content-type") ?? "image/jpeg" });
+  } catch (cause) {
+    const message = cause instanceof Error ? cause.message : "Imagem factual indisponível.";
+    const { failedJob, failError } = await markFailed(message);
+    return NextResponse.json({
+      job: failedJob,
+      error: message,
+      failureUpdateError: failError ? { code: failError.code, message: failError.message, details: failError.details, hint: failError.hint } : null,
+    }, { status: 502 });
+  }
 
   const result = await processAutoReelScenes({
     jobId: job.id,
@@ -96,5 +122,8 @@ export async function POST(request: Request) {
   });
 
   const { data: updated } = await admin.from("video_jobs").select("id,status,stage,video_url,metadata,created_at").eq("id", job.id).maybeSingle();
-  return NextResponse.json({ job: updated, result }, { status: result.status === "failed" ? 502 : 200 });
+  if (result.status === "failed") {
+    return NextResponse.json({ job: updated, result, error: result.error }, { status: 502 });
+  }
+  return NextResponse.json({ job: updated, result }, { status: 200 });
 }
