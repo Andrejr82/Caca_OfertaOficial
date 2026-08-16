@@ -1,9 +1,5 @@
 import { BrainCircuit } from "lucide-react";
 import { DailyRadarRefreshButton } from "@/components/trends/daily-radar-refresh-button";
-import { GoogleTrendsCollectButton } from "@/components/trends/google-trends-collect-button";
-import { MercadoLivreTrendsCollectButton } from "@/components/trends/mercado-livre-trends-collect-button";
-import { ClassifyTrendSignalsButton } from "@/components/trends/classify-trend-signals-button";
-import { MatchTrendSignalsButton } from "@/components/trends/match-trend-signals-button";
 import { ExecutiveRadarOverview } from "@/components/trends/executive-radar-overview";
 import { TrendApprovalQueue } from "@/components/trends/trend-approval-queue";
 import { buildDailyRadarFromTrendSignals } from "@/core/trends/daily-radar";
@@ -70,15 +66,11 @@ export default async function TrendsPage() {
 
       <section className="glass-card flex flex-wrap items-center justify-between gap-4 p-5">
         <div>
-          <h2 className="text-sm font-bold text-white/70">Controles atuais</h2>
-          <p className="mt-1 text-xs text-white/30">Executar Radar atualiza tendências, pesquisa Shopee e prepara a fila manual; atualizar tela apenas recarrega a visão.</p>
+          <h2 className="text-sm font-bold text-white/70">Controle do Radar</h2>
+          <p className="mt-1 text-xs text-white/30">A Vercel apenas solicita a execução e lê snapshots prontos. Coleta, classificação e matching pesado ficam fora do request web.</p>
         </div>
         <div className="flex flex-wrap gap-3">
           <DailyRadarRefreshButton />
-          <GoogleTrendsCollectButton />
-          <MercadoLivreTrendsCollectButton />
-          <ClassifyTrendSignalsButton />
-          <MatchTrendSignalsButton />
         </div>
       </section>
 
