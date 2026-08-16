@@ -16,6 +16,21 @@ const requestSchema = z.object({
 
 const jobSelect = "id,user_id,offer_id,status,stage,video_url,template_id,metadata,created_at";
 
+type AtomicJobResult = {
+  job?: {
+    id: string;
+    user_id: string;
+    offer_id: string;
+    status: string;
+    stage: string;
+    video_url?: string | null;
+    template_id: string;
+    metadata: Record<string, unknown>;
+    created_at: string;
+  };
+  created?: boolean;
+};
+
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
@@ -57,17 +72,16 @@ export async function POST(request: Request) {
     attempt: 1,
     factualSnapshot,
   };
-  const { data: job, error: createError } = await admin
-    .rpc("create_or_reuse_auto_reel_job", {
-      _user_id: user.id,
-      _offer_id: parsed.data.offerId,
-      _script: "Reel demonstrativo aguardando pipeline visual.",
-      _metadata: metadata,
-    })
-    .single();
+  const { data, error: createError } = await admin.rpc("create_or_reuse_auto_reel_job", {
+    _user_id: user.id,
+    _offer_id: parsed.data.offerId,
+    _script: "Reel demonstrativo aguardando pipeline visual.",
+    _metadata: metadata,
+  });
+  const result = data as AtomicJobResult | null;
 
-  if (createError || !job) return NextResponse.json({ error: createError?.message ?? "Não foi possível criar o Reel." }, { status: 500 });
-  return NextResponse.json({ job }, { status: job.created_at ? 201 : 200 });
+  if (createError || !result?.job) return NextResponse.json({ error: createError?.message ?? "Não foi possível criar o Reel." }, { status: 500 });
+  return NextResponse.json({ job: result.job }, { status: result.created ? 201 : 200 });
 }
 
 export async function GET(request: Request) {
