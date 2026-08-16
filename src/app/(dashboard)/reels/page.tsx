@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { CreativeCertificationPanel } from "@/app/(dashboard)/videos/CreativeCertificationPanel";
 import { AutoReelClient } from "./AutoReelClient";
 import { AuthorizedReelsClient } from "./AuthorizedReelsClient";
+import { CreativeCertificationPanel } from "./CreativeCertificationPanel";
 
 function jobStatusLabel(job: any) {
   if (job.stage === "awaiting_oracle_verification") return "Aguardando verificação do arquivo";

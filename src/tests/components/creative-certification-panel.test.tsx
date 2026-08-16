@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { CreativeCertificationPanel } from "@/app/(dashboard)/videos/CreativeCertificationPanel";
+import { CreativeCertificationPanel } from "@/app/(dashboard)/reels/CreativeCertificationPanel";
 import { canApproveCreative, certifyCreativeCandidate } from "@/lib/videos/creative-candidate";
 
 describe("CreativeCertificationPanel", () => {
