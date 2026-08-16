@@ -29,6 +29,8 @@ export interface TrendRadarSnapshotProductView {
   recommendedFormat: string | null;
   selectionDecision: string | null;
   selectionDecidedAt: string | null;
+  selectedOfferId: string | null;
+  executionContext: Record<string, unknown>;
 }
 
 export interface TrendRadarSnapshotView {
@@ -76,6 +78,8 @@ interface ProductRow {
   recommended_format: string | null;
   selection_decision: string | null;
   selection_decided_at: string | null;
+  selected_offer_id: string | null;
+  execution_context: unknown;
 }
 
 function object(value: unknown): Record<string, unknown> {
@@ -163,6 +167,8 @@ export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): 
           recommendedFormat: row.recommended_format,
           selectionDecision: row.selection_decision,
           selectionDecidedAt: row.selection_decided_at,
+          selectedOfferId: row.selected_offer_id,
+          executionContext: object(row.execution_context),
         };
       })
       .sort((a, b) => a.priority - b.priority),
@@ -183,7 +189,7 @@ export async function listLatestTrendRadarSnapshot(): Promise<TrendRadarSnapshot
 
   const { data: products, error: productError } = await supabase
     .from("trend_radar_products")
-    .select("id,priority,product_term,normalized_product_term,category,marketplace,evidence_status,source_count,commercial_score,confidence,direct_evidence,score_breakdown,determining_reasons,is_focus,opportunity_id,recommended_channel,recommended_format,selection_decision,selection_decided_at")
+    .select("id,priority,product_term,normalized_product_term,category,marketplace,evidence_status,source_count,commercial_score,confidence,direct_evidence,score_breakdown,determining_reasons,is_focus,opportunity_id,recommended_channel,recommended_format,selection_decision,selection_decided_at,selected_offer_id,execution_context")
     .eq("radar_run_id", run.id)
     .order("priority", { ascending: true });
   if (productError) return null;
