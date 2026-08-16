@@ -8,12 +8,11 @@ const pagePath = path.join(process.cwd(), "src/app/(dashboard)/trends/page.tsx")
 const queuePath = path.join(process.cwd(), "src/components/trends/trend-approval-queue.tsx");
 
 describe("Trend approval queue route contract", () => {
-  it("mantém um clique para Radar e preparação Shopee", () => {
+  it("mantém solicitação de Radar isolada e leve na interface", () => {
     const source = fs.readFileSync(buttonPath, "utf8");
     expect(source).toContain('fetch("/api/trends/execute?refresh=1"');
-    expect(source).toContain('fetch("/api/trends/approval-queue/execute"');
-    expect(source).toContain("runId: radar.runId");
-    expect(source).toContain("pronto(s) para aprovar");
+    expect(source).toContain("Solicitar Radar");
+    expect(source).toContain("Atualizar tela");
   });
 
   it("exige Radar concluído do usuário antes da descoberta e persistência", () => {
