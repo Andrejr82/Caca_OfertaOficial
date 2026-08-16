@@ -14,6 +14,11 @@ function decisionClass(decision: string | null): string {
   return "text-white/45";
 }
 
+function velocityLabel(value: number | null, status: string | null): string {
+  if (value === null) return status || "sem histórico";
+  return `velocity ${value > 0 ? "+" : ""}${value}`;
+}
+
 export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRadarSnapshotView | null }) {
   const products = snapshot?.products ?? [];
 
@@ -69,7 +74,7 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
                     <div className="rounded-lg border border-white/[0.05] p-2">
                       <p className="text-white/30">Demanda</p>
                       <p className="mt-1 font-bold text-white/75">{item.sales != null ? `${Math.round(item.sales)} vendas` : "n/d"}</p>
-                      <p className="text-[10px] text-white/30">{item.salesVelocity != null ? `velocity +${item.salesVelocity}` : item.velocityStatus || "sem histórico"}</p>
+                      <p className="text-[10px] text-white/30">{velocityLabel(item.salesVelocity, item.velocityStatus)}</p>
                     </div>
                     <div className="rounded-lg border border-white/[0.05] p-2">
                       <p className="text-white/30">Comissão</p>
