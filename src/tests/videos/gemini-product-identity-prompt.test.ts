@@ -1,4 +1,5 @@
 import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
+import { describe, expect, it } from "vitest";
 
 function extractIdentityRules(prompt: string) {
   const match = prompt.match(/REGRA CRÍTICA — PRESERVAÇÃO EXATA DO PRODUTO\n\n([\s\S]*?)\n\nPERSONAGEM:/u);
