@@ -15,6 +15,139 @@ const MAX_SPEECH_WORDS = 22;
 const PRODUCT_NAME_WORD_LIMITS = [8, 6, 4];
 const OFFICIAL_AVATAR_REFERENCE = "Avatar_Silvia";
 
+const PRODUCT_IDENTITY_RULES = `REGRA CRÍTICA — PRESERVAÇÃO EXATA DO PRODUTO
+
+A imagem anexada é a referência visual absoluta do produto.
+
+Durante TODO o vídeo, preserve o produto exatamente como aparece na imagem original.
+
+TEXTOS, LOGOTIPOS, NÚMEROS E ETIQUETAS
+
+NÃO recrie, reinterprete, traduza, corrija ou invente nenhum texto existente no produto.
+
+Todos os elementos gráficos presentes fisicamente no produto devem permanecer visualmente idênticos à imagem de referência em todos os frames.
+
+Isso inclui:
+
+- nome da marca;
+- logotipo;
+- números;
+- voltagem;
+- letras;
+- símbolos;
+- etiquetas;
+- adesivos;
+- tipografia;
+- posicionamento dos textos;
+- tamanho dos textos;
+- orientação;
+- cores.
+
+Se a imagem de referência mostrar, por exemplo, uma determinada marca ou número escrito no produto, esse elemento deve permanecer exatamente igual, sem trocar letras, adicionar caracteres ou gerar palavras semelhantes.
+
+REGRA DE PRIORIDADE
+
+A prioridade máxima do vídeo é:
+
+1. Preservar exatamente a aparência do produto.
+2. Preservar logotipos, textos e etiquetas existentes.
+3. Preservar cores e proporções.
+4. Demonstrar a utilização.
+5. Movimento cinematográfico.
+
+Se houver conflito entre um movimento de câmera e a preservação do produto, priorize a preservação do produto.
+
+CONSISTÊNCIA ENTRE FRAMES
+
+Trate o produto da imagem como um objeto visual fixo e consistente, e não como um novo produto que deve ser redesenhado a cada cena.
+
+O mesmo produto deve continuar sendo o mesmo objeto ao longo de todo o vídeo.
+
+Não permitir que letras ou números mudem entre frames.
+
+Não permitir:
+
+“FALASCA” → “FALACA”
+“FALASCA” → “FALASCO”
+“21V” → “24V”
+“21V” → “2IV”
+
+Nem qualquer outra alteração semelhante.
+
+NÃO GERAR NOVOS TEXTOS
+
+Não adicionar:
+
+- textos promocionais;
+- legendas;
+- títulos;
+- especificações;
+- slogans;
+- marcas adicionais;
+- etiquetas;
+- números;
+- caracteres aleatórios.
+
+O único texto permitido no vídeo é aquele já existente fisicamente no produto da imagem de referência.
+
+MOVIMENTO DE CÂMERA PARA MAIOR FIDELIDADE
+
+Evite movimentos rápidos de câmera.
+
+Evite rotações completas do produto.
+
+Evite mostrar ângulos extremos que não estejam suficientemente representados na imagem original.
+
+Utilize principalmente:
+
+- câmera estável;
+- movimentos lentos;
+- pequenos movimentos laterais;
+- aproximações suaves;
+- close-ups controlados;
+- enquadramentos semelhantes à referência.
+
+Quando um lado do produto não estiver visível na imagem original, não invente textos, etiquetas ou logotipos para esse lado.
+
+DURANTE A UTILIZAÇÃO
+
+Ao mostrar mãos utilizando o produto, preserve o corpo principal da ferramenta com máxima fidelidade.
+
+Anime principalmente:
+
+- mãos;
+- gatilho;
+- mandril;
+- broca;
+- acessórios;
+- elementos necessários para demonstrar a utilização.
+
+Evite deformar ou regenerar desnecessariamente as áreas do produto que contêm marca, logotipo, números ou etiquetas.
+
+REGRA FINAL
+
+IMAGE-TO-VIDEO COM PRESERVAÇÃO DE IDENTIDADE DO PRODUTO.
+
+Não redesenhe o produto.
+
+Não crie uma versão semelhante.
+
+Não substitua por outro modelo.
+
+Não estilize.
+
+Não altere a identidade visual.
+
+Não altere textos.
+
+Não altere logotipos.
+
+Não altere números.
+
+Não altere etiquetas.
+
+O produto do primeiro ao último frame deve parecer exatamente o mesmo produto físico presente na imagem anexada.`;
+
 function numeroPorExtenso(num: number): string {
   if (num === 0) return "zero";
   const unidades = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez", "onze", "doze", "treze", "catorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
@@ -219,5 +352,5 @@ export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
   const direction = visualDirectionByCategory(offer);
   const speech = speechScript8Seconds(offer);
 
-  return `Crie um vídeo publicitário fotorrealista de exatamente ${VIDEO_DURATION_SECONDS} segundos.\n\nPERSONAGEM:\nUse exclusivamente a imagem de referência oficial identificada como ${OFFICIAL_AVATAR_REFERENCE} como referência visual obrigatória e principal da personagem. Preserve rigorosamente a mesma mulher da imagem de referência: mesmos traços faciais, formato do rosto, tom de pele morena, cabelo escuro liso na altura dos ombros, proporções corporais e aparência geral. Preserve exatamente o figurino oficial da referência: camiseta azul-marinho, calça jeans escura e tênis branco. A estampa original da camiseta faz parte da identidade visual da personagem e deve permanecer idêntica à imagem de referência durante todo o vídeo. Preserve exatamente o logotipo e os elementos gráficos já existentes na camiseta, incluindo o texto \"CAÇA OFERTA\", a chama, o carrinho e a etiqueta de desconto. Não recriar, reinterpretar, traduzir, corrigir, substituir, deformar ou inventar letras, palavras, logotipos, símbolos ou elementos gráficos da camiseta. Não substituir \"CAÇA OFERTA\" por qualquer outro nome ou marca. Não alterar rosto, cabelo, idade aparente, corpo, roupa, estampa, cores ou identidade visual da personagem durante o vídeo.\n\nPRODUTO:\nUse a imagem do produto selecionado como referência visual obrigatória. A personagem está ${direction.interaction}. Preserve fielmente formato, proporções, cores, textos, logotipos e características visuais originais do produto. Não modificar, deformar, traduzir, substituir ou inventar partes, marcas ou textos do produto.\n\nCOMPOSIÇÃO DO PRODUTO:\n${direction.composition}. A imagem de referência é a autoridade visual: informações do título, descrição ou fala não autorizam adicionar componentes que não estejam visíveis nela.\n\nCENA:\nO ambiente é uma ${direction.scene}. Valorizar naturalmente o rosto da apresentadora e o produto, mantendo separação visual clara entre primeiro plano e fundo.\n\nATUAÇÃO:\nA personagem olha diretamente para a câmera e apresenta a oferta de maneira simpática, espontânea e entusiasmada. Enquanto fala, realiza pequenos movimentos naturais de cabeça e gestos suaves com as mãos. Ao mencionar o produto, faz um gesto discreto em direção a ele. Evitar movimentos exagerados, repetitivos ou artificiais.\n\nCÂMERA:\nPlano médio. Câmera fixa. Um único take contínuo durante os ${VIDEO_DURATION_SECONDS} segundos. Sem cortes. Sem zoom. Sem transições. Sem mudança de enquadramento.\n\nÁUDIO E LIPSYNC:\nVoz feminina adulta em português brasileiro. Tom comercial natural, simpático e entusiasmado. Dicção clara e ritmo fluido. Pronunciar todas as palavras em português brasileiro correto. Todos os números presentes na fala devem ser pronunciados integralmente por extenso. Valores monetários devem ser pronunciados usando \"reais\" e \"centavos\" quando aplicável. Não pronunciar algarismos, abreviações técnicas, símbolos ou códigos como parte da locução. Lipsync preciso e sincronizado com cada palavra. A fala deve começar imediatamente e ser pronunciada integralmente. Nenhuma palavra pode ser cortada, omitida ou interrompida. Não acelerar artificialmente a voz. A última palavra deve terminar antes do fim do vídeo. Após a última palavra, manter aproximadamente 0,3 segundo de imagem antes do encerramento.\n\nFALA EXATA:\n${speech}\n\nQUALIDADE:\nFotorrealista. Estética de publicidade profissional. Pele com textura natural. Expressões faciais realistas. Movimentos humanos naturais. Iluminação cinematográfica. Alta definição com aparência 4K.\n\nRESTRIÇÕES:\nVídeo completamente limpo. Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem. Não adicionar legendas. Não adicionar números ou preços escritos. Não adicionar elementos gráficos novos. Não adicionar marca d'água. Não adicionar acessórios, componentes, peças, embalagens, ferramentas, baterias, cabos, carregadores, consumíveis ou objetos como parte da oferta se eles não estiverem visíveis na imagem de referência do produto. Não transformar o produto em um kit maior do que a referência visual. Sem movimentos artificiais. Sem deformações no rosto, mãos ou produto. Sem alteração da identidade da personagem. Sem alteração do figurino oficial. Sem alteração, substituição ou invenção do nome, logotipo ou estampa existente na camiseta. Sem alteração do produto de referência.`;
+  return `Crie um vídeo publicitário fotorrealista de exatamente ${VIDEO_DURATION_SECONDS} segundos.\n\n${PRODUCT_IDENTITY_RULES}\n\nPERSONAGEM:\nUse exclusivamente a imagem de referência oficial identificada como ${OFFICIAL_AVATAR_REFERENCE} como referência visual obrigatória e principal da personagem. Preserve rigorosamente a mesma mulher da imagem de referência: mesmos traços faciais, formato do rosto, tom de pele morena, cabelo escuro liso na altura dos ombros, proporções corporais e aparência geral. Preserve exatamente o figurino oficial da referência: camiseta azul-marinho, calça jeans escura e tênis branco. A estampa original da camiseta faz parte da identidade visual da personagem e deve permanecer idêntica à imagem de referência durante todo o vídeo. Preserve exatamente o logotipo e os elementos gráficos já existentes na camiseta, incluindo o texto \"CAÇA OFERTA\", a chama, o carrinho e a etiqueta de desconto. Não recriar, reinterpretar, traduzir, corrigir, substituir, deformar ou inventar letras, palavras, logotipos, símbolos ou elementos gráficos da camiseta. Não substituir \"CAÇA OFERTA\" por qualquer outro nome ou marca. Não alterar rosto, cabelo, idade aparente, corpo, roupa, estampa, cores ou identidade visual da personagem durante o vídeo.\n\nPRODUTO:\nUse a imagem do produto selecionado como referência visual obrigatória. A personagem está ${direction.interaction}. Preserve fielmente formato, proporções, cores, textos, logotipos e características visuais originais do produto. Não modificar, deformar, traduzir, substituir ou inventar partes, marcas ou textos do produto.\n\nCOMPOSIÇÃO DO PRODUTO:\n${direction.composition}. A imagem de referência é a autoridade visual: informações do título, descrição ou fala não autorizam adicionar componentes que não estejam visíveis nela.\n\nCENA:\nO ambiente é uma ${direction.scene}. Valorizar naturalmente o rosto da apresentadora e o produto, mantendo separação visual clara entre primeiro plano e fundo.\n\nATUAÇÃO:\nA personagem olha diretamente para a câmera e apresenta a oferta de maneira simpática, espontânea e entusiasmada. Enquanto fala, realiza pequenos movimentos naturais de cabeça e gestos suaves com as mãos. Ao mencionar o produto, faz um gesto discreto em direção a ele. Evitar movimentos exagerados, repetitivos ou artificiais.\n\nCÂMERA:\nPlano médio. Câmera fixa. Um único take contínuo durante os ${VIDEO_DURATION_SECONDS} segundos. Sem cortes. Sem zoom. Sem transições. Sem mudança de enquadramento.\n\nÁUDIO E LIPSYNC:\nVoz feminina adulta em português brasileiro. Tom comercial natural, simpático e entusiasmado. Dicção clara e ritmo fluido. Pronunciar todas as palavras em português brasileiro correto. Todos os números presentes na fala devem ser pronunciados integralmente por extenso. Valores monetários devem ser pronunciados usando \"reais\" e \"centavos\" quando aplicável. Não pronunciar algarismos, abreviações técnicas, símbolos ou códigos como parte da locução. Lipsync preciso e sincronizado com cada palavra. A fala deve começar imediatamente e ser pronunciada integralmente. Nenhuma palavra pode ser cortada, omitida ou interrompida. Não acelerar artificialmente a voz. A última palavra deve terminar antes do fim do vídeo. Após a última palavra, manter aproximadamente 0,3 segundo de imagem antes do encerramento.\n\nFALA EXATA:\n${speech}\n\nQUALIDADE:\nFotorrealista. Estética de publicidade profissional. Pele com textura natural. Expressões faciais realistas. Movimentos humanos naturais. Iluminação cinematográfica. Alta definição com aparência 4K.\n\nRESTRIÇÕES:\nVídeo completamente limpo. Não adicionar texto novo na tela. Textos, logotipos, símbolos, estampas e elementos gráficos já existentes nas imagens de referência da personagem e do produto devem ser preservados exatamente como aparecem. Não adicionar legendas. Não adicionar números ou preços escritos. Não adicionar elementos gráficos novos. Não adicionar marca d'água. Não adicionar acessórios, componentes, peças, embalagens, ferramentas, baterias, cabos, carregadores, consumíveis ou objetos como parte da oferta se eles não estiverem visíveis na imagem de referência do produto. Não transformar o produto em um kit maior do que a referência visual. Sem movimentos artificiais. Sem deformações no rosto, mãos ou produto. Sem alteração da identidade da personagem. Sem alteração do figurino oficial. Sem alteração, substituição ou invenção do nome, logotipo ou estampa existente na camiseta. Sem alteração do produto de referência.`;
 }
