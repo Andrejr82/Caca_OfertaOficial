@@ -4,6 +4,8 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
+const VIDEO_OFFER_TEMPLATES = ["gemini-drive-v1", "motion-v1"];
+
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return NextResponse.json({ error: "Supabase não configurado." }, { status: 503 });
@@ -17,7 +19,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .select("*, offers(id,product_name,platform,category,current_price,old_price,original_url,image_url,shipping_free,explainability,marketplace_metrics)")
     .eq("id", id)
     .eq("user_id", userData.user.id)
-    .eq("template_id", "gemini-drive-v1")
+    .in("template_id", VIDEO_OFFER_TEMPLATES)
     .maybeSingle();
   if (readError) return NextResponse.json({ error: readError.message }, { status: 500 });
   if (!current || !["ready", "approved"].includes(current.status)) return NextResponse.json({ error: "O vídeo precisa estar pronto para aprovação." }, { status: 409 });
@@ -27,7 +29,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     .update(current.status === "approved" ? {} : { status: "approved", approved_at: new Date().toISOString() })
     .eq("id", id)
     .eq("user_id", userData.user.id)
-    .eq("template_id", "gemini-drive-v1")
+    .in("template_id", VIDEO_OFFER_TEMPLATES)
     .in("status", ["ready", "approved"])
     .select("*")
     .maybeSingle();
@@ -71,7 +73,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         } else delete draftIds[channel];
       }
     }
-    const { error: metadataError } = await admin.from("video_jobs").update({ metadata: { ...metadata, draftIds, channelCopies } }).eq("id", job.id).eq("user_id", userData.user.id).eq("template_id", "gemini-drive-v1");
+    const { error: metadataError } = await admin
+      .from("video_jobs")
+      .update({ metadata: { ...metadata, draftIds, channelCopies } })
+      .eq("id", job.id)
+      .eq("user_id", userData.user.id)
+      .in("template_id", VIDEO_OFFER_TEMPLATES);
     if (metadataError) return NextResponse.json({ error: `Falha ao vincular os drafts ao vídeo: ${metadataError.message}` }, { status: 502 });
   }
   return NextResponse.json({ job, drafts: syncedDraftIds });
