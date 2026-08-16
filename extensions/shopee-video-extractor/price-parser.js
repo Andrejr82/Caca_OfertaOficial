@@ -19,6 +19,21 @@
     return String(value || '').replace(/\s+/gu, ' ').trim().slice(0, 160);
   }
 
+  function scoreCandidate(candidate) {
+    let score = hasAuthorityContext(candidate.context) ? 6 : 0;
+    if (candidate.productScope) score += 4;
+    if (candidate.fontSize >= 24) score += 3;
+    else if (candidate.fontSize >= 18) score += 2;
+    else if (candidate.fontSize >= 16) score += 1;
+    return score;
+  }
+
+  function isSuspiciousCandidate(candidate) {
+    return candidate.value == null
+      || candidate.visible === false
+      || SUSPICIOUS_CONTEXT.test(candidate.context);
+  }
+
   function logFailClosed(reason, candidates, ranked = []) {
     const finalistValues = new Set(ranked.slice(0, 2).map((candidate) => candidate.value));
     const diagnostic = {
@@ -28,13 +43,18 @@
         raw: summarize(candidate.raw),
         context: summarize(candidate.context),
         normalizedContext: summarize(normalizeContext(candidate.context)),
-        score: candidate.value == null || SUSPICIOUS_CONTEXT.test(candidate.context) ? null : (hasAuthorityContext(candidate.context) ? 2 : 0),
-        authority: candidate.value != null && !SUSPICIOUS_CONTEXT.test(candidate.context) && hasAuthorityContext(candidate.context),
+        score: isSuspiciousCandidate(candidate) ? null : scoreCandidate(candidate),
+        authority: candidate.value != null && !isSuspiciousCandidate(candidate) && hasAuthorityContext(candidate.context),
+        productScope: candidate.productScope,
+        fontSize: candidate.fontSize,
+        visible: candidate.visible,
         rejection: candidate.value == null
           ? 'unparseable'
-          : SUSPICIOUS_CONTEXT.test(candidate.context)
-            ? 'suspicious_context'
-            : finalistValues.has(candidate.value) ? 'finalist' : 'not_finalist',
+          : candidate.visible === false
+            ? 'hidden'
+            : SUSPICIOUS_CONTEXT.test(candidate.context)
+              ? 'suspicious_context'
+              : finalistValues.has(candidate.value) ? 'finalist' : 'not_finalist',
       })),
       finalists: ranked.slice(0, 2).map((candidate) => ({ value: candidate.value, score: candidate.score, occurrences: candidate.occurrences })),
     };
@@ -56,11 +76,21 @@
     const observed = (candidates || [])
       .map((candidate) => {
         const text = String(candidate?.text || '').replace(/\s+/gu, ' ').trim();
-        const context = [text, candidate?.className, candidate?.id, candidate?.ariaLabel].filter(Boolean).join(' ');
-        return { raw: text.match(/R\$[^\n]*/iu)?.[0]?.trim() || text, text, context, value: parseBrazilPrice(text) };
+        const textDecoration = String(candidate?.textDecoration || '');
+        const context = [text, candidate?.className, candidate?.id, candidate?.ariaLabel, textDecoration].filter(Boolean).join(' ');
+        const fontSize = Number(candidate?.fontSize);
+        return {
+          raw: text.match(/R\$[^\n]*/iu)?.[0]?.trim() || text,
+          text,
+          context,
+          value: parseBrazilPrice(text),
+          visible: candidate?.visible !== false,
+          productScope: candidate?.productScope === true,
+          fontSize: Number.isFinite(fontSize) ? fontSize : 0,
+        };
       });
     const valid = observed
-      .filter((candidate) => candidate.value != null && !SUSPICIOUS_CONTEXT.test(candidate.context));
+      .filter((candidate) => !isSuspiciousCandidate(candidate));
 
     if (!valid.length) {
       logFailClosed('no_valid_candidates', observed);
@@ -69,7 +99,7 @@
 
     const byValue = new Map();
     for (const candidate of valid) {
-      const score = hasAuthorityContext(candidate.context) ? 2 : 0;
+      const score = scoreCandidate(candidate);
       const current = byValue.get(candidate.value);
       if (!current) {
         byValue.set(candidate.value, { ...candidate, score, occurrences: 1 });
