@@ -94,7 +94,7 @@ async function normalizeFluxInputImage(image: Blob): Promise<Blob> {
   if (!metadata.width || !metadata.height || metadata.width > FLUX_INPUT_MAX_EDGE || metadata.height > FLUX_INPUT_MAX_EDGE) {
     throw new Error("Imagem factual incompatível com FLUX.");
   }
-  return new Blob([normalized], { type: "image/jpeg" });
+  return new Blob([new Uint8Array(normalized)], { type: "image/jpeg" });
 }
 
 function sanitizeCloudflareErrorBody(value: unknown) {
@@ -166,9 +166,9 @@ export async function processAutoReelScenes(input: {
   const scenes = planAutoReelScenes(input.factualSnapshot);
   const existingScenes = input.existingScenes ?? [];
   const missingScenes = scenesToGenerate(scenes, existingScenes);
-  await input.updateJob(input.jobId, "planning");
   const persisted: Array<AutoReelScene & PersistedScene> = [...existingScenes];
   try {
+    await input.updateJob(input.jobId, "planning");
     await input.updateJob(input.jobId, "generating_visual");
     for (const scene of missingScenes) {
       const generated = await input.generate(scene, input.sourceImage);
