@@ -9,6 +9,10 @@ const {
   getMarketplaceImageUrl,
   withMarketplaceImageEvidence,
 } = require("../../../scripts/oracle-trends-radar-freshness.cjs");
+const {
+  buildTrendRadarProductsFromCandidates,
+  normalizeMercadoLivreRadarProduct,
+} = require("../../../scripts/oracle-trends-radar-engine.cjs");
 
 function candidate(itemId: string, productName: string) {
   return {
@@ -125,6 +129,63 @@ describe("Oracle Trends Radar fresh rotation", () => {
 
   it("rejects non-HTTPS image URLs from Radar evidence", () => {
     expect(getMarketplaceImageUrl({ imageUrl: "http://example.com/image.jpg" })).toBeNull();
+  });
+
+  it("maps Mercado Livre normalized price fields instead of manufacturing zero values", () => {
+    const normalized = normalizeMercadoLivreRadarProduct({
+      item_id: "MLB123",
+      product_id: "MLB456",
+      title: "Smart TV",
+      category_name: "Televisores",
+      current_price: 1499.9,
+      old_price: 1899.9,
+      discount_percent: 21.05,
+      sold_quantity: 321,
+      rating: 4.8,
+      product_url: "https://www.mercadolivre.com.br/p/MLB456",
+      image_url: "https://http2.mlstatic.com/example.jpg",
+    }, "2026-08-17T03:00:00.000Z");
+
+    expect(normalized).toMatchObject({
+      marketplace: "Mercado Livre",
+      itemId: "MLB123",
+      productId: "MLB456",
+      currentPrice: 1499.9,
+      oldPrice: 1899.9,
+      sales: 321,
+      rating: 4.8,
+      ratingStar: 4.8,
+    });
+  });
+
+  it("keeps unavailable Mercado Livre demand and rating as null in persisted evidence", () => {
+    const normalized = normalizeMercadoLivreRadarProduct({
+      item_id: "MLB789",
+      product_id: "MLB999",
+      title: "Notebook",
+      category_name: "Notebooks",
+      current_price: 3299,
+      old_price: null,
+      sold_quantity: null,
+      rating: null,
+      product_url: "https://www.mercadolivre.com.br/p/MLB999",
+      image_url: "https://http2.mlstatic.com/notebook.jpg",
+    }, "2026-08-17T03:00:00.000Z");
+
+    const [snapshot] = buildTrendRadarProductsFromCandidates({
+      radarRunId: "run-1",
+      shopeeCandidates: [],
+      mlCandidates: [normalized],
+      previousItemsMap: new Map(),
+      maxProducts: 20,
+      now: new Date("2026-08-17T03:00:00.000Z"),
+    });
+
+    expect(snapshot.direct_evidence[0].price).toBe(3299);
+    expect(snapshot.direct_evidence[0].sold_quantity).toBeNull();
+    expect(snapshot.direct_evidence[0].rating).toBeNull();
+    expect(snapshot.direct_evidence[0].commercial_metrics.sales).toBeNull();
+    expect(snapshot.direct_evidence[0].commercial_metrics.ratingStar).toBeNull();
   });
 
   it("keeps candidates without an excluded identity instead of manufacturing novelty", () => {
