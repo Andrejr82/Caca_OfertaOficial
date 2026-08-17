@@ -1,5 +1,9 @@
 export type TrendOfferHandoffResolution = "reuse" | "select" | "reject";
 
+export function supportsTrendApprovalMarketplace(marketplace: string | null | undefined): boolean {
+  return marketplace === "Shopee" || marketplace === "Mercado Livre";
+}
+
 export function resolveTrendOfferHandoff(status: string): TrendOfferHandoffResolution {
   if (status === "selected" || status === "approved") return "reuse";
   if (status === "pending_manual_review") return "select";
