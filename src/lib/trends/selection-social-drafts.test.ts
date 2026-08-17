@@ -1,10 +1,26 @@
 import { describe, expect, it } from "vitest";
 import { mergePanelDrafts } from "@/lib/offers/panel-draft-selection";
-import { TREND_SOCIAL_CHANNELS } from "./selection-social-drafts";
+import { buildTrendSocialDraftContent, TREND_SOCIAL_CHANNELS } from "./selection-social-drafts";
 
 describe("Trends social draft handoff", () => {
   it("prepares the operational social drafts used by the Trends handoff", () => {
     expect(TREND_SOCIAL_CHANNELS).toEqual(["facebook", "instagram", "whatsapp"]);
+  });
+
+  it("appends exactly one tracked URL to the WhatsApp draft and leaves other channels unchanged", () => {
+    const trackedUrl = "https://caca-oferta-oficial.vercel.app/go/wp_offer";
+    const whatsappBase = "✨ Oferta em destaque\n\n👉 ";
+
+    const whatsapp = buildTrendSocialDraftContent(whatsappBase, "whatsapp", trackedUrl);
+    const whatsappRetry = buildTrendSocialDraftContent(whatsapp, "whatsapp", trackedUrl);
+    const facebook = buildTrendSocialDraftContent("Facebook copy", "facebook", trackedUrl);
+    const instagram = buildTrendSocialDraftContent("Instagram copy", "instagram", trackedUrl);
+
+    expect(whatsapp).toBe(`✨ Oferta em destaque\n\n👉 ${trackedUrl}`);
+    expect(whatsappRetry).toBe(whatsapp);
+    expect(whatsapp.match(new RegExp(trackedUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "g"))).toHaveLength(1);
+    expect(facebook).toBe("Facebook copy");
+    expect(instagram).toBe("Instagram copy");
   });
 
   it("keeps active Trends drafts visible outside the editorial cohort", () => {
