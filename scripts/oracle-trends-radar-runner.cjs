@@ -2,6 +2,7 @@
 
 const { createClient } = require('@supabase/supabase-js');
 const engine = require('./oracle-trends-radar-engine.cjs');
+const achadinhoV12 = require('./shopee-achadinho-v12.cjs');
 const {
   fetchCompletedRadarIdentityKeys,
   fetchExistingOfferIdentityKeys,
@@ -40,7 +41,7 @@ async function persistFreshnessHealth(client, runId, freshness) {
   if (!client || !runId) return;
   const { data: run, error: readError } = await client
     .from('trend_radar_runs')
-    .select('source_health')
+    .select('source_health,executive_summary')
     .eq('id', runId)
     .maybeSingle();
   if (readError || !run) return;
@@ -50,6 +51,9 @@ async function persistFreshnessHealth(client, runId, freshness) {
     .update({
       source_health: {
         ...(run.source_health || {}),
+        strategy_version: achadinhoV12.ACHADINHO_STRATEGY_VERSION,
+        shopee_strategy_version: achadinhoV12.ACHADINHO_STRATEGY_VERSION,
+        mercado_livre_strategy_version: 'commercial-opportunity-v3',
         freshness_gate: 'exclude_all_completed_radar_and_existing_offers',
         latest_completed_run_id: freshness.latestCompletedRunId,
         completed_run_count: freshness.completedRunCount,
@@ -61,6 +65,11 @@ async function persistFreshnessHealth(client, runId, freshness) {
         mercado_livre_existing_offer_candidates_excluded: freshness.mlExistingOfferExcluded,
         historical_candidates_excluded: freshness.shopeeHistoricalExcluded + freshness.mlHistoricalExcluded,
         existing_offer_candidates_excluded: freshness.shopeeExistingOfferExcluded + freshness.mlExistingOfferExcluded,
+      },
+      executive_summary: {
+        ...(run.executive_summary || {}),
+        strategy_version: achadinhoV12.ACHADINHO_STRATEGY_VERSION,
+        generated_by: 'oracle_shopee_achadinho_v12',
       },
       updated_at: new Date().toISOString(),
     })
@@ -91,6 +100,21 @@ async function persistSnapshotImages(client, runId, candidateImages) {
   return updated;
 }
 
+function reindexFallbackProducts(products, startPriority) {
+  return products.map((product, index) => {
+    const priority = startPriority + index;
+    const directEvidence = Array.isArray(product.direct_evidence)
+      ? product.direct_evidence.map((evidence) => ({ ...evidence, rank_position: priority }))
+      : product.direct_evidence;
+    return {
+      ...product,
+      priority,
+      is_focus: priority <= 3,
+      direct_evidence: directEvidence,
+    };
+  });
+}
+
 async function processPendingTrendRadarRuns(options = {}) {
   if (isEditorialTrendRadarConsumer(options)) {
     return {
@@ -116,10 +140,28 @@ async function processPendingTrendRadarRuns(options = {}) {
 
   const env = options.env || process.env;
   const client = options.client || createRadarAdminClient(env);
-  if (!client) return engine.processPendingTrendRadarRuns(options);
+  if (!client) {
+    return {
+      processed: false,
+      reason: 'supabase_unavailable',
+      googleTrendsUsed: false,
+      publishCalls: 0,
+      postsWrites: 0,
+      offersWrites: 0,
+    };
+  }
 
   const pendingRun = await engine.findPendingTrendRadarRun(client);
-  if (!pendingRun) return engine.processPendingTrendRadarRuns({ ...options, client });
+  if (!pendingRun) {
+    return {
+      processed: false,
+      reason: 'no_pending_requests',
+      googleTrendsUsed: false,
+      publishCalls: 0,
+      postsWrites: 0,
+      offersWrites: 0,
+    };
+  }
 
   const radarHistory = await fetchCompletedRadarIdentityKeys(client, pendingRun.user_id);
   const existingOfferIdentityKeys = await fetchExistingOfferIdentityKeys(client, pendingRun.user_id);
@@ -135,7 +177,7 @@ async function processPendingTrendRadarRuns(options = {}) {
     mlExistingOfferExcluded: 0,
   };
 
-  const baseShopeeCollector = options.shopeeCollector || engine.collectShopeeMarketplaceCandidates;
+  const baseShopeeCollector = options.shopeeCollector || achadinhoV12.collectShopeeMarketplaceCandidates;
   const baseMlCollector = options.mlCollector || engine.collectMercadoLivreMarketplaceCandidates;
 
   const filterCollector = async (baseCollector, collectorOptions, historicalKey, existingOfferKey) => {
@@ -166,27 +208,84 @@ async function processPendingTrendRadarRuns(options = {}) {
     'mlExistingOfferExcluded',
   );
 
-  const result = await engine.processPendingTrendRadarRuns({
-    ...options,
-    env,
-    client,
-    shopeeCollector,
-    mlCollector,
+  const runId = pendingRun.id;
+  const radarDate = pendingRun.radar_date;
+  if (!options.dryRun) {
+    await engine.markTrendRadarRunRunning(client, runId, pendingRun.source_health || {});
+  }
+
+  const previousItemsMap = await engine.fetchRecentSnapshotItemsMap(client, pendingRun.user_id);
+
+  let shopeeCandidates = [];
+  try {
+    shopeeCandidates = await shopeeCollector({ env });
+    console.log(`[Oracle Trends Radar] Shopee V1.2: ${shopeeCandidates.length} candidatos frescos`);
+  } catch (err) {
+    console.error(`[Oracle Trends Radar] Erro Shopee V1.2: ${err.message}`);
+  }
+
+  let mlCandidates = [];
+  try {
+    mlCandidates = await mlCollector({ env });
+    console.log(`[Oracle Trends Radar] Mercado Livre: ${mlCandidates.length} candidatos frescos`);
+  } catch (err) {
+    console.error(`[Oracle Trends Radar] Erro ML: ${err.message}`);
+  }
+
+  const shopeeProducts = achadinhoV12.buildShopeeRadarProductsV12({
+    radarRunId: runId,
+    shopeeCandidates,
+    maxProducts: 20,
   });
 
-  if (result.processed && !options.dryRun) {
+  const remaining = Math.max(0, 20 - shopeeProducts.length);
+  const mlProducts = remaining > 0
+    ? reindexFallbackProducts(engine.buildTrendRadarProductsFromCandidates({
+        radarRunId: runId,
+        shopeeCandidates: [],
+        mlCandidates,
+        previousItemsMap,
+        maxProducts: remaining,
+      }), shopeeProducts.length + 1)
+    : [];
+  const products = [...shopeeProducts, ...mlProducts];
+
+  const result = await engine.persistTrendRadarSnapshot({
+    client,
+    run: pendingRun,
+    products,
+    shopeeCount: shopeeCandidates.length,
+    mlCount: mlCandidates.length,
+    dryRun: Boolean(options.dryRun),
+  });
+
+  if (result.persisted) {
     await persistSnapshotImages(client, result.runId, candidateImages);
     await persistFreshnessHealth(client, result.runId, freshness);
   }
 
   return {
-    ...result,
+    processed: true,
+    runId,
+    radarDate,
+    productsCount: products.length,
+    shopeeProductsCount: shopeeProducts.length,
+    mercadoLivreProductsCount: mlProducts.length,
+    shopeeCandidatesCount: shopeeCandidates.length,
+    mlCandidatesCount: mlCandidates.length,
+    persisted: result.persisted,
+    strategyVersion: achadinhoV12.ACHADINHO_STRATEGY_VERSION,
+    googleTrendsUsed: false,
+    publishCalls: 0,
+    postsWrites: 0,
+    offersWrites: 0,
     freshness,
   };
 }
 
 module.exports = {
   ...engine,
+  ACHADINHO_STRATEGY_VERSION: achadinhoV12.ACHADINHO_STRATEGY_VERSION,
   DEDICATED_RUNTIME_ENV,
   isDedicatedTrendRadarRuntimeEnabled,
   isEditorialTrendRadarConsumer,
