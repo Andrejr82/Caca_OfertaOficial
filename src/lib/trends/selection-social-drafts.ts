@@ -2,7 +2,7 @@ import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
 import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
-export const TREND_SOCIAL_CHANNELS = ["facebook", "instagram"] as const;
+export const TREND_SOCIAL_CHANNELS = ["facebook", "instagram", "whatsapp"] as const;
 
 export async function prepareTrendSocialDrafts(input: {
   userId: string;
