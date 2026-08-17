@@ -49,6 +49,14 @@ function filterCandidatesOutsidePreviousSnapshot(candidates = [], excludedIdenti
   return { fresh, excluded };
 }
 
+function chunks(values, size = 50) {
+  const result = [];
+  for (let index = 0; index < values.length; index += size) {
+    result.push(values.slice(index, index + size));
+  }
+  return result;
+}
+
 async function fetchCompletedRadarIdentityKeys(client, tenantId = null) {
   const identityKeys = new Set();
   if (!client) return { latestRunId: null, runCount: 0, identityKeys };
@@ -68,18 +76,21 @@ async function fetchCompletedRadarIdentityKeys(client, tenantId = null) {
 
   const runIds = runs.map((run) => run.id).filter(Boolean);
   const latestRunId = runIds[0] || null;
-  const { data: products, error: productsError } = await client
-    .from('trend_radar_products')
-    .select('marketplace, product_term, normalized_product_term, direct_evidence')
-    .in('radar_run_id', runIds);
 
-  if (productsError || !Array.isArray(products)) {
-    return { latestRunId, runCount: runIds.length, identityKeys };
-  }
+  for (const runIdChunk of chunks(runIds)) {
+    const { data: products, error: productsError } = await client
+      .from('trend_radar_products')
+      .select('marketplace, product_term, normalized_product_term, direct_evidence')
+      .in('radar_run_id', runIdChunk);
 
-  for (const product of products) {
-    const key = getMarketplaceIdentityKey(product);
-    if (key) identityKeys.add(key);
+    if (productsError || !Array.isArray(products)) {
+      return { latestRunId, runCount: runIds.length, identityKeys };
+    }
+
+    for (const product of products) {
+      const key = getMarketplaceIdentityKey(product);
+      if (key) identityKeys.add(key);
+    }
   }
 
   return { latestRunId, runCount: runIds.length, identityKeys };
