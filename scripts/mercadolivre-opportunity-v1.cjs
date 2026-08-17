@@ -79,15 +79,12 @@ function scoreMercadoLivreOpportunityV1(candidate = {}) {
   const validIdentity = Boolean(candidate.itemId || candidate.productId);
   const validImage = /^https:\/\//i.test(String(candidate.imageUrl || ''));
   const validLink = /^https:\/\//i.test(String(candidate.permalink || ''));
-  const hasRealOffer = offerScore >= 16;
-  const hasExceptionalOffer = offerScore >= 30;
-  const strongOfficialEvidence = officialEvidenceScore >= 16;
   const passesGate = Boolean(
     currentPrice > 0
     && validIdentity
     && validImage
     && validLink
-    && (hasRealOffer || (hasExceptionalOffer && strongOfficialEvidence))
+    && offerScore >= 16
   );
 
   const finalScore = Math.min(100,
