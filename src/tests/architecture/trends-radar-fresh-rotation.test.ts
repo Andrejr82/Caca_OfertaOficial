@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
+  fetchTerminalOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
   getMarketplaceIdentityKey,
 } = require("../../../scripts/oracle-trends-radar-freshness.cjs");
@@ -47,6 +48,46 @@ describe("Oracle Trends Radar fresh rotation", () => {
     const rejectedOffer = { platform: "Shopee", shopee_item_id: "22893738408" };
 
     expect(getMarketplaceIdentityKey(rejectedOffer)).toBe(getMarketplaceIdentityKey(liveCandidate));
+  });
+
+  it("paginates terminal offers beyond the Supabase default row limit", async () => {
+    const rows = Array.from({ length: 1005 }, (_, index) => ({
+      platform: "Shopee",
+      shopee_item_id: String(index + 1),
+      item_id: null,
+      product_id: null,
+    }));
+    const ranges: Array<[number, number]> = [];
+
+    const client = {
+      from(table: string) {
+        expect(table).toBe("offers");
+        return {
+          select() {
+            return this;
+          },
+          in() {
+            return this;
+          },
+          eq() {
+            return this;
+          },
+          async range(from: number, to: number) {
+            ranges.push([from, to]);
+            return { data: rows.slice(from, to + 1), error: null };
+          },
+        };
+      },
+    };
+
+    const keys = await fetchTerminalOfferIdentityKeys(client, "tenant-1");
+
+    expect(keys.size).toBe(1005);
+    expect(keys.has("shopee:native:1005")).toBe(true);
+    expect(ranges).toEqual([
+      [0, 999],
+      [1000, 1999],
+    ]);
   });
 
   it("keeps candidates without an excluded identity instead of manufacturing novelty", () => {
