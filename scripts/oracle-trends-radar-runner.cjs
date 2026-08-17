@@ -4,6 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const engine = require('./oracle-trends-radar-engine.cjs');
 const {
   fetchLatestCompletedSnapshotIdentityKeys,
+  fetchTerminalOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
 } = require('./oracle-trends-radar-freshness.cjs');
 
@@ -46,12 +47,16 @@ async function persistFreshnessHealth(client, runId, freshness) {
     .update({
       source_health: {
         ...(run.source_health || {}),
-        freshness_gate: 'exclude_latest_completed_snapshot',
+        freshness_gate: 'exclude_latest_snapshot_and_terminal_offers',
         previous_snapshot_run_id: freshness.previousSnapshotRunId,
         previous_snapshot_identity_count: freshness.previousSnapshotIdentityCount,
-        shopee_repeated_candidates_excluded: freshness.shopeeExcluded,
-        mercado_livre_repeated_candidates_excluded: freshness.mlExcluded,
-        repeated_candidates_excluded: freshness.shopeeExcluded + freshness.mlExcluded,
+        terminal_offer_identity_count: freshness.terminalOfferIdentityCount,
+        shopee_repeated_candidates_excluded: freshness.shopeeRepeatedExcluded,
+        mercado_livre_repeated_candidates_excluded: freshness.mlRepeatedExcluded,
+        shopee_terminal_candidates_excluded: freshness.shopeeTerminalExcluded,
+        mercado_livre_terminal_candidates_excluded: freshness.mlTerminalExcluded,
+        repeated_candidates_excluded: freshness.shopeeRepeatedExcluded + freshness.mlRepeatedExcluded,
+        terminal_candidates_excluded: freshness.shopeeTerminalExcluded + freshness.mlTerminalExcluded,
       },
       updated_at: new Date().toISOString(),
     })
@@ -89,29 +94,42 @@ async function processPendingTrendRadarRuns(options = {}) {
   if (!pendingRun) return engine.processPendingTrendRadarRuns({ ...options, client });
 
   const previousSnapshot = await fetchLatestCompletedSnapshotIdentityKeys(client, pendingRun.user_id);
+  const terminalOfferIdentityKeys = await fetchTerminalOfferIdentityKeys(client, pendingRun.user_id);
   const freshness = {
     previousSnapshotRunId: previousSnapshot.runId,
     previousSnapshotIdentityCount: previousSnapshot.identityKeys.size,
-    shopeeExcluded: 0,
-    mlExcluded: 0,
+    terminalOfferIdentityCount: terminalOfferIdentityKeys.size,
+    shopeeRepeatedExcluded: 0,
+    mlRepeatedExcluded: 0,
+    shopeeTerminalExcluded: 0,
+    mlTerminalExcluded: 0,
   };
 
   const baseShopeeCollector = options.shopeeCollector || engine.collectShopeeMarketplaceCandidates;
   const baseMlCollector = options.mlCollector || engine.collectMercadoLivreMarketplaceCandidates;
 
-  const shopeeCollector = async (collectorOptions = {}) => {
-    const candidates = await baseShopeeCollector(collectorOptions);
-    const filtered = filterCandidatesOutsidePreviousSnapshot(candidates, previousSnapshot.identityKeys);
-    freshness.shopeeExcluded = filtered.excluded.length;
-    return filtered.fresh;
+  const filterCollector = async (baseCollector, collectorOptions, repeatedKey, terminalKey) => {
+    const candidates = await baseCollector(collectorOptions);
+    const withoutRepeated = filterCandidatesOutsidePreviousSnapshot(candidates, previousSnapshot.identityKeys);
+    const withoutTerminal = filterCandidatesOutsidePreviousSnapshot(withoutRepeated.fresh, terminalOfferIdentityKeys);
+    freshness[repeatedKey] = withoutRepeated.excluded.length;
+    freshness[terminalKey] = withoutTerminal.excluded.length;
+    return withoutTerminal.fresh;
   };
 
-  const mlCollector = async (collectorOptions = {}) => {
-    const candidates = await baseMlCollector(collectorOptions);
-    const filtered = filterCandidatesOutsidePreviousSnapshot(candidates, previousSnapshot.identityKeys);
-    freshness.mlExcluded = filtered.excluded.length;
-    return filtered.fresh;
-  };
+  const shopeeCollector = (collectorOptions = {}) => filterCollector(
+    baseShopeeCollector,
+    collectorOptions,
+    'shopeeRepeatedExcluded',
+    'shopeeTerminalExcluded',
+  );
+
+  const mlCollector = (collectorOptions = {}) => filterCollector(
+    baseMlCollector,
+    collectorOptions,
+    'mlRepeatedExcluded',
+    'mlTerminalExcluded',
+  );
 
   const result = await engine.processPendingTrendRadarRuns({
     ...options,
