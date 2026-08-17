@@ -4,7 +4,7 @@ const { createClient } = require('@supabase/supabase-js');
 const engine = require('./oracle-trends-radar-engine.cjs');
 const {
   fetchCompletedRadarIdentityKeys,
-  fetchTerminalOfferIdentityKeys,
+  fetchExistingOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
 } = require('./oracle-trends-radar-freshness.cjs');
 
@@ -47,17 +47,17 @@ async function persistFreshnessHealth(client, runId, freshness) {
     .update({
       source_health: {
         ...(run.source_health || {}),
-        freshness_gate: 'exclude_all_completed_radar_and_terminal_offers',
+        freshness_gate: 'exclude_all_completed_radar_and_existing_offers',
         latest_completed_run_id: freshness.latestCompletedRunId,
         completed_run_count: freshness.completedRunCount,
         historical_radar_identity_count: freshness.historicalRadarIdentityCount,
-        terminal_offer_identity_count: freshness.terminalOfferIdentityCount,
+        existing_offer_identity_count: freshness.existingOfferIdentityCount,
         shopee_historical_candidates_excluded: freshness.shopeeHistoricalExcluded,
         mercado_livre_historical_candidates_excluded: freshness.mlHistoricalExcluded,
-        shopee_terminal_candidates_excluded: freshness.shopeeTerminalExcluded,
-        mercado_livre_terminal_candidates_excluded: freshness.mlTerminalExcluded,
+        shopee_existing_offer_candidates_excluded: freshness.shopeeExistingOfferExcluded,
+        mercado_livre_existing_offer_candidates_excluded: freshness.mlExistingOfferExcluded,
         historical_candidates_excluded: freshness.shopeeHistoricalExcluded + freshness.mlHistoricalExcluded,
-        terminal_candidates_excluded: freshness.shopeeTerminalExcluded + freshness.mlTerminalExcluded,
+        existing_offer_candidates_excluded: freshness.shopeeExistingOfferExcluded + freshness.mlExistingOfferExcluded,
       },
       updated_at: new Date().toISOString(),
     })
@@ -95,42 +95,42 @@ async function processPendingTrendRadarRuns(options = {}) {
   if (!pendingRun) return engine.processPendingTrendRadarRuns({ ...options, client });
 
   const radarHistory = await fetchCompletedRadarIdentityKeys(client, pendingRun.user_id);
-  const terminalOfferIdentityKeys = await fetchTerminalOfferIdentityKeys(client, pendingRun.user_id);
+  const existingOfferIdentityKeys = await fetchExistingOfferIdentityKeys(client, pendingRun.user_id);
   const freshness = {
     latestCompletedRunId: radarHistory.latestRunId,
     completedRunCount: radarHistory.runCount,
     historicalRadarIdentityCount: radarHistory.identityKeys.size,
-    terminalOfferIdentityCount: terminalOfferIdentityKeys.size,
+    existingOfferIdentityCount: existingOfferIdentityKeys.size,
     shopeeHistoricalExcluded: 0,
     mlHistoricalExcluded: 0,
-    shopeeTerminalExcluded: 0,
-    mlTerminalExcluded: 0,
+    shopeeExistingOfferExcluded: 0,
+    mlExistingOfferExcluded: 0,
   };
 
   const baseShopeeCollector = options.shopeeCollector || engine.collectShopeeMarketplaceCandidates;
   const baseMlCollector = options.mlCollector || engine.collectMercadoLivreMarketplaceCandidates;
 
-  const filterCollector = async (baseCollector, collectorOptions, historicalKey, terminalKey) => {
+  const filterCollector = async (baseCollector, collectorOptions, historicalKey, existingOfferKey) => {
     const candidates = await baseCollector(collectorOptions);
     const withoutHistorical = filterCandidatesOutsidePreviousSnapshot(candidates, radarHistory.identityKeys);
-    const withoutTerminal = filterCandidatesOutsidePreviousSnapshot(withoutHistorical.fresh, terminalOfferIdentityKeys);
+    const withoutExistingOffers = filterCandidatesOutsidePreviousSnapshot(withoutHistorical.fresh, existingOfferIdentityKeys);
     freshness[historicalKey] = withoutHistorical.excluded.length;
-    freshness[terminalKey] = withoutTerminal.excluded.length;
-    return withoutTerminal.fresh;
+    freshness[existingOfferKey] = withoutExistingOffers.excluded.length;
+    return withoutExistingOffers.fresh;
   };
 
   const shopeeCollector = (collectorOptions = {}) => filterCollector(
     baseShopeeCollector,
     collectorOptions,
     'shopeeHistoricalExcluded',
-    'shopeeTerminalExcluded',
+    'shopeeExistingOfferExcluded',
   );
 
   const mlCollector = (collectorOptions = {}) => filterCollector(
     baseMlCollector,
     collectorOptions,
     'mlHistoricalExcluded',
-    'mlTerminalExcluded',
+    'mlExistingOfferExcluded',
   );
 
   const result = await engine.processPendingTrendRadarRuns({
