@@ -31,6 +31,15 @@ function isShopeeAffiliateUrl(value: string): boolean {
   return /(?:s\.shopee\.com\.br|shope\.ee|affiliates|ext_camp)/i.test(value);
 }
 
+function isMercadoLivreUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === "https:" && /(^|\.)mercadolivre\.com\.br$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 async function findExactOffer(supabase: any, userId: string, marketplace: string, evidence: Evidence) {
   const identity = evidence.marketplace_identity ?? {};
   const itemId = String(identity.itemId ?? "").trim();
@@ -54,6 +63,17 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
     if (data) return data;
   }
   return null;
+}
+
+async function readMaterializedOffer(persistenceClient: any, userId: string, offerId: string) {
+  const { data: offer, error: offerError } = await persistenceClient
+    .from("offers")
+    .select("id,status,platform,product_name,explainability")
+    .eq("id", offerId)
+    .eq("user_id", userId)
+    .single();
+  if (offerError || !offer) throw new Error("Oferta Trends materializada não pôde ser confirmada.");
+  return offer;
 }
 
 async function materializeShopeeOfferFromSnapshot(userId: string, product: any, evidence: Evidence) {
@@ -100,15 +120,64 @@ async function materializeShopeeOfferFromSnapshot(userId: string, product: any, 
   if (error) throw new Error(`Falha ao materializar oferta Trends: ${error.message}`);
   const offerId = Array.isArray(data?.offer_ids) ? String(data.offer_ids[0] ?? "") : "";
   if (!offerId) throw new Error("Oferta Trends não retornou vínculo persistido.");
+  return readMaterializedOffer(persistenceClient, userId, offerId);
+}
 
-  const { data: offer, error: offerError } = await persistenceClient
-    .from("offers")
-    .select("id,status,platform,product_name,explainability")
-    .eq("id", offerId)
-    .eq("user_id", userId)
-    .single();
-  if (offerError || !offer) throw new Error("Oferta Trends materializada não pôde ser confirmada.");
-  return offer;
+async function materializeMercadoLivreOfferFromSnapshot(userId: string, product: any, evidence: Evidence) {
+  const identity = evidence.marketplace_identity ?? {};
+  const metrics = evidence.commercial_metrics ?? {};
+  const opportunity = evidence.mercado_livre_opportunity ?? {};
+  const itemId = String(identity.itemId ?? "").trim();
+  const productId = String(identity.productId ?? "").trim();
+  const marketplaceUrl = validHttps(evidence.source_url);
+  const imageUrl = resolveTrendSnapshotImageUrl(evidence);
+  const price = Number(evidence.price ?? metrics.price ?? 0);
+  const oldPrice = Number(evidence.old_price ?? 0);
+
+  if ((!itemId && !productId) || !marketplaceUrl || !isMercadoLivreUrl(marketplaceUrl) || !Number.isFinite(price) || price <= 0) {
+    throw new Error("Snapshot Mercado Livre não possui identidade/link/preço suficientes para materializar a oferta com segurança.");
+  }
+
+  const row = {
+    user_id: userId,
+    platform: "Mercado Livre",
+    product_name: product.product_term,
+    category: product.category,
+    original_url: marketplaceUrl,
+    image_url: imageUrl,
+    current_price: price,
+    old_price: Number.isFinite(oldPrice) && oldPrice > price ? oldPrice : null,
+    score: Number(product.commercial_score ?? 0) / 10,
+    status: "pending_manual_review",
+    explainability: {
+      provenance: "trend_experiment",
+      correlation_id: `trend-radar:${product.radar_run_id}:${product.id}`,
+      radar_run_id: product.radar_run_id,
+      radar_product_id: product.id,
+      strategy_version: evidence.strategy_version ?? "mercadolivre-opportunity-v1",
+      commercial_score: Number(product.commercial_score ?? 0),
+      score_breakdown: product.score_breakdown ?? {},
+      automatic_publication: false,
+      marketplace_metrics: metrics,
+    },
+    notes: `Trends IA · teste aprovado · ${product.product_term}`,
+    item_id: itemId || null,
+    product_id: productId || null,
+    category_id: opportunity.category_id ?? null,
+    category_name: product.category ?? null,
+    source_position: Number(opportunity.source_position ?? product.priority ?? 0) || null,
+    source_categories: product.category ? [product.category] : [],
+  };
+
+  const persistenceClient = createRequiredSupabaseAdminClient();
+  const { data, error } = await persistenceClient.rpc("upsert_discovery_offers_v2", {
+    p_marketplace: "Mercado Livre",
+    p_rows: [row],
+  });
+  if (error) throw new Error(`Falha ao materializar oferta Mercado Livre no Trends: ${error.message}`);
+  const offerId = Array.isArray(data?.offer_ids) ? String(data.offer_ids[0] ?? "") : "";
+  if (!offerId) throw new Error("Oferta Mercado Livre no Trends não retornou vínculo persistido.");
+  return readMaterializedOffer(persistenceClient, userId, offerId);
 }
 
 async function ensureOfferSelected(supabase: any, userId: string, offer: any, productId: string) {
@@ -169,7 +238,8 @@ async function approveAndBridge(formData: FormData) {
 
   if (!offer) offer = await findExactOffer(supabase, user.id, String(product.marketplace ?? ""), evidence);
   if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(user.id, product, evidence);
-  if (!offer) throw new Error("Nenhuma oferta monetizável existente foi encontrada para esta oportunidade.");
+  if (!offer && product.marketplace === "Mercado Livre") offer = await materializeMercadoLivreOfferFromSnapshot(user.id, product, evidence);
+  if (!offer) throw new Error("Nenhuma oferta rastreável existente foi encontrada para esta oportunidade.");
 
   await ensureOfferSelected(supabase, user.id, offer, product.id);
 
