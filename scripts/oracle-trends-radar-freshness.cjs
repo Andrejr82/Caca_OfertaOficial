@@ -100,19 +100,27 @@ async function fetchTerminalOfferIdentityKeys(client, tenantId = null) {
   const identityKeys = new Set();
   if (!client) return identityKeys;
 
-  let query = client
-    .from('offers')
-    .select('platform, shopee_item_id, item_id, product_id')
-    .in('status', ['rejected', 'posted']);
+  const pageSize = 1000;
+  let from = 0;
 
-  if (tenantId) query = query.eq('user_id', tenantId);
+  while (true) {
+    let query = client
+      .from('offers')
+      .select('platform, shopee_item_id, item_id, product_id')
+      .in('status', ['rejected', 'posted']);
 
-  const { data: offers, error } = await query;
-  if (error || !Array.isArray(offers)) return identityKeys;
+    if (tenantId) query = query.eq('user_id', tenantId);
 
-  for (const offer of offers) {
-    const key = getMarketplaceIdentityKey(offer);
-    if (key) identityKeys.add(key);
+    const { data: offers, error } = await query.range(from, from + pageSize - 1);
+    if (error || !Array.isArray(offers)) return identityKeys;
+
+    for (const offer of offers) {
+      const key = getMarketplaceIdentityKey(offer);
+      if (key) identityKeys.add(key);
+    }
+
+    if (offers.length < pageSize) break;
+    from += pageSize;
   }
 
   return identityKeys;
