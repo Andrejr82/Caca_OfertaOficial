@@ -42,7 +42,14 @@ describe("Oracle Trends Radar fresh rotation", () => {
     expect(getMarketplaceIdentityKey(shopee)).not.toBe(getMarketplaceIdentityKey(mercadoLivre));
   });
 
-  it("keeps candidates without a previous-snapshot match instead of manufacturing novelty", () => {
+  it("matches persisted terminal offers using their database identity columns", () => {
+    const liveCandidate = { marketplace: "Shopee", itemId: "22893738408", productName: "Produto atual" };
+    const rejectedOffer = { platform: "Shopee", shopee_item_id: "22893738408" };
+
+    expect(getMarketplaceIdentityKey(rejectedOffer)).toBe(getMarketplaceIdentityKey(liveCandidate));
+  });
+
+  it("keeps candidates without an excluded identity instead of manufacturing novelty", () => {
     const fresh = candidate("300", "Produto novo");
     const result = filterCandidatesOutsidePreviousSnapshot([fresh], new Set());
 
