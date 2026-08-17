@@ -144,6 +144,45 @@ describe("Oracle Trends Radar fresh rotation", () => {
     expect(seenLimits).toEqual([30]);
   });
 
+  it("does not treat Shopee priceMax as previous price or raw discount as verified", async () => {
+    const request = async () => ({
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [{
+              itemId: "22599466714",
+              shopId: "432679242",
+              productName: "Papa Bolinhas Elétrico",
+              priceMin: "23.66",
+              priceMax: "24.88",
+              priceDiscountRate: "41",
+              sales: "7242",
+              ratingStar: "4.8",
+              commissionRate: "9",
+              sellerCommissionRate: "6",
+              offerLink: "https://s.shopee.com.br/example",
+              imageUrl: "https://cf.shopee.com.br/file/example",
+            }],
+          },
+        },
+      },
+    });
+
+    const [normalized] = await collectShopeeMarketplaceCandidates({ request, categoryIds: [100010] });
+
+    expect(normalized).toMatchObject({
+      currentPrice: 23.66,
+      oldPrice: null,
+      discountPercent: 0,
+      priceDiscountRate: 0,
+      marketplaceReportedDiscountPercent: 41,
+      priceRangeAmbiguous: true,
+      priceAuthority: "priceMin",
+      oldPriceAuthority: "none",
+      discountAuthority: "none",
+    });
+  });
+
   it("maps Mercado Livre normalized price fields instead of manufacturing zero values", () => {
     const normalized = normalizeMercadoLivreRadarProduct({
       item_id: "MLB123",
