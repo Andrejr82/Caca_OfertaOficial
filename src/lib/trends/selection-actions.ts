@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { resolveTrendOfferHandoff } from "@/lib/trends/selection-offer-state";
@@ -55,7 +56,7 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
   return null;
 }
 
-async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string, product: any, evidence: Evidence) {
+async function materializeShopeeOfferFromSnapshot(userId: string, product: any, evidence: Evidence) {
   const identity = evidence.marketplace_identity ?? {};
   const metrics = evidence.commercial_metrics ?? {};
   const itemId = String(identity.itemId ?? "").trim();
@@ -92,12 +93,13 @@ async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string,
     native_category_position: Number(product.priority ?? 0) || null,
   };
 
-  const { data, error } = await supabase.rpc("upsert_discovery_offers_v2", { p_marketplace: "Shopee", p_rows: [row] });
+  const persistenceClient = createRequiredSupabaseAdminClient();
+  const { data, error } = await persistenceClient.rpc("upsert_discovery_offers_v2", { p_marketplace: "Shopee", p_rows: [row] });
   if (error) throw new Error(`Falha ao materializar oferta Trends: ${error.message}`);
   const offerId = Array.isArray(data?.offer_ids) ? String(data.offer_ids[0] ?? "") : "";
   if (!offerId) throw new Error("Oferta Trends não retornou vínculo persistido.");
 
-  const { data: offer, error: offerError } = await supabase
+  const { data: offer, error: offerError } = await persistenceClient
     .from("offers")
     .select("id,status,platform,product_name,explainability")
     .eq("id", offerId)
@@ -164,7 +166,7 @@ async function approveAndBridge(formData: FormData) {
     : null;
 
   if (!offer) offer = await findExactOffer(supabase, user.id, String(product.marketplace ?? ""), evidence);
-  if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(supabase, user.id, product, evidence);
+  if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(user.id, product, evidence);
   if (!offer) throw new Error("Nenhuma oferta monetizável existente foi encontrada para esta oportunidade.");
 
   await ensureOfferSelected(supabase, user.id, offer, product.id);
