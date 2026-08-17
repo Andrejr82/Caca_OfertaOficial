@@ -2,8 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
+import { resolveTrendOfferHandoff, resolveTrendSnapshotImageUrl } from "@/lib/trends/selection-offer-state";
+import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
 
 export type TrendSelectionDecision = "IGNORAR" | "APROVAR_TESTE";
 
@@ -53,12 +56,13 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
   return null;
 }
 
-async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string, product: any, evidence: Evidence) {
+async function materializeShopeeOfferFromSnapshot(userId: string, product: any, evidence: Evidence) {
   const identity = evidence.marketplace_identity ?? {};
   const metrics = evidence.commercial_metrics ?? {};
   const itemId = String(identity.itemId ?? "").trim();
   const shopId = String(identity.shopId ?? "").trim();
   const affiliateUrl = validHttps(evidence.source_url);
+  const imageUrl = resolveTrendSnapshotImageUrl(evidence);
   const price = Number(evidence.price ?? metrics.price ?? 0);
   if (!/^\d+$/.test(itemId) || !affiliateUrl || !isShopeeAffiliateUrl(affiliateUrl) || !Number.isFinite(price) || price <= 0) {
     throw new Error("Snapshot Shopee não possui identidade/link afiliado/preço suficientes para materializar a oferta com segurança.");
@@ -70,13 +74,14 @@ async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string,
     product_name: product.product_term,
     category: product.category,
     original_url: affiliateUrl,
-    image_url: null,
+    image_url: imageUrl,
     current_price: price,
     old_price: evidence.old_price ?? null,
     score: Number(product.commercial_score ?? 0) / 10,
     status: "pending_manual_review",
     explainability: {
       provenance: "trend_experiment",
+      correlation_id: `trend-radar:${product.radar_run_id}:${product.id}`,
       radar_run_id: product.radar_run_id,
       radar_product_id: product.id,
       commercial_score_v3: Number(product.commercial_score ?? 0),
@@ -90,12 +95,13 @@ async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string,
     native_category_position: Number(product.priority ?? 0) || null,
   };
 
-  const { data, error } = await supabase.rpc("upsert_discovery_offers_v2", { p_marketplace: "Shopee", p_rows: [row] });
+  const persistenceClient = createRequiredSupabaseAdminClient();
+  const { data, error } = await persistenceClient.rpc("upsert_discovery_offers_v2", { p_marketplace: "Shopee", p_rows: [row] });
   if (error) throw new Error(`Falha ao materializar oferta Trends: ${error.message}`);
   const offerId = Array.isArray(data?.offer_ids) ? String(data.offer_ids[0] ?? "") : "";
   if (!offerId) throw new Error("Oferta Trends não retornou vínculo persistido.");
 
-  const { data: offer, error: offerError } = await supabase
+  const { data: offer, error: offerError } = await persistenceClient
     .from("offers")
     .select("id,status,platform,product_name,explainability")
     .eq("id", offerId)
@@ -106,8 +112,9 @@ async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string,
 }
 
 async function ensureOfferSelected(supabase: any, userId: string, offer: any, productId: string) {
-  if (offer.status === "selected") return;
-  if (offer.status !== "pending_manual_review") {
+  const resolution = resolveTrendOfferHandoff(String(offer.status ?? ""));
+  if (resolution === "reuse") return;
+  if (resolution === "reject") {
     throw new Error(`Oferta vinculada está em estado ${offer.status} e não pode ser encaminhada automaticamente.`);
   }
 
@@ -161,7 +168,7 @@ async function approveAndBridge(formData: FormData) {
     : null;
 
   if (!offer) offer = await findExactOffer(supabase, user.id, String(product.marketplace ?? ""), evidence);
-  if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(supabase, user.id, product, evidence);
+  if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(user.id, product, evidence);
   if (!offer) throw new Error("Nenhuma oferta monetizável existente foi encontrada para esta oportunidade.");
 
   await ensureOfferSelected(supabase, user.id, offer, product.id);
@@ -195,9 +202,19 @@ async function approveAndBridge(formData: FormData) {
   }).eq("id", offer.id).eq("user_id", user.id);
   if (offerUpdateError) throw new Error("Falha ao registrar origem Trends na oferta.");
 
+  await prepareTrendSocialDrafts({
+    userId: user.id,
+    offerId: offer.id,
+    productId: product.id,
+  });
+
   revalidatePath("/trends");
   revalidatePath("/offers");
   revalidatePath("/videos");
+  revalidatePath("/facebook");
+  revalidatePath("/instagram");
+  revalidatePath("/telegram");
+  revalidatePath("/whatsapp");
 }
 
 async function persistIgnore(formData: FormData) {
