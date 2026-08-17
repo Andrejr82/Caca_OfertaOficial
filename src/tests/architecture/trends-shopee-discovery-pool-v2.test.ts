@@ -25,7 +25,7 @@ describe("Shopee discovery pool v2", () => {
     const seenPages: number[] = [];
     const request = async (_operation: string, _query: string, variables: { page: number; limit: number; productCatId?: number }) => {
       seenPages.push(variables.page);
-      expect(variables.limit).toBe(2);
+      expect(variables.limit).toBe(5);
       expect(variables.productCatId).toBe(100010);
 
       const pages: Record<number, ReturnType<typeof node>[]> = {
@@ -45,7 +45,7 @@ describe("Shopee discovery pool v2", () => {
     const candidates = await collectShopeeMarketplaceCandidates({
       request,
       categoryIds: [100010],
-      maxPerCategory: 2,
+      maxPerCategory: 5,
       maxPagesPerCategory: 2,
     });
 
