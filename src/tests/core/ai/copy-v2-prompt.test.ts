@@ -37,6 +37,7 @@ describe("Official AI O.P.A.C.", () => {
       "🎧 Oferta na Shopee",
       "✨ Bluetooth 5.3",
       "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
+      "🛒 Veja a oferta no link abaixo",
       "👉 "
     ].join("\n\n"));
   });
