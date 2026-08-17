@@ -91,6 +91,14 @@ function objectiveAttribute(facts: CopyV2Facts) {
   return null;
 }
 
+function trimDanglingTitleWords(value: string) {
+  let result = value.replace(/[\s,;:–—-]+$/gu, "").trim();
+  while (/\b(?:com|para|e|de|da|do|das|dos|em|no|na|nos|nas)$/iu.test(result)) {
+    result = result.replace(/\s+\S+$/u, "").replace(/[\s,;:–—-]+$/gu, "").trim();
+  }
+  return result;
+}
+
 function cleanProductName(value: string) {
   const normalized = value
     .replace(/^\s*(?:oferta|promoção|achadinho)\s*[:\-–—]\s*/iu, "")
@@ -110,9 +118,9 @@ function cleanProductName(value: string) {
     }
   }
   const cleaned = words.join(" ");
-  if (cleaned.length <= 76) return cleaned;
+  if (cleaned.length <= 76) return trimDanglingTitleWords(cleaned);
   const cut = cleaned.lastIndexOf(" ", 76);
-  return cut > 0 ? cleaned.slice(0, cut) : words[0];
+  return trimDanglingTitleWords(cut > 0 ? cleaned.slice(0, cut) : words[0]);
 }
 
 function compactProductName(value: string) {
@@ -128,7 +136,7 @@ function compactProductName(value: string) {
   }
   if (cleaned.length <= 58) return cleaned;
   const words = cleaned.split(" ");
-  return words.slice(0, 7).join(" ");
+  return trimDanglingTitleWords(words.slice(0, 7).join(" "));
 }
 
 const DEFAULT_HOOKS = {
@@ -152,10 +160,6 @@ function humanContext(facts: CopyV2Facts) {
   return null;
 }
 
-/**
- * Normaliza hooks legados ou promocionais sem evidência persistida.
- * A copy continua aproveitável; apenas remove urgência/escassez não comprovada.
- */
 export function sanitizeOfficialAIHook(value: string) {
   return value
     .replace(/\b(?:baixou muito|só agora|so agora|últimas unidades|ultimas unidades|estoque(?: costuma)? esgotar(?: em minutos)?|corre que[^\n.!?]*)\b/giu, "")
@@ -168,18 +172,20 @@ function hookFor(facts: CopyV2Facts, hook?: string) {
   const value = hook ? sanitizeOfficialAIHook(hook.replace(/\s+/gu, " ")) : "";
   const isGenericLegacyHook = /^(?:🔥\s*)?(?:preço baixou|achado do dia)$/iu.test(value);
   if (value && !isGenericLegacyHook && value.length <= 90 && !/[\n\r]|https?:\/\/|www\./iu.test(value)) return value;
-  
-  if (!facts.currentPrice || facts.currentPrice <= 0) {
-    const market = facts.marketplace || 'Shopee';
-    const isFeminine = /shopee|amazon|shein/i.test(market);
-    const inMarket = isFeminine ? "na" : "no";
-    return `✨ Oferta em destaque ${inMarket} ${market}`;
-  }
 
+  const product = compactProductName(facts.productName);
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   const saving = facts.originalPrice && facts.originalPrice > facts.currentPrice
     ? formatBRL(facts.originalPrice - facts.currentPrice)
     : null;
+
+  if (!hook) {
+    if (discount !== null && saving) return `🔥 ${product} com economia de ${saving}`;
+    if (facts.currentPrice > 0) return `💸 ${product} por ${formatBRL(facts.currentPrice)}`;
+    return `✨ ${product}`;
+  }
+
+  if (!facts.currentPrice || facts.currentPrice <= 0) return `✨ ${product}`;
   const templates = discount === null ? DEFAULT_HOOKS.standard : DEFAULT_HOOKS.discount;
   const template = templates[stableIndex(`${facts.marketplace}|${facts.productName}|${facts.currentPrice}`, templates.length)];
   return template.replace("{price}", formatBRL(facts.currentPrice)).replace("{saving}", saving ?? formatBRL(facts.currentPrice));
@@ -205,7 +211,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice && facts.currentPrice > 0
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : (facts.currentPrice > 0 ? `💰 ${formatBRL(facts.currentPrice)}` : `💰 Consulte o preço atual no link!`),
-      `👉 Link de compra no primeiro comentário! 👇`,
+      `👉 Veja a oferta no primeiro comentário 👇`,
       renderSocialHashtags(facts, "facebook")
     ];
     return blocks.join("\n\n");
@@ -220,7 +226,7 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(discount !== null && facts.originalPrice !== null && facts.currentPrice > 0 ? [`❌ *Preço anterior: ${formatBRL(facts.originalPrice)}*`] : []),
       facts.currentPrice > 0 ? `✅ *Valor confirmado: ${formatBRL(facts.currentPrice)}* ${discount ? `(${discount}% OFF)` : ''}`.trim() : `✅ Consulte o valor no link!`,
-      `👉 `
+      `👉 Ver oferta:`
     ];
     return blocks.join("\n\n");
   }
@@ -235,16 +241,17 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       discount && facts.originalPrice && facts.currentPrice > 0
         ? `📉 De ${formatBRL(facts.originalPrice)}\n💰 Por *${formatBRL(facts.currentPrice)}* (${discount}% OFF)`
         : (facts.currentPrice > 0 ? `💰 *${formatBRL(facts.currentPrice)}*` : `💰 Consulte o preço atual no link!`),
-      `👉 `
+      `👉 Ver oferta:`
     ];
     return blocks.join("\n\n");
   }
 
   if (channel === "instagram") {
     const hasPrice = facts.currentPrice && facts.currentPrice > 0;
+    const context = humanContext(facts);
     const blocks = [
       hookFor(facts, hook),
-      `${humanContext(facts) ?? "Uma opção para sua rotina"}: **${cleanProductName(facts.productName)}**.`,
+      context ? `${context}: **${cleanProductName(facts.productName)}**.` : `🛍️ **${cleanProductName(facts.productName)}**.`,
       ...(attribute ? [`✨ ${attribute.text}`] : []),
       ...(freight ? [freight] : []),
       hasPrice
@@ -253,30 +260,14 @@ export function buildCopyV2ChannelCopy(facts: CopyV2Facts, channel: OfficialAICh
       hasPrice
         ? (discount && facts.originalPrice
             ? `💰 **De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}**`
-            : `💰 **Apenas ${formatBRL(facts.currentPrice)}**`)
+            : `💰 **${formatBRL(facts.currentPrice)}**`)
         : null,
-      `🔎 **Link na bio ou nos Stories para consultar a oferta.** 👇`,
+      `🔎 **Veja a oferta no link da bio ou nos Stories.** 👇`,
       renderSocialHashtags(facts, "instagram")
     ].filter(Boolean);
     return blocks.join("\n\n");
   }
 
-  if (channel === "facebook") {
-    const blocks = [
-      hookFor(facts, hook),
-      `🛍️ ${cleanProductName(facts.productName)}`,
-      `${marketplace.icon} ${marketplace.text}`,
-      ...(freight ? [freight] : []),
-      ...(attribute ? [`✨ ${attribute.text}`] : []),
-      discount && facts.originalPrice
-        ? `📉 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`
-        : `💰 ${formatBRL(facts.currentPrice)}`,
-      `👉 `
-    ];
-    return blocks.join("\n\n");
-  }
-
-  // Fallback
   const priceBlock = discount !== null && facts.originalPrice !== null
     ? [`📉 De ${formatBRL(facts.originalPrice)}`, `💰 Por ${formatBRL(facts.currentPrice)} (${discount}% OFF)`]
     : [`💰 ${formatBRL(facts.currentPrice)}`];
@@ -310,9 +301,7 @@ export function buildOfficialPrompt(offer: OfficialAIOffer, channels: readonly O
       instagram: "Impacto visual, poucas hashtags relevantes e nenhuma URL.",
       facebook: "Feed de Página; texto factual, escaneável, com marketplace, preço e CTA direto; sem URL na resposta."
     },
-    required: [
-      "hook", "benefitLine", "contextLine"
-    ]
+    required: ["hook", "benefitLine", "contextLine"]
   });
 }
 
@@ -348,7 +337,7 @@ function validateV3Field(facts: CopyV3Facts, value: string | null | undefined) {
   if (!normalized || normalized.length > 180 || COPY_V3_FORBIDDEN.test(normalized)) return null;
   const sourceText = [facts.productName, facts.category ?? "", ...persistedStrings(facts.evidence ?? {})].join(" ");
   const unsupported = normalized.match(COPY_V3_UNSUPPORTED_ATTRIBUTE)?.[0];
-  if (unsupported && !new RegExp(`\\b${unsupported.replace(/\\s+/gu, "\\\\s+")}\\b`, "iu").test(sourceText)) return null;
+  if (unsupported && !new RegExp(`\\b${unsupported.replace(/\s+/gu, "\\s+")}\\b`, "iu").test(sourceText)) return null;
   const source = new Set(v3Words(sourceText));
   return v3Words(normalized).some((word) => source.has(word)) ? normalized : null;
 }
@@ -449,6 +438,8 @@ function conversionOffer(facts: CopyV3Facts) {
 function conversionHook(facts: CopyV3Facts, product: string, fields?: CopyV3Fields) {
   const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
   if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !WEAK_CONVERSION_OPENING.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate)) return candidate;
+  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
+  if (discount !== null) return `🔥 ${product} com ${discount}% OFF.`;
   const attribute = objectiveAttribute(facts);
   if (attribute) return `${attribute.emoji} ${attribute.hook ?? `${product} com ${attribute.text}`}.`;
   const benefit = v3DerivedBenefit(facts);
@@ -467,13 +458,12 @@ export function buildConversionCopyContract(facts: CopyV3Facts, fields?: CopyV3F
 }
 
 function channelCta(contract: OfficialConversionCopyContract, channel: OfficialAIChannel) {
-  if (channel === "instagram") return `🔎 ${contract.cta} Link na bio ou nos Stories. 👇`;
-  if (channel === "facebook") return `👉 ${contract.cta} Link no primeiro comentário. 👇`;
-  if (channel === "telegram") return `📣 ${contract.cta}`;
-  return `👉 ${contract.cta}`;
+  if (channel === "instagram") return `🔎 Veja a oferta no link da bio ou nos Stories. 👇`;
+  if (channel === "facebook") return `👉 Veja a oferta no primeiro comentário. 👇`;
+  if (channel === "telegram") return `📣 Ver oferta 👇`;
+  return `👉 Ver oferta 👇`;
 }
 
-/** Copy V3: the conversion contract owns commercial intelligence; this function only renders a channel. */
 export function buildCopyV3ChannelCopy(facts: CopyV3Facts, channel: OfficialAIChannel, fields?: CopyV3Fields) {
   const contract = buildConversionCopyContract(facts, fields);
   const attribute = objectiveAttribute(facts);
