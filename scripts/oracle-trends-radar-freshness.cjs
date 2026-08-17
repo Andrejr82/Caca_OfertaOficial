@@ -49,38 +49,40 @@ function filterCandidatesOutsidePreviousSnapshot(candidates = [], excludedIdenti
   return { fresh, excluded };
 }
 
-async function fetchLatestCompletedSnapshotIdentityKeys(client, tenantId = null) {
+async function fetchCompletedRadarIdentityKeys(client, tenantId = null) {
   const identityKeys = new Set();
-  if (!client) return { runId: null, identityKeys };
+  if (!client) return { latestRunId: null, runCount: 0, identityKeys };
 
   let runQuery = client
     .from('trend_radar_runs')
     .select('id')
     .eq('status', 'completed')
-    .order('created_at', { ascending: false })
-    .limit(1);
+    .order('created_at', { ascending: false });
 
   if (tenantId) runQuery = runQuery.eq('user_id', tenantId);
 
   const { data: runs, error: runsError } = await runQuery;
-  if (runsError || !Array.isArray(runs) || !runs[0]?.id) {
-    return { runId: null, identityKeys };
+  if (runsError || !Array.isArray(runs) || runs.length === 0) {
+    return { latestRunId: null, runCount: 0, identityKeys };
   }
 
-  const runId = runs[0].id;
+  const runIds = runs.map((run) => run.id).filter(Boolean);
+  const latestRunId = runIds[0] || null;
   const { data: products, error: productsError } = await client
     .from('trend_radar_products')
     .select('marketplace, product_term, normalized_product_term, direct_evidence')
-    .eq('radar_run_id', runId);
+    .in('radar_run_id', runIds);
 
-  if (productsError || !Array.isArray(products)) return { runId, identityKeys };
+  if (productsError || !Array.isArray(products)) {
+    return { latestRunId, runCount: runIds.length, identityKeys };
+  }
 
   for (const product of products) {
     const key = getMarketplaceIdentityKey(product);
     if (key) identityKeys.add(key);
   }
 
-  return { runId, identityKeys };
+  return { latestRunId, runCount: runIds.length, identityKeys };
 }
 
 async function fetchTerminalOfferIdentityKeys(client, tenantId = null) {
@@ -109,6 +111,6 @@ module.exports = {
   normalizeIdentityPart,
   getMarketplaceIdentityKey,
   filterCandidatesOutsidePreviousSnapshot,
-  fetchLatestCompletedSnapshotIdentityKeys,
+  fetchCompletedRadarIdentityKeys,
   fetchTerminalOfferIdentityKeys,
 };
