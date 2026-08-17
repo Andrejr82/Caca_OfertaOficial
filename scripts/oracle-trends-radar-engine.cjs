@@ -138,101 +138,110 @@ async function markTrendRadarRunRunning(client, runId, existingHealth = {}) {
 
 /**
  * Coleta candidatos comerciais da Shopee sem autoridade em seeds hardcoded.
- * Utiliza:
- * 1. Categorias amplas com ordenação por popularidade/vendas (sortType: 1/2).
- * 2. Feeds oficiais DELTA/BASE quando disponíveis na conta.
+ * Utiliza categorias amplas com ordenação por popularidade/vendas e paginação
+ * oficial limitada por categoria. O pool maior não altera o Top 20 final.
  */
 async function collectShopeeMarketplaceCandidates({
   request = null,
   categoryIds = SHOPEE_BROAD_DISCOVERY_CATEGORIES,
   maxPerCategory = 30,
+  maxPagesPerCategory = 2,
   env = process.env,
 } = {}) {
   const caller = request || defaultShopeeApiCaller();
   if (!caller) return [];
   const candidates = [];
-  const seenItemIds = new Set();
+  const seenCandidateIdentities = new Set();
 
   const targetCategories = Array.isArray(categoryIds) && categoryIds.length > 0
     ? categoryIds
     : [null];
+  const pageLimit = Math.max(5, maxPerCategory);
+  const pageCount = Math.max(1, Math.floor(Number(maxPagesPerCategory) || 1));
 
   for (const catId of targetCategories) {
     try {
-      const variables = {
-        page: 1,
-        limit: Math.max(5, maxPerCategory),
-        sortType: 2, // Popularidade / Vendas reais
-        isAMSOffer: true,
-      };
-      if (catId) {
-        variables.productCatId = catId;
-      }
+      for (let page = 1; page <= pageCount; page += 1) {
+        const variables = {
+          page,
+          limit: pageLimit,
+          sortType: 2, // Popularidade / Vendas reais
+          isAMSOffer: true,
+        };
+        if (catId) {
+          variables.productCatId = catId;
+        }
 
-      const response = await caller(
-        'ShopeePromotionOffers',
-        GRAPHQL_CONTRACTS.productOfferV2.query,
-        variables,
-        { timeoutMs: 15000 }
-      );
+        const response = await caller(
+          'ShopeePromotionOffers',
+          GRAPHQL_CONTRACTS.productOfferV2.query,
+          variables,
+          { timeoutMs: 15000 }
+        );
 
-      const nodes = response?.data?.data?.productOfferV2?.nodes || [];
-      for (const node of nodes) {
-        const itemId = String(node.itemId || '').trim();
-        if (!itemId || seenItemIds.has(itemId)) continue;
-        seenItemIds.add(itemId);
+        const nodes = response?.data?.data?.productOfferV2?.nodes || [];
+        if (!Array.isArray(nodes) || nodes.length === 0) break;
 
-        const productName = String(node.productName || '').trim();
-        if (!productName) continue;
+        for (const node of nodes) {
+          const itemId = String(node.itemId || '').trim();
+          const shopId = String(node.shopId || '').trim();
+          if (!itemId) continue;
+          const identityKey = `${shopId || 'unknown'}:${itemId}`;
+          if (seenCandidateIdentities.has(identityKey)) continue;
+          seenCandidateIdentities.add(identityKey);
 
-        const priceIntegrity = normalizePriceIntegrity({
-          price: node.price,
-          priceMin: node.priceMin,
-          priceMax: node.priceMax,
-          priceDiscountRate: node.priceDiscountRate,
-          officialOldPrice: node.officialOldPrice,
-        });
-        const price = priceIntegrity.currentPrice;
-        const oldPrice = priceIntegrity.oldPrice;
-        const discount = priceIntegrity.discountPercent ?? 0;
-        const marketplaceReportedDiscountPercent = parseNumber(node.priceDiscountRate, 0);
-        const sales = parseInt(String(node.sales || '0'), 10) || 0;
-        const ratingStar = parseNumber(node.ratingStar, 0);
-        const commRate = parseNumber(node.commissionRate, 0);
-        const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
-        const commissionPercent = Math.round((commRate > 0 && commRate <= 1 ? commRate * 100 : commRate) * 100) / 100;
-        const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate <= 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
-        const shopType = Array.isArray(node.shopType) ? node.shopType : [];
-        const link = String(node.offerLink || node.productLink || '');
+          const productName = String(node.productName || '').trim();
+          if (!productName) continue;
 
-        candidates.push({
-          marketplace: 'Shopee',
-          itemId,
-          shopId: String(node.shopId || ''),
-          shopName: String(node.shopName || ''),
-          productName,
-          category: 'Marketplace Deals',
-          currentPrice: price,
-          oldPrice,
-          priceDiscountRate: discount,
-          discountPercent: discount,
-          marketplaceReportedDiscountPercent,
-          priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
-          priceAuthority: priceIntegrity.priceAuthority,
-          oldPriceAuthority: priceIntegrity.oldPriceAuthority,
-          discountAuthority: priceIntegrity.discountAuthority,
-          sales,
-          ratingStar: ratingStar > 0 ? ratingStar : null,
-          rating: ratingStar > 0 ? ratingStar : null,
-          commissionRate: commissionPercent,
-          commissionPercent,
-          sellerCommissionRate: sellerCommissionPercent,
-          shopType,
-          permalink: link,
-          imageUrl: String(node.imageUrl || ''),
-          provenance: 'shopee_openapi_productOfferV2',
-          observedAt: new Date().toISOString(),
-        });
+          const priceIntegrity = normalizePriceIntegrity({
+            price: node.price,
+            priceMin: node.priceMin,
+            priceMax: node.priceMax,
+            priceDiscountRate: node.priceDiscountRate,
+            officialOldPrice: node.officialOldPrice,
+          });
+          const price = priceIntegrity.currentPrice;
+          const oldPrice = priceIntegrity.oldPrice;
+          const discount = priceIntegrity.discountPercent ?? 0;
+          const marketplaceReportedDiscountPercent = parseNumber(node.priceDiscountRate, 0);
+          const sales = parseInt(String(node.sales || '0'), 10) || 0;
+          const ratingStar = parseNumber(node.ratingStar, 0);
+          const commRate = parseNumber(node.commissionRate, 0);
+          const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
+          const commissionPercent = Math.round((commRate > 0 && commRate <= 1 ? commRate * 100 : commRate) * 100) / 100;
+          const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate <= 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
+          const shopType = Array.isArray(node.shopType) ? node.shopType : [];
+          const link = String(node.offerLink || node.productLink || '');
+
+          candidates.push({
+            marketplace: 'Shopee',
+            itemId,
+            shopId,
+            shopName: String(node.shopName || ''),
+            productName,
+            category: 'Marketplace Deals',
+            currentPrice: price,
+            oldPrice,
+            priceDiscountRate: discount,
+            discountPercent: discount,
+            marketplaceReportedDiscountPercent,
+            priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
+            priceAuthority: priceIntegrity.priceAuthority,
+            oldPriceAuthority: priceIntegrity.oldPriceAuthority,
+            discountAuthority: priceIntegrity.discountAuthority,
+            sales,
+            ratingStar: ratingStar > 0 ? ratingStar : null,
+            rating: ratingStar > 0 ? ratingStar : null,
+            commissionRate: commissionPercent,
+            commissionPercent,
+            sellerCommissionRate: sellerCommissionPercent,
+            shopType,
+            permalink: link,
+            imageUrl: String(node.imageUrl || ''),
+            provenance: 'shopee_openapi_productOfferV2',
+            observedAt: new Date().toISOString(),
+          });
+        }
       }
     } catch (err) {
       // Falha em uma categoria não aborta a coleta geral
