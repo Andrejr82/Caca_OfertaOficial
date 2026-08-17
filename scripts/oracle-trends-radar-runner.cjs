@@ -3,7 +3,7 @@
 const { createClient } = require('@supabase/supabase-js');
 const engine = require('./oracle-trends-radar-engine.cjs');
 const {
-  fetchLatestCompletedSnapshotIdentityKeys,
+  fetchCompletedRadarIdentityKeys,
   fetchTerminalOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
 } = require('./oracle-trends-radar-freshness.cjs');
@@ -47,15 +47,16 @@ async function persistFreshnessHealth(client, runId, freshness) {
     .update({
       source_health: {
         ...(run.source_health || {}),
-        freshness_gate: 'exclude_latest_snapshot_and_terminal_offers',
-        previous_snapshot_run_id: freshness.previousSnapshotRunId,
-        previous_snapshot_identity_count: freshness.previousSnapshotIdentityCount,
+        freshness_gate: 'exclude_all_completed_radar_and_terminal_offers',
+        latest_completed_run_id: freshness.latestCompletedRunId,
+        completed_run_count: freshness.completedRunCount,
+        historical_radar_identity_count: freshness.historicalRadarIdentityCount,
         terminal_offer_identity_count: freshness.terminalOfferIdentityCount,
-        shopee_repeated_candidates_excluded: freshness.shopeeRepeatedExcluded,
-        mercado_livre_repeated_candidates_excluded: freshness.mlRepeatedExcluded,
+        shopee_historical_candidates_excluded: freshness.shopeeHistoricalExcluded,
+        mercado_livre_historical_candidates_excluded: freshness.mlHistoricalExcluded,
         shopee_terminal_candidates_excluded: freshness.shopeeTerminalExcluded,
         mercado_livre_terminal_candidates_excluded: freshness.mlTerminalExcluded,
-        repeated_candidates_excluded: freshness.shopeeRepeatedExcluded + freshness.mlRepeatedExcluded,
+        historical_candidates_excluded: freshness.shopeeHistoricalExcluded + freshness.mlHistoricalExcluded,
         terminal_candidates_excluded: freshness.shopeeTerminalExcluded + freshness.mlTerminalExcluded,
       },
       updated_at: new Date().toISOString(),
@@ -93,14 +94,15 @@ async function processPendingTrendRadarRuns(options = {}) {
   const pendingRun = await engine.findPendingTrendRadarRun(client);
   if (!pendingRun) return engine.processPendingTrendRadarRuns({ ...options, client });
 
-  const previousSnapshot = await fetchLatestCompletedSnapshotIdentityKeys(client, pendingRun.user_id);
+  const radarHistory = await fetchCompletedRadarIdentityKeys(client, pendingRun.user_id);
   const terminalOfferIdentityKeys = await fetchTerminalOfferIdentityKeys(client, pendingRun.user_id);
   const freshness = {
-    previousSnapshotRunId: previousSnapshot.runId,
-    previousSnapshotIdentityCount: previousSnapshot.identityKeys.size,
+    latestCompletedRunId: radarHistory.latestRunId,
+    completedRunCount: radarHistory.runCount,
+    historicalRadarIdentityCount: radarHistory.identityKeys.size,
     terminalOfferIdentityCount: terminalOfferIdentityKeys.size,
-    shopeeRepeatedExcluded: 0,
-    mlRepeatedExcluded: 0,
+    shopeeHistoricalExcluded: 0,
+    mlHistoricalExcluded: 0,
     shopeeTerminalExcluded: 0,
     mlTerminalExcluded: 0,
   };
@@ -108,11 +110,11 @@ async function processPendingTrendRadarRuns(options = {}) {
   const baseShopeeCollector = options.shopeeCollector || engine.collectShopeeMarketplaceCandidates;
   const baseMlCollector = options.mlCollector || engine.collectMercadoLivreMarketplaceCandidates;
 
-  const filterCollector = async (baseCollector, collectorOptions, repeatedKey, terminalKey) => {
+  const filterCollector = async (baseCollector, collectorOptions, historicalKey, terminalKey) => {
     const candidates = await baseCollector(collectorOptions);
-    const withoutRepeated = filterCandidatesOutsidePreviousSnapshot(candidates, previousSnapshot.identityKeys);
-    const withoutTerminal = filterCandidatesOutsidePreviousSnapshot(withoutRepeated.fresh, terminalOfferIdentityKeys);
-    freshness[repeatedKey] = withoutRepeated.excluded.length;
+    const withoutHistorical = filterCandidatesOutsidePreviousSnapshot(candidates, radarHistory.identityKeys);
+    const withoutTerminal = filterCandidatesOutsidePreviousSnapshot(withoutHistorical.fresh, terminalOfferIdentityKeys);
+    freshness[historicalKey] = withoutHistorical.excluded.length;
     freshness[terminalKey] = withoutTerminal.excluded.length;
     return withoutTerminal.fresh;
   };
@@ -120,14 +122,14 @@ async function processPendingTrendRadarRuns(options = {}) {
   const shopeeCollector = (collectorOptions = {}) => filterCollector(
     baseShopeeCollector,
     collectorOptions,
-    'shopeeRepeatedExcluded',
+    'shopeeHistoricalExcluded',
     'shopeeTerminalExcluded',
   );
 
   const mlCollector = (collectorOptions = {}) => filterCollector(
     baseMlCollector,
     collectorOptions,
-    'mlRepeatedExcluded',
+    'mlHistoricalExcluded',
     'mlTerminalExcluded',
   );
 
