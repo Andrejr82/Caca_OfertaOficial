@@ -7,7 +7,7 @@
  * 2. SEM SEEDS FIXAS: Descoberta ampla via categorias oficiais, sortType da OpenAPI e feeds oficiais.
  * 3. SNAPSHOT COMERCIAL: Persistência de itemId, shopId, sales, rating, preços, comissões, shopType e provenance.
  * 4. TENDÊNCIA BASEADA EM HISTÓRICO: sales_velocity = sales_atual - sales_anterior.
- *    Sem histórico => status = insufficient_history (nunca inventa crescimento).
+ *    Sem histórico => status = insufficient_history (nunca inventar crescimento).
  * 5. RANKING TASK 2B: Ordenação por sales_velocity > 0, fallback explícito para sales absoluto.
  * 6. ZERO PUBLISH: Nenhuma chamada externa de publicação, nenhum post gerado.
  * 7. ZERO CONCORRÊNCIA: Integrado ao ciclo do oracle-scraper sem novo daemon ou scheduler.
@@ -18,7 +18,12 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { createClient } = require('@supabase/supabase-js');
-const { SCENARIO_CONTRACTS, GRAPHQL_CONTRACTS, createSignedRequest } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const {
+  SCENARIO_CONTRACTS,
+  GRAPHQL_CONTRACTS,
+  createSignedRequest,
+  normalizePriceIntegrity,
+} = require('./shopee-openapi-shadow-engine-v1.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
 const {
   COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
@@ -180,9 +185,17 @@ async function collectShopeeMarketplaceCandidates({
         const productName = String(node.productName || '').trim();
         if (!productName) continue;
 
-        const price = parseNumber(node.priceMin || node.priceMax, 0);
-        const oldPrice = parseNumber(node.priceMax, price);
-        const discount = parseNumber(node.priceDiscountRate, 0);
+        const priceIntegrity = normalizePriceIntegrity({
+          price: node.price,
+          priceMin: node.priceMin,
+          priceMax: node.priceMax,
+          priceDiscountRate: node.priceDiscountRate,
+          officialOldPrice: node.officialOldPrice,
+        });
+        const price = priceIntegrity.currentPrice;
+        const oldPrice = priceIntegrity.oldPrice;
+        const discount = priceIntegrity.discountPercent ?? 0;
+        const marketplaceReportedDiscountPercent = parseNumber(node.priceDiscountRate, 0);
         const sales = parseInt(String(node.sales || '0'), 10) || 0;
         const ratingStar = parseNumber(node.ratingStar, 0);
         const commRate = parseNumber(node.commissionRate, 0);
@@ -200,9 +213,14 @@ async function collectShopeeMarketplaceCandidates({
           productName,
           category: 'Marketplace Deals',
           currentPrice: price,
-          oldPrice: oldPrice > price ? oldPrice : null,
+          oldPrice,
           priceDiscountRate: discount,
           discountPercent: discount,
+          marketplaceReportedDiscountPercent,
+          priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
+          priceAuthority: priceIntegrity.priceAuthority,
+          oldPriceAuthority: priceIntegrity.oldPriceAuthority,
+          discountAuthority: priceIntegrity.discountAuthority,
           sales,
           ratingStar: ratingStar > 0 ? ratingStar : null,
           rating: ratingStar > 0 ? ratingStar : null,
