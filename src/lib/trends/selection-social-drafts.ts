@@ -19,7 +19,6 @@ export function buildTrendSocialDraftCommand(input: {
     causationId: null,
     offerId: input.offerId,
     tenantId: input.userId,
-    providerPreference: "groq",
     channels: [...TREND_SOCIAL_CHANNELS],
     requestedAt: input.requestedAt,
     actor: { type: "user", id: input.userId, service: "trends-selection-desk" },
