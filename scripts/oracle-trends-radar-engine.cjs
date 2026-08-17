@@ -7,7 +7,7 @@
  * 2. SEM SEEDS FIXAS: Descoberta ampla via categorias oficiais, sortType da OpenAPI e feeds oficiais.
  * 3. SNAPSHOT COMERCIAL: Persistência de itemId, shopId, sales, rating, preços, comissões, shopType e provenance.
  * 4. TENDÊNCIA BASEADA EM HISTÓRICO: sales_velocity = sales_atual - sales_anterior.
- *    Sem histórico => status = insufficient_history (nunca inventar crescimento).
+ *    Sem histórico => status = insufficient_history (nunca inventa crescimento).
  * 5. RANKING TASK 2B: Ordenação por sales_velocity > 0, fallback explícito para sales absoluto.
  * 6. ZERO PUBLISH: Nenhuma chamada externa de publicação, nenhum post gerado.
  * 7. ZERO CONCORRÊNCIA: Integrado ao ciclo do oracle-scraper sem novo daemon ou scheduler.
@@ -76,6 +76,12 @@ function parseNumber(value, fallback = 0) {
   return Number.isFinite(result) ? result : fallback;
 }
 
+function parseOptionalNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const result = Number(String(value).replace(',', '.'));
+  return Number.isFinite(result) ? result : null;
+}
+
 function getSupabaseAdmin(env = process.env, customClient = null) {
   if (customClient) return customClient;
   const url = env.NEXT_PUBLIC_SUPABASE_URL;
@@ -134,7 +140,7 @@ async function markTrendRadarRunRunning(client, runId, existingHealth = {}) {
 async function collectShopeeMarketplaceCandidates({
   request = null,
   categoryIds = SHOPEE_BROAD_DISCOVERY_CATEGORIES,
-  maxPerCategory = 10,
+  maxPerCategory = 30,
   env = process.env,
 } = {}) {
   const caller = request || defaultShopeeApiCaller();
@@ -178,7 +184,7 @@ async function collectShopeeMarketplaceCandidates({
         const oldPrice = parseNumber(node.priceMax, price);
         const discount = parseNumber(node.priceDiscountRate, 0);
         const sales = parseInt(String(node.sales || '0'), 10) || 0;
-        const ratingStar = parseNumber(node.ratingStar, 4.5);
+        const ratingStar = parseNumber(node.ratingStar, 0);
         const commRate = parseNumber(node.commissionRate, 0);
         const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
         const commissionPercent = Math.round((commRate > 0 && commRate <= 1 ? commRate * 100 : commRate) * 100) / 100;
@@ -198,8 +204,8 @@ async function collectShopeeMarketplaceCandidates({
           priceDiscountRate: discount,
           discountPercent: discount,
           sales,
-          ratingStar,
-          rating: ratingStar,
+          ratingStar: ratingStar > 0 ? ratingStar : null,
+          rating: ratingStar > 0 ? ratingStar : null,
           commissionRate: commissionPercent,
           commissionPercent,
           sellerCommissionRate: sellerCommissionPercent,
@@ -216,6 +222,42 @@ async function collectShopeeMarketplaceCandidates({
   }
 
   return candidates;
+}
+
+function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toISOString()) {
+  const itemId = String(product?.item_id || product?.id || '').trim();
+  const productName = String(product?.product_name || product?.title || '').trim();
+  if (!itemId || !productName) return null;
+
+  const price = parseOptionalNumber(product.current_price ?? product.price);
+  const oldPriceValue = parseOptionalNumber(product.old_price ?? product.original_price);
+  const oldPrice = oldPriceValue !== null && price !== null && oldPriceValue > price ? oldPriceValue : null;
+  const explicitDiscount = parseOptionalNumber(product.discount_percent);
+  const discount = oldPrice !== null && price !== null && price > 0
+    ? Math.round(((oldPrice - price) / oldPrice) * 100)
+    : (explicitDiscount ?? 0);
+  const sales = parseOptionalNumber(product.sold_quantity);
+  const rating = parseOptionalNumber(product.rating);
+
+  return {
+    marketplace: 'Mercado Livre',
+    itemId,
+    productId: String(product.product_id || ''),
+    productName,
+    category: product.category_name || 'Marketplace Deals',
+    currentPrice: price,
+    oldPrice,
+    discountPercent: discount,
+    priceDiscountRate: discount,
+    sales,
+    ratingStar: rating,
+    rating,
+    commissionPercent: 0,
+    permalink: String(product.product_url || product.permalink || ''),
+    imageUrl: String(product.image_url || product.thumbnail || ''),
+    provenance: 'mercadolivre_official_intent',
+    observedAt,
+  };
 }
 
 /**
@@ -243,38 +285,11 @@ async function collectMercadoLivreMarketplaceCandidates({
 
     const products = Array.isArray(result?.products) ? result.products : [];
     for (const product of products) {
-      const itemId = String(product.item_id || product.id || '').trim();
-      if (!itemId || seenItemIds.has(itemId)) continue;
-      seenItemIds.add(itemId);
-
-      const productName = String(product.product_name || product.title || '').trim();
-      if (!productName) continue;
-
-      const price = parseNumber(product.price, 0);
-      const oldPrice = parseNumber(product.original_price, 0);
-      const discount = oldPrice > price ? Math.round(((oldPrice - price) / oldPrice) * 100) : 0;
-      const sales = parseInt(String(product.sold_quantity || '0'), 10) || 0;
-      const rating = parseNumber(product.rating, 4.5);
-
-      candidates.push({
-        marketplace: 'Mercado Livre',
-        itemId,
-        productId: String(product.product_id || ''),
-        productName,
-        category: product.category_name || 'Marketplace Deals',
-        currentPrice: price,
-        oldPrice: oldPrice > price ? oldPrice : null,
-        discountPercent: discount,
-        priceDiscountRate: discount,
-        sales,
-        ratingStar: rating,
-        rating,
-        commissionPercent: 0,
-        permalink: String(product.product_url || product.permalink || ''),
-        imageUrl: String(product.image_url || product.thumbnail || ''),
-        provenance: 'mercadolivre_official_intent',
-        observedAt: new Date().toISOString(),
-      });
+      const candidate = normalizeMercadoLivreRadarProduct(product);
+      if (!candidate || seenItemIds.has(candidate.itemId)) continue;
+      seenItemIds.add(candidate.itemId);
+      if (candidate.currentPrice === null || candidate.currentPrice <= 0) continue;
+      candidates.push(candidate);
     }
   } catch (err) {
     // Falha em ML não aborta execução
@@ -285,14 +300,14 @@ async function collectMercadoLivreMarketplaceCandidates({
 
 /**
  * Calcula sales_velocity com base no histórico real anterior do item.
- * Se não houver histórico anterior => status = 'insufficient_history' (nunca inventa crescimento).
+ * Se não houver histórico anterior => status = insufficient_history (nunca inventa crescimento).
  */
 function computeCandidateSalesVelocity(candidate, previousItemsMap = new Map()) {
   const itemId = String(candidate.itemId || '').trim();
-  const currentSales = typeof candidate.sales === 'number' ? candidate.sales : 0;
+  const currentSales = typeof candidate.sales === 'number' ? candidate.sales : null;
   const currentObservedAt = candidate.observedAt || new Date().toISOString();
 
-  if (!itemId || !previousItemsMap || !previousItemsMap.has(itemId)) {
+  if (currentSales === null || !itemId || !previousItemsMap || !previousItemsMap.has(itemId)) {
     return {
       velocity_status: 'insufficient_history',
       sales_velocity: null,
@@ -304,8 +319,18 @@ function computeCandidateSalesVelocity(candidate, previousItemsMap = new Map()) 
   }
 
   const previous = previousItemsMap.get(itemId);
-  const prevSales = typeof previous.sales === 'number' ? previous.sales : 0;
+  const prevSales = typeof previous.sales === 'number' ? previous.sales : null;
   const prevObservedAt = previous.observedAt || previous.observed_at || null;
+  if (prevSales === null) {
+    return {
+      velocity_status: 'insufficient_history',
+      sales_velocity: null,
+      sales_delta: null,
+      previous_sales: null,
+      current_sales: currentSales,
+      observed_window: null,
+    };
+  }
 
   const delta = currentSales - prevSales;
   let windowHours = null;
@@ -370,7 +395,7 @@ async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
       for (const ev of evidences) {
         const itemId = ev?.marketplace_identity?.itemId || ev?.itemId;
         if (itemId && !map.has(itemId)) {
-          const sales = ev?.commercial_metrics?.sales ?? ev?.sold_quantity ?? 0;
+          const sales = ev?.commercial_metrics?.sales ?? ev?.sold_quantity ?? null;
           const observedAt = ev?.observed_at || prod.created_at;
           map.set(itemId, { itemId, sales, observedAt });
         }
@@ -402,7 +427,7 @@ function buildTrendRadarProductsFromCandidates({
     const evidenceStatus =
       candidate.evidenceStatus ||
       candidate.evidence_status ||
-      (candidate.sales > 0 || candidate.ratingStar > 0 || candidate.rating > 0 ? 'verified' : 'partial');
+      ((typeof candidate.sales === 'number' && candidate.sales > 0) || (typeof candidate.ratingStar === 'number' && candidate.ratingStar > 0) || (typeof candidate.rating === 'number' && candidate.rating > 0) ? 'verified' : 'partial');
 
     // Pré-avaliação do score V3 com dados existentes
     const scoreV3 = calculateCommercialOpportunityScoreV3({
@@ -434,12 +459,12 @@ function buildTrendRadarProductsFromCandidates({
     if (aVelocity !== null && aVelocity > 0 && (bVelocity === null || bVelocity <= 0)) return -1;
     if (bVelocity !== null && bVelocity > 0 && (aVelocity === null || aVelocity <= 0)) return 1;
 
-    const aSales = a.sales || 0;
-    const bSales = b.sales || 0;
+    const aSales = typeof a.sales === 'number' ? a.sales : 0;
+    const bSales = typeof b.sales === 'number' ? b.sales : 0;
     if (aSales !== bSales) return bSales - aSales;
 
-    const aRating = a.ratingStar || a.rating || 0;
-    const bRating = b.ratingStar || b.rating || 0;
+    const aRating = typeof a.ratingStar === 'number' ? a.ratingStar : (typeof a.rating === 'number' ? a.rating : 0);
+    const bRating = typeof b.ratingStar === 'number' ? b.ratingStar : (typeof b.rating === 'number' ? b.rating : 0);
     if (aRating !== bRating) return bRating - aRating;
 
     const aDiscount = a.discountPercent || 0;
@@ -459,8 +484,10 @@ function buildTrendRadarProductsFromCandidates({
 
     const priority = prioritizedProducts.length + 1;
     const isFocus = priority <= 3;
-    const sales = candidate.sales || 0;
-    const rating = candidate.ratingStar || candidate.rating || 4.5;
+    const sales = typeof candidate.sales === 'number' ? candidate.sales : null;
+    const rating = typeof candidate.ratingStar === 'number'
+      ? candidate.ratingStar
+      : (typeof candidate.rating === 'number' ? candidate.rating : null);
     const discount = candidate.discountPercent || 0;
     const price = candidate.currentPrice || 0;
     const oldPrice = candidate.oldPrice || null;
@@ -484,13 +511,13 @@ function buildTrendRadarProductsFromCandidates({
         source_url: candidate.permalink || null,
         observed_at: candidate.observedAt || now.toISOString(),
         rank_position: priority,
-        best_seller_flag: sales >= 50,
+        best_seller_flag: sales !== null && sales >= 50,
         trending_flag: hasVelocity && velocityInfo.sales_velocity > 0,
         sold_quantity: sales,
         price: price || null,
         old_price: oldPrice || null,
         discount_percent: discount || null,
-        rating: rating || null,
+        rating,
         decision: finalScoreV3.decision,
         strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
         marketplace_identity: {
@@ -513,7 +540,7 @@ function buildTrendRadarProductsFromCandidates({
 
     const inferredSignals = [
       hasVelocity && velocityInfo.sales_velocity > 0 ? 'real_sales_acceleration' : 'baseline_catalog_snapshot',
-      sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
+      sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
       `v3_decision_${finalScoreV3.decision.toLowerCase()}`,
     ];
@@ -532,12 +559,12 @@ function buildTrendRadarProductsFromCandidates({
       determining_reasons: finalScoreV3.determining_reasons,
       confidence: Math.min(
         95,
-        Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales > 50 ? 10 : 5) + (rating >= 4.5 ? 10 : 5)))
+        Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales !== null && sales > 50 ? 10 : 5) + (rating !== null && rating >= 4.5 ? 10 : 5)))
       ),
       direct_evidence: directEvidence,
       inferred_signals: inferredSignals,
       affiliate_potential:
-        sales >= 100 || (candidate.commissionPercent && candidate.commissionPercent > 5) ? 'high' : 'medium',
+        (sales !== null && sales >= 100) || (candidate.commissionPercent && candidate.commissionPercent > 5) ? 'high' : 'medium',
       visual_content_potential: isFocus ? 'high' : 'medium',
       recommended_channel: null,
       recommended_format: null,
@@ -696,6 +723,8 @@ module.exports = {
   SHOPEE_BROAD_DISCOVERY_CATEGORIES,
   normalizeText,
   parseNumber,
+  parseOptionalNumber,
+  normalizeMercadoLivreRadarProduct,
   findPendingTrendRadarRun,
   markTrendRadarRunRunning,
   collectShopeeMarketplaceCandidates,
