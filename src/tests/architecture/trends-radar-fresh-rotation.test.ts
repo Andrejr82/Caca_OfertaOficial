@@ -6,6 +6,8 @@ const {
   fetchExistingOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
   getMarketplaceIdentityKey,
+  getMarketplaceImageUrl,
+  withMarketplaceImageEvidence,
 } = require("../../../scripts/oracle-trends-radar-freshness.cjs");
 
 function candidate(itemId: string, productName: string) {
@@ -103,6 +105,26 @@ describe("Oracle Trends Radar fresh rotation", () => {
 
     expect(result.fresh.map((item: { itemId: string }) => item.itemId)).toEqual(["300"]);
     expect(result.excluded.map((item: { itemId: string }) => item.itemId)).toEqual(["23394276680"]);
+  });
+
+  it("preserves an HTTPS marketplace image in persisted Radar evidence", () => {
+    const candidateWithImage = {
+      marketplace: "Shopee",
+      itemId: "300",
+      productName: "Produto com imagem",
+      imageUrl: "https://cf.shopee.com.br/file/example.jpg",
+    };
+    const imageUrl = getMarketplaceImageUrl(candidateWithImage);
+    const evidence = withMarketplaceImageEvidence([
+      { marketplace_identity: { itemId: "300" }, source_url: "https://s.shopee.com.br/example" },
+    ], imageUrl);
+
+    expect(imageUrl).toBe("https://cf.shopee.com.br/file/example.jpg");
+    expect(evidence[0].image_url).toBe("https://cf.shopee.com.br/file/example.jpg");
+  });
+
+  it("rejects non-HTTPS image URLs from Radar evidence", () => {
+    expect(getMarketplaceImageUrl({ imageUrl: "http://example.com/image.jpg" })).toBeNull();
   });
 
   it("keeps candidates without an excluded identity instead of manufacturing novelty", () => {
