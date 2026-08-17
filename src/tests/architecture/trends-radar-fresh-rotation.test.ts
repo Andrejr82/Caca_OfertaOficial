@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
-  fetchTerminalOfferIdentityKeys,
+  fetchExistingOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
   getMarketplaceIdentityKey,
 } = require("../../../scripts/oracle-trends-radar-freshness.cjs");
@@ -43,21 +43,23 @@ describe("Oracle Trends Radar fresh rotation", () => {
     expect(getMarketplaceIdentityKey(shopee)).not.toBe(getMarketplaceIdentityKey(mercadoLivre));
   });
 
-  it("matches persisted terminal offers using their database identity columns", () => {
-    const liveCandidate = { marketplace: "Shopee", itemId: "22893738408", productName: "Produto atual" };
-    const rejectedOffer = { platform: "Shopee", shopee_item_id: "22893738408" };
+  it("matches persisted offers in any status using their database identity columns", () => {
+    const liveCandidate = { marketplace: "Shopee", itemId: "23394276680", productName: "Produto atual" };
+    const approvedOffer = { platform: "Shopee", shopee_item_id: "23394276680", status: "approved" };
 
-    expect(getMarketplaceIdentityKey(rejectedOffer)).toBe(getMarketplaceIdentityKey(liveCandidate));
+    expect(getMarketplaceIdentityKey(approvedOffer)).toBe(getMarketplaceIdentityKey(liveCandidate));
   });
 
-  it("paginates terminal offers beyond the Supabase default row limit", async () => {
+  it("paginates all existing offers beyond the Supabase default row limit without filtering status", async () => {
     const rows = Array.from({ length: 1005 }, (_, index) => ({
       platform: "Shopee",
       shopee_item_id: String(index + 1),
       item_id: null,
       product_id: null,
+      status: index % 2 === 0 ? "approved" : "rejected",
     }));
     const ranges: Array<[number, number]> = [];
+    let statusFilterCalled = false;
 
     const client = {
       from(table: string) {
@@ -67,6 +69,7 @@ describe("Oracle Trends Radar fresh rotation", () => {
             return this;
           },
           in() {
+            statusFilterCalled = true;
             return this;
           },
           eq() {
@@ -80,14 +83,26 @@ describe("Oracle Trends Radar fresh rotation", () => {
       },
     };
 
-    const keys = await fetchTerminalOfferIdentityKeys(client, "tenant-1");
+    const keys = await fetchExistingOfferIdentityKeys(client, "tenant-1");
 
+    expect(statusFilterCalled).toBe(false);
     expect(keys.size).toBe(1005);
     expect(keys.has("shopee:native:1005")).toBe(true);
     expect(ranges).toEqual([
       [0, 999],
       [1000, 1999],
     ]);
+  });
+
+  it("excludes a candidate when the same native identity already exists in offers", () => {
+    const existing = candidate("23394276680", "Oferta antiga aprovada");
+    const fresh = candidate("300", "Produto realmente novo");
+    const existingOfferIdentityKeys = new Set([getMarketplaceIdentityKey(existing)]);
+
+    const result = filterCandidatesOutsidePreviousSnapshot([existing, fresh], existingOfferIdentityKeys);
+
+    expect(result.fresh.map((item: { itemId: string }) => item.itemId)).toEqual(["300"]);
+    expect(result.excluded.map((item: { itemId: string }) => item.itemId)).toEqual(["23394276680"]);
   });
 
   it("keeps candidates without an excluded identity instead of manufacturing novelty", () => {
