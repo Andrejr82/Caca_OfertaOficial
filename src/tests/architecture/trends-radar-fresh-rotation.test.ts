@@ -3,78 +3,50 @@ import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
 const {
-  buildTrendRadarProductsFromCandidates,
+  filterCandidatesOutsidePreviousSnapshot,
   getMarketplaceIdentityKey,
-} = require("../../../scripts/oracle-trends-radar-engine.cjs");
+} = require("../../../scripts/oracle-trends-radar-freshness.cjs");
 
-function candidate(itemId: string, productName: string, sales: number) {
+function candidate(itemId: string, productName: string) {
   return {
     marketplace: "Shopee",
     itemId,
-    shopId: `shop-${itemId}`,
     productName,
-    category: "Teste",
-    currentPrice: 49.9,
-    oldPrice: 79.9,
-    discountPercent: 38,
-    priceDiscountRate: 38,
-    sales,
-    ratingStar: 4.9,
-    rating: 4.9,
-    commissionPercent: 10,
-    sellerCommissionRate: 0,
-    permalink: `https://s.shopee.com.br/${itemId}`,
-    observedAt: "2026-08-17T01:30:00.000Z",
   };
 }
 
 describe("Oracle Trends Radar fresh rotation", () => {
-  it("prioritizes identities absent from the latest completed snapshot", () => {
-    const repeatedA = candidate("100", "Campeão antigo A", 10000);
-    const repeatedB = candidate("200", "Campeão antigo B", 9000);
-    const freshA = candidate("300", "Produto novo A", 500);
-    const freshB = candidate("400", "Produto novo B", 400);
+  it("excludes identities selected in the latest completed snapshot", () => {
+    const repeatedA = candidate("100", "Campeão antigo A");
+    const repeatedB = candidate("200", "Campeão antigo B");
+    const freshA = candidate("300", "Produto novo A");
+    const freshB = candidate("400", "Produto novo B");
     const previousSnapshotIdentityKeys = new Set([
       getMarketplaceIdentityKey(repeatedA),
       getMarketplaceIdentityKey(repeatedB),
     ]);
 
-    const products = buildTrendRadarProductsFromCandidates({
-      radarRunId: "run-fresh",
-      shopeeCandidates: [repeatedA, repeatedB, freshA, freshB],
+    const result = filterCandidatesOutsidePreviousSnapshot(
+      [repeatedA, freshA, repeatedB, freshB],
       previousSnapshotIdentityKeys,
-      maxProducts: 2,
-      now: new Date("2026-08-17T01:30:00.000Z"),
-    });
+    );
 
-    expect(products.map((product: { product_term: string }) => product.product_term)).toEqual([
-      "Produto novo A",
-      "Produto novo B",
-    ]);
+    expect(result.fresh.map((item: { itemId: string }) => item.itemId)).toEqual(["300", "400"]);
+    expect(result.excluded.map((item: { itemId: string }) => item.itemId)).toEqual(["100", "200"]);
   });
 
-  it("falls back to repeated identities only when fresh candidates cannot fill the result", () => {
-    const repeatedA = candidate("100", "Campeão antigo A", 10000);
-    const repeatedB = candidate("200", "Campeão antigo B", 9000);
-    const fresh = candidate("300", "Produto novo", 500);
-    const previousSnapshotIdentityKeys = new Set([
-      getMarketplaceIdentityKey(repeatedA),
-      getMarketplaceIdentityKey(repeatedB),
-    ]);
+  it("uses marketplace plus native identity so equal ids from different marketplaces do not collide", () => {
+    const shopee = { marketplace: "Shopee", itemId: "100", productName: "Produto" };
+    const mercadoLivre = { marketplace: "Mercado Livre", itemId: "100", productName: "Produto" };
 
-    const products = buildTrendRadarProductsFromCandidates({
-      radarRunId: "run-fallback",
-      shopeeCandidates: [repeatedA, repeatedB, fresh],
-      previousSnapshotIdentityKeys,
-      maxProducts: 3,
-      now: new Date("2026-08-17T01:30:00.000Z"),
-    });
+    expect(getMarketplaceIdentityKey(shopee)).not.toBe(getMarketplaceIdentityKey(mercadoLivre));
+  });
 
-    expect(products).toHaveLength(3);
-    expect(products[0].product_term).toBe("Produto novo");
-    expect(products.slice(1).map((product: { product_term: string }) => product.product_term)).toEqual([
-      "Campeão antigo A",
-      "Campeão antigo B",
-    ]);
+  it("keeps candidates without a previous-snapshot match instead of manufacturing novelty", () => {
+    const fresh = candidate("300", "Produto novo");
+    const result = filterCandidatesOutsidePreviousSnapshot([fresh], new Set());
+
+    expect(result.fresh).toEqual([fresh]);
+    expect(result.excluded).toEqual([]);
   });
 });
