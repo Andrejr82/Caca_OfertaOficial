@@ -9,11 +9,27 @@ function isDedicatedTrendRadarRuntimeEnabled(env = process.env) {
   return value === '1' || value === 'true' || value === 'yes' || value === 'on';
 }
 
-function shouldRunTrendRadarConsumer({ env = process.env, dedicatedRuntime = false } = {}) {
+function isEditorialTrendRadarConsumer(options = {}) {
+  return Boolean(options?.stageLogger) && options?.dedicatedRuntime !== true;
+}
+
+function shouldRunTrendRadarConsumer({ env = process.env, dedicatedRuntime = false, stageLogger = null } = {}) {
+  if (stageLogger && !dedicatedRuntime) return false;
   return dedicatedRuntime || !isDedicatedTrendRadarRuntimeEnabled(env);
 }
 
 async function processPendingTrendRadarRuns(options = {}) {
+  if (isEditorialTrendRadarConsumer(options)) {
+    return {
+      processed: false,
+      reason: 'editorial_consumer_retired',
+      googleTrendsUsed: false,
+      publishCalls: 0,
+      postsWrites: 0,
+      offersWrites: 0,
+    };
+  }
+
   if (!shouldRunTrendRadarConsumer(options)) {
     return {
       processed: false,
@@ -32,6 +48,7 @@ module.exports = {
   ...engine,
   DEDICATED_RUNTIME_ENV,
   isDedicatedTrendRadarRuntimeEnabled,
+  isEditorialTrendRadarConsumer,
   shouldRunTrendRadarConsumer,
   processPendingTrendRadarRuns,
 };
