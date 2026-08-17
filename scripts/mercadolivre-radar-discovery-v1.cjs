@@ -97,7 +97,7 @@ async function collectMercadoLivreRadarDiscoveryV1({
     : ML_RADAR_DISCOVERY_INTENTS;
   if (!selectedKeywords.length) return [];
 
-  const token = accessToken || (await tokenProvider({ env }).catch(() => null));
+  const token = accessToken || (await tokenProvider({ env, persist: false }).catch(() => null));
   if (!token) return [];
 
   const result = await coverageRunner({
