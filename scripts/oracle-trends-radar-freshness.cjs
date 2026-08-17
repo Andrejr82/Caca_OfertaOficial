@@ -96,7 +96,7 @@ async function fetchCompletedRadarIdentityKeys(client, tenantId = null) {
   return { latestRunId, runCount: runIds.length, identityKeys };
 }
 
-async function fetchTerminalOfferIdentityKeys(client, tenantId = null) {
+async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
   const identityKeys = new Set();
   if (!client) return identityKeys;
 
@@ -106,8 +106,7 @@ async function fetchTerminalOfferIdentityKeys(client, tenantId = null) {
   while (true) {
     let query = client
       .from('offers')
-      .select('platform, shopee_item_id, item_id, product_id')
-      .in('status', ['rejected', 'posted']);
+      .select('platform, shopee_item_id, item_id, product_id');
 
     if (tenantId) query = query.eq('user_id', tenantId);
 
@@ -131,5 +130,5 @@ module.exports = {
   getMarketplaceIdentityKey,
   filterCandidatesOutsidePreviousSnapshot,
   fetchCompletedRadarIdentityKeys,
-  fetchTerminalOfferIdentityKeys,
+  fetchExistingOfferIdentityKeys,
 };
