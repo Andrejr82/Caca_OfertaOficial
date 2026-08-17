@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { resolveTrendOfferHandoff } from "@/lib/trends/selection-offer-state";
+import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
 
 export type TrendSelectionDecision = "IGNORAR" | "APROVAR_TESTE";
 
@@ -197,9 +198,19 @@ async function approveAndBridge(formData: FormData) {
   }).eq("id", offer.id).eq("user_id", user.id);
   if (offerUpdateError) throw new Error("Falha ao registrar origem Trends na oferta.");
 
+  await prepareTrendSocialDrafts({
+    userId: user.id,
+    offerId: offer.id,
+    productId: product.id,
+  });
+
   revalidatePath("/trends");
   revalidatePath("/offers");
   revalidatePath("/videos");
+  revalidatePath("/facebook");
+  revalidatePath("/instagram");
+  revalidatePath("/telegram");
+  revalidatePath("/whatsapp");
 }
 
 async function persistIgnore(formData: FormData) {
