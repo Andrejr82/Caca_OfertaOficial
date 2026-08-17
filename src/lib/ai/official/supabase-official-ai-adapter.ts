@@ -36,7 +36,7 @@ function mapAffiliateLinks(value: unknown) {
     .map((link) => ({ channel: link.channel as any, trackedUrl: link.tracked_url, subId: link.sub_id }));
 }
 
-function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string, options?: { repairInvalidUrl?: boolean }) {
+export function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string, options?: { repairInvalidUrl?: boolean }) {
   const copy = rawContent.trimEnd();
   const urls = copy.match(/https?:\/\/\S+/g) ?? [];
 
@@ -59,6 +59,16 @@ function materializeDraftContent(channel: string, rawContent: string, trackedUrl
       return repaired;
     }
     throw new Error(`Copy contains an invalid or duplicate URL for ${channel}`);
+  }
+
+  if (channel === "facebook") {
+    const blocks = copy.split(/\n{2,}/u);
+    const hashtagIndex = blocks.findIndex((block) => block.trimStart().startsWith("#"));
+    const linkBlock = `👉 ${trackedUrl}`;
+    if (hashtagIndex >= 0) {
+      return [...blocks.slice(0, hashtagIndex), linkBlock, ...blocks.slice(hashtagIndex)].join("\n\n");
+    }
+    return `${copy}\n\n${linkBlock}`;
   }
 
   return copy.endsWith("👉") ? `${copy} ${trackedUrl}` : `${copy}\n\n👉 ${trackedUrl}`;
@@ -174,10 +184,6 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       .order("created_at", { ascending: true })
       .order("id", { ascending: true });
 
-    // Paginacao por cursor composto: (created_at, id) ASC
-    // Usa OR para cursor: created_at > X OU (created_at = X AND id > Y)
-    // ponytail: PostgREST nao suporta OR direto em filtro composto, usamos gte+neq como aproximacao.
-    // Se created_at for unico por lote, basta gt. Se houver colisao, id desempata via order.
     if (cursor) {
       query = (query as any).or(
         `created_at.gt.${cursor.afterCreatedAt},and(created_at.eq.${cursor.afterCreatedAt},id.gt.${cursor.afterId})`
@@ -332,7 +338,6 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       user_id: this.tenantId,
       integration: "official-ai-service",
       action: "ai_generation",
-      // drafted = Modo 1 Draft Generation (ADR-014): oferta permanece pending_manual_review
       status: record.result === "approved" || record.result === "drafted" ? "success" : record.result === "rejected" ? "error" : "skipped",
       message: `${record.offerId}:${record.result}${record.failureStage ? `:${record.failureStage}` : ""}`,
       metadata: record
@@ -356,9 +361,6 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (error.code !== "23505") throw new Error(`Official AI idempotency reservation failed: ${error.message}`);
     const row = await this.readIdempotency(key);
     const stored = row.value;
-    // Sucesso é replay permanente: nunca devemos duplicar posts ou repetir aprovação.
-    // Rejeições são recuperáveis. Antes desta distinção, uma falha transitória de provider
-    // ficava gravada na chave v2 e cada novo clique apenas devolvia o erro antigo.
     if (stored.status === "completed" && stored.result) {
       if (stored.result.status !== "rejected") {
         if (stored.fingerprint === fingerprint) return { status: "replay" as const, result: stored.result };
@@ -379,7 +381,6 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
       if (retryError) throw new Error(`Official AI rejected-result retry failed: ${retryError.message}`);
       return { status: "started" as const };
     }
-    // Só aplica conflito se o registro ainda está pendente com fingerprint diferente.
     if (stored.fingerprint !== fingerprint) return { status: "conflict" as const };
 
     const pendingSince = stored.startedAt ?? row.created_at;
