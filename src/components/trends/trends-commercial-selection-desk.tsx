@@ -1,4 +1,4 @@
-import { ExternalLink, Film, FlaskConical, ShieldX } from "lucide-react";
+import { ExternalLink, FlaskConical, ShieldX } from "lucide-react";
 import type { TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
 import { approveTrendTestAction, ignoreTrendProductAction } from "@/lib/trends/selection-actions";
 
@@ -28,7 +28,7 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="text-base font-extrabold text-white">Mesa de seleção comercial</h2>
-            <p className="mt-1 text-xs text-white/35">Aprovar teste vincula a oportunidade a uma oferta do fluxo oficial. Nenhuma publicação acontece automaticamente.</p>
+            <p className="mt-1 text-xs text-white/35">Aprovar teste vincula a oportunidade a uma oferta do fluxo oficial e prepara os drafts sociais. Nenhuma publicação acontece automaticamente.</p>
           </div>
           <div className="text-right text-xs text-white/35">
             {snapshot ? <><p>{snapshot.radarDate} · {snapshot.status}</p><p>{String(snapshot.sourceHealth.strategy_version || snapshot.executiveSummary.strategy_version || snapshot.strategyVersion)}</p></> : <p>Nenhum snapshot disponível.</p>}
@@ -60,7 +60,7 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Preço</p><p className="mt-1 font-bold text-white/75">{item.price != null ? BRL.format(item.price) : "n/d"}</p></div>
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Demanda</p><p className="mt-1 font-bold text-white/75">{item.sales != null ? `${Math.round(item.sales)} vendas` : "n/d"}</p><p className="text-[10px] text-white/30">{velocityLabel(item.salesVelocity, item.velocityStatus)}</p></div>
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Comissão potencial</p><p className="mt-1 font-bold text-white/75">{totalCommission > 0 ? `${Math.round(totalCommission * 100) / 100}%` : "n/d"}</p><p className="text-[10px] text-white/30">{item.discountPercent != null ? `${item.discountPercent}% desconto` : "sem desconto informado"}</p></div>
-                    <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Execução</p><p className="mt-1 font-bold text-white/75">{handedOff ? "Oferta selecionada" : item.recommendedChannel || "aguardando aprovação"}</p><p className="text-[10px] text-white/30">{handedOff ? "fluxo oficial liberado" : item.recommendedFormat || "sem publicação automática"}</p></div>
+                    <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Execução</p><p className="mt-1 font-bold text-white/75">{handedOff ? "Oferta selecionada" : item.recommendedChannel || "aguardando aprovação"}</p><p className="text-[10px] text-white/30">{handedOff ? "drafts sociais preparados" : item.recommendedFormat || "sem publicação automática"}</p></div>
                   </div>
 
                   {handedOff ? (
@@ -76,7 +76,7 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
                 </div>
 
                 <div className="grid gap-2">
-                  {handedOff ? <><a href="/videos" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-emerald-950"><Film size={14} /> Abrir vídeos</a><a href="/offers" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-400/25 px-3 py-2 text-xs font-bold text-cyan-300">Ver oferta vinculada</a></> : <form action={approveTrendTestAction}><input type="hidden" name="product_id" value={item.id} /><button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-emerald-950"><FlaskConical size={14} /> Aprovar teste</button></form>}
+                  {handedOff ? <><a href="/facebook" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-emerald-950">Abrir Facebook</a><a href="/instagram" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-pink-400/25 px-3 py-2 text-xs font-bold text-pink-300">Abrir Instagram</a><a href="/offers" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-400/25 px-3 py-2 text-xs font-bold text-cyan-300">Ver oferta vinculada</a></> : <form action={approveTrendTestAction}><input type="hidden" name="product_id" value={item.id} /><button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-emerald-950"><FlaskConical size={14} /> Aprovar teste</button></form>}
                   <form action={ignoreTrendProductAction}><input type="hidden" name="product_id" value={item.id} /><button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/25 px-3 py-2 text-xs font-bold text-red-300"><ShieldX size={14} /> Ignorar</button></form>
                   <div className="rounded-lg border border-white/[0.05] p-2 text-center text-[10px] text-white/35">{handedOff ? `Experimento rastreável · oferta ${item.selectedOfferId?.slice(0, 8)}…` : item.selectionDecision ? `Decisão humana: ${item.selectionDecision}${item.selectionDecidedAt ? ` · ${new Date(item.selectionDecidedAt).toLocaleString("pt-BR")}` : ""}` : "Aguardando decisão humana"}</div>
                 </div>
