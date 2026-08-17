@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
+import { resolveTrendOfferHandoff } from "@/lib/trends/selection-offer-state";
 
 export type TrendSelectionDecision = "IGNORAR" | "APROVAR_TESTE";
 
@@ -106,8 +107,9 @@ async function materializeShopeeOfferFromSnapshot(supabase: any, userId: string,
 }
 
 async function ensureOfferSelected(supabase: any, userId: string, offer: any, productId: string) {
-  if (offer.status === "selected") return;
-  if (offer.status !== "pending_manual_review") {
+  const resolution = resolveTrendOfferHandoff(String(offer.status ?? ""));
+  if (resolution === "reuse") return;
+  if (resolution === "reject") {
     throw new Error(`Oferta vinculada está em estado ${offer.status} e não pode ser encaminhada automaticamente.`);
   }
 
