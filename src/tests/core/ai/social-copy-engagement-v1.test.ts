@@ -25,6 +25,18 @@ describe("social copy engagement v1", () => {
     expect(whatsapp).not.toMatch(/Corre pra conferir|últimas unidades|só hoje|corre que/iu);
   });
 
+  it("reserva a orientação de primeiro comentário exclusivamente ao Facebook", () => {
+    const facebook = buildCopyV3ChannelCopy(facts, "facebook");
+    const whatsapp = buildCopyV3ChannelCopy(facts, "whatsapp");
+    const telegram = buildCopyV3ChannelCopy(facts, "telegram");
+    const instagram = buildCopyV3ChannelCopy(facts, "instagram");
+
+    expect(facebook).toMatch(/primeiro comentário/iu);
+    expect(whatsapp).not.toMatch(/primeiro comentário/iu);
+    expect(telegram).not.toMatch(/primeiro comentário/iu);
+    expect(instagram).not.toMatch(/primeiro comentário/iu);
+  });
+
   it("não termina título público em conectivo ou pontuação quebrada", () => {
     const copy = buildCopyV2ChannelCopy({ ...facts, productName: "Mesa de Jantar Industrial 120x80 cm com Base em Metalon e Tampo em Lâmina Mel para Sala" }, "facebook");
     const title = copy.split("\n\n").find((block) => block.startsWith("🛍️")) ?? "";
