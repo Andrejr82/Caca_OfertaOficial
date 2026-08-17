@@ -121,6 +121,26 @@ describe("Shopee Achadinho Quality Gate V1.2", () => {
     expect(peer.offerPriceScore).toBe(0);
   });
 
+  it("scores eligible products against the raw discovery pool even when peers are excluded by novelty", () => {
+    const target = candidate({ itemId: "target", shopId: "target-shop", currentPrice: 10 });
+    const rawDiscoveryPool = [
+      target,
+      candidate({ itemId: "historical-1", shopId: "h1", currentPrice: 20 }),
+      candidate({ itemId: "historical-2", shopId: "h2", currentPrice: 21 }),
+      candidate({ itemId: "existing-offer", shopId: "h3", currentPrice: 22 }),
+    ];
+
+    const selected = selectShopeeAchadinhosV12([target], {
+      maxProducts: 20,
+      peerPool: rawDiscoveryPool,
+    });
+
+    expect(selected).toHaveLength(1);
+    expect(selected[0].peer.peerCount).toBe(3);
+    expect(selected[0].peer.peerConfidence).toBe("MEDIUM");
+    expect(selected[0].offerPriceScore).toBe(15);
+  });
+
   it("does not compare kits against unitary products when quantity is materially different", () => {
     const kit = candidate({
       itemId: "kit",
