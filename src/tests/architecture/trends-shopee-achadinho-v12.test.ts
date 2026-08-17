@@ -110,6 +110,26 @@ describe("Shopee Achadinho Quality Gate V1.2", () => {
     expect(classifyPeerIdentity("Chave T Longa Máquina de Lavar 10mm").peerType).toBe("chave_t_maquina_lavar");
   });
 
+  it("keeps TV supports, router supports and generic adhesive supports in separate peer types", () => {
+    const tvFixed = classifyPeerIdentity("Suporte para TV Universal Fixo Smart LED LCD 4K Parede 32 a 100 Polegadas");
+    const tvArticulated = classifyPeerIdentity("Suporte para TV Articulado Retrátil 10 a 55 Polegadas VESA 200x200");
+    const router = classifyPeerIdentity("Suporte para Roteador e Modem de Parede Sem Furo com Fita 3M Universal");
+    const adhesive = classifyPeerIdentity("Suporte Parede Adesivo Multiuso Organizador Controle Remoto");
+
+    expect(tvFixed.peerType).toBe("suporte_tv_fixo");
+    expect(tvArticulated.peerType).toBe("suporte_tv_articulado");
+    expect(router.peerType).toBe("suporte_roteador_parede");
+    expect(adhesive.peerType).toBe("suporte_parede_adesivo_multiuso");
+    expect(new Set([tvFixed.peerType, tvArticulated.peerType, router.peerType, adhesive.peerType]).size).toBe(4);
+  });
+
+  it("classifies observed high-intent utilities instead of collapsing them to item_isolado", () => {
+    expect(classifyPeerIdentity("Pino Adaptador Tomada Dobravel Articulado Flex 3 Saída 16A").peerType)
+      .toBe("adaptador_tomada_articulado");
+    expect(classifyPeerIdentity("Kit 3 Em 1 Bico Alta Pressão Para Mangueira + Conector Top").peerType)
+      .toBe("bico_mangueira_alta_pressao");
+  });
+
   it("excludes the candidate itself from peers and requires at least three real peers for price authority", () => {
     const target = candidate({ itemId: "target", currentPrice: 12.51 });
     const pool = [
