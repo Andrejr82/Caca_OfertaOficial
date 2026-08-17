@@ -184,7 +184,12 @@ function classifyPeerIdentity(productName) {
   else if (/\bcueca/.test(text) && /\b(kit|box|boxer)\b/.test(text)) set('vestuario', 'kit_cuecas_boxer', 'vestuario_calcados');
   else if (/\bcilios\b|\bpestanas\b/.test(text)) set('beleza_olhos', 'estojo_extensao_cilios', 'beleza');
   else if (/\bgarrafa/.test(text) && /\b(squeeze|motivacional)\b/.test(text)) set('utilidades', 'kit_garrafas_squeeze_motivacional', 'casa');
-  else if (/\bsuporte\b.*\bparede\b/.test(text)) set('organizacao', 'suporte_parede_adesivo_multiuso', 'casa');
+  else if (/\bsuporte\b.*\b(tv|televisao)\b.*\b(articulad|retratil)\b|\b(articulad|retratil)\b.*\bsuporte\b.*\b(tv|televisao)\b/.test(text)) set('suporte_tv', 'suporte_tv_articulado', 'casa');
+  else if (/\bsuporte\b.*\b(tv|televisao)\b.*\b(fixo|universal|parede)\b|\bsuporte\b.*\b(fixo|universal)\b.*\b(tv|televisao)\b/.test(text)) set('suporte_tv', 'suporte_tv_fixo', 'casa');
+  else if (/\bsuporte\b.*\b(roteador|modem|wifi)\b.*\bparede\b|\bsuporte\b.*\bparede\b.*\b(roteador|modem|wifi)\b/.test(text)) set('organizacao_rede', 'suporte_roteador_parede', 'casa');
+  else if (/\badaptador\b.*\btomada\b.*\b(dobravel|articulado|flex)\b|\bpino\b.*\badaptador\b.*\btomada\b/.test(text)) set('eletrica', 'adaptador_tomada_articulado', 'casa');
+  else if (/\b(bico|esguicho)\b.*\balta\s*pressao\b.*\bmangueira\b|\bmangueira\b.*\b(bico|esguicho)\b.*\balta\s*pressao\b/.test(text)) set('jardim', 'bico_mangueira_alta_pressao', 'casa');
+  else if (/\bsuporte\b.*\bparede\b.*\b(adesiv|fita|multiuso|organizador)\b/.test(text)) set('organizacao', 'suporte_parede_adesivo_multiuso', 'casa');
   else if (/\belastico\b.*\bcabelo\b|\bxuxinha\b/.test(text)) set('acessorios', 'kit_xuxinha_elastico_cabelo', 'beleza');
   else if (/\broll\s*on\b.*\b(olho|olheira|serum)\b|\bserum\b.*\broll\s*on\b/.test(text)) set('skincare', 'serum_rollon_olhos', 'beleza');
   else if (/\bclareador\b.*\b(virilha|axila)\b/.test(text)) set('skincare_corporal', 'creme_clareador_corporal', 'beleza');
