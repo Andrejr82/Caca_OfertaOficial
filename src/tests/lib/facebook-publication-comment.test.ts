@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { publishToFacebook } from "@/lib/platforms/facebook";
 
-function graphResponse(data: unknown, ok = true, status = 200) {
-  return {
-    ok,
+function graphResponse(data: unknown, ok = true, status = 200): Response {
+  return new Response(JSON.stringify(data), {
     status,
-    json: vi.fn().mockResolvedValue(data),
-  } as Response;
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 describe("Facebook publication first comment", () => {
