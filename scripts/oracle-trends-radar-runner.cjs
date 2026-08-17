@@ -6,6 +6,9 @@ const {
   fetchCompletedRadarIdentityKeys,
   fetchExistingOfferIdentityKeys,
   filterCandidatesOutsidePreviousSnapshot,
+  getMarketplaceIdentityKey,
+  getMarketplaceImageUrl,
+  withMarketplaceImageEvidence,
 } = require('./oracle-trends-radar-freshness.cjs');
 
 const DEDICATED_RUNTIME_ENV = 'TRENDS_RADAR_DEDICATED_RUNTIME';
@@ -64,6 +67,30 @@ async function persistFreshnessHealth(client, runId, freshness) {
     .eq('id', runId);
 }
 
+async function persistSnapshotImages(client, runId, candidateImages) {
+  if (!client || !runId || !(candidateImages instanceof Map) || candidateImages.size === 0) return 0;
+  const { data: products, error } = await client
+    .from('trend_radar_products')
+    .select('id,marketplace,product_term,normalized_product_term,direct_evidence')
+    .eq('radar_run_id', runId);
+  if (error || !Array.isArray(products)) return 0;
+
+  let updated = 0;
+  for (const product of products) {
+    const key = getMarketplaceIdentityKey(product);
+    const imageUrl = key ? candidateImages.get(key) : null;
+    if (!imageUrl) continue;
+    const directEvidence = withMarketplaceImageEvidence(product.direct_evidence, imageUrl);
+    const { error: updateError } = await client
+      .from('trend_radar_products')
+      .update({ direct_evidence: directEvidence })
+      .eq('id', product.id)
+      .eq('radar_run_id', runId);
+    if (!updateError) updated += 1;
+  }
+  return updated;
+}
+
 async function processPendingTrendRadarRuns(options = {}) {
   if (isEditorialTrendRadarConsumer(options)) {
     return {
@@ -96,6 +123,7 @@ async function processPendingTrendRadarRuns(options = {}) {
 
   const radarHistory = await fetchCompletedRadarIdentityKeys(client, pendingRun.user_id);
   const existingOfferIdentityKeys = await fetchExistingOfferIdentityKeys(client, pendingRun.user_id);
+  const candidateImages = new Map();
   const freshness = {
     latestCompletedRunId: radarHistory.latestRunId,
     completedRunCount: radarHistory.runCount,
@@ -116,6 +144,11 @@ async function processPendingTrendRadarRuns(options = {}) {
     const withoutExistingOffers = filterCandidatesOutsidePreviousSnapshot(withoutHistorical.fresh, existingOfferIdentityKeys);
     freshness[historicalKey] = withoutHistorical.excluded.length;
     freshness[existingOfferKey] = withoutExistingOffers.excluded.length;
+    for (const candidate of withoutExistingOffers.fresh) {
+      const key = getMarketplaceIdentityKey(candidate);
+      const imageUrl = getMarketplaceImageUrl(candidate);
+      if (key && imageUrl) candidateImages.set(key, imageUrl);
+    }
     return withoutExistingOffers.fresh;
   };
 
@@ -142,6 +175,7 @@ async function processPendingTrendRadarRuns(options = {}) {
   });
 
   if (result.processed && !options.dryRun) {
+    await persistSnapshotImages(client, result.runId, candidateImages);
     await persistFreshnessHealth(client, result.runId, freshness);
   }
 
@@ -159,5 +193,6 @@ module.exports = {
   shouldRunTrendRadarConsumer,
   createRadarAdminClient,
   persistFreshnessHealth,
+  persistSnapshotImages,
   processPendingTrendRadarRuns,
 };
