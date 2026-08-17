@@ -13,7 +13,7 @@ describe("Trends social draft handoff", () => {
     expect(command.offerId).toBe("offer-1");
     expect(command.channels).toEqual([...TREND_SOCIAL_CHANNELS]);
     expect(command.commandId).toBe("trend-social-drafts:trend-product-1:offer-1:v1");
-    expect(command.idempotencyKey).toBe(command.commandId);
+    expect(command.idempotencyKey).toBe("ai:draft:offer-1:v2");
     expect(command.origin).toBe("trends.approve-test");
     expect(command.metadata?.automaticPublication).toBe(false);
   });
