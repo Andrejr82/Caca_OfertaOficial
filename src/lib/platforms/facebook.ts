@@ -5,13 +5,31 @@ export interface FacebookPublishResponse {
   success: boolean;
   message: string;
   postId?: string;
+  commentStatus?: "published" | "failed" | "not_requested";
+  commentId?: string;
+  commentError?: string;
   error?: any;
 }
 
-/**
- * Função para publicar um post no Facebook Page usando a Graph API.
- * Atualmente atua como um skeleton para implementação futura caso a key seja preenchida.
- */
+async function publishFirstComment(postId: string, affiliateLink: string, accessToken: string) {
+  const response = await fetch(`https://graph.facebook.com/v19.0/${postId}/comments`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message: `🛒 Compre aqui: ${affiliateLink}`,
+      access_token: accessToken,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data?.error?.message || `Facebook comment Graph API (${response.status})`;
+    return { status: "failed" as const, error: message };
+  }
+
+  return { status: "published" as const, id: String(data.id || "") };
+}
+
 export async function publishToFacebook(
   message: string,
   imageUrl?: string | null,
@@ -31,13 +49,10 @@ export async function publishToFacebook(
   let token = process.env.FACEBOOK_ACCESS_TOKEN;
 
   try {
-    // Tentar obter o token da página caso o token fornecido seja um User Token
     const pageTokenRes = await fetch(`https://graph.facebook.com/v19.0/${pageId}?fields=access_token&access_token=${token}`);
     if (pageTokenRes.ok) {
       const pageTokenData = await pageTokenRes.json();
-      if (pageTokenData.access_token) {
-        token = pageTokenData.access_token;
-      }
+      if (pageTokenData.access_token) token = pageTokenData.access_token;
     }
 
     let endpoint = `https://graph.facebook.com/v19.0/${pageId}/feed`;
@@ -52,7 +67,6 @@ export async function publishToFacebook(
       payload.description = message;
       delete payload.message;
     } else if (imageUrl) {
-      // Se houver imagem, publica como Foto
       endpoint = `https://graph.facebook.com/v19.0/${pageId}/photos`;
       payload.url = imageUrl;
     }
@@ -75,17 +89,45 @@ export async function publishToFacebook(
       };
     }
 
-    logger.info("Publicação no Facebook concluída", { id: data.id });
-    
-    // O comentário com link de afiliado foi delegado ao Webhook de Feed da Meta.
-    // Assim que a Meta terminar de processar o vídeo/foto e publicar no feed,
-    // o Webhook (src/app/api/webhooks/facebook) será acionado e fará o comentário 100% seguro.
-    logger.info("Deixando comentário a cargo do Webhook do Facebook.", { postId: data.id });
-    
+    const postId = String(data.post_id || data.id || "");
+    if (!postId) {
+      return {
+        success: false,
+        message: "Facebook não retornou o identificador da publicação.",
+        error: data,
+      };
+    }
+
+    logger.info("Publicação no Facebook concluída", { postId });
+
+    if (!affiliateLink?.trim()) {
+      return {
+        success: true,
+        message: "Publicado com sucesso no Facebook.",
+        postId,
+        commentStatus: "not_requested",
+      };
+    }
+
+    const comment = await publishFirstComment(postId, affiliateLink.trim(), String(token || ""));
+    if (comment.status === "failed") {
+      logger.warn("Publicação concluída, mas o primeiro comentário falhou", { postId, error: comment.error });
+      return {
+        success: true,
+        message: "Publicado no Facebook; comentário automático pendente.",
+        postId,
+        commentStatus: "failed",
+        commentError: comment.error,
+      };
+    }
+
+    logger.info("Primeiro comentário do Facebook publicado", { postId, commentId: comment.id });
     return {
       success: true,
-      message: "Publicado com sucesso no Facebook.",
-      postId: data.id,
+      message: "Publicado com sucesso no Facebook e comentário adicionado.",
+      postId,
+      commentStatus: "published",
+      commentId: comment.id,
     };
   } catch (error: any) {
     logger.error("Exceção ao tentar publicar no Facebook", { error: error.message });

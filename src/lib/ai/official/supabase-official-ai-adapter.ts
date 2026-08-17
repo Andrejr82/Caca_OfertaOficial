@@ -36,7 +36,7 @@ function mapAffiliateLinks(value: unknown) {
     .map((link) => ({ channel: link.channel as any, trackedUrl: link.tracked_url, subId: link.sub_id }));
 }
 
-function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string, options?: { repairInvalidUrl?: boolean }) {
+export function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string, options?: { repairInvalidUrl?: boolean }) {
   const copy = rawContent.trimEnd();
   const urls = copy.match(/https?:\/\/\S+/g) ?? [];
 
@@ -59,6 +59,16 @@ function materializeDraftContent(channel: string, rawContent: string, trackedUrl
       return repaired;
     }
     throw new Error(`Copy contains an invalid or duplicate URL for ${channel}`);
+  }
+
+  if (channel === "facebook") {
+    const blocks = copy.split(/\n{2,}/u);
+    const hashtagIndex = blocks.findIndex((block) => block.trimStart().startsWith("#"));
+    const linkBlock = `👉 ${trackedUrl}`;
+    if (hashtagIndex >= 0) {
+      return [...blocks.slice(0, hashtagIndex), linkBlock, ...blocks.slice(hashtagIndex)].join("\n\n");
+    }
+    return `${copy}\n\n${linkBlock}`;
   }
 
   return copy.endsWith("👉") ? `${copy} ${trackedUrl}` : `${copy}\n\n👉 ${trackedUrl}`;
