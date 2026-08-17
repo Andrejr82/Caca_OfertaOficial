@@ -5,9 +5,9 @@ const require = createRequire(import.meta.url);
 const {
   ML_RADAR_DISCOVERY_INTENTS,
   ML_RADAR_INTENT_MACRO_GROUPS,
-  collectMercadoLivreMarketplaceCandidates,
-  normalizeMercadoLivreRadarProduct,
-} = require("../../../scripts/oracle-trends-radar-engine.cjs");
+  collectMercadoLivreRadarDiscoveryV1,
+  normalizeMercadoLivreDiscoveryProduct,
+} = require("../../../scripts/mercadolivre-radar-discovery-v1.cjs");
 const {
   SEARCH_ALIASES,
 } = require("../../../scripts/mercadolivre-official-intents-v5.cjs");
@@ -49,7 +49,7 @@ describe("Mercado Livre Radar Discovery V1", () => {
       ],
     }));
 
-    const result = await collectMercadoLivreMarketplaceCandidates({
+    const result = await collectMercadoLivreRadarDiscoveryV1({
       accessToken: "token",
       coverageRunner,
     });
@@ -83,7 +83,7 @@ describe("Mercado Livre Radar Discovery V1", () => {
       ],
     }));
 
-    const result = await collectMercadoLivreMarketplaceCandidates({ accessToken: "token", coverageRunner });
+    const result = await collectMercadoLivreRadarDiscoveryV1({ accessToken: "token", coverageRunner });
 
     expect(result).toHaveLength(1);
     expect(result[0].itemId).toBe("MLB-1");
@@ -93,7 +93,7 @@ describe("Mercado Livre Radar Discovery V1", () => {
   });
 
   it("preserves official discovery metadata during normalization", () => {
-    const result = normalizeMercadoLivreRadarProduct({
+    const result = normalizeMercadoLivreDiscoveryProduct({
       item_id: "MLB-9",
       product_id: "MLB-P9",
       product_name: "Mala de bordo",
