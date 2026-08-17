@@ -19,15 +19,29 @@ function tempLockPath() {
   return path.join(os.tmpdir(), `trends-radar-${crypto.randomUUID()}.lock`);
 }
 
-test('dedicated runtime flag is fail-closed and preserves legacy consumer by default', () => {
+test('dedicated runtime flag stays fail-closed while manual consumer remains available outside editorial cycle', () => {
   assert.equal(isDedicatedTrendRadarRuntimeEnabled({}), false);
   assert.equal(shouldRunTrendRadarConsumer({ env: {} }), true);
+  assert.equal(shouldRunTrendRadarConsumer({ env: {}, stageLogger: {} }), false);
   assert.equal(isDedicatedTrendRadarRuntimeEnabled({ TRENDS_RADAR_DEDICATED_RUNTIME: '1' }), true);
   assert.equal(shouldRunTrendRadarConsumer({ env: { TRENDS_RADAR_DEDICATED_RUNTIME: '1' } }), false);
   assert.equal(shouldRunTrendRadarConsumer({ env: { TRENDS_RADAR_DEDICATED_RUNTIME: '1' }, dedicatedRuntime: true }), true);
 });
 
-test('legacy oracle-scraper consumer is skipped when dedicated runtime is enabled', async () => {
+test('editorial oracle-scraper consumer is permanently retired even when dedicated flag is disabled', async () => {
+  const result = await processPendingTrendRadarRuns({
+    env: {},
+    stageLogger: {},
+  });
+
+  assert.equal(result.processed, false);
+  assert.equal(result.reason, 'editorial_consumer_retired');
+  assert.equal(result.publishCalls, 0);
+  assert.equal(result.postsWrites, 0);
+  assert.equal(result.offersWrites, 0);
+});
+
+test('legacy compatibility consumer is skipped when dedicated runtime is enabled', async () => {
   const result = await processPendingTrendRadarRuns({
     env: { TRENDS_RADAR_DEDICATED_RUNTIME: '1' },
   });
