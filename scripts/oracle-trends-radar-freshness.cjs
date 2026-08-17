@@ -36,6 +36,27 @@ function getMarketplaceIdentityKey(value = {}) {
   return productName ? `${marketplace}:name:${productName}` : null;
 }
 
+function getMarketplaceImageUrl(value = {}) {
+  const evidence = firstEvidence(value.direct_evidence);
+  const raw = String(value.imageUrl || value.image_url || evidence.image_url || '').trim();
+  if (!raw) return null;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function withMarketplaceImageEvidence(directEvidence, imageUrl) {
+  const normalizedImageUrl = getMarketplaceImageUrl({ image_url: imageUrl });
+  if (!normalizedImageUrl) return Array.isArray(directEvidence) ? directEvidence : [];
+  const evidence = Array.isArray(directEvidence) ? [...directEvidence] : [];
+  const first = evidence[0] && typeof evidence[0] === 'object' ? evidence[0] : {};
+  evidence[0] = { ...first, image_url: normalizedImageUrl };
+  return evidence;
+}
+
 function filterCandidatesOutsidePreviousSnapshot(candidates = [], excludedIdentityKeys = new Set()) {
   const fresh = [];
   const excluded = [];
@@ -128,6 +149,8 @@ async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
 module.exports = {
   normalizeIdentityPart,
   getMarketplaceIdentityKey,
+  getMarketplaceImageUrl,
+  withMarketplaceImageEvidence,
   filterCandidatesOutsidePreviousSnapshot,
   fetchCompletedRadarIdentityKeys,
   fetchExistingOfferIdentityKeys,
