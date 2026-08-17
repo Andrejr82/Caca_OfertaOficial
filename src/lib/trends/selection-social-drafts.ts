@@ -4,6 +4,24 @@ import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
 export const TREND_SOCIAL_CHANNELS = ["facebook", "instagram", "whatsapp"] as const;
 
+export function buildTrendSocialDraftContent(
+  baseContent: string,
+  channel: (typeof TREND_SOCIAL_CHANNELS)[number],
+  trackedUrl: string,
+) {
+  if (channel !== "whatsapp") return baseContent;
+
+  const url = trackedUrl.trim();
+  if (!url) return baseContent.trimEnd();
+
+  const withoutTrackedUrl = baseContent.replaceAll(url, "").trimEnd();
+  if (/👉\s*$/u.test(withoutTrackedUrl)) {
+    return `${withoutTrackedUrl} ${url}`;
+  }
+
+  return `${withoutTrackedUrl}\n\n👉 ${url}`;
+}
+
 export async function prepareTrendSocialDrafts(input: {
   userId: string;
   offerId: string;
@@ -47,7 +65,8 @@ export async function prepareTrendSocialDrafts(input: {
       throw new Error(`Falha ao preparar o link do canal ${channel}: ${linkError?.message ?? "registro ausente"}`);
     }
 
-    const content = buildCopyV2ChannelCopy(facts, channel);
+    const baseContent = buildCopyV2ChannelCopy(facts, channel);
+    const content = buildTrendSocialDraftContent(baseContent, channel, trackedUrl);
     const { data: draft, error: draftReadError } = await admin
       .from("posts")
       .select("id")
