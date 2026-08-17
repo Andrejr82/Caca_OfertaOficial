@@ -5,6 +5,7 @@ const engine = require('./oracle-trends-radar-engine.cjs');
 const achadinhoV12 = require('./shopee-achadinho-v12.cjs');
 const mlDiscoveryV1 = require('./mercadolivre-radar-discovery-v1.cjs');
 const mlOpportunityV1 = require('./mercadolivre-opportunity-v1.cjs');
+const marketplaceBalance = require('./marketplace-top20-balance.cjs');
 const {
   fetchCompletedRadarIdentityKeys,
   fetchExistingOfferIdentityKeys,
@@ -334,7 +335,10 @@ async function processPendingTrendRadarRuns(options = {}) {
   freshness.mlOpportunityDiscarded = Math.max(0, mlCandidates.length - mlSelectedRows.length);
   const mlProducts = buildMercadoLivreRadarProductsV1({ radarRunId: runId, selectedRows: mlSelectedRows });
 
-  const products = combineMarketplaceProductsByScore(shopeeProducts, mlProducts, 20);
+  const products = marketplaceBalance.composeBalancedMarketplaceTop20(shopeeProducts, mlProducts, {
+    maxProducts: 20,
+    minimumPerMarketplace: 6,
+  });
   const finalShopeeCount = products.filter((product) => product.marketplace === 'Shopee').length;
   const finalMlCount = products.filter((product) => product.marketplace === 'Mercado Livre').length;
 
@@ -389,5 +393,6 @@ module.exports = {
   buildShopeePeerScoringPool,
   buildMercadoLivreRadarProductsV1,
   combineMarketplaceProductsByScore,
+  composeBalancedMarketplaceTop20: marketplaceBalance.composeBalancedMarketplaceTop20,
   processPendingTrendRadarRuns,
 };
