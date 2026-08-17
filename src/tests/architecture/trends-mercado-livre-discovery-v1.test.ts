@@ -74,6 +74,15 @@ describe("Mercado Livre Radar Discovery V1", () => {
     });
   });
 
+  it("keeps OAuth refresh read-only during discovery", async () => {
+    const tokenProvider = vi.fn(async () => "token");
+    const coverageRunner = vi.fn(async () => ({ products: [] }));
+
+    await collectMercadoLivreRadarDiscoveryV1({ tokenProvider, coverageRunner, env: { TEST: "1" } });
+
+    expect(tokenProvider).toHaveBeenCalledWith({ env: { TEST: "1" }, persist: false });
+  });
+
   it("deduplicates native items and excludes invalid prices without fabricating metrics", async () => {
     const coverageRunner = vi.fn(async () => ({
       products: [
