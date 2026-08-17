@@ -5,7 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
-import { resolveTrendOfferHandoff } from "@/lib/trends/selection-offer-state";
+import { resolveTrendOfferHandoff, resolveTrendSnapshotImageUrl } from "@/lib/trends/selection-offer-state";
 import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
 
 export type TrendSelectionDecision = "IGNORAR" | "APROVAR_TESTE";
@@ -62,6 +62,7 @@ async function materializeShopeeOfferFromSnapshot(userId: string, product: any, 
   const itemId = String(identity.itemId ?? "").trim();
   const shopId = String(identity.shopId ?? "").trim();
   const affiliateUrl = validHttps(evidence.source_url);
+  const imageUrl = resolveTrendSnapshotImageUrl(evidence);
   const price = Number(evidence.price ?? metrics.price ?? 0);
   if (!/^\d+$/.test(itemId) || !affiliateUrl || !isShopeeAffiliateUrl(affiliateUrl) || !Number.isFinite(price) || price <= 0) {
     throw new Error("Snapshot Shopee não possui identidade/link afiliado/preço suficientes para materializar a oferta com segurança.");
@@ -73,7 +74,7 @@ async function materializeShopeeOfferFromSnapshot(userId: string, product: any, 
     product_name: product.product_term,
     category: product.category,
     original_url: affiliateUrl,
-    image_url: null,
+    image_url: imageUrl,
     current_price: price,
     old_price: evidence.old_price ?? null,
     score: Number(product.commercial_score ?? 0) / 10,
