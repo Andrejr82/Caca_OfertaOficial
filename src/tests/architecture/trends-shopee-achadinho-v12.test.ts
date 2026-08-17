@@ -13,6 +13,9 @@ const {
   scoreShopeeAchadinhoCandidate,
   selectShopeeAchadinhosV12,
 } = require("../../../scripts/shopee-achadinho-v12.cjs");
+const {
+  buildShopeePeerScoringPool,
+} = require("../../../scripts/oracle-trends-radar-runner.cjs");
 
 type Candidate = {
   marketplace: "Shopee";
@@ -121,21 +124,21 @@ describe("Shopee Achadinho Quality Gate V1.2", () => {
     expect(peer.offerPriceScore).toBe(0);
   });
 
-  it("scores eligible products against the raw discovery pool even when peers are excluded by novelty", () => {
+  it("uses historical/existing-offer exclusions as peers without making them selectable", () => {
     const target = candidate({ itemId: "target", shopId: "target-shop", currentPrice: 10 });
-    const rawDiscoveryPool = [
-      target,
+    const excludedPeers = [
       candidate({ itemId: "historical-1", shopId: "h1", currentPrice: 20 }),
       candidate({ itemId: "historical-2", shopId: "h2", currentPrice: 21 }),
       candidate({ itemId: "existing-offer", shopId: "h3", currentPrice: 22 }),
     ];
 
-    const selected = selectShopeeAchadinhosV12([target], {
-      maxProducts: 20,
-      peerPool: rawDiscoveryPool,
-    });
+    const scoringPool = buildShopeePeerScoringPool([target], excludedPeers);
+    const selected = selectShopeeAchadinhosV12(scoringPool, { maxProducts: 20 });
 
+    expect(scoringPool).toHaveLength(4);
+    expect(scoringPool.filter((row: any) => row.peerReferenceOnly)).toHaveLength(3);
     expect(selected).toHaveLength(1);
+    expect(selected[0].candidate.itemId).toBe("target");
     expect(selected[0].peer.peerCount).toBe(3);
     expect(selected[0].peer.peerConfidence).toBe("MEDIUM");
     expect(selected[0].offerPriceScore).toBe(15);
