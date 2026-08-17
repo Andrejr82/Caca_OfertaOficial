@@ -14,7 +14,7 @@ export function buildTrendSocialDraftCommand(input: {
   return {
     contractVersion: "pmav5.ai/v1",
     commandId,
-    idempotencyKey: commandId,
+    idempotencyKey: `ai:draft:${input.offerId}:v2`,
     correlationId: `trend-test:${input.productId}`,
     causationId: null,
     offerId: input.offerId,
