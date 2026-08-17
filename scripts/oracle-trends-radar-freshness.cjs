@@ -16,10 +16,13 @@ function firstEvidence(value) {
 function getMarketplaceIdentityKey(value = {}) {
   const evidence = firstEvidence(value.direct_evidence);
   const identity = value.marketplaceIdentity || value.marketplace_identity || evidence.marketplace_identity || {};
-  const marketplace = normalizeIdentityPart(value.marketplace || evidence.marketplace || 'unknown');
+  const marketplace = normalizeIdentityPart(value.marketplace || value.platform || evidence.marketplace || 'unknown');
   const nativeId = String(
     value.itemId ||
     value.productId ||
+    value.shopee_item_id ||
+    value.item_id ||
+    value.product_id ||
     identity.itemId ||
     identity.productId ||
     ''
@@ -33,13 +36,13 @@ function getMarketplaceIdentityKey(value = {}) {
   return productName ? `${marketplace}:name:${productName}` : null;
 }
 
-function filterCandidatesOutsidePreviousSnapshot(candidates = [], previousSnapshotIdentityKeys = new Set()) {
+function filterCandidatesOutsidePreviousSnapshot(candidates = [], excludedIdentityKeys = new Set()) {
   const fresh = [];
   const excluded = [];
 
   for (const candidate of Array.isArray(candidates) ? candidates : []) {
     const key = getMarketplaceIdentityKey(candidate);
-    if (key && previousSnapshotIdentityKeys.has(key)) excluded.push(candidate);
+    if (key && excludedIdentityKeys.has(key)) excluded.push(candidate);
     else fresh.push(candidate);
   }
 
@@ -80,9 +83,32 @@ async function fetchLatestCompletedSnapshotIdentityKeys(client, tenantId = null)
   return { runId, identityKeys };
 }
 
+async function fetchTerminalOfferIdentityKeys(client, tenantId = null) {
+  const identityKeys = new Set();
+  if (!client) return identityKeys;
+
+  let query = client
+    .from('offers')
+    .select('platform, shopee_item_id, item_id, product_id')
+    .in('status', ['rejected', 'posted']);
+
+  if (tenantId) query = query.eq('user_id', tenantId);
+
+  const { data: offers, error } = await query;
+  if (error || !Array.isArray(offers)) return identityKeys;
+
+  for (const offer of offers) {
+    const key = getMarketplaceIdentityKey(offer);
+    if (key) identityKeys.add(key);
+  }
+
+  return identityKeys;
+}
+
 module.exports = {
   normalizeIdentityPart,
   getMarketplaceIdentityKey,
   filterCandidatesOutsidePreviousSnapshot,
   fetchLatestCompletedSnapshotIdentityKeys,
+  fetchTerminalOfferIdentityKeys,
 };
