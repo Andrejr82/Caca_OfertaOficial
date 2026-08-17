@@ -1,8 +1,8 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: bc8a27d1ebc1092dea05d1adfdda0569e39b980b -->
+<!-- verified-on: 2026-08-16 -->
 
 Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Oracle, PM2, Meta, Telegram, WhatsApp e marketplaces precisa ser confirmada no ambiente correspondente.
 
@@ -57,3 +57,12 @@ Este documento confirma capacidade versionada, não estado de produção. Antes 
 - Integração Radar → Oracle está preparada apenas para observação/controlada; `TREND_EXECUTIVE_MODE=off` é o estado seguro e `active` continua bloqueado.
 - Feedback experimental `SCALE | ADJUST | ABORT` é auditável, mas não altera pesos automaticamente.
 - Governança bloqueia fontes degradadas/drifted e exige revisão humana para mudanças de pesos ou ativação.
+
+## Runtime independente do Radar
+
+- `scripts/oracle-trends-radar-engine.cjs` preserva o engine marketplace-first existente de Shopee + Mercado Livre.
+- `scripts/oracle-trends-radar-runner.cjs` atua como camada compatível de seleção de consumidor e recusa permanentemente chamadas originadas do ciclo editorial (`editorial_consumer_retired`).
+- `scripts/oracle-trends-radar-worker.cjs` é o único loop automático autorizado do Radar e usa polling sequencial com lock de processo no host.
+- `TRENDS_RADAR_DEDICATED_RUNTIME=true` continua sendo requisito fail-closed para o worker dedicado executar.
+- CLI/manual sem `stageLogger` permanece disponível para diagnóstico controlado; o ciclo do `oracle-scraper` não consome mais solicitações do Radar, mesmo se a flag dedicada estiver desligada.
+- Geração de snapshot preserva `publishCalls=0`, `postsWrites=0` e `offersWrites=0`.

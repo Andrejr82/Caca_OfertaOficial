@@ -1,6 +1,7 @@
 import type { TrendRadarRunRow } from "@/lib/trends/radar-snapshots";
 
 export type RadarExecutionClaimStatus = "claimed" | "running" | "completed";
+export type RadarExecutionReason = "manual" | "manual_refresh" | "scheduled" | "retry";
 
 export interface RadarExecutionWindow {
   radarDate: string;
@@ -11,6 +12,8 @@ export interface RadarExecutionWindow {
 export interface RadarExecutionIdentity extends RadarExecutionWindow {
   userId: string;
   strategyVersion: string;
+  requestReason?: RadarExecutionReason;
+  requestedAt?: string;
 }
 
 export interface RadarExecutionClaim {
@@ -74,6 +77,7 @@ export function buildRadarRefreshExecutionWindow(now: Date = new Date()): RadarE
 }
 
 function runRow(identity: RadarExecutionIdentity): TrendRadarRunRow {
+  const requestedAt = identity.requestedAt ?? new Date().toISOString();
   return {
     user_id: identity.userId,
     radar_date: identity.radarDate,
@@ -81,7 +85,12 @@ function runRow(identity: RadarExecutionIdentity): TrendRadarRunRow {
     window_end: identity.windowEnd,
     strategy_version: identity.strategyVersion,
     status: "building",
-    source_health: { status: "building" },
+    source_health: {
+      status: "requested",
+      runtime: "oracle",
+      request_reason: identity.requestReason ?? "scheduled",
+      requested_at: requestedAt,
+    },
     executive_summary: {},
     failure_code: null,
   };

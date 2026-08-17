@@ -26,19 +26,23 @@ require('dotenv').config({ path: '.env.local' });
  *   → validar boot
  */
 
-const SERVER_IP = process.env.ORACLE_SERVER_IP;
-const SERVER_USER = process.env.ORACLE_SERVER_USER;
-const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR;
+const SERVER_IP = process.env.ORACLE_SERVER_IP || '193.122.242.178';
+const SERVER_USER = process.env.ORACLE_SERVER_USER || 'ubuntu';
+const PROJECT_DIR = process.env.ORACLE_PROJECT_DIR || '/home/ubuntu/Caca_OfertaOficial';
 const PM2_SCRAPER_NAME = process.env.ORACLE_SCRAPER_PM2_NAME || 'oracle-scraper';
 const PM2_API_NAME = process.env.ORACLE_API_PM2_NAME || 'oracle-api';
 const SSH_PORT = process.env.ORACLE_SSH_PORT || '22';
-const SSH_KEY_PATH = process.env.ORACLE_SSH_KEY_PATH && path.resolve(process.env.ORACLE_SSH_KEY_PATH);
+const DEFAULT_KEY_PATH = path.resolve(__dirname, '..', 'keys', 'ssh-key-2026-06-25.key');
+const SSH_KEY_PATH = process.env.ORACLE_SSH_KEY_PATH
+  ? path.resolve(process.env.ORACLE_SSH_KEY_PATH)
+  : (fs.existsSync(DEFAULT_KEY_PATH) ? DEFAULT_KEY_PATH : null);
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const RUNTIME_OVERLAY_FILE = 'config/oracle-runtime-overlay.env';
 const DEPLOY_FILES = [
   'scripts/shopee-feed-sync.cjs',
   'scripts/oracle-scraper.cjs',
   'scripts/oracle-scraper_remote.cjs',
+  'scripts/oracle-trends-radar-runner.cjs',
   'scripts/editorial-scenario-config.cjs',
   'scripts/amazon-native-top20-v5.cjs',
   'scripts/amazon-scenario-config.cjs',
@@ -77,6 +81,7 @@ const DEPLOY_FILES = [
   'src/lib/shopee/ranking/commercial-filters.ts',
   'src/lib/shopee/ranking/score.ts',
   'src/lib/shopee/ranking/oracle-adapter.ts',
+  'src/core/trends/commercial-opportunity-score-v3.cjs',
 ];
 const DEPLOY_DIRS = [...new Set(DEPLOY_FILES.map((relativeFile) => relativeFile.split('/').slice(0, -1).join('/')).filter(Boolean))];
 

@@ -1,8 +1,8 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 > Fonte canônica documental do runtime versionado. A implementação, as migrations, os testes e o manifesto de release continuam sendo a autoridade final.
 
@@ -15,6 +15,7 @@
 - Telegram e WhatsApp possuem fluxo editorial Top 30. O WhatsApp também expõe rotação `next`; Publicação Expressa continua independente.
 - Shein Express usa confirmação assistida e imagem pública validada antes de persistência/publicação.
 - Guardas fail-closed separam descoberta, geração controlada de drafts e publicação; Oracle não publica por efeito colateral do ciclo.
+- O Radar de Tendências possui entrypoint Oracle dedicado preparado e desligado por padrão; a ativação produtiva depende de rollout próprio.
 
 ## Visão geral
 
@@ -44,6 +45,7 @@ flowchart LR
 |---|---|---|
 | Next.js/Vercel | UI, autenticação, APIs e serviços de estado/AI/publicação | `src/app`, `src/core`, `src/lib`, `vercel.json` |
 | Oracle Worker | Discovery dos três marketplaces, contrato Candidate/Ingestion V1, persistência e disparo da Official AI | `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs` |
+| Oracle Radar Worker | Consumo independente de solicitações do Radar, reutilizando o engine marketplace-first existente; desligado por padrão | `scripts/oracle-trends-radar-worker.cjs`, `scripts/oracle-trends-radar-runner.cjs`, `scripts/oracle-trends-radar-engine.cjs` |
 | Oracle API | Gateway Express em `:3002`; `POST /api/scrape` busca HTML e devolve conteúdo normalizado | `scripts/oracle-api.cjs` |
 | WhatsApp Engine | Express/Baileys em `:3001`, status e envio autenticado | `scripts/whatsapp-engine.cjs` |
 | Supabase | Auth, tabelas de ofertas/posts/links/logs e Storage usado pelo app | `supabase/schema.sql`, `supabase/migrations`, `src/lib/supabase` |
@@ -109,6 +111,8 @@ A Publicação Expressa é um fluxo separado: resolve a URL, confirma o produto 
 
 O Oracle→Vercel é um POST para a URL configurada em `OFFICIAL_AI_TRIGGER_URL`, ou para a base pública resolvida por `APP_URL`, `NEXT_PUBLIC_APP_URL`, `PUBLIC_APP_URL`, `NEXTAUTH_URL`, `AUTH_URL` ou `VERCEL_PROJECT_PRODUCTION_URL`, sempre terminando em `/api/ai/generate`. O request usa bearer da service role quando disponível e timeout de 120 s. O Vercel→Oracle usa `POST /api/scrape` na porta 3002, autenticado por `ORACLE_API_KEY`; a API seleciona Scrapfly para não-Amazon e Scrape.do para Amazon. O botão manual de tendências usa o proxy autenticado `/api/scraper/trends`, que encaminha `category`, `sources`, `limit` e `tenantId` para `POST /api/manual/trends`; a execução permanece no Oracle Worker e reutiliza a mesma fila, persistência e Official AI. O endereço público/privado real deve ser configurado em `ORACLE_REMOTE_URL`.
 
+Para o Radar `/trends`, o runtime versionado agora separa o engine do gatilho. `scripts/oracle-trends-radar-engine.cjs` preserva a lógica marketplace-first; `scripts/oracle-trends-radar-runner.cjs` escolhe a autoridade de consumo; `scripts/oracle-trends-radar-worker.cjs` fornece o loop dedicado. Com `TRENDS_RADAR_DEDICATED_RUNTIME=false` ou ausente, nada muda no runtime produtivo: o scraper continua consumindo o Radar. Com a flag habilitada em rollout controlado, o scraper deixa de consumir requests do Radar e o worker dedicado passa a fazê-lo em polling sequencial, sem esperar o ciclo editorial. O lock é local ao host e não substitui um claim distribuído para múltiplas Oracle/VPS.
+
 Logs operacionais são `console.log`/`console.warn`/`console.error` dos processos, logs estruturados da aplicação e `integration_logs`/auditoria no Supabase. O Capacity Hunter coleta PM2, reinícios, quantidade de schedulers, reachability, CPU/RAM/disco, metadata OCI e SHA Git; roda como timer systemd de cinco minutos segundo seu README e código de configuração. Recuperação automática do domínio de dados é best-effort/idempotente; reinício de processos é procedimento operacional, não uma garantia implementada pelo worker.
 
 ## Variáveis
@@ -123,7 +127,7 @@ Limitações verificáveis: produção Oracle/Vercel/Supabase e execução exter
 
 ## Fontes de verdade
 
-`src/app/api/**`; `src/core/**`; `src/lib/**`; `src/app/(dashboard)/**`; `scripts/oracle-scraper.cjs`; `scripts/oracle-worker-discovery-only.cjs`; `scripts/oracle-api.cjs`; `scripts/whatsapp-engine.cjs`; `apps/oracle-capacity-hunter/src/**`; `supabase/schema.sql`; `supabase/migrations/**`; `.env.example`; `src/lib/env.ts`; `package.json`; `vercel.json`.
+`src/app/api/**`; `src/core/**`; `src/lib/**`; `src/app/(dashboard)/**`; `scripts/oracle-scraper.cjs`; `scripts/oracle-worker-discovery-only.cjs`; `scripts/oracle-api.cjs`; `scripts/oracle-trends-radar-engine.cjs`; `scripts/oracle-trends-radar-runner.cjs`; `scripts/oracle-trends-radar-worker.cjs`; `scripts/whatsapp-engine.cjs`; `apps/oracle-capacity-hunter/src/**`; `supabase/schema.sql`; `supabase/migrations/**`; `.env.example`; `src/lib/env.ts`; `package.json`; `vercel.json`.
 
 ## Avaliação de qualidade V2 (desligada por padrão)
 

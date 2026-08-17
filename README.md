@@ -1,8 +1,8 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: a79fbd4 -->
-<!-- verified-on: 2026-08-13 -->
+<!-- verified-against: 2cfa11f -->
+<!-- verified-on: 2026-08-16 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
@@ -97,9 +97,12 @@ npm run verify
 - `scripts/whatsapp-engine.cjs`: motor Baileys, normalmente na porta `3001`.
 - `scripts/video-worker.py` e `scripts/video_worker_runtime.py`: processamento de vídeo quando configurado.
 - `scripts/github-publish.ts`: fluxo de publicação de vídeos via GitHub/Storage quando habilitado.
+- `scripts/oracle-trends-radar-worker.cjs`: entrypoint dedicado preparado para consumir o Radar independentemente do ciclo editorial, desligado por padrão até rollout Oracle aprovado.
 
 Ativação produtiva de Oracle, Vercel, Supabase, PM2, GitHub Actions e provedores externos não é inferida apenas pelo checkout. Confirme o ambiente e siga os runbooks antes de executar operações de produção.
 
 ## IA Executiva de Tendências
 
 O runtime versionado inclui o Radar Executivo de Tendências em `/trends`, com evidência direta, snapshots auditáveis, Score V2, Top 3/Top 20, performance interna e contratos de integração Radar → Oracle. O modo operacional de Trend Executive permanece **fail-closed em `off`**; `shadow` não substitui a autoridade do cenário legado e `active` continua bloqueado até evidência suficiente e autorização explícita. Consulte `docs/AI_EXECUTIVE_TRENDS.md` e os relatórios `docs/TREND_EXECUTIVE_*`.
+
+A arquitetura de execução independente do Radar está preparada no repositório e documentada em `docs/TRENDS_IA_INDEPENDENT_ORACLE_RUNTIME_ARCHITECTURE.md`. `TRENDS_RADAR_DEDICATED_RUNTIME=false` preserva o comportamento atual; a Oracle produtiva só deve usar o worker dedicado após validação operacional específica.

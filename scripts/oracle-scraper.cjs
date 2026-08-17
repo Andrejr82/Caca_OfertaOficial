@@ -1662,6 +1662,12 @@ async function runScrapingCycleCore() {
       console.log(`[Oracle Funnel V5] ${JSON.stringify({ marketplace: summary.marketplace, funnel: summary.funnel, classificationCoverage: summary.classificationCoverage })}`);
     }
   }
+  try {
+    const { processPendingTrendRadarRuns } = require('./oracle-trends-radar-runner.cjs');
+    await processPendingTrendRadarRuns({ stageLogger });
+  } catch (trendsError) {
+    console.error(`[Oracle Trends Radar] ${trendsError.message}`);
+  }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
   return result;
 }
@@ -1845,6 +1851,15 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
       console.error('[Mercado Livre V5 Dry-Run] ' + error.message);
       process.exitCode = 1;
     });
+  } else if (process.argv.includes('--process-trends-radar') || process.argv.includes('--trends-radar-dry-run')) {
+    const dryRun = process.argv.includes('--trends-radar-dry-run');
+    const { processPendingTrendRadarRuns } = require('./oracle-trends-radar-runner.cjs');
+    processPendingTrendRadarRuns({ dryRun }).then((res) => {
+      console.log(JSON.stringify(res, null, 2));
+    }).catch((error) => {
+      console.error('[Oracle Trends Radar] ' + error.message);
+      process.exitCode = 1;
+    });
   } else {
     startOracleScraper();
   }
@@ -1885,4 +1900,5 @@ module.exports = {
   SHOPEE_OPENAPI_STAGE_TIMEOUT_MS,
   mercadoLivreIdentityKey,
   isEquivalentMercadoLivreProduct,
+  processPendingTrendRadarRuns: require('./oracle-trends-radar-runner.cjs').processPendingTrendRadarRuns,
 };

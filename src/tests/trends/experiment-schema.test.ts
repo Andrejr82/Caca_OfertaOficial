@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 
 describe("trend experiment contract migration", () => {
   const sql = readFileSync("supabase/migrations/20260810050000_trend_experiment_contract.sql", "utf8");

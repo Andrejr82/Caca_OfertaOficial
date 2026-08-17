@@ -24,6 +24,14 @@ export function isManualExpressDraft(post: PanelDraftPost): boolean {
   return post.offers?.explainability?.manual_source === true;
 }
 
+export function isTrendExperimentDraft(post: PanelDraftPost): boolean {
+  const explainability = post.offers?.explainability;
+  if (!explainability || typeof explainability !== "object") return false;
+  if (explainability.provenance === "trend_experiment") return true;
+  const trendExecution = explainability.trend_execution;
+  return Boolean(trendExecution && typeof trendExecution === "object" && "origin" in trendExecution && trendExecution.origin === "trend");
+}
+
 function isActiveDraft(post: PanelDraftPost, allowApprovedOfferDrafts: boolean): boolean {
   const offerStatus = String(post.offers?.status || "").toLowerCase();
   return post.status === "draft"
@@ -44,7 +52,7 @@ export function mergePanelDrafts<T extends PanelDraftPost>(
   const currentCohortOfferIds = authoritativeCohortOfferIds ?? getCurrentCohortOfferIds(drafts, editorialDayStart, allowApprovedOfferDrafts);
   const selected = drafts.filter((post) => {
     if (!isActiveDraft(post, allowApprovedOfferDrafts)) return false;
-    if (isManualExpressDraft(post)) return true;
+    if (isManualExpressDraft(post) || isTrendExperimentDraft(post)) return true;
     if (!currentCohortOfferIds.has(post.offer_id)) return false;
     const postCreatedAt = new Date(post.created_at).getTime();
     const offerCreatedAt = new Date(post.offers?.created_at || "").getTime();
@@ -64,7 +72,7 @@ function getCurrentCohortOfferIds<T extends PanelDraftPost>(drafts: readonly T[]
   if (!useDiscoveryEvidence) {
     const cohortAnchor = new Date(editorialDayStart.getTime() + 24 * 60 * 60 * 1000 - 1);
     const offers = drafts
-      .filter((post) => !isManualExpressDraft(post) && post.offers?.id && post.offers.created_at)
+      .filter((post) => !isManualExpressDraft(post) && !isTrendExperimentDraft(post) && post.offers?.id && post.offers.created_at)
       .map((post) => ({
         id: post.offers?.id || post.offer_id,
         created_at: post.offers?.created_at || post.created_at,
@@ -75,7 +83,7 @@ function getCurrentCohortOfferIds<T extends PanelDraftPost>(drafts: readonly T[]
 
   const dayEnd = editorialDayStart.getTime() + 24 * 60 * 60 * 1000;
   const rows = drafts
-    .filter((post) => !isManualExpressDraft(post))
+    .filter((post) => !isManualExpressDraft(post) && !isTrendExperimentDraft(post))
     .map((post) => {
       const explainability = post.offers?.explainability || {};
       const correlationId = normalizeDiscoveryCorrelationId(
