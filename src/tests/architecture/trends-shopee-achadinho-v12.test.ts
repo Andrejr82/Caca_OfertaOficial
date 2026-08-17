@@ -1,7 +1,11 @@
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const {
   buildPeerContext,
   classifyPeerIdentity,
@@ -65,6 +69,16 @@ function node(itemId: string, shopId: string, productName: string) {
 }
 
 describe("Shopee Achadinho Quality Gate V1.2", () => {
+  it("replaces the Shopee selector in the runtime instead of delegating to the legacy engine", () => {
+    const runnerPath = resolve(__dirname, "../../../scripts/oracle-trends-radar-runner.cjs");
+    const source = readFileSync(runnerPath, "utf8");
+
+    expect(source).toContain("achadinhoV12.collectShopeeMarketplaceCandidates");
+    expect(source).toContain("achadinhoV12.buildShopeeRadarProductsV12");
+    expect(source).not.toContain("return engine.processPendingTrendRadarRuns(options)");
+    expect(source).not.toContain("return engine.processPendingTrendRadarRuns({ ...options, client })");
+  });
+
   it("collects two official pages and deduplicates by shopId + itemId", async () => {
     const pages: number[] = [];
     const request = async (_operation: string, _query: string, variables: { page: number }) => {
