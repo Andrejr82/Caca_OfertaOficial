@@ -80,6 +80,7 @@ async function materializeShopeeOfferFromSnapshot(userId: string, product: any, 
     status: "pending_manual_review",
     explainability: {
       provenance: "trend_experiment",
+      correlation_id: `trend-radar:${product.radar_run_id}:${product.id}`,
       radar_run_id: product.radar_run_id,
       radar_product_id: product.id,
       commercial_score_v3: Number(product.commercial_score ?? 0),
