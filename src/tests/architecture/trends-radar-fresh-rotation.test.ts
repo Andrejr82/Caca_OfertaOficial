@@ -11,6 +11,7 @@ const {
 } = require("../../../scripts/oracle-trends-radar-freshness.cjs");
 const {
   buildTrendRadarProductsFromCandidates,
+  collectShopeeMarketplaceCandidates,
   normalizeMercadoLivreRadarProduct,
 } = require("../../../scripts/oracle-trends-radar-engine.cjs");
 
@@ -129,6 +130,18 @@ describe("Oracle Trends Radar fresh rotation", () => {
 
   it("rejects non-HTTPS image URLs from Radar evidence", () => {
     expect(getMarketplaceImageUrl({ imageUrl: "http://example.com/image.jpg" })).toBeNull();
+  });
+
+  it("requests a deeper Shopee candidate pool without weakening novelty gates", async () => {
+    const seenLimits: number[] = [];
+    const request = async (_operation: string, _query: string, variables: { limit: number }) => {
+      seenLimits.push(variables.limit);
+      return { data: { data: { productOfferV2: { nodes: [] } } } };
+    };
+
+    await collectShopeeMarketplaceCandidates({ request, categoryIds: [100010] });
+
+    expect(seenLimits).toEqual([30]);
   });
 
   it("maps Mercado Livre normalized price fields instead of manufacturing zero values", () => {
