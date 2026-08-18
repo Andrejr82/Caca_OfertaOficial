@@ -214,17 +214,27 @@ function isFeaturedMarker(value: unknown): boolean {
   return typeof value === "string" && value.toLowerCase() === "/home/card-featured/element";
 }
 
+function urlFragmentsHaveFeaturedMarker(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+
+  try {
+    const params = new URLSearchParams(decodeHtmlUrl(value).replace(/^\?/, ""));
+    return isFeaturedMarker(params.get("c_id"));
+  } catch {
+    return false;
+  }
+}
+
 function objectHasFeaturedMarker(value: unknown): boolean {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const object = value as Record<string, unknown>;
   if (isFeaturedMarker(object.c_id)) return true;
+
   const metadata = object.metadata;
-  return Boolean(
-    metadata
-    && typeof metadata === "object"
-    && !Array.isArray(metadata)
-    && isFeaturedMarker((metadata as Record<string, unknown>).c_id)
-  );
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return false;
+
+  const meta = metadata as Record<string, unknown>;
+  return isFeaturedMarker(meta.c_id) || urlFragmentsHaveFeaturedMarker(meta.url_fragments);
 }
 
 function validateNordicFeaturedCard(card: unknown, baseUrl: string): string | null {
