@@ -19,6 +19,7 @@ type PolicyRule = {
   id: string;
   label: string;
   patterns: RegExp[];
+  exclusions?: RegExp[];
 };
 
 // Guard conservador para conteúdo comercial/afiliado. A Meta pode alterar suas
@@ -29,7 +30,13 @@ const BLOCKED_RULES: readonly PolicyRule[] = [
     id: "weapons_explosives",
     label: "armas, munições ou explosivos",
     patterns: [
-      /\b(arma(?:s)? de fogo|firearm|pistola|revolver|revólver|rifle|espingarda|muni[cç][aã]o|cartucho(?:s)?|silenciador|explosivo(?:s)?|granada(?:s)?)\b/i
+      /\b(arma(?:s)? de fogo|firearm|rev[oó]lver|rifle|espingarda|muni[cç][aã]o|cartucho(?:s)? de muni[cç][aã]o|explosivo(?:s)?|granada(?:s)?)\b/i,
+      /\bpistola\b(?=.*\b(calibre|9\s?mm|\.40|\.45|muni[cç][aã]o|airsoft|press[aã]o)\b)/i,
+      /\bsilenciador\b(?=.*\b(arma|pistola|rifle|firearm)\b)/i
+    ],
+    exclusions: [
+      /\bpistola de (cola|cola quente|pintura|pulveriza[cç][aã]o|ar quente)\b/i,
+      /\bsilenciador (automotivo|de escapamento|para escapamento)\b/i
     ]
   },
   {
@@ -76,16 +83,16 @@ const BLOCKED_RULES: readonly PolicyRule[] = [
   },
   {
     id: "political_government",
-    label: "conteúdo político/governamental incompatível com branded content comum",
+    label: "conteúdo sobre eleições, política ou entidades políticas",
     patterns: [
-      /\b(candidato(?:a)?|campanha eleitoral|partido pol[ií]tico|comit[eê] eleitoral|propaganda eleitoral|governo federal|governo estadual|prefeitura)\b/i
+      /\b(candidato(?:a)?|campanha eleitoral|propaganda eleitoral|partido pol[ií]tico|comit[eê] eleitoral|elei[cç][aã]o|elei[cç][oõ]es|vote em|votar em)\b/i
     ]
   },
   {
     id: "counterfeit_piracy",
     label: "mercadoria falsificada, pirataria ou violação explícita de propriedade intelectual",
     patterns: [
-      /\b(r[eé]plica 1[: ]?1|produto falsificado|produto fake|pirata|pirateado|desbloqueador ilegal|iptv pirata|jailbroken)\b/i
+      /\b(r[eé]plica 1[: ]?1|produto falsificado|produto fake|produto pirata|software pirata|pirateado|desbloqueador ilegal|iptv pirata|jailbroken)\b/i
     ]
   }
 ];
@@ -110,6 +117,7 @@ export function evaluateInstagramPolicy(input: InstagramPolicyGuardInput): Insta
 
   const haystack = fields.join(" \n ");
   for (const rule of BLOCKED_RULES) {
+    if (rule.exclusions?.some((pattern) => pattern.test(haystack))) continue;
     if (rule.patterns.some((pattern) => pattern.test(haystack))) {
       return {
         ok: false,
