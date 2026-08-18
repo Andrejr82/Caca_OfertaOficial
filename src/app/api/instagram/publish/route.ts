@@ -8,6 +8,7 @@ import {
   publicationPayloadReference
 } from "@/lib/publication/official/create-official-publication-service";
 import { createOfficialPublicationApprovalDependencies } from "@/lib/publication/official/create-official-publication-approval";
+import { evaluateInstagramPolicy } from "@/lib/instagram/policy-guard";
 import { evaluateInstagramSafety, instagramVideoFingerprint, validateInstagramReelMetadata } from "@/lib/instagram/safety";
 import { fetchInstagramContentPublishingLimit } from "@/lib/instagram/content-publishing-limit";
 import { discoverInstagramBusinessId } from "@/lib/instagram/client";
@@ -108,14 +109,49 @@ export async function POST(request: Request) {
       if (duplicate) return NextResponse.json({ ok: false, code: "INSTAGRAM_DUPLICATE_VIDEO", message: "Este vídeo já foi publicado no Instagram." }, { status: 409 });
     }
 
-    const { data: draftPost, error: draftPostError } = await client.from("posts")
-      .select("content")
-      .eq("id", postId)
-      .eq("user_id", user.id)
-      .eq("channel", "instagram")
-      .eq("status", "draft")
-      .maybeSingle();
+    const [{ data: draftPost, error: draftPostError }, { data: policyOffer, error: policyOfferError }] = await Promise.all([
+      client.from("posts")
+        .select("content")
+        .eq("id", postId)
+        .eq("user_id", user.id)
+        .eq("channel", "instagram")
+        .eq("status", "draft")
+        .maybeSingle(),
+      client.from("offers")
+        .select("id,product_name,category,notes,platform")
+        .eq("id", offerId)
+        .eq("user_id", user.id)
+        .maybeSingle()
+    ]);
     if (draftPostError || !draftPost) return NextResponse.json({ ok: false, message: "Draft do Instagram não encontrado." }, { status: 404 });
+
+    if (policyOfferError || !policyOffer) {
+      const code = "INSTAGRAM_POLICY_INPUT_INVALID";
+      const rule = "policy_context_unavailable";
+      const message = "Publicação bloqueada: não foi possível validar o produto contra a política do Instagram.";
+      console.warn(JSON.stringify({ event: "instagram.policy.blocked", offerId, postId, tenantId: user.id, rule, code, reason: message }));
+      return NextResponse.json({ ok: false, code, message, rule }, { status: 409 });
+    }
+
+    const policy = evaluateInstagramPolicy({
+      productName: policyOffer.product_name,
+      category: policyOffer.category,
+      notes: policyOffer.notes,
+      caption: draftPost.content,
+      platform: policyOffer.platform
+    });
+    if (!policy.ok) {
+      console.warn(JSON.stringify({
+        event: "instagram.policy.blocked",
+        offerId,
+        postId,
+        tenantId: user.id,
+        rule: policy.rule,
+        code: policy.code,
+        reason: policy.message
+      }));
+      return NextResponse.json({ ok: false, code: policy.code, message: policy.message, rule: policy.rule }, { status: 409 });
+    }
 
     let metaLimit: { quotaUsage: number; quotaTotal: number } | undefined;
     if (process.env.INSTAGRAM_ACCESS_TOKEN) {
