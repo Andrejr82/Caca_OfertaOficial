@@ -49,6 +49,26 @@ function isPrivateIpv4(hostname: string): boolean {
     || a >= 224;
 }
 
+function isPrivateIpv6(hostname: string): boolean {
+  if (!hostname.includes(":")) return false;
+
+  if (
+    hostname === "::"
+    || hostname === "::1"
+    || hostname.startsWith("fc")
+    || hostname.startsWith("fd")
+    || /^fe[89ab]/i.test(hostname)
+  ) {
+    return true;
+  }
+
+  if (hostname.startsWith("::ffff:")) {
+    return isPrivateIpv4(hostname.slice("::ffff:".length));
+  }
+
+  return false;
+}
+
 function isPrivateHostname(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
 
@@ -61,13 +81,7 @@ function isPrivateHostname(hostname: string): boolean {
     return true;
   }
 
-  if (isPrivateIpv4(normalized)) return true;
-
-  return normalized === "::"
-    || normalized === "::1"
-    || normalized.startsWith("fc")
-    || normalized.startsWith("fd")
-    || /^fe[89ab]/i.test(normalized);
+  return isPrivateIpv4(normalized) || isPrivateIpv6(normalized);
 }
 
 export function resolveGoAffiliateDestination(rawUrl: string): string | null {

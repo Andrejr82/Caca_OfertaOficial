@@ -48,6 +48,13 @@ describe("/go affiliate destination", () => {
     expect(resolveGoAffiliateDestination("http://10.0.0.5/internal")).toBeNull();
     expect(resolveGoAffiliateDestination("http://192.168.1.10/internal")).toBeNull();
     expect(resolveGoAffiliateDestination("http://[::1]/internal")).toBeNull();
+    expect(resolveGoAffiliateDestination("http://[fd00::1]/internal")).toBeNull();
+    expect(resolveGoAffiliateDestination("http://[::ffff:127.0.0.1]/internal")).toBeNull();
+  });
+
+  it("não confunde domínio público iniciado por fc/fd com IPv6 privado", () => {
+    expect(resolveGoAffiliateDestination("https://fcdn.example.com/produto")).toBe("https://fcdn.example.com/produto");
+    expect(resolveGoAffiliateDestination("https://fdshop.example.com/produto")).toBe("https://fdshop.example.com/produto");
   });
 });
 
