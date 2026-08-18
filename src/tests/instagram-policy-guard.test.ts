@@ -31,6 +31,20 @@ describe("Instagram Policy Guard", () => {
     }
   });
 
+  it.each([
+    ["Pistola de cola quente 60W", "Ferramentas"],
+    ["Pistola de pintura elétrica", "Ferramentas"],
+    ["Silenciador automotivo universal", "Automotivo"],
+    ["Fantasia de pirata infantil", "Fantasias"],
+    ["Livro sobre a história da prefeitura de São Paulo", "Livros"]
+  ])("does not block benign retail wording: %s", (productName, category) => {
+    expect(evaluateInstagramPolicy({
+      productName,
+      category,
+      caption: "Confira a oferta disponível hoje"
+    })).toEqual({ ok: true });
+  });
+
   it("fails closed when policy context is empty", () => {
     const result = evaluateInstagramPolicy({});
     expect(result.ok).toBe(false);
