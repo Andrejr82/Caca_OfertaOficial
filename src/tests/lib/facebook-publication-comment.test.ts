@@ -27,11 +27,12 @@ describe("Facebook publication first comment", () => {
       .mockResolvedValueOnce(graphResponse({ id: "comment-1" }));
     vi.stubGlobal("fetch", fetchMock);
 
+    const trackedUrl = "https://caca-oferta-oficial.vercel.app/go/fb_offer";
     const result = await publishToFacebook(
-      "Texto da oferta",
+      `Texto da oferta\n\n👉 Veja a oferta no primeiro comentário. 👇\n\n👉 ${trackedUrl}\n\n#Oferta`,
       "https://images.example/produto.jpg",
       null,
-      "https://caca-oferta-oficial.vercel.app/go/fb_offer",
+      trackedUrl,
     );
 
     expect(result).toMatchObject({
@@ -42,10 +43,16 @@ describe("Facebook publication first comment", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(3);
 
+    const [, publishRequest] = fetchMock.mock.calls[1];
+    const publishPayload = JSON.parse(String(publishRequest?.body));
+    expect(publishPayload.message).toContain("Veja a oferta no primeiro comentário");
+    expect(publishPayload.message).toContain("#Oferta");
+    expect(publishPayload.message).not.toContain(trackedUrl);
+
     const [commentUrl, commentRequest] = fetchMock.mock.calls[2];
     expect(String(commentUrl)).toContain("/page-123_post-1/comments");
     expect(JSON.parse(String(commentRequest?.body))).toEqual({
-      message: "🛒 Compre aqui: https://caca-oferta-oficial.vercel.app/go/fb_offer",
+      message: `🛒 Compre aqui: ${trackedUrl}`,
       access_token: "page-token",
     });
   });

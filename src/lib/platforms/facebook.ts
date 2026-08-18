@@ -11,6 +11,17 @@ export interface FacebookPublishResponse {
   error?: any;
 }
 
+function stripAffiliateLinkFromMessage(message: string, affiliateLink?: string | null) {
+  const trackedUrl = affiliateLink?.trim();
+  if (!trackedUrl || !message.includes(trackedUrl)) return message;
+
+  return message
+    .replaceAll(trackedUrl, "")
+    .replace(/^[ \t]*👉[ \t]*$/gmu, "")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+}
+
 async function publishFirstComment(postId: string, affiliateLink: string, accessToken: string) {
   const response = await fetch(`https://graph.facebook.com/v19.0/${postId}/comments`, {
     method: "POST",
@@ -55,16 +66,17 @@ export async function publishToFacebook(
       if (pageTokenData.access_token) token = pageTokenData.access_token;
     }
 
+    const publicMessage = stripAffiliateLinkFromMessage(message, affiliateLink);
     let endpoint = `https://graph.facebook.com/v19.0/${pageId}/feed`;
     const payload: any = {
-      message,
+      message: publicMessage,
       access_token: token,
     };
 
     if (videoUrl) {
       endpoint = `https://graph.facebook.com/v19.0/${pageId}/videos`;
       payload.file_url = videoUrl;
-      payload.description = message;
+      payload.description = publicMessage;
       delete payload.message;
     } else if (imageUrl) {
       endpoint = `https://graph.facebook.com/v19.0/${pageId}/photos`;
