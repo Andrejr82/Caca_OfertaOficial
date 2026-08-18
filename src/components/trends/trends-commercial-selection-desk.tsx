@@ -20,7 +20,13 @@ function velocityLabel(value: number | null, status: string | null): string {
   return `velocity ${value > 0 ? "+" : ""}${value}`;
 }
 
-export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRadarSnapshotView | null }) {
+export function TrendsCommercialSelectionDesk({
+  snapshot,
+  approvalFeedback = null,
+}: {
+  snapshot: TrendRadarSnapshotView | null;
+  approvalFeedback?: { productId: string; message: string } | null;
+}) {
   const products = snapshot?.products ?? [];
 
   return (
@@ -44,6 +50,7 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
           const handedOff = Boolean(item.selectedOfferId && item.selectionDecision === "APROVAR_TESTE");
           const canApprove = supportsTrendApprovalMarketplace(item.marketplace);
           const metrics = item.experimentMetrics;
+          const feedback = approvalFeedback?.productId === item.id ? approvalFeedback.message : null;
           return (
             <article key={item.id} className="glass-card p-4">
               <div className="grid gap-4 lg:grid-cols-[54px_minmax(0,1fr)_180px] lg:items-start">
@@ -57,6 +64,8 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
                     </div>
                     {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-cyan-300 underline">Ver oferta <ExternalLink size={11} /></a> : null}
                   </div>
+
+                  {feedback ? <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs font-semibold text-amber-200">{feedback}</div> : null}
 
                   <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Preço</p><p className="mt-1 font-bold text-white/75">{item.price != null ? BRL.format(item.price) : "n/d"}</p></div>
