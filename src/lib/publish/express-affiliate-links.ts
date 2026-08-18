@@ -25,15 +25,6 @@ export function isShopeeAffiliateInput(url: string): boolean {
     || value.includes("is_from_login=true");
 }
 
-export class ExpressAffiliateDestinationError extends Error {
-  readonly code = "ML_AFFILIATE_DESTINATION_NOT_APPROVED";
-
-  constructor(message = "Destino afiliado do Mercado Livre não aprovado.") {
-    super(message);
-    this.name = "ExpressAffiliateDestinationError";
-  }
-}
-
 /**
  * Decide o destino comercial usado pelos /go/... da Publicação Expressa.
  *
@@ -41,9 +32,9 @@ export class ExpressAffiliateDestinationError extends Error {
  * monetização e deve ser preservado byte a byte. A URL resolvida/canônica serve
  * para identidade e extração, não para substituir a atribuição da Central.
  *
- * URLs comuns do Mercado Livre e links legados baseados apenas em partner_id
- * são fail-closed: não podem chegar à persistência de affiliate_links como se
- * fossem destinos monetizados aprovados.
+ * Para entradas que não sejam links oficiais ML, mantém o comportamento já
+ * existente da Publicação Expressa. O fail-closed do fluxo automático é tratado
+ * separadamente na Task 3 para não deixar ofertas parcialmente persistidas.
  */
 export function selectExpressAffiliateDestination(input: {
   originalUrl: string;
@@ -54,17 +45,6 @@ export function selectExpressAffiliateDestination(input: {
 
   if (originalClassification.monetized && originalClassification.affiliateUrl) {
     return originalClassification.affiliateUrl;
-  }
-
-  const isUnapprovedMercadoLivreInput = originalClassification.kind === "plain_product_url"
-    || originalClassification.kind === "internally_generated_affiliate_url";
-
-  if (isUnapprovedMercadoLivreInput) {
-    const generatedClassification = classifyMLAffiliateInput(input.affiliateUrl?.trim() || "");
-    if (generatedClassification.monetized && generatedClassification.affiliateUrl) {
-      return generatedClassification.affiliateUrl;
-    }
-    throw new ExpressAffiliateDestinationError();
   }
 
   return input.affiliateUrl?.trim() || originalUrl;
