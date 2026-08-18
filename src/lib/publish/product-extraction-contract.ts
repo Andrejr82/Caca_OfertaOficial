@@ -123,6 +123,62 @@ function extractMlIdsFromTrustedNavigation(htmlBody: string | undefined, baseUrl
   return [...ids];
 }
 
+function extractBalancedJsonObject(value: string, searchFrom: number): string | null {
+  const start = value.indexOf("{", searchFrom);
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let index = start; index < value.length; index++) {
+    const char = value[index];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (char === "{") {
+      depth++;
+      continue;
+    }
+
+    if (char === "}") {
+      depth--;
+      if (depth === 0) return value.slice(start, index + 1);
+      if (depth < 0) return null;
+    }
+  }
+
+  return null;
+}
+
+function parseJsonAssignment(candidate: string, pattern: RegExp): unknown | null {
+  const assignment = pattern.exec(candidate);
+  if (!assignment || assignment.index === undefined) return null;
+
+  const objectText = extractBalancedJsonObject(candidate, assignment.index + assignment[0].length);
+  if (!objectText) return null;
+
+  try {
+    return JSON.parse(objectText);
+  } catch {
+    return null;
+  }
+}
+
 function parseNordicContext(htmlBody: string | undefined): unknown | null {
   if (!htmlBody) return null;
   const scripts = htmlBody.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) || [];
@@ -139,18 +195,13 @@ function parseNordicContext(htmlBody: string | undefined): unknown | null {
         return JSON.parse(candidate);
       } catch {
         const assignmentPatterns = [
-          /(?:window\.)?__NORDIC_RENDERING_CTX__\s*=\s*([\s\S]+?);?\s*$/i,
-          /(?:window\.)?_n\.ctx\.r\s*=\s*([\s\S]+?);?\s*$/i,
+          /(?:window\.)?__NORDIC_RENDERING_CTX__\s*=\s*/i,
+          /(?:window\.)?_n\.ctx\.r\s*=\s*/i,
         ];
 
         for (const pattern of assignmentPatterns) {
-          const assignment = candidate.match(pattern);
-          if (!assignment) continue;
-          try {
-            return JSON.parse(assignment[1]);
-          } catch {
-            // Contexto inválido não vira autoridade de identidade.
-          }
+          const parsed = parseJsonAssignment(candidate, pattern);
+          if (parsed) return parsed;
         }
       }
     }

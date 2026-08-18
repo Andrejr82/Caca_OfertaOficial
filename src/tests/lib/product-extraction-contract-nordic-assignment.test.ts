@@ -18,13 +18,18 @@ function buildNordicHtml(card: Record<string, unknown>): string {
         },
       },
     },
+    parser_guard: "texto com { chaves } e \\\"aspas escapadas\\\"",
   };
 
-  return `<script id="__NORDIC_RENDERING_CTX__">_n.ctx.r = ${JSON.stringify(renderingContext)};</script>`;
+  return `<script id="__NORDIC_RENDERING_CTX__">
+    _n.ctx.r = ${JSON.stringify(renderingContext)};
+    _n.ctx.r.assets = { mainAssetsNames: { scripts: new Set(["main", "vendor"]) } };
+    window.__afterNordic = true;
+  </script>`;
 }
 
 describe("Mercado Livre Nordic real assignment", () => {
-  it("recupera item de catálogo quando o HTML real usa _n.ctx.r = {...}", () => {
+  it("recupera item de catálogo quando o script real continua após _n.ctx.r", () => {
     const result = classifyResolution({
       resolvedUrl: "https://www.mercadolivre.com.br/social/doandre20220310102112",
       redirectChain: ["https://meli.la/1qkZssd"],
@@ -47,7 +52,7 @@ describe("Mercado Livre Nordic real assignment", () => {
     });
   });
 
-  it("recupera item direto quando o HTML real usa _n.ctx.r = {...}", () => {
+  it("recupera item direto quando o script real continua após _n.ctx.r", () => {
     const result = classifyResolution({
       resolvedUrl: "https://www.mercadolivre.com.br/social/doandre20220310102112",
       redirectChain: ["https://meli.la/2AfuzK7"],
