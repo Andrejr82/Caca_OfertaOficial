@@ -1,8 +1,8 @@
 # Troubleshooting atual
 
 <!-- docs-status: current -->
-<!-- verified-against: 2cfa11f -->
-<!-- verified-on: 2026-08-16 -->
+<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
+<!-- verified-on: 2026-08-18 -->
 
 ## Sequência de diagnóstico
 
@@ -22,14 +22,21 @@
 | Draft ausente | estado da oferta, janela controlada, Official AI e `posts.content` |
 | Top 30 incorreto | ciclo mais recente, diversidade, canal e filtros editoriais |
 | WhatsApp indisponível | sessão Baileys, action client e processo `whatsapp-bot` |
-| Instagram/Facebook falha | token/permissões, mídia processada, webhook e recibo da API |
+| Instagram bloqueia antes de publicar | conferir `code`, `rule` e evento `instagram.policy.blocked`; distinguir Policy Guard de erro da Graph API |
+| Instagram retorna `INSTAGRAM_POLICY_BLOCKED` | revisar nome/categoria/notas/legenda; não contornar o guard; corrigir falso positivo com teste |
+| Instagram retorna `INSTAGRAM_POLICY_INPUT_INVALID` | verificar leitura de oferta/post no Supabase, vínculo `offerId`/`postId`, autenticação e contexto disponível |
+| Instagram/Facebook falha no transporte | token/permissões, mídia processada, webhook e recibo da API |
+| Oferta `rejected` ainda aparece no painel | pode permanecer visível para exclusão; o botão de publicação deve estar bloqueado |
 | Imagem Shein inválida | confirmação, upload, bucket e acessibilidade pública |
 | Vídeo parado | claim, heartbeat, worker Oracle, FFmpeg e status do job |
 | Shopee V1 não persiste | flags, overlay, paginação, limites e logs fail-closed |
+| `Documentation Audit` falha por documento desatualizado | confirmar os marcadores `docs-status`/`verified-against` e se houve commits em paths de runtime após a última atualização documental |
 
 ## Recuperação
 
 Prefira desativar a flag específica e preservar dados. Não reinicie processos em loop nem publique manualmente para “testar” antes de identificar a fronteira da falha. Após correção, execute testes, uma coorte limitada e valide recibos antes de ampliar.
+
+Para Instagram, um bloqueio do Policy Guard é comportamento preventivo esperado e acontece antes da Graph API. Não transformar esse bloqueio em retry automático. Se a regra estiver incorreta para um produto legítimo, estreitar o matcher e cobrir o caso com regressão.
 
 ## Trend Executive
 
