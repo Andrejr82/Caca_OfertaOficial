@@ -8,215 +8,114 @@
 
 Este documento formaliza a correção da monetização do Mercado Livre no projeto Caça Ofertas Oficial.
 
-A alteração somente será iniciada após aprovação explícita deste plano.
+A implementação somente será iniciada após aprovação explícita do plano.
 
 Objetivos principais:
 
 1. Garantir que toda publicação de Mercado Livre encaminhe o clique para um destino monetizado válido.
 2. Preservar links oficiais gerados pela Central de Afiliados e Criadores do Mercado Livre.
-3. Separar de forma explícita URL de identificação do produto e URL de monetização.
-4. Corrigir o ciclo automático Oracle para não publicar Mercado Livre com URL comum de produto quando não houver monetização confirmada.
-5. Corrigir a Publicação Expressa para aceitar e preservar links oficiais `meli.la` e URLs completas oficiais de afiliado.
-6. Reduzir falsos positivos nas métricas internas de clique causados por crawlers de preview.
-7. Adicionar testes que impeçam regressão futura.
+3. Separar explicitamente URL de identificação do produto e URL de monetização.
+4. Corrigir a Publicação Expressa para aceitar e preservar `meli.la` e URLs completas oficiais de afiliado.
+5. Corrigir o ciclo automático Oracle / Official AI para não publicar Mercado Livre com URL comum quando a monetização não estiver confirmada.
+6. Garantir que `/go/...` redirecione sempre para o destino afiliado aprovado.
+7. Reduzir falsos positivos nas métricas internas de clique causados por crawlers de preview.
+8. Adicionar testes e telemetria que impeçam regressão futura.
 
 ---
 
-# 2. Resumo executivo do problema
+## 2. Resumo executivo do problema
 
-Foi observado no painel oficial do Mercado Livre:
+O painel oficial do Mercado Livre apresentou 0 cliques nos últimos 7 dias, enquanto o tracking interno do Caça Ofertas registrou tráfego recente.
 
-- últimos 7 dias: 0 cliques;
-- últimos 180 dias: 26 cliques.
+A investigação mostrou que o sistema pode contabilizar um clique em `/go/...` e, em seguida, redirecionar para uma URL comum do Mercado Livre sem atribuição de afiliado confirmada.
 
-Ao mesmo tempo, o tracking interno do Caça Ofertas registra cliques recentes.
+Também foi identificado que a Publicação Expressa reconhece `meli.la`, porém hoje resolve o produto e pode substituir a URL oficial fornecida pelo usuário por outra URL construída internamente.
 
-A investigação encontrou uma divergência entre:
+A causa arquitetural central é a mistura de duas responsabilidades:
 
-- clique registrado internamente pelo `/go/...`;
-- URL efetivamente usada como destino final no Mercado Livre.
+- `canonicalUrl`: URL técnica usada para identificação, extração e validação do produto;
+- `affiliateUrl`: URL comercial usada como destino final monetizado.
 
-O sistema consegue registrar que alguém acessou um link do Caça Ofertas, mas isso não garante que o Mercado Livre receba uma URL com atribuição oficial de afiliado.
+Regra principal deste plano:
 
-A causa principal identificada é que, em grande parte dos fluxos, o campo usado como destino final é a URL comum do produto do Mercado Livre.
-
----
-
-# 3. Evidências técnicas encontradas
-
-## 3.1 Tracking interno
-
-A rota pública:
-
-`src/app/go/[...subId]/route.ts`
-
-faz duas coisas principais:
-
-1. registra o evento de clique internamente;
-2. redireciona o usuário para `affiliate_links.original_url`.
-
-Portanto, o clique interno pode ser contabilizado mesmo que `affiliate_links.original_url` não seja um link monetizado pelo Mercado Livre.
-
-## 3.2 Ciclo automático / Official AI
-
-No fluxo oficial de persistência, o adapter atualmente cria/atualiza o registro de `affiliate_links` utilizando como destino:
-
-`input.offer.originalUrl`
-
-Isso é adequado para marketplaces em que `originalUrl` já representa o destino monetizado, mas não é seguro como contrato genérico para Mercado Livre.
-
-No caso do Mercado Livre, `offer.original_url` pode ser apenas:
-
-`https://www.mercadolivre.com.br/p/MLB...`
-
-ou outra URL canônica/comercial comum.
-
-## 3.3 Publicação Expressa
-
-A Publicação Expressa já reconhece `meli.la` como Mercado Livre e possui um resolvedor capaz de seguir o short link.
-
-Porém, após resolver o produto, o fluxo atualmente tenta gerar outra URL de afiliado por meio de:
-
-`generateMLAffiliateLinkWithId(canonicalUrl, mlAffiliateId)`
-
-Isso cria um conflito de autoridade:
-
-- o usuário fornece um link oficial gerado na Central de Afiliados;
-- o sistema resolve esse link;
-- em seguida, substitui a URL oficial de monetização por outra URL construída internamente.
-
-## 3.4 Comportamento diferente já existente em outros marketplaces
-
-Shopee e Amazon já possuem lógica para preservar o link de afiliado informado quando o input é reconhecido como afiliado.
-
-Mercado Livre ainda não possui uma regra equivalente forte de preservação.
-
-## 3.5 Banco de produção
-
-Durante a análise foram observados muitos registros de Mercado Livre em `affiliate_links` apontando para URLs comuns de produto.
-
-Também foram encontrados cliques internos em links publicados, demonstrando que o redirect do Caça Ofertas está recebendo tráfego.
-
-Logo, o problema não deve ser tratado como ausência de tráfego apenas.
+> Produto identificado não significa produto monetizado. Para Mercado Livre, a publicação só poderá prosseguir quando existir um destino afiliado explicitamente confirmado.
 
 ---
 
-# 4. Causa raiz
+## 3. Evidências técnicas já confirmadas
 
-## 4.1 Causa raiz principal
+### 3.1 Publicação Expressa
 
-O sistema mistura duas responsabilidades diferentes em uma mesma URL:
+O fluxo atual reconhece `meli.la` como Mercado Livre e possui resolvedor com allowlist para o domínio.
 
-- URL canônica/de extração do produto;
-- URL monetizada/de afiliado.
+Entretanto, depois da resolução, o fluxo pode chamar `generateMLAffiliateLinkWithId(canonicalUrl, mlAffiliateId)` e reconstruir a URL de monetização.
 
-Isso permite que uma URL tecnicamente válida para identificar o produto seja reutilizada como URL comercial final mesmo sem confirmação de monetização.
+Para links oficiais da Central isso cria conflito de autoridade: o usuário fornece um link oficial e o sistema o substitui.
 
-## 4.2 Causa secundária — Oracle
+### 3.2 Oracle / Official AI
 
-O ciclo automático não possui hoje uma barreira fail-closed específica para Mercado Livre que exija monetização confirmada antes de persistir/publicar o link.
+O adapter oficial persiste hoje `offer.originalUrl` em `affiliate_links.original_url`.
 
-## 4.3 Causa secundária — Publicação Expressa
+Para Mercado Livre, `offer.originalUrl` pode ser apenas uma URL comum do produto, suficiente para identificação, mas não suficiente para comprovar monetização.
 
-O Mercado Livre não possui uma função de detecção/preservação equivalente às rotinas já existentes para links afiliados de Amazon e Shopee.
+### 3.3 Redirect `/go/...`
 
-## 4.4 Causa secundária — métricas internas
+A rota pública usa `affiliate_links.original_url` como destino final.
 
-A rota `/go/...` dispara tracking antes de excluir crawlers de preview.
+Logo, se o registro estiver com uma URL comum, o sistema contabiliza o clique internamente, mas envia o usuário para um destino sem monetização confirmada.
 
-Assim, agentes como previews sociais podem ser contabilizados como cliques internos, aumentando a diferença entre o número interno e o número oficial do marketplace.
+### 3.4 Métricas internas
+
+A rota `/go/...` registra o clique antes de diferenciar corretamente crawlers de preview, o que pode inflar a métrica interna.
+
+### 3.5 Produção
+
+A auditoria do banco encontrou grande quantidade de links Mercado Livre sem sinal explícito de afiliação preservada, ao mesmo tempo em que existem cliques internos registrados.
 
 ---
 
-# 5. Arquitetura alvo
+## 4. Arquitetura alvo
 
-A correção deverá separar claramente dois conceitos.
+### 4.1 `canonicalUrl`
 
-## 5.1 `canonical_url`
+Usada para:
 
-Finalidade:
-
-- identificar o produto;
 - resolver short links;
-- obter `item_id` / `product_id`;
-- buscar preço;
-- buscar imagem;
+- identificar `item_id` / `product_id`;
+- buscar preço e imagem;
 - validar identidade;
 - consultar APIs oficiais.
 
-Nunca deve ser assumida automaticamente como URL monetizada.
+Nunca deve ser automaticamente considerada monetizada.
 
-## 5.2 `affiliate_url`
+### 4.2 `affiliateUrl`
 
-Finalidade:
+Usada para:
 
-- ser o destino comercial final do clique;
-- conter ou preservar a atribuição oficial do programa de afiliados;
-- ser usada por `/go/...`;
-- ser persistida em `affiliate_links.original_url` no modelo atual, ou em campo equivalente caso seja necessário evoluir o contrato.
+- destino comercial final;
+- preservação da atribuição oficial de afiliado;
+- `/go/...`;
+- persistência em `affiliate_links.original_url` enquanto o schema atual permanecer.
 
-Regra central:
+### 4.3 Links oficiais da Central
 
-> Para Mercado Livre, somente um destino explicitamente classificado como monetizado poderá ser usado como `affiliate_url`.
+Para `https://meli.la/...`:
 
----
+- preservar o input como `affiliateUrl`;
+- resolver somente para identificar o produto;
+- nunca substituir automaticamente pelo destino canônico.
 
-# 6. Regra de ouro
+Para URL completa oficial do Mercado Livre com marcadores de afiliação/compartilhamento reconhecidos:
 
-Para qualquer oferta Mercado Livre:
+- preservar a URL original como `affiliateUrl`;
+- extrair a URL canônica separadamente;
+- não remover parâmetros necessários da URL comercial.
 
-`produto identificado != produto monetizado`
+### 4.4 Classificação de monetização
 
-A identificação correta do item não será suficiente para liberar publicação.
+Não assumir `partner_id` como única autoridade.
 
-O sistema deverá comprovar também um destino de afiliado válido.
-
----
-
-# 7. Tratamento dos links oficiais da Central
-
-## 7.1 Entrada `meli.la`
-
-Exemplo:
-
-`https://meli.la/12hoKT9`
-
-Comportamento alvo:
-
-1. preservar o input original como candidato prioritário de `affiliate_url`;
-2. resolver o short link apenas para descobrir o produto;
-3. extrair e validar `item_id` / identidade;
-4. nunca substituir automaticamente o `meli.la` por uma URL comum de produto;
-5. persistir o short link oficial como destino final quando ele for classificado como afiliado válido.
-
-## 7.2 URL completa oficial do Mercado Livre
-
-Exemplo de formato observado:
-
-- domínio oficial Mercado Livre;
-- `pdp_filters`;
-- `matt_tool`;
-- `ua`;
-- parâmetros de compartilhamento.
-
-Comportamento alvo:
-
-1. preservar a URL original como possível `affiliate_url`;
-2. extrair a URL/ID canônico para uso técnico;
-3. não remover parâmetros de afiliado da URL comercial final;
-4. validar que o item identificado corresponde ao item que será divulgado.
-
----
-
-# 8. Não assumir `partner_id` como única autoridade
-
-A implementação atual considera `partner_id` como sinal obrigatório de monetização.
-
-Este contrato será revisto.
-
-Não será feita uma troca cega para outro parâmetro específico.
-
-A nova lógica deverá trabalhar com uma classificação explícita de origem do link, por exemplo:
+Criar classificação explícita, por exemplo:
 
 - `official_meli_shortlink`;
 - `official_affiliate_full_url`;
@@ -228,57 +127,56 @@ Somente classes aprovadas poderão ser usadas como destino monetizado.
 
 ---
 
-# 9. Escopo da alteração
+## 5. Escopo
 
-## Incluído
+### Incluído
 
 - Mercado Livre na Publicação Expressa;
-- Mercado Livre nos ciclos automáticos Oracle / Official AI;
+- Mercado Livre no Oracle / Official AI;
 - persistência de `affiliate_links`;
 - redirect `/go/...`;
-- classificação de links oficiais;
-- validação de monetização;
-- testes unitários e de integração;
-- telemetria sem exposição de credenciais/parâmetros sensíveis;
-- correção do tracking de crawlers, se confirmada como segura no mesmo PR ou em commit separado dentro do mesmo plano.
+- classificação e validação de monetização;
+- métricas de clique relacionadas a crawlers;
+- telemetria;
+- testes;
+- auditoria histórica sem backfill automático.
 
-## Fora de escopo
+### Fora de escopo
 
 - Shopee Search Engine;
 - algoritmo de descoberta do Oracle;
-- ranking de ofertas;
-- preços e extração de produto que já funcionam;
+- ranking;
+- preços e extração que já funcionam;
 - sistema de copy;
 - hashtags;
 - Instagram Policy Guard;
-- publicação do Facebook/Instagram;
-- alteração de schema sem necessidade comprovada;
-- backfill indiscriminado de links históricos.
+- mecanismos atuais de publicação de Facebook/Instagram;
+- backfill histórico automático;
+- alteração de schema sem necessidade comprovada.
 
 ---
 
-# 10. Estratégia de implementação
+# 6. Plano de execução — 8 tasks
 
-## TASK 0 — Congelar baseline
+## TASK 1 — Baseline e contrato oficial de monetização
 
-Antes de qualquer alteração:
+### Objetivo
 
-- confirmar SHA atual da `main`;
-- registrar estado dos testes;
-- identificar arquivos efetivamente envolvidos;
-- confirmar que não há outra alteração de monetização em paralelo.
+Definir a autoridade única de monetização Mercado Livre antes de alterar qualquer fluxo de publicação.
 
-Critério de saída:
+### Checklist
 
-- baseline reproduzível.
+- confirmar o SHA atual da `main` imediatamente antes da implementação;
+- registrar o comportamento atual dos testes relacionados;
+- mapear todos os pontos que criam, validam, persistem ou redirecionam links Mercado Livre;
+- criar/centralizar um contrato determinístico para classificar inputs Mercado Livre;
+- separar formalmente `canonicalUrl` e `affiliateUrl`;
+- definir quais classes de URL são consideradas monetizadas;
+- revisar a premissa atual de `partner_id` como autoridade única;
+- definir comportamento fail-closed para classe `plain_product_url` ou `unknown`;
+- manter sanitização de logs para `ua`, tokens e parâmetros sensíveis.
 
----
-
-## TASK 1 — Criar contrato de classificação de link Mercado Livre
-
-Criar uma função central capaz de classificar um input de Mercado Livre sem transformar prematuramente a URL.
-
-Contrato sugerido:
+### Contrato sugerido
 
 ```ts
 classifyMLAffiliateInput(url)
@@ -291,6 +189,7 @@ Saída sugerida:
   kind:
     | "official_meli_shortlink"
     | "official_affiliate_full_url"
+    | "internally_generated_affiliate_url"
     | "plain_product_url"
     | "unknown";
   monetized: boolean;
@@ -298,193 +197,102 @@ Saída sugerida:
 }
 ```
 
-Requisitos:
+### Critérios de aceite
 
-- determinístico;
-- sem chamadas de IA;
-- sem mutação;
-- sem expor parâmetros sensíveis em logs.
-
----
-
-## TASK 2 — Preservar `meli.la` na Publicação Expressa
-
-Hoje o resolvedor já aceita `meli.la`.
-
-A alteração será:
-
-- resolver para identificar o produto;
-- manter o short link original como `affiliate_url` quando classificado como oficial/monetizado;
-- usar a URL resolvida somente como `canonical_url`.
-
-Critério de aceite:
-
-- `meli.la` entra na Publicação Expressa;
-- produto é identificado;
-- o destino final persistido continua sendo o `meli.la` oficial.
+- existe uma única regra central para classificar monetização ML;
+- `meli.la` oficial é reconhecido sem ser destruído pela resolução;
+- URL comum do produto não é tratada como monetizada;
+- `canonicalUrl` e `affiliateUrl` deixam de ser semanticamente intercambiáveis;
+- nenhum fluxo de publicação é alterado ainda além do necessário para introduzir/testar o contrato.
 
 ---
 
-## TASK 3 — Preservar URL completa oficial da Central
+## TASK 2 — Corrigir Publicação Expressa
 
-Quando o usuário fornecer uma URL oficial completa com marcadores reconhecidos de afiliado/compartilhamento:
+### Objetivo
 
-- não substituir por URL canônica;
-- não reconstruir a monetização;
-- não remover parâmetros necessários do destino comercial;
-- continuar sanitizando apenas logs.
+Aceitar links oficiais da Central e preservar a monetização recebida.
 
-Critério de aceite:
+### Checklist
 
-- input oficial completo permanece o destino final.
+- preservar `meli.la` como `affiliateUrl`;
+- usar a URL resolvida somente para identidade/extração;
+- preservar URLs completas oficiais da Central;
+- revisar `generateMLAffiliateLinkWithId` para deixar de ser autoridade universal;
+- revisar `validateAffiliateMonetization` para usar a classificação central;
+- manter `canonicalUrl` e `affiliateUrl` separados até a persistência;
+- garantir que `buildExpressAffiliateLinks` receba o `affiliateUrl` aprovado;
+- rejeitar explicitamente URL comum quando não houver mecanismo comprovado para monetização.
 
----
+### Critérios de aceite
 
-## TASK 4 — Revisar `generateMLAffiliateLinkWithId`
-
-A função atual não deve continuar sendo autoridade universal de monetização.
-
-A implementação irá definir um dos seguintes destinos após inspeção final:
-
-1. restringir a função somente a um fallback explicitamente suportado;
-2. descontinuar seu uso para inputs oficiais da Central;
-3. mantê-la apenas onde houver evidência de contrato válido e teste correspondente.
-
-Regra:
-
-> Nunca substituir um link oficial de afiliado fornecido pelo usuário por uma URL reconstruída internamente.
+- `meli.la` oficial entra na Publicação Expressa e permanece como destino final;
+- URL completa oficial permanece preservada;
+- URL canônica nunca sobrescreve a URL afiliada;
+- URL comum não passa como monetizada por acidente.
 
 ---
 
-## TASK 5 — Revisar `validateAffiliateMonetization`
+## TASK 3 — Corrigir Oracle / Official AI
 
-A validação deverá deixar de usar apenas `partner_id` como sinal de monetização.
+### Objetivo
 
-Nova validação:
+Impedir que ciclos automáticos Mercado Livre publiquem links sem monetização confirmada.
 
-- entende a classe do link;
-- aceita short link oficial reconhecido;
-- aceita URL oficial completa reconhecida;
-- rejeita URL comum de produto como monetizada;
-- fail-closed em caso desconhecido.
+### Checklist
 
----
+- remover a suposição `offer.original_url = affiliate_url` para Mercado Livre;
+- definir um resolver/port de monetização específico para ML;
+- confirmar tecnicamente qual fonte oficial pode gerar/fornecer o link afiliado para ofertas descobertas automaticamente;
+- aceitar apenas monetização comprovada;
+- aplicar fail-closed quando não houver destino monetizado;
+- registrar reason code operacional;
+- preservar comportamento de outros marketplaces;
+- não sobrescrever drafts antigos automaticamente.
 
-## TASK 6 — Separar `canonicalUrl` e `affiliateUrl` no fluxo Express
+### Critérios de aceite
 
-Garantir que o pipeline mantenha ambas as variáveis até a persistência.
-
-Exemplo alvo:
-
-```text
-input oficial afiliado
-   ↓
-classificação
-   ↓
-affiliateUrl = input oficial
-   ↓
-resolver produto
-   ↓
-canonicalUrl = URL técnica/canônica
-   ↓
-extrair dados
-   ↓
-persistir affiliateUrl como destino comercial
-```
+- Oracle nunca publica Mercado Livre com URL comum silenciosamente;
+- oferta monetizada persiste o destino afiliado correto;
+- oferta sem monetização confirmada é bloqueada de forma explícita;
+- Shopee/Amazon/Shein permanecem inalterados.
 
 ---
 
-## TASK 7 — Blindar persistência de `affiliate_links`
+## TASK 4 — Corrigir `/go/...` e métricas de clique
 
-`buildExpressAffiliateLinks` continuará gerando os `/go/...`, mas o `redirectUrl` deverá sempre receber o `affiliateUrl` aprovado.
+### Objetivo
 
-Será adicionado teste garantindo:
+Garantir que o redirect use o destino afiliado e que a métrica interna represente melhor cliques humanos.
 
-- `original_url` em `affiliate_links` = URL monetizada;
-- `tracked_url` = URL interna do Caça Ofertas;
-- `tracked_url` nunca substitui o destino externo;
-- URL canônica não sobrescreve URL afiliada.
+### Checklist
 
----
+- redirect sempre usa o `affiliateUrl` persistido;
+- nunca substituir por `canonicalUrl` quando existir destino afiliado;
+- diferenciar crawler de WhatsApp;
+- diferenciar `facebookexternalhit`;
+- avaliar outros crawlers de preview relevantes;
+- preservar Open Graph e previews atuais;
+- não inflar `affiliate_links.clicks` com crawlers conhecidos;
+- manter erro seguro para URL inválida.
 
-## TASK 8 — Corrigir ciclo automático Oracle / Official AI para Mercado Livre
+### Critérios de aceite
 
-O fluxo automático não poderá mais persistir cegamente:
-
-```text
-offer.original_url → affiliate_links.original_url
-```
-
-para Mercado Livre.
-
-Será introduzido um resolvedor/port específico para obter ou confirmar um `affiliateUrl` válido antes da persistência.
-
-Comportamento esperado:
-
-### Cenário A — monetização confirmada
-
-- cria drafts normalmente;
-- `/go/...` aponta para destino afiliado.
-
-### Cenário B — monetização não confirmada
-
-- fail-closed;
-- não publica link Mercado Livre não monetizado;
-- registra motivo operacional;
-- oferta permanece disponível para tratamento posterior conforme estado definido na implementação.
-
-Regra:
-
-> O sistema não deve escolher “publicar sem comissão” silenciosamente.
+- clique humano → tracking + destino afiliado;
+- crawler de preview → preview preservado sem inflar clique humano;
+- nenhuma regressão em WhatsApp/Facebook preview.
 
 ---
 
-## TASK 9 — Definir fonte oficial de monetização para ofertas Oracle
+## TASK 5 — Telemetria e segurança
 
-Durante a implementação será confirmado o mecanismo real disponível para gerar/obter link oficial afiliado de uma oferta descoberta automaticamente.
+### Objetivo
 
-Possibilidades a validar tecnicamente:
+Tornar falhas de monetização observáveis sem expor dados sensíveis.
 
-- API oficial disponível ao programa;
-- endpoint/contrato existente já configurado no projeto;
-- transformação suportada pelo Mercado Livre;
-- outra fonte oficial já utilizada pelo afiliado.
+### Checklist
 
-Não será inventado um algoritmo de afiliação sem confirmação.
-
-Se não houver mecanismo oficial automatizável disponível:
-
-- o ciclo automático de Mercado Livre deverá fail-close para monetização;
-- ou usar apenas ofertas que já possuam um `affiliate_url` previamente confirmado.
-
----
-
-## TASK 10 — Corrigir tracking de crawlers/previews
-
-A rota `/go/...` hoje dispara tracking antes da decisão de preview.
-
-Será revisada para diferenciar, no mínimo:
-
-- clique humano provável;
-- crawler de WhatsApp;
-- `facebookexternalhit`;
-- outros crawlers conhecidos, se necessário.
-
-Objetivo:
-
-- não inflar `affiliate_links.clicks` com scraping de preview;
-- preservar geração de Open Graph;
-- preservar funcionamento de WhatsApp/Facebook.
-
-Esta task não altera monetização externa; apenas melhora confiabilidade da métrica interna.
-
----
-
-## TASK 11 — Telemetria de monetização
-
-Adicionar eventos estruturados sem armazenar tokens ou parâmetros sensíveis.
-
-Eventos sugeridos:
+Eventos estruturados sugeridos:
 
 ```text
 ml.affiliate.input.classified
@@ -496,179 +304,153 @@ ml.affiliate.express.preserved_official_link
 
 Campos permitidos:
 
-- offerId;
-- channel;
-- source;
-- classification;
-- monetized boolean;
-- host;
-- itemId;
-- reason code.
+- `offerId`;
+- `channel`;
+- `source`;
+- `classification`;
+- `monetized`;
+- `host`;
+- `itemId`;
+- `reasonCode`.
 
-Campos proibidos nos logs:
+Campos proibidos:
 
 - `ua` completo;
-- tokens;
-- secrets;
 - access tokens;
-- IDs sensíveis não necessários;
-- URL afiliada integral quando contiver parâmetros sensíveis.
+- secrets;
+- URL afiliada completa quando contiver parâmetros sensíveis.
+
+Também manter:
+
+- SSRF;
+- allowlist de domínios;
+- proteção contra redirect inesperado;
+- mismatch de produto bloqueado.
+
+### Critérios de aceite
+
+- falhas são diagnosticáveis por reason code;
+- logs não expõem credenciais/parâmetros sensíveis;
+- controles de segurança existentes continuam passando.
 
 ---
 
-## TASK 12 — Testes unitários
+## TASK 6 — Testes completos e regressão
 
-Adicionar testes para:
+### Objetivo
 
-1. `meli.la` reconhecido como Mercado Livre;
-2. `meli.la` preservado como `affiliateUrl`;
-3. resolução de `meli.la` usada somente para identidade;
-4. URL completa oficial preservada;
-5. URL comum não classificada como monetizada;
-6. `partner_id` não ser a única condição suportada;
-7. URL afiliada nunca ser trocada por canonical URL;
-8. mismatch de item continuar bloqueado;
-9. SSRF continuar bloqueado;
-10. redirect inesperado continuar bloqueado.
+Cobrir todos os contratos alterados em uma única etapa de validação automatizada.
 
----
+### Checklist
 
-## TASK 13 — Testes da Publicação Expressa
+Testes unitários:
 
-Casos obrigatórios:
+- `meli.la` reconhecido e preservado;
+- URL completa oficial preservada;
+- URL comum rejeitada como monetizada;
+- `partner_id` não é única condição possível;
+- canonical nunca substitui affiliate;
+- mismatch/SSRF/redirect safety preservados.
 
-### Caso 1
+Testes Publicação Expressa:
 
-Input:
+- `meli.la`;
+- URL oficial completa;
+- URL comum sem monetização;
+- persistência em `affiliate_links`.
 
-`https://meli.la/...`
+Testes Oracle:
 
-Resultado:
+- bloqueio sem monetização;
+- persistência com monetização confirmada;
+- regressão de outros marketplaces.
 
-- sucesso de extração;
-- `affiliateUrl` = input original;
-- `canonicalUrl` = destino resolvido/técnico;
-- `affiliate_links.original_url` = `meli.la/...`.
+Testes `/go`:
 
-### Caso 2
+- humano;
+- crawler;
+- redirect afiliado;
+- URL inválida.
 
-Input URL completa oficial.
+### Critérios de aceite
 
-Resultado:
-
-- preservação da URL afiliada;
-- extração normal;
-- nenhuma reconstrução indevida.
-
-### Caso 3
-
-Input URL comum de produto.
-
-Resultado esperado:
-
-- somente segue se existir mecanismo válido e comprovado para obter `affiliateUrl`;
-- caso contrário, falha explícita de monetização.
+- todos os testes relacionados passam;
+- nenhuma regressão em Shopee/Amazon/Shein;
+- nenhuma regressão de segurança.
 
 ---
 
-## TASK 14 — Testes do Oracle
+## TASK 7 — Auditoria dos links históricos
 
-Adicionar cobertura garantindo:
+### Objetivo
 
-- oferta ML comum não é publicada como afiliada sem monetização;
-- oferta com `affiliateUrl` confirmado persiste corretamente;
-- outros marketplaces não sofrem regressão;
-- drafts existentes não são sobrescritos sem regra explícita.
+Entender impacto legado sem executar backfill automático.
 
----
+### Checklist
 
-## TASK 15 — Testes do `/go/...`
-
-Garantir:
-
-- usuário humano → tracking + redirect para affiliate URL;
-- crawler de preview → comportamento de preview preservado;
-- crawler não infla cliques se essa regra for implementada;
-- redirect nunca aponta para canonical URL quando affiliate URL existir;
-- erro seguro para URL inválida.
-
----
-
-## TASK 16 — Auditoria de dados históricos
-
-Antes de qualquer backfill:
-
-- contar links ML atuais;
+- contar links ML existentes;
+- separar `meli.la`, URLs oficiais completas, URLs comuns e desconhecidas;
 - identificar links publicados ainda ativos;
-- separar URLs comuns, URLs oficiais e desconhecidas;
-- não alterar histórico automaticamente.
+- identificar drafts não publicados;
+- gerar relatório de impacto;
+- não alterar registros históricos automaticamente.
 
-Resultado esperado:
+### Tratamento posterior
 
-relatório de impacto antes de qualquer migração de dados.
+- publicados ativos: correção somente se houver destino oficial válido;
+- drafts: candidatos a regeneração controlada;
+- antigos/inativos: não alterar por padrão.
 
----
+Qualquer backfill em produção exigirá aprovação separada.
 
-## TASK 17 — Estratégia para links históricos
+### Critério de aceite
 
-Não será feito backfill indiscriminado no primeiro momento.
-
-Após validação da nova arquitetura, haverá três classes:
-
-### A. Publicados e ainda ativos
-
-Avaliar correção controlada somente se for possível gerar/preservar um destino oficial válido.
-
-### B. Drafts não publicados
-
-Podem ser candidatos a regeneração controlada.
-
-### C. Ofertas antigas/inativas
-
-Não alterar por padrão.
-
-Toda alteração histórica deverá ser aprovada separadamente se envolver reescrita em produção.
+- relatório objetivo do legado sem mutação do banco.
 
 ---
 
-## TASK 18 — Teste controlado em produção
+## TASK 8 — Inspeção final, deploy e teste real controlado
 
-Depois do merge e deploy:
+### Objetivo
 
-1. escolher um produto Mercado Livre da Central de Afiliados;
-2. copiar o `meli.la` oficial;
-3. gerar via Publicação Expressa;
-4. confirmar no banco que `affiliate_links.original_url` preserva o link oficial;
-5. publicar em um canal controlado;
-6. clicar manualmente uma vez;
-7. confirmar incremento interno correto;
-8. aguardar janela de atualização do painel Mercado Livre;
-9. confirmar que o clique aparece na Central.
+Certificar código, deploy e atribuição real no programa de afiliados.
 
-Não serão gerados cliques artificiais em massa.
-
----
-
-## TASK 19 — Inspeção final
-
-Antes de merge:
+### Checklist pré-merge
 
 - revisar diff completo;
-- confirmar que não houve alteração em copy;
-- confirmar que Shopee/Amazon não foram afetados indevidamente;
-- confirmar que segurança SSRF permanece;
-- confirmar que logs não expõem parâmetros sensíveis;
-- confirmar testes de monetização;
-- confirmar testes de tracking;
-- confirmar documentação de operação.
+- confirmar que nenhuma copy/hashtag foi alterada;
+- confirmar que Instagram/Facebook não foram alterados;
+- confirmar Shopee/Amazon/Shein sem regressão;
+- confirmar segurança SSRF/redirect;
+- confirmar telemetria sem dados sensíveis;
+- confirmar testes.
+
+### Teste real pós-deploy
+
+1. escolher um produto da Central de Afiliados;
+2. copiar o `meli.la` oficial;
+3. processar pela Publicação Expressa;
+4. confirmar que `affiliate_links.original_url` preserva o link oficial;
+5. publicar em canal controlado;
+6. realizar um clique manual real;
+7. confirmar incremento interno correto;
+8. aguardar a janela de atualização do Mercado Livre;
+9. confirmar atribuição no painel oficial.
+
+Não gerar cliques artificiais em massa.
+
+### Critérios de aceite
+
+- deploy saudável;
+- destino afiliado preservado em produção;
+- clique interno coerente;
+- clique atribuído no painel do Mercado Livre após a janela de atualização.
 
 ---
 
-# 11. Arquivos prováveis de alteração
+## 7. Arquivos prováveis de alteração
 
-A lista final será confirmada durante TASK 0.
-
-Arquivos já identificados:
+Lista a confirmar na TASK 1:
 
 - `src/lib/platforms/mercadolivre.ts`
 - `src/lib/publish/actions.ts`
@@ -679,195 +461,80 @@ Arquivos já identificados:
 - `src/app/go/[...subId]/route.ts`
 - testes relacionados em `src/tests/...`
 
-Pode ser criado um novo módulo dedicado, por exemplo:
+Pode ser criado módulo dedicado, por exemplo:
 
 `src/lib/platforms/mercadolivre-affiliate.ts`
 
-ou equivalente, caso isso mantenha responsabilidades mais claras.
+se isso reduzir acoplamento.
 
 ---
 
-# 12. Invariantes que não podem ser quebradas
+## 8. Invariantes
 
-## Mercado Livre
+### Mercado Livre
 
-- item errado nunca pode ser monetizado no lugar do item informado;
-- `meli.la` oficial não pode ser descartado sem motivo;
-- URL afiliada não pode ser substituída silenciosamente por URL comum;
+- produto errado nunca pode ser monetizado no lugar do informado;
+- `meli.la` oficial não pode ser descartado silenciosamente;
+- URL afiliada não pode ser substituída por URL comum;
 - publicação automática deve fail-close sem monetização confirmada.
 
-## Segurança
+### Segurança
 
 - SSRF permanece ativa;
-- redirect para domínios inesperados permanece bloqueado;
+- redirect inesperado permanece bloqueado;
 - tokens nunca aparecem em logs;
 - parâmetros sensíveis são sanitizados.
 
-## Outros marketplaces
+### Outros marketplaces
 
-- Shopee continua com fluxo atual;
-- Amazon continua com fluxo atual;
-- Shein continua com fluxo atual.
+- Shopee permanece como está;
+- Amazon permanece como está;
+- Shein permanece como está.
 
-## Redes sociais
+### Redes sociais
 
 - nenhuma alteração de copy;
 - nenhuma alteração em hashtags;
-- nenhuma alteração no mecanismo de Facebook comment link;
+- nenhuma alteração no comentário automático do Facebook;
 - nenhuma alteração na vitrine do Instagram.
 
 ---
 
-# 13. Critérios globais de aceite
-
-A correção somente será considerada pronta quando todos os itens abaixo estiverem verdadeiros.
+## 9. Critérios globais de aceite
 
 1. Publicação Expressa aceita `meli.la` oficial de produto.
 2. `meli.la` é preservado como destino afiliado.
-3. URL resolvida é usada somente para extração/identidade quando houver link afiliado original.
-4. URL completa oficial de afiliado é preservada.
-5. URL comum não é tratada como monetizada por acidente.
-6. Oracle não publica ML com destino comum sem monetização confirmada.
-7. `/go/...` redireciona para a URL afiliada correta.
-8. Métrica interna não depende de URL canônica.
-9. Crawlers de preview não devem contaminar a métrica humana após a correção prevista.
-10. Nenhuma regressão em Shopee/Amazon/Shein.
-11. Nenhuma regressão de SSRF/redirect safety.
-12. Testes passam.
-13. Um teste real controlado confirma atribuição no painel Mercado Livre após a janela de atualização.
+3. URL resolvida é usada somente para identidade/extração quando houver link oficial original.
+4. URL completa oficial é preservada.
+5. URL comum não é tratada como monetizada acidentalmente.
+6. Oracle não publica ML sem monetização confirmada.
+7. `/go/...` redireciona para o `affiliateUrl` correto.
+8. Crawlers conhecidos não contaminam a métrica humana.
+9. Nenhuma regressão em Shopee/Amazon/Shein.
+10. Nenhuma regressão de SSRF/redirect safety.
+11. Todos os testes passam.
+12. Teste real controlado confirma atribuição no painel Mercado Livre.
 
 ---
 
-# 14. Rollback
+## 10. Rollback
 
 A implementação deverá ser dividida em commits pequenos e reversíveis.
 
-Se após deploy ocorrer problema:
+Em caso de problema:
 
-1. reverter somente commits de monetização Mercado Livre;
-2. preservar alterações não relacionadas já presentes na `main`;
-3. não executar migração destrutiva de banco;
+1. reverter somente os commits de monetização Mercado Livre;
+2. preservar alterações não relacionadas existentes na `main`;
+3. não executar migração destrutiva;
 4. manter registro dos links previamente publicados;
-5. impedir publicação automática de ML se houver dúvida sobre monetização.
+5. se houver dúvida sobre monetização, bloquear novas publicações ML até correção.
 
-Fail-closed é preferível a publicar ofertas sem atribuição.
-
----
-
-# 15. Riscos
-
-## Risco 1 — classificar erroneamente URL oficial
-
-Mitigação:
-
-- testes com exemplos reais;
-- classificação restritiva;
-- fail-closed.
-
-## Risco 2 — quebrar extração ao preservar short link
-
-Mitigação:
-
-- manter canonical URL separada;
-- resolver short link apenas na camada de identidade.
-
-## Risco 3 — regressão nos previews sociais
-
-Mitigação:
-
-- alterações de tracking separadas da lógica OG;
-- testes com user-agent crawler.
-
-## Risco 4 — links históricos continuarem sem monetização
-
-Mitigação:
-
-- não mascarar o problema;
-- relatório pós-fix;
-- backfill controlado e aprovado separadamente.
-
-## Risco 5 — inexistência de API oficial para gerar link afiliado no Oracle
-
-Mitigação:
-
-- não inventar monetização;
-- fail-close;
-- somente publicar ML automático quando um link oficial puder ser obtido ou confirmado.
+Fail-closed é preferível a publicar sem atribuição.
 
 ---
 
-# 16. Ordem recomendada de execução
+## 11. Status
 
-Prioridade operacional:
+**AWAITING APPROVAL**
 
-```text
-P0.1  Classificação de link afiliado ML
-P0.2  Preservação de meli.la na Express
-P0.3  Separação canonicalUrl / affiliateUrl
-P0.4  Correção de persistência
-P0.5  Fail-closed Oracle sem monetização
-P0.6  Testes de monetização
-P1.1  Correção de crawlers no tracking
-P1.2  Auditoria dos links históricos
-P1.3  Teste real controlado em produção
-```
-
----
-
-# 17. Definição de sucesso
-
-A correção estará concluída quando a seguinte cadeia estiver garantida:
-
-```text
-Central de Afiliados / Oracle
-        ↓
-produto identificado
-        ↓
-affiliate URL oficialmente válida
-        ↓
-Caça Ofertas /go/...
-        ↓
-tracking interno confiável
-        ↓
-redirect para affiliate URL
-        ↓
-Mercado Livre atribui o clique ao afiliado
-```
-
-E nunca mais:
-
-```text
-produto identificado
-        ↓
-URL comum
-        ↓
-/publicação
-        ↓
-clique interno sem atribuição ML
-```
-
----
-
-# 18. Relação com o plano de unificação das copies
-
-Este plano é independente do documento de unificação das copies.
-
-Ordem recomendada:
-
-1. corrigir monetização Mercado Livre;
-2. validar em produção;
-3. somente depois iniciar a unificação das copies.
-
-Motivo:
-
-Monetização é funcionalidade financeira crítica e tem prioridade sobre melhoria editorial.
-
----
-
-# 19. Estado deste plano
-
-Status atual:
-
-`AWAITING APPROVAL`
-
-Nenhuma alteração de runtime descrita neste documento deve ser iniciada antes da aprovação explícita do usuário.
+Nenhuma alteração de runtime prevista neste plano deve começar antes da aprovação explícita do usuário.
