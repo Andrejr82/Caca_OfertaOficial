@@ -1,3 +1,10 @@
+import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { promisify } from "node:util";
+import ffmpegPath from "ffmpeg-static";
+
 type DriveFile = {
   id: string;
   name: string;
@@ -7,12 +14,22 @@ type DriveFile = {
   videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string };
 };
 
+export type InspectedVideoMetadata = {
+  width: number;
+  height: number;
+  durationSeconds: number;
+  codec: string | null;
+  hasAudio: boolean;
+  source: "ffmpeg";
+};
+
 const DEFAULT_FOLDER_ID = "1tj6S-Gr7hxt5RNRIAd7BkpR8_2tuGaFB";
 const REQUIRED_DRIVE_ENV = [
   "GOOGLE_DRIVE_CLIENT_ID",
   "GOOGLE_DRIVE_CLIENT_SECRET",
   "GOOGLE_DRIVE_REFRESH_TOKEN",
 ] as const;
+const execFileAsync = promisify(execFile);
 
 export type GoogleDriveIntegrationStatus = {
   configured: boolean;
@@ -87,15 +104,68 @@ export async function downloadDriveVideo(fileId: string) {
 export function validateDriveVideo(file: DriveFile) {
   const mime = file.mimeType.toLowerCase();
   const size = Number(file.size ?? 0);
-  const metadata = file.videoMediaMetadata;
-  const width = Number(metadata?.width ?? 0);
-  const height = Number(metadata?.height ?? 0);
-  const durationSeconds = Number(metadata?.durationMillis ?? 0) / 1000;
   if (mime !== "video/mp4") return "O vídeo precisa estar em MP4.";
   if (!size || size > 100 * 1024 * 1024) return "O vídeo precisa ter entre 1 e 100 MB.";
-  if (!width || !height) return "O Google Drive ainda não forneceu a resolução do vídeo.";
-  if (Math.abs(width / height - 9 / 16) > 0.05) return "O vídeo precisa estar no formato vertical 9:16.";
-  if (!durationSeconds || durationSeconds < 3 || durationSeconds > 90) return "A duração precisa estar entre 3 e 90 segundos.";
+  return null;
+}
+
+function parseDurationSeconds(stderr: string) {
+  const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+
+function parseVideoStream(stderr: string) {
+  const line = stderr.split("\n").find((candidate) => candidate.includes("Video:"));
+  if (!line) return { width: 0, height: 0, codec: null as string | null };
+  const dimensions = line.match(/(?:^|[,\s])(\d{2,5})x(\d{2,5})(?:[,\s]|$)/);
+  const codec = line.match(/Video:\s*([^,\s]+)/)?.[1] ?? null;
+  return {
+    width: Number(dimensions?.[1] ?? 0),
+    height: Number(dimensions?.[2] ?? 0),
+    codec,
+  };
+}
+
+export async function inspectVideoBytes(bytes: Buffer): Promise<InspectedVideoMetadata> {
+  if (!ffmpegPath) throw new Error("FFmpeg não está disponível para validar o vídeo.");
+
+  const dir = await mkdtemp(join(tmpdir(), "caca-oferta-video-"));
+  const inputPath = join(dir, "input.mp4");
+  await writeFile(inputPath, bytes);
+
+  try {
+    let stderr = "";
+    try {
+      const result = await execFileAsync(ffmpegPath, ["-hide_banner", "-i", inputPath, "-frames:v", "1", "-f", "null", "-"], {
+        maxBuffer: 8 * 1024 * 1024,
+        timeout: 20_000,
+      });
+      stderr = result.stderr;
+    } catch (error) {
+      const candidate = error as { stderr?: string | Buffer; message?: string };
+      stderr = Buffer.isBuffer(candidate.stderr) ? candidate.stderr.toString("utf8") : candidate.stderr ?? "";
+      if (!stderr) throw new Error(candidate.message || "Não foi possível inspecionar o vídeo com FFmpeg.");
+    }
+
+    const { width, height, codec } = parseVideoStream(stderr);
+    const durationSeconds = parseDurationSeconds(stderr);
+    const hasAudio = stderr.split("\n").some((line) => line.includes("Audio:"));
+
+    if (!width || !height || !durationSeconds) {
+      throw new Error("Não foi possível identificar resolução e duração no arquivo MP4.");
+    }
+
+    return { width, height, durationSeconds, codec, hasAudio, source: "ffmpeg" };
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+export function validateInspectedVideo(metadata: Pick<InspectedVideoMetadata, "width" | "height" | "durationSeconds">) {
+  if (!metadata.width || !metadata.height) return "Não foi possível identificar a resolução do vídeo.";
+  if (Math.abs(metadata.width / metadata.height - 9 / 16) > 0.05) return "O vídeo precisa estar no formato vertical 9:16.";
+  if (!metadata.durationSeconds || metadata.durationSeconds < 3 || metadata.durationSeconds > 90) return "A duração precisa estar entre 3 e 90 segundos.";
   return null;
 }
 
