@@ -1,11 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
-import { resolveTrendOfferHandoff, resolveTrendSnapshotImageUrl } from "@/lib/trends/selection-offer-state";
+import {
+  resolveTrendOfferHandoff,
+  resolveTrendOfferHandoffBlock,
+  resolveTrendSnapshotImageUrl,
+} from "@/lib/trends/selection-offer-state";
 import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
 
 export type TrendSelectionDecision = "IGNORAR" | "APROVAR_TESTE";
@@ -181,11 +186,11 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
 }
 
 async function ensureOfferSelected(supabase: any, userId: string, offer: any, productId: string) {
-  const resolution = resolveTrendOfferHandoff(String(offer.status ?? ""));
-  if (resolution === "reuse") return;
-  if (resolution === "reject") {
-    throw new Error(`Oferta vinculada está em estado ${offer.status} e não pode ser encaminhada automaticamente.`);
-  }
+  const status = String(offer.status ?? "");
+  const resolution = resolveTrendOfferHandoff(status);
+  if (resolution === "reuse") return null;
+  const block = resolveTrendOfferHandoffBlock(status);
+  if (block) return block;
 
   const requestedAt = new Date().toISOString();
   const commandId = `trend-test:${productId}:select:${requestedAt}`;
@@ -205,6 +210,7 @@ async function ensureOfferSelected(supabase: any, userId: string, offer: any, pr
     evidenceRefs: [`trend_radar_product:${productId}`, `offer:${offer.id}`],
   }, createSupabaseStateDependencies(supabase, userId));
   if (result.status === "rejected") throw new Error(result.message);
+  return null;
 }
 
 async function approveAndBridge(formData: FormData) {
@@ -241,7 +247,8 @@ async function approveAndBridge(formData: FormData) {
   if (!offer && product.marketplace === "Mercado Livre") offer = await materializeMercadoLivreOfferFromSnapshot(user.id, product, evidence);
   if (!offer) throw new Error("Nenhuma oferta rastreável existente foi encontrada para esta oportunidade.");
 
-  await ensureOfferSelected(supabase, user.id, offer, product.id);
+  const block = await ensureOfferSelected(supabase, user.id, offer, product.id);
+  if (block) return { blocked: block, productId: product.id };
 
   const approvedAt = new Date().toISOString();
   const executionContext = {
@@ -285,6 +292,7 @@ async function approveAndBridge(formData: FormData) {
   revalidatePath("/instagram");
   revalidatePath("/telegram");
   revalidatePath("/whatsapp");
+  return { blocked: null, productId: product.id };
 }
 
 async function persistIgnore(formData: FormData) {
@@ -309,7 +317,10 @@ async function persistIgnore(formData: FormData) {
 }
 
 export async function approveTrendTestAction(formData: FormData) {
-  await approveAndBridge(formData);
+  const result = await approveAndBridge(formData);
+  if (result.blocked) {
+    redirect(`/trends?approval_error=${result.blocked.code}&product_id=${encodeURIComponent(result.productId)}`);
+  }
 }
 
 export async function ignoreTrendProductAction(formData: FormData) {
