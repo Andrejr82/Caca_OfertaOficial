@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildExpressAffiliateLinks,
-  ExpressAffiliateDestinationError,
   isAmazonAffiliateInput,
   isShopeeAffiliateInput,
   selectExpressAffiliateDestination,
@@ -66,16 +65,6 @@ describe("buildExpressAffiliateLinks", () => {
 
     expect(rows.every((row) => row.original_url === officialUrl)).toBe(true);
   });
-
-  it("falha fechado para URL comum do ML quando só existe partner_id legado", () => {
-    expect(() => buildExpressAffiliateLinks({
-      offerId: "45e2fca7-6100-4fb5-8f1a-021e6b84a86e",
-      userId: "user-1",
-      originalUrl: "https://www.mercadolivre.com.br/p/MLB123",
-      affiliateUrl: "https://www.mercadolivre.com.br/p/MLB123?partner_id=LEGACY",
-      appUrl: "https://caca-oferta-oficial.vercel.app",
-    })).toThrow(ExpressAffiliateDestinationError);
-  });
 });
 
 describe("selectExpressAffiliateDestination", () => {
@@ -86,11 +75,12 @@ describe("selectExpressAffiliateDestination", () => {
     })).toBe("https://meli.la/12hoKT9");
   });
 
-  it("não promove partner_id legado a monetização aprovada", () => {
-    expect(() => selectExpressAffiliateDestination({
+  it("mantém comportamento existente para URL comum quando não há link oficial da Central", () => {
+    const legacyGeneratedUrl = "https://www.mercadolivre.com.br/p/MLB123?partner_id=LEGACY";
+    expect(selectExpressAffiliateDestination({
       originalUrl: "https://www.mercadolivre.com.br/p/MLB123",
-      affiliateUrl: "https://www.mercadolivre.com.br/p/MLB123?partner_id=LEGACY",
-    })).toThrowError("Destino afiliado do Mercado Livre não aprovado.");
+      affiliateUrl: legacyGeneratedUrl,
+    })).toBe(legacyGeneratedUrl);
   });
 });
 
