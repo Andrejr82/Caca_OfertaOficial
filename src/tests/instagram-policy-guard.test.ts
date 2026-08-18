@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { evaluateInstagramPolicy } from "@/lib/instagram/policy-guard";
 
@@ -62,5 +63,14 @@ describe("Instagram Policy Guard", () => {
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.rule).toBe("drugs_tobacco_nicotine");
+  });
+
+  it("runs policy preflight before official approval on every Instagram publication", () => {
+    const source = readFileSync("src/app/api/instagram/publish/route.ts", "utf8");
+    const policyIndex = source.indexOf("const policy = evaluateInstagramPolicy");
+    const approvalIndex = source.indexOf("const approval = await approveOfficialOfferForPublication");
+    expect(policyIndex).toBeGreaterThan(-1);
+    expect(approvalIndex).toBeGreaterThan(-1);
+    expect(policyIndex).toBeLessThan(approvalIndex);
   });
 });
