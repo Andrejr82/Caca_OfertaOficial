@@ -1,8 +1,8 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 2cfa11f -->
-<!-- verified-on: 2026-08-16 -->
+<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
+<!-- verified-on: 2026-08-18 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
@@ -31,6 +31,14 @@ Fluxo principal:
 5. As publicações aprovadas são enviadas pelos transportes oficiais configurados.
 
 O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `08:00`, `12:00`, `16:00` e `20:00`, `America/Sao_Paulo`). O ciclo Discovery-Only atual materializa candidatos de Shopee, Mercado Livre e Amazon; Shein, Magalu e Netshoes permanecem capacidades separadas até homologação própria. A Publicação Expressa é um fluxo independente de ingestão de links, com validação de marketplace e monetização antes da geração de copy.
+
+## Proteções atuais de publicação social
+
+- Ofertas em estado `rejected` não podem ser publicadas pelos fluxos sociais oficiais.
+- Instagram publica Feed e Reels com identificação de parceria paga para conteúdo afiliado.
+- O Instagram aplica validação de legenda, cota móvel de 24 horas, duplicidade de legenda/vídeo e validações conservadoras de mídia.
+- O `Instagram Policy Guard` executa fail-closed antes da publicação e bloqueia categorias sensíveis/proibidas, registrando `instagram.policy.blocked` com regra e motivo.
+- Facebook mantém o link afiliado no primeiro comentário, conforme o fluxo atual.
 
 ## Estrutura do repositório
 
@@ -63,6 +71,7 @@ O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `
 - [Scripts](docs/scripts.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Segurança](docs/SECURITY.md)
+- [Instagram Policy Guard](docs/INSTAGRAM_POLICY_GUARD.md)
 - [PMAV5 e contratos](docs/PMAV5/README.md)
 - [Operação de vídeo](docs/VIDEO_WORKER_CURRENT.md)
 - [Governança da documentação](docs/DOCUMENTATION_GOVERNANCE.md)
