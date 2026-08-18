@@ -72,3 +72,29 @@ describe.each([
     expect(fetchMock).toHaveBeenNthCalledWith(2, `/api/${channel}/publish`, expect.anything());
   });
 });
+
+describe.each([
+  ["facebook", FacebookPostApprovalCard, /aprovar e publicar/i],
+  ["instagram", InstagramPostApprovalCard, /aprovar e publicar no instagram/i],
+] as const)("rejected offer publication guard on %s", (_channel, Component, buttonName) => {
+  it("keeps the draft visible but blocks publishing with a clear reason", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <Component
+        post={{
+          ...post,
+          offers: {
+            ...post.offers,
+            status: "rejected",
+            image_url: "https://example.com/image.jpg"
+          }
+        }}
+      />
+    );
+
+    expect(screen.getByRole("button", { name: buttonName })).toHaveProperty("disabled", true);
+    expect(screen.getByText(/oferta foi rejeitada e não pode ser publicada/i)).toBeTruthy();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
