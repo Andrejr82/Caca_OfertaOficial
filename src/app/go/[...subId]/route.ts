@@ -3,6 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 import { inngest } from "@/lib/inngest/client";
 import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
+import {
+  isNonHumanTraffic,
+  isPreviewCrawler,
+  resolveGoAffiliateDestination,
+} from "@/lib/tracking/go-request";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -44,10 +49,7 @@ function buildOgDescription(offer: any) {
 }
 
 export async function GET(request: NextRequest, { params }: { params: Promise<{ subId: string[] }> | { subId: string[] } }) {
-  // Await params to avoid the Next.js 15+ synchronous dynamic API warning
   const resolvedParams = await params;
-  
-  // Extrai o primeiro elemento do array de parâmetros da rota catch-all
   const subIdString = Array.isArray(resolvedParams.subId) ? resolvedParams.subId[0] : resolvedParams.subId;
   const subId = decodeURIComponent(subIdString);
 
@@ -63,10 +65,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: "Configuração do Supabase ausente" }, { status: 500 });
   }
 
-  // Create admin client to bypass RLS for public link redirection
   const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-  // Find the affiliate link by sub_id and join the offer to grab metadata (image & title)
   const { data: links, error } = await supabase
     .from("affiliate_links")
     .select(`
@@ -105,39 +104,41 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 </html>`;
     return new NextResponse(html, {
       status: 404,
-      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      headers: { "Content-Type": "text/html; charset=utf-8" },
     });
   }
 
-  // Extrair metadados para analytics (anonimizados)
+  const affiliateUrl = resolveGoAffiliateDestination(String(link.original_url || ""));
+  if (!affiliateUrl) {
+    console.error("Destino afiliado inválido para affiliate_link:", link.id);
+    return NextResponse.json({ error: "URL de redirecionamento inválida" }, { status: 400 });
+  }
+
   const userAgent = request.headers.get("user-agent") || "";
   const referer = request.headers.get("referer") || "";
-  
+  const previewCrawler = isPreviewCrawler(userAgent);
+  const nonHumanTraffic = isNonHumanTraffic(userAgent);
+
   let deviceType = "desktop";
   if (/mobile|android|iphone|ipod/i.test(userAgent)) deviceType = "mobile";
   else if (/ipad|tablet/i.test(userAgent)) deviceType = "tablet";
-  
+
   const source = referer || link.channel || "direct";
 
-  // Dispara o tracking assíncrono para Inngest (Fire and forget)
-  // Isso insere no click_events e atualiza o affiliate_links paralelamente sem bloquear o redirect
-  inngest.send({
-    name: "tracking/click.registered",
-    data: {
-      affiliateLinkId: link.id,
-      source: source,
-      deviceType: deviceType
-    }
-  }).catch(err => console.error("Erro ao enfileirar tracking:", err));
+  // Somente tráfego humano gera evento de clique. Crawlers de preview/busca
+  // recebem o HTML necessário para metadados, mas não contaminam as métricas.
+  if (!nonHumanTraffic) {
+    inngest.send({
+      name: "tracking/click.registered",
+      data: {
+        affiliateLinkId: link.id,
+        source,
+        deviceType,
+      },
+    }).catch((err) => console.error("Erro ao enfileirar tracking:", err));
+  }
 
-  // Redirect cleanly to the original affiliate URL.
   try {
-    const originalUrl = link.original_url.startsWith('http') 
-      ? link.original_url 
-      : `https://${link.original_url}`;
-    
-    // Instead of a 302 redirect, return an HTML page with Open Graph tags and an instant redirect.
-    // This allows WhatsApp and Telegram to scrape the metadata and generate HIGH-QUALITY Link Previews!
     const title = link.offers?.product_name || "Oferta Especial";
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://caca-oferta-oficial.vercel.app";
     const canonicalUrl = new URL(`/go/${encodeURIComponent(subId)}`, appUrl).toString();
@@ -151,9 +152,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const escapedDescription = escapeHtml(buildOgDescription(link.offers));
     const escapedImage = escapeHtml(image);
     const escapedCanonicalUrl = escapeHtml(canonicalUrl);
-    const escapedOriginalUrl = escapeHtml(originalUrl);
-    const redirectScriptUrl = JSON.stringify(originalUrl);
-    const isPreviewCrawler = /WhatsApp|facebookexternalhit/i.test(userAgent);
+    const escapedAffiliateUrl = escapeHtml(affiliateUrl);
+    const redirectScriptUrl = JSON.stringify(affiliateUrl);
 
     const html = `
 <!DOCTYPE html>
@@ -164,10 +164,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <title>${escapedTitle}</title>
     <link rel="canonical" href="${escapedCanonicalUrl}">
     <link rel="icon" href="${escapeHtml(favicon)}" type="image/svg+xml">
-    
-    <!-- Prevents Mercado Livre WAF from triggering login/CAPTCHA blocks on redirect -->
+
     <meta name="referrer" content="no-referrer">
-    
+
     <!-- Open Graph / WhatsApp / Facebook -->
     <meta property="og:type" content="website">
     <meta property="og:url" content="${escapedCanonicalUrl}">
@@ -184,33 +183,28 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     <meta name="twitter:title" content="${escapedOgTitle}">
     <meta name="twitter:description" content="${escapedDescription}">
     <meta name="twitter:image" content="${escapedImage}">
-    
-    <!-- Redirecionamentos Automáticos -->
-    ${isPreviewCrawler
-      ? '<!-- Crawler detectado: Meta refresh bloqueado para evitar agrupamento de cache no destino -->' 
-      : '<meta http-equiv="refresh" content="0; url=' + escapedOriginalUrl + '">'}
-    
-    <script>
-        window.location.href = ${redirectScriptUrl};
-    </script>
+
+    ${previewCrawler
+      ? "<!-- Preview crawler detectado: sem redirect automático para preservar a leitura do Open Graph -->"
+      : `<meta http-equiv="refresh" content="0; url=${escapedAffiliateUrl}">\n    <script>window.location.href = ${redirectScriptUrl};</script>`}
 </head>
 <body>
-    <p>Redirecionando para a oferta... <a href="${escapedOriginalUrl}">Clique aqui se não for redirecionado.</a></p>
+    <p>Redirecionando para a oferta... <a href="${escapedAffiliateUrl}">Clique aqui se não for redirecionado.</a></p>
 </body>
 </html>`;
 
     return new NextResponse(html, {
       status: 200,
       headers: {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
-        'Pragma': 'no-cache',
-        'Expires': '0',
-        'Surrogate-Control': 'no-store',
+        "Content-Type": "text/html; charset=utf-8",
+        "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "Surrogate-Control": "no-store",
       },
     });
-  } catch (err) {
-    console.error("URL original inválida:", link.original_url);
+  } catch {
+    console.error("Falha ao renderizar redirecionamento para affiliate_link:", link.id);
     return NextResponse.json({ error: "URL de redirecionamento inválida" }, { status: 400 });
   }
 }
