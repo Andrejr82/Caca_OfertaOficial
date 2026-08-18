@@ -94,6 +94,228 @@ describe("classifyResolution", () => {
     });
   });
 
+  it("recupera o item do link 1qkZssd pelo card featured do SSR Nordic sem contaminar recomendações", () => {
+    const nordic = {
+      _n: {
+        ctx: {
+          r: {
+            appProps: {
+              pageProps: {
+                data: {
+                  components: [
+                    {
+                      recommendation_data: {
+                        recommendation_info: {
+                          polycards: [
+                            {
+                              c_id: "/home/card-featured/element",
+                              metadata: {
+                                id: "MLB5826790582",
+                                product_id: "MLB55027309",
+                                url: "https://www.mercadolivre.com.br/celular-samsung-galaxy-a17-5g/p/MLB55027309",
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                    {
+                      tabs: [
+                        {
+                          polycards: [
+                            {
+                              c_id: "/home/card-recommendation/element",
+                              metadata: {
+                                id: "MLB1111111111",
+                                url: "https://produto.mercadolivre.com.br/MLB-1111111111-recomendado-_JM",
+                              },
+                            },
+                            {
+                              c_id: "/home/card-recommendation/element",
+                              metadata: {
+                                id: "MLB2222222222",
+                                url: "https://produto.mercadolivre.com.br/MLB-2222222222-recomendado-_JM",
+                              },
+                            },
+                          ],
+                        },
+                      ],
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/doandre20220310102112",
+      redirectChain: ["https://meli.la/1qkZssd"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__" type="application/json">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toEqual({
+      status: "confirmed_identity",
+      itemId: "MLB5826790582",
+      resolvedUrl: "https://www.mercadolivre.com.br/social/doandre20220310102112",
+    });
+  });
+
+  it("recupera o item direto do link 2AfuzK7 pelo card featured do SSR Nordic", () => {
+    const nordic = {
+      _n: {
+        ctx: {
+          r: {
+            appProps: {
+              pageProps: {
+                data: {
+                  components: [
+                    {
+                      recommendation_data: {
+                        recommendation_info: {
+                          polycards: [
+                            {
+                              c_id: "/home/card-featured/element",
+                              metadata: {
+                                id: "MLB4592320910",
+                                url: "https://produto.mercadolivre.com.br/MLB-4592320910-kit-4-camiseta-dry-fit-_JM",
+                              },
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/doandre20220310102112",
+      redirectChain: ["https://meli.la/2AfuzK7"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toMatchObject({
+      status: "confirmed_identity",
+      itemId: "MLB4592320910",
+    });
+  });
+
+  it("mantém fail-closed quando o SSR Nordic contém mais de um card featured", () => {
+    const nordic = {
+      polycards: [
+        {
+          c_id: "/home/card-featured/element",
+          metadata: {
+            id: "MLB1111111111",
+            url: "https://produto.mercadolivre.com.br/MLB-1111111111-a-_JM",
+          },
+        },
+        {
+          c_id: "/home/card-featured/element",
+          metadata: {
+            id: "MLB2222222222",
+            url: "https://produto.mercadolivre.com.br/MLB-2222222222-b-_JM",
+          },
+        },
+      ],
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/perfil",
+      redirectChain: ["https://meli.la/lista"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toEqual({ status: "rejected", code: "AFFILIATE_SHOWCASE_NOT_PRODUCT" });
+  });
+
+  it("mantém fail-closed quando item e URL do card featured divergem", () => {
+    const nordic = {
+      polycards: [
+        {
+          c_id: "/home/card-featured/element",
+          metadata: {
+            id: "MLB1111111111",
+            url: "https://produto.mercadolivre.com.br/MLB-2222222222-produto-_JM",
+          },
+        },
+      ],
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/perfil",
+      redirectChain: ["https://meli.la/short"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toEqual({ status: "rejected", code: "AFFILIATE_SHOWCASE_NOT_PRODUCT" });
+  });
+
+  it("mantém fail-closed quando catálogo do card featured diverge da URL /p/", () => {
+    const nordic = {
+      polycards: [
+        {
+          c_id: "/home/card-featured/element",
+          metadata: {
+            id: "MLB5826790582",
+            product_id: "MLB9999999999",
+            url: "https://www.mercadolivre.com.br/produto/p/MLB55027309",
+          },
+        },
+      ],
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/perfil",
+      redirectChain: ["https://meli.la/short"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toEqual({ status: "rejected", code: "AFFILIATE_SHOWCASE_NOT_PRODUCT" });
+  });
+
+  it("mantém fail-closed quando o featured aponta para domínio externo", () => {
+    const nordic = {
+      polycards: [
+        {
+          c_id: "/home/card-featured/element",
+          metadata: {
+            id: "MLB5826790582",
+            url: "https://evil.example/MLB5826790582",
+          },
+        },
+      ],
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/perfil",
+      redirectChain: ["https://meli.la/short"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toEqual({ status: "rejected", code: "AFFILIATE_SHOWCASE_NOT_PRODUCT" });
+  });
+
   it("ignora navegação para domínio externo mesmo que a URL contenha um MLB", () => {
     const result = classifyResolution({
       resolvedUrl: "https://www.mercadolivre.com.br/social/perfil",

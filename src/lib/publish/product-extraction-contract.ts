@@ -16,6 +16,13 @@ export type ProductResolutionOutcome =
       code: NonNullable<UrlResolveResult["errorCode"]>;
     };
 
+type MLIdentity = { type: "item" | "product"; id: string };
+
+type NordicIdentityResult =
+  | { status: "absent" }
+  | { status: "valid"; itemId: string }
+  | { status: "invalid" };
+
 function decodeHtmlUrl(value: string): string {
   return value
     .replace(/&amp;/gi, "&")
@@ -32,17 +39,32 @@ function readAttribute(tag: string, name: string): string | null {
   return match ? decodeHtmlUrl(match[1]) : null;
 }
 
-function extractMlIdFromAllowedUrl(rawUrl: string, baseUrl: string): string | null {
+function normalizeMlId(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim().replace("-", "").toUpperCase();
+  return /^MLB\d+$/.test(normalized) ? normalized : null;
+}
+
+function extractMlIdentityFromAllowedUrl(rawUrl: string, baseUrl: string): MLIdentity | null {
   try {
     const absoluteUrl = new URL(decodeHtmlUrl(rawUrl), baseUrl);
     const host = absoluteUrl.hostname.toLowerCase().replace(/^www\./, "");
-    if (host !== "mercadolivre.com.br" && !host.endsWith(".mercadolivre.com.br") && host !== "mercadolibre.com" && !host.endsWith(".mercadolibre.com")) {
+    if (
+      host !== "mercadolivre.com.br"
+      && !host.endsWith(".mercadolivre.com.br")
+      && host !== "mercadolibre.com"
+      && !host.endsWith(".mercadolibre.com")
+    ) {
       return null;
     }
-    return extractMLId(absoluteUrl.toString())?.id || null;
+    return extractMLId(absoluteUrl.toString());
   } catch {
     return null;
   }
+}
+
+function extractMlIdFromAllowedUrl(rawUrl: string, baseUrl: string): string | null {
+  return extractMlIdentityFromAllowedUrl(rawUrl, baseUrl)?.id || null;
 }
 
 function extractMlIdsFromTrustedHtmlMetadata(htmlBody: string | undefined, baseUrl: string): string[] {
@@ -101,6 +123,110 @@ function extractMlIdsFromTrustedNavigation(htmlBody: string | undefined, baseUrl
   return [...ids];
 }
 
+function parseNordicContext(htmlBody: string | undefined): unknown | null {
+  if (!htmlBody) return null;
+  const scripts = htmlBody.match(/<script\b[^>]*>[\s\S]*?<\/script>/gi) || [];
+
+  for (const script of scripts) {
+    const openTag = script.match(/^<script\b[^>]*>/i)?.[0];
+    if (!openTag || !/__NORDIC_RENDERING_CTX__/i.test(openTag)) continue;
+
+    const rawBody = script.slice(openTag.length).replace(/<\/script>\s*$/i, "").trim();
+    const candidates = [rawBody, decodeHtmlUrl(rawBody)];
+
+    for (const candidate of candidates) {
+      try {
+        return JSON.parse(candidate);
+      } catch {
+        const assignment = candidate.match(/(?:window\.)?__NORDIC_RENDERING_CTX__\s*=\s*([\s\S]+?);?\s*$/i);
+        if (!assignment) continue;
+        try {
+          return JSON.parse(assignment[1]);
+        } catch {
+          // Contexto inválido não vira autoridade de identidade.
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+function isFeaturedMarker(value: unknown): boolean {
+  return typeof value === "string" && value.toLowerCase() === "/home/card-featured/element";
+}
+
+function objectHasFeaturedMarker(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const object = value as Record<string, unknown>;
+  if (isFeaturedMarker(object.c_id)) return true;
+  const metadata = object.metadata;
+  return Boolean(
+    metadata
+    && typeof metadata === "object"
+    && !Array.isArray(metadata)
+    && isFeaturedMarker((metadata as Record<string, unknown>).c_id)
+  );
+}
+
+function validateNordicFeaturedCard(card: unknown, baseUrl: string): string | null {
+  if (!card || typeof card !== "object" || Array.isArray(card)) return null;
+  const metadata = (card as Record<string, unknown>).metadata;
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
+
+  const meta = metadata as Record<string, unknown>;
+  const itemId = normalizeMlId(meta.id);
+  const productId = normalizeMlId(meta.product_id);
+  const rawUrl = typeof meta.url === "string" ? meta.url : "";
+  if (!itemId || !rawUrl) return null;
+
+  const urlIdentity = extractMlIdentityFromAllowedUrl(rawUrl, baseUrl);
+  if (!urlIdentity) return null;
+
+  if (urlIdentity.type === "item") {
+    return urlIdentity.id === itemId ? itemId : null;
+  }
+
+  // Em produto de catálogo, metadata.id representa a oferta/item real e
+  // metadata.product_id precisa confirmar o catálogo apontado pela URL /p/MLB...
+  return productId && productId === urlIdentity.id ? itemId : null;
+}
+
+function extractMlIdentityFromNordicFeaturedCard(
+  htmlBody: string | undefined,
+  baseUrl: string
+): NordicIdentityResult {
+  const context = parseNordicContext(htmlBody);
+  if (!context) return { status: "absent" };
+
+  const featuredCards: unknown[] = [];
+  const visit = (value: unknown): void => {
+    if (!value || typeof value !== "object") return;
+    if (Array.isArray(value)) {
+      for (const entry of value) visit(entry);
+      return;
+    }
+
+    const object = value as Record<string, unknown>;
+    const polycards = object.polycards;
+    if (Array.isArray(polycards)) {
+      const containerFeatured = objectHasFeaturedMarker(object);
+      for (const card of polycards) {
+        if (containerFeatured || objectHasFeaturedMarker(card)) featuredCards.push(card);
+      }
+    }
+
+    for (const child of Object.values(object)) visit(child);
+  };
+
+  visit(context);
+  if (featuredCards.length === 0) return { status: "absent" };
+  if (featuredCards.length !== 1) return { status: "invalid" };
+
+  const itemId = validateNordicFeaturedCard(featuredCards[0], baseUrl);
+  return itemId ? { status: "valid", itemId } : { status: "invalid" };
+}
+
 function recoverMlIdentityFromShowcase(result: UrlResolveResult): string | null {
   if (result.marketplace !== "Mercado Livre") return null;
 
@@ -114,6 +240,10 @@ function recoverMlIdentityFromShowcase(result: UrlResolveResult): string | null 
   for (const id of extractMlIdsFromTrustedNavigation(result.htmlBody, result.resolvedUrl)) {
     ids.add(id);
   }
+
+  const nordicIdentity = extractMlIdentityFromNordicFeaturedCard(result.htmlBody, result.resolvedUrl);
+  if (nordicIdentity.status === "invalid") return null;
+  if (nordicIdentity.status === "valid") ids.add(nordicIdentity.itemId);
 
   // /social/ não é prova suficiente de vitrine. Só recuperamos quando todas as
   // evidências confiáveis apontam para exatamente um produto individual.
