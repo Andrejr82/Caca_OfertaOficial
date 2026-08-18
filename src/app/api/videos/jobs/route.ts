@@ -3,9 +3,11 @@ import { z } from "zod";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getVideoJobPolicy, quotaMessage } from "@/lib/videos/job-policy";
-import { downloadDriveVideo, listDriveVideos, validateDriveVideo } from "@/lib/videos/google-drive";
+import { downloadDriveVideo, inspectVideoBytes, listDriveVideos, validateDriveVideo, validateInspectedVideo } from "@/lib/videos/google-drive";
 import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
+
+export const runtime = "nodejs";
 
 const createJobSchema = z.object({
   offerId: z.string().uuid(),
@@ -64,8 +66,25 @@ export async function POST(request: Request) {
   }
   const file = files.find((candidate) => candidate.id === parsed.data.driveFileId && candidate.name === parsed.data.driveFileName);
   if (!file) return NextResponse.json({ error: "Arquivo do Google Drive não encontrado na pasta configurada." }, { status: 404 });
-  const validationError = validateDriveVideo(file);
-  if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
+
+  const driveValidationError = validateDriveVideo(file);
+  if (driveValidationError) return NextResponse.json({ error: driveValidationError }, { status: 400 });
+
+  let media;
+  let inspected;
+  try {
+    media = await downloadDriveVideo(file.id);
+    inspected = await inspectVideoBytes(media.bytes);
+  } catch (inspectionError) {
+    return NextResponse.json({
+      error: inspectionError instanceof Error
+        ? `Não foi possível validar o arquivo MP4: ${inspectionError.message}`
+        : "Não foi possível validar o arquivo MP4."
+    }, { status: 502 });
+  }
+
+  const mediaValidationError = validateInspectedVideo(inspected);
+  if (mediaValidationError) return NextResponse.json({ error: mediaValidationError }, { status: 400 });
 
   const policy = getVideoJobPolicy();
   const { data, error } = await (supabase as any)
@@ -85,17 +104,32 @@ export async function POST(request: Request) {
   }
 
   try {
-    const media = await downloadDriveVideo(file.id);
     const admin = createSupabaseAdminClient();
     if (!admin) throw new Error("Supabase service role não configurada para importar o vídeo.");
     const path = `${userData.user.id}/${data.id}.mp4`;
     const upload = await admin.storage.from("videos").upload(path, media.bytes, { contentType: "video/mp4", upsert: true });
     if (upload.error) throw new Error(`Falha ao salvar vídeo: ${upload.error.message}`);
     const { data: publicData } = admin.storage.from("videos").getPublicUrl(path);
-    const durationSeconds = Number(file.videoMediaMetadata?.durationMillis ?? 0) / 1000;
     const metadata = {
-      templateId: "gemini-drive-v1", source: "google-drive", driveFileId: file.id, driveFileName: file.name,
-      validation: { mimeType: file.mimeType, sizeBytes: Number(file.size), width: file.videoMediaMetadata?.width ?? null, height: file.videoMediaMetadata?.height ?? null, durationSeconds, audio: "not_verified_server_side" },
+      templateId: "gemini-drive-v1",
+      source: "google-drive",
+      driveFileId: file.id,
+      driveFileName: file.name,
+      validation: {
+        mimeType: file.mimeType,
+        sizeBytes: Number(file.size),
+        width: inspected.width,
+        height: inspected.height,
+        durationSeconds: inspected.durationSeconds,
+        codec: inspected.codec,
+        hasAudio: inspected.hasAudio,
+        metadataSource: inspected.source,
+        driveMetadata: {
+          width: file.videoMediaMetadata?.width ?? null,
+          height: file.videoMediaMetadata?.height ?? null,
+          durationMillis: file.videoMediaMetadata?.durationMillis ?? null,
+        },
+      },
       prompt: parsed.data.prompt
     };
     const { error: updateError } = await admin.from("video_jobs").update({
