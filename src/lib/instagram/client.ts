@@ -151,6 +151,7 @@ export async function publishToInstagram(imageUrl: string, caption: string): Pro
       body: JSON.stringify({
         image_url: safeImageUrl,
         caption: caption,
+        is_paid_partnership: true,
         access_token: token,
       }),
     });
@@ -308,6 +309,7 @@ export async function publishVideoToInstagram(videoUrl: string, caption: string,
         media_type: "REELS",
         video_url: videoUrl,
         caption: caption,
+        is_paid_partnership: true,
         access_token: token,
       }),
     });
@@ -405,4 +407,3 @@ export async function publishVideoToInstagram(videoUrl: string, caption: string,
   console.log("[Instagram] Reels publicado com sucesso! Post ID:", postId);
   return postId;
 }
-
