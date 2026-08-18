@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Facebook, Image as ImageIcon, Send, Trash2 } from "lucide-react";
+import { AlertTriangle, Facebook, Image as ImageIcon, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PostWithOffer {
@@ -17,6 +17,7 @@ interface PostWithOffer {
     id: string;
     product_name: string;
     platform: string;
+    status?: string | null;
     current_price: number;
     old_price: number | null;
     image_url: string | null;
@@ -33,8 +34,13 @@ export function FacebookPostApprovalCard({ post, onApproved }: { post: PostWithO
   const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null);
   const link = post.affiliate_links?.tracked_url || post.offers.original_url;
   const price = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(post.offers.current_price);
+  const rejectedOffer = post.offers.status === "rejected";
 
   async function handleApproveAndPublish() {
+    if (rejectedOffer) {
+      setStatus({ success: false, message: "Esta oferta foi rejeitada e não pode ser publicada." });
+      return;
+    }
     setLoading(true);
     setStatus(null);
     try {
@@ -110,13 +116,18 @@ export function FacebookPostApprovalCard({ post, onApproved }: { post: PostWithO
           </div>
           <span className="text-xs rounded-full bg-blue-100 text-blue-800 px-2.5 py-0.5 font-semibold uppercase inline-flex items-center gap-1"><Facebook size={12} /> Aguardando envio</span>
         </header>
+        {rejectedOffer && (
+          <p className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-600">
+            <AlertTriangle size={16} /> Esta oferta foi rejeitada e não pode ser publicada.
+          </p>
+        )}
         <div>
           <label className="block text-xs font-bold text-ink/70 mb-1">Texto da publicação no Facebook (editar se necessário):</label>
           <textarea value={caption} onChange={(event) => setCaption(event.target.value)} className="w-full min-h-[220px] rounded-md border border-blue-500/20 p-3 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-paper text-ink resize-y leading-relaxed font-sans" />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Button disabled={loading} onClick={handleApproveAndPublish} type="button" className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Send size={16} /> {loading ? "Enviando..." : "Aprovar e publicar"}</Button>
+            <Button disabled={loading || rejectedOffer} onClick={handleApproveAndPublish} type="button" className="bg-blue-600 hover:bg-blue-700 text-white gap-2"><Send size={16} /> {loading ? "Enviando..." : "Aprovar e publicar"}</Button>
             <Button disabled={loading} onClick={handleReject} type="button" variant="glass" className="border-red-300 text-red-600 hover:bg-red-50 gap-2"><Trash2 size={16} /> Excluir rascunho</Button>
           </div>
           {status && <span className={`text-sm ${status.success ? "text-emerald-700" : "text-red-600"}`}>{status.message}</span>}
