@@ -18,6 +18,7 @@ import type { StateServiceDependencies } from "@/core/state";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 import { offerStateVersion, transitionOfficialOfferState } from "@/lib/state/official-state-service";
 import { assertOfficialCopy } from "@/core/ai/official-copy-policy";
+import { resolveOfficialAIAffiliateDestination } from "./official-ai-affiliate-destination";
 
 const IDEMPOTENCY_PREFIX = "pmav5.ai.idempotency.";
 const POLL_ATTEMPTS = 50;
@@ -30,10 +31,15 @@ const MAX_BATCH_SIZE = 1000;
 function mapAffiliateLinks(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value
-    .filter((link): link is { channel: string; tracked_url: string; sub_id?: string } =>
+    .filter((link): link is { channel: string; tracked_url: string; sub_id?: string; original_url?: string } =>
       Boolean(link && typeof link === "object" && typeof (link as any).channel === "string" && typeof (link as any).tracked_url === "string")
     )
-    .map((link) => ({ channel: link.channel as any, trackedUrl: link.tracked_url, subId: link.sub_id }));
+    .map((link) => ({
+      channel: link.channel as any,
+      trackedUrl: link.tracked_url,
+      subId: link.sub_id,
+      originalUrl: typeof (link as any).original_url === "string" ? (link as any).original_url : undefined
+    }));
 }
 
 export function materializeDraftContent(channel: string, rawContent: string, trackedUrl: string, options?: { repairInvalidUrl?: boolean }) {
@@ -145,7 +151,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     if (tenantId !== this.tenantId) return null;
     const { data, error } = await this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,short_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
+      .select("id,user_id,status,platform,product_name,short_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id,original_url)")
       .eq("id", offerId)
       .eq("user_id", tenantId)
       .maybeSingle();
@@ -178,7 +184,7 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
     const batchSize = getOfficialAIBatchSize();
     let query = this.client
       .from("offers")
-      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id)")
+      .select("id,user_id,status,platform,product_name,original_url,image_url,current_price,old_price,category,seller_name,shipping_free,marketplace_metrics,explainability,created_at,affiliate_links(channel,tracked_url,sub_id,original_url)")
       .eq("user_id", tenantId)
       .eq("status", "pending_manual_review")
       .order("created_at", { ascending: true })
@@ -255,19 +261,33 @@ export class SupabaseOfficialAIAdapter implements OfficialAIOfferPort, OfficialA
   }
 
   async persistDrafts(input: Parameters<OfficialAIContentPort["persistDrafts"]>[0]) {
+    // 1. Resolução e validação de destino afiliado antecipada (fail-closed atômico)
+    const channelDestinations = new Map<string, string>();
+    for (const channel of input.channels) {
+      const persistedLink = input.offer.affiliateLinks?.find((link) => link.channel === channel);
+      const destination = resolveOfficialAIAffiliateDestination(input.offer, channel, persistedLink);
+      if (!destination.ok) {
+        throw new Error(
+          `Official AI affiliate destination not confirmed for ${input.offer.marketplace} (${channel}): ${destination.reasonCode}`
+        );
+      }
+      channelDestinations.set(channel, destination.affiliateUrl);
+    }
+
     const drafts = [];
     for (const channel of input.channels) {
       const startedAt = Date.now();
       const persistedLink = input.offer.affiliateLinks?.find((link) => link.channel === channel);
       const subId = persistedLink?.subId ?? createSubId(channel, input.offer.productName, input.offer.id);
-      const trackedUrl = persistedLink?.trackedUrl ?? createTrackedUrl(input.offer.originalUrl, subId);
+      const destinationUrl = channelDestinations.get(channel) ?? input.offer.originalUrl;
+      const trackedUrl = persistedLink?.trackedUrl ?? createTrackedUrl(destinationUrl, subId);
       const { data: link, error: linkError } = await this.client
         .from("affiliate_links")
         .upsert({
           user_id: this.tenantId,
           offer_id: input.offer.id,
           channel,
-          original_url: input.offer.originalUrl,
+          original_url: destinationUrl,
           tracked_url: trackedUrl,
           sub_id: subId
         }, { onConflict: "offer_id,channel" })
