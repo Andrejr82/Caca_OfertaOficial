@@ -30,6 +30,46 @@ export function isNonHumanTraffic(userAgent: string): boolean {
     || SEARCH_CRAWLER_PATTERNS.some((pattern) => pattern.test(userAgent));
 }
 
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split(".");
+  if (parts.length !== 4 || parts.some((part) => !/^\d+$/.test(part))) return false;
+
+  const octets = parts.map(Number);
+  if (octets.some((value) => value < 0 || value > 255)) return false;
+
+  const [a, b] = octets;
+  return a === 0
+    || a === 10
+    || a === 127
+    || (a === 100 && b >= 64 && b <= 127)
+    || (a === 169 && b === 254)
+    || (a === 172 && b >= 16 && b <= 31)
+    || (a === 192 && b === 168)
+    || (a === 198 && (b === 18 || b === 19))
+    || a >= 224;
+}
+
+function isPrivateHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+
+  if (
+    normalized === "localhost"
+    || normalized.endsWith(".localhost")
+    || normalized.endsWith(".local")
+    || normalized.endsWith(".internal")
+  ) {
+    return true;
+  }
+
+  if (isPrivateIpv4(normalized)) return true;
+
+  return normalized === "::"
+    || normalized === "::1"
+    || normalized.startsWith("fc")
+    || normalized.startsWith("fd")
+    || /^fe[89ab]/i.test(normalized);
+}
+
 export function resolveGoAffiliateDestination(rawUrl: string): string | null {
   const value = rawUrl?.trim();
   if (!value) return null;
@@ -37,8 +77,24 @@ export function resolveGoAffiliateDestination(rawUrl: string): string | null {
   try {
     const parsed = new URL(value);
     if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+    if (parsed.username || parsed.password) return null;
+    if (isPrivateHostname(parsed.hostname)) return null;
     return value;
   } catch {
     return null;
+  }
+}
+
+export function resolveTrackingSource(referer: string, channel: string): string {
+  const fallback = String(channel || "").trim().slice(0, 64) || "direct";
+  const value = String(referer || "").trim();
+  if (!value) return fallback;
+
+  try {
+    const parsed = new URL(value);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return fallback;
+    return `ref:${parsed.hostname.toLowerCase()}`;
+  } catch {
+    return fallback;
   }
 }

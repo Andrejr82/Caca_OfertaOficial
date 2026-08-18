@@ -3,10 +3,12 @@ import { createClient } from "@supabase/supabase-js";
 import { createHash } from "node:crypto";
 import { inngest } from "@/lib/inngest/client";
 import { PRODUCT_IMAGE_RENDER_VERSION } from "@/lib/images/render-version";
+import { logger } from "@/lib/utils/logger";
 import {
   isNonHumanTraffic,
   isPreviewCrawler,
   resolveGoAffiliateDestination,
+  resolveTrackingSource,
 } from "@/lib/tracking/go-request";
 
 export const dynamic = "force-dynamic";
@@ -61,7 +63,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!supabaseUrl || !supabaseServiceKey) {
-    console.error("Missing Supabase credentials for redirect");
+    logger.error("Configuração ausente para /go", undefined, { event: "go.config.missing" });
     return NextResponse.json({ error: "Configuração do Supabase ausente" }, { status: 500 });
   }
 
@@ -69,7 +71,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const { data: links, error } = await supabase
     .from("affiliate_links")
     .select(`
-      *,
+      id,
+      original_url,
+      channel,
       offers (
         id,
         product_name,
@@ -86,7 +90,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   const link = links && links.length > 0 ? (links[0] as any) : null;
 
   if (error || !link) {
-    console.error("Link não encontrado para o subId:", subId, error);
+    logger.warn("Link de afiliado não encontrado", {
+      event: "go.link.not_found",
+      dbCode: error?.code || "not_found",
+    });
     const html = `
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -110,7 +117,12 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const affiliateUrl = resolveGoAffiliateDestination(String(link.original_url || ""));
   if (!affiliateUrl) {
-    console.error("Destino afiliado inválido para affiliate_link:", link.id);
+    logger.warn("Destino afiliado rejeitado", {
+      event: "go.redirect.rejected",
+      affiliateLinkId: link.id,
+      channel: link.channel || "unknown",
+      reason: "unsafe_destination",
+    });
     return NextResponse.json({ error: "URL de redirecionamento inválida" }, { status: 400 });
   }
 
@@ -123,10 +135,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (/mobile|android|iphone|ipod/i.test(userAgent)) deviceType = "mobile";
   else if (/ipad|tablet/i.test(userAgent)) deviceType = "tablet";
 
-  const source = referer || link.channel || "direct";
+  // Nunca persiste ou registra a URL completa de origem: somente hostname ou canal.
+  const source = resolveTrackingSource(referer, link.channel || "direct");
 
-  // Somente tráfego humano gera evento de clique. Crawlers de preview/busca
-  // recebem o HTML necessário para metadados, mas não contaminam as métricas.
   if (!nonHumanTraffic) {
     inngest.send({
       name: "tracking/click.registered",
@@ -135,7 +146,21 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         source,
         deviceType,
       },
-    }).catch((err) => console.error("Erro ao enfileirar tracking:", err));
+    }).then(() => {
+      logger.info("Clique humano enfileirado", {
+        event: "go.click.enqueued",
+        affiliateLinkId: link.id,
+        channel: link.channel || "unknown",
+        source,
+        deviceType,
+      });
+    }).catch(() => {
+      logger.error("Falha ao enfileirar clique", undefined, {
+        event: "go.click.enqueue_failed",
+        affiliateLinkId: link.id,
+        channel: link.channel || "unknown",
+      });
+    });
   }
 
   try {
@@ -204,7 +229,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
   } catch {
-    console.error("Falha ao renderizar redirecionamento para affiliate_link:", link.id);
+    logger.error("Falha ao renderizar redirect /go", undefined, {
+      event: "go.render.failed",
+      affiliateLinkId: link.id,
+      channel: link.channel || "unknown",
+    });
     return NextResponse.json({ error: "URL de redirecionamento inválida" }, { status: 400 });
   }
 }
