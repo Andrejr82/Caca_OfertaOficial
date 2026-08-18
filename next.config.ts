@@ -13,61 +13,22 @@ const nextConfig: NextConfig = {
       './node_modules/@img/sharp-linux-x64/**/*',
       './node_modules/@img/sharp-libvips-linux-x64/**/*',
     ],
-    '/api/videos/jobs': [
-      './node_modules/ffmpeg-static/**/*',
-    ],
   },
   images: {
     unoptimized: true,
     remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**.mlstatic.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'images.unsplash.com',
-      },
-      {
-        protocol: 'https',
-        hostname: 'm.media-amazon.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.ssl-images-amazon.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.amazon.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.images-amazon.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.amazon.com.br',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.mlcdn.com.br',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.shopee.com.br',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.susercontent.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**.ltwebstatic.com',
-      },
-      {
-        protocol: 'https',
-        hostname: '**',
-      }
+      { protocol: 'https', hostname: '**.mlstatic.com' },
+      { protocol: 'https', hostname: 'images.unsplash.com' },
+      { protocol: 'https', hostname: 'm.media-amazon.com' },
+      { protocol: 'https', hostname: '**.ssl-images-amazon.com' },
+      { protocol: 'https', hostname: '**.amazon.com' },
+      { protocol: 'https', hostname: '**.images-amazon.com' },
+      { protocol: 'https', hostname: '**.amazon.com.br' },
+      { protocol: 'https', hostname: '**.mlcdn.com.br' },
+      { protocol: 'https', hostname: '**.shopee.com.br' },
+      { protocol: 'https', hostname: '**.susercontent.com' },
+      { protocol: 'https', hostname: '**.ltwebstatic.com' },
+      { protocol: 'https', hostname: '**' }
     ],
   },
   turbopack: {

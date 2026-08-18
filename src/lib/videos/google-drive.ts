@@ -1,9 +1,4 @@
-import { execFile } from "node:child_process";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { promisify } from "node:util";
-import ffmpegPath from "ffmpeg-static";
+import { parseMp4Metadata, type ParsedMp4Metadata } from "@/lib/videos/mp4-metadata";
 
 type DriveFile = {
   id: string;
@@ -14,14 +9,7 @@ type DriveFile = {
   videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string };
 };
 
-export type InspectedVideoMetadata = {
-  width: number;
-  height: number;
-  durationSeconds: number;
-  codec: string | null;
-  hasAudio: boolean;
-  source: "ffmpeg";
-};
+export type InspectedVideoMetadata = ParsedMp4Metadata;
 
 const DEFAULT_FOLDER_ID = "1tj6S-Gr7hxt5RNRIAd7BkpR8_2tuGaFB";
 const REQUIRED_DRIVE_ENV = [
@@ -29,7 +17,6 @@ const REQUIRED_DRIVE_ENV = [
   "GOOGLE_DRIVE_CLIENT_SECRET",
   "GOOGLE_DRIVE_REFRESH_TOKEN",
 ] as const;
-const execFileAsync = promisify(execFile);
 
 export type GoogleDriveIntegrationStatus = {
   configured: boolean;
@@ -109,57 +96,8 @@ export function validateDriveVideo(file: DriveFile) {
   return null;
 }
 
-function parseDurationSeconds(stderr: string) {
-  const match = stderr.match(/Duration:\s*(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/);
-  if (!match) return 0;
-  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
-}
-
-function parseVideoStream(stderr: string) {
-  const line = stderr.split("\n").find((candidate) => candidate.includes("Video:"));
-  if (!line) return { width: 0, height: 0, codec: null as string | null };
-  const dimensions = line.match(/(?:^|[,\s])(\d{2,5})x(\d{2,5})(?:[,\s]|$)/);
-  const codec = line.match(/Video:\s*([^,\s]+)/)?.[1] ?? null;
-  return {
-    width: Number(dimensions?.[1] ?? 0),
-    height: Number(dimensions?.[2] ?? 0),
-    codec,
-  };
-}
-
 export async function inspectVideoBytes(bytes: Buffer): Promise<InspectedVideoMetadata> {
-  if (!ffmpegPath) throw new Error("FFmpeg não está disponível para validar o vídeo.");
-
-  const dir = await mkdtemp(join(tmpdir(), "caca-oferta-video-"));
-  const inputPath = join(dir, "input.mp4");
-  await writeFile(inputPath, bytes);
-
-  try {
-    let stderr = "";
-    try {
-      const result = await execFileAsync(ffmpegPath, ["-hide_banner", "-i", inputPath, "-frames:v", "1", "-f", "null", "-"], {
-        maxBuffer: 8 * 1024 * 1024,
-        timeout: 20_000,
-      });
-      stderr = result.stderr;
-    } catch (error) {
-      const candidate = error as { stderr?: string | Buffer; message?: string };
-      stderr = Buffer.isBuffer(candidate.stderr) ? candidate.stderr.toString("utf8") : candidate.stderr ?? "";
-      if (!stderr) throw new Error(candidate.message || "Não foi possível inspecionar o vídeo com FFmpeg.");
-    }
-
-    const { width, height, codec } = parseVideoStream(stderr);
-    const durationSeconds = parseDurationSeconds(stderr);
-    const hasAudio = stderr.split("\n").some((line) => line.includes("Audio:"));
-
-    if (!width || !height || !durationSeconds) {
-      throw new Error("Não foi possível identificar resolução e duração no arquivo MP4.");
-    }
-
-    return { width, height, durationSeconds, codec, hasAudio, source: "ffmpeg" };
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
+  return parseMp4Metadata(bytes);
 }
 
 export function validateInspectedVideo(metadata: Pick<InspectedVideoMetadata, "width" | "height" | "durationSeconds">) {
