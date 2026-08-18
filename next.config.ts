@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
       './node_modules/@img/sharp-linux-x64/**/*',
       './node_modules/@img/sharp-libvips-linux-x64/**/*',
     ],
+    '/api/videos/jobs': [
+      './node_modules/ffmpeg-static/**/*',
+    ],
   },
   images: {
     unoptimized: true,
