@@ -1,8 +1,8 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: 2cfa11f -->
-<!-- verified-on: 2026-08-16 -->
+<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
+<!-- verified-on: 2026-08-18 -->
 
 ## Princípios
 
@@ -23,6 +23,14 @@
 | Publicação | Telegram, Meta/Instagram/Facebook e WhatsApp |
 | Vídeo | worker, TTS, FFmpeg, Storage, heartbeat e limites |
 
+## Instagram e Meta
+
+- `INSTAGRAM_ACCESS_TOKEN` e a conta Business/Professional precisam estar válidos no ambiente de execução.
+- Feed e Reels usam o transporte oficial e marcam conteúdo afiliado como parceria paga.
+- O `Instagram Policy Guard` não depende de uma flag permissiva: ele é uma barreira fail-closed da rota oficial de publicação.
+- Se o contexto da oferta/post não puder ser carregado para análise, a publicação é bloqueada em vez de seguir para a Graph API.
+- Alterações das categorias preventivas devem ser acompanhadas por testes e revisão das políticas vigentes da Meta.
+
 ## Shopee OpenAPI V1
 
 O runtime possui controles separados para fonte, persistência, geração de drafts e publicação. A ativação deve ocorrer por janela controlada, com overlay validado, logs observados e publicação bloqueada até aprovação explícita. Não deduza ativação somente pela presença da variável em `.env.example`.
@@ -34,6 +42,7 @@ npm run typecheck
 npm test
 npm run build
 npm run security:check
+npm run docs:audit
 ```
 
 Depois do deploy, valide `/api/health`, `/api/readiness`, logs Oracle/PM2 e um smoke test read-only das integrações necessárias.
