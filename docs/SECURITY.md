@@ -1,8 +1,8 @@
 # Segurança
 
 <!-- docs-status: current -->
-<!-- verified-against: 2cfa11f -->
-<!-- verified-on: 2026-08-16 -->
+<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
+<!-- verified-on: 2026-08-18 -->
 
 ## Fronteiras de confiança
 
@@ -22,18 +22,23 @@
 
 - Discovery e geração de draft não podem publicar implicitamente.
 - Rotas exigem `postId`/`offerId`, aprovação e conteúdo oficial em `posts.content`.
+- Ofertas `rejected` são bloqueadas antes da publicação social.
 - Guardas históricas evitam republicação por ID ou identidade comercial equivalente.
 - Preço, desconto, frete, rating, cupom e link precisam de evidência do marketplace.
+- Instagram Feed e Reels usam disclosure de parceria paga no transporte atual para conteúdo afiliado.
+- `/api/instagram/publish` executa Safety + `Instagram Policy Guard` antes da aprovação/publicação e antes de qualquer chamada de mídia à Meta.
+- O Policy Guard opera fail-closed: contexto ausente ou categoria preventiva acionada bloqueiam o envio e geram evento `instagram.policy.blocked`.
 
 ## Segredos e logs
 
 - Valores reais ficam fora do Git; `.env.example` contém apenas nomes seguros.
 - Sanitizar bearer tokens, cookies, payloads pessoais, URLs assinadas e service-role keys.
+- Logs do Policy Guard devem registrar regra/código/IDs operacionais, nunca tokens ou conteúdo secreto.
 - Executar `npm run security:check` antes do merge e do deploy.
 
 ## Resposta a incidente
 
-Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afetados, avaliar dados persistidos e só reativar após smoke tests controlados.
+Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afetados, avaliar dados persistidos e só reativar após smoke tests controlados. Em falso positivo do Policy Guard, corrigir a regra e adicionar teste de regressão; não criar bypass de produção.
 
 ## Segurança do Trend Executive
 
