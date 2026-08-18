@@ -138,12 +138,19 @@ function parseNordicContext(htmlBody: string | undefined): unknown | null {
       try {
         return JSON.parse(candidate);
       } catch {
-        const assignment = candidate.match(/(?:window\.)?__NORDIC_RENDERING_CTX__\s*=\s*([\s\S]+?);?\s*$/i);
-        if (!assignment) continue;
-        try {
-          return JSON.parse(assignment[1]);
-        } catch {
-          // Contexto inválido não vira autoridade de identidade.
+        const assignmentPatterns = [
+          /(?:window\.)?__NORDIC_RENDERING_CTX__\s*=\s*([\s\S]+?);?\s*$/i,
+          /(?:window\.)?_n\.ctx\.r\s*=\s*([\s\S]+?);?\s*$/i,
+        ];
+
+        for (const pattern of assignmentPatterns) {
+          const assignment = candidate.match(pattern);
+          if (!assignment) continue;
+          try {
+            return JSON.parse(assignment[1]);
+          } catch {
+            // Contexto inválido não vira autoridade de identidade.
+          }
         }
       }
     }
@@ -187,8 +194,6 @@ function validateNordicFeaturedCard(card: unknown, baseUrl: string): string | nu
     return urlIdentity.id === itemId ? itemId : null;
   }
 
-  // Em produto de catálogo, metadata.id representa a oferta/item real e
-  // metadata.product_id precisa confirmar o catálogo apontado pela URL /p/MLB...
   return productId && productId === urlIdentity.id ? itemId : null;
 }
 
@@ -245,9 +250,6 @@ function recoverMlIdentityFromShowcase(result: UrlResolveResult): string | null 
   if (nordicIdentity.status === "invalid") return null;
   if (nordicIdentity.status === "valid") ids.add(nordicIdentity.itemId);
 
-  // /social/ não é prova suficiente de vitrine. Só recuperamos quando todas as
-  // evidências confiáveis apontam para exatamente um produto individual.
-  // Ausência ou conflito continua fail-closed.
   return ids.size === 1 ? [...ids][0] : null;
 }
 
