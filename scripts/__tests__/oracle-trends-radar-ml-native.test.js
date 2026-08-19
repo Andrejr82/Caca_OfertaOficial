@@ -166,3 +166,105 @@ test('freshness e deduplicação funcionam corretamente sobre produtos ML Native
   assert.equal(freshnessCheck.fresh[0].productId, 'MLB201');
   assert.equal(freshnessCheck.excludedRecentHistory.length, 1);
 });
+
+test('enrichMercadoLivreCandidatesInBatch enriquece lote com sold_quantity e rating sem alterar nulls não observados', async () => {
+  const { enrichMercadoLivreCandidatesInBatch } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [
+    { itemId: 'MLB001', productId: 'P001', productName: 'Item 1', currentPrice: 100, category: 'Eletrônicos', sales: null, rating: null },
+    { itemId: 'MLB002', productId: 'P002', productName: 'Item 2', currentPrice: 200, category: 'Casa', sales: null, rating: null },
+    { itemId: 'MLB003', productId: 'P003', productName: 'Item 3', currentPrice: 300, category: 'Ferramentas', sales: null, rating: null },
+  ];
+
+  const mockApiGet = async (path) => {
+    if (path.includes('MLB001') || path.includes('MLB002')) {
+      return [
+        { code: 200, body: { id: 'MLB001', sold_quantity: 150, rating: 4.8 } },
+        { code: 200, body: { id: 'MLB002', sold_quantity: 0, rating: 4.2 } },
+        { code: 404, body: null },
+      ];
+    }
+    return [];
+  };
+
+  await enrichMercadoLivreCandidatesInBatch(candidates, {
+    accessToken: 'test-token',
+    apiGetImpl: mockApiGet,
+    maxToEnrich: 10,
+    batchSize: 5,
+  });
+
+  assert.equal(candidates[0].sales, 150, 'sold_quantity 150 deve ser mapeado para sales');
+  assert.equal(candidates[0].rating, 4.8, 'rating 4.8 deve ser mapeado');
+  assert.equal(candidates[1].sales, 0, 'sold_quantity 0 deve ser preservado como 0');
+  assert.equal(candidates[1].rating, 4.2);
+  assert.equal(candidates[2].sales, null, 'Item sem retorno deve manter sales como null estritamente');
+  assert.equal(candidates[2].rating, null, 'Item sem retorno deve manter rating como null');
+});
+
+test('enrichMercadoLivreCandidatesInBatch respeita limites (maxToEnrich) e diversidade de categorias', async () => {
+  const { enrichMercadoLivreCandidatesInBatch } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+  const categories = ['Celulares', 'Informática', 'Games', 'Casa', 'Moda'];
+  for (let i = 1; i <= 50; i++) {
+    const cat = categories[i % categories.length];
+    candidates.push({
+      itemId: `MLB_CAT_${i}`,
+      productName: `Produto ${i} de ${cat}`,
+      currentPrice: 100 + i,
+      discountPercent: (i % 20) + 5,
+      category: cat,
+      sales: null,
+      rating: null,
+    });
+  }
+
+  const requestedIds = [];
+  const mockApiGet = async (path) => {
+    const ids = path.replace('/items?ids=', '').split(',');
+    requestedIds.push(...ids);
+    return ids.map((id) => ({ code: 200, body: { id, sold_quantity: 25, rating: 4.5 } }));
+  };
+
+  await enrichMercadoLivreCandidatesInBatch(candidates, {
+    accessToken: 'test-token',
+    apiGetImpl: mockApiGet,
+    maxToEnrich: 15,
+    batchSize: 5,
+  });
+
+  assert.equal(requestedIds.length, 15, 'Deve enriquecer exatamente maxToEnrich itens');
+  // Verifica diversidade: deve conter itens de diferentes categorias
+  const enrichedCategories = new Set(
+    candidates.filter((c) => c.sales === 25).map((c) => c.category)
+  );
+  assert.ok(enrichedCategories.size >= 4, 'Deve cobrir múltiplas categorias para garantir diversidade');
+});
+
+test('falha parcial ou timeout em chunks de enriquecimento não derruba a coleta ML Native', async () => {
+  const { enrichMercadoLivreCandidatesInBatch } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [
+    { itemId: 'MLB_FAIL_1', productName: 'Item com Erro', currentPrice: 50, category: 'Geral', sales: null, rating: null },
+    { itemId: 'MLB_OK_2', productName: 'Item Sucesso', currentPrice: 80, category: 'Geral', sales: null, rating: null },
+  ];
+
+  let calls = 0;
+  const mockApiGet = async () => {
+    calls++;
+    if (calls === 1) throw new Error('Timeout de rede na API ML');
+    return [{ code: 200, body: { id: 'MLB_OK_2', sold_quantity: 80, rating: 4.9 } }];
+  };
+
+  await enrichMercadoLivreCandidatesInBatch(candidates, {
+    accessToken: 'test-token',
+    apiGetImpl: mockApiGet,
+    maxToEnrich: 2,
+    batchSize: 1,
+  });
+
+  assert.equal(candidates[0].sales, null, 'Item que falhou mantém sales como null');
+  assert.equal(candidates[1].sales, 80, 'Item seguinte é processado normalmente');
+});
+

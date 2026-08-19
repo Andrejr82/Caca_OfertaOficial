@@ -188,12 +188,13 @@ async function apiGet(path, { fetchImpl = global.fetch, accessToken } = {}) {
   return body;
 }
 
-function normalizeItems(items, context) {
+function normalizeItems(items, context = {}) {
+  const safeContext = context || {};
   return items.map((item) => {
-    const rawSold = item.sold_quantity ?? context.sold_quantity;
+    const rawSold = item.sold_quantity ?? safeContext.sold_quantity;
     const soldQuantity = Number.isFinite(Number(rawSold)) && Number(rawSold) >= 0 ? Number(rawSold) : null;
 
-    const rawRating = item.rating ?? item.reviews?.rating_average ?? context.rating;
+    const rawRating = item.rating ?? item.reviews?.rating_average ?? safeContext.rating;
     const rating = Number.isFinite(Number(rawRating)) && Number(rawRating) >= 1 && Number(rawRating) <= 5
       ? Number(Number(rawRating).toFixed(2))
       : null;

@@ -307,8 +307,144 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
 }
 
 /**
+ * Enriquece um lote de candidatos do Mercado Livre com dados factuais oficiais
+ * (sold_quantity -> sales, rating) via API oficial (/items?ids=... e fallback oficial de reviews).
+ */
+async function enrichMercadoLivreCandidatesInBatch(candidates = [], {
+  accessToken = null,
+  env = process.env,
+  fetchImpl = null,
+  tokenProvider = refreshAccessToken,
+  maxToEnrich = 150,
+  batchSize = 20,
+  apiGetImpl = null,
+} = {}) {
+  if (!Array.isArray(candidates) || candidates.length === 0) return candidates;
+
+  const client = fetchImpl || global.fetch;
+
+  // 1. Pré-seleção com diversidade de categorias e qualidade mínima
+  const valid = candidates.filter((c) => (
+    c
+    && typeof c.currentPrice === 'number'
+    && c.currentPrice > 0
+    && (c.itemId || c.productId)
+    && c.productName
+  ));
+
+  if (valid.length === 0) return candidates;
+
+  // Agrupa por categoria para garantir representatividade e diversidade
+  const byCategory = new Map();
+  for (const item of valid) {
+    const cat = item.category || 'Geral';
+    if (!byCategory.has(cat)) byCategory.set(cat, []);
+    byCategory.get(cat).push(item);
+  }
+
+  // Ordena itens dentro de cada categoria por maior desconto
+  for (const items of byCategory.values()) {
+    items.sort((a, b) => (Number(b.discountPercent) || 0) - (Number(a.discountPercent) || 0));
+  }
+
+  // Seleciona no estilo round-robin equilibrado entre as categorias até maxToEnrich
+  const selectedToEnrich = [];
+  const selectedSet = new Set();
+  const categoryQueues = Array.from(byCategory.values());
+  let added = true;
+
+  while (selectedToEnrich.length < maxToEnrich && added) {
+    added = false;
+    for (const queue of categoryQueues) {
+      if (queue.length > 0 && selectedToEnrich.length < maxToEnrich) {
+        const item = queue.shift();
+        selectedToEnrich.push(item);
+        selectedSet.add(item);
+        added = true;
+      }
+    }
+  }
+
+  // Se ainda houver espaço até maxToEnrich, completa com os restantes
+  if (selectedToEnrich.length < maxToEnrich) {
+    for (const item of valid) {
+      if (!selectedSet.has(item) && selectedToEnrich.length < maxToEnrich) {
+        selectedToEnrich.push(item);
+        selectedSet.add(item);
+      }
+    }
+  }
+
+  // 2. Obtenção do token OAuth
+  let token = accessToken;
+  if (!token && typeof tokenProvider === 'function') {
+    token = await tokenProvider({ env, fetchImpl: client }).catch(() => null);
+  }
+
+  if (!token) {
+    return candidates;
+  }
+
+  // 3. Consulta em lote por /items?ids=... (chunks de 20)
+  const chunks = [];
+  for (let i = 0; i < selectedToEnrich.length; i += batchSize) {
+    chunks.push(selectedToEnrich.slice(i, i + batchSize));
+  }
+
+  const itemMap = new Map();
+
+  for (const chunk of chunks) {
+    const itemIds = chunk.map((c) => c.itemId).filter(Boolean);
+    if (!itemIds.length) continue;
+
+    try {
+      let data = null;
+      if (typeof apiGetImpl === 'function') {
+        data = await apiGetImpl(`/items?ids=${itemIds.join(',')}`, { accessToken: token, fetchImpl: client });
+      } else {
+        const res = await client(`https://api.mercadolibre.com/items?ids=${itemIds.join(',')}`, {
+          headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+          signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(10000) : undefined,
+        });
+        if (res.ok) {
+          data = await res.json();
+        }
+      }
+
+      if (Array.isArray(data)) {
+        for (const entry of data) {
+          if (entry && entry.code === 200 && entry.body) {
+            itemMap.set(String(entry.body.id), entry.body);
+          }
+        }
+      }
+    } catch (_err) {
+      // Falhas parciais em chunks de enriquecimento não interrompem o fluxo
+    }
+  }
+
+  // 4. Aplicação dos dados enriquecidos nos candidatos
+  for (const candidate of candidates) {
+    const live = itemMap.get(String(candidate.itemId));
+    if (live) {
+      const sold = parseOptionalNumber(live.sold_quantity);
+      if (sold !== null && sold >= 0) {
+        candidate.sales = sold;
+      }
+      const rating = parseOptionalNumber(live.rating ?? live.reviews?.rating_average);
+      if (rating !== null && rating >= 1 && rating <= 5) {
+        candidate.rating = rating;
+        candidate.ratingStar = rating;
+      }
+    }
+  }
+
+  return candidates;
+}
+
+/**
  * Coleta candidatos comerciais do Mercado Livre.
- * Fonte primária (round 1): Mercado Livre Native Top 20 (Central Oficial de Ofertas SSR).
+ * Fonte primária (round 1): Mercado Livre Native Top 20 (Central Oficial de Ofertas SSR) + Enriquecimento em lote.
  * Refill secundário (round >= 2 ou fallback): Intenções oficiais com batching determinístico.
  */
 async function collectMercadoLivreMarketplaceCandidates({
@@ -322,6 +458,8 @@ async function collectMercadoLivreMarketplaceCandidates({
   coverageRunner = runMercadoLivreOfficialIntentCoverage,
   tokenProvider = refreshAccessToken,
   fetchImpl = null,
+  enricher = enrichMercadoLivreCandidatesInBatch,
+  maxToEnrich = 150,
 } = {}) {
   const round = Math.max(1, Number(page) || 1);
   const candidates = [];
@@ -346,6 +484,15 @@ async function collectMercadoLivreMarketplaceCandidates({
         }
 
         if (candidates.length > 0) {
+          if (typeof enricher === 'function') {
+            await enricher(candidates, {
+              accessToken,
+              env,
+              fetchImpl,
+              tokenProvider,
+              maxToEnrich,
+            });
+          }
           return candidates;
         }
       } catch (err) {
@@ -813,6 +960,7 @@ module.exports = {
   markTrendRadarRunRunning,
   collectShopeeMarketplaceCandidates,
   collectMercadoLivreMarketplaceCandidates,
+  enrichMercadoLivreCandidatesInBatch,
   computeCandidateSalesVelocity,
   fetchRecentSnapshotItemsMap,
   buildTrendRadarProductsFromCandidates,
