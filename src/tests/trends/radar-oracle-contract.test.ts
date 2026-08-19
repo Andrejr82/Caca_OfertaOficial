@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
+import type { TrendRadarSnapshotProductView, TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
 import {
   RADAR_ORACLE_CONTRACT_VERSION,
   buildRadarOracleDiscoveryContracts,

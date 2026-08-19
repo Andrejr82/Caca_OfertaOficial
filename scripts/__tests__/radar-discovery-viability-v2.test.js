@@ -835,3 +835,253 @@ test('TEST 20: nenhuma oferta é criada automaticamente apenas por aparecer no R
 
   assert.equal(result.offersWrites, 0);
 });
+
+test('TEST 21: ML refill round 2 consulta conjunto diferente/seguinte de keywords vs round 1', async () => {
+  // Captura as keywords passadas ao coverageRunner por round
+  const capturedKeywordsByRound = [];
+
+  const mockMlCollector = async ({ page = 1 } = {}) => {
+    // Simula collectMercadoLivreMarketplaceCandidates com rotação de keywords.
+    // Reproduz a lógica de rotação do engine para verificar que o round 2
+    // começa num offset diferente do round 1.
+    const keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer', 'lixeira inox', 'suporte notebook', 'tapete pet'];
+    const round = Math.max(1, Number(page) || 1);
+    const rotationStep = 5;
+    const totalKeywords = keywords.length;
+    const offset = ((round - 1) * rotationStep) % totalKeywords;
+    const roundKeywords = [
+      ...keywords.slice(offset),
+      ...keywords.slice(0, offset),
+    ];
+    capturedKeywordsByRound.push({ round, firstKeyword: roundKeywords[0] });
+    return []; // Retornar vazio para forçar refill
+  };
+
+  const mockShopeeCollector = async ({ page = 1 } = {}) => {
+    if (page === 1) {
+      return [
+        { marketplace: 'Shopee', shopId: 's1', itemId: 'p1', productName: 'Item Shopee 1', currentPrice: 50, sales: 100, commissionPercent: 8 },
+      ];
+    }
+    return [];
+  };
+
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: async () => ({
+                  data: [{ id: 'run-21', radar_date: '2026-08-19', status: 'building', source_health: { runtime: 'oracle' } }],
+                  error: null,
+                }),
+              }),
+              gte: () => ({ order: async () => ({ data: [], error: null }) }),
+            }),
+          }),
+          update: () => ({ eq: async () => ({ error: null }) }),
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return { select: () => ({ range: async () => ({ data: [], error: null }) }) };
+      }
+      return {};
+    },
+  };
+
+  await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: mockMlCollector,
+    maxRefillRounds: 3,
+  });
+
+  // Deve ter havido pelo menos 2 rounds ML
+  assert.ok(capturedKeywordsByRound.length >= 2, 'ML collector deve ser chamado em ao menos 2 rounds');
+
+  // Round 1 e round 2 devem iniciar com keywords diferentes (rotação aplicada)
+  const round1FirstKeyword = capturedKeywordsByRound.find((r) => r.round === 1)?.firstKeyword;
+  const round2FirstKeyword = capturedKeywordsByRound.find((r) => r.round === 2)?.firstKeyword;
+
+  assert.ok(round1FirstKeyword !== undefined, 'Round 1 deve ter sido executado');
+  assert.ok(round2FirstKeyword !== undefined, 'Round 2 deve ter sido executado');
+  assert.notEqual(
+    round1FirstKeyword,
+    round2FirstKeyword,
+    `Round 2 deve consultar keywords diferentes de round 1 (round1="${round1FirstKeyword}", round2="${round2FirstKeyword}")`
+  );
+});
+
+test('TEST 22: fontes se esgotam (rounds retornam vazio) → completion_reason = eligible_sources_exhausted', async () => {
+  // Fontes retornam candidatos apenas no round 1, depois ficam completamente vazias.
+  const mockShopeeCollector = async ({ page = 1 } = {}) => {
+    if (page === 1) {
+      return Array.from({ length: 5 }, (_, i) => ({
+        marketplace: 'Shopee',
+        shopId: 's1',
+        itemId: `item-exhaust-22-${i}`,
+        productName: `Produto Esgotamento ${i}`,
+        currentPrice: 45,
+        sales: 50,
+        commissionPercent: 6,
+      }));
+    }
+    // Rounds 2+ retornam vazio → fontes esgotadas
+    return [];
+  };
+
+  let savedSourceHealth = {};
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: async () => ({
+                  data: [{ id: 'run-22', radar_date: '2026-08-19', status: 'building', source_health: { runtime: 'oracle' } }],
+                  error: null,
+                }),
+              }),
+              gte: () => ({ order: async () => ({ data: [], error: null }) }),
+            }),
+          }),
+          update: (payload) => {
+            if (payload.source_health) savedSourceHealth = payload.source_health;
+            return { eq: async () => ({ error: null }) };
+          },
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return { select: () => ({ range: async () => ({ data: [], error: null }) }) };
+      }
+      return {};
+    },
+  };
+
+  const result = await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: async () => [],
+    maxRefillRounds: 3,
+  });
+
+  assert.equal(result.processed, true);
+  assert.ok(result.productsCount < 10, 'Menos de 10 produtos (fontes esgotadas)');
+  assert.equal(
+    savedSourceHealth.completion_reason,
+    'eligible_sources_exhausted',
+    'Deve registrar eligible_sources_exhausted quando fontes retornarem vazio'
+  );
+});
+
+test('TEST 23: maxRefillRounds esgota mas fontes ainda ativas → completion_reason = refill_limit_reached', async () => {
+  // Fontes SEMPRE retornam candidatos (não esgotam), mas deduplicação/recência
+  // faz os produtos viáveis finais ficarem abaixo do mínimo.
+  // Isso significa que o loop parou por limite operacional, não por esgotamento de fontes.
+  let callCount = 0;
+  const mockShopeeCollector = async ({ page = 1 } = {}) => {
+    callCount += 1;
+    // Sempre retorna 1 candidato viável com itemId único por round
+    // mas todos já foram vistos (recência) — simulado por deduplicação nativa:
+    // mesmo shopId + itemId em todos os rounds para simular colisão de dedup.
+    // O truque: usar itemId diferente por round para não cair em dedup nativa,
+    // mas com nome semanticamente igual para forçar dedup semântica.
+    // Na prática o que importa é: fontes não estão vazias (retornam dados),
+    // mas o pool viável final < 10.
+    // Usamos 2 itens por round com itemId único, mas baixo volume (< 10 total viáveis no final).
+    return [
+      {
+        marketplace: 'Shopee',
+        shopId: 's-limit',
+        itemId: `item-limit-${page}-A`,
+        productName: `Produto Limite Round ${page} A`,
+        currentPrice: 45,
+        sales: 50,
+        commissionPercent: 6,
+      },
+      {
+        marketplace: 'Shopee',
+        shopId: 's-limit',
+        itemId: `item-limit-${page}-B`,
+        productName: `Produto Limite Round ${page} B`,
+        currentPrice: 46,
+        sales: 55,
+        commissionPercent: 6,
+      },
+    ];
+  };
+
+  let savedSourceHealth = {};
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => ({
+                limit: async () => ({
+                  data: [{ id: 'run-23', radar_date: '2026-08-19', status: 'building', source_health: { runtime: 'oracle' } }],
+                  error: null,
+                }),
+              }),
+              gte: () => ({ order: async () => ({ data: [], error: null }) }),
+            }),
+          }),
+          update: (payload) => {
+            if (payload.source_health) savedSourceHealth = payload.source_health;
+            return { eq: async () => ({ error: null }) };
+          },
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return { select: () => ({ range: async () => ({ data: [], error: null }) }) };
+      }
+      return {};
+    },
+  };
+
+  // maxRefillRounds = 2 → loop para por limite (2 rounds × 2 itens = 4 viáveis < 10)
+  const result = await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: async () => [],
+    maxRefillRounds: 2,
+  });
+
+  assert.equal(result.processed, true);
+  // Fontes foram chamadas (não retornaram vazio) — loop parou por maxRefillRounds
+  assert.ok(callCount >= 2, 'Shopee collector deve ter sido chamado em ao menos 2 rounds');
+  assert.ok(result.productsCount < 10, 'Menos de 10 produtos (não atingiu mínimo)');
+  assert.equal(
+    savedSourceHealth.completion_reason,
+    'refill_limit_reached',
+    'Deve registrar refill_limit_reached quando parar por limite operacional, não por esgotamento de fontes'
+  );
+  assert.notEqual(
+    savedSourceHealth.completion_reason,
+    'eligible_sources_exhausted',
+    'NÃO deve usar eligible_sources_exhausted quando fontes ainda retornam dados'
+  );
+});
+

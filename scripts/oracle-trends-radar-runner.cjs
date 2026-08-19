@@ -165,6 +165,9 @@ async function processPendingTrendRadarRuns(options = {}) {
 
   let finalProducts = [];
   let actualRoundsRun = 0;
+  // Rastreia se o loop parou porque as fontes realmente retornaram esgotamento
+  // (round sem nenhum candidato bruto), vs parada por limite operacional de rounds.
+  let stoppedBySourceExhaustion = false;
 
   // 3. Loop de Refill & Descoberta
   for (let round = 1; round <= maxRefillRounds; round++) {
@@ -260,6 +263,10 @@ async function processPendingTrendRadarRuns(options = {}) {
 
     // Se já atingiu 20 produtos ou não há novos candidatos brutos retornando, encerra o loop
     if (finalProducts.length >= targetProducts || (roundShopeeRaw === 0 && roundMlRaw === 0)) {
+      // Registrar esgotamento real de fontes (nenhum candidato bruto neste round)
+      if (roundShopeeRaw === 0 && roundMlRaw === 0) {
+        stoppedBySourceExhaustion = true;
+      }
       break;
     }
   }
@@ -285,13 +292,18 @@ async function processPendingTrendRadarRuns(options = {}) {
   }
 
   // 5. Determinação da razão de conclusão (completion_reason)
+  // Distingue parada por esgotamento real de fontes vs limite operacional de rounds.
   let completionReason = 'target_reached';
   if (finalProducts.length >= targetProducts) {
     completionReason = 'target_reached';
   } else if (finalProducts.length >= minimumProducts) {
     completionReason = 'minimum_reached';
-  } else {
+  } else if (stoppedBySourceExhaustion) {
+    // Fontes retornaram vazio — não há mais candidatos disponíveis nas APIs.
     completionReason = 'eligible_sources_exhausted';
+  } else {
+    // Loop encerrou por limite operacional (maxRefillRounds) com fontes ainda ativas.
+    completionReason = 'refill_limit_reached';
   }
 
   // 6. Diversidade de famílias

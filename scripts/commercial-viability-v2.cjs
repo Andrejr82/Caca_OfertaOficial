@@ -172,7 +172,34 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
     };
   }
 
-  // 8. Classificação MEDIUM
+  // 8. Guard de evidência mínima antes de classificar como MEDIUM
+  // Sem vendas observadas, sem comissão e sem velocity → não há base factual para medium.
+  // Fail-closed: retorna insufficient_data para não ocupar vagas comerciais principais.
+  const hasObservedDemand = sales !== null && sales >= 1;
+  const hasObservedRevenue = effectiveCommissionPercent > 0 || (estimatedCommissionPerSale !== null && estimatedCommissionPerSale > 0);
+  const hasObservedVelocity = isVelocityComputed;
+
+  if (!hasObservedDemand && !hasObservedRevenue && !hasObservedVelocity) {
+    return {
+      strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+      classification: 'insufficient_data',
+      effectiveCommissionPercent,
+      estimatedCommissionPerSale,
+      reasons: ['Preço válido mas sem evidência de demanda, comissão ou velocidade de vendas observada'],
+      isViable: false,
+      diagnostic: {
+        price_observed: price,
+        sales_observed: sales,
+        rating_observed: rating,
+        commission_observed: rawComm,
+        sales_velocity: salesVelocity,
+        velocity_used: isVelocityComputed,
+        ticket_class: ticketClass,
+      },
+    };
+  }
+
+  // 9. Classificação MEDIUM — há pelo menos uma evidência factual de viabilidade
   reasons.push('Viabilidade comercial padrão validada');
   return {
     strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,

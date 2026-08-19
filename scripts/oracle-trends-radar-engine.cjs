@@ -303,6 +303,8 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
 
 /**
  * Coleta candidatos comerciais do Mercado Livre via intenções oficiais.
+ * O parâmetro `page` (round de refill) é usado para rotacionar as keywords
+ * por offset circular, garantindo que cada round consulte um universo diferente.
  */
 async function collectMercadoLivreMarketplaceCandidates({
   keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer', 'lixeira inox', 'suporte notebook', 'tapete pet'],
@@ -318,9 +320,20 @@ async function collectMercadoLivreMarketplaceCandidates({
     const token = accessToken || (await refreshAccessToken({ env }).catch(() => null));
     if (!token) return [];
 
+    // Rotacionar keywords por round para consultar universo diferente a cada refill.
+    // Round 1: keywords[0..4], Round 2: keywords[5..8,0..0], etc.
+    const round = Math.max(1, Number(page) || 1);
+    const rotationStep = 5;
+    const totalKeywords = keywords.length;
+    const offset = ((round - 1) * rotationStep) % totalKeywords;
+    const roundKeywords = [
+      ...keywords.slice(offset),
+      ...keywords.slice(0, offset),
+    ];
+
     const result = await runMercadoLivreOfficialIntentCoverage({
       accessToken: token,
-      keywords,
+      keywords: roundKeywords,
       maxPerIntent: Math.max(3, maxPerIntent),
       delayMs: 150,
     });

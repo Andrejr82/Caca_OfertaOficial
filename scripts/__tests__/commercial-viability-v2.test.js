@@ -167,3 +167,29 @@ test('calculateCommercialViabilityV2 never fabricates missing rating, commission
   assert.equal(result.diagnostic.sales_velocity, null);
   assert.equal(result.estimatedCommissionPerSale, null);
 });
+
+test('calculateCommercialViabilityV2 retorna insufficient_data para produto com preço válido mas sem demanda, comissão ou velocity observadas', () => {
+  // Produto com preço legítimo, mas absolutamente nenhum dado de demanda ou rentabilidade.
+  // NÃO pode cair como medium — deve ficar insufficient_data e fora das vagas comerciais principais.
+  const candidateNoDemandNoCommission = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB-no-evidence',
+    productName: 'Organizador Plástico Multiuso',
+    currentPrice: 89.9,
+    // sales: ausente (null implícito)
+    // commissionRate: ausente
+    // velocityInfo: ausente
+  };
+
+  const result = calculateCommercialViabilityV2(candidateNoDemandNoCommission);
+  assert.equal(result.classification, 'insufficient_data',
+    'Produto com preço válido mas sem evidência de demanda/comissão/velocity deve ser insufficient_data, não medium');
+  assert.equal(result.isViable, false);
+  assert.equal(isViableForRadar(result), false,
+    'insufficient_data não deve ocupar vagas comerciais principais do Radar');
+  assert.ok(
+    result.reasons.some((r) => /evidência|demanda|comissão|velocidade/i.test(r)),
+    'Razão deve mencionar ausência de evidência'
+  );
+});
+
