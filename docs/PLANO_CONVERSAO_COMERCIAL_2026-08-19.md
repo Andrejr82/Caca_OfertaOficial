@@ -129,6 +129,33 @@ A tabela `click_events` possui apenas `source`, `device_type` e `created_at`; n�
 
 **Tempo alvo:** 30–45 minutos.
 
+#### Resultado — Task 2 concluída em 2026-08-19
+
+O histórico clicado mostrou interesse humano provável, mas grande parte das ofertas antigas não possui no registro persistido evidência suficiente de vendas, rating ou comissão. Exemplos: Capacete Coquinho BR101 (18 cliques humanos prováveis) tinha preço R$ 196,52 e desconto de 13,4%, porém sem rating, vendas ou comissão observados no registro; Lava e Seca Samsung (16 cliques humanos prováveis) tinha ticket de R$ 3.905,07 e também sem evidência comercial persistida. Esses produtos não entram no teste apenas por terem recebido cliques.
+
+O sinal histórico mais útil foi por **tipo de intenção**, não por reaproveitamento cego da mesma oferta. Houve resposta humana em produtos de grooming/beleza, games, utilidades e bens domésticos. Para escolher o teste, esse sinal foi cruzado com o último Radar real concluído (`f3ffe4cc-a339-47c1-a79a-5e97976b86ec`), que já contém preço, vendas, rating, desconto e comissão factual via marketplace.
+
+**Shortlist para o teste comercial controlado:**
+
+1. **Console Portátil R36S + 15.000 jogos — Shopee** — R$ 175,99; 696 vendas; 4,8★; 65% desconto; comissão efetiva 11%; comissão estimada R$ 19,36/venda; Score V3 71. Motivo: categoria games já mostrou 18 cliques humanos prováveis em console retrô histórico, agora combinada com demanda, reputação, desconto e comissão observados.
+2. **Percarbonato de sódio 1kg/2kg — Shopee** — R$ 28,99; 7.080 vendas; 4,9★; 24% desconto; comissão efetiva 13%; R$ 3,77/venda; Score V3 70. Motivo: utilidade doméstica simples, prova de demanda forte, baixo atrito de preço e possibilidade clara de demonstração de uso.
+3. **Cama/colchonete lavável para cachorro ou gato — Shopee** — R$ 21,90; 2.693 vendas; 4,9★; 39% desconto; comissão efetiva 13%; R$ 2,85/venda; Score V3 71. Motivo: baixo ticket, reputação alta e benefício visual/emocional fácil de comunicar.
+4. **Ventilador Mondial 30cm — Shopee** — R$ 149,99; 2.296 vendas; 4,9★; 25% desconto; comissão efetiva 10%; R$ 15,00/venda; Score V3 71. Motivo: utilidade clara, marca conhecida, demanda observada e comissão absoluta relevante; serve como teste de ticket médio contra itens de impulso.
+5. **Mini máquina de costura portátil — Shopee** — R$ 10,99; 6.417 vendas; 4,4★; 83% desconto; comissão efetiva 9%; R$ 0,99/venda; Score V3 71. Motivo: demonstração muito direta, grande volume de vendas e preço de impulso; rating menor que os demais deve ser tratado como ponto de atenção, não escondido.
+6. **Caneta corretiva hidratante ZVEV — Shopee** — R$ 6,05; 9.215 vendas; 4,6★; 77% desconto; comissão efetiva 13%; R$ 0,79/venda; Score V3 75. Motivo: beleza/grooming já mostrou interesse humano no histórico; aqui há demanda factual muito superior e visual potencial alto, apesar da baixa comissão unitária.
+7. **Brinquedo interativo para gatos com som de pássaro — Shopee** — R$ 6,54; 1.765 vendas; 4,7★; 62% desconto; comissão efetiva 11%; R$ 0,72/venda; Score V3 73. Motivo: demonstração curta e compreensível, apelo pet e baixo atrito de compra.
+8. **Kit 3 sutiãs/top de academia — Shopee** — R$ 21,50; 934 vendas; 4,8★; 51% desconto; comissão efetiva 13%; R$ 2,80/venda; Score V3 71. Motivo: ticket baixo, desconto forte, rating alto e comissão suficiente para testar categoria moda sem depender de Shein.
+
+**O que ficou fora apesar de clique histórico:**
+- Lava e Seca Samsung, patinete elétrico, guarda-roupa e colchão magnético: tickets altos e/ou ausência de evidência comercial suficiente no registro histórico; não são bons candidatos para o primeiro teste de conversão rápida.
+- Capacete Coquinho ML: bom sinal de clique humano, mas desconto modesto e registro histórico sem rating/vendas/comissão; deve voltar apenas quando houver evidência comercial atual comparável.
+- Ofertas Shein: tinham cliques humanos prováveis, mas ficam fora desta frente de teste porque o escopo operacional atual prioriza Shopee/Mercado Livre/Amazon e o Radar atual não as qualificou.
+- Joias de ticket extremamente baixo do Radar: possuem score e demanda, porém foram preteridas nesta primeira bateria para evitar concentração excessiva em produtos visualmente semelhantes e comissão absoluta muito pequena.
+
+**Conclusão da Task 2:** o histórico confirma que clique humano sozinho não seleciona boa oferta. Os melhores candidatos para buscar venda agora são os que combinam **intenção/categoria já observada + demanda factual atual + preço plausível + reputação + desconto + comissão + facilidade de demonstrar valor**. A shortlist de 8 ofertas cria variação deliberada de ticket e categoria sem forçar marketplace ou produto.
+
+**Status:** CONCLUÍDA.
+
 ---
 
 ### Task 3 — Auditar copy, CTA, hashtags e formato por canal
@@ -231,7 +258,7 @@ Sucesso comercial:
 ## Ordem de execução
 
 1. Task 1 — Qualificar tráfego real. ✅ Concluída.
-2. Task 2 — Diagnosticar produto/preço/oferta.
+2. Task 2 — Diagnosticar produto/preço/oferta. ✅ Concluída.
 3. Task 3 — Copy/CTA/hashtags.
 4. Task 4 — Criativos/vídeos.
 5. Task 5 — Teste comercial controlado.
