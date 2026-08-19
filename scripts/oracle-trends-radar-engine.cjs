@@ -556,8 +556,26 @@ function buildTrendRadarProductsFromCandidates({
     return bDiscount - aDiscount;
   });
 
+  // 3.1 Garantir unicidade final por marketplace + normalized_product_term
+  // Preserva o melhor representante de cada termo normalizado por marketplace,
+  // descartando duplicatas secundárias e promovendo os próximos candidatos viáveis.
+  const uniqueTermCandidates = [];
+  const seenMarketplaceNormalizedTerms = new Set();
+
+  for (const candidate of viableCandidates) {
+    const marketplace = String(candidate.marketplace || '').trim().toLowerCase();
+    const normalizedTerm = normalizeText(candidate.productName);
+    const termKey = `${marketplace}:${normalizedTerm}`;
+
+    if (!termKey || seenMarketplaceNormalizedTerms.has(termKey)) {
+      continue;
+    }
+    seenMarketplaceNormalizedTerms.add(termKey);
+    uniqueTermCandidates.push(candidate);
+  }
+
   // 4. Aplicação do Capping de Diversidade Familiar
-  const diversityResult = applyFamilyDiversityCap(viableCandidates, {
+  const diversityResult = applyFamilyDiversityCap(uniqueTermCandidates, {
     maxPerFamily: 3,
     targetCount: maxProducts,
   });
@@ -565,10 +583,22 @@ function buildTrendRadarProductsFromCandidates({
 
   // 5. Mapeamento final dos produtos para o snapshot
   const prioritizedProducts = [];
+  const seenFinalKeys = new Set();
 
   for (let index = 0; index < selectedCandidates.length; index++) {
     const candidate = selectedCandidates[index];
-    const priority = index + 1;
+    const marketplace = candidate.marketplace;
+    const normalizedTerm = normalizeText(candidate.productName);
+    const finalKey = `${String(marketplace || '').trim().toLowerCase()}:${normalizedTerm}`;
+
+    if (seenFinalKeys.has(finalKey)) {
+      continue;
+    }
+    seenFinalKeys.add(finalKey);
+
+    const priority = prioritizedProducts.length + 1;
+    if (priority > maxProducts) break;
+
     const isFocus = priority <= 3;
     const sales = typeof candidate.sales === 'number' ? candidate.sales : null;
     const rating = typeof candidate.ratingStar === 'number'

@@ -118,265 +118,293 @@ async function processPendingTrendRadarRuns(options = {}) {
     await engine.markTrendRadarRunRunning(client, runId, pendingRun.source_health || {});
   }
 
-  // 1. Carrega histórico na janela de recência e ofertas existentes
-  const recencyWindowDays = options.recencyDays || DEFAULT_RECENCY_DAYS;
-  const radarHistory = await fetchCompletedRadarIdentityKeys(client, pendingRun.user_id, {
-    recencyDays: recencyWindowDays,
-    now: options.now || new Date(),
-  });
-  const existingOfferKeys = await fetchExistingOfferIdentityKeys(client, pendingRun.user_id);
-  const previousItemsMap = await engine.fetchRecentSnapshotItemsMap(client, pendingRun.user_id);
+  try {
+    // 1. Carrega histórico na janela de recência e ofertas existentes
+    const recencyWindowDays = options.recencyDays || DEFAULT_RECENCY_DAYS;
+    const radarHistory = await fetchCompletedRadarIdentityKeys(client, pendingRun.user_id, {
+      recencyDays: recencyWindowDays,
+      now: options.now || new Date(),
+    });
+    const existingOfferKeys = await fetchExistingOfferIdentityKeys(client, pendingRun.user_id);
+    const previousItemsMap = await engine.fetchRecentSnapshotItemsMap(client, pendingRun.user_id);
 
-  const candidateImages = new Map();
+    const candidateImages = new Map();
 
-  // 2. Métricas de observabilidade de source_health
-  const targetProducts = 20;
-  const minimumProducts = 10;
-  const maxRefillRounds = Math.max(1, Math.min(5, Number(options.maxRefillRounds) || 3));
+    // 2. Métricas de observabilidade de source_health
+    const targetProducts = 20;
+    const minimumProducts = 10;
+    const maxRefillRounds = Math.max(1, Math.min(5, Number(options.maxRefillRounds) || 3));
 
-  let shopeeCandidatesRaw = 0;
-  let shopeeCandidatesUnique = 0;
-  let shopeePagesScanned = 0;
-  let shopeeRecentHistoryExcluded = 0;
-  let shopeeExistingOfferExcluded = 0;
-  let shopeeNativeDuplicatesExcluded = 0;
-  let shopeeSemanticDuplicatesExcluded = 0;
-  let shopeeLowViabilityExcluded = 0;
-  let shopeeInsufficientDataExcluded = 0;
+    let shopeeCandidatesRaw = 0;
+    let shopeeCandidatesUnique = 0;
+    let shopeePagesScanned = 0;
+    let shopeeRecentHistoryExcluded = 0;
+    let shopeeExistingOfferExcluded = 0;
+    let shopeeNativeDuplicatesExcluded = 0;
+    let shopeeSemanticDuplicatesExcluded = 0;
+    let shopeeLowViabilityExcluded = 0;
+    let shopeeInsufficientDataExcluded = 0;
 
-  let mlCandidatesRaw = 0;
-  let mlCandidatesUnique = 0;
-  let mlRecentHistoryExcluded = 0;
-  let mlExistingOfferExcluded = 0;
-  let mlCatalogDuplicatesExcluded = 0;
-  let mlSemanticDuplicatesExcluded = 0;
-  let mlLowViabilityExcluded = 0;
-  let mlInsufficientDataExcluded = 0;
+    let mlCandidatesRaw = 0;
+    let mlCandidatesUnique = 0;
+    let mlRecentHistoryExcluded = 0;
+    let mlExistingOfferExcluded = 0;
+    let mlCatalogDuplicatesExcluded = 0;
+    let mlSemanticDuplicatesExcluded = 0;
+    let mlLowViabilityExcluded = 0;
+    let mlInsufficientDataExcluded = 0;
 
-  const candidatesPerRefillRound = [];
-  const aggregatedShopeeCandidates = [];
-  const aggregatedMlCandidates = [];
+    const candidatesPerRefillRound = [];
+    const aggregatedShopeeCandidates = [];
+    const aggregatedMlCandidates = [];
 
-  const seenShopeeNativeKeys = new Set();
-  const seenMlNativeKeys = new Set();
+    const seenShopeeNativeKeys = new Set();
+    const seenMlNativeKeys = new Set();
 
-  const baseShopeeCollector = options.shopeeCollector || engine.collectShopeeMarketplaceCandidates;
-  const baseMlCollector = options.mlCollector || engine.collectMercadoLivreMarketplaceCandidates;
+    const baseShopeeCollector = options.shopeeCollector || engine.collectShopeeMarketplaceCandidates;
+    const baseMlCollector = options.mlCollector || engine.collectMercadoLivreMarketplaceCandidates;
 
-  let finalProducts = [];
-  let actualRoundsRun = 0;
-  // Rastreia se o loop parou porque as fontes realmente retornaram esgotamento
-  // (round sem nenhum candidato bruto), vs parada por limite operacional de rounds.
-  let stoppedBySourceExhaustion = false;
+    let finalProducts = [];
+    let actualRoundsRun = 0;
+    // Rastreia se o loop parou porque as fontes realmente retornaram esgotamento
+    // (round sem nenhum candidato bruto), vs parada por limite operacional de rounds.
+    let stoppedBySourceExhaustion = false;
 
-  // 3. Loop de Refill & Descoberta
-  for (let round = 1; round <= maxRefillRounds; round++) {
-    actualRoundsRun = round;
-    let roundShopeeRaw = 0;
-    let roundMlRaw = 0;
+    // 3. Loop de Refill & Descoberta
+    for (let round = 1; round <= maxRefillRounds; round++) {
+      actualRoundsRun = round;
+      let roundShopeeRaw = 0;
+      let roundMlRaw = 0;
 
-    // 3.1 Coleta Shopee
-    try {
-      const rawShopee = await baseShopeeCollector({ page: round, env });
-      shopeePagesScanned += 1;
-      roundShopeeRaw = rawShopee.length;
-      shopeeCandidatesRaw += rawShopee.length;
+      // 3.1 Coleta Shopee
+      try {
+        const rawShopee = await baseShopeeCollector({ page: round, env });
+        shopeePagesScanned += 1;
+        roundShopeeRaw = rawShopee.length;
+        shopeeCandidatesRaw += rawShopee.length;
 
-      for (const item of rawShopee) {
-        const key = getMarketplaceIdentityKey(item);
-        const imageUrl = getMarketplaceImageUrl(item);
-        if (key && imageUrl) candidateImages.set(key, imageUrl);
+        for (const item of rawShopee) {
+          const key = getMarketplaceIdentityKey(item);
+          const imageUrl = getMarketplaceImageUrl(item);
+          if (key && imageUrl) candidateImages.set(key, imageUrl);
 
-        if (!key || seenShopeeNativeKeys.has(key)) {
-          shopeeNativeDuplicatesExcluded += 1;
-          continue;
+          if (!key || seenShopeeNativeKeys.has(key)) {
+            shopeeNativeDuplicatesExcluded += 1;
+            continue;
+          }
+          seenShopeeNativeKeys.add(key);
+
+          const freshnessCheck = filterCandidatesWithRecency([item], radarHistory.recentIdentityKeys, existingOfferKeys);
+          if (freshnessCheck.excludedRecentHistory.length) {
+            shopeeRecentHistoryExcluded += 1;
+            continue;
+          }
+          if (freshnessCheck.excludedExistingOffers.length) {
+            shopeeExistingOfferExcluded += 1;
+            continue;
+          }
+
+          aggregatedShopeeCandidates.push(item);
         }
-        seenShopeeNativeKeys.add(key);
-
-        const freshnessCheck = filterCandidatesWithRecency([item], radarHistory.recentIdentityKeys, existingOfferKeys);
-        if (freshnessCheck.excludedRecentHistory.length) {
-          shopeeRecentHistoryExcluded += 1;
-          continue;
-        }
-        if (freshnessCheck.excludedExistingOffers.length) {
-          shopeeExistingOfferExcluded += 1;
-          continue;
-        }
-
-        aggregatedShopeeCandidates.push(item);
+        shopeeCandidatesUnique = seenShopeeNativeKeys.size;
+      } catch (err) {
+        console.error(`[Oracle Radar] Erro Shopee round ${round}: ${err.message}`);
       }
-      shopeeCandidatesUnique = seenShopeeNativeKeys.size;
-    } catch (err) {
-      console.error(`[Oracle Radar] Erro Shopee round ${round}: ${err.message}`);
+
+      // 3.2 Coleta Mercado Livre
+      try {
+        const rawMl = await baseMlCollector({ page: round, env });
+        roundMlRaw = rawMl.length;
+        mlCandidatesRaw += rawMl.length;
+
+        for (const item of rawMl) {
+          const key = getMarketplaceIdentityKey(item);
+          const imageUrl = getMarketplaceImageUrl(item);
+          if (key && imageUrl) candidateImages.set(key, imageUrl);
+
+          if (!key || seenMlNativeKeys.has(key)) {
+            continue;
+          }
+          seenMlNativeKeys.add(key);
+
+          const freshnessCheck = filterCandidatesWithRecency([item], radarHistory.recentIdentityKeys, existingOfferKeys);
+          if (freshnessCheck.excludedRecentHistory.length) {
+            mlRecentHistoryExcluded += 1;
+            continue;
+          }
+          if (freshnessCheck.excludedExistingOffers.length) {
+            mlExistingOfferExcluded += 1;
+            continue;
+          }
+
+          aggregatedMlCandidates.push(item);
+        }
+        mlCandidatesUnique = seenMlNativeKeys.size;
+      } catch (err) {
+        console.error(`[Oracle Radar] Erro Mercado Livre round ${round}: ${err.message}`);
+      }
+
+      // 3.3 Construção preliminar do Radar com a piscina agregada
+      finalProducts = engine.buildTrendRadarProductsFromCandidates({
+        radarRunId: runId,
+        shopeeCandidates: aggregatedShopeeCandidates,
+        mlCandidates: aggregatedMlCandidates,
+        previousItemsMap,
+        maxProducts: targetProducts,
+      });
+
+      candidatesPerRefillRound.push({
+        round,
+        shopee_raw: roundShopeeRaw,
+        ml_raw: roundMlRaw,
+        shopee_pool: aggregatedShopeeCandidates.length,
+        ml_pool: aggregatedMlCandidates.length,
+        eligible_after_round: finalProducts.length,
+      });
+
+      // Se já atingiu 20 produtos ou não há novos candidatos brutos retornando, encerra o loop
+      if (finalProducts.length >= targetProducts || (roundShopeeRaw === 0 && roundMlRaw === 0)) {
+        // Registrar esgotamento real de fontes (nenhum candidato bruto neste round)
+        if (roundShopeeRaw === 0 && roundMlRaw === 0) {
+          stoppedBySourceExhaustion = true;
+        }
+        break;
+      }
     }
 
-    // 3.2 Coleta Mercado Livre
-    try {
-      const rawMl = await baseMlCollector({ page: round, env });
-      roundMlRaw = rawMl.length;
-      mlCandidatesRaw += rawMl.length;
+    // 4. Contabilidade de deduplicações e descarte de viabilidade
+    const dedupAudit = deduplicateCatalogAndSemantic([...aggregatedShopeeCandidates, ...aggregatedMlCandidates]);
+    mlCatalogDuplicatesExcluded = dedupAudit.excludedCatalogDuplicates.length;
 
-      for (const item of rawMl) {
-        const key = getMarketplaceIdentityKey(item);
-        const imageUrl = getMarketplaceImageUrl(item);
-        if (key && imageUrl) candidateImages.set(key, imageUrl);
-
-        if (!key || seenMlNativeKeys.has(key)) {
-          continue;
-        }
-        seenMlNativeKeys.add(key);
-
-        const freshnessCheck = filterCandidatesWithRecency([item], radarHistory.recentIdentityKeys, existingOfferKeys);
-        if (freshnessCheck.excludedRecentHistory.length) {
-          mlRecentHistoryExcluded += 1;
-          continue;
-        }
-        if (freshnessCheck.excludedExistingOffers.length) {
-          mlExistingOfferExcluded += 1;
-          continue;
-        }
-
-        aggregatedMlCandidates.push(item);
-      }
-      mlCandidatesUnique = seenMlNativeKeys.size;
-    } catch (err) {
-      console.error(`[Oracle Radar] Erro Mercado Livre round ${round}: ${err.message}`);
+    for (const excluded of dedupAudit.excludedSemanticDuplicates) {
+      if (excluded.marketplace === 'Shopee') shopeeSemanticDuplicatesExcluded += 1;
+      else mlSemanticDuplicatesExcluded += 1;
     }
 
-    // 3.3 Construção preliminar do Radar com a piscina agregada
-    finalProducts = engine.buildTrendRadarProductsFromCandidates({
-      radarRunId: runId,
-      shopeeCandidates: aggregatedShopeeCandidates,
-      mlCandidates: aggregatedMlCandidates,
-      previousItemsMap,
-      maxProducts: targetProducts,
+    for (const candidate of dedupAudit.uniqueCandidates) {
+      const viability = calculateCommercialViabilityV2(candidate);
+      if (viability.classification === 'low') {
+        if (candidate.marketplace === 'Shopee') shopeeLowViabilityExcluded += 1;
+        else mlLowViabilityExcluded += 1;
+      } else if (viability.classification === 'insufficient_data') {
+        if (candidate.marketplace === 'Shopee') shopeeInsufficientDataExcluded += 1;
+        else mlInsufficientDataExcluded += 1;
+      }
+    }
+
+    // 5. Determinação da razão de conclusão (completion_reason)
+    // Distingue parada por esgotamento real de fontes vs limite operacional de rounds.
+    let completionReason = 'target_reached';
+    if (finalProducts.length >= targetProducts) {
+      completionReason = 'target_reached';
+    } else if (finalProducts.length >= minimumProducts) {
+      completionReason = 'minimum_reached';
+    } else if (stoppedBySourceExhaustion) {
+      // Fontes retornaram vazio — não há mais candidatos disponíveis nas APIs.
+      completionReason = 'eligible_sources_exhausted';
+    } else {
+      // Loop encerrou por limite operacional (maxRefillRounds) com fontes ainda ativas.
+      completionReason = 'refill_limit_reached';
+    }
+
+    // 6. Diversidade de famílias
+    const representedFamilies = new Set(
+      finalProducts.map((p) => extractSemanticClusterKey({
+        productName: p.product_term,
+        category: p.category,
+        marketplace: p.marketplace,
+      }))
+    );
+
+    // 7. Montagem do source_health consolidado
+    const sourceHealth = {
+      google_trends_used: false,
+      target_products: targetProducts,
+      minimum_products: minimumProducts,
+      target_reached: finalProducts.length >= targetProducts,
+      completion_reason: completionReason,
+      shopee_candidates_raw: shopeeCandidatesRaw,
+      shopee_candidates_unique: shopeeCandidatesUnique,
+      shopee_pages_scanned: shopeePagesScanned,
+      shopee_recent_history_excluded: shopeeRecentHistoryExcluded,
+      shopee_existing_offer_excluded: shopeeExistingOfferExcluded,
+      shopee_native_duplicates_excluded: shopeeNativeDuplicatesExcluded,
+      shopee_semantic_duplicates_excluded: shopeeSemanticDuplicatesExcluded,
+      shopee_low_viability_excluded: shopeeLowViabilityExcluded,
+      shopee_insufficient_data_excluded: shopeeInsufficientDataExcluded,
+      mercado_livre_candidates_raw: mlCandidatesRaw,
+      mercado_livre_candidates_unique: mlCandidatesUnique,
+      mercado_livre_recent_history_excluded: mlRecentHistoryExcluded,
+      mercado_livre_existing_offer_excluded: mlExistingOfferExcluded,
+      mercado_livre_catalog_duplicates_excluded: mlCatalogDuplicatesExcluded,
+      mercado_livre_semantic_duplicates_excluded: mlSemanticDuplicatesExcluded,
+      mercado_livre_low_viability_excluded: mlLowViabilityExcluded,
+      mercado_livre_insufficient_data_excluded: mlInsufficientDataExcluded,
+      refill_rounds: actualRoundsRun,
+      candidates_per_refill_round: candidatesPerRefillRound,
+      total_products_selected: finalProducts.length,
+      families_selected: representedFamilies.size,
+      recency_window_days: recencyWindowDays,
+      completed_runs_in_window: radarHistory.runCount,
+    };
+
+    // 8. Persistência do snapshot
+    const persistResult = await engine.persistTrendRadarSnapshot({
+      client,
+      run: pendingRun,
+      products: finalProducts,
+      sourceHealthOverrides: sourceHealth,
+      dryRun: Boolean(options.dryRun || !client),
     });
 
-    candidatesPerRefillRound.push({
-      round,
-      shopee_raw: roundShopeeRaw,
-      ml_raw: roundMlRaw,
-      shopee_pool: aggregatedShopeeCandidates.length,
-      ml_pool: aggregatedMlCandidates.length,
-      eligible_after_round: finalProducts.length,
-    });
+    if (persistResult.persisted && client) {
+      await persistSnapshotImages(client, runId, candidateImages);
+    }
 
-    // Se já atingiu 20 produtos ou não há novos candidatos brutos retornando, encerra o loop
-    if (finalProducts.length >= targetProducts || (roundShopeeRaw === 0 && roundMlRaw === 0)) {
-      // Registrar esgotamento real de fontes (nenhum candidato bruto neste round)
-      if (roundShopeeRaw === 0 && roundMlRaw === 0) {
-        stoppedBySourceExhaustion = true;
+    const finalShopeeCount = finalProducts.filter((p) => p.marketplace === 'Shopee').length;
+    const finalMlCount = finalProducts.filter((p) => p.marketplace === 'Mercado Livre').length;
+
+    return {
+      processed: true,
+      runId,
+      radarDate,
+      productsCount: finalProducts.length,
+      shopeeProductsCount: finalShopeeCount,
+      mercadoLivreProductsCount: finalMlCount,
+      persisted: persistResult.persisted,
+      googleTrendsUsed: false,
+      publishCalls: 0,
+      postsWrites: 0,
+      offersWrites: 0,
+      sourceHealth,
+    };
+  } catch (error) {
+    if (client && !options.dryRun && runId) {
+      try {
+        const failureCode = error.code || 'PERSISTENCE_ERROR';
+        const failedHealth = {
+          ...(pendingRun.source_health || {}),
+          runtime: 'oracle',
+          status: 'failed',
+          failed_at: new Date().toISOString(),
+          error_message: error.message,
+          google_trends_used: false,
+        };
+        await client
+          .from('trend_radar_runs')
+          .update({
+            status: 'failed',
+            failure_code: failureCode,
+            source_health: failedHealth,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', runId);
+      } catch (updateErr) {
+        console.error(`[Oracle Radar Runner] Falha ao marcar run como failed: ${updateErr.message}`);
       }
-      break;
     }
+    throw error;
   }
-
-  // 4. Contabilidade de deduplicações e descarte de viabilidade
-  const dedupAudit = deduplicateCatalogAndSemantic([...aggregatedShopeeCandidates, ...aggregatedMlCandidates]);
-  mlCatalogDuplicatesExcluded = dedupAudit.excludedCatalogDuplicates.length;
-
-  for (const excluded of dedupAudit.excludedSemanticDuplicates) {
-    if (excluded.marketplace === 'Shopee') shopeeSemanticDuplicatesExcluded += 1;
-    else mlSemanticDuplicatesExcluded += 1;
-  }
-
-  for (const candidate of dedupAudit.uniqueCandidates) {
-    const viability = calculateCommercialViabilityV2(candidate);
-    if (viability.classification === 'low') {
-      if (candidate.marketplace === 'Shopee') shopeeLowViabilityExcluded += 1;
-      else mlLowViabilityExcluded += 1;
-    } else if (viability.classification === 'insufficient_data') {
-      if (candidate.marketplace === 'Shopee') shopeeInsufficientDataExcluded += 1;
-      else mlInsufficientDataExcluded += 1;
-    }
-  }
-
-  // 5. Determinação da razão de conclusão (completion_reason)
-  // Distingue parada por esgotamento real de fontes vs limite operacional de rounds.
-  let completionReason = 'target_reached';
-  if (finalProducts.length >= targetProducts) {
-    completionReason = 'target_reached';
-  } else if (finalProducts.length >= minimumProducts) {
-    completionReason = 'minimum_reached';
-  } else if (stoppedBySourceExhaustion) {
-    // Fontes retornaram vazio — não há mais candidatos disponíveis nas APIs.
-    completionReason = 'eligible_sources_exhausted';
-  } else {
-    // Loop encerrou por limite operacional (maxRefillRounds) com fontes ainda ativas.
-    completionReason = 'refill_limit_reached';
-  }
-
-  // 6. Diversidade de famílias
-  const representedFamilies = new Set(
-    finalProducts.map((p) => extractSemanticClusterKey({
-      productName: p.product_term,
-      category: p.category,
-      marketplace: p.marketplace,
-    }))
-  );
-
-  // 7. Montagem do source_health consolidado
-  const sourceHealth = {
-    google_trends_used: false,
-    target_products: targetProducts,
-    minimum_products: minimumProducts,
-    target_reached: finalProducts.length >= targetProducts,
-    completion_reason: completionReason,
-    shopee_candidates_raw: shopeeCandidatesRaw,
-    shopee_candidates_unique: shopeeCandidatesUnique,
-    shopee_pages_scanned: shopeePagesScanned,
-    shopee_recent_history_excluded: shopeeRecentHistoryExcluded,
-    shopee_existing_offer_excluded: shopeeExistingOfferExcluded,
-    shopee_native_duplicates_excluded: shopeeNativeDuplicatesExcluded,
-    shopee_semantic_duplicates_excluded: shopeeSemanticDuplicatesExcluded,
-    shopee_low_viability_excluded: shopeeLowViabilityExcluded,
-    shopee_insufficient_data_excluded: shopeeInsufficientDataExcluded,
-    mercado_livre_candidates_raw: mlCandidatesRaw,
-    mercado_livre_candidates_unique: mlCandidatesUnique,
-    mercado_livre_recent_history_excluded: mlRecentHistoryExcluded,
-    mercado_livre_existing_offer_excluded: mlExistingOfferExcluded,
-    mercado_livre_catalog_duplicates_excluded: mlCatalogDuplicatesExcluded,
-    mercado_livre_semantic_duplicates_excluded: mlSemanticDuplicatesExcluded,
-    mercado_livre_low_viability_excluded: mlLowViabilityExcluded,
-    mercado_livre_insufficient_data_excluded: mlInsufficientDataExcluded,
-    refill_rounds: actualRoundsRun,
-    candidates_per_refill_round: candidatesPerRefillRound,
-    total_products_selected: finalProducts.length,
-    families_selected: representedFamilies.size,
-    recency_window_days: recencyWindowDays,
-    completed_runs_in_window: radarHistory.runCount,
-  };
-
-  // 8. Persistência do snapshot
-  const persistResult = await engine.persistTrendRadarSnapshot({
-    client,
-    run: pendingRun,
-    products: finalProducts,
-    sourceHealthOverrides: sourceHealth,
-    dryRun: Boolean(options.dryRun || !client),
-  });
-
-  if (persistResult.persisted && client) {
-    await persistSnapshotImages(client, runId, candidateImages);
-  }
-
-  const finalShopeeCount = finalProducts.filter((p) => p.marketplace === 'Shopee').length;
-  const finalMlCount = finalProducts.filter((p) => p.marketplace === 'Mercado Livre').length;
-
-  return {
-    processed: true,
-    runId,
-    radarDate,
-    productsCount: finalProducts.length,
-    shopeeProductsCount: finalShopeeCount,
-    mercadoLivreProductsCount: finalMlCount,
-    persisted: persistResult.persisted,
-    googleTrendsUsed: false,
-    publishCalls: 0,
-    postsWrites: 0,
-    offersWrites: 0,
-    sourceHealth,
-  };
 }
 
 module.exports = {
