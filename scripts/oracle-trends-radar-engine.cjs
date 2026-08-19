@@ -835,8 +835,8 @@ function classifyClickEvents(clickEvents = [], {
       classification = 'human_probable';
       reason = 'direct_messaging_human_click';
     }
-    // Regra 4: Facebook mobile com referências explícitas m.facebook / lm.facebook / l.facebook ou mobile device => human_probable
-    else if (isFacebook && (isFbMobileRef || deviceType === 'mobile')) {
+    // Regra 4: Facebook com referências móveis explícitas m.facebook / lm.facebook / l.facebook => human_probable
+    else if (isFacebook && isFbMobileRef) {
       classification = 'human_probable';
       reason = 'facebook_mobile_human_click';
     }

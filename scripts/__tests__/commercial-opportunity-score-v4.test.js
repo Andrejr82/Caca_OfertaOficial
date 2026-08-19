@@ -885,7 +885,7 @@ test('CLASSIFICAÇÃO DE CLIQUES: WhatsApp e Telegram => human_probable', () => 
   assert.equal(statsByOfferId.get('offer-msg-2').humanProbableClicks, 1);
 });
 
-test('CLASSIFICAÇÃO DE CLIQUES: Facebook mobile com m.facebook / l.facebook => human_probable', () => {
+test('CLASSIFICAÇÃO DE CLIQUES: Facebook mobile com m.facebook / l.facebook => human_probable e source genérico => ambiguous', () => {
   const { classifyClickEvents } = require('../oracle-trends-radar-engine.cjs');
 
   const linkIdToOfferId = new Map([
@@ -902,13 +902,14 @@ test('CLASSIFICAÇÃO DE CLIQUES: Facebook mobile com m.facebook / l.facebook =>
 
   const { classifiedEvents, statsByOfferId } = classifyClickEvents(events, { linkIdToOfferId });
 
-  for (const item of classifiedEvents) {
-    assert.equal(item.classification, 'human_probable', 'Facebook mobile com referer móvel deve ser human_probable');
-  }
+  assert.equal(classifiedEvents[0].classification, 'human_probable', 'Facebook mobile + m.facebook => human_probable');
+  assert.equal(classifiedEvents[1].classification, 'human_probable', 'Facebook mobile + l.facebook => human_probable');
+  assert.equal(classifiedEvents[2].classification, 'ambiguous', 'Facebook mobile + source genérico facebook => ambiguous');
 
   assert.equal(statsByOfferId.get('offer-fb-1').humanProbableClicks, 1);
   assert.equal(statsByOfferId.get('offer-fb-2').humanProbableClicks, 1);
-  assert.equal(statsByOfferId.get('offer-fb-3').humanProbableClicks, 1);
+  assert.equal(statsByOfferId.get('offer-fb-3').humanProbableClicks, 0);
+  assert.equal(statsByOfferId.get('offer-fb-3').ambiguousClicks, 1);
 });
 
 test('SCORE V4: ambiguous e technical NÃO entram em internalConversion', () => {
