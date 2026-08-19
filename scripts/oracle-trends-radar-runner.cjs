@@ -28,6 +28,9 @@ const {
   deduplicateCatalogAndSemantic,
   applyFamilyDiversityCap,
 } = require('./radar-semantic-dedup-v2.cjs');
+const {
+  classifyTicket,
+} = require('../src/core/trends/commercial-opportunity-score-v4.cjs');
 
 const DEDICATED_RUNTIME_ENV = 'TRENDS_RADAR_DEDICATED_RUNTIME';
 
@@ -307,7 +310,7 @@ async function processPendingTrendRadarRuns(options = {}) {
       completionReason = 'refill_limit_reached';
     }
 
-    // 6. Diversidade de famílias
+    // 6. Diversidade de famílias e métricas de ticket / retorno econômico
     const representedFamilies = new Set(
       finalProducts.map((p) => extractSemanticClusterKey({
         productName: p.product_term,
@@ -315,6 +318,47 @@ async function processPendingTrendRadarRuns(options = {}) {
         marketplace: p.marketplace,
       }))
     );
+
+    const candidateCountByTicketBeforeSelection = { impulse: 0, core: 0, upper: 0, premium: 0 };
+    for (const c of [...aggregatedShopeeCandidates, ...aggregatedMlCandidates]) {
+      const t = classifyTicket(c.currentPrice ?? c.price);
+      if (t in candidateCountByTicketBeforeSelection) candidateCountByTicketBeforeSelection[t] += 1;
+    }
+
+    const eligibleCountByTicket = { impulse: 0, core: 0, upper: 0, premium: 0 };
+    for (const c of dedupAudit.uniqueCandidates) {
+      const v = calculateCommercialViabilityV2(c);
+      if (isViableForRadar(v)) {
+        const t = classifyTicket(c.currentPrice ?? c.price);
+        if (t in eligibleCountByTicket) eligibleCountByTicket[t] += 1;
+      }
+    }
+
+    const selectedCountByTicket = { impulse: 0, core: 0, upper: 0, premium: 0 };
+    let knownCommissionCount = 0;
+    let unknownCommissionCount = 0;
+    const commissionAmounts = [];
+
+    for (const p of finalProducts) {
+      const direct = p.direct_evidence?.[0] || {};
+      const t = direct.ticket_class || classifyTicket(direct.price);
+      if (t in selectedCountByTicket) selectedCountByTicket[t] += 1;
+
+      if (direct.commission_status === 'observed' && typeof direct.estimated_commission_per_sale === 'number') {
+        knownCommissionCount += 1;
+        commissionAmounts.push(direct.estimated_commission_per_sale);
+      } else {
+        unknownCommissionCount += 1;
+      }
+    }
+
+    commissionAmounts.sort((a, b) => a - b);
+    const avgCommission = commissionAmounts.length > 0
+      ? Math.round((commissionAmounts.reduce((a, b) => a + b, 0) / commissionAmounts.length) * 100) / 100
+      : null;
+    const medianCommission = commissionAmounts.length > 0
+      ? commissionAmounts[Math.floor(commissionAmounts.length / 2)]
+      : null;
 
     // 7. Montagem do source_health consolidado
     const sourceHealth = {
@@ -346,6 +390,17 @@ async function processPendingTrendRadarRuns(options = {}) {
       families_selected: representedFamilies.size,
       recency_window_days: recencyWindowDays,
       completed_runs_in_window: radarHistory.runCount,
+      candidate_count_by_ticket_before_selection: candidateCountByTicketBeforeSelection,
+      eligible_count_by_ticket: eligibleCountByTicket,
+      selected_count_by_ticket: selectedCountByTicket,
+      impulse_count: selectedCountByTicket.impulse,
+      core_count: selectedCountByTicket.core,
+      upper_count: selectedCountByTicket.upper,
+      premium_count: selectedCountByTicket.premium,
+      known_commission_count: knownCommissionCount,
+      unknown_commission_count: unknownCommissionCount,
+      average_estimated_commission_per_sale: avgCommission,
+      median_estimated_commission_per_sale: medianCommission,
     };
 
     // 8. Persistência do snapshot

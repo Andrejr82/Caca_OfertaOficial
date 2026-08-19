@@ -30,6 +30,11 @@ const {
   calculateCommercialOpportunityScoreV3,
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
 const {
+  COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+  classifyTicket,
+  calculateCommercialOpportunityScoreV4,
+} = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v4.cjs'));
+const {
   COMMERCIAL_VIABILITY_STRATEGY_VERSION,
   calculateCommercialViabilityV2,
   isViableForRadar,
@@ -653,7 +658,7 @@ function buildTrendRadarProductsFromCandidates({
   const dedupResult = deduplicateCatalogAndSemantic(allCandidates);
   const uniqueCandidates = dedupResult.uniqueCandidates;
 
-  // 2. Avaliação de Viabilidade Comercial V2 & Score V3
+  // 2. Avaliação de Viabilidade Comercial V2 & Score V4
   const viableCandidates = [];
 
   for (const candidate of uniqueCandidates) {
@@ -671,10 +676,13 @@ function buildTrendRadarProductsFromCandidates({
       candidate.evidence_status ||
       ((typeof candidate.sales === 'number' && candidate.sales > 0) || (typeof candidate.ratingStar === 'number' && candidate.ratingStar > 0) ? 'verified' : 'partial');
 
-    const scoreV3 = calculateCommercialOpportunityScoreV3({
+    const scoreV4 = calculateCommercialOpportunityScoreV4({
       ...candidate,
       evidenceStatus,
       velocityInfo,
+    }, {
+      velocityInfo,
+      internalPerformance: candidate.internalPerformance,
     });
 
     viableCandidates.push({
@@ -682,18 +690,20 @@ function buildTrendRadarProductsFromCandidates({
       evidenceStatus,
       velocityInfo,
       viability,
-      scoreV3,
+      scoreV4,
+      commercial_score: scoreV4.total,
+      ticket_class: scoreV4.ticket_class,
     });
   }
 
-  // 3. Ordenação Determinística: Score V3 > High Viability (em empate) > Sales Velocity > Sales > Rating > Discount
-  viableCandidates.sort((a, b) => {
-    // 3.1 Score V3 total (maior primeiro)
-    if (b.scoreV3.total !== a.scoreV3.total) {
-      return b.scoreV3.total - a.scoreV3.total;
+  // 3. Ordenação Determinística: Score V4 > High Viability (em empate) > Sales Velocity > Sales > Rating > Discount
+  const sortCandidatesDeterministic = (a, b) => {
+    // 3.1 Score V4 total (maior primeiro)
+    if (b.scoreV4.total !== a.scoreV4.total) {
+      return b.scoreV4.total - a.scoreV4.total;
     }
 
-    // 3.2 Prioridade de Viabilidade: High antes de Medium SOMENTE em empate de Score V3
+    // 3.2 Prioridade de Viabilidade: High antes de Medium SOMENTE em empate de Score V4
     if (a.viability.classification === 'high' && b.viability.classification !== 'high') return -1;
     if (b.viability.classification === 'high' && a.viability.classification !== 'high') return 1;
 
@@ -720,11 +730,11 @@ function buildTrendRadarProductsFromCandidates({
     const aDiscount = a.discountPercent || 0;
     const bDiscount = b.discountPercent || 0;
     return bDiscount - aDiscount;
-  });
+  };
+
+  viableCandidates.sort(sortCandidatesDeterministic);
 
   // 3.1 Garantir unicidade final por marketplace + normalized_product_term
-  // Preserva o melhor representante de cada termo normalizado por marketplace,
-  // descartando duplicatas secundárias e promovendo os próximos candidatos viáveis.
   const uniqueTermCandidates = [];
   const seenMarketplaceNormalizedTerms = new Set();
 
@@ -740,12 +750,113 @@ function buildTrendRadarProductsFromCandidates({
     uniqueTermCandidates.push(candidate);
   }
 
-  // 4. Aplicação do Capping de Diversidade Familiar
-  const diversityResult = applyFamilyDiversityCap(uniqueTermCandidates, {
-    maxPerFamily: 3,
-    targetCount: maxProducts,
-  });
-  const selectedCandidates = diversityResult.diversifiedProducts;
+  // 4. Montagem da Carteira Comercial Top 20 por Faixas de Ticket & Capping Familiar
+  // Metas estruturais quando existirem candidatos viáveis:
+  // - impulse: max 6
+  // - core: seek >= 5
+  // - upper: seek >= 4
+  // - premium: seek >= 2
+  // Vagas restantes / não preenchidas são redistribuídas para os melhores scores globais.
+  const selectedCandidates = [];
+  const selectedKeys = new Set();
+  const familyCounts = new Map();
+  let impulseCount = 0;
+  let coreCount = 0;
+  let upperCount = 0;
+  let premiumCount = 0;
+
+  const canSelectCandidate = (candidate) => {
+    const marketplace = String(candidate.marketplace || '').trim().toLowerCase();
+    const normalizedTerm = normalizeText(candidate.productName);
+    const key = `${marketplace}:${normalizedTerm}`;
+    if (selectedKeys.has(key)) return false;
+
+    const famKey = extractSemanticClusterKey({
+      productName: candidate.productName,
+      category: candidate.category,
+      marketplace: candidate.marketplace,
+      itemId: candidate.itemId,
+    });
+    const currentFamilyCount = familyCounts.get(famKey) || 0;
+    if (currentFamilyCount >= 3) return false;
+
+    return true;
+  };
+
+  const selectCandidate = (candidate) => {
+    const marketplace = String(candidate.marketplace || '').trim().toLowerCase();
+    const normalizedTerm = normalizeText(candidate.productName);
+    const key = `${marketplace}:${normalizedTerm}`;
+    const famKey = extractSemanticClusterKey({
+      productName: candidate.productName,
+      category: candidate.category,
+      marketplace: candidate.marketplace,
+      itemId: candidate.itemId,
+    });
+
+    selectedKeys.add(key);
+    familyCounts.set(famKey, (familyCounts.get(famKey) || 0) + 1);
+    selectedCandidates.push(candidate);
+
+    if (candidate.ticket_class === 'impulse') impulseCount += 1;
+    else if (candidate.ticket_class === 'core') coreCount += 1;
+    else if (candidate.ticket_class === 'upper') upperCount += 1;
+    else if (candidate.ticket_class === 'premium') premiumCount += 1;
+  };
+
+  const candidatesByTicket = {
+    premium: uniqueTermCandidates.filter(c => c.ticket_class === 'premium'),
+    upper: uniqueTermCandidates.filter(c => c.ticket_class === 'upper'),
+    core: uniqueTermCandidates.filter(c => c.ticket_class === 'core'),
+    impulse: uniqueTermCandidates.filter(c => c.ticket_class === 'impulse'),
+  };
+
+  // Pass 1: Metas estruturais de representação por faixa
+  // Premium: até 2
+  for (const c of candidatesByTicket.premium) {
+    if (premiumCount >= 2 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Upper: até 4
+  for (const c of candidatesByTicket.upper) {
+    if (upperCount >= 4 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Core: até 5
+  for (const c of candidatesByTicket.core) {
+    if (coreCount >= 5 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Impulse: até 6
+  for (const c of candidatesByTicket.impulse) {
+    if (impulseCount >= 6 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Pass 2: Preenchimento e redistribuição de vagas restantes pelos melhores scores globais
+  for (const candidate of uniqueTermCandidates) {
+    if (selectedCandidates.length >= maxProducts) break;
+    if (!canSelectCandidate(candidate)) continue;
+
+    // Se for impulse e já atingiu o teto de 6, verificar se ainda há candidatos viáveis de outras faixas
+    if (candidate.ticket_class === 'impulse' && impulseCount >= 6) {
+      const hasOtherTiersAvailable = uniqueTermCandidates.some(
+        other => other.ticket_class !== 'impulse' && canSelectCandidate(other)
+      );
+      if (hasOtherTiersAvailable) {
+        // Pula este impulse para dar preferência a core/upper/premium disponíveis
+        continue;
+      }
+    }
+
+    selectCandidate(candidate);
+  }
+
+  // Pass 3: Ordenação final da carteira por Score V4 para o snapshot
+  selectedCandidates.sort(sortCandidatesDeterministic);
 
   // 5. Mapeamento final dos produtos para o snapshot
   const prioritizedProducts = [];
@@ -777,11 +888,14 @@ function buildTrendRadarProductsFromCandidates({
     const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
     const viability = candidate.viability;
 
-    const finalScoreV3 = calculateCommercialOpportunityScoreV3({
+    const finalScoreV4 = calculateCommercialOpportunityScoreV4({
       ...candidate,
       isFocus,
       evidenceStatus: candidate.evidenceStatus,
       velocityInfo,
+    }, {
+      velocityInfo,
+      internalPerformance: candidate.internalPerformance,
     });
 
     const directEvidence = [
@@ -799,12 +913,20 @@ function buildTrendRadarProductsFromCandidates({
         old_price: oldPrice,
         discount_percent: discount,
         rating,
-        decision: finalScoreV3.decision,
-        strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+        decision: finalScoreV4.decision,
+        strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+        score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
         viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
         viability_classification: viability.classification,
-        effective_commission_percent: viability.effectiveCommissionPercent,
-        estimated_commission_per_sale: viability.estimatedCommissionPerSale,
+        ticket_class: finalScoreV4.ticket_class,
+        effective_commission_percent: finalScoreV4.economic_return.effectiveCommissionPercent,
+        estimated_commission_per_sale: finalScoreV4.economic_return.estimatedCommissionPerSale,
+        commission_status: finalScoreV4.economic_return.commissionStatus,
+        internal_conversion_status: finalScoreV4.internal_conversion.internalConversionStatus,
+        human_probable_clicks: finalScoreV4.internal_conversion.humanProbableClicks,
+        attributed_sales: finalScoreV4.internal_conversion.attributedSales,
+        internal_conversion_rate: finalScoreV4.internal_conversion.internalConversionRate,
+        score_breakdown: finalScoreV4.breakdown,
         marketplace_identity: {
           itemId: candidate.itemId || null,
           shopId: candidate.shopId || null,
@@ -818,8 +940,8 @@ function buildTrendRadarProductsFromCandidates({
           priceDiscountRate: candidate.priceDiscountRate || discount,
           commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
           sellerCommissionRate: candidate.sellerCommissionRate || 0,
-          effectiveCommissionPercent: viability.effectiveCommissionPercent,
-          estimatedCommissionPerSale: viability.estimatedCommissionPerSale,
+          effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
+          estimatedCommissionPerSale: finalScoreV4.economic_return.estimatedCommissionPerSale,
         },
         temporal_metrics: velocityInfo,
       },
@@ -827,7 +949,7 @@ function buildTrendRadarProductsFromCandidates({
 
     const determiningReasons = [
       ...viability.reasons,
-      ...finalScoreV3.determining_reasons,
+      ...finalScoreV4.determining_reasons,
     ];
 
     const inferredSignals = [
@@ -835,7 +957,8 @@ function buildTrendRadarProductsFromCandidates({
       sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
       `viability_${viability.classification}`,
-      `v3_decision_${finalScoreV3.decision.toLowerCase()}`,
+      `v4_decision_${finalScoreV4.decision.toLowerCase()}`,
+      `ticket_${finalScoreV4.ticket_class}`,
     ];
 
     prioritizedProducts.push({
@@ -847,8 +970,8 @@ function buildTrendRadarProductsFromCandidates({
       marketplace: candidate.marketplace,
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
-      commercial_score: finalScoreV3.total,
-      score_breakdown: finalScoreV3.breakdown,
+      commercial_score: finalScoreV4.total,
+      score_breakdown: finalScoreV4.breakdown,
       determining_reasons: determiningReasons,
       confidence: Math.min(
         95,
@@ -902,7 +1025,8 @@ async function persistTrendRadarSnapshot({
     target_products: 20,
     minimum_products: 10,
     target_reached: products.length >= 20,
-    strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
     viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     total_products_selected: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
@@ -915,8 +1039,8 @@ async function persistTrendRadarSnapshot({
     top_product: products[0]?.product_term || null,
     top_product_score: products[0]?.commercial_score || null,
     top_product_decision: products[0]?.direct_evidence?.[0]?.decision || null,
-    strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
-    generated_by: 'oracle_radar_viability_v2_engine',
+    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    generated_by: 'oracle_radar_commercial_opportunity_v4_engine',
     contract: RUNNER_CONTRACT_VERSION,
   };
 
