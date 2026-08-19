@@ -41,6 +41,7 @@ const {
 } = require('./commercial-viability-v2.cjs');
 const {
   DEFAULT_RECENCY_DAYS,
+  normalizeIdentityPart,
   getMarketplaceIdentityKey,
   getMarketplaceImageUrl,
   withMarketplaceImageEvidence,
@@ -641,6 +642,283 @@ async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
 }
 
 /**
+ * Constrói as chaves de identidade oficial estritas de um candidato para matching com ofertas internas.
+ * NUNCA usa similaridade de nome.
+ */
+function getCandidateOfficialIdentityKeys(candidate = {}) {
+  const keys = [];
+  const marketplace = String(candidate.marketplace || candidate.platform || '').trim().toLowerCase();
+
+  if (marketplace.includes('shopee')) {
+    const itemId = normalizeIdentityPart(candidate.itemId || candidate.item_id || candidate.shopee_item_id || '');
+    const shopId = normalizeIdentityPart(candidate.shopId || candidate.shop_id || '');
+    if (itemId) {
+      if (shopId) {
+        keys.push(`shopee:shop:${shopId}:item:${itemId}`);
+      }
+      keys.push(`shopee:item:${itemId}`);
+    }
+  } else if (marketplace.includes('mercado') || marketplace.includes('meli')) {
+    const productId = normalizeIdentityPart(candidate.productId || candidate.product_id || '');
+    const itemId = normalizeIdentityPart(candidate.itemId || candidate.item_id || candidate.id || '');
+    if (productId) {
+      keys.push(`mercadolivre:catalog:${productId}`);
+    }
+    if (itemId) {
+      keys.push(`mercadolivre:item:${itemId}`);
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Constrói as chaves de identidade oficial de uma linha da tabela `offers`.
+ */
+function getOfferOfficialIdentityKeys(offer = {}) {
+  const keys = [];
+  const platform = String(offer.platform || '').trim().toLowerCase();
+  const metrics = offer.marketplace_metrics || {};
+
+  if (platform.includes('shopee')) {
+    const itemId = normalizeIdentityPart(
+      offer.shopee_item_id ||
+      metrics.itemId ||
+      metrics.item_id ||
+      metrics.sourceItemId ||
+      ''
+    );
+    const shopId = normalizeIdentityPart(
+      offer.shopee_shop_id ||
+      metrics.shopId ||
+      metrics.shop_id ||
+      ''
+    );
+
+    if (itemId) {
+      if (shopId) {
+        keys.push(`shopee:shop:${shopId}:item:${itemId}`);
+      }
+      keys.push(`shopee:item:${itemId}`);
+    }
+  } else if (platform.includes('mercado') || platform.includes('meli')) {
+    const productId = normalizeIdentityPart(
+      offer.product_id ||
+      metrics.productId ||
+      metrics.product_id ||
+      ''
+    );
+    const itemId = normalizeIdentityPart(
+      offer.item_id ||
+      metrics.itemId ||
+      metrics.item_id ||
+      metrics.sourceItemId ||
+      ''
+    );
+
+    if (productId) {
+      keys.push(`mercadolivre:catalog:${productId}`);
+    }
+    if (itemId) {
+      keys.push(`mercadolivre:item:${itemId}`);
+    } else if (offer.original_url) {
+      const match = offer.original_url.match(/MLB-?(\d+)/i);
+      if (match && match[1]) {
+        keys.push(`mercadolivre:item:mlb${match[1]}`);
+      }
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Carrega o histórico comercial interno (cliques humanos, vendas atribuídas) do Supabase
+ * para os candidatos fornecidos, utilizando APENAS matching determinístico por IDs oficiais.
+ */
+async function fetchInternalOfferPerformanceMap(client, {
+  tenantId = null,
+  candidates = [],
+  windowDays = 30,
+  now = new Date(),
+} = {}) {
+  const performanceMap = new Map();
+  if (!client || !Array.isArray(candidates) || candidates.length === 0) {
+    return performanceMap;
+  }
+
+  const windowEnd = now;
+  const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+
+  try {
+    // 1. Carrega ofertas existentes do tenant/usuário
+    let offerQuery = client
+      .from('offers')
+      .select('id, user_id, platform, shopee_item_id, shopee_shop_id, marketplace_metrics, original_url');
+
+    if (tenantId) {
+      offerQuery = offerQuery.eq('user_id', tenantId);
+    }
+
+    const { data: offers, error: offerErr } = await offerQuery;
+    if (offerErr || !Array.isArray(offers) || offers.length === 0) {
+      return performanceMap;
+    }
+
+    // 2. Mapeia chaves oficiais para as ofertas
+    const offerByOfficialKey = new Map();
+    for (const offer of offers) {
+      const keys = getOfferOfficialIdentityKeys(offer);
+      for (const k of keys) {
+        if (!offerByOfficialKey.has(k)) {
+          offerByOfficialKey.set(k, offer);
+        }
+      }
+    }
+
+    // 3. Identifica quais ofertas correspondem aos candidatos por ID oficial
+    const candidateToOfferMap = new Map();
+    const matchedOfferIdsSet = new Set();
+
+    for (const candidate of candidates) {
+      const candidateKeys = getCandidateOfficialIdentityKeys(candidate);
+      let matchedOffer = null;
+
+      for (const k of candidateKeys) {
+        if (offerByOfficialKey.has(k)) {
+          matchedOffer = offerByOfficialKey.get(k);
+          break;
+        }
+      }
+
+      if (matchedOffer) {
+        candidateToOfferMap.set(candidate, matchedOffer);
+        matchedOfferIdsSet.add(matchedOffer.id);
+      }
+    }
+
+    if (matchedOfferIdsSet.size === 0) {
+      return performanceMap;
+    }
+
+    const matchedOfferIds = Array.from(matchedOfferIdsSet);
+
+    // 4. Carrega affiliate_links associados a essas ofertas
+    const { data: links, error: linkErr } = await client
+      .from('affiliate_links')
+      .select('id, offer_id, clicks')
+      .in('offer_id', matchedOfferIds);
+
+    const linkIdToOfferId = new Map();
+    const linkIds = [];
+
+    if (!linkErr && Array.isArray(links)) {
+      for (const link of links) {
+        linkIdToOfferId.set(link.id, link.offer_id);
+        linkIds.push(link.id);
+      }
+    }
+
+    // 5. Carrega click_events granulares para os links dessas ofertas
+    const clicksByOfferId = new Map();
+    for (const offerId of matchedOfferIds) {
+      clicksByOfferId.set(offerId, {
+        humanProbableClicks: 0,
+        technicalClicks: 0,
+        ambiguousClicks: 0,
+      });
+    }
+
+    if (linkIds.length > 0) {
+      const { data: clickEvents, error: clickErr } = await client
+        .from('click_events')
+        .select('id, affiliate_link_id, source, device_type, created_at')
+        .in('affiliate_link_id', linkIds)
+        .gte('created_at', windowStart.toISOString())
+        .lte('created_at', windowEnd.toISOString());
+
+      if (!clickErr && Array.isArray(clickEvents)) {
+        for (const ev of clickEvents) {
+          const offerId = linkIdToOfferId.get(ev.affiliate_link_id);
+          if (!offerId || !clicksByOfferId.has(offerId)) continue;
+
+          const stats = clicksByOfferId.get(offerId);
+          const dev = String(ev.device_type || '').toLowerCase();
+          const src = String(ev.source || '').toLowerCase();
+
+          const isTechnical = dev === 'bot' || src === 'crawler' || src === 'bot' || src === 'preview' || src === 'technical';
+          const isAmbiguous = src === 'ambiguous';
+
+          if (isTechnical) {
+            stats.technicalClicks += 1;
+          } else if (isAmbiguous) {
+            stats.ambiguousClicks += 1;
+          } else {
+            stats.humanProbableClicks += 1;
+          }
+        }
+      }
+    }
+
+    // 6. Carrega sales atribuídas a essas ofertas
+    const salesByOfferId = new Map();
+    for (const offerId of matchedOfferIds) {
+      salesByOfferId.set(offerId, 0);
+    }
+
+    const { data: sales, error: salesErr } = await client
+      .from('sales')
+      .select('id, offer_id, status, sold_at')
+      .in('offer_id', matchedOfferIds)
+      .neq('status', 'cancelled')
+      .gte('sold_at', windowStart.toISOString())
+      .lte('sold_at', windowEnd.toISOString());
+
+    if (!salesErr && Array.isArray(sales)) {
+      for (const sale of sales) {
+        if (sale.offer_id && salesByOfferId.has(sale.offer_id)) {
+          salesByOfferId.set(sale.offer_id, salesByOfferId.get(sale.offer_id) + 1);
+        }
+      }
+    }
+
+    // 7. Monta o internalPerformance consolidado por candidato
+    for (const candidate of candidates) {
+      const matchedOffer = candidateToOfferMap.get(candidate);
+      if (matchedOffer) {
+        const clickStats = clicksByOfferId.get(matchedOffer.id) || { humanProbableClicks: 0, technicalClicks: 0, ambiguousClicks: 0 };
+        const attributedSales = salesByOfferId.get(matchedOffer.id) || 0;
+
+        const perf = {
+          matched: true,
+          matchedOfferId: matchedOffer.id,
+          humanProbableClicks: clickStats.humanProbableClicks,
+          technicalClicks: clickStats.technicalClicks,
+          ambiguousClicks: clickStats.ambiguousClicks,
+          attributedSales,
+          internalHistoryWindow: {
+            days: windowDays,
+            windowStart: windowStart.toISOString(),
+            windowEnd: windowEnd.toISOString(),
+          },
+        };
+
+        const primaryKey = getCandidateOfficialIdentityKeys(candidate)[0] || candidate.itemId;
+        performanceMap.set(primaryKey, perf);
+        // Também indexa por todas as chaves do candidato para lookups flexíveis
+        for (const k of getCandidateOfficialIdentityKeys(candidate)) {
+          performanceMap.set(k, perf);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[Oracle Radar] Erro ao carregar histórico interno: ${err.message}`);
+  }
+
+  return performanceMap;
+}
+
+/**
  * Constrói e ranqueia produtos do Radar integrando Commercial Viability V2,
  * Deduplicação Semântica e Capping de Diversidade.
  */
@@ -649,6 +927,7 @@ function buildTrendRadarProductsFromCandidates({
   shopeeCandidates = [],
   mlCandidates = [],
   previousItemsMap = new Map(),
+  internalPerformanceMap = new Map(),
   maxProducts = 20,
   now = new Date(),
 }) {
@@ -676,13 +955,38 @@ function buildTrendRadarProductsFromCandidates({
       candidate.evidence_status ||
       ((typeof candidate.sales === 'number' && candidate.sales > 0) || (typeof candidate.ratingStar === 'number' && candidate.ratingStar > 0) ? 'verified' : 'partial');
 
+    // Resolução do histórico interno determinístico
+    let internalPerformance = candidate.internalPerformance;
+    if (!internalPerformance && internalPerformanceMap && internalPerformanceMap.size > 0) {
+      const keys = getCandidateOfficialIdentityKeys(candidate);
+      for (const k of keys) {
+        if (internalPerformanceMap.has(k)) {
+          internalPerformance = internalPerformanceMap.get(k);
+          break;
+        }
+      }
+    }
+
+    if (!internalPerformance) {
+      internalPerformance = {
+        matched: false,
+        matchedOfferId: null,
+        humanProbableClicks: 0,
+        technicalClicks: 0,
+        ambiguousClicks: 0,
+        attributedSales: 0,
+        internalHistoryWindow: null,
+      };
+    }
+
     const scoreV4 = calculateCommercialOpportunityScoreV4({
       ...candidate,
       evidenceStatus,
       velocityInfo,
+      internalPerformance,
     }, {
       velocityInfo,
-      internalPerformance: candidate.internalPerformance,
+      internalPerformance,
     });
 
     viableCandidates.push({
@@ -691,6 +995,7 @@ function buildTrendRadarProductsFromCandidates({
       velocityInfo,
       viability,
       scoreV4,
+      internalPerformance,
       commercial_score: scoreV4.total,
       ticket_class: scoreV4.ticket_class,
     });
@@ -1074,6 +1379,9 @@ module.exports = {
   enrichMercadoLivreWithHighlightsAndReviews,
   computeCandidateSalesVelocity,
   fetchRecentSnapshotItemsMap,
+  getCandidateOfficialIdentityKeys,
+  getOfferOfficialIdentityKeys,
+  fetchInternalOfferPerformanceMap,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,
 };

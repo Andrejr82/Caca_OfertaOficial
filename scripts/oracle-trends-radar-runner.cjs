@@ -247,12 +247,20 @@ async function processPendingTrendRadarRuns(options = {}) {
         console.error(`[Oracle Radar] Erro Mercado Livre round ${round}: ${err.message}`);
       }
 
-      // 3.3 Construção preliminar do Radar com a piscina agregada
+      // 3.3 Carregamento do histórico interno e construção preliminar do Radar com a piscina agregada
+      const internalPerformanceMap = await engine.fetchInternalOfferPerformanceMap(client, {
+        tenantId: pendingRun.user_id,
+        candidates: [...aggregatedShopeeCandidates, ...aggregatedMlCandidates],
+        windowDays: 30,
+        now: new Date(radarDate),
+      });
+
       finalProducts = engine.buildTrendRadarProductsFromCandidates({
         radarRunId: runId,
         shopeeCandidates: aggregatedShopeeCandidates,
         mlCandidates: aggregatedMlCandidates,
         previousItemsMap,
+        internalPerformanceMap,
         maxProducts: targetProducts,
       });
 

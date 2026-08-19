@@ -511,3 +511,297 @@ test('CARTEIRA COMERCIAL: Quotas nunca forçam candidatos com viabilidade LOW ou
   assert.equal(hasInsufficient, false);
 });
 
+// ============================================================================
+// TESTES DE INTEGRAÇÃO: Carregamento Real e Determinístico de Histórico Interno
+// ============================================================================
+
+function createMockSupabaseClient({
+  offers = [],
+  affiliateLinks = [],
+  clickEvents = [],
+  sales = [],
+} = {}) {
+  return {
+    from: (table) => {
+      let currentData = [];
+      if (table === 'offers') currentData = [...offers];
+      else if (table === 'affiliate_links') currentData = [...affiliateLinks];
+      else if (table === 'click_events') currentData = [...clickEvents];
+      else if (table === 'sales') currentData = [...sales];
+
+      const builder = {
+        select: () => builder,
+        eq: (col, val) => {
+          currentData = currentData.filter(row => row[col] === val);
+          return builder;
+        },
+        neq: (col, val) => {
+          currentData = currentData.filter(row => row[col] !== val);
+          return builder;
+        },
+        in: (col, vals) => {
+          const set = new Set(vals);
+          currentData = currentData.filter(row => set.has(row[col]));
+          return builder;
+        },
+        gte: (col, val) => {
+          currentData = currentData.filter(row => !row[col] || new Date(row[col]) >= new Date(val));
+          return builder;
+        },
+        lte: (col, val) => {
+          currentData = currentData.filter(row => !row[col] || new Date(row[col]) <= new Date(val));
+          return builder;
+        },
+        then: (resolve) => resolve({ data: currentData, error: null }),
+      };
+      return builder;
+    },
+  };
+}
+
+test('INTEGRAÇÃO 1: Candidato com IDs oficiais correspondentes recebe histórico real de cliques e vendas', async () => {
+  const { fetchInternalOfferPerformanceMap } = require('../oracle-trends-radar-engine.cjs');
+
+  const mockClient = createMockSupabaseClient({
+    offers: [
+      {
+        id: 'offer-shopee-1',
+        user_id: 'user-1',
+        platform: 'Shopee',
+        shopee_item_id: 'ITEM-123',
+        shopee_shop_id: 'SHOP-456',
+        marketplace_metrics: { itemId: 'ITEM-123', shopId: 'SHOP-456' },
+      },
+      {
+        id: 'offer-ml-1',
+        user_id: 'user-1',
+        platform: 'Mercado Livre',
+        marketplace_metrics: { productId: 'MLB999888' },
+      },
+    ],
+    affiliateLinks: [
+      { id: 'link-shopee-1', offer_id: 'offer-shopee-1', clicks: 15 },
+      { id: 'link-ml-1', offer_id: 'offer-ml-1', clicks: 8 },
+    ],
+    clickEvents: [
+      { id: 'c1', affiliate_link_id: 'link-shopee-1', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+      { id: 'c2', affiliate_link_id: 'link-shopee-1', device_type: 'desktop', source: 'telegram', created_at: new Date().toISOString() },
+      { id: 'c3', affiliate_link_id: 'link-ml-1', device_type: 'mobile', source: 'instagram', created_at: new Date().toISOString() },
+    ],
+    sales: [
+      { id: 's1', offer_id: 'offer-shopee-1', status: 'confirmed', sold_at: new Date().toISOString() },
+    ],
+  });
+
+  const candidates = [
+    { marketplace: 'Shopee', itemId: 'ITEM-123', shopId: 'SHOP-456', productName: 'Item Shopee A' },
+    { marketplace: 'Mercado Livre', productId: 'MLB999888', itemId: 'MLB777', productName: 'Item ML B' },
+  ];
+
+  const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
+    tenantId: 'user-1',
+    candidates,
+    windowDays: 30,
+  });
+
+  const shopeePerf = perfMap.get('shopee:shop:shop-456:item:item-123');
+  assert.ok(shopeePerf, 'Shopee deve ter encontrado match');
+  assert.equal(shopeePerf.matched, true);
+  assert.equal(shopeePerf.matchedOfferId, 'offer-shopee-1');
+  assert.equal(shopeePerf.humanProbableClicks, 2);
+  assert.equal(shopeePerf.attributedSales, 1);
+
+  const mlPerf = perfMap.get('mercadolivre:catalog:mlb999888');
+  assert.ok(mlPerf, 'Mercado Livre deve ter encontrado match por productId');
+  assert.equal(mlPerf.matched, true);
+  assert.equal(mlPerf.matchedOfferId, 'offer-ml-1');
+  assert.equal(mlPerf.humanProbableClicks, 1);
+  assert.equal(mlPerf.attributedSales, 0);
+});
+
+test('INTEGRAÇÃO 2: Mesmo nome com ID diferente NÃO recebe histórico (sem matching por nome)', async () => {
+  const { fetchInternalOfferPerformanceMap } = require('../oracle-trends-radar-engine.cjs');
+
+  const mockClient = createMockSupabaseClient({
+    offers: [
+      {
+        id: 'offer-shopee-real',
+        user_id: 'user-1',
+        platform: 'Shopee',
+        shopee_item_id: 'REAL-ID-100',
+        product_name: 'Fone de Ouvido Bluetooth TWS Pro',
+      },
+    ],
+    affiliateLinks: [{ id: 'link-real', offer_id: 'offer-shopee-real', clicks: 50 }],
+    clickEvents: [{ id: 'c1', affiliate_link_id: 'link-real', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() }],
+    sales: [{ id: 's1', offer_id: 'offer-shopee-real', status: 'confirmed', sold_at: new Date().toISOString() }],
+  });
+
+  // Candidato com mesmo nome exato mas ID diferente
+  const candidateDifferentId = {
+    marketplace: 'Shopee',
+    itemId: 'DIFFERENT-ID-999',
+    productName: 'Fone de Ouvido Bluetooth TWS Pro', // Mesmo nome!
+  };
+
+  const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
+    tenantId: 'user-1',
+    candidates: [candidateDifferentId],
+    windowDays: 30,
+  });
+
+  assert.equal(perfMap.size, 0, 'Não deve mapear histórico para ID diferente mesmo com nome idêntico');
+});
+
+test('INTEGRAÇÃO 3 & 4: Clicks e sales de outro offer NÃO contaminam', async () => {
+  const { fetchInternalOfferPerformanceMap } = require('../oracle-trends-radar-engine.cjs');
+
+  const mockClient = createMockSupabaseClient({
+    offers: [
+      { id: 'offer-A', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-A' },
+      { id: 'offer-B', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-B' },
+    ],
+    affiliateLinks: [
+      { id: 'link-A', offer_id: 'offer-A', clicks: 100 },
+      { id: 'link-B', offer_id: 'offer-B', clicks: 0 },
+    ],
+    clickEvents: [
+      // 5 cliques no link-A
+      { id: 'ca1', affiliate_link_id: 'link-A', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+      { id: 'ca2', affiliate_link_id: 'link-A', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+      { id: 'ca3', affiliate_link_id: 'link-A', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+      { id: 'ca4', affiliate_link_id: 'link-A', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+      { id: 'ca5', affiliate_link_id: 'link-A', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+    ],
+    sales: [
+      // 2 vendas para offer-A
+      { id: 'sa1', offer_id: 'offer-A', status: 'confirmed', sold_at: new Date().toISOString() },
+      { id: 'sa2', offer_id: 'offer-A', status: 'confirmed', sold_at: new Date().toISOString() },
+    ],
+  });
+
+  const candidates = [
+    { marketplace: 'Shopee', itemId: 'ITEM-A', productName: 'Item A' },
+    { marketplace: 'Shopee', itemId: 'ITEM-B', productName: 'Item B' },
+  ];
+
+  const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
+    tenantId: 'user-1',
+    candidates,
+    windowDays: 30,
+  });
+
+  const perfA = perfMap.get('shopee:item:item-a');
+  const perfB = perfMap.get('shopee:item:item-b');
+
+  assert.equal(perfA.humanProbableClicks, 5);
+  assert.equal(perfA.attributedSales, 2);
+
+  assert.equal(perfB.humanProbableClicks, 0, 'Offer B não pode herdar cliques de Offer A');
+  assert.equal(perfB.attributedSales, 0, 'Offer B não pode herdar vendas de Offer A');
+});
+
+test('INTEGRAÇÃO 5: Candidato com >=10 cliques humanos e 0 vendas vira observed_zero_conversion no pipeline real', async () => {
+  const { fetchInternalOfferPerformanceMap, buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const clickEvents = [];
+  for (let i = 1; i <= 12; i++) {
+    clickEvents.push({
+      id: `c_${i}`,
+      affiliate_link_id: 'link-zero-conv',
+      device_type: 'mobile',
+      source: 'whatsapp',
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const mockClient = createMockSupabaseClient({
+    offers: [{ id: 'offer-zero', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-ZERO' }],
+    affiliateLinks: [{ id: 'link-zero-conv', offer_id: 'offer-zero', clicks: 12 }],
+    clickEvents,
+    sales: [], // 0 vendas
+  });
+
+  const candidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-ZERO',
+    productName: 'Produto Muita Visita Sem Venda',
+    category: 'Geral',
+    currentPrice: 150,
+    oldPrice: 200,
+    discountPercent: 25,
+    sales: 1000,
+    ratingStar: 4.8,
+    commissionPercent: 8,
+  };
+
+  const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
+    tenantId: 'user-1',
+    candidates: [candidate],
+    windowDays: 30,
+  });
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-zero-conv-run',
+    shopeeCandidates: [candidate],
+    internalPerformanceMap: perfMap,
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 1);
+  const evidence = products[0].direct_evidence[0];
+  assert.equal(evidence.internal_conversion_status, 'observed_zero_conversion');
+  assert.equal(evidence.human_probable_clicks, 12);
+  assert.equal(evidence.attributed_sales, 0);
+  assert.equal(products[0].score_breakdown.internalConversion, 0);
+});
+
+test('INTEGRAÇÃO 6: Candidato com venda atribuída vira observed_conversion no pipeline real', async () => {
+  const { fetchInternalOfferPerformanceMap, buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mockClient = createMockSupabaseClient({
+    offers: [{ id: 'offer-conv', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-CONV' }],
+    affiliateLinks: [{ id: 'link-conv', offer_id: 'offer-conv', clicks: 20 }],
+    clickEvents: [
+      { id: 'c1', affiliate_link_id: 'link-conv', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+      { id: 'c2', affiliate_link_id: 'link-conv', device_type: 'mobile', source: 'whatsapp', created_at: new Date().toISOString() },
+    ],
+    sales: [
+      { id: 's1', offer_id: 'offer-conv', status: 'confirmed', sold_at: new Date().toISOString() },
+    ],
+  });
+
+  const candidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-CONV',
+    productName: 'Produto Com Venda Comprovada',
+    category: 'Geral',
+    currentPrice: 220,
+    oldPrice: 300,
+    discountPercent: 26,
+    sales: 1500,
+    ratingStar: 4.8,
+    commissionPercent: 8,
+  };
+
+  const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
+    tenantId: 'user-1',
+    candidates: [candidate],
+    windowDays: 30,
+  });
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-conv-run',
+    shopeeCandidates: [candidate],
+    internalPerformanceMap: perfMap,
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 1);
+  const evidence = products[0].direct_evidence[0];
+  assert.equal(evidence.internal_conversion_status, 'observed_conversion');
+  assert.equal(evidence.attributed_sales, 1);
+  assert.ok(products[0].score_breakdown.internalConversion >= 10, 'Deve pontuar em internalConversion');
+});
+
+
