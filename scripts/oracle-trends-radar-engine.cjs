@@ -654,9 +654,11 @@ function getCandidateOfficialIdentityKeys(candidate = {}) {
     const shopId = normalizeIdentityPart(candidate.shopId || candidate.shop_id || '');
     if (itemId) {
       if (shopId) {
+        // Prioriza e restringe à chave composta shopId + itemId (sem match cruzado entre shops)
         keys.push(`shopee:shop:${shopId}:item:${itemId}`);
+      } else {
+        keys.push(`shopee:item:${itemId}`);
       }
-      keys.push(`shopee:item:${itemId}`);
     }
   } else if (marketplace.includes('mercado') || marketplace.includes('meli')) {
     const productId = normalizeIdentityPart(candidate.productId || candidate.product_id || '');
@@ -698,8 +700,9 @@ function getOfferOfficialIdentityKeys(offer = {}) {
     if (itemId) {
       if (shopId) {
         keys.push(`shopee:shop:${shopId}:item:${itemId}`);
+      } else {
+        keys.push(`shopee:item:${itemId}`);
       }
-      keys.push(`shopee:item:${itemId}`);
     }
   } else if (platform.includes('mercado') || platform.includes('meli')) {
     const productId = normalizeIdentityPart(
@@ -730,6 +733,162 @@ function getOfferOfficialIdentityKeys(offer = {}) {
   }
 
   return keys;
+}
+
+/**
+ * Classifica eventos de clique de forma determinística em:
+ * - 'human_probable' (WhatsApp, Telegram, Facebook mobile com ref m.facebook/lm.facebook/l.facebook, Instagram direto)
+ * - 'technical_probable' (burst >= 5 ofertas distintas no mesmo minuto por bucket canal/source/device, bots, crawlers, previews)
+ * - 'ambiguous' (Facebook desktop não verificado, fontes desconhecidas ou não comprovadas)
+ */
+function classifyClickEvents(clickEvents = [], {
+  linkIdToOfferId = new Map(),
+  linkIdToChannel = new Map(),
+} = {}) {
+  const classifiedEvents = [];
+  const statsByOfferId = new Map();
+
+  if (!Array.isArray(clickEvents) || clickEvents.length === 0) {
+    return { classifiedEvents, statsByOfferId };
+  }
+
+  // 1. Agrupar em buckets por channel / source / device / minuto para detectar bursts técnicos
+  const bucketMap = new Map();
+
+  for (const ev of clickEvents) {
+    const linkId = ev.affiliate_link_id;
+    const offerId = linkIdToOfferId.get(linkId) || ev.offer_id || null;
+    const channel = String(linkIdToChannel.get(linkId) || ev.channel || '').trim().toLowerCase();
+    const source = String(ev.source || '').trim().toLowerCase();
+    const deviceType = String(ev.device_type || '').trim().toLowerCase();
+    const createdDate = ev.created_at ? new Date(ev.created_at) : new Date();
+    const minuteIso = !isNaN(createdDate.getTime()) ? createdDate.toISOString().slice(0, 16) : 'unknown-minute';
+
+    const bucketKey = `${channel}:${source}:${deviceType}:${minuteIso}`;
+    if (!bucketMap.has(bucketKey)) {
+      bucketMap.set(bucketKey, {
+        bucketKey,
+        offerIds: new Set(),
+        events: [],
+      });
+    }
+
+    const bucket = bucketMap.get(bucketKey);
+    if (offerId) {
+      bucket.offerIds.add(offerId);
+    }
+    bucket.events.push(ev);
+  }
+
+  // 2. Classificação determinística de cada evento
+  for (const ev of clickEvents) {
+    const linkId = ev.affiliate_link_id;
+    const offerId = linkIdToOfferId.get(linkId) || ev.offer_id || null;
+    const channel = String(linkIdToChannel.get(linkId) || ev.channel || '').trim().toLowerCase();
+    const source = String(ev.source || '').trim().toLowerCase();
+    const deviceType = String(ev.device_type || '').trim().toLowerCase();
+    const createdDate = ev.created_at ? new Date(ev.created_at) : new Date();
+    const minuteIso = !isNaN(createdDate.getTime()) ? createdDate.toISOString().slice(0, 16) : 'unknown-minute';
+    const bucketKey = `${channel}:${source}:${deviceType}:${minuteIso}`;
+
+    const bucket = bucketMap.get(bucketKey);
+    const distinctOffersInMinute = bucket ? bucket.offerIds.size : 0;
+
+    let classification = 'ambiguous';
+    let reason = 'unverified_traffic';
+
+    const isFacebook = channel === 'facebook' || source.includes('facebook') || source.includes('fb');
+    const isFbMobileRef = /^(?:https?:\/\/)?(?:m|lm|l)\.facebook\.com/i.test(source) ||
+      source === 'm.facebook' ||
+      source === 'lm.facebook' ||
+      source === 'l.facebook' ||
+      source.includes('m.facebook') ||
+      source.includes('lm.facebook') ||
+      source.includes('l.facebook');
+
+    // Regra 1: Burst de >= 5 ofertas distintas no mesmo minuto no mesmo bucket => technical_probable
+    if (distinctOffersInMinute >= 5) {
+      classification = 'technical_probable';
+      reason = `burst_technical_scan_${distinctOffersInMinute}_offers_same_minute`;
+    }
+    // Regra 2: Bots, crawlers, spiders, previews explícitos => technical_probable
+    else if (
+      deviceType === 'bot' ||
+      source === 'crawler' ||
+      source === 'bot' ||
+      source === 'preview' ||
+      source === 'technical' ||
+      source.includes('bot') ||
+      source.includes('crawler') ||
+      source.includes('spider')
+    ) {
+      classification = 'technical_probable';
+      reason = 'explicit_bot_or_crawler';
+    }
+    // Regra 3: WhatsApp ou Telegram => human_probable
+    else if (
+      channel === 'whatsapp' ||
+      channel === 'telegram' ||
+      source.includes('whatsapp') ||
+      source.includes('telegram')
+    ) {
+      classification = 'human_probable';
+      reason = 'direct_messaging_human_click';
+    }
+    // Regra 4: Facebook mobile com referências explícitas m.facebook / lm.facebook / l.facebook ou mobile device => human_probable
+    else if (isFacebook && (isFbMobileRef || deviceType === 'mobile')) {
+      classification = 'human_probable';
+      reason = 'facebook_mobile_human_click';
+    }
+    // Regra 5: Instagram direto válido => human_probable
+    else if (
+      channel === 'instagram' ||
+      source.includes('instagram') ||
+      source.includes('ig') ||
+      /^(?:https?:\/\/)?(?:l\.)?instagram\.com/i.test(source)
+    ) {
+      classification = 'human_probable';
+      reason = 'instagram_direct_human_click';
+    }
+    // Regra 6: Facebook desktop isolado sem evidência humana explícita => ambiguous
+    else if (isFacebook && deviceType === 'desktop') {
+      classification = 'ambiguous';
+      reason = 'facebook_desktop_unverified';
+    }
+    // Regra 7: Default fail-closed => ambiguous
+    else {
+      classification = 'ambiguous';
+      reason = 'unverified_traffic';
+    }
+
+    classifiedEvents.push({
+      eventId: ev.id,
+      affiliateLinkId: linkId,
+      offerId,
+      classification,
+      reason,
+    });
+
+    if (offerId) {
+      if (!statsByOfferId.has(offerId)) {
+        statsByOfferId.set(offerId, {
+          humanProbableClicks: 0,
+          technicalClicks: 0,
+          ambiguousClicks: 0,
+        });
+      }
+      const stats = statsByOfferId.get(offerId);
+      if (classification === 'human_probable') {
+        stats.humanProbableClicks += 1;
+      } else if (classification === 'technical_probable') {
+        stats.technicalClicks += 1;
+      } else {
+        stats.ambiguousClicks += 1;
+      }
+    }
+  }
+
+  return { classifiedEvents, statsByOfferId };
 }
 
 /**
@@ -806,21 +965,25 @@ async function fetchInternalOfferPerformanceMap(client, {
     // 4. Carrega affiliate_links associados a essas ofertas
     const { data: links, error: linkErr } = await client
       .from('affiliate_links')
-      .select('id, offer_id, clicks')
+      .select('id, offer_id, channel, clicks')
       .in('offer_id', matchedOfferIds);
 
     const linkIdToOfferId = new Map();
+    const linkIdToChannel = new Map();
     const linkIds = [];
 
     if (!linkErr && Array.isArray(links)) {
       for (const link of links) {
         linkIdToOfferId.set(link.id, link.offer_id);
+        if (link.channel) {
+          linkIdToChannel.set(link.id, link.channel);
+        }
         linkIds.push(link.id);
       }
     }
 
-    // 5. Carrega click_events granulares para os links dessas ofertas
-    const clicksByOfferId = new Map();
+    // 5. Carrega e classifica click_events granulares para os links dessas ofertas
+    let clicksByOfferId = new Map();
     for (const offerId of matchedOfferIds) {
       clicksByOfferId.set(offerId, {
         humanProbableClicks: 0,
@@ -837,26 +1000,12 @@ async function fetchInternalOfferPerformanceMap(client, {
         .gte('created_at', windowStart.toISOString())
         .lte('created_at', windowEnd.toISOString());
 
-      if (!clickErr && Array.isArray(clickEvents)) {
-        for (const ev of clickEvents) {
-          const offerId = linkIdToOfferId.get(ev.affiliate_link_id);
-          if (!offerId || !clicksByOfferId.has(offerId)) continue;
-
-          const stats = clicksByOfferId.get(offerId);
-          const dev = String(ev.device_type || '').toLowerCase();
-          const src = String(ev.source || '').toLowerCase();
-
-          const isTechnical = dev === 'bot' || src === 'crawler' || src === 'bot' || src === 'preview' || src === 'technical';
-          const isAmbiguous = src === 'ambiguous';
-
-          if (isTechnical) {
-            stats.technicalClicks += 1;
-          } else if (isAmbiguous) {
-            stats.ambiguousClicks += 1;
-          } else {
-            stats.humanProbableClicks += 1;
-          }
-        }
+      if (!clickErr && Array.isArray(clickEvents) && clickEvents.length > 0) {
+        const { statsByOfferId } = classifyClickEvents(clickEvents, {
+          linkIdToOfferId,
+          linkIdToChannel,
+        });
+        clicksByOfferId = statsByOfferId;
       }
     }
 
@@ -1381,6 +1530,7 @@ module.exports = {
   fetchRecentSnapshotItemsMap,
   getCandidateOfficialIdentityKeys,
   getOfferOfficialIdentityKeys,
+  classifyClickEvents,
   fetchInternalOfferPerformanceMap,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,

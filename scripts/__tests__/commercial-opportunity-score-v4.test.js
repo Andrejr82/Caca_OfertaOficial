@@ -804,4 +804,179 @@ test('INTEGRAÇÃO 6: Candidato com venda atribuída vira observed_conversion no
   assert.ok(products[0].score_breakdown.internalConversion >= 10, 'Deve pontuar em internalConversion');
 });
 
+// ============================================================================
+// TESTES DE CLASSIFICAÇÃO DETERMINÍSTICA DE CLIQUES & MATCHING SHOPEE
+// ============================================================================
+
+test('CLASSIFICAÇÃO DE CLIQUES: burst Facebook desktop com >=5 ofertas no mesmo minuto => technical_probable', () => {
+  const { classifyClickEvents } = require('../oracle-trends-radar-engine.cjs');
+
+  const linkIdToOfferId = new Map([
+    ['link-1', 'offer-1'],
+    ['link-2', 'offer-2'],
+    ['link-3', 'offer-3'],
+    ['link-4', 'offer-4'],
+    ['link-5', 'offer-5'],
+  ]);
+
+  const timestamp = '2026-08-19T14:30:15.000Z'; // Mesmo minuto
+  const events = [
+    { id: 'e1', affiliate_link_id: 'link-1', channel: 'facebook', source: 'facebook.com', device_type: 'desktop', created_at: timestamp },
+    { id: 'e2', affiliate_link_id: 'link-2', channel: 'facebook', source: 'facebook.com', device_type: 'desktop', created_at: timestamp },
+    { id: 'e3', affiliate_link_id: 'link-3', channel: 'facebook', source: 'facebook.com', device_type: 'desktop', created_at: timestamp },
+    { id: 'e4', affiliate_link_id: 'link-4', channel: 'facebook', source: 'facebook.com', device_type: 'desktop', created_at: timestamp },
+    { id: 'e5', affiliate_link_id: 'link-5', channel: 'facebook', source: 'facebook.com', device_type: 'desktop', created_at: timestamp },
+  ];
+
+  const { classifiedEvents, statsByOfferId } = classifyClickEvents(events, { linkIdToOfferId });
+
+  assert.equal(classifiedEvents.length, 5);
+  for (const item of classifiedEvents) {
+    assert.equal(item.classification, 'technical_probable', 'Burst de >=5 ofertas no mesmo minuto deve ser technical_probable');
+    assert.ok(item.reason.includes('burst_technical_scan'));
+  }
+
+  const stats1 = statsByOfferId.get('offer-1');
+  assert.equal(stats1.technicalClicks, 1);
+  assert.equal(stats1.humanProbableClicks, 0);
+  assert.equal(stats1.ambiguousClicks, 0);
+});
+
+test('CLASSIFICAÇÃO DE CLIQUES: Facebook desktop isolado sem evidência humana => ambiguous', () => {
+  const { classifyClickEvents } = require('../oracle-trends-radar-engine.cjs');
+
+  const linkIdToOfferId = new Map([['link-fb-desk', 'offer-desk-1']]);
+  const events = [
+    { id: 'e1', affiliate_link_id: 'link-fb-desk', channel: 'facebook', source: 'https://facebook.com', device_type: 'desktop', created_at: '2026-08-19T10:00:00.000Z' },
+    { id: 'e2', affiliate_link_id: 'link-fb-desk', channel: 'facebook', source: 'facebook', device_type: 'desktop', created_at: '2026-08-19T10:05:00.000Z' },
+  ];
+
+  const { classifiedEvents, statsByOfferId } = classifyClickEvents(events, { linkIdToOfferId });
+
+  for (const item of classifiedEvents) {
+    assert.equal(item.classification, 'ambiguous', 'Facebook desktop sem evidência explícita deve ser ambiguous');
+  }
+
+  const stats = statsByOfferId.get('offer-desk-1');
+  assert.equal(stats.ambiguousClicks, 2);
+  assert.equal(stats.humanProbableClicks, 0);
+  assert.equal(stats.technicalClicks, 0);
+});
+
+test('CLASSIFICAÇÃO DE CLIQUES: WhatsApp e Telegram => human_probable', () => {
+  const { classifyClickEvents } = require('../oracle-trends-radar-engine.cjs');
+
+  const linkIdToOfferId = new Map([
+    ['link-wpp', 'offer-msg-1'],
+    ['link-tg', 'offer-msg-2'],
+  ]);
+
+  const events = [
+    { id: 'e1', affiliate_link_id: 'link-wpp', channel: 'whatsapp', source: 'whatsapp_group', device_type: 'mobile', created_at: '2026-08-19T11:00:00.000Z' },
+    { id: 'e2', affiliate_link_id: 'link-tg', channel: 'telegram', source: 't.me/cacaofertas', device_type: 'desktop', created_at: '2026-08-19T11:01:00.000Z' },
+  ];
+
+  const { classifiedEvents, statsByOfferId } = classifyClickEvents(events, { linkIdToOfferId });
+
+  assert.equal(classifiedEvents[0].classification, 'human_probable');
+  assert.equal(classifiedEvents[1].classification, 'human_probable');
+
+  assert.equal(statsByOfferId.get('offer-msg-1').humanProbableClicks, 1);
+  assert.equal(statsByOfferId.get('offer-msg-2').humanProbableClicks, 1);
+});
+
+test('CLASSIFICAÇÃO DE CLIQUES: Facebook mobile com m.facebook / l.facebook => human_probable', () => {
+  const { classifyClickEvents } = require('../oracle-trends-radar-engine.cjs');
+
+  const linkIdToOfferId = new Map([
+    ['link-fb-m', 'offer-fb-1'],
+    ['link-fb-l', 'offer-fb-2'],
+    ['link-fb-mob', 'offer-fb-3'],
+  ]);
+
+  const events = [
+    { id: 'e1', affiliate_link_id: 'link-fb-m', channel: 'facebook', source: 'https://m.facebook.com/story.php', device_type: 'mobile', created_at: '2026-08-19T12:00:00.000Z' },
+    { id: 'e2', affiliate_link_id: 'link-fb-l', channel: 'facebook', source: 'http://l.facebook.com/l.php', device_type: 'mobile', created_at: '2026-08-19T12:01:00.000Z' },
+    { id: 'e3', affiliate_link_id: 'link-fb-mob', channel: 'facebook', source: 'facebook', device_type: 'mobile', created_at: '2026-08-19T12:02:00.000Z' },
+  ];
+
+  const { classifiedEvents, statsByOfferId } = classifyClickEvents(events, { linkIdToOfferId });
+
+  for (const item of classifiedEvents) {
+    assert.equal(item.classification, 'human_probable', 'Facebook mobile com referer móvel deve ser human_probable');
+  }
+
+  assert.equal(statsByOfferId.get('offer-fb-1').humanProbableClicks, 1);
+  assert.equal(statsByOfferId.get('offer-fb-2').humanProbableClicks, 1);
+  assert.equal(statsByOfferId.get('offer-fb-3').humanProbableClicks, 1);
+});
+
+test('SCORE V4: ambiguous e technical NÃO entram em internalConversion', () => {
+  const { calculateCommercialOpportunityScoreV4 } = require('../../src/core/trends/commercial-opportunity-score-v4.cjs');
+
+  // Candidato com 100 cliques técnicos, 50 ambíguos, e 0 human
+  const candidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-TEST-CLICKS',
+    productName: 'Produto Teste Clicks',
+    category: 'Geral',
+    currentPrice: 100,
+    sales: 500,
+    ratingStar: 4.8,
+    commissionPercent: 10,
+    internalPerformance: {
+      matched: true,
+      humanProbableClicks: 0,
+      technicalClicks: 100,
+      ambiguousClicks: 50,
+      attributedSales: 0,
+    },
+  };
+
+  const result = calculateCommercialOpportunityScoreV4(candidate, {
+    internalPerformance: candidate.internalPerformance,
+  });
+
+  assert.equal(result.internal_conversion.humanProbableClicks, 0);
+  assert.equal(result.internal_conversion.internalConversionStatus, 'insufficient_history', 'Sem cliques humanos válidos vira insufficient_history');
+  assert.equal(result.breakdown.internalConversion, 0, 'Cliques técnicos/ambíguos não geram pontos em internalConversion');
+});
+
+test('MATCHING SHOPEE: mesmo itemId em shopId diferente NÃO faz matching cruzado (fail-closed)', async () => {
+  const { fetchInternalOfferPerformanceMap } = require('../oracle-trends-radar-engine.cjs');
+
+  const mockClient = createMockSupabaseClient({
+    offers: [
+      {
+        id: 'offer-shop-loja-a',
+        user_id: 'user-1',
+        platform: 'Shopee',
+        shopee_item_id: 'ITEM-SHARED-ID',
+        shopee_shop_id: 'SHOP-LOJA-A',
+        marketplace_metrics: { itemId: 'ITEM-SHARED-ID', shopId: 'SHOP-LOJA-A' },
+      },
+    ],
+    affiliateLinks: [{ id: 'link-loja-a', offer_id: 'offer-shop-loja-a', clicks: 20 }],
+    clickEvents: [{ id: 'c1', affiliate_link_id: 'link-loja-a', channel: 'whatsapp', source: 'whatsapp', device_type: 'mobile', created_at: new Date().toISOString() }],
+    sales: [{ id: 's1', offer_id: 'offer-shop-loja-a', status: 'confirmed', sold_at: new Date().toISOString() }],
+  });
+
+  // Candidato com mesmo itemId mas shopId diferente
+  const candidateDifferentShop = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-SHARED-ID',
+    shopId: 'SHOP-LOJA-B', // OUTRO SHOP!
+    productName: 'Produto Compartilhado Mas Outra Loja',
+  };
+
+  const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
+    tenantId: 'user-1',
+    candidates: [candidateDifferentShop],
+    windowDays: 30,
+  });
+
+  assert.equal(perfMap.size, 0, 'Não pode haver match quando o shopId for diferente, mesmo com mesmo itemId');
+});
+
+
 
