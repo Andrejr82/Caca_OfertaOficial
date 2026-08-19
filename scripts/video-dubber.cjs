@@ -66,6 +66,15 @@ const SPECIFIC_DUBBING_FACTS = [
 ];
 
 const TRAILING_DUBBING_CONNECTOR = /\s+\b(?:a|ao|aos|as|com|da|das|de|do|dos|e|em|na|nas|no|nos|para|pela|pelas|pelo|pelos|por|sem)\b[.,;:]*$/iu;
+const DUBBING_IDENTITY_CONNECTORS = new Set([
+  'a', 'ao', 'aos', 'as', 'com', 'da', 'das', 'de', 'do', 'dos', 'e', 'em',
+  'na', 'nas', 'no', 'nos', 'para', 'pela', 'pelas', 'pelo', 'pelos', 'por', 'sem',
+]);
+const DUBBING_IDENTITY_NOISE = new Set([
+  'masculina', 'masculino', 'feminina', 'feminino', 'unissex', 'adulto', 'adulta',
+  'academia', 'corrida', 'fitness', 'treino', 'casual', 'brasil', 'shopee',
+  'original', 'premium', 'novo', 'nova', 'kit', 'ou', 'oficial', 'promoção', 'oferta',
+]);
 
 function trimTrailingDubbingConnector(value) {
   let output = String(value || '').trim();
@@ -191,6 +200,51 @@ function deriveTitleProductIdentity(normalized) {
   return trimTrailingDubbingConnector(identity) || singular;
 }
 
+function deriveShortSpokenIdentity(normalized, categoryKey, fallbackIdentity) {
+  const fallback = trimTrailingDubbingConnector(String(fallbackIdentity || '').replace(/^um |^uma /iu, '').trim());
+  const requiredKey = String(categoryKey || '').toLowerCase().trim();
+  if (!normalized || !fallback || !requiredKey) return fallback;
+  const derivedIdentity = deriveTitleProductIdentity(normalized);
+  if (derivedIdentity && derivedIdentity.toLowerCase() === fallback.toLowerCase()) return fallback;
+
+  const selected = [];
+  let meaningful = 0;
+  for (const rawToken of String(normalized).split(/\s+/u)) {
+    const token = rawToken.replace(/^[,.;:()[\]{}]+|[,.;:()[\]{}]+$/gu, '');
+    if (!token) continue;
+    if (/\d/u.test(token)) {
+      if (meaningful < 3) return fallback;
+      break;
+    }
+    if (!/[A-Za-zÀ-ÿ]/u.test(token)) continue;
+    const lower = token.toLowerCase();
+    if (DUBBING_IDENTITY_NOISE.has(lower)) continue;
+    if (DUBBING_IDENTITY_CONNECTORS.has(lower)) {
+      if (selected.length && meaningful < 5) selected.push(lower);
+      continue;
+    }
+    selected.push(token);
+    meaningful += 1;
+    if (meaningful >= 5) break;
+  }
+
+  const candidate = trimTrailingDubbingConnector(selected.join(' '));
+  if (!candidate) return fallback;
+  const lowerCandidate = candidate.toLowerCase();
+  const keyTerms = requiredKey.split(/\s+/u).filter((term) => !DUBBING_IDENTITY_CONNECTORS.has(term));
+  if (!keyTerms.every((term) => lowerCandidate.includes(term))) return fallback;
+  return candidate;
+}
+
+function identityRequiredTerms(identity) {
+  return String(identity || '')
+    .toLowerCase()
+    .split(/\s+/u)
+    .map((term) => term.replace(/^[,.;:]+|[,.;:]+$/gu, ''))
+    .filter((term) => term.length >= 2 && !DUBBING_IDENTITY_CONNECTORS.has(term))
+    .slice(0, 3);
+}
+
 function extractDubbingFacts(title) {
   const normalized = normalizeDubbingTitle(title);
   const lower = normalized.toLowerCase();
@@ -247,7 +301,9 @@ function extractDubbingFacts(title) {
   const categoryName = category[0] === 'mixer'
     ? `${category[1]}${features[0] ? ` ${features[0]}` : ''}`
     : category[1];
-  return { key: category[0], category: categoryName, useCase: category[2], benefit: category[3], features: features.slice(0, 3) };
+  const baseIdentity = categoryName.replace(/^um |^uma /iu, '').trim();
+  const identity = deriveShortSpokenIdentity(normalized, category[0], baseIdentity);
+  return { key: category[0], category: categoryName, identity, useCase: category[2], benefit: category[3], features: features.slice(0, 3) };
 }
 
 function spokenPrice(price) {
@@ -280,7 +336,7 @@ function buildUniversalDubbingCta(title) {
 function buildFallbackDubbingScript(title, durationSecs = 15, price = null) {
   const facts = extractDubbingFacts(title);
   if (facts.key === 'produto') throw new Error('Identidade do produto insuficiente para gerar roteiro factual.');
-  let categoryLabel = facts.category.replace(/^um |^uma /iu, '').trim();
+  let categoryLabel = (facts.identity || facts.category).replace(/^um |^uma /iu, '').trim();
   if (facts.key === 'potes' && facts.features[0]) categoryLabel = `conjunto de ${facts.features[0]}`;
   if (facts.key === 'camisetas' && facts.features[0]) categoryLabel = `kit de ${facts.features[0]}`;
   categoryLabel = trimTrailingDubbingConnector(categoryLabel.replace(/\bEm\b/gu, 'em'));
@@ -364,7 +420,9 @@ function hasUnsupportedSpecificFact(script, title) {
 function hasProductIdentity(script, title) {
   const facts = extractDubbingFacts(title);
   const output = String(script || '').toLowerCase();
-  if (facts.key !== 'produto') return output.includes(facts.key.toLowerCase());
+  const identity = facts.identity || facts.category || facts.key;
+  const requiredTerms = identityRequiredTerms(identity);
+  if (requiredTerms.length) return requiredTerms.every((term) => output.includes(term));
   const firstProductWord = normalizeDubbingTitle(title).match(/[A-Za-zÀ-ÿ]{4,}/u)?.[0];
   return Boolean(firstProductWord && output.includes(firstProductWord.toLowerCase()));
 }
