@@ -211,7 +211,10 @@ async function fetchPage(fetchImpl, url) {
     ? AbortSignal.timeout(30_000)
     : undefined;
   const response = await transport(url, {
-    headers: { Accept: 'text/html', 'User-Agent': 'CacaOfertaOficial/5.0' },
+    headers: {
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    },
     ...(signal ? { signal } : {})
   });
   if (!response.ok) throw new Error(`HTTP ${response.status} ${url}`);
