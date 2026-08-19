@@ -686,16 +686,16 @@ function buildTrendRadarProductsFromCandidates({
     });
   }
 
-  // 3. Ordenação Determinística: High Viability > Score V3 > Sales Velocity > Sales > Rating > Discount
+  // 3. Ordenação Determinística: Score V3 > High Viability (em empate) > Sales Velocity > Sales > Rating > Discount
   viableCandidates.sort((a, b) => {
-    // 3.1 Prioridade de Viabilidade: High antes de Medium
-    if (a.viability.classification === 'high' && b.viability.classification !== 'high') return -1;
-    if (b.viability.classification === 'high' && a.viability.classification !== 'high') return 1;
-
-    // 3.2 Score V3
+    // 3.1 Score V3 total (maior primeiro)
     if (b.scoreV3.total !== a.scoreV3.total) {
       return b.scoreV3.total - a.scoreV3.total;
     }
+
+    // 3.2 Prioridade de Viabilidade: High antes de Medium SOMENTE em empate de Score V3
+    if (a.viability.classification === 'high' && b.viability.classification !== 'high') return -1;
+    if (b.viability.classification === 'high' && a.viability.classification !== 'high') return 1;
 
     // 3.3 Aceleração real (velocity)
     const aVelocity = a.velocityInfo.velocity_status === 'computed' ? (a.velocityInfo.sales_velocity || 0) : null;

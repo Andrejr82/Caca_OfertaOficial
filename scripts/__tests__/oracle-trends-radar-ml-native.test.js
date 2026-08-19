@@ -247,10 +247,154 @@ test('falha na API de highlights ou 404 não derruba Radar', async () => {
   assert.equal(candidates[0].sales, null);
 });
 
-test('ranking do Radar não possui cotas artificiais por marketplace e permite distribuição orgânica (ex: 14 ML + 6 Shopee)', () => {
+test('TESTE A: MEDIUM com Score V3 maior que HIGH deve aparecer antes no ranking', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
-  // Criar 14 candidatos ML com viabilidade e scores altos
+  // Candidato MEDIUM com score alto (500 vendas, 50% desconto, 4.9 rating, mas sem comissão -> viability MEDIUM)
+  const mediumCandidate = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB_MED_HIGH_SCORE',
+    productName: 'Mochila Impermeável Reforçada Premium',
+    category: 'Acessórios',
+    currentPrice: 150,
+    oldPrice: 300,
+    discountPercent: 50,
+    ratingStar: 4.9,
+    sales: 500, // viability vira MEDIUM por commission = 0
+    commissionPercent: 0,
+    marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: 1 },
+  };
+
+  // Candidato HIGH com score mais baixo (100 vendas, 9% desconto, 3.8 rating, comissão 5% -> viability HIGH)
+  const highCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'SHP_HIGH_LOW_SCORE',
+    productName: 'Cabo USB Básico 1m',
+    category: 'Eletrônicos',
+    currentPrice: 20,
+    oldPrice: 22,
+    discountPercent: 9,
+    ratingStar: 3.8,
+    sales: 100, // viability vira HIGH por sales >= 100 e comm >= 5
+    commissionPercent: 5,
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-score-priority-run',
+    shopeeCandidates: [highCandidate],
+    mlCandidates: [mediumCandidate],
+    maxProducts: 2,
+  });
+
+  assert.equal(products.length, 2);
+  assert.equal(products[0].product_term, 'Mochila Impermeável Reforçada Premium', 'MEDIUM com score superior deve ser rank #1');
+  assert.equal(products[0].direct_evidence[0].viability_classification, 'medium');
+  assert.equal(products[1].product_term, 'Cabo USB Básico 1m', 'HIGH com score inferior deve ser rank #2');
+  assert.equal(products[1].direct_evidence[0].viability_classification, 'high');
+  assert.ok(products[0].commercial_score > products[1].commercial_score, 'Score do primeiro deve ser estritamente maior');
+});
+
+test('TESTE B: HIGH e MEDIUM com Score V3 exatamente igual -> HIGH deve aparecer primeiro como critério de desempate', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  // Dois candidatos com inputs calibrados para ter exatamente o mesmo score V3
+  const highCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'SHP_TIE_HIGH',
+    productName: 'Produto Empate High',
+    category: 'Casa',
+    currentPrice: 50,
+    oldPrice: 100,
+    discountPercent: 50,
+    sales: 200,
+    ratingStar: 4.8,
+    commissionPercent: 5,
+  };
+
+  const mediumCandidate = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB_TIE_MED',
+    productName: 'Produto Empate Medium',
+    category: 'Informática',
+    currentPrice: 50,
+    oldPrice: 100,
+    discountPercent: 50,
+    sales: null,
+    ratingStar: 4.8,
+    commissionPercent: 0,
+    marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: 5 },
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-tie-run',
+    shopeeCandidates: [highCandidate],
+    mlCandidates: [mediumCandidate],
+    maxProducts: 2,
+  });
+
+  assert.equal(products.length, 2);
+  if (products[0].commercial_score === products[1].commercial_score) {
+    assert.equal(products[0].direct_evidence[0].viability_classification, 'high', 'Em caso de empate de Score V3, HIGH deve preceder MEDIUM');
+  }
+});
+
+test('TESTE C: LOW viability com score alto continua fora da seleção do Radar', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const lowCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'SHP_LOW_RATING',
+    productName: 'Produto com Avaliação Baixa',
+    category: 'Eletrônicos',
+    currentPrice: 100,
+    oldPrice: 200,
+    discountPercent: 50,
+    sales: 1000,
+    ratingStar: 2.5, // rating < 3.5 -> LOW viability
+    commissionPercent: 10,
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-low-exclusion',
+    shopeeCandidates: [lowCandidate],
+    mlCandidates: [],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 0, 'Item LOW deve ser descartado pelo gate de viabilidade');
+});
+
+test('TESTE D: INSUFFICIENT_DATA com preço válido continua fora da seleção do Radar', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const insufficientCandidate = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB_NO_DATA',
+    productName: 'Item Sem Demanda Comprovada',
+    category: 'Geral',
+    currentPrice: 150,
+    oldPrice: 200,
+    discountPercent: 25,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    marketplaceDemandEvidence: null, // Sem BEST_SELLER -> insufficient_data
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-insufficient-exclusion',
+    shopeeCandidates: [],
+    mlCandidates: [insufficientCandidate],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 0, 'Item INSUFFICIENT_DATA deve ser descartado pelo gate de viabilidade');
+});
+
+test('TESTE E: não existe cota por marketplace e permite distribuição orgânica (ex: 14 ML + 6 Shopee)', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  // 14 candidatos ML com viabilidade MEDIUM e scores altos
   const mlCandidates = [];
   for (let i = 1; i <= 14; i++) {
     mlCandidates.push({
@@ -260,16 +404,16 @@ test('ranking do Radar não possui cotas artificiais por marketplace e permite d
       productName: `Produto ML Excepcional ${i}`,
       category: `Categoria ${i}`,
       currentPrice: 100 + i * 10,
-      oldPrice: 200 + i * 20,
-      discountPercent: 50,
-      sales: 500 - i * 10, // sales observados
+      oldPrice: 300 + i * 20,
+      discountPercent: 65,
+      sales: null,
       ratingStar: 4.9,
-      commissionPercent: 10,
+      commissionPercent: 0,
       marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
     });
   }
 
-  // Criar 6 candidatos Shopee também viáveis mas com score ligeiramente inferior
+  // 6 candidatos Shopee com scores inferiores
   const shopeeCandidates = [];
   for (let j = 1; j <= 6; j++) {
     shopeeCandidates.push({
@@ -278,10 +422,10 @@ test('ranking do Radar não possui cotas artificiais por marketplace e permite d
       productName: `Produto Shopee ${j}`,
       category: `Categoria Shopee ${j}`,
       currentPrice: 80 + j * 5,
-      oldPrice: 100 + j * 5,
-      discountPercent: 20,
+      oldPrice: 90 + j * 5,
+      discountPercent: 10,
       sales: 100,
-      ratingStar: 4.5,
+      ratingStar: 4.0,
       commissionPercent: 5,
     });
   }
@@ -300,5 +444,55 @@ test('ranking do Radar não possui cotas artificiais por marketplace e permite d
   assert.equal(mlCount, 14, 'Deve conter exatamente 14 produtos ML conforme o mérito/score do ranking');
   assert.equal(shopeeCount, 6, 'Deve conter exatamente 6 produtos Shopee conforme o mérito/score do ranking');
 });
+
+test('TESTE F: family diversity continua funcionando após o novo sort por Score V3 (max 3 por família)', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  // Criar 10 produtos da mesma família "Fone Bluetooth" com viabilidade e scores altos
+  const sameFamilyCandidates = [];
+  for (let i = 1; i <= 10; i++) {
+    sameFamilyCandidates.push({
+      marketplace: 'Mercado Livre',
+      itemId: `MLB_FONE_${i}`,
+      productName: `Fone de Ouvido Bluetooth Sem Fio Modelo Pro V${i}`,
+      category: 'Áudio',
+      currentPrice: 100 + i,
+      oldPrice: 200,
+      discountPercent: 50,
+      sales: null,
+      ratingStar: 4.8,
+      commissionPercent: 0,
+      marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
+    });
+  }
+
+  // Criar 5 produtos de outra família "Mochila"
+  const otherFamilyCandidates = [];
+  for (let j = 1; j <= 5; j++) {
+    otherFamilyCandidates.push({
+      marketplace: 'Shopee',
+      itemId: `SHP_MOCHILA_${j}`,
+      productName: `Mochila Escolar Masculina Reforçada Resistente ${j}`,
+      category: 'Acessórios',
+      currentPrice: 80 + j,
+      oldPrice: 120,
+      discountPercent: 30,
+      sales: 100,
+      ratingStar: 4.5,
+      commissionPercent: 5,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-family-cap',
+    shopeeCandidates: otherFamilyCandidates,
+    mlCandidates: sameFamilyCandidates,
+    maxProducts: 20,
+  });
+
+  const fones = products.filter((p) => p.product_term.toLowerCase().includes('fone'));
+  assert.ok(fones.length <= 3, `Deve conter no máximo 3 produtos da família Fone (obtido: ${fones.length})`);
+});
+
 
 
