@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const {
   COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
   WEIGHTS_V4,
+  parsePercentage,
   classifyTicket,
   calculateEconomicReturn,
   calculateInternalConversion,
@@ -16,6 +17,33 @@ const {
   classifyCommercialDecision,
   calculateCommercialOpportunityScoreV4,
 } = require('../../src/core/trends/commercial-opportunity-score-v4.cjs');
+
+test('parsePercentage: normaliza valores inteiros e fracionários sem distorcer 1 como 100%', () => {
+  // Obrigatórios pela especificação:
+  assert.equal(parsePercentage(1), 1, '1 deve representar 1% e não 100%');
+  assert.equal(parsePercentage(0.01), 1, '0.01 deve representar 1%');
+  assert.equal(parsePercentage('1'), 1, "'1' em string deve representar 1%");
+  assert.equal(parsePercentage('0.01'), 1, "'0.01' em string deve representar 1%");
+
+  // Combinação 4 + 1 => 5%:
+  const candidate = {
+    currentPrice: 100,
+    commissionRate: 4,
+    sellerCommissionRate: 1,
+  };
+  const econ = calculateEconomicReturn(candidate);
+  assert.equal(econ.effectiveCommissionPercent, 5, 'commissionRate=4 + sellerCommissionRate=1 deve resultar em 5%');
+  assert.equal(econ.estimatedCommissionPerSale, 5.0, 'R$ 100 a 5% deve ser R$ 5.00');
+
+  // Formatos válidos existentes:
+  assert.equal(parsePercentage(15), 15);
+  assert.equal(parsePercentage('10'), 10);
+  assert.equal(parsePercentage(0.15), 15);
+  assert.equal(parsePercentage('0.08'), 8);
+  assert.equal(parsePercentage(0), 0);
+  assert.equal(parsePercentage(null), null);
+  assert.equal(parsePercentage('abc'), null);
+});
 
 test('weights V4 sum to exactly 100', () => {
   const sum = Object.values(WEIGHTS_V4).reduce((acc, val) => acc + val, 0);

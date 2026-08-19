@@ -23,7 +23,7 @@ function parseNumber(value, fallback = null) {
 function normalizePercentage(value) {
   const num = parseNumber(value, null);
   if (num === null) return null;
-  if (num > 0 && num <= 1) return Math.round(num * 10000) / 100;
+  if (num > 0 && num < 1) return Math.round(num * 10000) / 100;
   return Math.round(num * 100) / 100;
 }
 

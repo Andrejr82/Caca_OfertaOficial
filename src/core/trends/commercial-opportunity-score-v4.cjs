@@ -33,6 +33,7 @@ function clamp(value, min, max) {
 }
 
 function finite(value) {
+  if (value === null || value === undefined || value === '' || typeof value === 'boolean') return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
 }
@@ -40,7 +41,7 @@ function finite(value) {
 function parsePercentage(value) {
   const num = finite(value);
   if (num === null) return null;
-  if (num > 0 && num <= 1) return Math.round(num * 10000) / 100;
+  if (num > 0 && num < 1) return Math.round(num * 10000) / 100;
   return Math.round(num * 100) / 100;
 }
 
@@ -470,6 +471,7 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
 module.exports = {
   COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
   WEIGHTS_V4,
+  parsePercentage,
   classifyTicket,
   calculateEconomicReturn,
   calculateInternalConversion,

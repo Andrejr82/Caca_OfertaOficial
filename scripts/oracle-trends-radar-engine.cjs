@@ -230,8 +230,8 @@ async function collectShopeeMarketplaceCandidates({
         const ratingStar = parseNumber(node.ratingStar, 0);
         const commRate = parseNumber(node.commissionRate, 0);
         const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
-        const commissionPercent = Math.round((commRate > 0 && commRate <= 1 ? commRate * 100 : commRate) * 100) / 100;
-        const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate <= 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
+        const commissionPercent = Math.round((commRate > 0 && commRate < 1 ? commRate * 100 : commRate) * 100) / 100;
+        const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate < 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
         const shopType = Array.isArray(node.shopType) ? node.shopType : [];
         const link = String(node.offerLink || node.productLink || '');
 
