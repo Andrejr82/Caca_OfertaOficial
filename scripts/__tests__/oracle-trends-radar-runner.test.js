@@ -295,14 +295,16 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
   const mockClient = {
     from: (table) => {
       if (table === 'trend_radar_runs') {
+        const queryBuilder = {
+          eq: () => queryBuilder,
+          gte: () => queryBuilder,
+          order: () => queryBuilder,
+          limit: async () => ({ data: [mockRun], error: null }),
+          then: (resolve) => resolve({ data: [], error: null }),
+        };
+        queryBuilder[Symbol.asyncIterator] = async function* () { yield { data: [], error: null }; };
         return {
-          select: () => ({
-            eq: () => ({
-              order: () => ({
-                limit: async () => ({ data: [mockRun], error: null }),
-              }),
-            }),
-          }),
+          select: () => queryBuilder,
           update: (payload) => ({
             eq: async (col, val) => {
               updatedRun = payload;
@@ -314,10 +316,14 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
       if (table === 'trend_radar_products') {
         return {
           select: () => ({
+            eq: () => ({
+              then: (resolve) => resolve({ data: [], error: null }),
+            }),
             in: () => ({
               order: () => ({
                 limit: async () => ({ data: [], error: null }),
               }),
+              then: (resolve) => resolve({ data: [], error: null }),
             }),
           }),
           delete: () => ({
@@ -329,7 +335,15 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
           },
         };
       }
-      throw new Error(`Tabela inesperada: ${table}`);
+      if (table === 'offers') {
+        return {
+          select: () => ({
+            eq: () => ({ range: async () => ({ data: [], error: null }) }),
+            range: async () => ({ data: [], error: null }),
+          }),
+        };
+      }
+      return {};
     },
   };
 

@@ -1,25 +1,24 @@
 /**
- * Oracle Trends Radar Runner - Task 2B
+ * Oracle Trends Radar Engine V2 — Caça Ofertas Oficial
  *
- * Motor autônomo executado na VPS Oracle para processamento do Radar de Tendências.
- * Regras:
+ * Motor de descoberta, viabilidade comercial, deduplicação e ranking executivo.
+ *
+ * Regras do Contrato:
  * 1. MARKETPLACE-FIRST: Shopee e Mercado Livre como fontes primárias de descoberta comercial.
- * 2. SEM SEEDS FIXAS: Descoberta ampla via categorias oficiais, sortType da OpenAPI e feeds oficiais.
- * 3. SNAPSHOT COMERCIAL: Persistência de itemId, shopId, sales, rating, preços, comissões, shopType e provenance.
- * 4. TENDÊNCIA BASEADA EM HISTÓRICO: sales_velocity = sales_atual - sales_anterior.
- *    Sem histórico => status = insufficient_history (nunca inventar crescimento).
- * 5. RANKING TASK 2B: Ordenação por sales_velocity > 0, fallback explícito para sales absoluto.
- * 6. ZERO PUBLISH: Nenhuma chamada externa de publicação, nenhum post gerado.
- * 7. ZERO CONCORRÊNCIA: Integrado ao ciclo do oracle-scraper sem novo daemon ou scheduler.
+ * 2. GOOGLE TRENDS FORA: google_trends_used = false sempre.
+ * 3. IDENTIDADE MERCADO LIVRE: prioridade 1 para productId de catálogo.
+ * 4. IDENTIDADE SHOPEE: shopId + itemId nativo.
+ * 5. DEDUPLICAÇÃO SEMÂNTICA: eliminação de produtos equivalentes/variantes redundantes.
+ * 6. COMMERCIAL VIABILITY V2: cálculo determinístico de dados observados (high | medium | low | insufficient_data).
+ * 7. ZERO PUBLISH: Nenhuma publicação automática, nenhuma oferta criada automaticamente.
+ * 8. REFILL CONTROLADO: Alvo 20 produtos (mínimo 10).
  */
 
 'use strict';
 
-const crypto = require('node:crypto');
 const path = require('node:path');
 const { createClient } = require('@supabase/supabase-js');
 const {
-  SCENARIO_CONTRACTS,
   GRAPHQL_CONTRACTS,
   createSignedRequest,
   normalizePriceIntegrity,
@@ -28,12 +27,29 @@ const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('.
 const {
   COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
   calculateCommercialOpportunityScoreV3,
-  classifyCommercialDecision,
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
+const {
+  COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+  calculateCommercialViabilityV2,
+  isViableForRadar,
+} = require('./commercial-viability-v2.cjs');
+const {
+  DEFAULT_RECENCY_DAYS,
+  getMarketplaceIdentityKey,
+  getMarketplaceImageUrl,
+  withMarketplaceImageEvidence,
+  filterCandidatesWithRecency,
+  fetchCompletedRadarIdentityKeys,
+  fetchExistingOfferIdentityKeys,
+} = require('./oracle-trends-radar-freshness.cjs');
+const {
+  extractSemanticClusterKey,
+  deduplicateCatalogAndSemantic,
+  applyFamilyDiversityCap,
+} = require('./radar-semantic-dedup-v2.cjs');
 
-const RUNNER_CONTRACT_VERSION = 'trend-executive.oracle-radar-runner/v3';
+const RUNNER_CONTRACT_VERSION = 'trend-executive.oracle-radar-runner/v4-viability-v2';
 
-// Categorias oficiais amplas da Shopee para descoberta abrangente sem seeds fixas
 const SHOPEE_BROAD_DISCOVERY_CATEGORIES = Object.freeze([
   100010, // Casa e Cozinha / Eletroportáteis
   100013, // Celulares e Acessórios
@@ -48,9 +64,9 @@ const SHOPEE_BROAD_DISCOVERY_CATEGORIES = Object.freeze([
   100634, // Games e Consoles
 ]);
 
-function defaultShopeeApiCaller() {
-  const appId = process.env.SHOPEE_APP_ID;
-  const appSecret = process.env.SHOPEE_APP_SECRET;
+function defaultShopeeApiCaller(env = process.env) {
+  const appId = env.SHOPEE_APP_ID;
+  const appSecret = env.SHOPEE_APP_SECRET;
   if (!appId || !appSecret) return null;
   return createSignedRequest({
     appId,
@@ -137,21 +153,19 @@ async function markTrendRadarRunRunning(client, runId, existingHealth = {}) {
 }
 
 /**
- * Coleta candidatos comerciais da Shopee sem autoridade em seeds hardcoded.
- * Utiliza:
- * 1. Categorias amplas com ordenação por popularidade/vendas (sortType: 1/2).
- * 2. Feeds oficiais DELTA/BASE quando disponíveis na conta.
+ * Coleta candidatos comerciais da Shopee com paginação oficial e parada quando vazia.
  */
 async function collectShopeeMarketplaceCandidates({
   request = null,
   categoryIds = SHOPEE_BROAD_DISCOVERY_CATEGORIES,
   maxPerCategory = 30,
+  page = 1,
   env = process.env,
 } = {}) {
-  const caller = request || defaultShopeeApiCaller();
+  const caller = request || defaultShopeeApiCaller(env);
   if (!caller) return [];
   const candidates = [];
-  const seenItemIds = new Set();
+  const seenIdentities = new Set();
 
   const targetCategories = Array.isArray(categoryIds) && categoryIds.length > 0
     ? categoryIds
@@ -160,8 +174,8 @@ async function collectShopeeMarketplaceCandidates({
   for (const catId of targetCategories) {
     try {
       const variables = {
-        page: 1,
-        limit: Math.max(5, maxPerCategory),
+        page: Math.max(1, Number(page) || 1),
+        limit: Math.max(5, Number(maxPerCategory) || 30),
         sortType: 2, // Popularidade / Vendas reais
         isAMSOffer: true,
       };
@@ -177,13 +191,20 @@ async function collectShopeeMarketplaceCandidates({
       );
 
       const nodes = response?.data?.data?.productOfferV2?.nodes || [];
+      if (!Array.isArray(nodes) || nodes.length === 0) {
+        // Categoria sem mais produtos nesta página
+        continue;
+      }
+
       for (const node of nodes) {
         const itemId = String(node.itemId || '').trim();
-        if (!itemId || seenItemIds.has(itemId)) continue;
-        seenItemIds.add(itemId);
-
+        const shopId = String(node.shopId || '').trim();
         const productName = String(node.productName || '').trim();
-        if (!productName) continue;
+        if (!itemId || !productName) continue;
+
+        const identityKey = `${shopId || '0'}:${itemId}`;
+        if (seenIdentities.has(identityKey)) continue;
+        seenIdentities.add(identityKey);
 
         const priceIntegrity = normalizePriceIntegrity({
           price: node.price,
@@ -193,6 +214,8 @@ async function collectShopeeMarketplaceCandidates({
           officialOldPrice: node.officialOldPrice,
         });
         const price = priceIntegrity.currentPrice;
+        if (!(price > 0)) continue;
+
         const oldPrice = priceIntegrity.oldPrice;
         const discount = priceIntegrity.discountPercent ?? 0;
         const marketplaceReportedDiscountPercent = parseNumber(node.priceDiscountRate, 0);
@@ -208,14 +231,14 @@ async function collectShopeeMarketplaceCandidates({
         candidates.push({
           marketplace: 'Shopee',
           itemId,
-          shopId: String(node.shopId || ''),
+          shopId,
           shopName: String(node.shopName || ''),
           productName,
           category: 'Marketplace Deals',
           currentPrice: price,
           oldPrice,
-          priceDiscountRate: discount,
-          discountPercent: discount,
+          priceDiscountRate: parseNumber(node.priceDiscountRate, discount),
+          discountPercent: discount || parseNumber(node.priceDiscountRate, 0),
           marketplaceReportedDiscountPercent,
           priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
           priceAuthority: priceIntegrity.priceAuthority,
@@ -234,7 +257,7 @@ async function collectShopeeMarketplaceCandidates({
           observedAt: new Date().toISOString(),
         });
       }
-    } catch (err) {
+    } catch (_err) {
       // Falha em uma categoria não aborta a coleta geral
     }
   }
@@ -252,7 +275,7 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
   const oldPrice = oldPriceValue !== null && price !== null && oldPriceValue > price ? oldPriceValue : null;
   const explicitDiscount = parseOptionalNumber(product.discount_percent);
   const discount = oldPrice !== null && price !== null && price > 0
-    ? Math.round(((oldPrice - price) / oldPrice) * 100)
+    ? Math.round((((oldPrice - price) / oldPrice) * 100) * 100) / 100
     : (explicitDiscount ?? 0);
   const sales = parseOptionalNumber(product.sold_quantity);
   const rating = parseOptionalNumber(product.rating);
@@ -260,7 +283,7 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
   return {
     marketplace: 'Mercado Livre',
     itemId,
-    productId: String(product.product_id || ''),
+    productId: String(product.product_id || product.productId || '').trim(),
     productName,
     category: product.category_name || 'Marketplace Deals',
     currentPrice: price,
@@ -282,13 +305,14 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
  * Coleta candidatos comerciais do Mercado Livre via intenções oficiais.
  */
 async function collectMercadoLivreMarketplaceCandidates({
-  keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer'],
+  keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer', 'lixeira inox', 'suporte notebook', 'tapete pet'],
   accessToken = null,
   maxPerIntent = 5,
+  page = 1,
   env = process.env,
 } = {}) {
   const candidates = [];
-  const seenItemIds = new Set();
+  const seenIds = new Set();
 
   try {
     const token = accessToken || (await refreshAccessToken({ env }).catch(() => null));
@@ -298,18 +322,21 @@ async function collectMercadoLivreMarketplaceCandidates({
       accessToken: token,
       keywords,
       maxPerIntent: Math.max(3, maxPerIntent),
-      delayMs: 200,
+      delayMs: 150,
     });
 
     const products = Array.isArray(result?.products) ? result.products : [];
     for (const product of products) {
       const candidate = normalizeMercadoLivreRadarProduct(product);
-      if (!candidate || seenItemIds.has(candidate.itemId)) continue;
-      seenItemIds.add(candidate.itemId);
-      if (candidate.currentPrice === null || candidate.currentPrice <= 0) continue;
+      if (!candidate || candidate.currentPrice === null || candidate.currentPrice <= 0) continue;
+
+      const key = candidate.productId ? `ml_prod_${candidate.productId}` : `ml_item_${candidate.itemId}`;
+      if (seenIds.has(key)) continue;
+      seenIds.add(key);
+
       candidates.push(candidate);
     }
-  } catch (err) {
+  } catch (_err) {
     // Falha em ML não aborta execução
   }
 
@@ -318,7 +345,6 @@ async function collectMercadoLivreMarketplaceCandidates({
 
 /**
  * Calcula sales_velocity com base no histórico real anterior do item.
- * Se não houver histórico anterior => status = insufficient_history (nunca inventa crescimento).
  */
 function computeCandidateSalesVelocity(candidate, previousItemsMap = new Map()) {
   const itemId = String(candidate.itemId || '').trim();
@@ -376,9 +402,6 @@ function computeCandidateSalesVelocity(candidate, previousItemsMap = new Map()) 
   };
 }
 
-/**
- * Busca snapshots anteriores de produtos em trend_radar_products para o mesmo tenant.
- */
 async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
   const map = new Map();
   if (!client) return map;
@@ -391,9 +414,7 @@ async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
       .order('created_at', { ascending: false })
       .limit(3);
 
-    if (tenantId) {
-      runQuery = runQuery.eq('user_id', tenantId);
-    }
+    if (tenantId) runQuery = runQuery.eq('user_id', tenantId);
 
     const { data: runs, error: runsErr } = await runQuery;
     if (runsErr || !Array.isArray(runs) || runs.length === 0) return map;
@@ -419,15 +440,16 @@ async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
         }
       }
     }
-  } catch (err) {
-    // Falha silenciosa: retorna mapa vazio e ativa fallback de insufficient_history
+  } catch (_err) {
+    // Fallback silencioso para insufficient_history
   }
 
   return map;
 }
 
 /**
- * Constrói produtos do Radar com ordenação temporária da Task 2B.
+ * Constrói e ranqueia produtos do Radar integrando Commercial Viability V2,
+ * Deduplicação Semântica e Capping de Diversidade.
  */
 function buildTrendRadarProductsFromCandidates({
   radarRunId,
@@ -437,70 +459,94 @@ function buildTrendRadarProductsFromCandidates({
   maxProducts = 20,
   now = new Date(),
 }) {
-  const seenIdentities = new Set();
   const allCandidates = [...shopeeCandidates, ...mlCandidates];
 
-  const enrichedCandidates = allCandidates.map((candidate) => {
-    const velocity = computeCandidateSalesVelocity(candidate, previousItemsMap);
+  // 1. Deduplicação Nativa & Catálogo (ML productId) & Semântica (Shopee)
+  const dedupResult = deduplicateCatalogAndSemantic(allCandidates);
+  const uniqueCandidates = dedupResult.uniqueCandidates;
+
+  // 2. Avaliação de Viabilidade Comercial V2 & Score V3
+  const viableCandidates = [];
+
+  for (const candidate of uniqueCandidates) {
+    const velocityInfo = computeCandidateSalesVelocity(candidate, previousItemsMap);
+    const viability = calculateCommercialViabilityV2({
+      ...candidate,
+      velocityInfo,
+    });
+
+    // Descarta low e insufficient_data dos slots principais
+    if (!isViableForRadar(viability)) continue;
+
     const evidenceStatus =
       candidate.evidenceStatus ||
       candidate.evidence_status ||
-      ((typeof candidate.sales === 'number' && candidate.sales > 0) || (typeof candidate.ratingStar === 'number' && candidate.ratingStar > 0) || (typeof candidate.rating === 'number' && candidate.rating > 0) ? 'verified' : 'partial');
+      ((typeof candidate.sales === 'number' && candidate.sales > 0) || (typeof candidate.ratingStar === 'number' && candidate.ratingStar > 0) ? 'verified' : 'partial');
 
-    // Pré-avaliação do score V3 com dados existentes
     const scoreV3 = calculateCommercialOpportunityScoreV3({
       ...candidate,
       evidenceStatus,
-      velocityInfo: velocity,
+      velocityInfo,
     });
 
-    return {
+    viableCandidates.push({
       ...candidate,
       evidenceStatus,
-      velocityInfo: velocity,
+      velocityInfo,
+      viability,
       scoreV3,
-    };
-  });
+    });
+  }
 
-  // Ranking único e determinístico pelo Commercial Opportunity Score V3
-  enrichedCandidates.sort((a, b) => {
+  // 3. Ordenação Determinística: High Viability > Score V3 > Sales Velocity > Sales > Rating > Discount
+  viableCandidates.sort((a, b) => {
+    // 3.1 Prioridade de Viabilidade: High antes de Medium
+    if (a.viability.classification === 'high' && b.viability.classification !== 'high') return -1;
+    if (b.viability.classification === 'high' && a.viability.classification !== 'high') return 1;
+
+    // 3.2 Score V3
     if (b.scoreV3.total !== a.scoreV3.total) {
       return b.scoreV3.total - a.scoreV3.total;
     }
 
+    // 3.3 Aceleração real (velocity)
     const aVelocity = a.velocityInfo.velocity_status === 'computed' ? (a.velocityInfo.sales_velocity || 0) : null;
     const bVelocity = b.velocityInfo.velocity_status === 'computed' ? (b.velocityInfo.sales_velocity || 0) : null;
-
     if (aVelocity !== null && bVelocity !== null && aVelocity !== bVelocity) {
       return bVelocity - aVelocity;
     }
     if (aVelocity !== null && aVelocity > 0 && (bVelocity === null || bVelocity <= 0)) return -1;
     if (bVelocity !== null && bVelocity > 0 && (aVelocity === null || aVelocity <= 0)) return 1;
 
+    // 3.4 Volume de vendas
     const aSales = typeof a.sales === 'number' ? a.sales : 0;
     const bSales = typeof b.sales === 'number' ? b.sales : 0;
     if (aSales !== bSales) return bSales - aSales;
 
-    const aRating = typeof a.ratingStar === 'number' ? a.ratingStar : (typeof a.rating === 'number' ? a.rating : 0);
-    const bRating = typeof b.ratingStar === 'number' ? b.ratingStar : (typeof b.rating === 'number' ? b.rating : 0);
+    // 3.5 Rating
+    const aRating = typeof a.ratingStar === 'number' ? a.ratingStar : 0;
+    const bRating = typeof b.ratingStar === 'number' ? b.ratingStar : 0;
     if (aRating !== bRating) return bRating - aRating;
 
+    // 3.6 Desconto
     const aDiscount = a.discountPercent || 0;
     const bDiscount = b.discountPercent || 0;
     return bDiscount - aDiscount;
   });
 
+  // 4. Aplicação do Capping de Diversidade Familiar
+  const diversityResult = applyFamilyDiversityCap(viableCandidates, {
+    maxPerFamily: 3,
+    targetCount: maxProducts,
+  });
+  const selectedCandidates = diversityResult.diversifiedProducts;
+
+  // 5. Mapeamento final dos produtos para o snapshot
   const prioritizedProducts = [];
 
-  for (const candidate of enrichedCandidates) {
-    if (prioritizedProducts.length >= maxProducts) break;
-
-    const normalizedTerm = normalizeText(candidate.productName);
-    const identityKey = `${normalizedTerm}\u0000${candidate.marketplace}`;
-    if (!normalizedTerm || seenIdentities.has(identityKey)) continue;
-    seenIdentities.add(identityKey);
-
-    const priority = prioritizedProducts.length + 1;
+  for (let index = 0; index < selectedCandidates.length; index++) {
+    const candidate = selectedCandidates[index];
+    const priority = index + 1;
     const isFocus = priority <= 3;
     const sales = typeof candidate.sales === 'number' ? candidate.sales : null;
     const rating = typeof candidate.ratingStar === 'number'
@@ -509,11 +555,10 @@ function buildTrendRadarProductsFromCandidates({
     const discount = candidate.discountPercent || 0;
     const price = candidate.currentPrice || 0;
     const oldPrice = candidate.oldPrice || null;
-
     const velocityInfo = candidate.velocityInfo;
     const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
+    const viability = candidate.viability;
 
-    // Avaliação definitiva do Commercial Opportunity Score V3 com foco visual atualizado
     const finalScoreV3 = calculateCommercialOpportunityScoreV3({
       ...candidate,
       isFocus,
@@ -532,12 +577,16 @@ function buildTrendRadarProductsFromCandidates({
         best_seller_flag: sales !== null && sales >= 50,
         trending_flag: hasVelocity && velocityInfo.sales_velocity > 0,
         sold_quantity: sales,
-        price: price || null,
-        old_price: oldPrice || null,
-        discount_percent: discount || null,
+        price,
+        old_price: oldPrice,
+        discount_percent: discount,
         rating,
         decision: finalScoreV3.decision,
         strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+        viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+        viability_classification: viability.classification,
+        effective_commission_percent: viability.effectiveCommissionPercent,
+        estimated_commission_per_sale: viability.estimatedCommissionPerSale,
         marketplace_identity: {
           itemId: candidate.itemId || null,
           shopId: candidate.shopId || null,
@@ -551,15 +600,23 @@ function buildTrendRadarProductsFromCandidates({
           priceDiscountRate: candidate.priceDiscountRate || discount,
           commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
           sellerCommissionRate: candidate.sellerCommissionRate || 0,
+          effectiveCommissionPercent: viability.effectiveCommissionPercent,
+          estimatedCommissionPerSale: viability.estimatedCommissionPerSale,
         },
         temporal_metrics: velocityInfo,
       },
+    ];
+
+    const determiningReasons = [
+      ...viability.reasons,
+      ...finalScoreV3.determining_reasons,
     ];
 
     const inferredSignals = [
       hasVelocity && velocityInfo.sales_velocity > 0 ? 'real_sales_acceleration' : 'baseline_catalog_snapshot',
       sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
+      `viability_${viability.classification}`,
       `v3_decision_${finalScoreV3.decision.toLowerCase()}`,
     ];
 
@@ -567,14 +624,14 @@ function buildTrendRadarProductsFromCandidates({
       radar_run_id: radarRunId,
       priority,
       product_term: candidate.productName,
-      normalized_product_term: normalizedTerm,
+      normalized_product_term: normalizeText(candidate.productName),
       category: candidate.category || null,
       marketplace: candidate.marketplace,
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
       commercial_score: finalScoreV3.total,
       score_breakdown: finalScoreV3.breakdown,
-      determining_reasons: finalScoreV3.determining_reasons,
+      determining_reasons: determiningReasons,
       confidence: Math.min(
         95,
         Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales !== null && sales > 50 ? 10 : 5) + (rating !== null && rating >= 4.5 ? 10 : 5)))
@@ -582,7 +639,7 @@ function buildTrendRadarProductsFromCandidates({
       direct_evidence: directEvidence,
       inferred_signals: inferredSignals,
       affiliate_potential:
-        (sales !== null && sales >= 100) || (candidate.commissionPercent && candidate.commissionPercent > 5) ? 'high' : 'medium',
+        (sales !== null && sales >= 100) || (viability.effectiveCommissionPercent >= 5) ? 'high' : 'medium',
       visual_content_potential: isFocus ? 'high' : 'medium',
       recommended_channel: null,
       recommended_format: null,
@@ -599,12 +656,11 @@ async function persistTrendRadarSnapshot({
   client,
   run,
   products,
-  shopeeCount = 0,
-  mlCount = 0,
+  sourceHealthOverrides = {},
   dryRun = false,
 }) {
   if (dryRun) {
-    return { runId: run.id, productsCount: products.length, shopeeCount, mlCount, persisted: false };
+    return { runId: run?.id || 'dry-run', productsCount: products.length, persisted: false };
   }
 
   const { error: deleteError } = await client
@@ -625,11 +681,14 @@ async function persistTrendRadarSnapshot({
     status: 'completed',
     completed_at: new Date().toISOString(),
     google_trends_used: false,
+    target_products: 20,
+    minimum_products: 10,
+    target_reached: products.length >= 20,
     strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
-    marketplaces: ['Shopee', 'Mercado Livre'],
-    shopee_candidates_found: shopeeCount,
-    mercado_livre_candidates_found: mlCount,
+    viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     total_products_selected: products.length,
+    marketplaces: ['Shopee', 'Mercado Livre'],
+    ...sourceHealthOverrides,
   };
 
   const executiveSummary = {
@@ -639,7 +698,7 @@ async function persistTrendRadarSnapshot({
     top_product_score: products[0]?.commercial_score || null,
     top_product_decision: products[0]?.direct_evidence?.[0]?.decision || null,
     strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
-    generated_by: 'oracle_marketplace_first_engine_v3',
+    generated_by: 'oracle_radar_viability_v2_engine',
     contract: RUNNER_CONTRACT_VERSION,
   };
 
@@ -656,84 +715,7 @@ async function persistTrendRadarSnapshot({
 
   if (updateError) throw new Error(`Falha ao concluir run: ${updateError.message}`);
 
-  return { runId: run.id, productsCount: products.length, shopeeCount, mlCount, persisted: true };
-}
-
-async function processPendingTrendRadarRuns({
-  client = null,
-  env = process.env,
-  dryRun = false,
-  shopeeCollector = collectShopeeMarketplaceCandidates,
-  mlCollector = collectMercadoLivreMarketplaceCandidates,
-  stageLogger = null,
-} = {}) {
-  const supabase = getSupabaseAdmin(env, client);
-  const pendingRun = await findPendingTrendRadarRun(supabase);
-
-  if (!pendingRun) {
-    return { processed: false, reason: 'no_pending_requests', googleTrendsUsed: false, publishCalls: 0 };
-  }
-
-  const runId = pendingRun.id;
-  const radarDate = pendingRun.radar_date;
-
-  if (stageLogger) stageLogger('trends_radar_identified', { runId, radarDate });
-  console.log(`[Oracle Trends Radar] Processando solicitação runId=${runId} data=${radarDate}`);
-
-  if (!dryRun) {
-    await markTrendRadarRunRunning(supabase, runId, pendingRun.source_health || {});
-  }
-
-  const previousItemsMap = await fetchRecentSnapshotItemsMap(supabase, pendingRun.user_id);
-
-  let shopeeCandidates = [];
-  try {
-    shopeeCandidates = await shopeeCollector({ env });
-    console.log(`[Oracle Trends Radar] Shopee: ${shopeeCandidates.length} candidatos coletados`);
-  } catch (err) {
-    console.error(`[Oracle Trends Radar] Erro Shopee: ${err.message}`);
-  }
-
-  let mlCandidates = [];
-  try {
-    mlCandidates = await mlCollector({ env });
-    console.log(`[Oracle Trends Radar] Mercado Livre: ${mlCandidates.length} candidatos coletados`);
-  } catch (err) {
-    console.error(`[Oracle Trends Radar] Erro ML: ${err.message}`);
-  }
-
-  const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: runId,
-    shopeeCandidates,
-    mlCandidates,
-    previousItemsMap,
-    maxProducts: 20,
-  });
-
-  const result = await persistTrendRadarSnapshot({
-    client: supabase,
-    run: pendingRun,
-    products,
-    shopeeCount: shopeeCandidates.length,
-    mlCount: mlCandidates.length,
-    dryRun,
-  });
-
-  console.log(`[Oracle Trends Radar] Concluído runId=${runId} produtos=${products.length} persisted=${result.persisted}`);
-
-  return {
-    processed: true,
-    runId,
-    radarDate,
-    productsCount: products.length,
-    shopeeCandidatesCount: shopeeCandidates.length,
-    mlCandidatesCount: mlCandidates.length,
-    persisted: result.persisted,
-    googleTrendsUsed: false,
-    publishCalls: 0,
-    postsWrites: 0,
-    offersWrites: 0,
-  };
+  return { runId: run.id, productsCount: products.length, persisted: true };
 }
 
 module.exports = {
@@ -751,5 +733,4 @@ module.exports = {
   fetchRecentSnapshotItemsMap,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,
-  processPendingTrendRadarRuns,
 };
