@@ -29,7 +29,10 @@ export default async function TrendsPage({ searchParams }: { searchParams?: Tren
             <p className="text-xs text-white/35">Mesa de seleção comercial baseada no snapshot pronto da Oracle.</p>
           </div>
         </div>
-        <DailyRadarRefreshButton />
+        <DailyRadarRefreshButton
+          latestRunId={latestSnapshot?.id ?? null}
+          latestGeneratedAt={latestSnapshot?.generatedAt ?? null}
+        />
       </header>
 
       <TrendsCommercialSelectionDesk snapshot={latestSnapshot} approvalFeedback={approvalFeedback} />
