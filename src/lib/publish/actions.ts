@@ -681,22 +681,31 @@ async function generateQuickPostActionInternal(
     const mlResult = await fetchMLProductDetailsResult(urlForApi, userId);
 
     if (!mlResult.ok) {
-      const failureMessages: Record<string, string> = {
-        MARKETPLACE_AUTH_DENIED: "A integração do Mercado Livre precisa ser reconectada para confirmar este produto.",
-        MARKETPLACE_PERMISSION_DENIED: "O Mercado Livre recusou o acesso a este produto para a aplicação. Verifique as permissões da integração.",
-        MARKETPLACE_SOURCE_UNAVAILABLE: "O Mercado Livre não respondeu com dados do produto. Tente novamente em alguns minutos.",
-        INVALID_PRODUCT_ID: "Não foi possível confirmar a identidade do produto do Mercado Livre.",
-      };
-      log("[Express Link Error]", { requestId: operationId, errorCode: mlResult.code, stage: "marketplace_provider" });
-      return { ok: false, status: mlResult.code, message: failureMessages[mlResult.code] };
+      const fallback = resolutionOutcome.status === "confirmed_identity" ? resolutionOutcome.fallbackDetails : undefined;
+      if (fallback?.title && typeof fallback.price === "number" && fallback.price > 0) {
+        log("[Express Fallback Applied]", { requestId: operationId, message: "Utilizando dados resilientes do produto validados no SSR.", itemId });
+        title = fallback.title;
+        imageUrl = fallback.imageUrl || "";
+        price = fallback.price;
+        canonicalUrl = fallback.canonicalUrl || urlForApi;
+      } else {
+        const failureMessages: Record<string, string> = {
+          MARKETPLACE_AUTH_DENIED: "A integração do Mercado Livre precisa ser reconectada para confirmar este produto.",
+          MARKETPLACE_PERMISSION_DENIED: "O Mercado Livre recusou o acesso a este produto para a aplicação. Verifique as permissões da integração.",
+          MARKETPLACE_SOURCE_UNAVAILABLE: "O Mercado Livre não respondeu com dados do produto. Tente novamente em alguns minutos.",
+          INVALID_PRODUCT_ID: "Não foi possível confirmar a identidade do produto do Mercado Livre.",
+        };
+        log("[Express Link Error]", { requestId: operationId, errorCode: mlResult.code, stage: "marketplace_provider" });
+        return { ok: false, status: mlResult.code, message: failureMessages[mlResult.code] };
+      }
+    } else {
+      const mlData = mlResult.data;
+
+      title = mlData.title;
+      imageUrl = mlData.imageUrl || "";
+      price = mlData.price ?? 0;
+      canonicalUrl = mlData.finalUrl || urlForApi;
     }
-
-    const mlData = mlResult.data;
-
-    title = mlData.title;
-    imageUrl = mlData.imageUrl || "";
-    price = mlData.price ?? 0;
-    canonicalUrl = mlData.finalUrl || urlForApi;
     if (!itemId) {
       const extractedId = extractMLId(canonicalUrl);
       if (extractedId) itemId = extractedId.id;

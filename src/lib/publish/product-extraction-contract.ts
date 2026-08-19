@@ -1,11 +1,19 @@
 import { extractMLId } from "@/lib/platforms/mercadolivre";
 import type { UrlResolveResult } from "./express-url-resolver";
 
+export type ProductFallbackDetails = {
+  title?: string;
+  price?: number;
+  imageUrl?: string;
+  canonicalUrl?: string;
+};
+
 export type ProductResolutionOutcome =
   | {
       status: "confirmed_identity";
       itemId: string;
       resolvedUrl: string;
+      fallbackDetails?: ProductFallbackDetails;
     }
   | {
       status: "ready";
@@ -20,7 +28,7 @@ type MLIdentity = { type: "item" | "product"; id: string };
 
 type NordicIdentityResult =
   | { status: "absent" }
-  | { status: "valid"; itemId: string }
+  | { status: "valid"; itemId: string; fallbackDetails?: ProductFallbackDetails }
   | { status: "invalid" };
 
 function decodeHtmlUrl(value: string): string {
@@ -42,7 +50,7 @@ function readAttribute(tag: string, name: string): string | null {
 function normalizeMlId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const normalized = value.trim().replace("-", "").toUpperCase();
-  return /^MLB\d+$/.test(normalized) ? normalized : null;
+  return /^MLB[U]?\d+$/.test(normalized) ? normalized : null;
 }
 
 function extractMlIdentityFromAllowedUrl(rawUrl: string, baseUrl: string): MLIdentity | null {
@@ -245,6 +253,7 @@ function validateNordicFeaturedCard(card: unknown, baseUrl: string): string | nu
   const meta = metadata as Record<string, unknown>;
   const itemId = normalizeMlId(meta.id);
   const productId = normalizeMlId(meta.product_id);
+  const userProductId = normalizeMlId(meta.user_product_id);
   const rawUrl = typeof meta.url === "string" ? meta.url : "";
   if (!itemId || !rawUrl) return null;
 
@@ -255,7 +264,60 @@ function validateNordicFeaturedCard(card: unknown, baseUrl: string): string | nu
     return urlIdentity.id === itemId ? itemId : null;
   }
 
-  return productId && productId === urlIdentity.id ? itemId : null;
+  if (productId && productId === urlIdentity.id) {
+    return itemId;
+  }
+
+  if (userProductId && userProductId === urlIdentity.id) {
+    return itemId;
+  }
+
+  return null;
+}
+
+function extractNordicCardDetails(card: unknown, htmlBody?: string): ProductFallbackDetails | undefined {
+  if (!card || typeof card !== "object" || Array.isArray(card)) return undefined;
+  const meta = ((card as Record<string, unknown>).metadata || {}) as Record<string, unknown>;
+  const rawUrl = typeof meta.url === "string" ? meta.url : undefined;
+
+  const cardComponents = Array.isArray((card as Record<string, unknown>).components)
+    ? ((card as Record<string, unknown>).components as unknown[])
+    : Object.values(((card as Record<string, unknown>).components || {}) as Record<string, unknown>);
+
+  const titleComp = cardComponents.find(
+    (c: any) => c && (c.type === "title" || c.id === "title")
+  ) as any;
+  const ogTitle = htmlBody
+    ? (htmlBody.match(/property=["']og:title["'][^>]*content=["']([^"']+)["']/i) || htmlBody.match(/content=["']([^"']+)["'][^>]*property=["']og:title["']/i))?.[1]
+    : undefined;
+  const title = titleComp?.title?.text || ogTitle;
+
+  const priceComp = cardComponents.find(
+    (c: any) => c && (c.type === "price" || c.id === "price")
+  ) as any;
+  const priceVal = typeof priceComp?.price?.current_price?.value === "number"
+    ? priceComp.price.current_price.value
+    : undefined;
+  const tracksMeta = meta.tracks as any;
+  const tracksPrice = typeof tracksMeta?.price?.price === "number" ? tracksMeta.price.price : undefined;
+  const price = priceVal ?? tracksPrice;
+
+  const pictures = (card as Record<string, unknown>).pictures as any[];
+  const pictureObj = Array.isArray(pictures) ? pictures[0] : undefined;
+  const ogImage = htmlBody
+    ? (htmlBody.match(/property=["']og:image["'][^>]*content=["']([^"']+)["']/i) || htmlBody.match(/content=["']([^"']+)["'][^>]*property=["']og:image["']/i))?.[1]
+    : undefined;
+  const imageUrl = pictureObj?.url || pictureObj?.secure_url || ogImage;
+
+  if (!title && price === undefined && !imageUrl) return undefined;
+
+  const details: ProductFallbackDetails = {};
+  if (typeof title === "string" && title.trim()) details.title = title.trim();
+  if (typeof price === "number" && price > 0) details.price = price;
+  if (typeof imageUrl === "string" && imageUrl.trim()) details.imageUrl = imageUrl.trim();
+  if (typeof rawUrl === "string" && rawUrl.trim()) details.canonicalUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
+
+  return details;
 }
 
 function extractMlIdentityFromNordicFeaturedCard(
@@ -290,10 +352,20 @@ function extractMlIdentityFromNordicFeaturedCard(
   if (featuredCards.length !== 1) return { status: "invalid" };
 
   const itemId = validateNordicFeaturedCard(featuredCards[0], baseUrl);
-  return itemId ? { status: "valid", itemId } : { status: "invalid" };
+  if (!itemId) return { status: "invalid" };
+
+  const fallbackDetails = extractNordicCardDetails(featuredCards[0], htmlBody);
+  return fallbackDetails
+    ? { status: "valid", itemId, fallbackDetails }
+    : { status: "valid", itemId };
 }
 
-function recoverMlIdentityFromShowcase(result: UrlResolveResult): string | null {
+type RecoveredShowcaseIdentity = {
+  itemId: string;
+  fallbackDetails?: ProductFallbackDetails;
+};
+
+function recoverMlIdentityFromShowcase(result: UrlResolveResult): RecoveredShowcaseIdentity | null {
   if (result.marketplace !== "Mercado Livre") return null;
 
   const ids = new Set<string>();
@@ -307,11 +379,19 @@ function recoverMlIdentityFromShowcase(result: UrlResolveResult): string | null 
     ids.add(id);
   }
 
+  let fallbackDetails: ProductFallbackDetails | undefined;
   const nordicIdentity = extractMlIdentityFromNordicFeaturedCard(result.htmlBody, result.resolvedUrl);
   if (nordicIdentity.status === "invalid") return null;
-  if (nordicIdentity.status === "valid") ids.add(nordicIdentity.itemId);
+  if (nordicIdentity.status === "valid") {
+    ids.add(nordicIdentity.itemId);
+    fallbackDetails = nordicIdentity.fallbackDetails;
+  }
 
-  return ids.size === 1 ? [...ids][0] : null;
+  if (ids.size === 1) {
+    return fallbackDetails ? { itemId: [...ids][0], fallbackDetails } : { itemId: [...ids][0] };
+  }
+
+  return null;
 }
 
 export function classifyResolution(result: UrlResolveResult): ProductResolutionOutcome {
@@ -324,12 +404,13 @@ export function classifyResolution(result: UrlResolveResult): ProductResolutionO
   }
 
   if (result.errorCode === "AFFILIATE_SHOWCASE_NOT_PRODUCT") {
-    const recoveredItemId = recoverMlIdentityFromShowcase(result);
-    if (recoveredItemId) {
+    const recovered = recoverMlIdentityFromShowcase(result);
+    if (recovered) {
       return {
         status: "confirmed_identity",
-        itemId: recoveredItemId,
+        itemId: recovered.itemId,
         resolvedUrl: result.resolvedUrl,
+        ...(recovered.fallbackDetails ? { fallbackDetails: recovered.fallbackDetails } : {}),
       };
     }
   }

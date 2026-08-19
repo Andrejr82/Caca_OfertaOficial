@@ -382,6 +382,107 @@ describe("classifyResolution", () => {
     expect(result).toEqual({ status: "rejected", code: "PRODUCT_ID_MISMATCH" });
   });
 
+  it("recupera o item do link 18dxNo8 com catálogo de usuário (/up/MLBU...) pelo card featured do SSR Nordic", () => {
+    const nordic = {
+      _n: {
+        ctx: {
+          r: {
+            appProps: {
+              pageProps: {
+                data: {
+                  components: [
+                    { type: "header" },
+                    {
+                      type: "recommendations",
+                      recommendation_data: {
+                        recommendation_info: {
+                          polycards: [
+                            {
+                              metadata: {
+                                id: "MLB6037755720",
+                                user_product_id: "MLBU1993483730",
+                                url: "www.mercadolivre.com.br/kit-4-short-praia/up/MLBU1993483730",
+                                url_fragments: "#polycard_client=recommendations_home_affiliate-profile&c_id=/home/card-featured/element",
+                              },
+                              components: [
+                                {
+                                  type: "title",
+                                  title: { text: "Kit 4 Short Praia Masculino" },
+                                },
+                                {
+                                  type: "price",
+                                  price: { current_price: { value: 72.65 } },
+                                },
+                              ],
+                              pictures: [{ url: "https://http2.mlstatic.com/short.webp" }],
+                            },
+                          ],
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      },
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/doandre",
+      redirectChain: ["https://meli.la/18dxNo8"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">_n.ctx.r = ${JSON.stringify(nordic._n.ctx.r)};</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toMatchObject({
+      status: "confirmed_identity",
+      itemId: "MLB6037755720",
+      fallbackDetails: {
+        title: "Kit 4 Short Praia Masculino",
+        price: 72.65,
+        imageUrl: "https://http2.mlstatic.com/short.webp",
+      },
+    });
+  });
+
+  it("rejeita card featured de catálogo de usuário quando o user_product_id diverge da URL", () => {
+    const nordic = {
+      appProps: {
+        pageProps: {
+          data: {
+            components: [
+              {
+                polycards: [
+                  {
+                    metadata: {
+                      id: "MLB6037755720",
+                      user_product_id: "MLBU1111111111",
+                      url: "www.mercadolivre.com.br/kit-4-short-praia/up/MLBU2222222222",
+                      c_id: "/home/card-featured/element",
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        },
+      },
+    };
+
+    const result = classifyResolution({
+      resolvedUrl: "https://www.mercadolivre.com.br/social/perfil",
+      redirectChain: ["https://meli.la/18dxNo8"],
+      marketplace: "Mercado Livre",
+      htmlBody: `<script id="__NORDIC_RENDERING_CTX__">${JSON.stringify(nordic)}</script>`,
+      errorCode: "AFFILIATE_SHOWCASE_NOT_PRODUCT",
+    });
+
+    expect(result).toEqual({ status: "rejected", code: "AFFILIATE_SHOWCASE_NOT_PRODUCT" });
+  });
+
   it("rejeita somente um ciclo de redirecionamento real", () => {
     const result = classifyResolution({
       resolvedUrl: "https://meli.la/loop",

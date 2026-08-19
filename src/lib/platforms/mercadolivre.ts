@@ -310,7 +310,8 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
       return { type: "item", id: itemIdParam.replace("-", "").toUpperCase() };
     }
 
-    const productMatch = path.match(/\/p\/(MLB-?\d+)/i);
+    // 1. Testa se é um ID de catálogo de produto (/p/MLB123456 ou /up/MLBU123456)
+    const productMatch = path.match(/\/(?:p|up)\/(MLB[U]?-?\d+)/i);
     if (productMatch) {
       return { type: "product", id: productMatch[1].replace("-", "").toUpperCase() };
     }
@@ -322,7 +323,8 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
 
     return null;
   } catch {
-    const productMatch = url.match(/\/p\/(MLB-?\d+)/i);
+    // Fallback se o parser de URL falhar (regex direto na string de texto)
+    const productMatch = url.match(/\/(?:p|up)\/(MLB[U]?-?\d+)/i);
     if (productMatch) {
       return { type: "product", id: productMatch[1].replace("-", "").toUpperCase() };
     }
@@ -335,7 +337,7 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
 }
 
 function extractMLCatalogId(url: string): string | null {
-  const match = url.match(/\/p\/(MLB-?\d+)/i);
+  const match = url.match(/\/(?:p|up)\/(MLB[U]?-?\d+)/i);
   return match ? match[1].replace("-", "").toUpperCase() : null;
 }
 
