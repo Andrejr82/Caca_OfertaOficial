@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
@@ -15,7 +16,6 @@ function schedulePostResponseTask(task: () => Promise<unknown> | unknown) {
       }
     });
   } catch {
-    // Fallback assíncrono seguro caso chamado fora de contexto de request (ex: testes)
     Promise.resolve().then(task).catch((err) => {
       console.warn("[AUDIT] Fallback assíncrono de auditoria falhou:", err);
     });
@@ -36,8 +36,6 @@ export async function signInAction(formData: FormData) {
     redirect(`/login?error=${encodeURIComponent(error.message)}`);
   }
 
-  // Registra auditoria de login via pós-resposta do Next.js sem bloquear o redirect
-  // e reutilizando o userId já autenticado para evitar disputa concorrente de sessão/refresh.
   if (data?.user?.id) {
     const userId = data.user.id;
     schedulePostResponseTask(async () => {
@@ -45,6 +43,9 @@ export async function signInAction(formData: FormData) {
     });
   }
 
+  // A autenticação altera os cookies da sessão. Limpa o Router Cache antes do
+  // redirect para impedir que a árvore de /login seja reutilizada após o POST.
+  revalidatePath("/", "layout");
   redirect("/dashboard");
 }
 
@@ -64,6 +65,7 @@ export async function signOutAction() {
     }
     await supabase.auth.signOut();
   }
+
+  revalidatePath("/", "layout");
   redirect("/login");
 }
-
