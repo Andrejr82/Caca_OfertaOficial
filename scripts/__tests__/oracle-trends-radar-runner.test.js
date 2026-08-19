@@ -222,17 +222,17 @@ test('buildTrendRadarProductsFromCandidates ranks by sales_velocity first and ab
   assert.equal(products[1].product_term, 'Item Alto Volume Estável');
   assert.equal(products[1].priority, 2);
 
-  // Validate Commercial Opportunity Score V3 fields
+  // Validate Commercial Opportunity Score V4 fields
   assert.ok(typeof products[0].commercial_score === 'number');
   assert.ok(products[0].commercial_score >= 0 && products[0].commercial_score <= 100);
   assert.ok(products[0].score_breakdown);
   assert.equal(typeof products[0].score_breakdown.marketplaceDemand, 'number');
-  assert.equal(typeof products[0].score_breakdown.identityQuality, 'number');
-  assert.equal(typeof products[0].score_breakdown.priceCompetitiveness, 'number');
-  assert.equal(typeof products[0].score_breakdown.commissionPotential, 'number');
-  assert.equal(typeof products[0].score_breakdown.visualPotential, 'number');
-  assert.equal(typeof products[0].score_breakdown.internalHistory, 'number');
+  assert.equal(typeof products[0].score_breakdown.economicReturn, 'number');
+  assert.equal(typeof products[0].score_breakdown.internalConversion, 'number');
   assert.equal(typeof products[0].score_breakdown.reputation, 'number');
+  assert.equal(typeof products[0].score_breakdown.offerCompetitiveness, 'number');
+  assert.equal(typeof products[0].score_breakdown.identityTraceability, 'number');
+  assert.equal(typeof products[0].score_breakdown.visualPotential, 'number');
 
   // Breakdown sum strictly equals commercial_score
   const sumBreakdown = Object.values(products[0].score_breakdown).reduce((a, b) => a + b, 0);
@@ -247,7 +247,7 @@ test('buildTrendRadarProductsFromCandidates ranks by sales_velocity first and ab
   assert.equal(evidence0.temporal_metrics.velocity_status, 'computed');
   assert.equal(evidence0.temporal_metrics.sales_velocity, 200);
   assert.equal(evidence0.temporal_metrics.sales_delta, 200);
-  assert.equal(evidence0.strategy_version, 'commercial-opportunity-v3');
+  assert.equal(evidence0.strategy_version, 'commercial-opportunity-v4');
   assert.ok(['PRIORIDADE', 'TESTAR', 'IGNORAR'].includes(evidence0.decision));
 });
 

@@ -30,12 +30,18 @@ const {
   calculateCommercialOpportunityScoreV3,
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
 const {
+  COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+  classifyTicket,
+  calculateCommercialOpportunityScoreV4,
+} = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v4.cjs'));
+const {
   COMMERCIAL_VIABILITY_STRATEGY_VERSION,
   calculateCommercialViabilityV2,
   isViableForRadar,
 } = require('./commercial-viability-v2.cjs');
 const {
   DEFAULT_RECENCY_DAYS,
+  normalizeIdentityPart,
   getMarketplaceIdentityKey,
   getMarketplaceImageUrl,
   withMarketplaceImageEvidence,
@@ -636,6 +642,432 @@ async function fetchRecentSnapshotItemsMap(client, tenantId = null) {
 }
 
 /**
+ * Constrói as chaves de identidade oficial estritas de um candidato para matching com ofertas internas.
+ * NUNCA usa similaridade de nome.
+ */
+function getCandidateOfficialIdentityKeys(candidate = {}) {
+  const keys = [];
+  const marketplace = String(candidate.marketplace || candidate.platform || '').trim().toLowerCase();
+
+  if (marketplace.includes('shopee')) {
+    const itemId = normalizeIdentityPart(candidate.itemId || candidate.item_id || candidate.shopee_item_id || '');
+    const shopId = normalizeIdentityPart(candidate.shopId || candidate.shop_id || '');
+    if (itemId) {
+      if (shopId) {
+        // Prioriza e restringe à chave composta shopId + itemId (sem match cruzado entre shops)
+        keys.push(`shopee:shop:${shopId}:item:${itemId}`);
+      } else {
+        keys.push(`shopee:item:${itemId}`);
+      }
+    }
+  } else if (marketplace.includes('mercado') || marketplace.includes('meli')) {
+    const productId = normalizeIdentityPart(candidate.productId || candidate.product_id || '');
+    const itemId = normalizeIdentityPart(candidate.itemId || candidate.item_id || candidate.id || '');
+    if (productId) {
+      keys.push(`mercadolivre:catalog:${productId}`);
+    }
+    if (itemId) {
+      keys.push(`mercadolivre:item:${itemId}`);
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Constrói as chaves de identidade oficial de uma linha da tabela `offers`.
+ */
+function getOfferOfficialIdentityKeys(offer = {}) {
+  const keys = [];
+  const platform = String(offer.platform || '').trim().toLowerCase();
+  const metrics = offer.marketplace_metrics || {};
+
+  if (platform.includes('shopee')) {
+    const itemId = normalizeIdentityPart(
+      offer.shopee_item_id ||
+      metrics.itemId ||
+      metrics.item_id ||
+      metrics.sourceItemId ||
+      ''
+    );
+    const shopId = normalizeIdentityPart(
+      offer.shopee_shop_id ||
+      metrics.shopId ||
+      metrics.shop_id ||
+      ''
+    );
+
+    if (itemId) {
+      if (shopId) {
+        keys.push(`shopee:shop:${shopId}:item:${itemId}`);
+      } else {
+        keys.push(`shopee:item:${itemId}`);
+      }
+    }
+  } else if (platform.includes('mercado') || platform.includes('meli')) {
+    const productId = normalizeIdentityPart(
+      offer.product_id ||
+      metrics.productId ||
+      metrics.product_id ||
+      ''
+    );
+    const itemId = normalizeIdentityPart(
+      offer.item_id ||
+      metrics.itemId ||
+      metrics.item_id ||
+      metrics.sourceItemId ||
+      ''
+    );
+
+    if (productId) {
+      keys.push(`mercadolivre:catalog:${productId}`);
+    }
+    if (itemId) {
+      keys.push(`mercadolivre:item:${itemId}`);
+    } else if (offer.original_url) {
+      const match = offer.original_url.match(/MLB-?(\d+)/i);
+      if (match && match[1]) {
+        keys.push(`mercadolivre:item:mlb${match[1]}`);
+      }
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * Classifica eventos de clique de forma determinística em:
+ * - 'human_probable' (WhatsApp, Telegram, Facebook mobile com ref m.facebook/lm.facebook/l.facebook, Instagram direto)
+ * - 'technical_probable' (burst >= 5 ofertas distintas no mesmo minuto por bucket canal/source/device, bots, crawlers, previews)
+ * - 'ambiguous' (Facebook desktop não verificado, fontes desconhecidas ou não comprovadas)
+ */
+function classifyClickEvents(clickEvents = [], {
+  linkIdToOfferId = new Map(),
+  linkIdToChannel = new Map(),
+} = {}) {
+  const classifiedEvents = [];
+  const statsByOfferId = new Map();
+
+  if (!Array.isArray(clickEvents) || clickEvents.length === 0) {
+    return { classifiedEvents, statsByOfferId };
+  }
+
+  // 1. Agrupar em buckets por channel / source / device / minuto para detectar bursts técnicos
+  const bucketMap = new Map();
+
+  for (const ev of clickEvents) {
+    const linkId = ev.affiliate_link_id;
+    const offerId = linkIdToOfferId.get(linkId) || ev.offer_id || null;
+    const channel = String(linkIdToChannel.get(linkId) || ev.channel || '').trim().toLowerCase();
+    const source = String(ev.source || '').trim().toLowerCase();
+    const deviceType = String(ev.device_type || '').trim().toLowerCase();
+    const createdDate = ev.created_at ? new Date(ev.created_at) : new Date();
+    const minuteIso = !isNaN(createdDate.getTime()) ? createdDate.toISOString().slice(0, 16) : 'unknown-minute';
+
+    const bucketKey = `${channel}:${source}:${deviceType}:${minuteIso}`;
+    if (!bucketMap.has(bucketKey)) {
+      bucketMap.set(bucketKey, {
+        bucketKey,
+        offerIds: new Set(),
+        events: [],
+      });
+    }
+
+    const bucket = bucketMap.get(bucketKey);
+    if (offerId) {
+      bucket.offerIds.add(offerId);
+    }
+    bucket.events.push(ev);
+  }
+
+  // 2. Classificação determinística de cada evento
+  for (const ev of clickEvents) {
+    const linkId = ev.affiliate_link_id;
+    const offerId = linkIdToOfferId.get(linkId) || ev.offer_id || null;
+    const channel = String(linkIdToChannel.get(linkId) || ev.channel || '').trim().toLowerCase();
+    const source = String(ev.source || '').trim().toLowerCase();
+    const deviceType = String(ev.device_type || '').trim().toLowerCase();
+    const createdDate = ev.created_at ? new Date(ev.created_at) : new Date();
+    const minuteIso = !isNaN(createdDate.getTime()) ? createdDate.toISOString().slice(0, 16) : 'unknown-minute';
+    const bucketKey = `${channel}:${source}:${deviceType}:${minuteIso}`;
+
+    const bucket = bucketMap.get(bucketKey);
+    const distinctOffersInMinute = bucket ? bucket.offerIds.size : 0;
+
+    let classification = 'ambiguous';
+    let reason = 'unverified_traffic';
+
+    const isFacebook = channel === 'facebook' || source.includes('facebook') || source.includes('fb');
+    const isFbMobileRef = /^(?:https?:\/\/)?(?:m|lm|l)\.facebook\.com/i.test(source) ||
+      source === 'm.facebook' ||
+      source === 'lm.facebook' ||
+      source === 'l.facebook' ||
+      source.includes('m.facebook') ||
+      source.includes('lm.facebook') ||
+      source.includes('l.facebook');
+
+    // Regra 1: Burst de >= 5 ofertas distintas no mesmo minuto no mesmo bucket => technical_probable
+    if (distinctOffersInMinute >= 5) {
+      classification = 'technical_probable';
+      reason = `burst_technical_scan_${distinctOffersInMinute}_offers_same_minute`;
+    }
+    // Regra 2: Bots, crawlers, spiders, previews explícitos => technical_probable
+    else if (
+      deviceType === 'bot' ||
+      source === 'crawler' ||
+      source === 'bot' ||
+      source === 'preview' ||
+      source === 'technical' ||
+      source.includes('bot') ||
+      source.includes('crawler') ||
+      source.includes('spider')
+    ) {
+      classification = 'technical_probable';
+      reason = 'explicit_bot_or_crawler';
+    }
+    // Regra 3: WhatsApp ou Telegram => human_probable
+    else if (
+      channel === 'whatsapp' ||
+      channel === 'telegram' ||
+      source.includes('whatsapp') ||
+      source.includes('telegram')
+    ) {
+      classification = 'human_probable';
+      reason = 'direct_messaging_human_click';
+    }
+    // Regra 4: Facebook com referências móveis explícitas m.facebook / lm.facebook / l.facebook => human_probable
+    else if (isFacebook && isFbMobileRef) {
+      classification = 'human_probable';
+      reason = 'facebook_mobile_human_click';
+    }
+    // Regra 5: Instagram direto válido => human_probable
+    else if (
+      channel === 'instagram' ||
+      source.includes('instagram') ||
+      source.includes('ig') ||
+      /^(?:https?:\/\/)?(?:l\.)?instagram\.com/i.test(source)
+    ) {
+      classification = 'human_probable';
+      reason = 'instagram_direct_human_click';
+    }
+    // Regra 6: Facebook desktop isolado sem evidência humana explícita => ambiguous
+    else if (isFacebook && deviceType === 'desktop') {
+      classification = 'ambiguous';
+      reason = 'facebook_desktop_unverified';
+    }
+    // Regra 7: Default fail-closed => ambiguous
+    else {
+      classification = 'ambiguous';
+      reason = 'unverified_traffic';
+    }
+
+    classifiedEvents.push({
+      eventId: ev.id,
+      affiliateLinkId: linkId,
+      offerId,
+      classification,
+      reason,
+    });
+
+    if (offerId) {
+      if (!statsByOfferId.has(offerId)) {
+        statsByOfferId.set(offerId, {
+          humanProbableClicks: 0,
+          technicalClicks: 0,
+          ambiguousClicks: 0,
+        });
+      }
+      const stats = statsByOfferId.get(offerId);
+      if (classification === 'human_probable') {
+        stats.humanProbableClicks += 1;
+      } else if (classification === 'technical_probable') {
+        stats.technicalClicks += 1;
+      } else {
+        stats.ambiguousClicks += 1;
+      }
+    }
+  }
+
+  return { classifiedEvents, statsByOfferId };
+}
+
+/**
+ * Carrega o histórico comercial interno (cliques humanos, vendas atribuídas) do Supabase
+ * para os candidatos fornecidos, utilizando APENAS matching determinístico por IDs oficiais.
+ */
+async function fetchInternalOfferPerformanceMap(client, {
+  tenantId = null,
+  candidates = [],
+  windowDays = 30,
+  now = new Date(),
+} = {}) {
+  const performanceMap = new Map();
+  if (!client || !Array.isArray(candidates) || candidates.length === 0) {
+    return performanceMap;
+  }
+
+  const windowEnd = now;
+  const windowStart = new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
+
+  try {
+    // 1. Carrega ofertas existentes do tenant/usuário
+    let offerQuery = client
+      .from('offers')
+      .select('id, user_id, platform, shopee_item_id, shopee_shop_id, marketplace_metrics, original_url');
+
+    if (tenantId) {
+      offerQuery = offerQuery.eq('user_id', tenantId);
+    }
+
+    const { data: offers, error: offerErr } = await offerQuery;
+    if (offerErr || !Array.isArray(offers) || offers.length === 0) {
+      return performanceMap;
+    }
+
+    // 2. Mapeia chaves oficiais para as ofertas
+    const offerByOfficialKey = new Map();
+    for (const offer of offers) {
+      const keys = getOfferOfficialIdentityKeys(offer);
+      for (const k of keys) {
+        if (!offerByOfficialKey.has(k)) {
+          offerByOfficialKey.set(k, offer);
+        }
+      }
+    }
+
+    // 3. Identifica quais ofertas correspondem aos candidatos por ID oficial
+    const candidateToOfferMap = new Map();
+    const matchedOfferIdsSet = new Set();
+
+    for (const candidate of candidates) {
+      const candidateKeys = getCandidateOfficialIdentityKeys(candidate);
+      let matchedOffer = null;
+
+      for (const k of candidateKeys) {
+        if (offerByOfficialKey.has(k)) {
+          matchedOffer = offerByOfficialKey.get(k);
+          break;
+        }
+      }
+
+      if (matchedOffer) {
+        candidateToOfferMap.set(candidate, matchedOffer);
+        matchedOfferIdsSet.add(matchedOffer.id);
+      }
+    }
+
+    if (matchedOfferIdsSet.size === 0) {
+      return performanceMap;
+    }
+
+    const matchedOfferIds = Array.from(matchedOfferIdsSet);
+
+    // 4. Carrega affiliate_links associados a essas ofertas
+    const { data: links, error: linkErr } = await client
+      .from('affiliate_links')
+      .select('id, offer_id, channel, clicks')
+      .in('offer_id', matchedOfferIds);
+
+    const linkIdToOfferId = new Map();
+    const linkIdToChannel = new Map();
+    const linkIds = [];
+
+    if (!linkErr && Array.isArray(links)) {
+      for (const link of links) {
+        linkIdToOfferId.set(link.id, link.offer_id);
+        if (link.channel) {
+          linkIdToChannel.set(link.id, link.channel);
+        }
+        linkIds.push(link.id);
+      }
+    }
+
+    // 5. Carrega e classifica click_events granulares para os links dessas ofertas
+    let clicksByOfferId = new Map();
+    for (const offerId of matchedOfferIds) {
+      clicksByOfferId.set(offerId, {
+        humanProbableClicks: 0,
+        technicalClicks: 0,
+        ambiguousClicks: 0,
+      });
+    }
+
+    if (linkIds.length > 0) {
+      const { data: clickEvents, error: clickErr } = await client
+        .from('click_events')
+        .select('id, affiliate_link_id, source, device_type, created_at')
+        .in('affiliate_link_id', linkIds)
+        .gte('created_at', windowStart.toISOString())
+        .lte('created_at', windowEnd.toISOString());
+
+      if (!clickErr && Array.isArray(clickEvents) && clickEvents.length > 0) {
+        const { statsByOfferId } = classifyClickEvents(clickEvents, {
+          linkIdToOfferId,
+          linkIdToChannel,
+        });
+        clicksByOfferId = statsByOfferId;
+      }
+    }
+
+    // 6. Carrega sales atribuídas a essas ofertas
+    const salesByOfferId = new Map();
+    for (const offerId of matchedOfferIds) {
+      salesByOfferId.set(offerId, 0);
+    }
+
+    const { data: sales, error: salesErr } = await client
+      .from('sales')
+      .select('id, offer_id, status, sold_at')
+      .in('offer_id', matchedOfferIds)
+      .neq('status', 'cancelled')
+      .gte('sold_at', windowStart.toISOString())
+      .lte('sold_at', windowEnd.toISOString());
+
+    if (!salesErr && Array.isArray(sales)) {
+      for (const sale of sales) {
+        if (sale.offer_id && salesByOfferId.has(sale.offer_id)) {
+          salesByOfferId.set(sale.offer_id, salesByOfferId.get(sale.offer_id) + 1);
+        }
+      }
+    }
+
+    // 7. Monta o internalPerformance consolidado por candidato
+    for (const candidate of candidates) {
+      const matchedOffer = candidateToOfferMap.get(candidate);
+      if (matchedOffer) {
+        const clickStats = clicksByOfferId.get(matchedOffer.id) || { humanProbableClicks: 0, technicalClicks: 0, ambiguousClicks: 0 };
+        const attributedSales = salesByOfferId.get(matchedOffer.id) || 0;
+
+        const perf = {
+          matched: true,
+          matchedOfferId: matchedOffer.id,
+          humanProbableClicks: clickStats.humanProbableClicks,
+          technicalClicks: clickStats.technicalClicks,
+          ambiguousClicks: clickStats.ambiguousClicks,
+          attributedSales,
+          internalHistoryWindow: {
+            days: windowDays,
+            windowStart: windowStart.toISOString(),
+            windowEnd: windowEnd.toISOString(),
+          },
+        };
+
+        const primaryKey = getCandidateOfficialIdentityKeys(candidate)[0] || candidate.itemId;
+        performanceMap.set(primaryKey, perf);
+        // Também indexa por todas as chaves do candidato para lookups flexíveis
+        for (const k of getCandidateOfficialIdentityKeys(candidate)) {
+          performanceMap.set(k, perf);
+        }
+      }
+    }
+  } catch (err) {
+    console.error(`[Oracle Radar] Erro ao carregar histórico interno: ${err.message}`);
+  }
+
+  return performanceMap;
+}
+
+/**
  * Constrói e ranqueia produtos do Radar integrando Commercial Viability V2,
  * Deduplicação Semântica e Capping de Diversidade.
  */
@@ -644,6 +1076,7 @@ function buildTrendRadarProductsFromCandidates({
   shopeeCandidates = [],
   mlCandidates = [],
   previousItemsMap = new Map(),
+  internalPerformanceMap = new Map(),
   maxProducts = 20,
   now = new Date(),
 }) {
@@ -653,7 +1086,7 @@ function buildTrendRadarProductsFromCandidates({
   const dedupResult = deduplicateCatalogAndSemantic(allCandidates);
   const uniqueCandidates = dedupResult.uniqueCandidates;
 
-  // 2. Avaliação de Viabilidade Comercial V2 & Score V3
+  // 2. Avaliação de Viabilidade Comercial V2 & Score V4
   const viableCandidates = [];
 
   for (const candidate of uniqueCandidates) {
@@ -671,10 +1104,38 @@ function buildTrendRadarProductsFromCandidates({
       candidate.evidence_status ||
       ((typeof candidate.sales === 'number' && candidate.sales > 0) || (typeof candidate.ratingStar === 'number' && candidate.ratingStar > 0) ? 'verified' : 'partial');
 
-    const scoreV3 = calculateCommercialOpportunityScoreV3({
+    // Resolução do histórico interno determinístico
+    let internalPerformance = candidate.internalPerformance;
+    if (!internalPerformance && internalPerformanceMap && internalPerformanceMap.size > 0) {
+      const keys = getCandidateOfficialIdentityKeys(candidate);
+      for (const k of keys) {
+        if (internalPerformanceMap.has(k)) {
+          internalPerformance = internalPerformanceMap.get(k);
+          break;
+        }
+      }
+    }
+
+    if (!internalPerformance) {
+      internalPerformance = {
+        matched: false,
+        matchedOfferId: null,
+        humanProbableClicks: 0,
+        technicalClicks: 0,
+        ambiguousClicks: 0,
+        attributedSales: 0,
+        internalHistoryWindow: null,
+      };
+    }
+
+    const scoreV4 = calculateCommercialOpportunityScoreV4({
       ...candidate,
       evidenceStatus,
       velocityInfo,
+      internalPerformance,
+    }, {
+      velocityInfo,
+      internalPerformance,
     });
 
     viableCandidates.push({
@@ -682,18 +1143,21 @@ function buildTrendRadarProductsFromCandidates({
       evidenceStatus,
       velocityInfo,
       viability,
-      scoreV3,
+      scoreV4,
+      internalPerformance,
+      commercial_score: scoreV4.total,
+      ticket_class: scoreV4.ticket_class,
     });
   }
 
-  // 3. Ordenação Determinística: Score V3 > High Viability (em empate) > Sales Velocity > Sales > Rating > Discount
-  viableCandidates.sort((a, b) => {
-    // 3.1 Score V3 total (maior primeiro)
-    if (b.scoreV3.total !== a.scoreV3.total) {
-      return b.scoreV3.total - a.scoreV3.total;
+  // 3. Ordenação Determinística: Score V4 > High Viability (em empate) > Sales Velocity > Sales > Rating > Discount
+  const sortCandidatesDeterministic = (a, b) => {
+    // 3.1 Score V4 total (maior primeiro)
+    if (b.scoreV4.total !== a.scoreV4.total) {
+      return b.scoreV4.total - a.scoreV4.total;
     }
 
-    // 3.2 Prioridade de Viabilidade: High antes de Medium SOMENTE em empate de Score V3
+    // 3.2 Prioridade de Viabilidade: High antes de Medium SOMENTE em empate de Score V4
     if (a.viability.classification === 'high' && b.viability.classification !== 'high') return -1;
     if (b.viability.classification === 'high' && a.viability.classification !== 'high') return 1;
 
@@ -720,11 +1184,11 @@ function buildTrendRadarProductsFromCandidates({
     const aDiscount = a.discountPercent || 0;
     const bDiscount = b.discountPercent || 0;
     return bDiscount - aDiscount;
-  });
+  };
+
+  viableCandidates.sort(sortCandidatesDeterministic);
 
   // 3.1 Garantir unicidade final por marketplace + normalized_product_term
-  // Preserva o melhor representante de cada termo normalizado por marketplace,
-  // descartando duplicatas secundárias e promovendo os próximos candidatos viáveis.
   const uniqueTermCandidates = [];
   const seenMarketplaceNormalizedTerms = new Set();
 
@@ -740,12 +1204,113 @@ function buildTrendRadarProductsFromCandidates({
     uniqueTermCandidates.push(candidate);
   }
 
-  // 4. Aplicação do Capping de Diversidade Familiar
-  const diversityResult = applyFamilyDiversityCap(uniqueTermCandidates, {
-    maxPerFamily: 3,
-    targetCount: maxProducts,
-  });
-  const selectedCandidates = diversityResult.diversifiedProducts;
+  // 4. Montagem da Carteira Comercial Top 20 por Faixas de Ticket & Capping Familiar
+  // Metas estruturais quando existirem candidatos viáveis:
+  // - impulse: max 6
+  // - core: seek >= 5
+  // - upper: seek >= 4
+  // - premium: seek >= 2
+  // Vagas restantes / não preenchidas são redistribuídas para os melhores scores globais.
+  const selectedCandidates = [];
+  const selectedKeys = new Set();
+  const familyCounts = new Map();
+  let impulseCount = 0;
+  let coreCount = 0;
+  let upperCount = 0;
+  let premiumCount = 0;
+
+  const canSelectCandidate = (candidate) => {
+    const marketplace = String(candidate.marketplace || '').trim().toLowerCase();
+    const normalizedTerm = normalizeText(candidate.productName);
+    const key = `${marketplace}:${normalizedTerm}`;
+    if (selectedKeys.has(key)) return false;
+
+    const famKey = extractSemanticClusterKey({
+      productName: candidate.productName,
+      category: candidate.category,
+      marketplace: candidate.marketplace,
+      itemId: candidate.itemId,
+    });
+    const currentFamilyCount = familyCounts.get(famKey) || 0;
+    if (currentFamilyCount >= 3) return false;
+
+    return true;
+  };
+
+  const selectCandidate = (candidate) => {
+    const marketplace = String(candidate.marketplace || '').trim().toLowerCase();
+    const normalizedTerm = normalizeText(candidate.productName);
+    const key = `${marketplace}:${normalizedTerm}`;
+    const famKey = extractSemanticClusterKey({
+      productName: candidate.productName,
+      category: candidate.category,
+      marketplace: candidate.marketplace,
+      itemId: candidate.itemId,
+    });
+
+    selectedKeys.add(key);
+    familyCounts.set(famKey, (familyCounts.get(famKey) || 0) + 1);
+    selectedCandidates.push(candidate);
+
+    if (candidate.ticket_class === 'impulse') impulseCount += 1;
+    else if (candidate.ticket_class === 'core') coreCount += 1;
+    else if (candidate.ticket_class === 'upper') upperCount += 1;
+    else if (candidate.ticket_class === 'premium') premiumCount += 1;
+  };
+
+  const candidatesByTicket = {
+    premium: uniqueTermCandidates.filter(c => c.ticket_class === 'premium'),
+    upper: uniqueTermCandidates.filter(c => c.ticket_class === 'upper'),
+    core: uniqueTermCandidates.filter(c => c.ticket_class === 'core'),
+    impulse: uniqueTermCandidates.filter(c => c.ticket_class === 'impulse'),
+  };
+
+  // Pass 1: Metas estruturais de representação por faixa
+  // Premium: até 2
+  for (const c of candidatesByTicket.premium) {
+    if (premiumCount >= 2 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Upper: até 4
+  for (const c of candidatesByTicket.upper) {
+    if (upperCount >= 4 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Core: até 5
+  for (const c of candidatesByTicket.core) {
+    if (coreCount >= 5 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Impulse: até 6
+  for (const c of candidatesByTicket.impulse) {
+    if (impulseCount >= 6 || selectedCandidates.length >= maxProducts) break;
+    if (canSelectCandidate(c)) selectCandidate(c);
+  }
+
+  // Pass 2: Preenchimento e redistribuição de vagas restantes pelos melhores scores globais
+  for (const candidate of uniqueTermCandidates) {
+    if (selectedCandidates.length >= maxProducts) break;
+    if (!canSelectCandidate(candidate)) continue;
+
+    // Se for impulse e já atingiu o teto de 6, verificar se ainda há candidatos viáveis de outras faixas
+    if (candidate.ticket_class === 'impulse' && impulseCount >= 6) {
+      const hasOtherTiersAvailable = uniqueTermCandidates.some(
+        other => other.ticket_class !== 'impulse' && canSelectCandidate(other)
+      );
+      if (hasOtherTiersAvailable) {
+        // Pula este impulse para dar preferência a core/upper/premium disponíveis
+        continue;
+      }
+    }
+
+    selectCandidate(candidate);
+  }
+
+  // Pass 3: Ordenação final da carteira por Score V4 para o snapshot
+  selectedCandidates.sort(sortCandidatesDeterministic);
 
   // 5. Mapeamento final dos produtos para o snapshot
   const prioritizedProducts = [];
@@ -777,11 +1342,14 @@ function buildTrendRadarProductsFromCandidates({
     const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
     const viability = candidate.viability;
 
-    const finalScoreV3 = calculateCommercialOpportunityScoreV3({
+    const finalScoreV4 = calculateCommercialOpportunityScoreV4({
       ...candidate,
       isFocus,
       evidenceStatus: candidate.evidenceStatus,
       velocityInfo,
+    }, {
+      velocityInfo,
+      internalPerformance: candidate.internalPerformance,
     });
 
     const directEvidence = [
@@ -799,12 +1367,20 @@ function buildTrendRadarProductsFromCandidates({
         old_price: oldPrice,
         discount_percent: discount,
         rating,
-        decision: finalScoreV3.decision,
-        strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+        decision: finalScoreV4.decision,
+        strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+        score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
         viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
         viability_classification: viability.classification,
-        effective_commission_percent: viability.effectiveCommissionPercent,
-        estimated_commission_per_sale: viability.estimatedCommissionPerSale,
+        ticket_class: finalScoreV4.ticket_class,
+        effective_commission_percent: finalScoreV4.economic_return.effectiveCommissionPercent,
+        estimated_commission_per_sale: finalScoreV4.economic_return.estimatedCommissionPerSale,
+        commission_status: finalScoreV4.economic_return.commissionStatus,
+        internal_conversion_status: finalScoreV4.internal_conversion.internalConversionStatus,
+        human_probable_clicks: finalScoreV4.internal_conversion.humanProbableClicks,
+        attributed_sales: finalScoreV4.internal_conversion.attributedSales,
+        internal_conversion_rate: finalScoreV4.internal_conversion.internalConversionRate,
+        score_breakdown: finalScoreV4.breakdown,
         marketplace_identity: {
           itemId: candidate.itemId || null,
           shopId: candidate.shopId || null,
@@ -818,8 +1394,8 @@ function buildTrendRadarProductsFromCandidates({
           priceDiscountRate: candidate.priceDiscountRate || discount,
           commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
           sellerCommissionRate: candidate.sellerCommissionRate || 0,
-          effectiveCommissionPercent: viability.effectiveCommissionPercent,
-          estimatedCommissionPerSale: viability.estimatedCommissionPerSale,
+          effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
+          estimatedCommissionPerSale: finalScoreV4.economic_return.estimatedCommissionPerSale,
         },
         temporal_metrics: velocityInfo,
       },
@@ -827,7 +1403,7 @@ function buildTrendRadarProductsFromCandidates({
 
     const determiningReasons = [
       ...viability.reasons,
-      ...finalScoreV3.determining_reasons,
+      ...finalScoreV4.determining_reasons,
     ];
 
     const inferredSignals = [
@@ -835,7 +1411,8 @@ function buildTrendRadarProductsFromCandidates({
       sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
       `viability_${viability.classification}`,
-      `v3_decision_${finalScoreV3.decision.toLowerCase()}`,
+      `v4_decision_${finalScoreV4.decision.toLowerCase()}`,
+      `ticket_${finalScoreV4.ticket_class}`,
     ];
 
     prioritizedProducts.push({
@@ -847,8 +1424,8 @@ function buildTrendRadarProductsFromCandidates({
       marketplace: candidate.marketplace,
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
-      commercial_score: finalScoreV3.total,
-      score_breakdown: finalScoreV3.breakdown,
+      commercial_score: finalScoreV4.total,
+      score_breakdown: finalScoreV4.breakdown,
       determining_reasons: determiningReasons,
       confidence: Math.min(
         95,
@@ -902,7 +1479,8 @@ async function persistTrendRadarSnapshot({
     target_products: 20,
     minimum_products: 10,
     target_reached: products.length >= 20,
-    strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
     viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     total_products_selected: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
@@ -915,8 +1493,8 @@ async function persistTrendRadarSnapshot({
     top_product: products[0]?.product_term || null,
     top_product_score: products[0]?.commercial_score || null,
     top_product_decision: products[0]?.direct_evidence?.[0]?.decision || null,
-    strategy_version: COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
-    generated_by: 'oracle_radar_viability_v2_engine',
+    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    generated_by: 'oracle_radar_commercial_opportunity_v4_engine',
     contract: RUNNER_CONTRACT_VERSION,
   };
 
@@ -950,6 +1528,10 @@ module.exports = {
   enrichMercadoLivreWithHighlightsAndReviews,
   computeCandidateSalesVelocity,
   fetchRecentSnapshotItemsMap,
+  getCandidateOfficialIdentityKeys,
+  getOfferOfficialIdentityKeys,
+  classifyClickEvents,
+  fetchInternalOfferPerformanceMap,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,
 };
