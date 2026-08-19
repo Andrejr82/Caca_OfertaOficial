@@ -7,7 +7,7 @@ import { logger } from "@/lib/utils/logger";
 import {
   isNonHumanTraffic,
   isPreviewCrawler,
-  resolveGoAffiliateDestination,
+  resolveTrackedOfferDestination,
   resolveTrackingSource,
 } from "@/lib/tracking/go-request";
 
@@ -81,7 +81,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
         image_url,
         coupon,
         current_price,
-        updated_at
+        updated_at,
+        explainability
       )
     `)
     .ilike("sub_id", `${subId}%`)
@@ -115,15 +116,24 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     });
   }
 
-  const affiliateUrl = resolveGoAffiliateDestination(String(link.original_url || ""));
+  const affiliateUrl = resolveTrackedOfferDestination({
+    platform: link.offers?.platform,
+    originalUrl: link.original_url,
+    affiliateUrl: link.offers?.explainability?.affiliate_url,
+  });
+
   if (!affiliateUrl) {
+    const isMercadoLivre = String(link.offers?.platform || "").trim().toLowerCase() === "mercado livre";
     logger.warn("Destino afiliado rejeitado", {
       event: "go.redirect.rejected",
       affiliateLinkId: link.id,
       channel: link.channel || "unknown",
-      reason: "unsafe_destination",
+      reason: isMercadoLivre ? "ml_monetization_required" : "unsafe_destination",
     });
-    return NextResponse.json({ error: "URL de redirecionamento inválida" }, { status: 400 });
+    return NextResponse.json(
+      { error: isMercadoLivre ? "Oferta Mercado Livre sem monetização válida" : "URL de redirecionamento inválida" },
+      { status: isMercadoLivre ? 409 : 400 },
+    );
   }
 
   const userAgent = request.headers.get("user-agent") || "";
