@@ -173,9 +173,10 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
   }
 
   // 8. Guard de evidência mínima antes de classificar como MEDIUM
-  // Sem vendas observadas, sem comissão e sem velocity → não há base factual para medium.
+  // Sem vendas observadas, sem comissão, sem velocity e sem destaque oficial (ex: BEST_SELLER) → não há base factual para medium.
   // Fail-closed: retorna insufficient_data para não ocupar vagas comerciais principais.
-  const hasObservedDemand = sales !== null && sales >= 1;
+  const hasMarketplaceBestSeller = candidate?.marketplaceDemandEvidence?.type === 'BEST_SELLER';
+  const hasObservedDemand = (sales !== null && sales >= 1) || hasMarketplaceBestSeller;
   const hasObservedRevenue = effectiveCommissionPercent > 0 || (estimatedCommissionPerSale !== null && estimatedCommissionPerSale > 0);
   const hasObservedVelocity = isVelocityComputed;
 
@@ -185,7 +186,7 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
       classification: 'insufficient_data',
       effectiveCommissionPercent,
       estimatedCommissionPerSale,
-      reasons: ['Preço válido mas sem evidência de demanda, comissão ou velocidade de vendas observada'],
+      reasons: ['Preço válido mas sem evidência de demanda, comissão, velocidade ou destaque comprovado observado'],
       isViable: false,
       diagnostic: {
         price_observed: price,
@@ -195,12 +196,18 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
         sales_velocity: salesVelocity,
         velocity_used: isVelocityComputed,
         ticket_class: ticketClass,
+        best_seller_evidence: hasMarketplaceBestSeller ? candidate.marketplaceDemandEvidence : null,
       },
     };
   }
 
   // 9. Classificação MEDIUM — há pelo menos uma evidência factual de viabilidade
-  reasons.push('Viabilidade comercial padrão validada');
+  if (hasMarketplaceBestSeller) {
+    const pos = candidate.marketplaceDemandEvidence.position ? ` pos #${candidate.marketplaceDemandEvidence.position}` : '';
+    reasons.push(`Destaque oficial comprovado no marketplace (${candidate.marketplaceDemandEvidence.source}: ${candidate.marketplaceDemandEvidence.type}${pos})`);
+  } else {
+    reasons.push('Viabilidade comercial padrão validada');
+  }
   return {
     strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     classification: 'medium',

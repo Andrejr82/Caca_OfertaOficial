@@ -291,6 +291,7 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
     productId: String(product.product_id || product.productId || '').trim(),
     productName,
     category: product.category_name || 'Marketplace Deals',
+    categoryId: product.category_id || product.categoryId || null,
     currentPrice: price,
     oldPrice,
     discountPercent: discount,
@@ -307,134 +308,122 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
 }
 
 /**
- * Enriquece um lote de candidatos do Mercado Livre com dados factuais oficiais
- * (sold_quantity -> sales, rating) via API oficial (/items?ids=... e fallback oficial de reviews).
+ * Enriquece candidatos do Mercado Livre cruzando os rankings oficiais de Best Sellers
+ * (/highlights/MLB/category/{categoryId}), tendências de busca (/trends/MLB) e avaliações.
  */
-async function enrichMercadoLivreCandidatesInBatch(candidates = [], {
+async function enrichMercadoLivreWithHighlightsAndReviews(candidates = [], {
   accessToken = null,
   env = process.env,
   fetchImpl = null,
   tokenProvider = refreshAccessToken,
-  maxToEnrich = 150,
-  batchSize = 20,
-  apiGetImpl = null,
+  maxReviews = 25,
 } = {}) {
   if (!Array.isArray(candidates) || candidates.length === 0) return candidates;
 
   const client = fetchImpl || global.fetch;
 
-  // 1. Pré-seleção com diversidade de categorias e qualidade mínima
-  const valid = candidates.filter((c) => (
-    c
-    && typeof c.currentPrice === 'number'
-    && c.currentPrice > 0
-    && (c.itemId || c.productId)
-    && c.productName
-  ));
-
-  if (valid.length === 0) return candidates;
-
-  // Agrupa por categoria para garantir representatividade e diversidade
-  const byCategory = new Map();
-  for (const item of valid) {
-    const cat = item.category || 'Geral';
-    if (!byCategory.has(cat)) byCategory.set(cat, []);
-    byCategory.get(cat).push(item);
-  }
-
-  // Ordena itens dentro de cada categoria por maior desconto
-  for (const items of byCategory.values()) {
-    items.sort((a, b) => (Number(b.discountPercent) || 0) - (Number(a.discountPercent) || 0));
-  }
-
-  // Seleciona no estilo round-robin equilibrado entre as categorias até maxToEnrich
-  const selectedToEnrich = [];
-  const selectedSet = new Set();
-  const categoryQueues = Array.from(byCategory.values());
-  let added = true;
-
-  while (selectedToEnrich.length < maxToEnrich && added) {
-    added = false;
-    for (const queue of categoryQueues) {
-      if (queue.length > 0 && selectedToEnrich.length < maxToEnrich) {
-        const item = queue.shift();
-        selectedToEnrich.push(item);
-        selectedSet.add(item);
-        added = true;
-      }
-    }
-  }
-
-  // Se ainda houver espaço até maxToEnrich, completa com os restantes
-  if (selectedToEnrich.length < maxToEnrich) {
-    for (const item of valid) {
-      if (!selectedSet.has(item) && selectedToEnrich.length < maxToEnrich) {
-        selectedToEnrich.push(item);
-        selectedSet.add(item);
-      }
-    }
-  }
-
-  // 2. Obtenção do token OAuth
   let token = accessToken;
   if (!token && typeof tokenProvider === 'function') {
     token = await tokenProvider({ env, fetchImpl: client }).catch(() => null);
   }
 
-  if (!token) {
-    return candidates;
+  if (!token) return candidates;
+
+  // 1. Extrai categoryIds observados no pool de candidatos
+  const categoryIds = new Set();
+  for (const c of candidates) {
+    if (c.categoryId) categoryIds.add(String(c.categoryId).trim());
   }
 
-  // 3. Consulta em lote por /items?ids=... (chunks de 20)
-  const chunks = [];
-  for (let i = 0; i < selectedToEnrich.length; i += batchSize) {
-    chunks.push(selectedToEnrich.slice(i, i + batchSize));
-  }
-
-  const itemMap = new Map();
-
-  for (const chunk of chunks) {
-    const itemIds = chunk.map((c) => c.itemId).filter(Boolean);
-    if (!itemIds.length) continue;
-
+  // 2. Consulta /highlights/MLB/category/{categoryId} para obter Best Sellers oficiais
+  const bestSellerMap = new Map();
+  for (const catId of categoryIds) {
+    if (!catId) continue;
     try {
-      let data = null;
-      if (typeof apiGetImpl === 'function') {
-        data = await apiGetImpl(`/items?ids=${itemIds.join(',')}`, { accessToken: token, fetchImpl: client });
-      } else {
-        const res = await client(`https://api.mercadolibre.com/items?ids=${itemIds.join(',')}`, {
-          headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
-          signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(10000) : undefined,
-        });
-        if (res.ok) {
-          data = await res.json();
-        }
-      }
-
-      if (Array.isArray(data)) {
-        for (const entry of data) {
-          if (entry && entry.code === 200 && entry.body) {
-            itemMap.set(String(entry.body.id), entry.body);
+      const res = await client(`https://api.mercadolibre.com/highlights/MLB/category/${catId}`, {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+        signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(8000) : undefined,
+      });
+      if (res.ok) {
+        const data = await res.json();
+        for (const item of (data.content || [])) {
+          if (item && item.id) {
+            bestSellerMap.set(String(item.id).trim(), {
+              source: 'mercadolivre_highlights',
+              type: 'BEST_SELLER',
+              position: item.position || null,
+              categoryId: catId,
+              itemType: item.type || 'PRODUCT',
+            });
           }
         }
       }
     } catch (_err) {
-      // Falhas parciais em chunks de enriquecimento não interrompem o fluxo
+      // Falhas em categorias específicas não abortam o fluxo
     }
   }
 
-  // 4. Aplicação dos dados enriquecidos nos candidatos
+  // 3. Consulta opcional de tendências de busca (/trends/MLB)
+  let trendsKeywords = [];
+  try {
+    const resTrends = await client('https://api.mercadolibre.com/trends/MLB', {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+      signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(5000) : undefined,
+    });
+    if (resTrends.ok) {
+      trendsKeywords = await resTrends.json();
+    }
+  } catch (_err) {
+    // Trends é opcional e não-bloqueante
+  }
+
+  // 4. Cruzamento de evidências com os candidatos
+  let reviewsCountFetched = 0;
+
   for (const candidate of candidates) {
-    const live = itemMap.get(String(candidate.itemId));
-    if (live) {
-      const sold = parseOptionalNumber(live.sold_quantity);
-      if (sold !== null && sold >= 0) {
-        candidate.sales = sold;
+    // Cruzamento Best Seller por productId ou itemId
+    const matchByProd = candidate.productId && bestSellerMap.get(String(candidate.productId).trim());
+    const matchByItem = candidate.itemId && bestSellerMap.get(String(candidate.itemId).trim());
+    const bestSellerEvidence = matchByProd || matchByItem;
+
+    if (bestSellerEvidence) {
+      candidate.marketplaceDemandEvidence = bestSellerEvidence;
+
+      // Consulta de avaliações somente para itens destacados (limite pequeno)
+      if (candidate.itemId && reviewsCountFetched < maxReviews) {
+        reviewsCountFetched++;
+        try {
+          const revRes = await client(`https://api.mercadolibre.com/reviews/item/${candidate.itemId}`, {
+            headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+            signal: typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function' ? AbortSignal.timeout(5000) : undefined,
+          });
+          if (revRes.ok) {
+            const revData = await revRes.json();
+            const ratingAvg = parseOptionalNumber(revData.rating_average);
+            if (ratingAvg !== null && ratingAvg >= 1 && ratingAvg <= 5) {
+              candidate.rating = ratingAvg;
+              candidate.ratingStar = ratingAvg;
+            }
+            if (revData.rating_levels && typeof revData.rating_levels === 'object') {
+              const totalLevels = Object.values(revData.rating_levels).reduce((acc, val) => acc + (Number(val) || 0), 0);
+              if (totalLevels > 0) candidate.reviewsCount = totalLevels;
+            }
+          }
+        } catch (_err) {
+          // Erro em reviews não impede o candidato de seguir
+        }
       }
-      const rating = parseOptionalNumber(live.rating ?? live.reviews?.rating_average);
-      if (rating !== null && rating >= 1 && rating <= 5) {
-        candidate.rating = rating;
-        candidate.ratingStar = rating;
+    }
+
+    // Cruzamento opcional de tendências
+    if (Array.isArray(trendsKeywords) && trendsKeywords.length > 0 && candidate.productName) {
+      const lowerName = candidate.productName.toLowerCase();
+      const matchedTrend = trendsKeywords.find((t) => t.keyword && lowerName.includes(t.keyword.toLowerCase()));
+      if (matchedTrend) {
+        candidate.marketplaceTrendEvidence = {
+          keyword: matchedTrend.keyword,
+          source: 'mercadolivre_trends',
+        };
       }
     }
   }
@@ -444,7 +433,7 @@ async function enrichMercadoLivreCandidatesInBatch(candidates = [], {
 
 /**
  * Coleta candidatos comerciais do Mercado Livre.
- * Fonte primária (round 1): Mercado Livre Native Top 20 (Central Oficial de Ofertas SSR) + Enriquecimento em lote.
+ * Fonte primária (round 1): Mercado Livre Native Top 20 (Central Oficial de Ofertas SSR) + Cruzamento Highlights/Trends.
  * Refill secundário (round >= 2 ou fallback): Intenções oficiais com batching determinístico.
  */
 async function collectMercadoLivreMarketplaceCandidates({
@@ -458,8 +447,7 @@ async function collectMercadoLivreMarketplaceCandidates({
   coverageRunner = runMercadoLivreOfficialIntentCoverage,
   tokenProvider = refreshAccessToken,
   fetchImpl = null,
-  enricher = enrichMercadoLivreCandidatesInBatch,
-  maxToEnrich = 150,
+  enricher = enrichMercadoLivreWithHighlightsAndReviews,
 } = {}) {
   const round = Math.max(1, Number(page) || 1);
   const candidates = [];
@@ -490,7 +478,6 @@ async function collectMercadoLivreMarketplaceCandidates({
               env,
               fetchImpl,
               tokenProvider,
-              maxToEnrich,
             });
           }
           return candidates;
@@ -753,8 +740,30 @@ function buildTrendRadarProductsFromCandidates({
     uniqueTermCandidates.push(candidate);
   }
 
-  // 4. Aplicação do Capping de Diversidade Familiar
-  const diversityResult = applyFamilyDiversityCap(uniqueTermCandidates, {
+  // 4. Aplicação do Capping de Diversidade Familiar com Representatividade Multi-Marketplace
+  // Intercala candidatos viáveis por marketplace para garantir que nenhum marketplace elegível seja ofuscado
+  const byMarketplace = new Map();
+  for (const c of uniqueTermCandidates) {
+    const mk = c.marketplace || 'Outros';
+    if (!byMarketplace.has(mk)) byMarketplace.set(mk, []);
+    byMarketplace.get(mk).push(c);
+  }
+
+  const balancedCandidates = [];
+  const mkQueues = Array.from(byMarketplace.values());
+  let hasMore = true;
+
+  while (balancedCandidates.length < uniqueTermCandidates.length && hasMore) {
+    hasMore = false;
+    for (const queue of mkQueues) {
+      if (queue.length > 0) {
+        balancedCandidates.push(queue.shift());
+        hasMore = true;
+      }
+    }
+  }
+
+  const diversityResult = applyFamilyDiversityCap(balancedCandidates, {
     maxPerFamily: 3,
     targetCount: maxProducts,
   });
@@ -960,7 +969,7 @@ module.exports = {
   markTrendRadarRunRunning,
   collectShopeeMarketplaceCandidates,
   collectMercadoLivreMarketplaceCandidates,
-  enrichMercadoLivreCandidatesInBatch,
+  enrichMercadoLivreWithHighlightsAndReviews,
   computeCandidateSalesVelocity,
   fetchRecentSnapshotItemsMap,
   buildTrendRadarProductsFromCandidates,
