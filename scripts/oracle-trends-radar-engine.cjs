@@ -277,8 +277,8 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
   const discount = oldPrice !== null && price !== null && price > 0
     ? Math.round((((oldPrice - price) / oldPrice) * 100) * 100) / 100
     : (explicitDiscount ?? 0);
-  const sales = parseOptionalNumber(product.sold_quantity);
-  const rating = parseOptionalNumber(product.rating);
+  const sales = parseOptionalNumber(product.sold_quantity ?? product.sales);
+  const rating = parseOptionalNumber(product.rating ?? product.ratingStar);
 
   return {
     marketplace: 'Mercado Livre',
