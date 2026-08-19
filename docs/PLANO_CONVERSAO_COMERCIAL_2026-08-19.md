@@ -69,6 +69,48 @@ O principal erro a evitar é tratar clique bruto como intenção de compra.
 
 **Tempo alvo:** 30–45 minutos de investigação, sem alteração de arquitetura.
 
+#### Resultado — Task 1 concluída em 2026-08-19
+
+A tabela `click_events` possui apenas `source`, `device_type` e `created_at`; não há user-agent nem IP/hash persistidos. Por isso a classificação foi deliberadamente conservadora e não afirma que todo tráfego ambíguo seja humano ou bot.
+
+**Volume observado:**
+- 5.886 cliques brutos ligados a `affiliate_links`;
+- Facebook: 5.809 cliques em 282 ofertas;
+- WhatsApp: 56 cliques em 46 ofertas;
+- Instagram: 13 cliques em 13 ofertas;
+- Telegram: 8 cliques em 8 ofertas.
+
+**Heurística aplicada para esta análise:**
+- `technical_probable`: burst no mesmo minuto/source/device alcançando pelo menos 5 ofertas distintas;
+- `human_probable`: WhatsApp/Telegram; Facebook mobile vindo de `m.facebook.com`/link-shim equivalente quando fora de burst; Instagram direto quando fora de burst;
+- demais eventos: `ambiguous`.
+
+**Resultado conservador:**
+- 852 cliques `human_probable` (14,5% do total), distribuídos por 189 ofertas;
+- 677 cliques `technical_probable` (11,5%);
+- 4.357 cliques `ambiguous` (74,0%), quase integralmente Facebook desktop;
+- todas as 189 ofertas com ao menos um clique humano provável continuam sem venda atribuída por `offer_id`.
+
+**Por canal:**
+- Facebook: 787 `human_probable`, 665 `technical_probable`, 4.357 `ambiguous`;
+- WhatsApp: 56 `human_probable`;
+- Telegram: 8 `human_probable`;
+- Instagram: 1 `human_probable` e 12 `technical_probable` em um burst de 12 ofertas no mesmo minuto.
+
+**Sinal técnico relevante:** o grupo `source=facebook + desktop` sozinho soma 4.491 cliques. Em 17 minutos ocorreram bursts com 5 ou mais ofertas distintas e 655 cliques dentro desses bursts, chegando a 78 cliques e 11 ofertas em um único minuto. Isso é incompatível com usar o contador bruto como proxy de intenção comercial e é compatível com tráfego técnico/preview automatizado, embora o banco atual não permita identificar cada agente com certeza.
+
+**Ofertas com maior `human_probable` nesta leitura:**
+- Máquina de Cortar Cabelo Dragão — Shopee — R$ 19,98 — 22 `human_probable` / 51 totais;
+- Capacete Coquinho BR101 — Mercado Livre — R$ 196,52 — 18 / 47;
+- Console Portátil Retrô 400 Jogos — Shopee — R$ 36,90 — 18 / 39;
+- Tênis Casuais Femininos — Shein — R$ 149,21 — 18 / 31;
+- Meias Unissex — Shein — R$ 13,52 — 17 / 27;
+- Lava e Seca Samsung WD11A — Mercado Livre — R$ 3.905,07 — 16 / 33.
+
+**Conclusão da Task 1:** o funil tem dois problemas diferentes. Primeiro, o contador bruto está fortemente contaminado por tráfego Facebook desktop/ambíguo e por bursts técnicos, portanto “milhares de cliques” não equivalem a milhares de compradores. Segundo, mesmo usando apenas o subconjunto conservador de 852 cliques humanos prováveis, há 189 ofertas com sinal de intenção e nenhuma venda atribuída. Logo, o problema comercial não termina na medição: existe evidência suficiente de quebra também **depois do clique humano provável**. A próxima task deve avaliar produto, preço e qualidade dessas ofertas antes de alterar tracking ou criar infraestrutura nova.
+
+**Status:** CONCLUÍDA.
+
 ---
 
 ### Task 2 — Diagnosticar produto, preço e qualidade da oferta
@@ -188,7 +230,7 @@ Sucesso comercial:
 
 ## Ordem de execução
 
-1. Task 1 — Qualificar tráfego real.
+1. Task 1 — Qualificar tráfego real. ✅ Concluída.
 2. Task 2 — Diagnosticar produto/preço/oferta.
 3. Task 3 — Copy/CTA/hashtags.
 4. Task 4 — Criativos/vídeos.
