@@ -303,35 +303,44 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
 
 /**
  * Coleta candidatos comerciais do Mercado Livre via intenções oficiais.
- * O parâmetro `page` (round de refill) é usado para rotacionar as keywords
- * por offset circular, garantindo que cada round consulte um universo diferente.
+ * Divide as keywords em batches determinísticos e não sobrepostos por round (page).
+ * Quando todos os batches/intents forem consumidos, retorna [] sinalizando esgotamento factual.
  */
 async function collectMercadoLivreMarketplaceCandidates({
   keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer', 'lixeira inox', 'suporte notebook', 'tapete pet'],
   accessToken = null,
   maxPerIntent = 5,
   page = 1,
+  batchSize = 3,
   env = process.env,
+  coverageRunner = runMercadoLivreOfficialIntentCoverage,
+  tokenProvider = refreshAccessToken,
 } = {}) {
   const candidates = [];
   const seenIds = new Set();
 
   try {
-    const token = accessToken || (await refreshAccessToken({ env }).catch(() => null));
+    const round = Math.max(1, Number(page) || 1);
+    const size = Math.max(1, Number(batchSize) || 3);
+    const totalKeywords = Array.isArray(keywords) ? keywords.length : 0;
+
+    const startIndex = (round - 1) * size;
+    // Se a página/round solicitar um índice além do total de keywords disponíveis,
+    // todos os batches foram consumidos: sinalizar esgotamento real retornando vazio.
+    if (startIndex >= totalKeywords) {
+      return [];
+    }
+
+    const endIndex = Math.min(startIndex + size, totalKeywords);
+    const roundKeywords = keywords.slice(startIndex, endIndex);
+    if (!roundKeywords.length) {
+      return [];
+    }
+
+    const token = accessToken || (await tokenProvider({ env }).catch(() => null));
     if (!token) return [];
 
-    // Rotacionar keywords por round para consultar universo diferente a cada refill.
-    // Round 1: keywords[0..4], Round 2: keywords[5..8,0..0], etc.
-    const round = Math.max(1, Number(page) || 1);
-    const rotationStep = 5;
-    const totalKeywords = keywords.length;
-    const offset = ((round - 1) * rotationStep) % totalKeywords;
-    const roundKeywords = [
-      ...keywords.slice(offset),
-      ...keywords.slice(0, offset),
-    ];
-
-    const result = await runMercadoLivreOfficialIntentCoverage({
+    const result = await coverageRunner({
       accessToken: token,
       keywords: roundKeywords,
       maxPerIntent: Math.max(3, maxPerIntent),

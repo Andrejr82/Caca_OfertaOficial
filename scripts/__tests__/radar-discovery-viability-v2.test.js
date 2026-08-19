@@ -836,88 +836,98 @@ test('TEST 20: nenhuma oferta é criada automaticamente apenas por aparecer no R
   assert.equal(result.offersWrites, 0);
 });
 
-test('TEST 21: ML refill round 2 consulta conjunto diferente/seguinte de keywords vs round 1', async () => {
-  // Captura as keywords passadas ao coverageRunner por round
-  const capturedKeywordsByRound = [];
+test('TEST 21: collectMercadoLivreMarketplaceCandidates real divide keywords em batches determinísticos e não sobrepostos por round e esgota explicitamente', async () => {
+  const capturedCalls = [];
+  const testKeywords = [
+    'smart TV 4K',
+    'fone bluetooth',
+    'air fryer',
+    'notebook',
+    'tenis corrida',
+    'cadeira gamer',
+    'lixeira inox',
+    'suporte notebook',
+    'tapete pet',
+  ];
 
-  const mockMlCollector = async ({ page = 1 } = {}) => {
-    // Simula collectMercadoLivreMarketplaceCandidates com rotação de keywords.
-    // Reproduz a lógica de rotação do engine para verificar que o round 2
-    // começa num offset diferente do round 1.
-    const keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer', 'lixeira inox', 'suporte notebook', 'tapete pet'];
-    const round = Math.max(1, Number(page) || 1);
-    const rotationStep = 5;
-    const totalKeywords = keywords.length;
-    const offset = ((round - 1) * rotationStep) % totalKeywords;
-    const roundKeywords = [
-      ...keywords.slice(offset),
-      ...keywords.slice(0, offset),
-    ];
-    capturedKeywordsByRound.push({ round, firstKeyword: roundKeywords[0] });
-    return []; // Retornar vazio para forçar refill
+  const mockCoverageRunner = async ({ keywords, accessToken }) => {
+    capturedCalls.push({ keywords: [...keywords], accessToken });
+    return {
+      products: keywords.map((kw, idx) => ({
+        id: `MLB-${kw.replace(/\s+/g, '-').toLowerCase()}-${idx}`,
+        title: `Produto Oficial ${kw}`,
+        price: 199.9,
+        sold_quantity: 50,
+        rating: 4.8,
+        intent: kw,
+      })),
+    };
   };
 
-  const mockShopeeCollector = async ({ page = 1 } = {}) => {
-    if (page === 1) {
-      return [
-        { marketplace: 'Shopee', shopId: 's1', itemId: 'p1', productName: 'Item Shopee 1', currentPrice: 50, sales: 100, commissionPercent: 8 },
-      ];
-    }
-    return [];
-  };
-
-  const mockClient = {
-    from: (table) => {
-      if (table === 'trend_radar_runs') {
-        return {
-          select: () => ({
-            eq: () => ({
-              order: () => ({
-                limit: async () => ({
-                  data: [{ id: 'run-21', radar_date: '2026-08-19', status: 'building', source_health: { runtime: 'oracle' } }],
-                  error: null,
-                }),
-              }),
-              gte: () => ({ order: async () => ({ data: [], error: null }) }),
-            }),
-          }),
-          update: () => ({ eq: async () => ({ error: null }) }),
-        };
-      }
-      if (table === 'trend_radar_products') {
-        return {
-          delete: () => ({ eq: async () => ({ error: null }) }),
-          insert: async () => ({ error: null }),
-        };
-      }
-      if (table === 'offers') {
-        return { select: () => ({ range: async () => ({ data: [], error: null }) }) };
-      }
-      return {};
-    },
-  };
-
-  await processPendingTrendRadarRuns({
-    client: mockClient,
-    shopeeCollector: mockShopeeCollector,
-    mlCollector: mockMlCollector,
-    maxRefillRounds: 3,
+  // 1. Executa round 1 (Batch A: keywords 0..2)
+  const round1Candidates = await collectMercadoLivreMarketplaceCandidates({
+    keywords: testKeywords,
+    page: 1,
+    batchSize: 3,
+    accessToken: 'mock-token-ml',
+    coverageRunner: mockCoverageRunner,
   });
 
-  // Deve ter havido pelo menos 2 rounds ML
-  assert.ok(capturedKeywordsByRound.length >= 2, 'ML collector deve ser chamado em ao menos 2 rounds');
+  // 2. Executa round 2 (Batch B: keywords 3..5)
+  const round2Candidates = await collectMercadoLivreMarketplaceCandidates({
+    keywords: testKeywords,
+    page: 2,
+    batchSize: 3,
+    accessToken: 'mock-token-ml',
+    coverageRunner: mockCoverageRunner,
+  });
 
-  // Round 1 e round 2 devem iniciar com keywords diferentes (rotação aplicada)
-  const round1FirstKeyword = capturedKeywordsByRound.find((r) => r.round === 1)?.firstKeyword;
-  const round2FirstKeyword = capturedKeywordsByRound.find((r) => r.round === 2)?.firstKeyword;
+  // 3. Executa round 3 (Batch C: keywords 6..8)
+  const round3Candidates = await collectMercadoLivreMarketplaceCandidates({
+    keywords: testKeywords,
+    page: 3,
+    batchSize: 3,
+    accessToken: 'mock-token-ml',
+    coverageRunner: mockCoverageRunner,
+  });
 
-  assert.ok(round1FirstKeyword !== undefined, 'Round 1 deve ter sido executado');
-  assert.ok(round2FirstKeyword !== undefined, 'Round 2 deve ter sido executado');
-  assert.notEqual(
-    round1FirstKeyword,
-    round2FirstKeyword,
-    `Round 2 deve consultar keywords diferentes de round 1 (round1="${round1FirstKeyword}", round2="${round2FirstKeyword}")`
-  );
+  // 4. Executa round 4 (além do total de batches disponíveis -> esgotamento factual)
+  const round4Candidates = await collectMercadoLivreMarketplaceCandidates({
+    keywords: testKeywords,
+    page: 4,
+    batchSize: 3,
+    accessToken: 'mock-token-ml',
+    coverageRunner: mockCoverageRunner,
+  });
+
+  // Validação 1: coverageRunner só deve ser chamado para batches existentes (rounds 1 a 3)
+  assert.equal(capturedCalls.length, 3, 'coverageRunner só deve ser chamado para batches com keywords válidas');
+  assert.equal(round1Candidates.length, 3);
+  assert.equal(round2Candidates.length, 3);
+  assert.equal(round3Candidates.length, 3);
+  assert.deepEqual(round4Candidates, [], 'Round após esgotamento de batches deve retornar array vazio explicitamente');
+
+  // Validação 2: Conjuntos de keywords por round
+  const round1Keywords = capturedCalls[0].keywords;
+  const round2Keywords = capturedCalls[1].keywords;
+  const round3Keywords = capturedCalls[2].keywords;
+
+  assert.deepEqual(round1Keywords, ['smart TV 4K', 'fone bluetooth', 'air fryer']);
+  assert.deepEqual(round2Keywords, ['notebook', 'tenis corrida', 'cadeira gamer']);
+  assert.deepEqual(round3Keywords, ['lixeira inox', 'suporte notebook', 'tapete pet']);
+
+  // Validação 3: Prova estrita de não sobreposição (disjunção total)
+  const set1 = new Set(round1Keywords);
+  const set2 = new Set(round2Keywords);
+  const set3 = new Set(round3Keywords);
+
+  for (const kw of round2Keywords) {
+    assert.equal(set1.has(kw), false, `Keyword "${kw}" do round 2 não pode existir no round 1`);
+  }
+  for (const kw of round3Keywords) {
+    assert.equal(set1.has(kw), false, `Keyword "${kw}" do round 3 não pode existir no round 1`);
+    assert.equal(set2.has(kw), false, `Keyword "${kw}" do round 3 não pode existir no round 2`);
+  }
 });
 
 test('TEST 22: fontes se esgotam (rounds retornam vazio) → completion_reason = eligible_sources_exhausted', async () => {
