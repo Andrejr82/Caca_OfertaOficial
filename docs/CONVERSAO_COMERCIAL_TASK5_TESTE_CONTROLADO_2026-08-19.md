@@ -8,25 +8,23 @@ Montar um teste pequeno e rastreável para medir venda real, usando ofertas já 
 
 ## Descoberta operacional importante
 
-Ao iniciar a Task 5, cinco ofertas já estavam aprovadas e publicadas no mesmo dia em Facebook e WhatsApp. Portanto, o teste não precisa começar com nova publicação imediata: estes posts passam a formar o baseline comercial de referência.
+Ao iniciar a Task 5, cinco ofertas já estavam aprovadas e publicadas no mesmo dia em Facebook e WhatsApp. Portanto, estes posts formam o baseline comercial de referência.
 
-As copies publicadas ainda seguem o padrão antigo (produto + marketplace + preço + CTA genérico). Isso significa que os resultados atuais servem como baseline do modelo antigo e não como validação das copies revisadas na Task 3.
+As copies publicadas ainda seguem o padrão antigo (produto + marketplace + preço + CTA genérico). Isso é útil: os resultados atuais servem como baseline do modelo antigo e não serão misturados com a rodada comercial melhorada.
 
 ## Cinco ofertas do baseline
 
 ### 1. KIT 3 Camiseta Academia Feminina Dry Fit
 - offer_id: `bdbc4c02-34c1-4fd9-b663-5d214a35b523`
 - preço: R$ 59,50
-- vendas observadas no marketplace: 2.863
+- vendas observadas: 2.863
 - rating: 4,8
 - desconto observado: 18%
 - comissão efetiva observada: 35%
 - comissão estimada por venda: R$ 20,83
 - canais publicados no baseline: Facebook e WhatsApp
 - Instagram: draft disponível
-- cliques no baseline até a leitura: 0
-- vendas atribuídas: 0
-- criativo recomendado para rodada melhorada: vídeo de usabilidade de moda
+- criativo da rodada melhorada: vídeo de usabilidade de moda
 
 ### 2. Calça Jogger Preta Masculina Dry Fit
 - offer_id: `450fe8c4-3068-4ad8-8140-c9a7d9b9db5a`
@@ -38,9 +36,7 @@ As copies publicadas ainda seguem o padrão antigo (produto + marketplace + pre�
 - comissão estimada por venda: R$ 11,31
 - canais publicados no baseline: Facebook e WhatsApp
 - Instagram: draft disponível
-- cliques no baseline até a leitura: 0
-- vendas atribuídas: 0
-- criativo recomendado: vídeo de usabilidade de moda
+- criativo da rodada melhorada: vídeo de usabilidade de moda
 
 ### 3. Extensão Elétrica 20 Metros
 - offer_id: `0dd2537d-b2fb-4e75-823a-04436b83924a`
@@ -52,9 +48,7 @@ As copies publicadas ainda seguem o padrão antigo (produto + marketplace + pre�
 - comissão estimada por venda: R$ 8,35
 - canais publicados no baseline: Facebook e WhatsApp
 - Instagram: draft disponível
-- cliques no baseline até a leitura: 0
-- vendas atribuídas: 0
-- criativo recomendado: vídeo de usabilidade/demonstração, sem inventar carga, potência ou aplicações não comprovadas
+- criativo da rodada melhorada: vídeo demonstrativo somente se preservar o produto e não inventar carga, potência ou aplicação técnica
 
 ### 4. Cama/Colchonete Pet Lavável com Zíper
 - offer_id: `13671c0f-7b24-4b99-92a0-9bfbaeb6eb10`
@@ -66,9 +60,7 @@ As copies publicadas ainda seguem o padrão antigo (produto + marketplace + pre�
 - comissão estimada por venda: R$ 2,85
 - canais publicados no baseline: Facebook e WhatsApp
 - Instagram: draft disponível
-- cliques observados: 1 Facebook, classificado como ambíguo pela heurística da Task 1
-- vendas atribuídas: 0
-- criativo recomendado: imagem oficial ou vídeo curto de uso pet se houver referência real adequada
+- criativo da rodada melhorada: imagem oficial inicialmente; vídeo curto de uso pet apenas se houver referência visual adequada
 
 ### 5. Ventilador Mondial 30cm
 - offer_id: `2225fe15-4326-4760-bd1c-cdbb9843c8fa`
@@ -80,60 +72,113 @@ As copies publicadas ainda seguem o padrão antigo (produto + marketplace + pre�
 - comissão estimada por venda: R$ 15,00
 - canais publicados no baseline: Facebook e WhatsApp
 - Instagram: draft disponível
-- cliques observados: 5 Facebook; 4 classificados como `human_probable` e 1 como ambíguo
-- vendas atribuídas: 0
-- criativo recomendado: imagem oficial no baseline; vídeo de uso somente se preservar fielmente o produto
+- criativo da rodada melhorada: imagem oficial; vídeo de uso somente se preservar fielmente o produto
 
-## Links e rastreabilidade
+## Rastreabilidade confirmada
 
-As cinco ofertas possuem `affiliate_links` separados para Facebook, Instagram e WhatsApp, com `sub_id` por canal e URL interna `/go/...` por oferta/canal. Isso permite medir click_events por oferta e canal sem misturar os resultados.
+As cinco ofertas possuem `affiliate_links` separados para Facebook, Instagram e WhatsApp, com `sub_id` por canal e URL interna `/go/...` por oferta/canal. Isso permite medir `click_events` por oferta e canal sem misturar resultados.
 
-Telegram não faz parte desta primeira rodada porque estas cinco ofertas não possuem link gerado para esse canal no baseline observado.
+Telegram não faz parte desta rodada porque estas cinco ofertas não possuem link gerado para esse canal no baseline observado.
 
-## Baseline atual
+## Baseline registrado
 
-No momento desta leitura:
+Na leitura de 2026-08-19:
 - 5 ofertas aprovadas;
 - 10 posts publicados: 5 Facebook + 5 WhatsApp;
 - 5 drafts Instagram;
-- 6 click_events totais no conjunto;
-- 4 cliques humanos prováveis, todos no Ventilador Mondial;
-- 2 cliques ambíguos (Ventilador + Cama Pet);
+- 6 `click_events` no conjunto;
+- 4 cliques `human_probable`, todos no Ventilador Mondial;
+- 2 cliques ambíguos;
 - 0 vendas atribuídas.
 
-## Hipóteses por oferta
+## Rodada comercial melhorada — preparada
 
-- Kit camisetas: ticket baixo/médio + comissão forte; hipótese de que demonstração visual de caimento converte melhor do que card estático e copy genérica.
-- Calça jogger: produto visual e de uso; hipótese de que vídeo de usabilidade reduz incerteza e melhora intenção.
-- Extensão: utilidade clara; hipótese de que demonstração de uso é mais persuasiva que nome técnico longo.
-- Cama pet: preço baixo + rating alto + desconto forte; hipótese de compra por impulso/utilidade pet.
-- Ventilador: maior ticket, mas marca conhecida + rating alto + comissão unitária relevante; já demonstrou o maior sinal humano inicial.
+A rodada melhorada usa as mesmas cinco ofertas. Não troca produto, marketplace ou preço apenas para gerar movimento. A variável principal passa a ser **copy comercial curta + criativo mais demonstrativo quando agrega**.
 
-## Rodada controlada melhorada
+### Copy oficial — Facebook
 
-A segunda leitura do teste deve usar as mesmas cinco ofertas, evitando trocar produto e copy ao mesmo tempo sem necessidade.
+**KIT 3 Camisetas Dry Fit**
 
-Ordem recomendada:
-1. manter o baseline atual sem republicar em massa;
-2. gerar vídeos de usabilidade para Kit Camisetas e Calça Jogger;
-3. gerar vídeo demonstrativo para Extensão somente se o prompt preservar produto e não inventar uso técnico;
-4. Cama Pet e Ventilador podem continuar com imagem oficial inicialmente;
-5. aplicar as copies comerciais curtas da Task 3 na rodada seguinte;
-6. publicar apenas uma nova versão por oferta/canal escolhido, com horário registrado;
-7. medir cliques humanos prováveis e venda atribuída antes de qualquer escala.
+`🏋️ Kit com 3 camisetas Dry Fit para treino e caminhada. Já soma 2.863 vendas e 4,8★ na Shopee. Está por R$ 59,50, com 18% OFF. Confira no link do primeiro comentário.`
 
-## Métricas obrigatórias
+**Calça Jogger**
 
-Por oferta e canal:
-- post publicado e horário;
-- clique bruto;
+`👖 Calça Jogger masculina Dry Fit para treino e uso diário. São 2.180 vendas e 4,8★ na Shopee. Agora por R$ 38,99, com 22% OFF. Confira no primeiro comentário.`
+
+**Extensão 20 m**
+
+`🔌 Extensão elétrica de 20 metros para quem precisa alcançar mais longe sem improviso. O anúncio soma 3.837 vendas e 4,7★. Está por R$ 28,80, com 20% OFF. Confira no primeiro comentário.`
+
+**Cama Pet**
+
+`🐶🐱 Cama pet lavável com zíper por R$ 21,90. O anúncio já soma 2.693 vendas, 4,9★ e 39% OFF. Confira no link do primeiro comentário.`
+
+**Ventilador Mondial 30cm**
+
+`🌬️ Ventilador Mondial 30cm com 2.296 vendas e avaliação 4,9★. Está por R$ 149,99, com 25% OFF. Confira no link do primeiro comentário.`
+
+Regra Facebook: sem URL no corpo; link rastreado permanece no primeiro comentário.
+
+### Copy oficial — WhatsApp
+
+**KIT 3 Camisetas Dry Fit**
+
+`🏋️ Kit com 3 camisetas Dry Fit. 2.863 vendas, 4,8★ e 18% OFF. Agora por R$ 59,50. Confira: https://caca-oferta-oficial.vercel.app/go/wp_bdbc4c02-34c1-4fd9-b663-5d214a35b523`
+
+**Calça Jogger**
+
+`👖 Calça Jogger masculina Dry Fit. 2.180 vendas, 4,8★ e 22% OFF. Agora por R$ 38,99. Confira: https://caca-oferta-oficial.vercel.app/go/wp_450fe8c4-3068-4ad8-8140-c9a7d9b9db5a`
+
+**Extensão 20 m**
+
+`🔌 Extensão elétrica de 20 m. 3.837 vendas, 4,7★ e 20% OFF. Está por R$ 28,80. Confira: https://caca-oferta-oficial.vercel.app/go/wp_0dd2537d-b2fb-4e75-823a-04436b83924a`
+
+**Cama Pet**
+
+`🐶🐱 Cama pet lavável com zíper. 2.693 vendas, 4,9★ e 39% OFF. Agora por R$ 21,90. Confira: https://caca-oferta-oficial.vercel.app/go/wp_13671c0f-7b24-4b99-92a0-9bfbaeb6eb10`
+
+**Ventilador Mondial 30cm**
+
+`🌬️ Ventilador Mondial 30cm. 2.296 vendas, 4,9★ e 25% OFF. Está por R$ 149,99. Confira: https://caca-oferta-oficial.vercel.app/go/wp_2225fe15-4326-4760-bd1c-cdbb9843c8fa`
+
+### Instagram
+
+Instagram não entra como comparação imediata com o baseline porque os cinco itens atuais estão apenas em draft nesse canal. Quando os vídeos de usabilidade forem aprovados, usar a mesma copy curta sem URL na legenda e CTA para vitrine/bio.
+
+### Plano de criativo
+
+- KIT 3 Camisetas: **vídeo de usabilidade**; prioridade alta.
+- Calça Jogger: **vídeo de usabilidade**; prioridade alta.
+- Extensão 20 m: **vídeo demonstrativo** apenas se fiel à referência; caso contrário, imagem oficial.
+- Cama Pet: **imagem oficial** na primeira comparação; vídeo pet é opcional e posterior.
+- Ventilador Mondial: **imagem oficial** na primeira comparação; não depender de geração de vídeo para testar venda.
+
+## Regra de publicação da rodada melhorada
+
+Não republicar as cinco ofertas poucas horas após o baseline. Isso contaminaria o teste por repetição/saturação. A rodada melhorada deve ser publicada no próximo ciclo adequado, mantendo exatamente os mesmos `offer_id` e links rastreados.
+
+Cada nova publicação deve registrar:
+- oferta;
+- canal;
+- horário;
+- versão de copy (`baseline` ou `conversion_v1`);
+- criativo (`image` ou `usability_video`);
+- cliques brutos;
+- cliques humanos prováveis;
+- vendas;
+- comissão.
+
+## Comparação mínima
+
+A pergunta não será “qual post teve mais clique bruto?”. A comparação correta será:
+
+`baseline antigo` × `conversion_v1`
+
+por:
 - clique humano provável;
-- clique técnico provável/ambíguo;
-- venda;
-- comissão;
-- conversão clique humano provável -> venda.
-
-Não usar CTR se não houver denominador de impressão confiável.
+- venda atribuída;
+- conversão clique humano → venda;
+- comissão gerada.
 
 ## Critério de aceite da Task 5
 
@@ -141,9 +186,8 @@ A preparação está concluída quando:
 - existem 5 ofertas definidas;
 - links rastreáveis estão confirmados;
 - baseline foi registrado;
-- copy/criativo da próxima rodada estão definidos;
+- copy final da rodada melhorada está pronta;
+- criativo por oferta está definido;
 - nenhuma nova publicação em massa foi feita apenas para gerar volume.
 
-A observação comercial continua separada da implementação.
-
-**Status: PREPARAÇÃO CONCLUÍDA / TESTE EM OBSERVAÇÃO.**
+**Status: RODADA MELHORADA PREPARADA / AGUARDANDO JANELA DE PUBLICAÇÃO E VÍDEOS DE USABILIDADE.**
