@@ -211,13 +211,14 @@ function deriveShortSpokenIdentity(normalized, categoryKey, fallbackIdentity) {
   let meaningful = 0;
   for (const rawToken of String(normalized).split(/\s+/u)) {
     const token = rawToken.replace(/^[,.;:()[\]{}]+|[,.;:()[\]{}]+$/gu, '');
-    if (!token || !/[A-Za-zÀ-ÿ]/u.test(token)) continue;
-    const lower = token.toLowerCase();
-    if (DUBBING_IDENTITY_NOISE.has(lower)) continue;
+    if (!token) continue;
     if (/\d/u.test(token)) {
       if (meaningful < 3) return fallback;
       break;
     }
+    if (!/[A-Za-zÀ-ÿ]/u.test(token)) continue;
+    const lower = token.toLowerCase();
+    if (DUBBING_IDENTITY_NOISE.has(lower)) continue;
     if (DUBBING_IDENTITY_CONNECTORS.has(lower)) {
       if (selected.length && meaningful < 5) selected.push(lower);
       continue;
