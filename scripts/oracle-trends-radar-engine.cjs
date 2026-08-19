@@ -740,30 +740,8 @@ function buildTrendRadarProductsFromCandidates({
     uniqueTermCandidates.push(candidate);
   }
 
-  // 4. Aplicação do Capping de Diversidade Familiar com Representatividade Multi-Marketplace
-  // Intercala candidatos viáveis por marketplace para garantir que nenhum marketplace elegível seja ofuscado
-  const byMarketplace = new Map();
-  for (const c of uniqueTermCandidates) {
-    const mk = c.marketplace || 'Outros';
-    if (!byMarketplace.has(mk)) byMarketplace.set(mk, []);
-    byMarketplace.get(mk).push(c);
-  }
-
-  const balancedCandidates = [];
-  const mkQueues = Array.from(byMarketplace.values());
-  let hasMore = true;
-
-  while (balancedCandidates.length < uniqueTermCandidates.length && hasMore) {
-    hasMore = false;
-    for (const queue of mkQueues) {
-      if (queue.length > 0) {
-        balancedCandidates.push(queue.shift());
-        hasMore = true;
-      }
-    }
-  }
-
-  const diversityResult = applyFamilyDiversityCap(balancedCandidates, {
+  // 4. Aplicação do Capping de Diversidade Familiar
+  const diversityResult = applyFamilyDiversityCap(uniqueTermCandidates, {
     maxPerFamily: 3,
     targetCount: maxProducts,
   });

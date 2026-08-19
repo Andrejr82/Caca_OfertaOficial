@@ -247,4 +247,58 @@ test('falha na API de highlights ou 404 não derruba Radar', async () => {
   assert.equal(candidates[0].sales, null);
 });
 
+test('ranking do Radar não possui cotas artificiais por marketplace e permite distribuição orgânica (ex: 14 ML + 6 Shopee)', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  // Criar 14 candidatos ML com viabilidade e scores altos
+  const mlCandidates = [];
+  for (let i = 1; i <= 14; i++) {
+    mlCandidates.push({
+      marketplace: 'Mercado Livre',
+      itemId: `MLB_SCORE_HIGH_${i}`,
+      productId: `PROD_ML_${i}`,
+      productName: `Produto ML Excepcional ${i}`,
+      category: `Categoria ${i}`,
+      currentPrice: 100 + i * 10,
+      oldPrice: 200 + i * 20,
+      discountPercent: 50,
+      sales: 500 - i * 10, // sales observados
+      ratingStar: 4.9,
+      commissionPercent: 10,
+      marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
+    });
+  }
+
+  // Criar 6 candidatos Shopee também viáveis mas com score ligeiramente inferior
+  const shopeeCandidates = [];
+  for (let j = 1; j <= 6; j++) {
+    shopeeCandidates.push({
+      marketplace: 'Shopee',
+      itemId: `SHP_${j}`,
+      productName: `Produto Shopee ${j}`,
+      category: `Categoria Shopee ${j}`,
+      currentPrice: 80 + j * 5,
+      oldPrice: 100 + j * 5,
+      discountPercent: 20,
+      sales: 100,
+      ratingStar: 4.5,
+      commissionPercent: 5,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'test-organic-ranking-run',
+    shopeeCandidates,
+    mlCandidates,
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 20, 'Top 20 deve ser preenchido');
+  const mlCount = products.filter((p) => p.marketplace === 'Mercado Livre').length;
+  const shopeeCount = products.filter((p) => p.marketplace === 'Shopee').length;
+
+  assert.equal(mlCount, 14, 'Deve conter exatamente 14 produtos ML conforme o mérito/score do ranking');
+  assert.equal(shopeeCount, 6, 'Deve conter exatamente 6 produtos Shopee conforme o mérito/score do ranking');
+});
+
 
