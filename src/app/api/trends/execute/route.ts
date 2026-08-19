@@ -23,6 +23,12 @@ function responseStatus(status: RadarExecutionClaimStatus): ExecuteResponseStatu
   return status;
 }
 
+function sourceHealthObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
 export async function GET(request: Request) {
   const client = await createServerSupabaseClient();
   if (!client) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
@@ -43,9 +49,7 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ ok: false, message: "Não foi possível consultar a execução do Radar." }, { status: 503 });
   if (!run) return NextResponse.json({ ok: false, message: "Execução do Radar não encontrada." }, { status: 404 });
 
-  const sourceHealth = run.source_health && typeof run.source_health === "object" && !Array.isArray(run.source_health)
-    ? run.source_health as Record<string, unknown>
-    : {};
+  const sourceHealth = sourceHealthObject(run.source_health);
   const sourceStatus = typeof sourceHealth.status === "string" ? sourceHealth.status : null;
   const status = run.status === "completed"
     ? "completed"
@@ -78,6 +82,35 @@ export async function POST(request: Request) {
   const requestedAt = new Date().toISOString();
 
   try {
+    // Manual refresh creates a timestamped execution window. Without this guard,
+    // repeated clicks create distinct building rows before Oracle finishes the first one.
+    const { data: activeRuns, error: activeRunsError } = await client
+      .from("trend_radar_runs")
+      .select("id,source_health,created_at")
+      .eq("user_id", user.id)
+      .eq("strategy_version", DAILY_TREND_RADAR_STRATEGY_VERSION)
+      .eq("status", "building")
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (activeRunsError) throw new Error("Falha ao verificar execução ativa do Radar.");
+    const active = activeRuns?.[0];
+    if (active?.id) {
+      return NextResponse.json({
+        ok: true,
+        executionId: active.id,
+        runId: active.id,
+        status: "running",
+        snapshotId: null,
+        requestedAt,
+        processedAt: null,
+        counts: null,
+        failureReason: null,
+        runtime: sourceHealthObject(active.source_health).runtime ?? "oracle",
+        message: "O Radar já possui uma execução pendente/em processamento na Oracle.",
+      });
+    }
+
     const executionStore = createSupabaseRadarExecutionStore(executionClient(client));
     const claim = await claimTrendRadarExecution(executionStore, {
       userId: user.id,
