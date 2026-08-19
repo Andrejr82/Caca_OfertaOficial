@@ -1,8 +1,8 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 2cfa11f -->
-<!-- verified-on: 2026-08-16 -->
+<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
+<!-- verified-on: 2026-08-18 -->
 
 ## Pré-deploy
 
@@ -20,6 +20,7 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 - Validar build, variáveis, cron declarado em `vercel.json`, `/api/health` e `/api/readiness`.
 - Confirmar que rotas de publicação exigem autenticação e entidades oficiais.
 - Builds Git automáticos prosseguem somente para `main`; branches deliberadas podem ser publicadas manualmente com `vercel --build-env VERCEL_FORCE_BUILD=1`.
+- Para mudanças de publicação social, observar logs estruturados após o deploy; bloqueios do Instagram Policy Guard aparecem como `instagram.policy.blocked` e não devem ser tratados como falha de transporte.
 
 ## Supabase
 
@@ -41,11 +42,14 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 3. Discovery controlada e persistência observada.
 4. Geração limitada de drafts.
 5. Aprovação manual e smoke test por canal.
-6. Expansão somente com recibos e métricas saudáveis.
+6. Para Instagram, usar uma oferta comum de varejo e confirmar que Safety + Policy Guard permitem o fluxo; validar também um caso bloqueado sem enviar mídia à Meta.
+7. Expansão somente com recibos e métricas saudáveis.
 
 ## Rollback
 
 Reverter o artefato/commit e as flags primeiro. Migrations destrutivas exigem plano próprio; não presumir rollback automático do banco. Preservar logs, correlation IDs e recibos para investigação.
+
+O Instagram Policy Guard faz parte do caminho de segurança da publicação. Não o contorne durante incidentes; se houver falso positivo, corrigir a regra com teste de regressão e novo deploy.
 
 Para o Radar dedicado, o rollback operacional é parar o processo dedicado e remover/desabilitar `TRENDS_RADAR_DEDICATED_RUNTIME`; isso restaura o consumo pelo `oracle-scraper` sem alterar schema ou snapshots existentes.
 

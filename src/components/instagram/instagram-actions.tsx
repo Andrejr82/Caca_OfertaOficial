@@ -70,6 +70,7 @@ interface PostWithOffer {
     id: string;
     product_name: string;
     platform: string;
+    status?: string | null;
     current_price: number;
     old_price: number | null;
     image_url: string | null;
@@ -90,12 +91,17 @@ export function InstagramPostApprovalCard({ post, onApproved }: { post: PostWith
   const couponImage = couponOffer ? getCouponCardImageSources(post.offers) : null;
   const [couponImageSrc, setCouponImageSrc] = useState(couponImage?.initialSrc || "");
   const couponLink = post.affiliate_links?.tracked_url || post.offers.original_url;
+  const rejectedOffer = post.offers.status === "rejected";
 
   useEffect(() => {
     setCouponImageSrc(couponImage?.initialSrc || "");
   }, [couponImage?.initialSrc]);
 
   async function handleApproveAndPublish() {
+    if (rejectedOffer) {
+      setStatus({ success: false, message: "Esta oferta foi rejeitada e não pode ser publicada." });
+      return;
+    }
     setLoading(true);
     setStatus(null);
 
@@ -252,6 +258,13 @@ export function InstagramPostApprovalCard({ post, onApproved }: { post: PostWith
           </span>
         </header>
 
+        {rejectedOffer && (
+          <p className="flex items-center gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm font-semibold text-red-600">
+            <AlertTriangle size={16} />
+            Esta oferta foi rejeitada e não pode ser publicada.
+          </p>
+        )}
+
         <div>
           <label className="block text-xs font-bold text-ink/70 mb-1">
             Legenda do Feed e Criativos (Editar se necessário):
@@ -266,7 +279,7 @@ export function InstagramPostApprovalCard({ post, onApproved }: { post: PostWith
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Button
-              disabled={loading || (!couponOffer && !post.offers.image_url)}
+              disabled={loading || rejectedOffer || (!couponOffer && !post.offers.image_url)}
               onClick={handleApproveAndPublish}
               type="button"
               className="bg-moss hover:bg-ink text-white"
@@ -287,7 +300,7 @@ export function InstagramPostApprovalCard({ post, onApproved }: { post: PostWith
             </Button>
           </div>
 
-          {!couponOffer && !post.offers.image_url && (
+          {!rejectedOffer && !couponOffer && !post.offers.image_url && (
             <p className="text-xs text-red-500 font-semibold flex items-center gap-1">
               <AlertTriangle size={14} />
               Requer imagem cadastrada no produto para poder postar.

@@ -74,6 +74,7 @@ export interface OfficialAIAffiliateLink {
   channel: OfficialAIChannel;
   trackedUrl: string;
   subId?: string;
+  originalUrl?: string;
 }
 
 export interface OfficialAIContent {

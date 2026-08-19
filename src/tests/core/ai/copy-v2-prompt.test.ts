@@ -34,9 +34,10 @@ describe("Official AI O.P.A.C.", () => {
     expect(copy).toBe([
       "🔥 Economia confirmada de R$ 20,00",
       "🛍️ Fone Bluetooth 5.3 com cancelamento de ruído ativo para viagens",
-      "🎧 Oferta na Shopee",
+      "🛒 Oferta na Shopee",
       "✨ Bluetooth 5.3",
       "📉 De R$ 99,90\n💰 Por *R$ 79,90* (20% OFF)",
+      "🛒 Veja a oferta no link abaixo",
       "👉 "
     ].join("\n\n"));
   });

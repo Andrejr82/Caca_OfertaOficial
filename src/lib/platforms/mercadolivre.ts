@@ -55,7 +55,7 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
     const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
     if (!supabase) {
       console.error("[ML API] Supabase client não disponível para salvar novo token.");
-      return access_token; // Retorna o token mesmo que falhe em salvar no banco (para uso imediato)
+      return access_token;
     }
 
     const { error: upsertError } = await supabase
@@ -66,7 +66,7 @@ export async function refreshMLToken(userId: string, refreshToken: string): Prom
           key: "ml_credentials",
           value: {
             access_token,
-             refresh_token: newRefreshToken || refreshToken,
+            refresh_token: newRefreshToken || refreshToken,
             expires_at: expiresAt,
             ml_user_id: user_id
           },
@@ -97,7 +97,7 @@ export async function getAppMLAccessToken(): Promise<string | null> {
   if (cachedAppToken && Date.now() < appTokenExpiresAt) {
     return cachedAppToken;
   }
-  
+
   const appId = process.env.MERCADO_LIVRE_APP_ID || process.env.MERCADO_LIVRE_CLIENT_ID;
   const clientSecret = process.env.MERCADO_LIVRE_CLIENT_SECRET;
 
@@ -120,7 +120,7 @@ export async function getAppMLAccessToken(): Promise<string | null> {
     if (response.ok) {
       const data = await response.json();
       cachedAppToken = data.access_token;
-      appTokenExpiresAt = Date.now() + (data.expires_in * 1000) - (5 * 60 * 1000); // 5 min safety margin
+      appTokenExpiresAt = Date.now() + (data.expires_in * 1000) - (5 * 60 * 1000);
       return cachedAppToken;
     }
   } catch (err) {
@@ -140,45 +140,44 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
       return null;
     }
 
-  let credentialsOwnerId = userId;
-  let { data, error } = await supabase
-    .from("app_settings")
-    .select("value")
-    .eq("user_id", userId)
-    .eq("key", "ml_credentials")
-    .maybeSingle();
-
-  if (error) {
-    console.error(`[ML API] Erro ao buscar credenciais do Mercado Livre para usuário ${userId}:`, error);
-    return null;
-  }
-
-  if ((!data || !data.value) && userId !== SHARED_ML_CREDENTIALS_OWNER) {
-    const shared = await supabase
+    let credentialsOwnerId = userId;
+    let { data, error } = await supabase
       .from("app_settings")
       .select("value")
-      .eq("user_id", SHARED_ML_CREDENTIALS_OWNER)
+      .eq("user_id", userId)
       .eq("key", "ml_credentials")
       .maybeSingle();
-    data = shared.data;
-    error = shared.error;
-    credentialsOwnerId = SHARED_ML_CREDENTIALS_OWNER;
-  }
 
-  if (!data || !data.value) {
-    console.log(`[ML API] Nenhuma credencial do Mercado Livre encontrada para o usuário ${userId}.`);
-    return null;
-  }
+    if (error) {
+      console.error(`[ML API] Erro ao buscar credenciais do Mercado Livre para usuário ${userId}:`, error);
+      return null;
+    }
 
-  const credentials = data.value as MLCredentials;
-  const expiresAt = new Date(credentials.expires_at);
-  const now = new Date();
+    if ((!data || !data.value) && userId !== SHARED_ML_CREDENTIALS_OWNER) {
+      const shared = await supabase
+        .from("app_settings")
+        .select("value")
+        .eq("user_id", SHARED_ML_CREDENTIALS_OWNER)
+        .eq("key", "ml_credentials")
+        .maybeSingle();
+      data = shared.data;
+      error = shared.error;
+      credentialsOwnerId = SHARED_ML_CREDENTIALS_OWNER;
+    }
 
-  // Se o token estiver expirado ou a menos de 5 minutos de expirar, renova
-  if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
-    console.log(`[ML API] Token do Mercado Livre para ${userId} está expirado ou próximo de expirar. Renovando...`);
-    return refreshMLToken(credentialsOwnerId, credentials.refresh_token);
-  }
+    if (!data || !data.value) {
+      console.log(`[ML API] Nenhuma credencial do Mercado Livre encontrada para o usuário ${userId}.`);
+      return null;
+    }
+
+    const credentials = data.value as MLCredentials;
+    const expiresAt = new Date(credentials.expires_at);
+    const now = new Date();
+
+    if (expiresAt.getTime() - now.getTime() < 5 * 60 * 1000) {
+      console.log(`[ML API] Token do Mercado Livre para ${userId} está expirado ou próximo de expirar. Renovando...`);
+      return refreshMLToken(credentialsOwnerId, credentials.refresh_token);
+    }
 
     return credentials.access_token;
   } catch (error) {
@@ -192,10 +191,6 @@ export async function getValidMLAccessToken(userId: string): Promise<string | nu
 const SHARED_ML_CREDENTIALS_OWNER = "7a9ca7b7-f464-46e0-a9de-9b322c73628a";
 
 async function refreshMLTokenFromEnvironment(): Promise<string | null> {
-  // O Oracle usa o refresh token operacional configurado na Vercel. Como o
-  // Mercado Livre pode rotacioná-lo, também tentamos o valor persistido no
-  // Supabase. Os dois são tentados isoladamente: um token persistido inválido
-  // não pode bloquear o token operacional válido (e vice-versa).
   const candidates: Array<{ source: "environment" | "supabase"; token: string }> = [];
   const environmentToken = process.env.MERCADO_LIVRE_REFRESH_TOKEN;
   if (environmentToken) candidates.push({ source: "environment", token: environmentToken });
@@ -230,7 +225,6 @@ async function refreshMLTokenFromEnvironment(): Promise<string | null> {
   return null;
 }
 
-/** Força a renovação quando a API rejeita um token ainda marcado como válido. */
 async function forceRefreshMLAccessToken(userId: string): Promise<string | null> {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return null;
@@ -258,10 +252,6 @@ async function forceRefreshMLAccessToken(userId: string): Promise<string | null>
   return refreshMLToken(ownerId, credentials.refresh_token);
 }
 
-/**
- * Reaproveita uma oferta já validada pelo Oracle quando a API de item bloqueia
- * a consulta direta. O item_id exato evita trocar o anúncio por outro vendedor.
- */
 async function findStoredOracleOffer(itemId: string): Promise<LinkMetadata | null> {
   let clients: Array<any> = [];
   try {
@@ -307,17 +297,11 @@ async function findStoredOracleOffer(itemId: string): Promise<LinkMetadata | nul
   return null;
 }
 
-/**
- * Extrai o ID do item ou produto de catálogo de uma URL do Mercado Livre
- */
 export function extractMLId(url: string): { type: "item" | "product"; id: string } | null {
   try {
     const urlObj = new URL(url);
     const path = urlObj.pathname;
 
-    // Links de compartilhamento de catálogo podem apontar para /p/MLB...
-    // e carregar o item/oferta real em ?pdp_filters=item_id%3AMLB....
-    // O item tem preço e estoque atuais; priorize-o quando estiver presente.
     const pdpFilters = urlObj.searchParams.get("pdp_filters") || "";
     const itemIdParam = urlObj.searchParams.get("item_id")
       || urlObj.searchParams.get("itemId")
@@ -326,23 +310,21 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
       return { type: "item", id: itemIdParam.replace("-", "").toUpperCase() };
     }
 
-    // 1. Testa se é um ID de catálogo de produto (/p/MLB123456)
-    const productMatch = path.match(/\/p\/(MLB-?\d+)/i);
+    // 1. Testa se é um ID de catálogo de produto (/p/MLB123456 ou /up/MLBU123456)
+    const productMatch = path.match(/\/(?:p|up)\/(MLB[U]?-?\d+)/i);
     if (productMatch) {
       return { type: "product", id: productMatch[1].replace("-", "").toUpperCase() };
     }
 
-    // 2. Testa se é um item comum (/MLB-123456 ou /MLB123456)
     const itemMatch = path.match(/(MLB-?\d+)/i);
     if (itemMatch) {
       return { type: "item", id: itemMatch[1].replace("-", "").toUpperCase() };
     }
 
-    // 3. Testa nos parâmetros de busca (ex: itemId=MLB123456)
     return null;
   } catch {
     // Fallback se o parser de URL falhar (regex direto na string de texto)
-    const productMatch = url.match(/\/p\/(MLB-?\d+)/i);
+    const productMatch = url.match(/\/(?:p|up)\/(MLB[U]?-?\d+)/i);
     if (productMatch) {
       return { type: "product", id: productMatch[1].replace("-", "").toUpperCase() };
     }
@@ -355,7 +337,7 @@ export function extractMLId(url: string): { type: "item" | "product"; id: string
 }
 
 function extractMLCatalogId(url: string): string | null {
-  const match = url.match(/\/p\/(MLB-?\d+)/i);
+  const match = url.match(/\/(?:p|up)\/(MLB[U]?-?\d+)/i);
   return match ? match[1].replace("-", "").toUpperCase() : null;
 }
 
@@ -367,7 +349,6 @@ export type MLApiFailureCode =
 export function classifyMLApiFailure(status: number): MLApiFailureCode {
   if (status === 401) return "MARKETPLACE_AUTH_DENIED";
   if (status === 403) return "MARKETPLACE_PERMISSION_DENIED";
-
   return "MARKETPLACE_SOURCE_UNAVAILABLE";
 }
 
@@ -379,6 +360,18 @@ class MLApiRequestError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
   }
+}
+
+async function tryAffiliateSourceFallback(extractionUrl: string, itemId: string): Promise<LinkMetadata | null> {
+  const { fetchMLFeaturedSnapshotFallback } = await import("@/lib/platforms/mercadolivre-featured-fallback");
+  const fallback = await fetchMLFeaturedSnapshotFallback(extractionUrl, itemId);
+  if (fallback) {
+    console.log("[ML API] Dados recuperados do featured SSR da origem afiliada", {
+      itemId,
+      source: "affiliate_social_ssr",
+    });
+  }
+  return fallback;
 }
 
 /**
@@ -398,14 +391,10 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
     accessToken = await getValidMLAccessToken(userId);
   }
 
-  // O fluxo nativo/Oracle mantém um token oficial de usuário no ambiente.
-  // Priorizá-lo evita consultar a API com client-credentials, que não possui
-  // permissão para o endpoint de item e retorna 401/403.
   if (!accessToken) {
     accessToken = process.env.MERCADO_LIVRE_ACCESS_TOKEN || null;
   }
 
-  // Último fallback: token genérico da aplicação.
   if (!accessToken) {
     console.log(`[ML API] Usuário sem token OAuth. Utilizando fallback App Token (Client Credentials).`);
     accessToken = await getAppMLAccessToken();
@@ -431,14 +420,10 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
 
     let apiData: any = null;
     if (mlIdInfo.type === "item") {
-      // O endpoint individual /items/{id} pode retornar 403 para aplicativos
-      // válidos. O endpoint em lote é o mesmo usado pelo pipeline oficial.
       const itemUrl = `https://api.mercadolibre.com/items?ids=${encodeURIComponent(mlIdInfo.id)}`;
       let response = await fetch(itemUrl, { headers });
       console.log("[ML API] Consulta de item concluída", { itemId: mlIdInfo.id, status: response.status, endpoint: "items" });
 
-      // Tokens podem ser revogados antes do expires_at. Renova uma vez e
-      // repete a consulta oficial para evitar o falso "nome não confirmado".
       if (!response.ok && userId && (response.status === 401 || response.status === 403)) {
         const refreshedToken = await forceRefreshMLAccessToken(userId);
         if (refreshedToken) {
@@ -450,9 +435,6 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
 
       let catalogFallbackApplied = false;
       if (!response.ok && response.status === 403) {
-        // O Oracle usa o refresh token operacional da Vercel para consultar
-        // produtos de terceiros. Tente esse token antes do fallback de catálogo
-        // quando o OAuth do usuário não tiver permissão para o item.
         const operationalToken = await refreshMLTokenFromEnvironment();
         if (operationalToken && operationalToken !== accessToken) {
           accessToken = operationalToken;
@@ -463,9 +445,6 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
 
         const catalogId = extractMLCatalogId(url);
         if (catalogId) {
-          // O endpoint de item pode negar acesso mesmo com OAuth válido.
-          // Reutilizamos o fallback oficial do Oracle: dados de catálogo
-          // continuam trazendo título, preço e imagem da oferta.
           const catalogItemsResponse = await fetch(
             `https://api.mercadolibre.com/products/${catalogId}/items?limit=20`,
             { headers },
@@ -493,6 +472,10 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       }
 
       if (!response.ok && !catalogFallbackApplied) {
+        if (response.status === 401 || response.status === 403) {
+          const fallback = await tryAffiliateSourceFallback(url, mlIdInfo.id);
+          if (fallback) return { ok: true, data: fallback };
+        }
         throw new MLApiRequestError(response.status, `Erro ao buscar item ${mlIdInfo.id}: ${response.status} ${response.statusText}`);
       }
 
@@ -502,7 +485,12 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
         if (firstResult && Number(firstResult.code) >= 400) {
           const catalogId = extractMLCatalogId(url);
           if (!catalogId) {
-            throw new MLApiRequestError(Number(firstResult.code), `Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
+            const verboseStatus = Number(firstResult.code);
+            if (verboseStatus === 401 || verboseStatus === 403) {
+              const fallback = await tryAffiliateSourceFallback(url, mlIdInfo.id);
+              if (fallback) return { ok: true, data: fallback };
+            }
+            throw new MLApiRequestError(verboseStatus, `Erro ao buscar item ${mlIdInfo.id}: ${firstResult.code} ${firstResult.body?.message || "resposta inválida"}`);
           }
 
           const catalogItemsResponse = await fetch(
@@ -542,7 +530,6 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
         }
       }
     } else {
-      // Consulta detalhes do produto de catálogo
       const productUrl = `https://api.mercadolibre.com/products/${mlIdInfo.id}`;
       const response = await fetch(productUrl, { headers });
 
@@ -554,10 +541,6 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       title = apiData.name || apiData.title || title;
       permalink = apiData.permalink || permalink;
 
-      // O endpoint /products/{id} descreve o catálogo, mas normalmente não
-      // contém o preço da oferta. O Oracle consulta as ofertas do catálogo
-      // como fonte primária; reproduzimos esse contrato aqui para que um link
-      // /p/MLB... também seja processável sem exigir pdp_filters.
       try {
         const catalogItemsResponse = await fetch(
           `${productUrl}/items?limit=20`,
@@ -588,28 +571,26 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
         });
       }
 
-      // Obtém preço do buy box
       if (price > 0) {
-        // A oferta do catálogo já forneceu o preço atual.
+        // a oferta do catálogo já forneceu o preço atual
       } else if (apiData.buy_box_winner) {
         price = apiData.buy_box_winner.price || 0;
       } else if (apiData.price) {
         price = apiData.price;
       }
 
-      // Fallback para quando o produto de catálogo não retorna o preço na API
       if (price === 0) {
         console.log(`[ML API] Preço não encontrado no produto de catálogo ${mlIdInfo.id}. Tentando fallback de HTML...`);
         try {
           const htmlRes = await fetch(url, {
-             headers: {
-               "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-               "Accept-Language": "pt-BR,pt;q=0.9"
-             }
+            headers: {
+              "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+              "Accept-Language": "pt-BR,pt;q=0.9"
+            }
           });
           htmlContent = await htmlRes.text();
           const metaPriceMatch = htmlContent.match(/<meta\s+property=["']product:preconfigured_price:amount["']\s+content=["']([^"']+)["']/i) ||
-                             htmlContent.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
+            htmlContent.match(/<meta\s+itemprop=["']price["']\s+content=["']([^"']+)["']/i);
           if (metaPriceMatch) {
             price = parseFloat(metaPriceMatch[1]);
             console.log(`[ML API] Preço resgatado via fallback HTML: R$ ${price}`);
@@ -628,8 +609,6 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       }
     }
 
-    // A substituição por -O.jpg foi removida porque a CDN do ML retorna 404
-    // se a imagem em alta resolução (-O) não existir de fato.
     if (imageUrl && imageUrl.includes("mlstatic.com")) {
       imageUrl = imageUrl.replace(/\.webp$/i, ".jpg");
     }
@@ -638,19 +617,17 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
       imageUrl = "https:" + imageUrl;
     }
 
-    // Extração de Rating Real via HTML/JSON-LD
     try {
       if (!htmlContent) {
         const htmlRes = await fetch(permalink, {
-           headers: {
-             "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
-             "Accept-Language": "pt-BR,pt;q=0.9"
-           }
+          headers: {
+            "User-Agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+            "Accept-Language": "pt-BR,pt;q=0.9"
+          }
         });
         htmlContent = await htmlRes.text();
       }
 
-      // Procura AggregateRating no JSON-LD
       const jsonLdMatches = htmlContent.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
       if (jsonLdMatches) {
         for (const match of jsonLdMatches) {
@@ -667,17 +644,16 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
                 }
               }
             }
-          } catch (e) {
-            // ignore JSON parse error for this block
+          } catch {
+            // ignora bloco JSON-LD inválido
           }
           if (rating !== undefined) break;
         }
       }
 
-      // Se não encontrou no JSON-LD, tenta na meta tag ou itemprop
       if (rating === undefined) {
         const ratingMatch = htmlContent.match(/<meta\s+itemprop=["']ratingValue["']\s+content=["']([^"']+)["']/i) ||
-                            htmlContent.match(/"ratingValue"\s*:\s*"?([0-9.]+)"?/i);
+          htmlContent.match(/"ratingValue"\s*:\s*"?([0-9.]+)"?/i);
         if (ratingMatch) {
           const parsedRating = parseFloat(ratingMatch[1]);
           if (!isNaN(parsedRating) && parsedRating > 0) {
@@ -729,21 +705,16 @@ export async function fetchMLProductDetailsResult(url: string, userId?: string):
   }
 }
 
-/** Compatibilidade para consumidores que ainda esperam apenas metadados ou null. */
 export async function fetchMLProductDetails(url: string, userId?: string): Promise<LinkMetadata | null> {
   const result = await fetchMLProductDetailsResult(url, userId);
   return result.ok ? result.data : null;
 }
 
-/**
- * Gera o link de afiliado oficial usando o ID do usuário (ou tag do Mercado Livre)
- */
 export function generateMLAffiliateLink(productUrl: string, userId?: string): string {
   if (!userId) return productUrl;
 
   try {
     const url = new URL(productUrl);
-    // Injeta o tracking de afiliado (af_sub1 recebe o id do usuário do sistema)
     url.searchParams.set("af_sub1", userId);
     url.searchParams.set("utm_source", "afiliado");
     url.searchParams.set("utm_medium", "caca_oferta");
@@ -753,8 +724,6 @@ export function generateMLAffiliateLink(productUrl: string, userId?: string): st
   }
 }
 
-// ─── Monetização com AFFILIATE_ID Oficial do ML ──────────────────────────────
-
 export interface AffiliateMonetizationResult {
   monetized: boolean;
   affiliateUrl: string;
@@ -762,24 +731,12 @@ export interface AffiliateMonetizationResult {
   reason?: string;
 }
 
-/**
- * Gera link afiliado do Mercado Livre usando o MERCADO_LIVRE_AFFILIATE_ID oficial.
- *
- * O parâmetro `partner_id` (ou `deal_print_id`) é o identificador do programa
- * de afiliados do ML. Sem ele o clique não é rastreado e a comissão não é creditada.
- *
- * @param productUrl - URL canônica do produto (já resolvida)
- * @param affiliateId - MERCADO_LIVRE_AFFILIATE_ID do ambiente (nunca expor o valor)
- * @returns URL com parâmetros de rastreamento de afiliado injetados
- */
 export function generateMLAffiliateLinkWithId(productUrl: string, affiliateId: string): string {
   if (!affiliateId?.trim()) return productUrl;
 
   try {
     const url = new URL(productUrl);
-    // Limpar fragmento (evita #origin=share quebrar o link)
     url.hash = "";
-    // Parâmetros do Programa de Afiliados ML
     url.searchParams.set("partner_id", affiliateId.trim());
     url.searchParams.set("utm_source", "caca_oferta");
     url.searchParams.set("utm_medium", "afiliado");
@@ -790,12 +747,6 @@ export function generateMLAffiliateLinkWithId(productUrl: string, affiliateId: s
   }
 }
 
-/**
- * Valida se a monetização foi aplicada corretamente ao link.
- *
- * Para Mercado Livre: exige affiliate_url com partner_id presente.
- * Para Shopee: usa o link do afiliado Shopee (aceito como-está — sem validação ML).
- */
 export function validateAffiliateMonetization(params: {
   marketplace: string;
   affiliateUrl: string;
@@ -804,12 +755,10 @@ export function validateAffiliateMonetization(params: {
 }): AffiliateMonetizationResult {
   const { marketplace, affiliateUrl } = params;
 
-  // Shopee: o link de afiliado é controlado pelo app Shopee — aceitar sem validação ML
   if (marketplace !== "Mercado Livre") {
     return { monetized: true, affiliateUrl: affiliateUrl || params.resolvedUrl };
   }
 
-  // ML: exige affiliate_url preenchida
   if (!affiliateUrl?.trim()) {
     return {
       monetized: false,
@@ -821,4 +770,3 @@ export function validateAffiliateMonetization(params: {
 
   return { monetized: true, affiliateUrl };
 }
-

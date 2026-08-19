@@ -1,8 +1,8 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: bc8a27d1ebc1092dea05d1adfdda0569e39b980b -->
-<!-- verified-on: 2026-08-16 -->
+<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
+<!-- verified-on: 2026-08-18 -->
 
 Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Oracle, PM2, Meta, Telegram, WhatsApp e marketplaces precisa ser confirmada no ambiente correspondente.
 
@@ -34,6 +34,10 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 - Telegram possui publicação editorial Top 30; WhatsApp possui fila Top 30 do ciclo mais recente e rotação `next`.
 - Publicação Expressa multicanal permanece separada do Top 30 editorial.
 - Shein possui fluxo Express assistido, incluindo texto compartilhado, fallback de imagem e upload para Storage público validado.
+- Ofertas `rejected` são bloqueadas nos fluxos sociais oficiais e não podem ser aprovadas para publicação.
+- Instagram Feed e Reels enviam o disclosure de parceria paga para conteúdo afiliado.
+- A rota oficial do Instagram valida legenda, cota móvel, duplicidade, mídia e executa o `Instagram Policy Guard` fail-closed antes da aprovação/publicação.
+- Bloqueios do Policy Guard retornam `INSTAGRAM_POLICY_BLOCKED` ou `INSTAGRAM_POLICY_INPUT_INVALID` e registram `instagram.policy.blocked` com regra e motivo.
 
 ## Vídeos
 
@@ -45,6 +49,7 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 - `npm run verify` executa lint, typecheck, testes, build e verificação de segurança.
 - `npm run docs:audit` detecta commits de runtime posteriores à verificação documental.
 - Endpoints de saúde: `/api/health` e `/api/readiness`.
+- O `Documentation Audit` considera os oito documentos canônicos e exige `docs-status: current` e um `verified-against` pertencente ao histórico atual.
 
 ## Limites
 

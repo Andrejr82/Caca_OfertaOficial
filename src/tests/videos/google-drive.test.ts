@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getGoogleDriveIntegrationStatus } from "@/lib/videos/google-drive";
+import { getGoogleDriveIntegrationStatus, validateDriveVideo, validateInspectedVideo } from "@/lib/videos/google-drive";
 
 const DRIVE_ENV = [
   "GOOGLE_DRIVE_CLIENT_ID",
@@ -41,5 +41,22 @@ describe("Google Drive video integration status", () => {
     expect(status.configured).toBe(true);
     expect(status.missing).toEqual([]);
     expect(status.folderId).toBe("folder-123");
+  });
+});
+
+describe("Google Drive video validation", () => {
+  it("does not reject an MP4 just because Drive metadata is missing", () => {
+    expect(validateDriveVideo({
+      id: "drive-file-1",
+      name: "video.mp4",
+      mimeType: "video/mp4",
+      size: String(2 * 1024 * 1024),
+    })).toBeNull();
+  });
+
+  it("validates 9:16 and duration using metadata inspected from the actual MP4", () => {
+    expect(validateInspectedVideo({ width: 720, height: 1280, durationSeconds: 10 })).toBeNull();
+    expect(validateInspectedVideo({ width: 1920, height: 1080, durationSeconds: 10 })).toBe("O vídeo precisa estar no formato vertical 9:16.");
+    expect(validateInspectedVideo({ width: 720, height: 1280, durationSeconds: 2 })).toBe("A duração precisa estar entre 3 e 90 segundos.");
   });
 });

@@ -1,3 +1,5 @@
+import { parseMp4Metadata, type ParsedMp4Metadata } from "@/lib/videos/mp4-metadata";
+
 type DriveFile = {
   id: string;
   name: string;
@@ -6,6 +8,8 @@ type DriveFile = {
   webViewLink?: string;
   videoMediaMetadata?: { width?: number; height?: number; durationMillis?: string };
 };
+
+export type InspectedVideoMetadata = ParsedMp4Metadata;
 
 const DEFAULT_FOLDER_ID = "1tj6S-Gr7hxt5RNRIAd7BkpR8_2tuGaFB";
 const REQUIRED_DRIVE_ENV = [
@@ -87,15 +91,19 @@ export async function downloadDriveVideo(fileId: string) {
 export function validateDriveVideo(file: DriveFile) {
   const mime = file.mimeType.toLowerCase();
   const size = Number(file.size ?? 0);
-  const metadata = file.videoMediaMetadata;
-  const width = Number(metadata?.width ?? 0);
-  const height = Number(metadata?.height ?? 0);
-  const durationSeconds = Number(metadata?.durationMillis ?? 0) / 1000;
   if (mime !== "video/mp4") return "O vídeo precisa estar em MP4.";
   if (!size || size > 100 * 1024 * 1024) return "O vídeo precisa ter entre 1 e 100 MB.";
-  if (!width || !height) return "O Google Drive ainda não forneceu a resolução do vídeo.";
-  if (Math.abs(width / height - 9 / 16) > 0.05) return "O vídeo precisa estar no formato vertical 9:16.";
-  if (!durationSeconds || durationSeconds < 3 || durationSeconds > 90) return "A duração precisa estar entre 3 e 90 segundos.";
+  return null;
+}
+
+export async function inspectVideoBytes(bytes: Buffer): Promise<InspectedVideoMetadata> {
+  return parseMp4Metadata(bytes);
+}
+
+export function validateInspectedVideo(metadata: Pick<InspectedVideoMetadata, "width" | "height" | "durationSeconds">) {
+  if (!metadata.width || !metadata.height) return "Não foi possível identificar a resolução do vídeo.";
+  if (Math.abs(metadata.width / metadata.height - 9 / 16) > 0.05) return "O vídeo precisa estar no formato vertical 9:16.";
+  if (!metadata.durationSeconds || metadata.durationSeconds < 3 || metadata.durationSeconds > 90) return "A duração precisa estar entre 3 e 90 segundos.";
   return null;
 }
 

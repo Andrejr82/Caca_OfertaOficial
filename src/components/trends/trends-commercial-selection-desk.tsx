@@ -1,6 +1,7 @@
 import { ExternalLink, FlaskConical, ShieldX } from "lucide-react";
 import type { TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
 import { approveTrendTestAction, ignoreTrendProductAction } from "@/lib/trends/selection-actions";
+import { supportsTrendApprovalMarketplace } from "@/lib/trends/selection-offer-state";
 
 const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -19,7 +20,13 @@ function velocityLabel(value: number | null, status: string | null): string {
   return `velocity ${value > 0 ? "+" : ""}${value}`;
 }
 
-export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRadarSnapshotView | null }) {
+export function TrendsCommercialSelectionDesk({
+  snapshot,
+  approvalFeedback = null,
+}: {
+  snapshot: TrendRadarSnapshotView | null;
+  approvalFeedback?: { productId: string; message: string } | null;
+}) {
   const products = snapshot?.products ?? [];
 
   return (
@@ -41,8 +48,9 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
           const sourceUrl = item.directEvidenceSourceUrls[0] ?? null;
           const totalCommission = (item.commissionPercent ?? 0) + (item.sellerCommissionPercent ?? 0);
           const handedOff = Boolean(item.selectedOfferId && item.selectionDecision === "APROVAR_TESTE");
-          const canApprove = item.marketplace === "Shopee";
+          const canApprove = supportsTrendApprovalMarketplace(item.marketplace);
           const metrics = item.experimentMetrics;
+          const feedback = approvalFeedback?.productId === item.id ? approvalFeedback.message : null;
           return (
             <article key={item.id} className="glass-card p-4">
               <div className="grid gap-4 lg:grid-cols-[54px_minmax(0,1fr)_180px] lg:items-start">
@@ -57,11 +65,13 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
                     {sourceUrl ? <a href={sourceUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs font-bold text-cyan-300 underline">Ver oferta <ExternalLink size={11} /></a> : null}
                   </div>
 
+                  {feedback ? <div className="mt-3 rounded-lg border border-amber-400/20 bg-amber-400/[0.06] px-3 py-2 text-xs font-semibold text-amber-200">{feedback}</div> : null}
+
                   <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Preço</p><p className="mt-1 font-bold text-white/75">{item.price != null ? BRL.format(item.price) : "n/d"}</p></div>
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Demanda</p><p className="mt-1 font-bold text-white/75">{item.sales != null ? `${Math.round(item.sales)} vendas` : "n/d"}</p><p className="text-[10px] text-white/30">{velocityLabel(item.salesVelocity, item.velocityStatus)}</p></div>
                     <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Comissão potencial</p><p className="mt-1 font-bold text-white/75">{totalCommission > 0 ? `${Math.round(totalCommission * 100) / 100}%` : "n/d"}</p><p className="text-[10px] text-white/30">{item.discountPercent != null ? `${item.discountPercent}% desconto` : "sem desconto informado"}</p></div>
-                    <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Execução</p><p className="mt-1 font-bold text-white/75">{handedOff ? "Oferta selecionada" : canApprove ? item.recommendedChannel || "aguardando aprovação" : "monitoramento"}</p><p className="text-[10px] text-white/30">{handedOff ? "drafts sociais preparados" : canApprove ? item.recommendedFormat || "sem publicação automática" : "handoff afiliado indisponível"}</p></div>
+                    <div className="rounded-lg border border-white/[0.05] p-2"><p className="text-white/30">Execução</p><p className="mt-1 font-bold text-white/75">{handedOff ? "Oferta selecionada" : canApprove ? item.recommendedChannel || "aguardando aprovação" : "monitoramento"}</p><p className="text-[10px] text-white/30">{handedOff ? "drafts sociais preparados" : canApprove ? item.recommendedFormat || "sem publicação automática" : "handoff indisponível"}</p></div>
                   </div>
 
                   {handedOff ? (
@@ -79,7 +89,7 @@ export function TrendsCommercialSelectionDesk({ snapshot }: { snapshot: TrendRad
                 <div className="grid gap-2">
                   {handedOff ? <><form action={approveTrendTestAction}><input type="hidden" name="product_id" value={item.id} /><button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-emerald-950"><FlaskConical size={14} /> Preparar redes sociais</button></form><a href="/facebook" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-blue-400/25 px-3 py-2 text-xs font-bold text-blue-300">Abrir Facebook</a><a href="/instagram" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-pink-400/25 px-3 py-2 text-xs font-bold text-pink-300">Abrir Instagram</a><a href="/whatsapp" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-emerald-400/25 px-3 py-2 text-xs font-bold text-emerald-300">Abrir WhatsApp</a><a href="/offers" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-cyan-400/25 px-3 py-2 text-xs font-bold text-cyan-300">Ver oferta vinculada</a></> : canApprove ? <form action={approveTrendTestAction}><input type="hidden" name="product_id" value={item.id} /><button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-400 px-3 py-2 text-xs font-black text-emerald-950"><FlaskConical size={14} /> Aprovar teste</button></form> : <div className="rounded-lg border border-white/[0.08] px-3 py-2 text-center text-xs font-bold text-white/35">Somente monitoramento</div>}
                   <form action={ignoreTrendProductAction}><input type="hidden" name="product_id" value={item.id} /><button type="submit" className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/25 px-3 py-2 text-xs font-bold text-red-300"><ShieldX size={14} /> Ignorar</button></form>
-                  <div className="rounded-lg border border-white/[0.05] p-2 text-center text-[10px] text-white/35">{handedOff ? `Experimento rastreável · oferta ${item.selectedOfferId?.slice(0, 8)}…` : item.selectionDecision ? `Decisão humana: ${item.selectionDecision}${item.selectionDecidedAt ? ` · ${new Date(item.selectionDecidedAt).toLocaleString("pt-BR")}` : ""}` : canApprove ? "Aguardando decisão humana" : "Sem handoff afiliado para este marketplace"}</div>
+                  <div className="rounded-lg border border-white/[0.05] p-2 text-center text-[10px] text-white/35">{handedOff ? `Experimento rastreável · oferta ${item.selectedOfferId?.slice(0, 8)}…` : item.selectionDecision ? `Decisão humana: ${item.selectionDecision}${item.selectionDecidedAt ? ` · ${new Date(item.selectionDecidedAt).toLocaleString("pt-BR")}` : ""}` : canApprove ? "Aguardando decisão humana" : "Sem handoff para este marketplace"}</div>
                 </div>
               </div>
             </article>

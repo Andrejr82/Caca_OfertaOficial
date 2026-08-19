@@ -2,56 +2,99 @@ import { inngest } from "./client";
 import { logger } from "@/lib/utils/logger";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
+const ALLOWED_DEVICE_TYPES = new Set(["desktop", "mobile", "tablet", "unknown"]);
+
+function normalizeClickEventData(data: any) {
+  const affiliateLinkId = String(data?.affiliateLinkId || "").trim();
+  const source = String(data?.source || "direct").trim().slice(0, 160) || "direct";
+  const requestedDeviceType = String(data?.deviceType || "unknown").trim().toLowerCase();
+  const deviceType = ALLOWED_DEVICE_TYPES.has(requestedDeviceType) ? requestedDeviceType : "unknown";
+
+  if (!affiliateLinkId) {
+    throw new Error("Evento de clique sem affiliateLinkId.");
+  }
+
+  return { affiliateLinkId, source, deviceType };
+}
+
 /**
  * Worker: Process Click Background
- * Responsável por realizar a inserção de tracking na tabela de eventos e a 
- * escrita paralela no contador legado da affiliate_links, tudo assincronamente.
+ * Persiste somente campos analíticos mínimos e não registra UA, tokens ou URLs completas.
  */
 export const processClickBackground = inngest.createFunction(
   { id: "process-click-tracking", retries: 3, triggers: [{ event: "tracking/click.registered" }] },
   async ({ event, step }: any) => {
-    logger.info("Processando clique assíncrono", { linkId: event.data.affiliateLinkId });
-    
-    const { affiliateLinkId, source, deviceType } = event.data;
+    const { affiliateLinkId, source, deviceType } = normalizeClickEventData(event.data);
+
+    logger.info("Processando clique assíncrono", {
+      event: "tracking.click.processing",
+      affiliateLinkId,
+      source,
+      deviceType,
+    });
 
     const supabase = createSupabaseAdminClient();
     if (!supabase) {
+      logger.error("Supabase Admin indisponível para tracking", undefined, {
+        event: "tracking.click.config_missing",
+        affiliateLinkId,
+      });
       throw new Error("Supabase Admin client não configurado para processClickBackground.");
     }
 
-    // 1. Inserir o evento analítico granular na nova fonte de verdade
     await step.run("insert-click-event", async () => {
       const { error } = await supabase.from("click_events").insert({
         affiliate_link_id: affiliateLinkId,
-        source: source || 'direct',
-        device_type: deviceType || 'unknown'
+        source,
+        device_type: deviceType,
       });
+
       if (error) {
-        logger.error("Falha ao inserir evento de clique", { error });
-        throw new Error(`Erro SQL no click_events: ${error.message}`);
+        logger.error("Falha ao inserir evento de clique", undefined, {
+          event: "tracking.click.insert_failed",
+          affiliateLinkId,
+          dbCode: error.code || "db_error",
+        });
+        throw new Error("Falha ao persistir click_event.");
       }
     });
 
-    // 2. Incrementar a coluna legada em affiliate_links (Retrocompatibilidade)
     await step.run("increment-legacy-counter", async () => {
-      // Como não temos uma função RPC pronta 'increment_clicks', 
-      // fazemos uma leitura seguida de escrita. O Inngest lida com retries caso haja lock de linha muito longo, 
-      // mas isso pode sofrer race condition sob extrema carga. 
-      // Uma RPC seria ideal, mas para MVP manteremos a lógica paralela aqui.
       const { data: link, error: selectError } = await supabase
         .from("affiliate_links")
         .select("id, clicks")
         .eq("id", affiliateLinkId)
         .single();
-      
-      if (selectError) throw selectError;
+
+      if (selectError) {
+        logger.error("Falha ao ler contador legado", undefined, {
+          event: "tracking.click.legacy_read_failed",
+          affiliateLinkId,
+          dbCode: selectError.code || "db_error",
+        });
+        throw new Error("Falha ao ler contador legado.");
+      }
 
       const { error: updateError } = await supabase
         .from("affiliate_links")
         .update({ clicks: (link?.clicks || 0) + 1 })
         .eq("id", affiliateLinkId);
 
-      if (updateError) throw updateError;
+      if (updateError) {
+        logger.error("Falha ao atualizar contador legado", undefined, {
+          event: "tracking.click.legacy_update_failed",
+          affiliateLinkId,
+          dbCode: updateError.code || "db_error",
+        });
+        throw new Error("Falha ao atualizar contador legado.");
+      }
+    });
+
+    logger.info("Clique processado", {
+      event: "tracking.click.completed",
+      affiliateLinkId,
+      source,
+      deviceType,
     });
 
     return { status: "tracked", affiliateLinkId };
