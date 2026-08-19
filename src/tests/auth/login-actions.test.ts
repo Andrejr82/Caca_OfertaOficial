@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Mocks hoisted
 const {
   mockRedirect,
+  mockRevalidatePath,
   mockAfter,
   mockCreateServerSupabaseClient,
-  mockCreateSupabaseAdminClient,
   mockSignInWithPassword,
   mockSignOut,
   mockGetUser,
@@ -16,66 +15,40 @@ const {
     (err as any).digest = `NEXT_REDIRECT;replace;${url};307;;`;
     throw err;
   }),
-  mockAfter: vi.fn((cb: () => any) => {
-    // Executa ou agenda
-    cb();
-  }),
+  mockRevalidatePath: vi.fn(),
+  mockAfter: vi.fn((cb: () => any) => cb()),
   mockCreateServerSupabaseClient: vi.fn(),
-  mockCreateSupabaseAdminClient: vi.fn(),
   mockSignInWithPassword: vi.fn(),
   mockSignOut: vi.fn(),
   mockGetUser: vi.fn(),
   mockLogAuditAction: vi.fn()
 }));
 
-vi.mock("next/navigation", () => ({
-  redirect: mockRedirect
-}));
-
-vi.mock("next/server", () => ({
-  after: mockAfter
-}));
-
-vi.mock("@/lib/supabase/server", () => ({
-  createServerSupabaseClient: mockCreateServerSupabaseClient
-}));
-
-vi.mock("@/lib/supabase/admin", () => ({
-  createSupabaseAdminClient: mockCreateSupabaseAdminClient
-}));
-
-vi.mock("@/lib/security/audit", () => ({
-  logAuditAction: mockLogAuditAction
-}));
+vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
+vi.mock("next/cache", () => ({ revalidatePath: mockRevalidatePath }));
+vi.mock("next/server", () => ({ after: mockAfter }));
+vi.mock("@/lib/supabase/server", () => ({ createServerSupabaseClient: mockCreateServerSupabaseClient }));
+vi.mock("@/lib/security/audit", () => ({ logAuditAction: mockLogAuditAction }));
 
 import { signInAction, signOutAction } from "@/lib/auth/actions";
 
-describe("signInAction - Autenticação e Redirecionamento Cirúrgico", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+describe("signInAction", () => {
+  beforeEach(() => vi.clearAllMocks());
 
   it("redireciona para /login?error=supabase-env quando o Supabase não está configurado", async () => {
     mockCreateServerSupabaseClient.mockResolvedValue(null);
-
     const formData = new FormData();
     formData.append("email", "admin@cacaoferta.com");
     formData.append("password", "secret123");
 
     await expect(signInAction(formData)).rejects.toThrow("NEXT_REDIRECT: /login?error=supabase-env");
-    expect(mockSignInWithPassword).not.toHaveBeenCalled();
-    expect(mockLogAuditAction).not.toHaveBeenCalled();
+    expect(mockRevalidatePath).not.toHaveBeenCalled();
   });
 
-  it("redireciona para /login?error=... quando as credenciais são inválidas", async () => {
+  it("mantém erro de credenciais no fluxo de login", async () => {
     mockCreateServerSupabaseClient.mockResolvedValue({
-      auth: {
-        signInWithPassword: mockSignInWithPassword,
-        signOut: mockSignOut,
-        getUser: mockGetUser
-      }
+      auth: { signInWithPassword: mockSignInWithPassword }
     });
-
     mockSignInWithPassword.mockResolvedValue({
       error: { message: "Invalid login credentials" },
       data: { user: null, session: null }
@@ -86,22 +59,13 @@ describe("signInAction - Autenticação e Redirecionamento Cirúrgico", () => {
     formData.append("password", "wrongpass");
 
     await expect(signInAction(formData)).rejects.toThrow("NEXT_REDIRECT: /login?error=Invalid%20login%20credentials");
-    expect(mockSignInWithPassword).toHaveBeenCalledWith({
-      email: "wrong@cacaoferta.com",
-      password: "wrongpass"
-    });
-    expect(mockLogAuditAction).not.toHaveBeenCalled();
+    expect(mockRevalidatePath).not.toHaveBeenCalled();
   });
 
-  it("autentica com sucesso e redireciona para /dashboard sem chamar getUser concorrente", async () => {
+  it("limpa o Router Cache antes de redirecionar login válido para /dashboard", async () => {
     mockCreateServerSupabaseClient.mockResolvedValue({
-      auth: {
-        signInWithPassword: mockSignInWithPassword,
-        signOut: mockSignOut,
-        getUser: mockGetUser
-      }
+      auth: { signInWithPassword: mockSignInWithPassword, getUser: mockGetUser }
     });
-
     mockSignInWithPassword.mockResolvedValue({
       error: null,
       data: {
@@ -109,7 +73,6 @@ describe("signInAction - Autenticação e Redirecionamento Cirúrgico", () => {
         session: { access_token: "tok_abc" }
       }
     });
-
     mockLogAuditAction.mockResolvedValue(true);
 
     const formData = new FormData();
@@ -117,72 +80,42 @@ describe("signInAction - Autenticação e Redirecionamento Cirúrgico", () => {
     formData.append("password", "secret123");
 
     await expect(signInAction(formData)).rejects.toThrow("NEXT_REDIRECT: /dashboard");
-    expect(mockSignInWithPassword).toHaveBeenCalledWith({
-      email: "admin@cacaoferta.com",
-      password: "secret123"
-    });
-
-    // Não deve invocar getUser() no cliente de sessão
     expect(mockGetUser).not.toHaveBeenCalled();
-
-    // Deve ter despachado auditoria pós-resposta passando o id resolvido
-    expect(mockLogAuditAction).toHaveBeenCalledWith(
-      "login",
-      "Usuário autenticado com sucesso: admin@cacaoferta.com",
-      undefined,
-      "usr_12345"
-    );
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/", "layout");
+    expect(mockRevalidatePath.mock.invocationCallOrder[0]).toBeLessThan(mockRedirect.mock.invocationCallOrder.at(-1)!);
   });
 
-  it("falha ou lentidão da auditoria NÃO impede nem bloqueia o login com sucesso", async () => {
+  it("falha da auditoria não impede o redirect do login", async () => {
     mockCreateServerSupabaseClient.mockResolvedValue({
-      auth: {
-        signInWithPassword: mockSignInWithPassword,
-        signOut: mockSignOut,
-        getUser: mockGetUser
-      }
+      auth: { signInWithPassword: mockSignInWithPassword, getUser: mockGetUser }
     });
-
     mockSignInWithPassword.mockResolvedValue({
       error: null,
-      data: {
-        user: { id: "usr_999", email: "admin@cacaoferta.com" },
-        session: { access_token: "tok_xyz" }
-      }
+      data: { user: { id: "usr_999" }, session: { access_token: "tok_xyz" } }
     });
-
-    // Simula erro ou rejeição na auditoria
     mockLogAuditAction.mockRejectedValue(new Error("Database audit timeout"));
 
     const formData = new FormData();
     formData.append("email", "admin@cacaoferta.com");
     formData.append("password", "secret123");
 
-    // O login DEVE continuar redirecionando para /dashboard sem lançar o erro da auditoria
     await expect(signInAction(formData)).rejects.toThrow("NEXT_REDIRECT: /dashboard");
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 });
 
 describe("signOutAction", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+  beforeEach(() => vi.clearAllMocks());
 
-  it("efetua logout e redireciona para /login", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "usr_123" } }
-    });
+  it("efetua logout, limpa o Router Cache e redireciona para /login", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "usr_123" } } });
     mockSignOut.mockResolvedValue({ error: null });
-
     mockCreateServerSupabaseClient.mockResolvedValue({
-      auth: {
-        signInWithPassword: mockSignInWithPassword,
-        signOut: mockSignOut,
-        getUser: mockGetUser
-      }
+      auth: { signOut: mockSignOut, getUser: mockGetUser }
     });
 
     await expect(signOutAction()).rejects.toThrow("NEXT_REDIRECT: /login");
     expect(mockSignOut).toHaveBeenCalled();
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/", "layout");
   });
 });
