@@ -194,6 +194,7 @@ export async function listLatestTrendRadarSnapshot(): Promise<TrendRadarSnapshot
 
   const { data: runs, error: runError } = await supabase.from("trend_radar_runs")
     .select("id,radar_date,window_start,window_end,strategy_version,status,generated_at,source_health,executive_summary")
+    .eq("status", "completed")
     .order("generated_at", { ascending: false }).limit(1);
   const run = runs?.[0] as RunRow | undefined;
   if (runError || !run) return null;
