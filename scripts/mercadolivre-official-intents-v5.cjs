@@ -189,27 +189,39 @@ async function apiGet(path, { fetchImpl = global.fetch, accessToken } = {}) {
 }
 
 function normalizeItems(items, context) {
-  return items.map((item) => ({
-    marketplace: 'Mercado Livre',
-    source: 'mercadolivre_official_api',
-    intent: context.intent,
-    domain_id: context.domain_id,
-    category_id: context.category_id,
-    category_name: context.category_name,
-    item_id: item.id || null,
-    product_id: item.catalog_product_id || context.product_id || null,
-    title: item.title || context.product_name || null,
-    current_price: Number.isFinite(Number(item.price)) ? Number(item.price) : null,
-    old_price: Number.isFinite(Number(item.original_price)) ? Number(item.original_price) : null,
-    discount_percent: Number.isFinite(Number(item.original_price)) && Number(item.original_price) > Number(item.price)
-      ? Number((((Number(item.original_price) - Number(item.price)) / Number(item.original_price)) * 100).toFixed(2)) : null,
-    seller_id: item.seller_id || null,
-    official_store_id: item.official_store_id || null,
-    shipping_free: item.shipping?.free_shipping === true,
-    image_url: item.thumbnail || item.pictures?.[0]?.url || context.image_url || null,
-    product_url: item.permalink || context.product_url || null,
-    source_position: context.position || null
-  }));
+  return items.map((item) => {
+    const rawSold = item.sold_quantity ?? context.sold_quantity;
+    const soldQuantity = Number.isFinite(Number(rawSold)) && Number(rawSold) >= 0 ? Number(rawSold) : null;
+
+    const rawRating = item.rating ?? item.reviews?.rating_average ?? context.rating;
+    const rating = Number.isFinite(Number(rawRating)) && Number(rawRating) >= 1 && Number(rawRating) <= 5
+      ? Number(Number(rawRating).toFixed(2))
+      : null;
+
+    return {
+      marketplace: 'Mercado Livre',
+      source: 'mercadolivre_official_api',
+      intent: context.intent,
+      domain_id: context.domain_id,
+      category_id: context.category_id,
+      category_name: context.category_name,
+      item_id: item.id || null,
+      product_id: item.catalog_product_id || context.product_id || null,
+      title: item.title || context.product_name || null,
+      current_price: Number.isFinite(Number(item.price)) ? Number(item.price) : null,
+      old_price: Number.isFinite(Number(item.original_price)) ? Number(item.original_price) : null,
+      discount_percent: Number.isFinite(Number(item.original_price)) && Number(item.original_price) > Number(item.price)
+        ? Number((((Number(item.original_price) - Number(item.price)) / Number(item.original_price)) * 100).toFixed(2)) : null,
+      sold_quantity: soldQuantity,
+      rating: rating,
+      seller_id: item.seller_id || null,
+      official_store_id: item.official_store_id || null,
+      shipping_free: item.shipping?.free_shipping === true,
+      image_url: item.thumbnail || item.pictures?.[0]?.url || context.image_url || null,
+      product_url: item.permalink || context.product_url || null,
+      source_position: context.position || null,
+    };
+  });
 }
 
 async function runMercadoLivreOfficialIntentCoverage({
