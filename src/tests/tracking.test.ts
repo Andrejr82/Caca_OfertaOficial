@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { createSubId, createTrackedUrl, slugifyProductName } from "@/lib/tracking/sub-id";
+import {
+  isMercadoLivreMonetizedUrl,
+  resolveTrackedOfferDestination,
+} from "@/lib/tracking/go-request";
 // CJS helper is exercised directly; the worker has no TypeScript declaration file.
 const { buildAffiliateLinkRows } = require("../../scripts/oracle-scraper.cjs");
 
@@ -15,6 +19,46 @@ describe("tracking helpers", () => {
 
   it("adds sub_id to URLs", () => {
     expect(createTrackedUrl("https://loja.example/produto?a=1", "telegram_prod_1")).toContain("telegram_prod_1");
+  });
+});
+
+describe("Mercado Livre monetization guard", () => {
+  it("accepts official meli.la shortlinks", () => {
+    expect(isMercadoLivreMonetizedUrl("https://meli.la/2AfuzK7")).toBe(true);
+  });
+
+  it("accepts cycle affiliate URLs with partner_id", () => {
+    expect(isMercadoLivreMonetizedUrl(
+      "https://www.mercadolivre.com.br/p/MLB62549311?partner_id=cacaofertaoficial&utm_source=caca_oferta"
+    )).toBe(true);
+  });
+
+  it("rejects plain Mercado Livre product URLs", () => {
+    expect(isMercadoLivreMonetizedUrl("https://www.mercadolivre.com.br/p/MLB62549311")).toBe(false);
+  });
+
+  it("prefers cycle affiliate_url over plain affiliate_links original_url", () => {
+    expect(resolveTrackedOfferDestination({
+      platform: "Mercado Livre",
+      originalUrl: "https://www.mercadolivre.com.br/p/MLB62549311",
+      affiliateUrl: "https://www.mercadolivre.com.br/p/MLB62549311?partner_id=cacaofertaoficial&utm_source=caca_oferta",
+    })).toContain("partner_id=cacaofertaoficial");
+  });
+
+  it("fails closed when a Mercado Livre offer has no monetized destination", () => {
+    expect(resolveTrackedOfferDestination({
+      platform: "Mercado Livre",
+      originalUrl: "https://www.mercadolivre.com.br/p/MLB62549311",
+      affiliateUrl: "",
+    })).toBeNull();
+  });
+
+  it("keeps non-ML destinations unchanged", () => {
+    expect(resolveTrackedOfferDestination({
+      platform: "Shopee",
+      originalUrl: "https://s.shopee.com.br/example",
+      affiliateUrl: "",
+    })).toBe("https://s.shopee.com.br/example");
   });
 });
 

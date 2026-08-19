@@ -115,6 +115,45 @@ export function resolveGoAffiliateDestination(rawUrl: string): string | null {
   }
 }
 
+export function isMercadoLivreMonetizedUrl(rawUrl: string): boolean {
+  const safeUrl = resolveGoAffiliateDestination(rawUrl);
+  if (!safeUrl) return false;
+
+  try {
+    const parsed = new URL(safeUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === "meli.la" || hostname.endsWith(".meli.la")) return true;
+    return Boolean(parsed.searchParams.get("partner_id")?.trim());
+  } catch {
+    return false;
+  }
+}
+
+export function resolveTrackedOfferDestination(input: {
+  platform?: string | null;
+  originalUrl?: string | null;
+  affiliateUrl?: string | null;
+}): string | null {
+  const platform = String(input.platform || "").trim().toLowerCase();
+  const originalUrl = String(input.originalUrl || "").trim();
+  const affiliateUrl = String(input.affiliateUrl || "").trim();
+
+  if (platform !== "mercado livre") {
+    return resolveGoAffiliateDestination(originalUrl);
+  }
+
+  // Mercado Livre é fail-closed: nunca deixa /go cair para URL comum de produto.
+  // Prioriza a URL monetizada calculada no ciclo e mantém compatibilidade com
+  // shortlinks oficiais meli.la já gravados em affiliate_links.
+  for (const candidate of [affiliateUrl, originalUrl]) {
+    if (isMercadoLivreMonetizedUrl(candidate)) {
+      return resolveGoAffiliateDestination(candidate);
+    }
+  }
+
+  return null;
+}
+
 export function resolveTrackingSource(referer: string, channel: string): string {
   const fallback = String(channel || "").trim().slice(0, 64) || "direct";
   const value = String(referer || "").trim();
