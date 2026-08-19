@@ -1,13 +1,28 @@
 import { AlertCircle, Mail, Lock } from "lucide-react";
 import Image from "next/image";
+import { redirect } from "next/navigation";
 import { signInAction } from "@/lib/auth/actions";
 import { officialBrand, hasSupabasePublicEnv } from "@/lib/env";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { Button } from "@/components/ui/button";
 
 export default async function LoginPage(props: { searchParams: Promise<{ error?: string }> }) {
   const searchParams = await props.searchParams;
   const configured = hasSupabasePublicEnv();
   const error = searchParams?.error;
+
+  if (configured) {
+    const supabase = await createServerSupabaseClient();
+    if (supabase) {
+      const {
+        data: { user }
+      } = await supabase.auth.getUser();
+
+      if (user) {
+        redirect("/dashboard");
+      }
+    }
+  }
 
   return (
     <main
@@ -16,7 +31,6 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
         background: "linear-gradient(135deg, #060a13 0%, #0c1020 40%, #060a13 100%)"
       }}
     >
-      {/* Animated background blobs */}
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div
           className="absolute -left-32 -top-32 h-96 w-96 rounded-full opacity-20 blur-[120px]"
@@ -41,7 +55,6 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
         />
       </div>
 
-      {/* Login Card */}
       <section
         className="relative z-10 w-full max-w-md animate-slideUp"
         style={{
@@ -54,7 +67,6 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
         }}
       >
         <div className="p-8">
-          {/* Logo */}
           <div className="mb-8 text-center">
             <div className="mx-auto mb-4 h-20 w-20 overflow-hidden rounded-2xl bg-[#06131f] shadow-xl shadow-emerald-500/25 ring-1 ring-white/10">
               <Image
@@ -75,7 +87,6 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
             </p>
           </div>
 
-          {/* Config Warning */}
           {!configured ? (
             <div className="mb-5 flex gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3.5 text-sm text-amber-300">
               <AlertCircle className="mt-0.5 shrink-0" size={16} />
@@ -86,14 +97,12 @@ export default async function LoginPage(props: { searchParams: Promise<{ error?:
             </div>
           ) : null}
 
-          {/* Error */}
           {error && error !== "supabase-env" ? (
             <p className="mb-5 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-400">
               {decodeURIComponent(error)}
             </p>
           ) : null}
 
-          {/* Form */}
           <form action={signInAction} className="grid gap-5">
             <label className="grid gap-2">
               <span className="text-[11px] font-bold uppercase tracking-[0.06em] text-white/35">E-mail</span>
