@@ -23,6 +23,7 @@ const {
   createSignedRequest,
   normalizePriceIntegrity,
 } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const { runMercadoLivreNativeTop20 } = require('./mercadolivre-native-top20-v5.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
 const {
   COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
@@ -280,6 +281,10 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
   const sales = parseOptionalNumber(product.sold_quantity ?? product.sales);
   const rating = parseOptionalNumber(product.rating ?? product.ratingStar);
 
+  const provenance = product.source === 'mercadolivre_offers_ssr'
+    ? 'mercadolivre_offers_ssr'
+    : (product.provenance || 'mercadolivre_official_intent');
+
   return {
     marketplace: 'Mercado Livre',
     itemId,
@@ -296,15 +301,15 @@ function normalizeMercadoLivreRadarProduct(product, observedAt = new Date().toIS
     commissionPercent: 0,
     permalink: String(product.product_url || product.permalink || ''),
     imageUrl: String(product.image_url || product.thumbnail || ''),
-    provenance: 'mercadolivre_official_intent',
+    provenance,
     observedAt,
   };
 }
 
 /**
- * Coleta candidatos comerciais do Mercado Livre via intenções oficiais.
- * Divide as keywords em batches determinísticos e não sobrepostos por round (page).
- * Quando todos os batches/intents forem consumidos, retorna [] sinalizando esgotamento factual.
+ * Coleta candidatos comerciais do Mercado Livre.
+ * Fonte primária (round 1): Mercado Livre Native Top 20 (Central Oficial de Ofertas SSR).
+ * Refill secundário (round >= 2 ou fallback): Intenções oficiais com batching determinístico.
  */
 async function collectMercadoLivreMarketplaceCandidates({
   keywords = ['smart TV 4K', 'fone bluetooth', 'air fryer', 'notebook', 'tenis corrida', 'cadeira gamer', 'lixeira inox', 'suporte notebook', 'tapete pet'],
@@ -313,20 +318,46 @@ async function collectMercadoLivreMarketplaceCandidates({
   page = 1,
   batchSize = 3,
   env = process.env,
+  nativeCollector = runMercadoLivreNativeTop20,
   coverageRunner = runMercadoLivreOfficialIntentCoverage,
   tokenProvider = refreshAccessToken,
+  fetchImpl = null,
 } = {}) {
+  const round = Math.max(1, Number(page) || 1);
   const candidates = [];
   const seenIds = new Set();
 
   try {
-    const round = Math.max(1, Number(page) || 1);
+    // 1. Fonte PRIMÁRIA (round 1): Mercado Livre Native Top 20 (SSR Offers)
+    if (round === 1 && typeof nativeCollector === 'function') {
+      try {
+        const nativeResult = await nativeCollector({ fetchImpl });
+        const products = Array.isArray(nativeResult?.products) ? nativeResult.products : [];
+
+        for (const product of products) {
+          const candidate = normalizeMercadoLivreRadarProduct(product);
+          if (!candidate || candidate.currentPrice === null || candidate.currentPrice <= 0) continue;
+
+          const key = candidate.productId ? `ml_prod_${candidate.productId}` : `ml_item_${candidate.itemId}`;
+          if (seenIds.has(key)) continue;
+          seenIds.add(key);
+
+          candidates.push(candidate);
+        }
+
+        if (candidates.length > 0) {
+          return candidates;
+        }
+      } catch (err) {
+        console.warn(`[Oracle Trends Radar] Falha ao coletar ML Native (round 1): ${err.message}. Ativando refill de intents.`);
+      }
+    }
+
+    // 2. REFILL SECUNDÁRIO (round >= 2 ou fallback se round 1 nativo falhou)
     const size = Math.max(1, Number(batchSize) || 3);
     const totalKeywords = Array.isArray(keywords) ? keywords.length : 0;
 
     const startIndex = (round - 1) * size;
-    // Se a página/round solicitar um índice além do total de keywords disponíveis,
-    // todos os batches foram consumidos: sinalizar esgotamento real retornando vazio.
     if (startIndex >= totalKeywords) {
       return [];
     }
@@ -345,6 +376,7 @@ async function collectMercadoLivreMarketplaceCandidates({
       keywords: roundKeywords,
       maxPerIntent: Math.max(3, maxPerIntent),
       delayMs: 150,
+      fetchImpl: fetchImpl || global.fetch,
     });
 
     const products = Array.isArray(result?.products) ? result.products : [];
@@ -359,7 +391,7 @@ async function collectMercadoLivreMarketplaceCandidates({
       candidates.push(candidate);
     }
   } catch (_err) {
-    // Falha em ML não aborta execução
+    // Falha em ML não aborta execução geral
   }
 
   return candidates;

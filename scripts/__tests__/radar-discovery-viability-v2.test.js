@@ -870,6 +870,7 @@ test('TEST 21: collectMercadoLivreMarketplaceCandidates real divide keywords em 
     page: 1,
     batchSize: 3,
     accessToken: 'mock-token-ml',
+    nativeCollector: null,
     coverageRunner: mockCoverageRunner,
   });
 
@@ -879,6 +880,7 @@ test('TEST 21: collectMercadoLivreMarketplaceCandidates real divide keywords em 
     page: 2,
     batchSize: 3,
     accessToken: 'mock-token-ml',
+    nativeCollector: null,
     coverageRunner: mockCoverageRunner,
   });
 
@@ -888,6 +890,7 @@ test('TEST 21: collectMercadoLivreMarketplaceCandidates real divide keywords em 
     page: 3,
     batchSize: 3,
     accessToken: 'mock-token-ml',
+    nativeCollector: null,
     coverageRunner: mockCoverageRunner,
   });
 
@@ -897,6 +900,7 @@ test('TEST 21: collectMercadoLivreMarketplaceCandidates real divide keywords em 
     page: 4,
     batchSize: 3,
     accessToken: 'mock-token-ml',
+    nativeCollector: null,
     coverageRunner: mockCoverageRunner,
   });
 
