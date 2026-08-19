@@ -1,9 +1,54 @@
 import { describe, expect, it } from "vitest";
-import type { TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
+import type { TrendRadarSnapshotProductView, TrendRadarSnapshotView } from "@/lib/trends/radar-queries";
 import {
   RADAR_ORACLE_CONTRACT_VERSION,
   buildRadarOracleDiscoveryContracts,
 } from "@/core/trends/radar-oracle-contract";
+
+function makeMockProduct(partial: Partial<TrendRadarSnapshotProductView>): TrendRadarSnapshotProductView {
+  return {
+    id: "product-1",
+    priority: 1,
+    productTerm: "Produto Mock",
+    normalizedProductTerm: "produto mock",
+    category: "Geral",
+    marketplace: null,
+    evidenceStatus: "partial",
+    sourceCount: 1,
+    commercialScore: 20,
+    confidence: 60,
+    directEvidenceSourceUrls: [],
+    scoreBreakdown: {},
+    determiningReasons: [],
+    isFocus: false,
+    opportunityId: null,
+    price: null,
+    discountPercent: null,
+    commissionPercent: null,
+    sellerCommissionPercent: null,
+    sales: null,
+    salesVelocity: null,
+    velocityStatus: null,
+    scoreDecision: null,
+    scoreStrategyVersion: null,
+    recommendedChannel: null,
+    recommendedFormat: null,
+    selectionDecision: null,
+    selectionDecidedAt: null,
+    selectedOfferId: null,
+    executionContext: {},
+    experimentMetrics: {
+      clicks: 0,
+      orders: 0,
+      commissionValue: 0,
+      grossValue: 0,
+      conversionRate: 0,
+      windowStart: null,
+      windowEnd: null,
+    },
+    ...partial,
+  };
+}
 
 function snapshot(): TrendRadarSnapshotView {
   return {
@@ -17,14 +62,12 @@ function snapshot(): TrendRadarSnapshotView {
     sourceHealth: {},
     executiveSummary: {},
     products: [
-      {
+      makeMockProduct({
         id: "product-1",
         priority: 1,
         productTerm: "Fone Bluetooth M90 Pro 5.3 TWS",
         normalizedProductTerm: "fone bluetooth m90 pro 5 3 tws",
         category: "Áudio e acessórios",
-        marketplace: null,
-        evidenceStatus: "partial",
         sourceCount: 2,
         commercialScore: 32,
         confidence: 60,
@@ -36,15 +79,13 @@ function snapshot(): TrendRadarSnapshotView {
         determiningReasons: ["Evidência: 2 fontes convergentes."],
         isFocus: true,
         opportunityId: "opportunity-1",
-      },
-      {
+      }),
+      makeMockProduct({
         id: "product-2",
         priority: 2,
         productTerm: "Galaxy S26 FE",
         normalizedProductTerm: "galaxy s26 fe",
         category: "Eletrônicos",
-        marketplace: null,
-        evidenceStatus: "partial",
         sourceCount: 1,
         commercialScore: 20,
         confidence: 60,
@@ -53,7 +94,7 @@ function snapshot(): TrendRadarSnapshotView {
         determiningReasons: [],
         isFocus: true,
         opportunityId: null,
-      },
+      }),
     ],
   };
 }

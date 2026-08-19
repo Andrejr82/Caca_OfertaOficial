@@ -30,6 +30,12 @@ describe("Radar snapshot query mapping", () => {
         determining_reasons: ["Evidência: válida.", "Recomendação: score 80.5/100."],
         is_focus: true,
         opportunity_id: null,
+        recommended_channel: null,
+        recommended_format: null,
+        selection_decision: null,
+        selection_decided_at: null,
+        selected_offer_id: null,
+        execution_context: {},
       },
       {
         id: "p1",
@@ -51,6 +57,12 @@ describe("Radar snapshot query mapping", () => {
         determining_reasons: [],
         is_focus: true,
         opportunity_id: "11111111-1111-1111-1111-111111111111",
+        recommended_channel: null,
+        recommended_format: null,
+        selection_decision: null,
+        selection_decided_at: null,
+        selected_offer_id: null,
+        execution_context: {},
       },
     ]);
 

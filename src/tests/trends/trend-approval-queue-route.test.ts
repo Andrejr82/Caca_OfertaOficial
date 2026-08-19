@@ -25,11 +25,11 @@ describe("Trend approval queue route contract", () => {
     expect(source).toContain("automaticPublication: false");
   });
 
-  it("renderiza a fila Pronto para aprovar dentro da Trends", () => {
+  it("renderiza a mesa de seleção comercial dentro da Trends", () => {
     const page = fs.readFileSync(pagePath, "utf8");
     const queue = fs.readFileSync(queuePath, "utf8");
-    expect(page).toContain("listTrendApprovalQueueOffers(latestSnapshot?.id)");
-    expect(page).toContain("<TrendApprovalQueue offers={approvalQueueOffers} />");
+    expect(page).toContain("listLatestTrendRadarSnapshot()");
+    expect(page).toContain("<TrendsCommercialSelectionDesk snapshot={latestSnapshot} approvalFeedback={approvalFeedback} />");
     expect(queue).toContain("Pronto para aprovar");
     expect(queue).toContain("approveTrendShopeeOfferAction");
     expect(queue).toContain("rejectTrendShopeeOfferAction");
