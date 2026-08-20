@@ -1448,7 +1448,7 @@ test('Seleção com 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) retorna exa
   });
 
   assert.equal(products.length, 20, 'Deve selecionar exatamente os 20 produtos elegíveis');
-  const ignoreInResult = products.filter(p => p.selection_decision === 'IGNORAR' || p.commercial_score < 60);
+  const ignoreInResult = products.filter(p => p.direct_evidence[0].decision === 'IGNORAR' || p.commercial_score < 60);
   assert.equal(ignoreInResult.length, 0, 'Zero produtos com decisão IGNORAR no resultado final');
 });
 
@@ -1503,7 +1503,7 @@ test('Seleção com 8 TESTAR + 12 IGNORAR retorna somente 8 sem preenchimento ar
   });
 
   assert.equal(products.length, 8, 'Deve retornar exatamente os 8 produtos elegíveis');
-  const ignoreInResult = products.filter(p => p.selection_decision === 'IGNORAR' || p.commercial_score < 60);
+  const ignoreInResult = products.filter(p => p.direct_evidence[0].decision === 'IGNORAR' || p.commercial_score < 60);
   assert.equal(ignoreInResult.length, 0, 'Nenhum produto IGNORAR deve ser introduzido para completar quota');
 });
 
@@ -1630,7 +1630,7 @@ test('Mercado Livre com promoção e dados mínimos válidos é elegível para T
   });
 
   assert.equal(products.length, 1);
-  assert.equal(products[0].selection_decision, 'TESTAR');
+  assert.equal(products[0].direct_evidence[0].decision, 'TESTAR');
   assert.equal(products[0].direct_evidence[0].selection_decision, 'TESTAR');
   assert.equal(products[0].direct_evidence[0].raw_decision, 'IGNORAR');
 });
@@ -1794,7 +1794,7 @@ test('Auditoria factual preserva dados ausentes como nulos e persiste selection_
   assert.equal(direct.commission_status, 'unknown');
 
   // Metadados reais de decisão
-  assert.equal(p.selection_decision, 'TESTAR');
+  assert.equal(direct.decision, 'TESTAR');
   assert.equal(direct.selection_decision, 'TESTAR');
   assert.equal(direct.raw_decision, 'IGNORAR');
   assert.ok(p.commercial_score < 60, 'Commercial score bruto permanece auditável sem inflação artificial');
