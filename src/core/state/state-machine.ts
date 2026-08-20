@@ -7,7 +7,8 @@ const transitions: Readonly<Record<EntityType, ReadonlySet<string>>> = {
     "approved:posted",
     "pending_manual_review:rejected",
     "selected:rejected",
-    "approved:rejected"
+    "approved:rejected",
+    "rejected:pending_manual_review"
   ]),
   post: new Set(["draft:published"])
 };

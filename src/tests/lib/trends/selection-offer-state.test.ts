@@ -2,21 +2,25 @@ import { describe, expect, it } from "vitest";
 import {
   resolveTrendOfferHandoff,
   resolveTrendOfferHandoffBlock,
-  TREND_REJECTED_OFFER_MESSAGE,
 } from "@/lib/trends/selection-offer-state";
 
 describe("Trends offer handoff state", () => {
-  it("bloqueia oferta rejected com feedback controlado", () => {
-    expect(resolveTrendOfferHandoff("rejected")).toBe("reject");
-    expect(resolveTrendOfferHandoffBlock("rejected")).toEqual({
-      code: "offer_rejected",
-      message: TREND_REJECTED_OFFER_MESSAGE,
-    });
+  it("reabre oferta rejected para um novo teste humano do Radar", () => {
+    expect(resolveTrendOfferHandoff("rejected")).toBe("reopen");
+    expect(resolveTrendOfferHandoffBlock("rejected")).toBeNull();
   });
 
   it("não cria bloqueio para estados reutilizáveis ou selecionáveis", () => {
     expect(resolveTrendOfferHandoffBlock("selected")).toBeNull();
     expect(resolveTrendOfferHandoffBlock("approved")).toBeNull();
     expect(resolveTrendOfferHandoffBlock("pending_manual_review")).toBeNull();
+  });
+
+  it("continua bloqueando estados realmente indisponíveis", () => {
+    expect(resolveTrendOfferHandoff("posted")).toBe("reject");
+    expect(resolveTrendOfferHandoffBlock("posted")).toEqual({
+      code: "offer_unavailable",
+      message: "Esta oportunidade está vinculada a uma oferta em estado posted e não pode ser aprovada automaticamente.",
+    });
   });
 });
