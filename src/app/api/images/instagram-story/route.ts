@@ -78,13 +78,40 @@ export function buildCommercialStoryModel(offer: StoryOffer): CommercialStoryMod
   };
 }
 
+export function buildCommercialStoryFrameLayout() {
+  return {
+    display: "flex",
+    flexDirection: "column" as const,
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    flex: 1,
+    overflow: "hidden" as const,
+    justifyContent: "space-between",
+    gap: 38,
+  };
+}
+
+function frameShell(...children: React.ReactNode[]) {
+  return React.createElement("div", { style: buildCommercialStoryFrameLayout() }, ...children);
+}
+
 function brandHeader(model: CommercialStoryModel, frame: number) {
   return React.createElement(
     "div",
-    { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" } },
+    {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        width: "100%",
+        maxWidth: "100%",
+        minWidth: 0,
+      },
+    },
     React.createElement(
       "div",
-      { style: { display: "flex", alignItems: "center", gap: 16 } },
+      { style: { display: "flex", alignItems: "center", gap: 16, minWidth: 0 } },
       React.createElement(
         "div",
         {
@@ -99,39 +126,48 @@ function brandHeader(model: CommercialStoryModel, frame: number) {
             color: "#071827",
             fontSize: 26,
             fontWeight: 1000,
+            flexShrink: 0,
           },
         },
         "CAÇA",
       ),
       React.createElement(
         "div",
-        { style: { display: "flex", flexDirection: "column", gap: 4 } },
+        { style: { display: "flex", flexDirection: "column", gap: 4, minWidth: 0 } },
         React.createElement("div", { style: { fontSize: 27, fontWeight: 900 } }, "Caça Oferta Oficial"),
         React.createElement("div", { style: { fontSize: 20, opacity: 0.68 } }, model.marketplace),
       ),
     ),
     React.createElement(
       "div",
-      { style: { fontSize: 20, fontWeight: 800, opacity: 0.55 } },
+      { style: { fontSize: 20, fontWeight: 800, opacity: 0.55, flexShrink: 0 } },
       `${frame}/3`,
     ),
   );
 }
 
 function productImage(model: CommercialStoryModel, height: number) {
+  const wrapperStyle = {
+    width: "100%",
+    maxWidth: "100%",
+    minWidth: 0,
+    height,
+    flexShrink: 0,
+    borderRadius: 44,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden" as const,
+  };
+
   if (!model.imageUrl) {
     return React.createElement(
       "div",
       {
         style: {
-          width: "100%",
-          height,
-          borderRadius: 44,
+          ...wrapperStyle,
           background: "rgba(255,255,255,0.08)",
           border: "2px solid rgba(255,255,255,0.12)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
           padding: 50,
           fontSize: 36,
           fontWeight: 800,
@@ -147,14 +183,8 @@ function productImage(model: CommercialStoryModel, height: number) {
     "div",
     {
       style: {
-        width: "100%",
-        height,
-        borderRadius: 44,
+        ...wrapperStyle,
         background: "#ffffff",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        overflow: "hidden",
         padding: 34,
         boxShadow: "0 30px 80px rgba(0,0,0,0.34)",
       },
@@ -162,21 +192,29 @@ function productImage(model: CommercialStoryModel, height: number) {
     React.createElement("img", {
       src: model.imageUrl,
       alt: "",
-      style: { width: "100%", height: "100%", objectFit: "contain" },
+      style: { width: "100%", maxWidth: "100%", height: "100%", objectFit: "contain" },
     }),
   );
 }
 
 function frameOne(model: CommercialStoryModel) {
-  return React.createElement(
-    React.Fragment,
-    null,
+  return frameShell(
     React.createElement(
       "div",
-      { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 24 } },
+      {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          gap: 24,
+        },
+      },
       React.createElement(
         "div",
-        { style: { fontSize: 32, fontWeight: 900, letterSpacing: 2.4, color: "#fde68a" } },
+        { style: { fontSize: 31, fontWeight: 900, letterSpacing: 2.1, color: "#fde68a", minWidth: 0 } },
         "OFERTA QUE CHAMA ATENÇÃO",
       ),
       model.discountLabel
@@ -187,38 +225,39 @@ function frameOne(model: CommercialStoryModel) {
                 background: "#facc15",
                 color: "#071827",
                 borderRadius: 999,
-                padding: "16px 24px",
-                fontSize: 34,
+                padding: "14px 22px",
+                fontSize: 32,
                 fontWeight: 1000,
                 whiteSpace: "nowrap",
+                flexShrink: 0,
               },
             },
             model.discountLabel,
           )
         : null,
     ),
-    productImage(model, 790),
+    productImage(model, 760),
     React.createElement(
       "div",
-      { style: { display: "flex", flexDirection: "column", gap: 26 } },
+      { style: { display: "flex", flexDirection: "column", width: "100%", maxWidth: "100%", minWidth: 0, gap: 20 } },
       React.createElement(
         "div",
-        { style: { fontSize: 52, lineHeight: 1.04, fontWeight: 950, letterSpacing: -1.6 } },
+        { style: { fontSize: 48, lineHeight: 1.05, fontWeight: 950, letterSpacing: -1.4, maxWidth: "100%" } },
         model.productName,
       ),
       React.createElement(
         "div",
-        { style: { display: "flex", flexDirection: "column", gap: 6 } },
+        { style: { display: "flex", flexDirection: "column", gap: 6, width: "100%", minWidth: 0 } },
         model.oldPriceLabel
           ? React.createElement(
               "div",
-              { style: { fontSize: 30, opacity: 0.62, textDecoration: "line-through" } },
+              { style: { fontSize: 29, opacity: 0.62, textDecoration: "line-through" } },
               `De ${model.oldPriceLabel}`,
             )
           : null,
         React.createElement(
           "div",
-          { style: { fontSize: 72, fontWeight: 1000, color: "#facc15", letterSpacing: -2 } },
+          { style: { fontSize: 72, fontWeight: 1000, color: "#facc15", letterSpacing: -2, maxWidth: "100%" } },
           model.currentPriceLabel,
         ),
       ),
@@ -228,12 +267,37 @@ function frameOne(model: CommercialStoryModel) {
 
 function frameTwo(model: CommercialStoryModel) {
   const hasSavings = Boolean(model.savingsLabel && model.discountLabel);
-  return React.createElement(
-    React.Fragment,
-    null,
+  const proofBlock = hasSavings
+    ? React.createElement(
+        "div",
+        { style: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0, gap: 18 } },
+        React.createElement("div", { style: { fontSize: 29, fontWeight: 800, opacity: 0.7 } }, "VOCÊ ECONOMIZA"),
+        React.createElement(
+          "div",
+          { style: { fontSize: 88, fontWeight: 1000, color: "#86efac", letterSpacing: -3, maxWidth: "100%" } },
+          model.savingsLabel,
+        ),
+        React.createElement(
+          "div",
+          { style: { fontSize: 43, lineHeight: 1.08, fontWeight: 950, maxWidth: "100%" } },
+          `${model.discountLabel} sobre o preço anterior`,
+        ),
+      )
+    : React.createElement(
+        "div",
+        { style: { display: "flex", flexDirection: "column", width: "100%", minWidth: 0, gap: 18 } },
+        React.createElement("div", { style: { fontSize: 29, fontWeight: 800, opacity: 0.7 } }, "PREÇO ATUAL INFORMADO"),
+        React.createElement(
+          "div",
+          { style: { fontSize: 88, fontWeight: 1000, color: "#facc15", letterSpacing: -3, maxWidth: "100%" } },
+          model.currentPriceLabel,
+        ),
+      );
+
+  return frameShell(
     React.createElement(
       "div",
-      { style: { fontSize: 31, fontWeight: 900, letterSpacing: 2.2, color: "#bfdbfe" } },
+      { style: { fontSize: 31, fontWeight: 900, letterSpacing: 2.2, color: "#bfdbfe", width: "100%" } },
       hasSavings ? "O NÚMERO QUE IMPORTA" : "PREÇO VERIFICADO",
     ),
     productImage(model, 610),
@@ -243,57 +307,53 @@ function frameTwo(model: CommercialStoryModel) {
         style: {
           display: "flex",
           flexDirection: "column",
-          gap: 24,
-          padding: "52px 54px",
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          gap: 22,
+          padding: "46px 48px",
           borderRadius: 44,
           background: "rgba(255,255,255,0.09)",
           border: "2px solid rgba(255,255,255,0.13)",
         },
       },
-      hasSavings
-        ? React.createElement(
-            React.Fragment,
-            null,
-            React.createElement("div", { style: { fontSize: 30, fontWeight: 800, opacity: 0.7 } }, "VOCÊ ECONOMIZA"),
-            React.createElement("div", { style: { fontSize: 92, fontWeight: 1000, color: "#86efac", letterSpacing: -3 } }, model.savingsLabel),
-            React.createElement("div", { style: { fontSize: 48, fontWeight: 950 } }, `${model.discountLabel} sobre o preço anterior`),
-          )
-        : React.createElement(
-            React.Fragment,
-            null,
-            React.createElement("div", { style: { fontSize: 30, fontWeight: 800, opacity: 0.7 } }, "PREÇO ATUAL INFORMADO"),
-            React.createElement("div", { style: { fontSize: 92, fontWeight: 1000, color: "#facc15", letterSpacing: -3 } }, model.currentPriceLabel),
-          ),
-      React.createElement("div", { style: { fontSize: 31, lineHeight: 1.18, fontWeight: 800, opacity: 0.82 } }, model.productName),
+      proofBlock,
+      React.createElement(
+        "div",
+        { style: { fontSize: 30, lineHeight: 1.17, fontWeight: 800, opacity: 0.82, width: "100%", maxWidth: "100%" } },
+        model.productName,
+      ),
     ),
   );
 }
 
 function frameThree(model: CommercialStoryModel) {
-  return React.createElement(
-    React.Fragment,
-    null,
+  return frameShell(
     React.createElement(
       "div",
-      { style: { fontSize: 31, fontWeight: 900, letterSpacing: 2.2, color: "#fde68a" } },
+      { style: { fontSize: 31, fontWeight: 900, letterSpacing: 2.2, color: "#fde68a", width: "100%" } },
       "CONFIRA O PREÇO ATUAL",
     ),
-    productImage(model, 650),
+    productImage(model, 610),
     React.createElement(
       "div",
-      { style: { display: "flex", flexDirection: "column", gap: 22 } },
-      React.createElement("div", { style: { fontSize: 29, fontWeight: 800, opacity: 0.68 } }, "PREÇO ATUAL"),
-      React.createElement("div", { style: { fontSize: 102, fontWeight: 1000, color: "#facc15", letterSpacing: -4 } }, model.currentPriceLabel),
+      { style: { display: "flex", flexDirection: "column", width: "100%", maxWidth: "100%", minWidth: 0, gap: 18 } },
+      React.createElement("div", { style: { fontSize: 28, fontWeight: 800, opacity: 0.68 } }, "PREÇO ATUAL"),
+      React.createElement(
+        "div",
+        { style: { fontSize: 96, fontWeight: 1000, color: "#facc15", letterSpacing: -4, maxWidth: "100%" } },
+        model.currentPriceLabel,
+      ),
       model.savingsLabel
         ? React.createElement(
             "div",
-            { style: { fontSize: 35, fontWeight: 900, color: "#86efac" } },
+            { style: { fontSize: 34, fontWeight: 900, color: "#86efac" } },
             `Economia de ${model.savingsLabel}`,
           )
         : null,
       React.createElement(
         "div",
-        { style: { fontSize: 45, lineHeight: 1.08, fontWeight: 950, marginTop: 8 } },
+        { style: { fontSize: 41, lineHeight: 1.08, fontWeight: 950, maxWidth: "100%" } },
         "Toque no sticker de link para conferir a oferta.",
       ),
     ),
@@ -301,16 +361,20 @@ function frameThree(model: CommercialStoryModel) {
       "div",
       {
         style: {
-          height: 190,
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          height: 170,
+          flexShrink: 0,
           borderRadius: 40,
           border: "3px dashed rgba(255,255,255,0.35)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           color: "rgba(255,255,255,0.5)",
-          fontSize: 25,
+          fontSize: 24,
           fontWeight: 800,
-          letterSpacing: 1.2,
+          letterSpacing: 1.1,
         },
       },
       "ÁREA LIVRE PARA O STICKER DE LINK",
@@ -325,22 +389,36 @@ function storyImage(model: CommercialStoryModel, frame: number) {
     {
       style: {
         width: "100%",
+        maxWidth: "100%",
         height: "100%",
+        minWidth: 0,
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
         padding: "72px 72px 64px",
+        boxSizing: "border-box",
         background: frame === 2
           ? "linear-gradient(165deg, #071827 0%, #111827 56%, #172554 100%)"
           : "linear-gradient(160deg, #061724 0%, #0b2235 54%, #071827 100%)",
         color: "#ffffff",
         fontFamily: "Arial, sans-serif",
-        gap: 48,
+        gap: 42,
       },
     },
     brandHeader(model, frame),
     React.createElement(
       "div",
-      { style: { display: "flex", flexDirection: "column", flex: 1, justifyContent: "space-between", gap: 42 } },
+      {
+        style: {
+          display: "flex",
+          flexDirection: "column",
+          width: "100%",
+          maxWidth: "100%",
+          minWidth: 0,
+          flex: 1,
+          overflow: "hidden",
+        },
+      },
       content,
     ),
   );
