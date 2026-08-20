@@ -42,7 +42,7 @@ describe("Trend Social Copy V4 bridge", () => {
   it.each(["telegram", "whatsapp"] as const)("materializes exactly one tracked URL for %s", (channel) => {
     const copy = buildTrendSocialDraft(facts, channel, trackedUrl);
 
-    expect(copy.match(new RegExp(trackedUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gu"))).toHaveLength(1);
+    expect(copy.split(trackedUrl)).toHaveLength(2);
     expect(copy).toContain("👉 Conferir o preço atual");
   });
 });
