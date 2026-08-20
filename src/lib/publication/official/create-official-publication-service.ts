@@ -19,6 +19,8 @@ import { publishToFacebook } from "@/lib/platforms/facebook";
 import { createSupabaseStateDependencies } from "@/lib/state/supabase-state-adapter";
 import { OfficialPublicationStateAdapter, SupabaseOfficialPublicationAdapter } from "./supabase-official-publication-adapter";
 import { createServerObservabilityDependencies, PublicationObservabilityAuditAdapter } from "@/lib/observability";
+import { isInstagramReelsV4Enabled } from "@/lib/social/meta-delivery-policy";
+import { assertInstagramV4PublicationAllowed } from "@/lib/social/meta-publication-guard";
 
 export class OfficialPublicationTransportRegistry implements PublicationTransportRegistryPort {
   private readonly transports: Map<OfficialPublicationChannel, PublicationTransportPort>;
@@ -84,6 +86,11 @@ function createTransportRegistry() {
       ...receiptDependencies,
       send: async (input) => {
         const mediaType = input.metadata?.instagramMediaType === "REELS" ? "REELS" : "FEED";
+        assertInstagramV4PublicationAllowed({
+          content: input.text,
+          mediaType,
+          reelsEnabled: isInstagramReelsV4Enabled(),
+        });
         if (mediaType === "REELS") {
           const videoUrl = typeof input.metadata?.instagramVideoUrl === "string" ? input.metadata.instagramVideoUrl : "";
           if (!videoUrl) throw new Error("Instagram Reels requires a public video URL.");
