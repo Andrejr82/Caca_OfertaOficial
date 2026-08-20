@@ -1,15 +1,16 @@
-import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
+import { buildCanonicalCopyV4ChannelDraft } from "@/core/ai/official-ai-service";
+import type { CopyV4Facts } from "@/core/ai/copy-v4";
 import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
-export const TREND_SOCIAL_CHANNELS = ["facebook", "instagram", "whatsapp"] as const;
+export const TREND_SOCIAL_CHANNELS = ["facebook", "instagram", "telegram", "whatsapp"] as const;
 
 export function buildTrendSocialDraftContent(
   baseContent: string,
   channel: (typeof TREND_SOCIAL_CHANNELS)[number],
   trackedUrl: string,
 ) {
-  if (channel !== "whatsapp") return baseContent;
+  if (channel !== "whatsapp" && channel !== "telegram") return baseContent;
 
   const url = trackedUrl.trim();
   if (!url) return baseContent.trimEnd();
@@ -20,6 +21,15 @@ export function buildTrendSocialDraftContent(
   }
 
   return `${withoutTrackedUrl}\n\n👉 ${url}`;
+}
+
+export function buildTrendSocialDraft(
+  facts: CopyV4Facts,
+  channel: (typeof TREND_SOCIAL_CHANNELS)[number],
+  trackedUrl: string,
+) {
+  const baseContent = buildCanonicalCopyV4ChannelDraft(facts, channel);
+  return buildTrendSocialDraftContent(baseContent, channel, trackedUrl);
 }
 
 export async function prepareTrendSocialDrafts(input: {
@@ -36,14 +46,23 @@ export async function prepareTrendSocialDrafts(input: {
     .single();
   if (offerError || !offer) throw new Error("Oferta aprovada no Trends não pôde ser carregada para as redes sociais.");
 
-  const facts = {
+  const explainabilityMetrics = offer.explainability?.marketplace_metrics;
+  const facts: CopyV4Facts = {
     productName: offer.product_name,
     marketplace: offer.platform,
     category: offer.category ?? null,
     currentPrice: Number(offer.current_price),
     originalPrice: offer.old_price == null ? null : Number(offer.old_price),
     freeShipping: offer.shipping_free ?? null,
-    evidence: { ...(offer.explainability ?? {}), ...(offer.marketplace_metrics ?? {}) },
+    evidence: {
+      ...(offer.explainability ?? {}),
+      marketplace_metrics: {
+        ...(explainabilityMetrics && typeof explainabilityMetrics === "object"
+          ? explainabilityMetrics as Record<string, unknown>
+          : {}),
+        ...(offer.marketplace_metrics ?? {}),
+      },
+    },
   };
 
   const draftIds: Record<string, string> = {};
@@ -65,8 +84,7 @@ export async function prepareTrendSocialDrafts(input: {
       throw new Error(`Falha ao preparar o link do canal ${channel}: ${linkError?.message ?? "registro ausente"}`);
     }
 
-    const baseContent = buildCopyV2ChannelCopy(facts, channel);
-    const content = buildTrendSocialDraftContent(baseContent, channel, trackedUrl);
+    const content = buildTrendSocialDraft(facts, channel, trackedUrl);
     const { data: draft, error: draftReadError } = await admin
       .from("posts")
       .select("id")
