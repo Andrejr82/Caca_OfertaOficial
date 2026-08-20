@@ -52,6 +52,26 @@ function instagramMode(offer: { product_name?: string | null; notes?: string | n
   return coupon ? "synchronous" : "asynchronous";
 }
 
+function trackedUrlFromRelation(value: unknown) {
+  const relation = Array.isArray(value) ? value[0] : value;
+  if (!relation || typeof relation !== "object") return null;
+  const trackedUrl = (relation as { tracked_url?: unknown }).tracked_url;
+  return typeof trackedUrl === "string" && /^https:\/\//iu.test(trackedUrl) ? trackedUrl : null;
+}
+
+function publicationMetadata(
+  channel: OfficialPublicationChannel,
+  offer: { product_name?: string | null; notes?: string | null },
+  affiliateLinks: unknown,
+): Readonly<Record<string, string | number | boolean>> {
+  if (channel === "instagram") return { instagramMode: instagramMode(offer) };
+  if (channel === "facebook") {
+    const trackedUrl = trackedUrlFromRelation(affiliateLinks);
+    return trackedUrl ? { affiliateLink: trackedUrl } : {};
+  }
+  return {};
+}
+
 function socialImageUrl(offer: {
   id?: string | null;
   image_url?: string | null;
@@ -117,7 +137,7 @@ export class SupabaseOfficialPublicationAdapter implements
       content: data.content,
       mediaUrl: await resolvePublicationImage(channel, related),
       destination: this.destinations[channel] ?? "",
-      metadata: channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}
+      metadata: publicationMetadata(channel, related ?? {}, (data as { affiliate_links?: unknown }).affiliate_links)
     };
   }
 
@@ -141,7 +161,7 @@ export class SupabaseOfficialPublicationAdapter implements
         content: item.content,
         mediaUrl: await resolvePublicationImage(channel, related),
         destination: this.destinations[channel] ?? "",
-        metadata: (channel === "instagram" ? { instagramMode: instagramMode(related ?? {}) } : {}) as Readonly<Record<string, string | number | boolean>>
+        metadata: publicationMetadata(channel, related ?? {}, (item as { affiliate_links?: unknown }).affiliate_links)
       };
     }));
   }
@@ -249,7 +269,8 @@ export class SupabaseOfficialPublicationAdapter implements
   }
 
   async complete(idempotencyKey: string, fingerprint: string, result: OfficialPublicationResult): Promise<void> {
-    await this.updateSetting(idempotencySettingKey(idempotencyKey), { fingerprint, status: "completed", result });
+    const key = idempotencySettingKey(idempotencyKey);
+    await this.updateSetting(key, { fingerprint, status: "completed", result });
     await this.updateSetting(reservationSettingKey({ postId: result.postId, channel: result.channel } as OfficialPublicationCommand), {
       fingerprint, idempotencyKey, commandId: result.commandId,
       status: result.status === "published" ? "completed" : "failed_before_receipt"
@@ -322,9 +343,9 @@ export class OfficialPublicationStateAdapter implements PublicationStatePort {
       entityId: command.postId,
       fromState: "draft",
       toState: "published",
-      origin: "official-publication-service.receipt",
-      reason: { code: "FINAL_RECEIPT_CONFIRMED" },
-      evidenceRefs: [`receipt:${receipt.receiptId}`, `external:${receipt.externalId}`]
+      origin: "official-publication-service.post",
+      reason: command.reason,
+      evidenceRefs: [`receipt:${receipt.receiptId}`]
     }, this.dependencies);
     return result.status === "applied"
       ? { status: "applied" as const, auditId: result.auditId, newState: "published" as const }
@@ -336,41 +357,19 @@ export class OfficialPublicationStateAdapter implements PublicationStatePort {
       commandId: `${command.commandId}:offer`,
       idempotencyKey: `${command.idempotencyKey}:offer`,
       correlationId: command.correlationId,
-      causationId: `${command.commandId}:post`,
+      causationId: command.commandId,
       tenantId: command.tenantId,
       actor: { type: "service", id: "official-publication-service", service: "official-publication-service" },
       requestedAt: command.requestedAt,
       entityId: command.offerId,
       fromState: "approved",
       toState: "posted",
-      origin: "official-publication-service.first-confirmed-publication",
-      reason: { code: "FIRST_OFFICIAL_POST_PUBLISHED" },
-      evidenceRefs: [`receipt:${receipt.receiptId}`, `post:${command.postId}:published`]
+      origin: "official-publication-service.offer",
+      reason: command.reason,
+      evidenceRefs: [`receipt:${receipt.receiptId}`]
     }, this.dependencies);
     return result.status === "applied"
       ? { status: "applied" as const, auditId: result.auditId, newState: "posted" as const }
       : { status: "rejected" as const, code: result.code, message: result.message };
   }
-
-  async reconcileOffer({ command }: { command: OfficialPublicationCommand }) {
-    const result = await transitionOfficialOfferState({
-      commandId: `${command.commandId}:offer-reconcile`,
-      idempotencyKey: `${command.idempotencyKey}:offer-reconcile`,
-      correlationId: command.correlationId,
-      causationId: command.commandId,
-      tenantId: command.tenantId,
-      actor: { type: "service", id: "official-publication-service", service: "official-publication-service" },
-      requestedAt: command.requestedAt,
-      entityId: command.offerId,
-      fromState: "posted",
-      toState: "approved",
-      origin: "official-publication-service.premature-post-reconciliation",
-      reason: { code: "PUBLICATION_RECONCILIATION", detail: command.channel },
-      evidenceRefs: [`offer:${command.offerId}:active-draft`, `post:${command.postId}:draft`]
-    }, this.dependencies);
-    return result.status === "applied"
-      ? { status: "applied" as const, auditId: result.auditId, newState: "approved" as const }
-      : { status: "rejected" as const, code: result.code, message: result.message };
-  }
 }
-
