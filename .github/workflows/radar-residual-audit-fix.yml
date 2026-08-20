@@ -1,0 +1,288 @@
+name: Apply radar residual audit fix
+
+on:
+  push:
+    branches:
+      - fix/radar-commercial-residual-audit
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    if: ${{ github.actor != 'github-actions[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/radar-commercial-residual-audit
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Apply surgical fixes and tests
+        shell: python
+        run: |
+          from pathlib import Path
+
+          engine = Path('scripts/oracle-trends-radar-engine.cjs')
+          text = engine.read_text(encoding='utf-8')
+
+          old = """function parseOptionalNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const result = Number(String(value).replace(',', '.'));
+  return Number.isFinite(result) ? result : null;
+}
+"""
+          new = old + """
+function normalizeShopeeCommissionPercent(value) {
+  const num = parseOptionalNumber(value);
+  if (num === null || num <= 0) return null;
+  const percent = num < 1 ? num * 100 : num;
+  const rounded = Math.round(percent * 100) / 100;
+  return rounded > 0 && rounded <= 100 ? rounded : null;
+}
+
+function resolveShopeeCommission(node = {}) {
+  const total = normalizeShopeeCommissionPercent(node.commissionRate);
+  const shopee = normalizeShopeeCommissionPercent(node.shopeeCommissionRate);
+  const seller = normalizeShopeeCommissionPercent(node.sellerCommissionRate);
+
+  if (total !== null) {
+    return {
+      effectiveCommissionPercent: total,
+      shopeeCommissionPercent: shopee,
+      sellerCommissionPercent: seller,
+      commissionSource: 'commissionRate_total',
+    };
+  }
+
+  const components = Math.round(((shopee || 0) + (seller || 0)) * 100) / 100;
+  if (components > 0 && components <= 100) {
+    return {
+      effectiveCommissionPercent: components,
+      shopeeCommissionPercent: shopee,
+      sellerCommissionPercent: seller,
+      commissionSource: 'official_components',
+    };
+  }
+
+  return {
+    effectiveCommissionPercent: null,
+    shopeeCommissionPercent: shopee,
+    sellerCommissionPercent: seller,
+    commissionSource: 'unknown',
+  };
+}
+"""
+          assert old in text, 'parseOptionalNumber anchor not found'
+          text = text.replace(old, new, 1)
+
+          old = """          const commRate = parseNumber(node.commissionRate, 0);
+          const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
+          const commissionPercent = Math.round((commRate > 0 && commRate < 1 ? commRate * 100 : commRate) * 100) / 100;
+          const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate < 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
+"""
+          new = """          const commission = resolveShopeeCommission(node);
+          const commissionPercent = commission.effectiveCommissionPercent || 0;
+"""
+          assert old in text, 'Shopee commission parsing anchor not found'
+          text = text.replace(old, new, 1)
+
+          old = """            commissionRate: commissionPercent,
+            commissionPercent,
+            sellerCommissionRate: sellerCommissionPercent,
+"""
+          new = """            commissionRate: commissionPercent,
+            commissionPercent,
+            // O score V4 soma commissionRate + sellerCommissionRate. Como commissionRate da
+            // OpenAPI já representa o total quando presente, sellerCommissionRate fica zerado
+            // para impedir dupla contagem. Os componentes factuais são preservados abaixo.
+            sellerCommissionRate: 0,
+            shopeeCommissionRate: commission.shopeeCommissionPercent,
+            sellerCommissionRateObserved: commission.sellerCommissionPercent,
+            commissionSource: commission.commissionSource,
+"""
+          assert old in text, 'candidate commission fields anchor not found'
+          text = text.replace(old, new, 1)
+
+          old = """          commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
+          sellerCommissionRate: candidate.sellerCommissionRate || 0,
+          effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
+"""
+          new = """          commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
+          sellerCommissionRate: candidate.sellerCommissionRateObserved ?? candidate.sellerCommissionRate ?? 0,
+          shopeeCommissionRate: candidate.shopeeCommissionRate ?? null,
+          commissionSource: candidate.commissionSource || null,
+          effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
+"""
+          assert old in text, 'commercial_metrics commission anchor not found'
+          text = text.replace(old, new, 1)
+
+          old = """      commercial_score: finalScoreV4.total,
+      score_breakdown: finalScoreV4.breakdown,
+"""
+          new = """      commercial_score: finalScoreV4.total,
+      selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision,
+      score_breakdown: finalScoreV4.breakdown,
+"""
+          assert old in text, 'selection_decision persistence anchor not found'
+          text = text.replace(old, new, 1)
+
+          old = """  parseOptionalNumber,
+  normalizeMercadoLivreRadarProduct,
+"""
+          new = """  parseOptionalNumber,
+  normalizeShopeeCommissionPercent,
+  resolveShopeeCommission,
+  normalizeMercadoLivreRadarProduct,
+"""
+          assert old in text, 'exports anchor not found'
+          text = text.replace(old, new, 1)
+
+          engine.write_text(text, encoding='utf-8')
+
+          test = Path('scripts/__tests__/radar-residual-audit-fixes.test.js')
+          test.write_text(r'''\
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+const {
+  resolveShopeeCommission,
+  collectShopeeMarketplaceCandidates,
+  buildTrendRadarProductsFromCandidates,
+} = require('../oracle-trends-radar-engine.cjs');
+
+test('Shopee preserva commissionRate total e não soma sellerCommissionRate novamente', () => {
+  const commission = resolveShopeeCommission({
+    commissionRate: 73,
+    shopeeCommissionRate: 3,
+    sellerCommissionRate: 70,
+  });
+
+  assert.equal(commission.effectiveCommissionPercent, 73);
+  assert.equal(commission.commissionSource, 'commissionRate_total');
+});
+
+test('Shopee usa componentes oficiais quando commissionRate total não está disponível', () => {
+  const commission = resolveShopeeCommission({
+    commissionRate: null,
+    shopeeCommissionRate: 4,
+    sellerCommissionRate: 1,
+  });
+
+  assert.equal(commission.effectiveCommissionPercent, 5);
+  assert.equal(commission.commissionSource, 'official_components');
+});
+
+test('Shopee rejeita comissão efetiva acima de 100%', () => {
+  const commission = resolveShopeeCommission({
+    commissionRate: null,
+    shopeeCommissionRate: 70,
+    sellerCommissionRate: 40,
+  });
+
+  assert.equal(commission.effectiveCommissionPercent, null);
+  assert.equal(commission.commissionSource, 'unknown');
+});
+
+test('coletor Shopee não entrega comissão duplicada ao score', async () => {
+  const request = async () => ({
+    data: {
+      data: {
+        productOfferV2: {
+          nodes: [{
+            itemId: 'item-1',
+            shopId: 'shop-1',
+            productName: 'Produto comissão total',
+            priceMin: 100,
+            priceMax: 100,
+            ratingStar: 4.9,
+            sales: 100,
+            priceDiscountRate: 20,
+            commissionRate: 73,
+            shopeeCommissionRate: 3,
+            sellerCommissionRate: 70,
+            offerLink: 'https://example.com/produto',
+            imageUrl: 'https://example.com/image.jpg',
+            shopType: [],
+          }],
+          pageInfo: { hasNextPage: false },
+        },
+      },
+    },
+  });
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request,
+    categoryIds: [100010],
+    maxPagesPerCategory: 1,
+  });
+
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0].commissionRate, 73);
+  assert.equal(candidates[0].sellerCommissionRate, 0);
+  assert.equal(candidates[0].sellerCommissionRateObserved, 70);
+  assert.equal(candidates[0].shopeeCommissionRate, 3);
+  assert.equal(candidates[0].commissionSource, 'commissionRate_total');
+});
+
+test('produto final persiste selection_decision no campo dedicado', () => {
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: '00000000-0000-0000-0000-000000000001',
+    shopeeCandidates: [{
+      marketplace: 'Shopee',
+      itemId: 'item-selection',
+      shopId: 'shop-selection',
+      productName: 'Câmera digital oferta comercial',
+      currentPrice: 99,
+      oldPrice: 199,
+      discountPercent: 50,
+      priceDiscountRate: 50,
+      sales: 1500,
+      ratingStar: 4.9,
+      commissionRate: 15,
+      sellerCommissionRate: 0,
+      permalink: 'https://example.com/camera',
+      imageUrl: 'https://example.com/camera.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
+    }],
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 1);
+  assert.equal(products[0].selection_decision, 'TESTAR');
+  assert.equal(products[0].direct_evidence[0].selection_decision, 'TESTAR');
+});
+''', encoding='utf-8')
+
+          doc = Path('docs/RADAR_RESIDUAL_AUDIT_FIX.md')
+          doc.write_text('''# Radar — Correções Residuais de Auditoria\n\nCorreções finais após validação do Radar em produção:\n\n- `trend_radar_products.selection_decision` passa a ser persistido com a decisão efetiva usada pelo motor (`TESTAR`/`PRIORIDADE`).\n- Na Shopee, `commissionRate` é tratado como comissão total quando informado pela OpenAPI e não é somado novamente a `sellerCommissionRate`.\n- Quando o total não existe, os componentes oficiais `shopeeCommissionRate + sellerCommissionRate` podem compor a comissão efetiva.\n- Comissão calculada acima de 100% é rejeitada como desconhecida, sem fabricar retorno econômico.\n- Os componentes factuais continuam preservados para auditoria, sem dupla contagem no score.\n\nSem alteração de thresholds, quotas, discovery, publicação automática ou regras do Mercado Livre.\n''', encoding='utf-8')
+
+          workflow = Path('.github/workflows/radar-residual-audit-fix.yml')
+          workflow.unlink()
+
+      - name: Run focused tests
+        run: node --test scripts/__tests__/radar-residual-audit-fixes.test.js scripts/__tests__/oracle-trends-radar-runner.test.js scripts/__tests__/commercial-opportunity-score-v4.test.js
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Diff check
+        run: git diff --check
+
+      - name: Commit surgical fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- scripts/oracle-trends-radar-engine.cjs scripts/__tests__/radar-residual-audit-fixes.test.js docs/RADAR_RESIDUAL_AUDIT_FIX.md .github/workflows/radar-residual-audit-fix.yml
+          git commit -m "fix(trends): persist decisions and prevent commission double count"
+          git push origin HEAD:fix/radar-commercial-residual-audit
