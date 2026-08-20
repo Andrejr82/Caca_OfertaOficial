@@ -3,19 +3,15 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { Instagram } from "lucide-react";
-import { isInstagramReelsV4Enabled } from "@/lib/social/meta-delivery-policy";
-import { isInstagramReelsDraft } from "@/lib/social/meta-publication-guard";
+import { isInstagramReelsDraft, isInstagramStoriesV4Handoff } from "@/lib/social/meta-publication-guard";
 
 export const dynamic = "force-dynamic";
 
 export default async function InstagramDashboardPage() {
   const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
-  const reelsEnabled = isInstagramReelsV4Enabled();
 
   interface PostWithOffer {
     id: string;
-    videoJobId?: string | null;
-    videoUrl?: string | null;
     content: string;
     status: string;
     external_id: string | null;
@@ -37,31 +33,19 @@ export default async function InstagramDashboardPage() {
   }
 
   let draftPosts: PostWithOffer[] = [];
-
   if (supabase) {
-    const [{ data: drafts }, { data: videoJobs }] = await Promise.all([
-      supabase.from("posts").select("*, offers(*)").eq("channel", "instagram").eq("status", "draft").order("created_at", { ascending: false }),
-      reelsEnabled
-        ? supabase.from("video_jobs").select("id,status,video_url,offer_id,metadata").in("status", ["ready", "approved"])
-        : Promise.resolve({ data: [] as any[] }),
-    ]);
-    const jobsByDraftId = new Map<string, { id: string; status: string; video_url: string | null }>();
-    const jobsByOfferId = new Map<string, { id: string; status: string; video_url: string | null }>();
-    for (const job of videoJobs ?? []) {
-      const normalizedJob = { id: job.id, status: job.status, video_url: (job as { video_url?: string | null }).video_url ?? null };
-      const draftId = (job.metadata as { draftIds?: { instagram?: string } } | null)?.draftIds?.instagram;
-      if (draftId) jobsByDraftId.set(draftId, normalizedJob);
-      if (job.offer_id) jobsByOfferId.set(job.offer_id, normalizedJob);
-    }
-    draftPosts = (drafts ?? []).map((post) => ({ ...post, _videoJob: jobsByDraftId.get(post.id) ?? jobsByOfferId.get(post.offer_id) }))
-      .map(({ _videoJob, ...post }) => ({
-        ...post,
-        videoJobId: reelsEnabled ? (_videoJob?.id ?? null) : null,
-        videoUrl: reelsEnabled ? (_videoJob?.video_url ?? null) : null,
-      }));
+    const { data: drafts } = await supabase
+      .from("posts")
+      .select("*, offers(*)")
+      .eq("channel", "instagram")
+      .eq("status", "draft")
+      .order("created_at", { ascending: false });
+    draftPosts = (drafts ?? []) as PostWithOffer[];
   }
 
-  const reelDrafts = draftPosts.filter((post) => isInstagramReelsDraft(post.content));
+  const manualFeedDrafts = draftPosts.filter((post) =>
+    !isInstagramStoriesV4Handoff(post.content) && !isInstagramReelsDraft(post.content)
+  );
   const historyData = await getPostHistory("instagram");
 
   return (
@@ -71,15 +55,15 @@ export default async function InstagramDashboardPage() {
           <Instagram size={20} className="text-white" />
         </span>
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white">Instagram Reels</h1>
-          <p className="text-xs text-white/35">Fluxo focado em vídeo. Stories estáticos foram aposentados; Reels continua protegido até homologação audiovisual.</p>
+          <h1 className="text-2xl font-extrabold tracking-tight text-white">Instagram</h1>
+          <p className="text-xs text-white/35">Posts manuais e histórico. Stories e Reels ficam em páginas próprias.</p>
         </div>
       </header>
 
       <SocialChannelPostsView
         channel="instagram"
         accentClassName="bg-pink-500/15 text-pink-300"
-        draftPosts={reelDrafts}
+        draftPosts={manualFeedDrafts}
         historyData={historyData as any}
       />
     </div>
