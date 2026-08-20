@@ -29,24 +29,27 @@ Substituir o renderer atual de Stories por uma arquitetura comercial determinís
 ### Task 1 — Classificador comercial e plano de frames — CONCLUÍDA
 Contrato determinístico `StoryV5Plan` com template, título comercial curto, fatos derivados e número de frames. TDD: 6/6 PASS em validação local.
 
-### Task 2 — Renderer V5 nativo — IMPLEMENTADA / AGUARDANDO VALIDAÇÃO
+### Task 2 — Renderer V5 nativo — CONCLUÍDA
 Novo renderer 1080x1920 independente do template V4 atual. Produto domina a composição, primeira tela é autossuficiente, preço/vantagem têm hierarquia visual alta, CTA é curto e não há texto interno de implementação/sticker.
 
 Arquivos:
 - `src/lib/social/instagram-story-v5-renderer.ts`
 - `src/tests/lib/social/instagram-story-v5-renderer.test.ts`
 
-Critérios de regressão:
-- `DISCOUNT_HERO` mostra desconto real, preço anterior e preço atual;
-- `PROOF_HERO` usa apenas prova estruturada aceita pelo plano;
-- `PRICE_HERO` não cria frames extras;
-- frames de reforço só existem quando previstos pelo `frameCount`;
-- nenhuma arte carrega instruções como `handoff`, `sticker`, `área livre` ou `preço atual informado`.
+Validação local: 11/11 PASS somando plano + renderer; typecheck voltou ao baseline conhecido de 18 erros, sem regressão V5.
 
-### Task 3 — Integração com endpoint/painel
-Fazer `/api/images/instagram-story` consumir `StoryV5Plan`, renderizar apenas os frames existentes e ajustar o painel para mostrar 1–3 botões dinamicamente.
+### Task 3 — Integração com endpoint/painel — IMPLEMENTADA
+- `/api/images/instagram-story` agora monta `StoryV5Plan` com fatos reais disponíveis da oferta e renderiza pelo V5;
+- frame inexistente retorna erro em vez de gerar tela artificial;
+- imagem precisa ser HTTPS válida;
+- painel calcula `frameCount` e mostra somente 1–3 botões existentes;
+- painel exibe família de template e quantidade de telas;
+- tracked URL continua sendo o destino manual do sticker no último Story;
+- prova/frete continuam desligados neste bridge enquanto não houver fatos estruturados confiáveis nesse caminho.
 
-### Task 4 — QA visual local com ofertas reais
+Regressão: `src/tests/architecture/instagram-story-v5-integration.test.ts`.
+
+### Task 4 — QA visual local com ofertas reais — PRÓXIMA
 Validar ao menos um exemplo `DISCOUNT_HERO`, um `PRICE_HERO` e, se houver dados, um `PROOF_HERO`. Não mergear se qualquer arte tiver overflow, espaço morto excessivo ou aparência de dashboard.
 
 ### Task 5 — Guardrails e fechamento
