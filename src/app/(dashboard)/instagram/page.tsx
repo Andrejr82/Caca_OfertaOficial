@@ -4,6 +4,7 @@ import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { Instagram } from "lucide-react";
 import { isInstagramReelsV4Enabled } from "@/lib/social/meta-delivery-policy";
+import { buildStoryV5Plan } from "@/lib/social/instagram-story-v5";
 
 export const dynamic = "force-dynamic";
 
@@ -68,6 +69,16 @@ export default async function InstagramDashboardPage() {
   const publishableDrafts = draftPosts.filter((post) => !post.content.startsWith("STORIES V4 · HANDOFF MANUAL"));
   const historyData = await getPostHistory("instagram");
 
+  const storyPlan = (post: PostWithOffer) => buildStoryV5Plan({
+    productName: post.offers?.product_name || "Oferta selecionada",
+    marketplace: post.offers?.platform || "Marketplace",
+    category: post.offers?.category ?? null,
+    currentPrice: Number(post.offers?.current_price ?? 0),
+    originalPrice: post.offers?.old_price ?? null,
+    evidence: {},
+    freeShipping: false,
+  });
+
   return (
     <div className="grid gap-6 animate-fadeIn">
       <header className="flex items-center gap-3">
@@ -76,7 +87,7 @@ export default async function InstagramDashboardPage() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Instagram</h1>
-          <p className="text-xs text-white/35">Stories V4 com 3 artes prontas e link rastreado. Reels permanece desativado até homologação.</p>
+          <p className="text-xs text-white/35">Story Engine V5: 1–3 artes conforme a força comercial real da oferta. Reels permanece desativado.</p>
         </div>
       </header>
 
@@ -89,47 +100,52 @@ export default async function InstagramDashboardPage() {
             </span>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            {storyDrafts.map((post) => (
-              <article key={post.id} className="glass-card grid gap-4 p-5">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">{post.offers?.platform || "Instagram"}</p>
-                  <h3 className="mt-1 font-bold text-white">{post.offers?.product_name}</h3>
-                </div>
-                <div className="grid grid-cols-3 gap-2">
-                  {[1, 2, 3].map((frame) => (
-                    <a
-                      key={frame}
-                      href={`/api/images/instagram-story?postId=${encodeURIComponent(post.id)}&frame=${frame}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="rounded-xl border border-pink-400/25 bg-pink-500/10 px-3 py-3 text-center text-xs font-bold text-pink-200 transition hover:bg-pink-500/20"
-                    >
-                      Abrir Tela {frame}
-                    </a>
-                  ))}
-                </div>
-                <details className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/75">
-                  <summary className="cursor-pointer font-semibold text-white/80">Ver roteiro textual</summary>
-                  <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{post.content}</pre>
-                </details>
-                <div className="rounded-xl border border-pink-400/20 bg-pink-500/10 p-4 text-sm text-white/75">
-                  <p className="font-semibold text-pink-200">Como postar</p>
-                  <p className="mt-1">Abra as artes 1, 2 e 3 e publique nessa ordem. Na tela 3, adicione o sticker <strong>Link</strong> do Instagram usando exatamente o endereço rastreado abaixo.</p>
-                  {post.affiliate_links?.tracked_url ? (
-                    <a
-                      href={post.affiliate_links.tracked_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-3 block break-all rounded-lg bg-black/20 p-3 font-mono text-xs text-pink-200 underline decoration-pink-300/40 underline-offset-4"
-                    >
-                      {post.affiliate_links.tracked_url}
-                    </a>
-                  ) : (
-                    <p className="mt-3 font-semibold text-amber-300">Link rastreado indisponível — não publicar este Story.</p>
-                  )}
-                </div>
-              </article>
-            ))}
+            {storyDrafts.map((post) => {
+              const plan = storyPlan(post);
+              const frames = Array.from({ length: plan.frameCount }, (_, index) => index + 1);
+              return (
+                <article key={post.id} className="glass-card grid gap-4 p-5">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">{post.offers?.platform || "Instagram"}</p>
+                    <h3 className="mt-1 font-bold text-white">{post.offers?.product_name}</h3>
+                    <p className="mt-2 text-xs font-semibold text-white/45">{plan.template} · {plan.frameCount} tela(s)</p>
+                  </div>
+                  <div className={`grid gap-2 ${plan.frameCount === 1 ? "grid-cols-1" : plan.frameCount === 2 ? "grid-cols-2" : "grid-cols-3"}`}>
+                    {frames.map((frame) => (
+                      <a
+                        key={frame}
+                        href={`/api/images/instagram-story?postId=${encodeURIComponent(post.id)}&frame=${frame}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="rounded-xl border border-pink-400/25 bg-pink-500/10 px-3 py-3 text-center text-xs font-bold text-pink-200 transition hover:bg-pink-500/20"
+                      >
+                        Abrir Tela {frame}
+                      </a>
+                    ))}
+                  </div>
+                  <details className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/75">
+                    <summary className="cursor-pointer font-semibold text-white/80">Ver roteiro textual</summary>
+                    <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{post.content}</pre>
+                  </details>
+                  <div className="rounded-xl border border-pink-400/20 bg-pink-500/10 p-4 text-sm text-white/75">
+                    <p className="font-semibold text-pink-200">Como postar</p>
+                    <p className="mt-1">Abra {plan.frameCount === 1 ? "a arte" : `as ${plan.frameCount} artes`} e publique na ordem. No último Story, adicione o sticker <strong>Link</strong> do Instagram usando exatamente o endereço rastreado abaixo.</p>
+                    {post.affiliate_links?.tracked_url ? (
+                      <a
+                        href={post.affiliate_links.tracked_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 block break-all rounded-lg bg-black/20 p-3 font-mono text-xs text-pink-200 underline decoration-pink-300/40 underline-offset-4"
+                      >
+                        {post.affiliate_links.tracked_url}
+                      </a>
+                    ) : (
+                      <p className="mt-3 font-semibold text-amber-300">Link rastreado indisponível — não publicar este Story.</p>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
       )}
