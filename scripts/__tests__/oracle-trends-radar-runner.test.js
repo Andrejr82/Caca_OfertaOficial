@@ -107,7 +107,7 @@ test('collectShopeeMarketplaceCandidates uses broad official category discovery 
   assert.ok(capturedCalls[0].variables.productCatId !== undefined || capturedCalls[0].variables.sortType !== undefined);
 });
 
-test('TASK 3 (Shopee): paginação real busca múltiplas páginas por categoria e agrega resultados', async () => {
+test('Coleta Shopee com paginação real busca múltiplas páginas por categoria e agrega resultados', async () => {
   const capturedCalls = [];
   const mockCaller = async (operation, query, variables) => {
     capturedCalls.push({ operation, variables });
@@ -149,7 +149,7 @@ test('TASK 3 (Shopee): paginação real busca múltiplas páginas por categoria 
   assert.equal(capturedCalls[1].variables.page, 2);
 });
 
-test('TASK 3 (Shopee): parada quando página vazia ou hasNextPage = false', async () => {
+test('Coleta Shopee interrompe paginação quando página vazia ou hasNextPage = false', async () => {
   const capturedCalls = [];
   const mockCaller = async (operation, query, variables) => {
     capturedCalls.push({ operation, variables });
@@ -176,7 +176,7 @@ test('TASK 3 (Shopee): parada quando página vazia ou hasNextPage = false', asyn
   assert.equal(capturedCalls.length, 1, 'Deve interromper a paginação após página vazia');
 });
 
-test('TASK 3 (Shopee): deduplicação entre páginas e entre categorias por shopId + itemId', async () => {
+test('Deduplicação de candidatos Shopee entre páginas e categorias por shopId + itemId', async () => {
   const mockCaller = async (operation, query, variables) => {
     return {
       status: 200,
@@ -213,7 +213,7 @@ test('TASK 3 (Shopee): deduplicação entre páginas e entre categorias por shop
   assert.equal(candidates[0].shopId, 'same_shop_456');
 });
 
-test('TASK 3 (Shopee): falha em uma categoria não aborta a coleta das demais categorias', async () => {
+test('Falha em uma categoria Shopee não aborta a coleta das demais categorias', async () => {
   const mockCaller = async (operation, query, variables) => {
     if (variables.productCatId === 999999) {
       throw new Error('Falha simulada na API Shopee para categoria com erro');
@@ -251,7 +251,7 @@ test('TASK 3 (Shopee): falha em uma categoria não aborta a coleta das demais ca
   assert.equal(candidates[0].itemId, 'item_cat_ok');
 });
 
-test('TASK 3 (Shopee): candidato válido sem vendas e sem comissão continua coletado', async () => {
+test('Candidato Shopee válido sem vendas e sem comissão continua coletado', async () => {
   const mockCaller = async () => {
     return {
       status: 200,
@@ -292,7 +292,7 @@ test('TASK 3 (Shopee): candidato válido sem vendas e sem comissão continua col
   assert.equal(candidates[0].commissionPercent, 0);
 });
 
-test('TASK 3 (Shopee): campos ricos Shopee continuam preservados e isAMSOffer não é restrição rígida', async () => {
+test('Campos ricos Shopee são preservados e isAMSOffer não restringe catálogo', async () => {
   const capturedVariables = [];
   const mockCaller = async (operation, query, variables) => {
     capturedVariables.push(variables);
@@ -651,10 +651,10 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
 });
 
 // ============================================================================
-// TASK 6: TELEMETRIA FINAL DO RADAR COMERCIAL (FUNIL POR MARKETPLACE)
+// TELEMETRIA DO FUNIL COMERCIAL POR MARKETPLACE
 // ============================================================================
 
-test('TASK 6 (Telemetria): run com 20 Shopee e 0 ML selecionados -> marketplaces_selected contém apenas Shopee', async () => {
+test('Run com 20 Shopee e 0 ML selecionados define marketplaces_selected contendo apenas Shopee', async () => {
   const mockRun = {
     id: 'run-shopee-only',
     user_id: 'user-t6-1',
@@ -753,7 +753,7 @@ test('TASK 6 (Telemetria): run com 20 Shopee e 0 ML selecionados -> marketplaces
   assert.equal(health.mercado_livre_products_selected, 0);
 });
 
-test('TASK 6 (Telemetria): run com Shopee + ML elegíveis e selecionados -> ambos aparecem em marketplaces_selected', async () => {
+test('Run com Shopee e Mercado Livre elegíveis e selecionados inclui ambos em marketplaces_selected', async () => {
   const mockRun = {
     id: 'run-mixed',
     user_id: 'user-t6-2',
@@ -869,7 +869,7 @@ test('TASK 6 (Telemetria): run com Shopee + ML elegíveis e selecionados -> ambo
   assert.ok(health.marketplaces_with_eligible_products.includes('Mercado Livre'));
 });
 
-test('TASK 6 (Telemetria): ML coletado mas zero elegível -> scanned/candidates tem ML, eligible/selected não tem', async () => {
+test('Mercado Livre coletado com zero elegíveis aparece em scanned e candidates mas não em eligible ou selected', async () => {
   const mockRun = {
     id: 'run-ml-zero-eligible',
     user_id: 'user-t6-3',
@@ -987,7 +987,7 @@ test('TASK 6 (Telemetria): ML coletado mas zero elegível -> scanned/candidates 
   assert.equal(health.marketplaces_selected.includes('Mercado Livre'), false, 'ML com 0 selecionados não deve estar em marketplaces_selected');
 });
 
-test('TASK 6 (Telemetria): contadores de funil fecham matematicamente e registram todas as 10 dimensões por marketplace', async () => {
+test('Contadores de funil de telemetria fecham matematicamente e registram as 10 dimensões por marketplace', async () => {
   const mockRun = {
     id: 'run-funnel-check',
     user_id: 'user-t6-4',

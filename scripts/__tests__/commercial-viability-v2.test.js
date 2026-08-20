@@ -190,7 +190,7 @@ test('calculateCommercialViabilityV2 retorna insufficient_data para Shopee com p
   );
 });
 
-test('TASK 2 (ML): Mercado Livre com preço + identidade + link válido é elegível (medium) sem vendas/comissão/rating', () => {
+test('Mercado Livre com preço, identidade e link válidos é elegível (medium) sem vendas/comissão/rating', () => {
   const candidateMl = {
     marketplace: 'Mercado Livre',
     itemId: 'MLB123456789',
@@ -212,7 +212,7 @@ test('TASK 2 (ML): Mercado Livre com preço + identidade + link válido é eleg�
   assert.equal(result.diagnostic.velocity_used, false);
 });
 
-test('TASK 2 (ML): Mercado Livre com productId e link válido (sem itemId) também é elegível', () => {
+test('Mercado Livre com productId e link válido sem itemId também é elegível', () => {
   const candidateMlProduct = {
     marketplace: 'Mercado Livre',
     productId: 'MLB987654',
@@ -227,7 +227,7 @@ test('TASK 2 (ML): Mercado Livre com productId e link válido (sem itemId) tamb�
   assert.equal(isViableForRadar(result), true);
 });
 
-test('TASK 2 (ML): Mercado Livre com preço inválido continua bloqueado', () => {
+test('Mercado Livre com preço inválido ou não positivo continua bloqueado', () => {
   const candidateZero = {
     marketplace: 'Mercado Livre',
     itemId: 'MLB123',
@@ -259,7 +259,7 @@ test('TASK 2 (ML): Mercado Livre com preço inválido continua bloqueado', () =>
   assert.equal(resultNeg.isViable, false);
 });
 
-test('TASK 2 (ML): Mercado Livre sem identidade válida (sem itemId e sem productId) continua bloqueado', () => {
+test('Mercado Livre sem identidade válida (sem itemId e sem productId) continua bloqueado', () => {
   const candidateNoId = {
     marketplace: 'Mercado Livre',
     productName: 'Produto Sem Identidade',
@@ -273,7 +273,7 @@ test('TASK 2 (ML): Mercado Livre sem identidade válida (sem itemId e sem produc
   assert.ok(result.reasons.some((r) => /identidade/i.test(r)));
 });
 
-test('TASK 2 (ML): Mercado Livre com link ausente ou inválido continua bloqueado', () => {
+test('Mercado Livre com link ausente ou inválido continua bloqueado', () => {
   const candidateNoLink = {
     marketplace: 'Mercado Livre',
     itemId: 'MLB123',
@@ -297,7 +297,7 @@ test('TASK 2 (ML): Mercado Livre com link ausente ou inválido continua bloquead
   assert.equal(resultInvalidLink.isViable, false);
 });
 
-test('TASK 2 (Shopee): Shopee não regride e continua funcionando normalmente', () => {
+test('Shopee preserva classificação de viabilidade normal', () => {
   const shopeeHigh = {
     marketplace: 'Shopee',
     itemId: 'shopee-high',

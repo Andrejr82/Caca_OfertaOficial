@@ -150,7 +150,7 @@ test('ML com sold_quantity=0 ou null sem link continua fail-closed como insuffic
   assert.equal(viabilityZero.isViable, false);
 });
 
-test('TASK 2 (ML): ML com preço + identidade + link válido sem vendas é elegível (medium)', () => {
+test('Mercado Livre com preço, identidade e link válidos sem vendas é elegível (medium)', () => {
   const mlProductValid = {
     item_id: 'MLB999991',
     product_id: 'MLB999992',

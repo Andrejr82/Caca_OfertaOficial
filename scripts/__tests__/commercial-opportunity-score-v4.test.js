@@ -1066,10 +1066,10 @@ test('MATCHING SHOPEE: mesmo itemId em shopId diferente NÃO faz matching cruzad
 });
 
 // ============================================================================
-// TASK 4: COMPETITIVIDADE REAL DE PREÇO E NORMALIZAÇÃO DE UNIDADES
+// COMPETITIVIDADE REAL DE PREÇO E NORMALIZAÇÃO DE UNIDADES
 // ============================================================================
 
-test('TASK 4 (Competitividade): OMO 4kg vs OMO 5L -> NÃO comparar R$/kg com R$/L (unit_not_comparable)', () => {
+test('Produtos de mesma família com unidades incompatíveis (L vs kg) não são comparados diretamente e recebem unit_not_comparable', () => {
   const omo4kg = {
     itemId: 'omo-4kg',
     productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
@@ -1102,7 +1102,7 @@ test('TASK 4 (Competitividade): OMO 4kg vs OMO 5L -> NÃO comparar R$/kg com R$/
   assert.equal(score4kg.relative_price_position, 'unit_not_comparable', 'Unidades diferentes (kg vs L) não devem gerar unfavorable');
 });
 
-test('TASK 4 (Competitividade): OMO 5L vs OMO 7L -> comparação R$/L válida', () => {
+test('Produtos da mesma família com mesma unidade de volume (L) comparam preço normalizado R$/L', () => {
   const omo5L = {
     itemId: 'omo-5l',
     productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
@@ -1133,7 +1133,7 @@ test('TASK 4 (Competitividade): OMO 5L vs OMO 7L -> comparação R$/L válida', 
   assert.equal(score7L.breakdown.offerCompetitiveness, 1);
 });
 
-test('TASK 4 (Competitividade): Dois produtos iguais com mesma quantidade -> menor preço vence', () => {
+test('Dois produtos iguais com mesma quantidade têm menor preço normalizado como best_in_family', () => {
   const foneBarato = {
     itemId: 'fone-25',
     productName: 'Fone de Ouvido Bluetooth TWS i12',
@@ -1162,7 +1162,7 @@ test('TASK 4 (Competitividade): Dois produtos iguais com mesma quantidade -> men
   assert.ok(scoreBarato.total > scoreCaro.total, 'Menor preço real deve vencer o anúncio mais caro mesmo com desconto falso');
 });
 
-test('TASK 4 (Competitividade): Kit 3 vs Kit 2 -> compara por unidade', () => {
+test('Kits de unidades comparam preço normalizado por unidade', () => {
   const kit3 = {
     itemId: 'kit-3',
     productName: 'Kit 3 Camisetas Básicas Algodão',
@@ -1193,7 +1193,7 @@ test('TASK 4 (Competitividade): Kit 3 vs Kit 2 -> compara por unidade', () => {
   assert.ok(scoreKit3.breakdown.offerCompetitiveness > scoreKit2.breakdown.offerCompetitiveness);
 });
 
-test('TASK 4 (Competitividade): 500g vs 1kg -> compara por kg', () => {
+test('Produtos de massa (g vs kg) comparam preço normalizado por kg', () => {
   const cafe1kg = {
     itemId: 'cafe-1kg',
     productName: 'Café Especial Torrado em Grãos 1kg',
@@ -1224,7 +1224,7 @@ test('TASK 4 (Competitividade): 500g vs 1kg -> compara por kg', () => {
   assert.ok(score1kg.breakdown.offerCompetitiveness > score500g.breakdown.offerCompetitiveness);
 });
 
-test('TASK 4 (Competitividade): Produto sem quantidade detectável não inventa unidade e compara se seguro', () => {
+test('Produto sem quantidade detectável usa preço unitário e compara se seguro', () => {
   const mouseA = {
     itemId: 'mouse-a',
     productName: 'Mouse Gamer RGB Ergonômico 7200 DPI',
@@ -1252,7 +1252,7 @@ test('TASK 4 (Competitividade): Produto sem quantidade detectável não inventa 
   assert.equal(scoreB.breakdown.offerCompetitiveness, 1);
 });
 
-test('TASK 4 (Competitividade): Produtos de famílias diferentes não são comparados entre si', () => {
+test('Produtos de famílias diferentes não são comparados entre si', () => {
   const omo = {
     itemId: 'omo-1',
     productName: 'Sabão Líquido OMO 5L',
@@ -1277,7 +1277,7 @@ test('TASK 4 (Competitividade): Produtos de famílias diferentes não são compa
   assert.equal(scoreFone.relative_price_position, 'solo');
 });
 
-test('TASK 4 (Competitividade): Desconto próprio alto não supera concorrente equivalente muito mais barato', () => {
+test('Desconto próprio anunciado não supera concorrente da mesma família muito mais barato', () => {
   const caroComDesconto = {
     itemId: 'item-caro',
     productName: 'Suporte de Celular Veicular Magnético Saída de Ar',
@@ -1302,7 +1302,7 @@ test('TASK 4 (Competitividade): Desconto próprio alto não supera concorrente e
   assert.ok(scoreBarato.breakdown.offerCompetitiveness > scoreCaro.breakdown.offerCompetitiveness);
 });
 
-test('TASK 4 (Competitividade): Candidato sem concorrente no run preserva avaliação intrínseca de desconto', () => {
+test('Candidato isolado no run preserva avaliação intrínseca de desconto promocional', () => {
   const soloComDesconto = {
     itemId: 'item-solo-50',
     productName: 'Câmera de Segurança Externa Wi-Fi 360',
@@ -1317,7 +1317,7 @@ test('TASK 4 (Competitividade): Candidato sem concorrente no run preserva avalia
   assert.equal(score.breakdown.offerCompetitiveness, 10, 'Desconto solo de 50% pontua 10 pts');
 });
 
-test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra family_key, normalized_unit, normalized_price e relative_price_position no directEvidence', () => {
+test('Engine registra family_key, normalized_unit, normalized_price e relative_price_position no directEvidence', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const shopeeCandidate1 = {
@@ -1351,7 +1351,7 @@ test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra f
   };
 
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: 'run-test-task4',
+    radarRunId: 'run-test-price-competitiveness',
     shopeeCandidates: [shopeeCandidate1, shopeeCandidate2],
     mlCandidates: [],
     maxProducts: 10,
@@ -1370,10 +1370,10 @@ test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra f
 });
 
 // ============================================================================
-// TASK 5: TOP 20 COMERCIAL SEM PREENCHIMENTO ARTIFICIAL
+// SELEÇÃO COMERCIAL E QUOTAS SEM PREENCHIMENTO ARTIFICIAL
 // ============================================================================
 
-test('TASK 5: 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) -> retorna exatamente 20 e zero IGNORAR', () => {
+test('Seleção com 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) retorna exatamente 20 e zero IGNORAR', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const candidates = [];
@@ -1441,7 +1441,7 @@ test('TASK 5: 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) -> retorna exatam
   }
 
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: 'run-task5-25-candidates',
+    radarRunId: 'run-commercial-25-candidates',
     shopeeCandidates: candidates,
     mlCandidates: [],
     maxProducts: 20,
@@ -1452,7 +1452,7 @@ test('TASK 5: 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) -> retorna exatam
   assert.equal(ignoreInResult.length, 0, 'Zero produtos com decisão IGNORAR no resultado final');
 });
 
-test('TASK 5: 8 TESTAR + 12 IGNORAR -> retorna somente 8, sem erro artificial e sem preenchimento', () => {
+test('Seleção com 8 TESTAR + 12 IGNORAR retorna somente 8 sem preenchimento artificial', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const candidates = [];
@@ -1496,7 +1496,7 @@ test('TASK 5: 8 TESTAR + 12 IGNORAR -> retorna somente 8, sem erro artificial e 
   }
 
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: 'run-task5-8-candidates',
+    radarRunId: 'run-commercial-8-candidates',
     shopeeCandidates: candidates,
     mlCandidates: [],
     maxProducts: 20,
@@ -1507,7 +1507,7 @@ test('TASK 5: 8 TESTAR + 12 IGNORAR -> retorna somente 8, sem erro artificial e 
   assert.equal(ignoreInResult.length, 0, 'Nenhum produto IGNORAR deve ser introduzido para completar quota');
 });
 
-test('TASK 5: Todos IGNORAR -> retorna lista vazia com 0 produtos', () => {
+test('Seleção com todos candidatos IGNORAR retorna lista vazia com 0 produtos', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const candidates = [];
@@ -1528,7 +1528,7 @@ test('TASK 5: Todos IGNORAR -> retorna lista vazia com 0 produtos', () => {
   }
 
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: 'run-task5-all-ignore',
+    radarRunId: 'run-commercial-all-ignore',
     shopeeCandidates: candidates,
     mlCandidates: [],
     maxProducts: 20,
@@ -1537,7 +1537,7 @@ test('TASK 5: Todos IGNORAR -> retorna lista vazia com 0 produtos', () => {
   assert.equal(products.length, 0, 'Quando todos são IGNORAR, deve retornar lista vazia');
 });
 
-test('TASK 5: PRIORIDADE ranqueia acima de TESTAR quando score for maior', () => {
+test('Produtos com decisão PRIORIDADE ranqueiam acima de TESTAR', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const prioCandidate = {
@@ -1578,7 +1578,7 @@ test('TASK 5: PRIORIDADE ranqueia acima de TESTAR quando score for maior', () =>
   };
 
   const products = buildTrendRadarProductsFromCandidates({
-    radarRunId: 'run-task5-ranking',
+    radarRunId: 'run-commercial-ranking',
     shopeeCandidates: [testCandidate, prioCandidate],
     mlCandidates: [],
     maxProducts: 20,
@@ -1591,10 +1591,10 @@ test('TASK 5: PRIORIDADE ranqueia acima de TESTAR quando score for maior', () =>
 });
 
 // ============================================================================
-// TASK PRÉ-MERGE: ELEGIBILIDADE SOURCE-AWARE DO MERCADO LIVRE & UNIDADES
+// ELEGIBILIDADE SOURCE-AWARE DO MERCADO LIVRE & CONSISTÊNCIA DE DADOS
 // ============================================================================
 
-test('TASK PRÉ-MERGE (ML): ML válido + promoção + sem vendas/comissão/rating -> selection_decision = TESTAR e entra no painel', () => {
+test('Mercado Livre com promoção e dados mínimos válidos é elegível para TESTAR e entra no painel', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const mlPromo = {
@@ -1635,7 +1635,7 @@ test('TASK PRÉ-MERGE (ML): ML válido + promoção + sem vendas/comissão/ratin
   assert.equal(products[0].direct_evidence[0].raw_decision, 'IGNORAR');
 });
 
-test('TASK PRÉ-MERGE (ML): ML válido + best_in_family + sem comissão/vendas -> selection_decision = TESTAR', () => {
+test('Mercado Livre com melhor preço da família é elegível para TESTAR mesmo sem vendas/comissão', () => {
   const mlBestPrice = {
     marketplace: 'Mercado Livre',
     itemId: 'MLB2001',
@@ -1676,7 +1676,7 @@ test('TASK PRÉ-MERGE (ML): ML válido + best_in_family + sem comissão/vendas -
   assert.equal(scorePeer.selection_decision, 'IGNORAR', 'Sem desconto, sem best_in_family e sem destaque deve ser IGNORAR');
 });
 
-test('TASK PRÉ-MERGE (ML): ML válido + BEST_SELLER -> selection_decision = TESTAR', () => {
+test('Mercado Livre com destaque oficial BEST_SELLER é elegível para TESTAR', () => {
   const mlBestSeller = {
     marketplace: 'Mercado Livre',
     itemId: 'MLB3001',
@@ -1701,7 +1701,7 @@ test('TASK PRÉ-MERGE (ML): ML válido + BEST_SELLER -> selection_decision = TES
   assert.equal(score.selection_decision, 'TESTAR', 'Destaque oficial BEST_SELLER torna produto ML elegível para TESTAR');
 });
 
-test('TASK PRÉ-MERGE (ML): ML válido sem qualquer sinal comercial adicional -> selection_decision = IGNORAR', () => {
+test('Mercado Livre válido sem qualquer sinal comercial adicional permanece como IGNORAR', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const mlPlain = {
@@ -1734,7 +1734,7 @@ test('TASK PRÉ-MERGE (ML): ML válido sem qualquer sinal comercial adicional ->
   assert.equal(products.length, 0, 'ML sem qualquer sinal comercial adicional não entra no painel');
 });
 
-test('TASK PRÉ-MERGE (Shopee): Shopee mantém thresholds normais (<60 = IGNORAR, 60-79 = TESTAR, >=80 = PRIORIDADE)', () => {
+test('Shopee mantém thresholds padrão de score comercial (<60 IGNORAR, 60-79 TESTAR, >=80 PRIORIDADE)', () => {
   const shopeePlain = {
     marketplace: 'Shopee',
     itemId: 'SHP5001',
@@ -1757,7 +1757,7 @@ test('TASK PRÉ-MERGE (Shopee): Shopee mantém thresholds normais (<60 = IGNORAR
   assert.equal(score.decision, 'IGNORAR');
 });
 
-test('TASK PRÉ-MERGE (Auditoria): Nenhuma fabricação de dados e persistência com selection_decision real', () => {
+test('Auditoria factual preserva dados ausentes como nulos e persiste selection_decision real', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
   const mlItem = {

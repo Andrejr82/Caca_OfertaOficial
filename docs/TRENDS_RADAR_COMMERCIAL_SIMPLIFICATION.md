@@ -85,7 +85,7 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
   - `marketplaces_with_eligible_products`: Fontes com oportunidades viáveis aprovadas.
   - `marketplaces_selected`: Fontes com produtos efetivamente alocados no Top 20 final (sem arrays estáticos artificiais).
 
-### Task Pré-Merge — Elegibilidade Source-Aware ML & Unidades Estritas [CONCLUÍDA]
+### Regra Permanente — Elegibilidade Source-Aware ML & Unidades Estritas [CONCLUÍDA]
 - **Decisão Comercial Source-Aware para o Mercado Livre**:
   - O score V4 bruto (`total`, `commercial_score`) é preservado integralmente sem alteração de pesos nem fabricação de dados (auditoria pura).
   - Candidatos do Mercado Livre válidos (preço positivo, identidade nativa, link) e não reprovados por `low` recebem `selection_decision = TESTAR` quando apresentam ao menos um sinal factual observado:
