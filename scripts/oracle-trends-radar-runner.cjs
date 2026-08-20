@@ -142,21 +142,27 @@ async function processPendingTrendRadarRuns(options = {}) {
     let shopeeCandidatesRaw = 0;
     let shopeeCandidatesUnique = 0;
     let shopeePagesScanned = 0;
+    let shopeeInvalidExcluded = 0;
     let shopeeRecentHistoryExcluded = 0;
     let shopeeExistingOfferExcluded = 0;
     let shopeeNativeDuplicatesExcluded = 0;
     let shopeeSemanticDuplicatesExcluded = 0;
     let shopeeLowViabilityExcluded = 0;
     let shopeeInsufficientDataExcluded = 0;
+    let shopeeCommercialDecisionIgnoreExcluded = 0;
+    let shopeeEligibleCount = 0;
 
     let mlCandidatesRaw = 0;
     let mlCandidatesUnique = 0;
+    let mlInvalidExcluded = 0;
     let mlRecentHistoryExcluded = 0;
     let mlExistingOfferExcluded = 0;
     let mlCatalogDuplicatesExcluded = 0;
     let mlSemanticDuplicatesExcluded = 0;
     let mlLowViabilityExcluded = 0;
     let mlInsufficientDataExcluded = 0;
+    let mlCommercialDecisionIgnoreExcluded = 0;
+    let mlEligibleCount = 0;
 
     const candidatesPerRefillRound = [];
     const aggregatedShopeeCandidates = [];
@@ -192,7 +198,19 @@ async function processPendingTrendRadarRuns(options = {}) {
           const imageUrl = getMarketplaceImageUrl(item);
           if (key && imageUrl) candidateImages.set(key, imageUrl);
 
-          if (!key || seenShopeeNativeKeys.has(key)) {
+          // Validação mínima de preço, identidade e link
+          const price = Number(item.currentPrice ?? item.price);
+          const hasShopId = Boolean(item.shopId || item.shop_id);
+          const hasItemId = Boolean(item.itemId || item.item_id || item.id);
+          const link = String(item.permalink || item.productLink || item.offerLink || item.link || item.url || '').trim();
+          const hasValidLink = link.length > 0 && /^https?:\/\//i.test(link);
+
+          if (!Number.isFinite(price) || price <= 0 || !hasShopId || !hasItemId || !hasValidLink || !key) {
+            shopeeInvalidExcluded += 1;
+            continue;
+          }
+
+          if (seenShopeeNativeKeys.has(key)) {
             shopeeNativeDuplicatesExcluded += 1;
             continue;
           }
@@ -226,7 +244,18 @@ async function processPendingTrendRadarRuns(options = {}) {
           const imageUrl = getMarketplaceImageUrl(item);
           if (key && imageUrl) candidateImages.set(key, imageUrl);
 
-          if (!key || seenMlNativeKeys.has(key)) {
+          // Validação mínima de preço, identidade e link
+          const price = Number(item.currentPrice ?? item.price);
+          const hasId = Boolean(item.itemId || item.item_id || item.productId || item.product_id || item.id);
+          const link = String(item.permalink || item.product_url || item.productUrl || item.link || item.url || '').trim();
+          const hasValidLink = link.length > 0 && /^https?:\/\//i.test(link);
+
+          if (!Number.isFinite(price) || price <= 0 || !hasId || !hasValidLink || !key) {
+            mlInvalidExcluded += 1;
+            continue;
+          }
+
+          if (seenMlNativeKeys.has(key)) {
             continue;
           }
           seenMlNativeKeys.add(key);
@@ -293,9 +322,6 @@ async function processPendingTrendRadarRuns(options = {}) {
       else mlSemanticDuplicatesExcluded += 1;
     }
 
-    let shopeeCommercialDecisionIgnoreExcluded = 0;
-    let mlCommercialDecisionIgnoreExcluded = 0;
-
     for (const candidate of dedupAudit.uniqueCandidates) {
       const viability = calculateCommercialViabilityV2(candidate);
       if (viability.classification === 'low') {
@@ -309,6 +335,10 @@ async function processPendingTrendRadarRuns(options = {}) {
         if (scoreV4.decision === 'IGNORAR' || scoreV4.total < 60) {
           if (candidate.marketplace === 'Shopee') shopeeCommercialDecisionIgnoreExcluded += 1;
           else mlCommercialDecisionIgnoreExcluded += 1;
+        } else {
+          // Elegível comercial (TESTAR ou PRIORIDADE)
+          if (candidate.marketplace === 'Shopee') shopeeEligibleCount += 1;
+          else mlEligibleCount += 1;
         }
       }
     }
@@ -378,6 +408,26 @@ async function processPendingTrendRadarRuns(options = {}) {
       ? commissionAmounts[Math.floor(commissionAmounts.length / 2)]
       : null;
 
+    const finalShopeeCount = finalProducts.filter((p) => p.marketplace === 'Shopee').length;
+    const finalMlCount = finalProducts.filter((p) => p.marketplace === 'Mercado Livre').length;
+
+    // Determinação precisa dos marketplaces participantes em cada estágio
+    const marketplacesScanned = [];
+    if (shopeePagesScanned > 0 || options.shopeeCollector) marketplacesScanned.push('Shopee');
+    if (mlCandidatesRaw > 0 || options.mlCollector || actualRoundsRun > 0) marketplacesScanned.push('Mercado Livre');
+
+    const marketplacesWithCandidates = [];
+    if (shopeeCandidatesRaw > 0) marketplacesWithCandidates.push('Shopee');
+    if (mlCandidatesRaw > 0) marketplacesWithCandidates.push('Mercado Livre');
+
+    const marketplacesWithEligibleProducts = [];
+    if (shopeeEligibleCount > 0) marketplacesWithEligibleProducts.push('Shopee');
+    if (mlEligibleCount > 0) marketplacesWithEligibleProducts.push('Mercado Livre');
+
+    const marketplacesSelected = [];
+    if (finalShopeeCount > 0) marketplacesSelected.push('Shopee');
+    if (finalMlCount > 0) marketplacesSelected.push('Mercado Livre');
+
     // 7. Montagem do source_health consolidado
     const sourceHealth = {
       google_trends_used: false,
@@ -385,9 +435,12 @@ async function processPendingTrendRadarRuns(options = {}) {
       minimum_products: minimumProducts,
       target_reached: finalProducts.length >= targetProducts,
       completion_reason: completionReason,
+
+      // 10 dimensões Shopee
       shopee_candidates_raw: shopeeCandidatesRaw,
       shopee_candidates_unique: shopeeCandidatesUnique,
       shopee_pages_scanned: shopeePagesScanned,
+      shopee_invalid_excluded: shopeeInvalidExcluded,
       shopee_recent_history_excluded: shopeeRecentHistoryExcluded,
       shopee_existing_offer_excluded: shopeeExistingOfferExcluded,
       shopee_native_duplicates_excluded: shopeeNativeDuplicatesExcluded,
@@ -395,8 +448,15 @@ async function processPendingTrendRadarRuns(options = {}) {
       shopee_low_viability_excluded: shopeeLowViabilityExcluded,
       shopee_insufficient_data_excluded: shopeeInsufficientDataExcluded,
       shopee_commercial_decision_ignore_excluded: shopeeCommercialDecisionIgnoreExcluded,
+      shopee_commercial_eligible: shopeeEligibleCount,
+      shopee_eligible_count: shopeeEligibleCount,
+      shopee_products_selected: finalShopeeCount,
+      shopee_selected_count: finalShopeeCount,
+
+      // 10 dimensões Mercado Livre
       mercado_livre_candidates_raw: mlCandidatesRaw,
       mercado_livre_candidates_unique: mlCandidatesUnique,
+      mercado_livre_invalid_excluded: mlInvalidExcluded,
       mercado_livre_recent_history_excluded: mlRecentHistoryExcluded,
       mercado_livre_existing_offer_excluded: mlExistingOfferExcluded,
       mercado_livre_catalog_duplicates_excluded: mlCatalogDuplicatesExcluded,
@@ -404,6 +464,26 @@ async function processPendingTrendRadarRuns(options = {}) {
       mercado_livre_low_viability_excluded: mlLowViabilityExcluded,
       mercado_livre_insufficient_data_excluded: mlInsufficientDataExcluded,
       mercado_livre_commercial_decision_ignore_excluded: mlCommercialDecisionIgnoreExcluded,
+      mercado_livre_commercial_eligible: mlEligibleCount,
+      mercado_livre_eligible_count: mlEligibleCount,
+      mercado_livre_products_selected: finalMlCount,
+      mercado_livre_selected_count: finalMlCount,
+
+      // Métricas e coleções consolidadas por marketplace
+      selected_count_by_marketplace: {
+        'Shopee': finalShopeeCount,
+        'Mercado Livre': finalMlCount,
+      },
+      eligible_count_by_marketplace: {
+        'Shopee': shopeeEligibleCount,
+        'Mercado Livre': mlEligibleCount,
+      },
+      marketplaces_scanned: marketplacesScanned,
+      marketplaces_with_candidates: marketplacesWithCandidates,
+      marketplaces_with_eligible_products: marketplacesWithEligibleProducts,
+      marketplaces_selected: marketplacesSelected,
+
+      // Métricas gerais
       commercial_decision_ignore_excluded: shopeeCommercialDecisionIgnoreExcluded + mlCommercialDecisionIgnoreExcluded,
       refill_rounds: actualRoundsRun,
       candidates_per_refill_round: candidatesPerRefillRound,
@@ -436,9 +516,6 @@ async function processPendingTrendRadarRuns(options = {}) {
     if (persistResult.persisted && client) {
       await persistSnapshotImages(client, runId, candidateImages);
     }
-
-    const finalShopeeCount = finalProducts.filter((p) => p.marketplace === 'Shopee').length;
-    const finalMlCount = finalProducts.filter((p) => p.marketplace === 'Mercado Livre').length;
 
     return {
       processed: true,

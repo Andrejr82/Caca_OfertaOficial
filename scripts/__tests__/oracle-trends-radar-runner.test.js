@@ -649,3 +649,495 @@ test('processPendingTrendRadarRuns executes safe marketplace-first flow with 0 p
   assert.equal(updatedRun.source_health.google_trends_used, false);
   assert.equal(updatedRun.source_health.runtime, 'oracle');
 });
+
+// ============================================================================
+// TASK 6: TELEMETRIA FINAL DO RADAR COMERCIAL (FUNIL POR MARKETPLACE)
+// ============================================================================
+
+test('TASK 6 (Telemetria): run com 20 Shopee e 0 ML selecionados -> marketplaces_selected contém apenas Shopee', async () => {
+  const mockRun = {
+    id: 'run-shopee-only',
+    user_id: 'user-t6-1',
+    radar_date: '2026-08-20',
+    status: 'building',
+    source_health: { runtime: 'oracle', status: 'requested' },
+  };
+
+  let updatedRun = null;
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        const qb = {
+          eq: () => qb,
+          gte: () => qb,
+          order: () => qb,
+          limit: async () => ({ data: [mockRun], error: null }),
+          then: (resolve) => resolve({ data: [], error: null }),
+        };
+        qb[Symbol.asyncIterator] = async function* () { yield { data: [], error: null }; };
+        return {
+          select: () => qb,
+          update: (payload) => ({
+            eq: async () => {
+              updatedRun = payload;
+              return { error: null };
+            },
+          }),
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          select: () => ({
+            eq: () => ({ then: (r) => r({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (r) => r({ data: [], error: null }) }),
+          }),
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return {
+          select: () => ({
+            eq: () => ({ range: async () => ({ data: [], error: null }) }),
+            range: async () => ({ data: [], error: null }),
+          }),
+        };
+      }
+      return {};
+    },
+  };
+
+  const mockShopeeCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    const list = [];
+    for (let i = 1; i <= 20; i++) {
+      list.push({
+        marketplace: 'Shopee',
+        itemId: `shopee-item-${i}`,
+        shopId: `shop-${i}`,
+        productName: `Produto Categoria ${i} Modelo Exclusivo ${i}`,
+        currentPrice: 150,
+        oldPrice: 300,
+        discountPercent: 50,
+        sales: 5000,
+        ratingStar: 4.9,
+        commissionPercent: 15,
+        permalink: `https://shopee.com.br/product/${i}/${i}`,
+        imageUrl: `https://cf.shopee.com.br/img_${i}.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
+      });
+    }
+    return list;
+  };
+
+  const mockMlCollector = async () => [];
+
+  const result = await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: mockMlCollector,
+    dryRun: false,
+  });
+
+  assert.equal(result.processed, true);
+  assert.equal(result.productsCount, 20);
+  assert.equal(result.shopeeProductsCount, 20);
+  assert.equal(result.mercadoLivreProductsCount, 0);
+
+  const health = updatedRun.source_health;
+  assert.deepEqual(health.marketplaces_selected, ['Shopee'], 'Não pode ter Mercado Livre em marketplaces_selected quando 0 produtos ML foram selecionados');
+  assert.deepEqual(health.selected_count_by_marketplace, { 'Shopee': 20, 'Mercado Livre': 0 });
+  assert.equal(health.shopee_selected_count, 20);
+  assert.equal(health.mercado_livre_selected_count, 0);
+  assert.equal(health.shopee_products_selected, 20);
+  assert.equal(health.mercado_livre_products_selected, 0);
+});
+
+test('TASK 6 (Telemetria): run com Shopee + ML elegíveis e selecionados -> ambos aparecem em marketplaces_selected', async () => {
+  const mockRun = {
+    id: 'run-mixed',
+    user_id: 'user-t6-2',
+    radar_date: '2026-08-20',
+    status: 'building',
+    source_health: { runtime: 'oracle', status: 'requested' },
+  };
+
+  let updatedRun = null;
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        const qb = {
+          eq: () => qb,
+          gte: () => qb,
+          order: () => qb,
+          limit: async () => ({ data: [mockRun], error: null }),
+          then: (resolve) => resolve({ data: [], error: null }),
+        };
+        qb[Symbol.asyncIterator] = async function* () { yield { data: [], error: null }; };
+        return {
+          select: () => qb,
+          update: (payload) => ({
+            eq: async () => {
+              updatedRun = payload;
+              return { error: null };
+            },
+          }),
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          select: () => ({
+            eq: () => ({ then: (r) => r({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (r) => r({ data: [], error: null }) }),
+          }),
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return {
+          select: () => ({
+            eq: () => ({ range: async () => ({ data: [], error: null }) }),
+            range: async () => ({ data: [], error: null }),
+          }),
+        };
+      }
+      return {};
+    },
+  };
+
+  const mockShopeeCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    return [
+      {
+        marketplace: 'Shopee',
+        itemId: 'shopee-m-1',
+        shopId: 'shop-m-1',
+        productName: 'Teclado Mecânico RGB Shopee Modelo Pro',
+        currentPrice: 180,
+        oldPrice: 360,
+        discountPercent: 50,
+        sales: 5000,
+        ratingStar: 4.9,
+        commissionPercent: 15,
+        permalink: 'https://shopee.com.br/product/1/1',
+        imageUrl: 'https://cf.shopee.com.br/1.jpg',
+        provenance: 'shopee_openapi_productOfferV2',
+      },
+    ];
+  };
+
+  const mockMlCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    return [
+      {
+        marketplace: 'Mercado Livre',
+        itemId: 'MLB-m-1',
+        productId: 'MLB-m-prod-1',
+        productName: 'Mouse Sem Fio Ergonômico Mercado Livre Pro',
+        currentPrice: 120,
+        oldPrice: 240,
+        discountPercent: 50,
+        sales: 3000,
+        ratingStar: 4.8,
+        commissionPercent: 12,
+        permalink: 'https://produto.mercadolivre.com.br/MLB-m-1',
+        imageUrl: 'https://http2.mlstatic.com/1.jpg',
+        provenance: 'mercadolivre_official_intent',
+      },
+    ];
+  };
+
+  const result = await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: mockMlCollector,
+    dryRun: false,
+  });
+
+  assert.equal(result.processed, true);
+  assert.equal(result.productsCount, 2);
+  assert.equal(result.shopeeProductsCount, 1);
+  assert.equal(result.mercadoLivreProductsCount, 1);
+
+  const health = updatedRun.source_health;
+  assert.ok(health.marketplaces_selected.includes('Shopee'));
+  assert.ok(health.marketplaces_selected.includes('Mercado Livre'));
+  assert.equal(health.marketplaces_selected.length, 2);
+  assert.deepEqual(health.selected_count_by_marketplace, { 'Shopee': 1, 'Mercado Livre': 1 });
+  assert.ok(health.marketplaces_with_eligible_products.includes('Shopee'));
+  assert.ok(health.marketplaces_with_eligible_products.includes('Mercado Livre'));
+});
+
+test('TASK 6 (Telemetria): ML coletado mas zero elegível -> scanned/candidates tem ML, eligible/selected não tem', async () => {
+  const mockRun = {
+    id: 'run-ml-zero-eligible',
+    user_id: 'user-t6-3',
+    radar_date: '2026-08-20',
+    status: 'building',
+    source_health: { runtime: 'oracle', status: 'requested' },
+  };
+
+  let updatedRun = null;
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        const qb = {
+          eq: () => qb,
+          gte: () => qb,
+          order: () => qb,
+          limit: async () => ({ data: [mockRun], error: null }),
+          then: (resolve) => resolve({ data: [], error: null }),
+        };
+        qb[Symbol.asyncIterator] = async function* () { yield { data: [], error: null }; };
+        return {
+          select: () => qb,
+          update: (payload) => ({
+            eq: async () => {
+              updatedRun = payload;
+              return { error: null };
+            },
+          }),
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          select: () => ({
+            eq: () => ({ then: (r) => r({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (r) => r({ data: [], error: null }) }),
+          }),
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return {
+          select: () => ({
+            eq: () => ({ range: async () => ({ data: [], error: null }) }),
+            range: async () => ({ data: [], error: null }),
+          }),
+        };
+      }
+      return {};
+    },
+  };
+
+  const mockShopeeCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    return [
+      {
+        marketplace: 'Shopee',
+        itemId: 'shopee-valid-1',
+        shopId: 'shop-1',
+        productName: 'Fone Bluetooth Top Shopee Modelo Pro',
+        currentPrice: 150,
+        oldPrice: 300,
+        discountPercent: 50,
+        sales: 5000,
+        ratingStar: 4.8,
+        commissionPercent: 15,
+        permalink: 'https://shopee.com.br/product/1/1',
+        imageUrl: 'https://cf.shopee.com.br/1.jpg',
+        provenance: 'shopee_openapi_productOfferV2',
+      },
+    ];
+  };
+
+  // ML retorna produtos, mas todos com baixa viabilidade (rating < 3.5) ou inválidos
+  const mockMlCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    return [
+      {
+        marketplace: 'Mercado Livre',
+        itemId: 'MLB-bad-1',
+        productName: 'Produto Ruim ML',
+        currentPrice: 10,
+        rating: 2.0, // rating < 3.5 => low viability
+        permalink: 'https://produto.mercadolivre.com.br/MLB-bad-1',
+        provenance: 'mercadolivre_official_intent',
+      },
+      {
+        marketplace: 'Mercado Livre',
+        itemId: 'MLB-bad-2',
+        productName: 'Produto Sem Preço ML',
+        currentPrice: 0, // preço inválido
+        permalink: 'https://produto.mercadolivre.com.br/MLB-bad-2',
+        provenance: 'mercadolivre_official_intent',
+      },
+    ];
+  };
+
+  const result = await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: mockMlCollector,
+    dryRun: false,
+  });
+
+  assert.equal(result.processed, true);
+  const health = updatedRun.source_health;
+
+  assert.ok(health.marketplaces_scanned.includes('Mercado Livre'));
+  assert.ok(health.marketplaces_with_candidates.includes('Mercado Livre'));
+  assert.equal(health.mercado_livre_candidates_raw, 2);
+
+  assert.equal(health.mercado_livre_eligible_count, 0);
+  assert.equal(health.mercado_livre_selected_count, 0);
+  assert.equal(health.marketplaces_with_eligible_products.includes('Mercado Livre'), false, 'ML com 0 elegíveis não deve estar em marketplaces_with_eligible_products');
+  assert.equal(health.marketplaces_selected.includes('Mercado Livre'), false, 'ML com 0 selecionados não deve estar em marketplaces_selected');
+});
+
+test('TASK 6 (Telemetria): contadores de funil fecham matematicamente e registram todas as 10 dimensões por marketplace', async () => {
+  const mockRun = {
+    id: 'run-funnel-check',
+    user_id: 'user-t6-4',
+    radar_date: '2026-08-20',
+    status: 'building',
+    source_health: { runtime: 'oracle', status: 'requested' },
+  };
+
+  let updatedRun = null;
+  const mockClient = {
+    from: (table) => {
+      if (table === 'trend_radar_runs') {
+        const qb = {
+          eq: () => qb,
+          gte: () => qb,
+          order: () => qb,
+          limit: async () => ({ data: [mockRun], error: null }),
+          then: (resolve) => resolve({ data: [], error: null }),
+        };
+        qb[Symbol.asyncIterator] = async function* () { yield { data: [], error: null }; };
+        return {
+          select: () => qb,
+          update: (payload) => ({
+            eq: async () => {
+              updatedRun = payload;
+              return { error: null };
+            },
+          }),
+        };
+      }
+      if (table === 'trend_radar_products') {
+        return {
+          select: () => ({
+            eq: () => ({ then: (r) => r({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (r) => r({ data: [], error: null }) }),
+          }),
+          delete: () => ({ eq: async () => ({ error: null }) }),
+          insert: async () => ({ error: null }),
+        };
+      }
+      if (table === 'offers') {
+        return {
+          select: () => ({
+            eq: () => ({ range: async () => ({ data: [], error: null }) }),
+            range: async () => ({ data: [], error: null }),
+          }),
+        };
+      }
+      return {};
+    },
+  };
+
+  const mockShopeeCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    return [
+      // 1 Válido e elegível
+      {
+        marketplace: 'Shopee',
+        itemId: 'shp-1',
+        shopId: 'shop-1',
+        productName: 'Teclado Gamer Mecânico Exclusivo Pro',
+        currentPrice: 150,
+        oldPrice: 300,
+        discountPercent: 50,
+        sales: 5000,
+        ratingStar: 4.8,
+        commissionPercent: 15,
+        permalink: 'https://shopee.com.br/product/1/1',
+        imageUrl: 'https://cf.shopee.com.br/1.jpg',
+        provenance: 'shopee_openapi_productOfferV2',
+      },
+      // 1 Inválido (sem shopId)
+      {
+        marketplace: 'Shopee',
+        itemId: 'shp-invalid',
+        productName: 'Produto Sem ShopId',
+        currentPrice: 100,
+        permalink: 'https://shopee.com.br/product/0/0',
+      },
+    ];
+  };
+
+  const mockMlCollector = async ({ page } = {}) => {
+    if (page && page > 1) return [];
+    return [
+      // 1 Válido e elegível
+      {
+        marketplace: 'Mercado Livre',
+        itemId: 'ml-1',
+        productId: 'ml-prod-1',
+        productName: 'Monitor Gamer 144Hz UltraWide Pro',
+        currentPrice: 800,
+        oldPrice: 1600,
+        discountPercent: 50,
+        sales: 3000,
+        ratingStar: 4.9,
+        commissionPercent: 12,
+        permalink: 'https://produto.mercadolivre.com.br/ml-1',
+        imageUrl: 'https://http2.mlstatic.com/ml-1.jpg',
+        provenance: 'mercadolivre_official_intent',
+      },
+      // 1 Inválido (sem link)
+      {
+        marketplace: 'Mercado Livre',
+        itemId: 'ml-invalid',
+        productName: 'Produto Sem Link',
+        currentPrice: 200,
+        permalink: '',
+      },
+    ];
+  };
+
+  const result = await processPendingTrendRadarRuns({
+    client: mockClient,
+    shopeeCollector: mockShopeeCollector,
+    mlCollector: mockMlCollector,
+    dryRun: false,
+  });
+
+  assert.equal(result.processed, true);
+  const health = updatedRun.source_health;
+
+  // 10 dimensões Shopee
+  assert.equal(typeof health.shopee_candidates_raw, 'number');
+  assert.equal(typeof health.shopee_candidates_unique, 'number');
+  assert.equal(typeof health.shopee_invalid_excluded, 'number');
+  assert.equal(typeof health.shopee_existing_offer_excluded, 'number');
+  assert.equal(typeof health.shopee_recent_history_excluded, 'number');
+  assert.equal(typeof health.shopee_semantic_duplicates_excluded, 'number');
+  assert.equal(typeof health.shopee_low_viability_excluded, 'number');
+  assert.equal(typeof health.shopee_commercial_decision_ignore_excluded, 'number');
+  assert.equal(typeof health.shopee_eligible_count, 'number');
+  assert.equal(typeof health.shopee_selected_count, 'number');
+
+  // 10 dimensões Mercado Livre
+  assert.equal(typeof health.mercado_livre_candidates_raw, 'number');
+  assert.equal(typeof health.mercado_livre_candidates_unique, 'number');
+  assert.equal(typeof health.mercado_livre_invalid_excluded, 'number');
+  assert.equal(typeof health.mercado_livre_existing_offer_excluded, 'number');
+  assert.equal(typeof health.mercado_livre_recent_history_excluded, 'number');
+  assert.equal(typeof health.mercado_livre_semantic_duplicates_excluded, 'number');
+  assert.equal(typeof health.mercado_livre_low_viability_excluded, 'number');
+  assert.equal(typeof health.mercado_livre_commercial_decision_ignore_excluded, 'number');
+  assert.equal(typeof health.mercado_livre_eligible_count, 'number');
+  assert.equal(typeof health.mercado_livre_selected_count, 'number');
+
+  // Consistência matemática
+  assert.equal(health.shopee_invalid_excluded, 1);
+  assert.equal(health.mercado_livre_invalid_excluded, 1);
+  assert.equal(health.shopee_eligible_count, 1);
+  assert.equal(health.mercado_livre_eligible_count, 1);
+  assert.equal(health.total_products_selected, health.shopee_selected_count + health.mercado_livre_selected_count);
+});

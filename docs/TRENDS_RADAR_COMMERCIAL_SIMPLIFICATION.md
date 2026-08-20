@@ -64,8 +64,26 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
   - `target_reached` reflete a realidade da conversão sem mascarar como falha de processamento.
 - **Auditoria e Persistência**: Zero produtos com `decision=IGNORAR` no resultado persistido. Quotas de ticket (impulse, core, upper, premium) operam exclusivamente sobre o subconjunto comercialmente viável.
 
-### Task 6 — Telemetria final
-Registrar por marketplace: coletados, válidos, bloqueados, elegíveis e selecionados.
+### Task 6 — Telemetria final do Radar Comercial [CONCLUÍDA]
+- **Telemetria de Funil por Marketplace**:
+  - Registrado no `source_health` do snapshot de cada run, discriminando isoladamente Shopee e Mercado Livre em 10 dimensões fundamentais:
+    1. **Candidatos brutos coletados**: `shopee_candidates_raw`, `mercado_livre_candidates_raw`.
+    2. **Candidatos únicos observados**: `shopee_candidates_unique`, `mercado_livre_candidates_unique`.
+    3. **Inválidos por preço/identidade/link**: `shopee_invalid_excluded`, `mercado_livre_invalid_excluded`.
+    4. **Excluídos por oferta existente**: `shopee_existing_offer_excluded`, `mercado_livre_existing_offer_excluded`.
+    5. **Excluídos por recência histórica**: `shopee_recent_history_excluded`, `mercado_livre_recent_history_excluded`.
+    6. **Excluídos por deduplicação semântica/catálogo**: `shopee_semantic_duplicates_excluded`, `mercado_livre_semantic_duplicates_excluded`, `shopee_native_duplicates_excluded`, `mercado_livre_catalog_duplicates_excluded`.
+    7. **Excluídos por baixa viabilidade / dados insuficientes**: `shopee_low_viability_excluded`, `mercado_livre_low_viability_excluded`, `shopee_insufficient_data_excluded`, `mercado_livre_insufficient_data_excluded`.
+    8. **Excluídos por decisão comercial IGNORAR (< 60 pts)**: `shopee_commercial_decision_ignore_excluded`, `mercado_livre_commercial_decision_ignore_excluded`.
+    9. **Elegíveis comerciais (TESTAR / PRIORIDADE)**: `shopee_eligible_count` (`shopee_commercial_eligible`), `mercado_livre_eligible_count` (`mercado_livre_commercial_eligible`).
+    10. **Selecionados finais**: `shopee_selected_count` (`shopee_products_selected`), `mercado_livre_selected_count` (`mercado_livre_products_selected`).
+- **Mapeamentos e Agrupamentos Reais**:
+  - `selected_count_by_marketplace`: `{ 'Shopee': N, 'Mercado Livre': M }`.
+  - `eligible_count_by_marketplace`: `{ 'Shopee': N, 'Mercado Livre': M }`.
+  - `marketplaces_scanned`: Array determinístico de fontes ativamente escaneadas.
+  - `marketplaces_with_candidates`: Fontes que forneceram candidatos brutos.
+  - `marketplaces_with_eligible_products`: Fontes com oportunidades viáveis aprovadas.
+  - `marketplaces_selected`: Fontes com produtos efetivamente alocados no Top 20 final (sem arrays estáticos artificiais).
 
 ## Critério final
 O Radar deve retornar Shopee + Mercado Livre com diversidade real, preço competitivo e oportunidade comercial clara, sem depender de dados que cada marketplace não fornece.
