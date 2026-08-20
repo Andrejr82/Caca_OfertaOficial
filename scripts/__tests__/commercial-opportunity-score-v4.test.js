@@ -322,73 +322,102 @@ test('decision thresholds V4 are deterministic', () => {
 test('CARTEIRA COMERCIAL: Seleção Top 20 respeita quotas de ticket (max 6 impulse, >=5 core, >=4 upper, >=2 premium)', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
+  const impulseTitles = [
+    'Fone de Ouvido Intra-auricular', 'Cabo Tipo C Trançado', 'Suporte Celular Mesa', 'Mousepad Speed Médio',
+    'Mini Lanterna Tática LED', 'Adaptador USB OTG', 'Película de Vidro 3D', 'Limpador de Tela Spray',
+    'Organizador de Cabos', 'Capa Protetora Silicone',
+  ];
+  const coreTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Headset 7.1 Surround', 'Webcam Full HD 1080p',
+    'Microfone Condensador USB', 'Suporte Articulado Monitor', 'Luminária de Mesa LED', 'Gabinete Gamer Vidro',
+    'Memória RAM 16GB DDR4', 'Processador Octa Core',
+  ];
+  const upperTitles = [
+    'Monitor Gamer 165Hz IPS', 'Cadeira Ergonômica Pro Mesh', 'Placa de Vídeo 8GB GDDR6', 'Fonte 750W 80 Plus Gold',
+    'SSD NVMe 2TB Gen4', 'Roteador Wi-Fi 6 Mesh Tri-Band', 'Smartwatch Esportivo AMOLED', 'Impressora Tanque de Tinta',
+    'Caixa de Som Portátil 60W', 'Tablet 10 Polegadas Octa Core',
+  ];
+  const premTitles = [
+    'Notebook Gamer RTX 4060', 'Smart TV 65 Polegadas QLED 4K', 'Smartphone Flagship 256GB', 'Drone Profissional 4K Gimbal',
+    'Câmera Mirrorless Full Frame', 'Projetor Laser 4K Cinema', 'Console de Video Game 1TB', 'Bicicleta Elétrica Dobrável',
+    'Ar Condicionado Inverter 18000', 'Geladeira Frost Free Inox',
+  ];
+
   const candidates = [];
 
   // 10 Impulse (R$ 50)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `IMP_${i}`,
-      shopId: 'shop-1',
-      productName: `Item Impulso Barato ${i}`,
-      category: `Categoria Impulso ${i}`,
+      itemId: `IMP_${i + 1}`,
+      shopId: `shop-i-${i + 1}`,
+      productName: `${impulseTitles[i]} Modelo Shopee`,
+      category: `Categoria Impulso ${i + 1}`,
       currentPrice: 50,
       oldPrice: 100,
       discountPercent: 50,
       sales: 5000,
       ratingStar: 4.8,
-      commissionPercent: 10,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/1/imp_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/imp_${i + 1}.jpg`,
     });
   }
 
   // 10 Core (R$ 250)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `CORE_${i}`,
-      shopId: 'shop-2',
-      productName: `Item Core Médio ${i}`,
-      category: `Categoria Core ${i}`,
+      itemId: `CORE_${i + 1}`,
+      shopId: `shop-c-${i + 1}`,
+      productName: `${coreTitles[i]} Modelo Shopee`,
+      category: `Categoria Core ${i + 1}`,
       currentPrice: 250,
-      oldPrice: 350,
-      discountPercent: 28,
+      oldPrice: 500,
+      discountPercent: 50,
       sales: 2000,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/2/core_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/core_${i + 1}.jpg`,
     });
   }
 
   // 10 Upper (R$ 800)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `UPPER_${i}`,
-      shopId: 'shop-3',
-      productName: `Item Upper Alto ${i}`,
-      category: `Categoria Upper ${i}`,
+      itemId: `UPPER_${i + 1}`,
+      shopId: `shop-u-${i + 1}`,
+      productName: `${upperTitles[i]} Modelo Shopee`,
+      category: `Categoria Upper ${i + 1}`,
       currentPrice: 800,
-      oldPrice: 1000,
-      discountPercent: 20,
-      sales: 1000,
+      oldPrice: 1600,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 6,
+      commissionPercent: 10,
+      permalink: `https://shopee.com.br/product/3/upper_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/upper_${i + 1}.jpg`,
     });
   }
 
   // 10 Premium (R$ 2000)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `PREM_${i}`,
-      shopId: 'shop-4',
-      productName: `Item Premium Top ${i}`,
-      category: `Categoria Premium ${i}`,
+      itemId: `PREM_${i + 1}`,
+      shopId: `shop-p-${i + 1}`,
+      productName: `${premTitles[i]} Modelo Shopee`,
+      category: `Categoria Premium ${i + 1}`,
       currentPrice: 2000,
-      oldPrice: 2500,
-      discountPercent: 20,
-      sales: 500,
+      oldPrice: 4000,
+      discountPercent: 50,
+      sales: 1000,
       ratingStar: 4.9,
-      commissionPercent: 5,
+      commissionPercent: 8,
+      permalink: `https://shopee.com.br/product/4/prem_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/prem_${i + 1}.jpg`,
     });
   }
 
@@ -415,6 +444,18 @@ test('CARTEIRA COMERCIAL: Seleção Top 20 respeita quotas de ticket (max 6 impu
 test('CARTEIRA COMERCIAL: Quotas redistribuem vagas quando uma faixa não possui candidatos suficientes sem forçar produtos ruins', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
+  const coreTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Headset 7.1 Surround', 'Webcam Full HD 1080p',
+    'Microfone Condensador USB', 'Suporte Articulado Monitor', 'Luminária de Mesa LED', 'Gabinete Gamer Vidro',
+    'Memória RAM 16GB DDR4', 'Processador Octa Core',
+  ];
+  const impulseTitles = [
+    'Fone de Ouvido Intra-auricular', 'Cabo Tipo C Trançado', 'Suporte Celular Mesa', 'Mousepad Speed Médio',
+    'Mini Lanterna Tática LED', 'Adaptador USB OTG', 'Película de Vidro 3D', 'Limpador de Tela Spray',
+    'Organizador de Cabos', 'Capa Protetora Silicone', 'Hub USB 4 Portas', 'Carregador Parede 20W',
+    'Cabo Auxiliar P2', 'Mini Caixa de Som', 'Suporte Veicular Celular',
+  ];
+
   const candidates = [];
 
   // Apenas 1 Premium viável
@@ -422,47 +463,53 @@ test('CARTEIRA COMERCIAL: Quotas redistribuem vagas quando uma faixa não possui
     marketplace: 'Shopee',
     itemId: 'PREM_SINGLE',
     shopId: 'shop-p',
-    productName: 'Notebook Ultra R$ 3500',
+    productName: 'Notebook Ultra 16GB SSD 512GB',
     category: 'Informática',
     currentPrice: 3500,
-    oldPrice: 4000,
-    discountPercent: 12,
-    sales: 300,
+    oldPrice: 7000,
+    discountPercent: 50,
+    sales: 1000,
     ratingStar: 4.8,
-    commissionPercent: 5,
+    commissionPercent: 8,
+    permalink: 'https://shopee.com.br/product/p/single',
+    imageUrl: 'https://cf.shopee.com.br/single.jpg',
   });
 
   // 10 Core
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `CORE_R_${i}`,
-      shopId: 'shop-c',
-      productName: `Produto Core Variado ${i}`,
-      category: `Categoria C ${i}`,
+      itemId: `CORE_R_${i + 1}`,
+      shopId: `shop-c-${i + 1}`,
+      productName: `${coreTitles[i]} Modelo Shopee`,
+      category: `Categoria C ${i + 1}`,
       currentPrice: 200 + i * 10,
-      oldPrice: 300 + i * 10,
-      discountPercent: 30,
-      sales: 1000,
+      oldPrice: 400 + i * 20,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/c/core_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/core_${i + 1}.jpg`,
     });
   }
 
   // 15 Impulse
-  for (let j = 1; j <= 15; j++) {
+  for (let j = 0; j < 15; j++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `IMP_R_${j}`,
-      shopId: 'shop-i',
-      productName: `Produto Impulso Variado ${j}`,
-      category: `Categoria I ${j}`,
-      currentPrice: 40 + j,
-      oldPrice: 80,
+      itemId: `IMP_R_${j + 1}`,
+      shopId: `shop-i-${j + 1}`,
+      productName: `${impulseTitles[j]} Modelo Shopee`,
+      category: `Categoria I ${j + 1}`,
+      currentPrice: 80 + j,
+      oldPrice: 160 + j * 2,
       discountPercent: 50,
-      sales: 5000,
+      sales: 10000,
       ratingStar: 4.8,
-      commissionPercent: 10,
+      commissionPercent: 15,
+      permalink: `https://shopee.com.br/product/i/imp_${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/imp_${j + 1}.jpg`,
     });
   }
 
@@ -481,6 +528,11 @@ test('CARTEIRA COMERCIAL: Quotas redistribuem vagas quando uma faixa não possui
 
 test('CARTEIRA COMERCIAL: Quotas nunca forçam candidatos com viabilidade LOW ou INSUFFICIENT_DATA', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const coreTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Headset 7.1 Surround', 'Webcam Full HD 1080p',
+    'Microfone Condensador USB',
+  ];
 
   const candidates = [];
 
@@ -510,18 +562,21 @@ test('CARTEIRA COMERCIAL: Quotas nunca forçam candidatos com viabilidade LOW ou
   });
 
   // 5 Core viáveis
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 0; i < 5; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `CORE_GOOD_${i}`,
-      productName: `Item Core Bom ${i}`,
-      category: `Cat ${i}`,
+      itemId: `CORE_GOOD_${i + 1}`,
+      shopId: `shop-g-${i + 1}`,
+      productName: `${coreTitles[i]} Modelo Shopee`,
+      category: `Cat ${i + 1}`,
       currentPrice: 200,
-      oldPrice: 300,
-      discountPercent: 33,
-      sales: 800,
+      oldPrice: 400,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/g/core_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/core_${i + 1}.jpg`,
     });
   }
 
@@ -744,7 +799,7 @@ test('INTEGRAÇÃO 5: Candidato com >=10 cliques humanos e 0 vendas vira observe
   }
 
   const mockClient = createMockSupabaseClient({
-    offers: [{ id: 'offer-zero', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-ZERO' }],
+    offers: [{ id: 'offer-zero', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-ZERO', shopee_shop_id: 'shop-zero' }],
     affiliateLinks: [{ id: 'link-zero-conv', offer_id: 'offer-zero', clicks: 12 }],
     clickEvents,
     sales: [], // 0 vendas
@@ -752,15 +807,18 @@ test('INTEGRAÇÃO 5: Candidato com >=10 cliques humanos e 0 vendas vira observe
 
   const candidate = {
     marketplace: 'Shopee',
+    shopId: 'shop-zero',
     itemId: 'ITEM-ZERO',
     productName: 'Produto Muita Visita Sem Venda',
     category: 'Geral',
     currentPrice: 150,
-    oldPrice: 200,
-    discountPercent: 25,
-    sales: 1000,
+    oldPrice: 300,
+    discountPercent: 50,
+    sales: 1500,
     ratingStar: 4.8,
-    commissionPercent: 8,
+    commissionPercent: 12,
+    permalink: 'https://shopee.com.br/product/1/ITEM-ZERO',
+    imageUrl: 'https://cf.shopee.com.br/item-zero.jpg',
   };
 
   const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
@@ -1243,11 +1301,14 @@ test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra f
     itemId: 'shopee-omo-5l',
     shopId: 'shop-1',
     productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
-    currentPrice: 50.00,
-    sales: 500,
+    currentPrice: 70.00,
+    oldPrice: 140.00,
+    discountPercent: 50,
+    sales: 5000,
     ratingStar: 4.9,
-    commissionPercent: 10,
+    commissionPercent: 15,
     permalink: 'https://shopee.com.br/product/1/omo5l',
+    imageUrl: 'https://cf.shopee.com.br/omo5l.jpg',
   };
 
   const shopeeCandidate2 = {
@@ -1256,11 +1317,13 @@ test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra f
     shopId: 'shop-2',
     productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
     currentPrice: 95.88,
+    oldPrice: 160.00,
     discountPercent: 40,
-    sales: 500,
+    sales: 1500,
     ratingStar: 4.8,
-    commissionPercent: 10,
+    commissionPercent: 12,
     permalink: 'https://shopee.com.br/product/2/omo4kg',
+    imageUrl: 'https://cf.shopee.com.br/omo4kg.jpg',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -1277,7 +1340,228 @@ test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra f
   const direct = bestProduct.direct_evidence[0];
   assert.ok(direct.family_key.includes('omo'));
   assert.equal(direct.normalized_unit, 'L');
-  assert.equal(direct.normalized_price, 10.00);
+  assert.equal(direct.normalized_price, 14.00);
   assert.equal(direct.relative_price_position, 'best_in_family');
   assert.ok(direct.competitiveness_reason.includes('Melhor preço'));
+});
+
+// ============================================================================
+// TASK 5: TOP 20 COMERCIAL SEM PREENCHIMENTO ARTIFICIAL
+// ============================================================================
+
+test('TASK 5: 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) -> retorna exatamente 20 e zero IGNORAR', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+
+  // 10 PRIORIDADE (score >= 80)
+  for (let i = 0; i < 10; i++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `PRIO_${i + 1}`,
+      shopId: `shop-prio-${i + 1}`,
+      productName: `Produto Prioridade Especial ${i + 1} Original`,
+      category: `Categoria Prio ${i + 1}`,
+      currentPrice: 200,
+      oldPrice: 400,
+      discountPercent: 50,
+      sales: 15000,
+      ratingStar: 4.9,
+      commissionPercent: 15,
+      permalink: `https://shopee.com.br/product/prio/${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/prio_${i + 1}.jpg`,
+      internalPerformance: {
+        matched: true,
+        humanProbableClicks: 50,
+        attributedSales: 10,
+      },
+    });
+  }
+
+  // 10 TESTAR (score 60-79)
+  for (let j = 0; j < 10; j++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `TEST_${j + 1}`,
+      shopId: `shop-test-${j + 1}`,
+      productName: `Produto Testar Elegivel ${j + 1} Original`,
+      category: `Categoria Test ${j + 1}`,
+      currentPrice: 150,
+      oldPrice: 300,
+      discountPercent: 50,
+      sales: 3000,
+      ratingStar: 4.8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/test/${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/test_${j + 1}.jpg`,
+    });
+  }
+
+  // 5 IGNORAR (score < 60)
+  for (let k = 0; k < 5; k++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `IGN_${k + 1}`,
+      shopId: `shop-ign-${k + 1}`,
+      productName: `Produto Ruim Descartavel ${k + 1}`,
+      category: `Categoria Ign ${k + 1}`,
+      currentPrice: 10,
+      oldPrice: 10,
+      discountPercent: 0,
+      sales: 0,
+      ratingStar: 0,
+      commissionPercent: 1,
+      permalink: `https://shopee.com.br/product/ign/${k + 1}`,
+      imageUrl: `https://cf.shopee.com.br/ign_${k + 1}.jpg`,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-task5-25-candidates',
+    shopeeCandidates: candidates,
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 20, 'Deve selecionar exatamente os 20 produtos elegíveis');
+  const ignoreInResult = products.filter(p => p.selection_decision === 'IGNORAR' || p.commercial_score < 60);
+  assert.equal(ignoreInResult.length, 0, 'Zero produtos com decisão IGNORAR no resultado final');
+});
+
+test('TASK 5: 8 TESTAR + 12 IGNORAR -> retorna somente 8, sem erro artificial e sem preenchimento', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+
+  // 8 TESTAR
+  for (let i = 0; i < 8; i++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `VALID_${i + 1}`,
+      shopId: `shop-val-${i + 1}`,
+      productName: `Produto Valido Testar ${i + 1} Oficial`,
+      category: `Categoria Val ${i + 1}`,
+      currentPrice: 180,
+      oldPrice: 360,
+      discountPercent: 50,
+      sales: 2000,
+      ratingStar: 4.8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/val/${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/val_${i + 1}.jpg`,
+    });
+  }
+
+  // 12 IGNORAR
+  for (let j = 0; j < 12; j++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `BAD_${j + 1}`,
+      shopId: `shop-bad-${j + 1}`,
+      productName: `Produto Sem Condicoes ${j + 1}`,
+      category: `Categoria Bad ${j + 1}`,
+      currentPrice: 15,
+      oldPrice: 15,
+      discountPercent: 0,
+      sales: 0,
+      ratingStar: 0,
+      commissionPercent: 0,
+      permalink: `https://shopee.com.br/product/bad/${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/bad_${j + 1}.jpg`,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-task5-8-candidates',
+    shopeeCandidates: candidates,
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 8, 'Deve retornar exatamente os 8 produtos elegíveis');
+  const ignoreInResult = products.filter(p => p.selection_decision === 'IGNORAR' || p.commercial_score < 60);
+  assert.equal(ignoreInResult.length, 0, 'Nenhum produto IGNORAR deve ser introduzido para completar quota');
+});
+
+test('TASK 5: Todos IGNORAR -> retorna lista vazia com 0 produtos', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+  for (let i = 0; i < 15; i++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `ALL_IGN_${i + 1}`,
+      shopId: `shop-all-ign-${i + 1}`,
+      productName: `Produto Sem Atratividade ${i + 1}`,
+      category: `Categoria ${i + 1}`,
+      currentPrice: 10,
+      sales: 0,
+      ratingStar: 0,
+      commissionPercent: 0,
+      permalink: `https://shopee.com.br/product/all/${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/all_${i + 1}.jpg`,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-task5-all-ignore',
+    shopeeCandidates: candidates,
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 0, 'Quando todos são IGNORAR, deve retornar lista vazia');
+});
+
+test('TASK 5: PRIORIDADE ranqueia acima de TESTAR quando score for maior', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const prioCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-PRIO',
+    shopId: 'shop-prio',
+    productName: 'Monitor Gamer 144Hz IPS 1ms FreeSync',
+    category: 'Monitores',
+    currentPrice: 800,
+    oldPrice: 1600,
+    discountPercent: 50,
+    sales: 10000,
+    ratingStar: 4.9,
+    commissionPercent: 12,
+    permalink: 'https://shopee.com.br/product/prio/1',
+    imageUrl: 'https://cf.shopee.com.br/prio.jpg',
+    internalPerformance: {
+      matched: true,
+      humanProbableClicks: 100,
+      attributedSales: 20,
+    },
+  };
+
+  const testCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-TEST',
+    shopId: 'shop-test',
+    productName: 'Cabo HDMI 2.1 8K Ultra High Speed',
+    category: 'Cabos',
+    currentPrice: 150,
+    oldPrice: 300,
+    discountPercent: 50,
+    sales: 2000,
+    ratingStar: 4.8,
+    commissionPercent: 15,
+    permalink: 'https://shopee.com.br/product/test/1',
+    imageUrl: 'https://cf.shopee.com.br/test.jpg',
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-task5-ranking',
+    shopeeCandidates: [testCandidate, prioCandidate],
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 2);
+  assert.equal(products[0].direct_evidence[0].decision, 'PRIORIDADE');
+  assert.equal(products[1].direct_evidence[0].decision, 'TESTAR');
+  assert.ok(products[0].commercial_score > products[1].commercial_score);
 });

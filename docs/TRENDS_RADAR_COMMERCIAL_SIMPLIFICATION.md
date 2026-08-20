@@ -52,8 +52,17 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
 - **Sem Regressão Solo**: Candidatos isolados sem concorrentes diretos no mesmo run continuam sendo avaliados por desconto promocional intrínseco (desconto >= 50% = 10 pts, >= 35% = 8 pts, etc.).
 - **Auditoria no directEvidence**: Registro determinístico de `family_key`, `normalized_unit`, `normalized_price`, `peer_count`, `relative_price_position` e `competitiveness_reason`.
 
-### Task 5 — Top 20 comercial
-Não usar `IGNORAR` para preencher vagas. Mostrar até 20 oportunidades realmente aprovadas pelo ranking.
+### Task 5 — Top 20 comercial sem preenchimento artificial [CONCLUÍDA]
+- **Gate de Decisão V4**: O motor `buildTrendRadarProductsFromCandidates` aplica exclusão direta para candidatos com `scoreV4.decision === 'IGNORAR' || scoreV4.total < 60` antes da montagem de vagas e quotas da carteira comercial.
+- **Regra de Entrada**: Somente produtos com classificação `PRIORIDADE` (score >= 80) e `TESTAR` (score 60–79) são elegíveis para compor o painel do Radar.
+- **Preenchimento Orgânico e Fiel à Realidade**:
+  - Se existirem 20+ oportunidades `TESTAR`/`PRIORIDADE`, o Radar seleciona as melhores 20 conforme as quotas estruturais e ranking.
+  - Se existirem menos de 20 (ex: 12, 8, 4 ou 0), o Radar retorna exatamente essa contagem e o run é concluído com `status: 'completed'`.
+  - Produtos classificados como `IGNORAR` jamais são reintroduzidos ou fabricados para inflar a quantidade.
+- **Telemetria de Exclusão**:
+  - `commercial_decision_ignore_excluded`, `shopee_commercial_decision_ignore_excluded` e `mercado_livre_commercial_decision_ignore_excluded` registrados no `sourceHealth` do snapshot do runner.
+  - `target_reached` reflete a realidade da conversão sem mascarar como falha de processamento.
+- **Auditoria e Persistência**: Zero produtos com `decision=IGNORAR` no resultado persistido. Quotas de ticket (impulse, core, upper, premium) operam exclusivamente sobre o subconjunto comercialmente viável.
 
 ### Task 6 — Telemetria final
 Registrar por marketplace: coletados, válidos, bloqueados, elegíveis e selecionados.

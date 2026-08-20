@@ -30,6 +30,7 @@ const {
 } = require('./radar-semantic-dedup-v2.cjs');
 const {
   classifyTicket,
+  calculateCommercialOpportunityScoreV4,
 } = require('../src/core/trends/commercial-opportunity-score-v4.cjs');
 
 const DEDICATED_RUNTIME_ENV = 'TRENDS_RADAR_DEDICATED_RUNTIME';
@@ -292,6 +293,9 @@ async function processPendingTrendRadarRuns(options = {}) {
       else mlSemanticDuplicatesExcluded += 1;
     }
 
+    let shopeeCommercialDecisionIgnoreExcluded = 0;
+    let mlCommercialDecisionIgnoreExcluded = 0;
+
     for (const candidate of dedupAudit.uniqueCandidates) {
       const viability = calculateCommercialViabilityV2(candidate);
       if (viability.classification === 'low') {
@@ -300,6 +304,12 @@ async function processPendingTrendRadarRuns(options = {}) {
       } else if (viability.classification === 'insufficient_data') {
         if (candidate.marketplace === 'Shopee') shopeeInsufficientDataExcluded += 1;
         else mlInsufficientDataExcluded += 1;
+      } else if (isViableForRadar(viability)) {
+        const scoreV4 = calculateCommercialOpportunityScoreV4(candidate, { peers: dedupAudit.uniqueCandidates });
+        if (scoreV4.decision === 'IGNORAR' || scoreV4.total < 60) {
+          if (candidate.marketplace === 'Shopee') shopeeCommercialDecisionIgnoreExcluded += 1;
+          else mlCommercialDecisionIgnoreExcluded += 1;
+        }
       }
     }
 
@@ -384,6 +394,7 @@ async function processPendingTrendRadarRuns(options = {}) {
       shopee_semantic_duplicates_excluded: shopeeSemanticDuplicatesExcluded,
       shopee_low_viability_excluded: shopeeLowViabilityExcluded,
       shopee_insufficient_data_excluded: shopeeInsufficientDataExcluded,
+      shopee_commercial_decision_ignore_excluded: shopeeCommercialDecisionIgnoreExcluded,
       mercado_livre_candidates_raw: mlCandidatesRaw,
       mercado_livre_candidates_unique: mlCandidatesUnique,
       mercado_livre_recent_history_excluded: mlRecentHistoryExcluded,
@@ -392,6 +403,8 @@ async function processPendingTrendRadarRuns(options = {}) {
       mercado_livre_semantic_duplicates_excluded: mlSemanticDuplicatesExcluded,
       mercado_livre_low_viability_excluded: mlLowViabilityExcluded,
       mercado_livre_insufficient_data_excluded: mlInsufficientDataExcluded,
+      mercado_livre_commercial_decision_ignore_excluded: mlCommercialDecisionIgnoreExcluded,
+      commercial_decision_ignore_excluded: shopeeCommercialDecisionIgnoreExcluded + mlCommercialDecisionIgnoreExcluded,
       refill_rounds: actualRoundsRun,
       candidates_per_refill_round: candidatesPerRefillRound,
       total_products_selected: finalProducts.length,

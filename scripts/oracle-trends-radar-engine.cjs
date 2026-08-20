@@ -1162,6 +1162,12 @@ function buildTrendRadarProductsFromCandidates({
       peers: uniqueCandidates,
     });
 
+    // Gate Task 5: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' (60–79) entram na seleção final do Radar.
+    // Candidatos com decisão 'IGNORAR' (< 60) são excluídos antes do preenchimento de quotas/vagas.
+    if (scoreV4.decision === 'IGNORAR' || scoreV4.total < 60) {
+      continue;
+    }
+
     viableCandidates.push({
       ...candidate,
       evidenceStatus,
@@ -1308,7 +1314,7 @@ function buildTrendRadarProductsFromCandidates({
     if (canSelectCandidate(c)) selectCandidate(c);
   }
 
-  // Pass 2: Preenchimento e redistribuição de vagas restantes pelos melhores scores globais
+  // Pass 2: Preenchimento preferencial de vagas restantes por faixas superiores (core/upper/premium)
   for (const candidate of uniqueTermCandidates) {
     if (selectedCandidates.length >= maxProducts) break;
     if (!canSelectCandidate(candidate)) continue;
@@ -1319,12 +1325,20 @@ function buildTrendRadarProductsFromCandidates({
         other => other.ticket_class !== 'impulse' && canSelectCandidate(other)
       );
       if (hasOtherTiersAvailable) {
-        // Pula este impulse para dar preferência a core/upper/premium disponíveis
         continue;
       }
     }
 
     selectCandidate(candidate);
+  }
+
+  // Pass 2.1: Se ainda restarem vagas e não houver mais candidatos de outras faixas, redistribuir vagas com os melhores candidatos restantes
+  if (selectedCandidates.length < maxProducts) {
+    for (const candidate of uniqueTermCandidates) {
+      if (selectedCandidates.length >= maxProducts) break;
+      if (!canSelectCandidate(candidate)) continue;
+      selectCandidate(candidate);
+    }
   }
 
   // Pass 3: Ordenação final da carteira por Score V4 para o snapshot
