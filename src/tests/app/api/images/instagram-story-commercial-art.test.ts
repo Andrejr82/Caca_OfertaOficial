@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildCommercialStoryModel } from "@/app/api/images/instagram-story/route";
+import {
+  buildCommercialStoryFrameLayout,
+  buildCommercialStoryModel,
+} from "@/app/api/images/instagram-story/route";
 
 describe("Instagram Stories commercial artwork", () => {
   it("uses the real product image and verified price comparison", () => {
@@ -43,5 +46,17 @@ describe("Instagram Stories commercial artwork", () => {
     });
 
     expect(model.imageUrl).toBeNull();
+  });
+
+  it("locks every Story frame into an explicit vertical bounded layout", () => {
+    expect(buildCommercialStoryFrameLayout()).toMatchObject({
+      display: "flex",
+      flexDirection: "column",
+      width: "100%",
+      maxWidth: "100%",
+      minWidth: 0,
+      flex: 1,
+      overflow: "hidden",
+    });
   });
 });
