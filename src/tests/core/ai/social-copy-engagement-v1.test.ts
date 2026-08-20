@@ -43,15 +43,15 @@ describe("social copy engagement v1", () => {
     expect(title).not.toMatch(/\b(?:com|para|e|de|da|do)[,.:;!?]?$/iu);
   });
 
-  it("materializa URL do Facebook antes das hashtags", () => {
+  it("mantém URL do Facebook fora do corpo para o primeiro comentário", () => {
     const raw = [
       "🔥 47% OFF: Cadeira Gamer Nitro",
-      "👉 Veja a oferta no primeiro comentário 👇",
-      "#CadeiraGamer #MercadoLivre #Oferta",
+      "👉 Conferir o preço atual no primeiro comentário. 👇",
     ].join("\n\n");
     const url = "https://caca-oferta-oficial.vercel.app/go/fb_offer";
     const content = materializeDraftContent("facebook", raw, url);
-    expect(content.indexOf(url)).toBeGreaterThan(content.indexOf("👉"));
-    expect(content.indexOf(url)).toBeLessThan(content.indexOf("#CadeiraGamer"));
+    expect(content).toBe(raw);
+    expect(content).not.toContain(url);
+    expect(content).toMatch(/primeiro comentário/iu);
   });
 });
