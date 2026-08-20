@@ -14,8 +14,6 @@ import type {
 
 export { OFFICIAL_AI_PAGE_CONCURRENCY };
 
-export const INSTAGRAM_REELS_DRAFT_MARKER = "REELS · AGUARDANDO VÍDEO";
-
 function copyV4FactsFromOffer(offer: OfficialAIOffer): CopyV4Facts {
   const explainabilityMetrics = offer.explainability?.marketplace_metrics;
   return {
@@ -58,10 +56,10 @@ function decisionBlocks(facts: CopyV4Facts) {
 
 /**
  * Copy V4 canônica antes da materialização do tracked URL.
- * WhatsApp/Telegram terminam com uma seta vazia de propósito: o adapter oficial
- * anexa ali o único tracked URL. Facebook reserva o destino ao primeiro comentário.
- * Instagram agora prepara apenas a legenda comercial do futuro Reel. Não existem
- * mais telas/cards estáticos de Stories neste contrato.
+ * WhatsApp/Telegram recebem um único tracked URL pelo adapter.
+ * Facebook reserva o destino ao primeiro comentário.
+ * Instagram volta a ser uma legenda manual/feed. Stories e Reels são superfícies
+ * separadas e não são codificadas dentro do draft textual do Instagram.
  */
 export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: OfficialAIChannel) {
   const { blocks } = decisionBlocks(facts);
@@ -70,11 +68,7 @@ export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: Of
     return [...blocks, "👉 Conferir o preço atual no primeiro comentário. 👇"].join("\n\n");
   }
   if (channel === "instagram") {
-    return [
-      INSTAGRAM_REELS_DRAFT_MARKER,
-      ...blocks,
-      "👉 Confira a oferta pelo link disponível no perfil.",
-    ].join("\n\n");
+    return [...blocks, "👉 Conferir o preço atual."].join("\n\n");
   }
   return [...blocks, "👉 Conferir o preço atual", "👉"].join("\n\n");
 }
