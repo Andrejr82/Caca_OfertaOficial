@@ -187,14 +187,48 @@ async function collectShopeeMarketplaceCandidatesSafe({
 const originalBuildTrendRadarProductsFromCandidates = engine.buildTrendRadarProductsFromCandidates;
 
 function buildTrendRadarProductsFromCandidatesWithPersistedDecision(options = {}) {
+  const shopeeByIdentity = new Map();
+  for (const candidate of options.shopeeCandidates || []) {
+    const itemId = String(candidate.itemId || '').trim();
+    const shopId = String(candidate.shopId || '').trim();
+    if (itemId) shopeeByIdentity.set(`${shopId || '0'}:${itemId}`, candidate);
+  }
+
   return originalBuildTrendRadarProductsFromCandidates(options).map((product) => {
     const decision = product.selection_decision
       || product.direct_evidence?.[0]?.selection_decision
       || product.direct_evidence?.[0]?.decision
       || null;
+
+    const directEvidence = Array.isArray(product.direct_evidence)
+      ? product.direct_evidence.map((entry, index) => {
+          if (index !== 0 || product.marketplace !== 'Shopee') return entry;
+
+          const itemId = String(entry?.marketplace_identity?.itemId || '').trim();
+          const shopId = String(entry?.marketplace_identity?.shopId || '').trim();
+          const candidate = shopeeByIdentity.get(`${shopId || '0'}:${itemId}`);
+          if (!candidate) return entry;
+
+          return {
+            ...entry,
+            commission_source: candidate.commissionSource || null,
+            shopee_commission_percent: candidate.shopeeCommissionRate ?? null,
+            seller_commission_percent: candidate.sellerCommissionRateObserved ?? null,
+            commercial_metrics: {
+              ...(entry.commercial_metrics || {}),
+              commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
+              shopeeCommissionRate: candidate.shopeeCommissionRate ?? null,
+              sellerCommissionRate: candidate.sellerCommissionRateObserved ?? null,
+              commissionSource: candidate.commissionSource || null,
+            },
+          };
+        })
+      : product.direct_evidence;
+
     return {
       ...product,
       selection_decision: decision,
+      direct_evidence: directEvidence,
     };
   });
 }
