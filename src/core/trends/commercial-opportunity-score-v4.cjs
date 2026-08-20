@@ -16,6 +16,13 @@
  * - visualPotential: 5
  */
 
+const {
+  evaluatePeerPriceCompetitiveness,
+  extractProductUnitAndQuantity,
+  calculateNormalizedPrice,
+  extractCompetitivenessFamilyKey,
+} = require('./commercial-price-competitiveness.cjs');
+
 const COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION = 'commercial-opportunity-v4';
 
 const WEIGHTS_V4 = Object.freeze({
@@ -304,35 +311,27 @@ function calculateReputation(candidate) {
 
 /**
  * 5. Offer Competitiveness — 10 pontos
- * Desconto real e autoridade de preço:
- * >= 50%: 10 pts
- * >= 35%: 8 pts
- * >= 20%: 6 pts
- * >= 10%: 4 pts
- * > 0%: 2 pts
- * preço regular: 1 pt
+ * Avalia competitividade de preço real relativa aos concorrentes da mesma família
+ * ou atratividade intrínseca de desconto quando sem concorrentes diretos no run:
+ * - Melhor preço na família (ou desconto >= 50% solo): 10 pts
+ * - Preço competitivo na família (ou desconto >= 35% solo): 7-8 pts
+ * - Preço intermediário na família (ou desconto >= 20% solo): 4-5 pts
+ * - Preço regular / desconto inicial (ou desconto >= 10% solo): 2-4 pts
+ * - Preço desfavorável / claramente mais caro na família: 1 pt
  */
-function calculateOfferCompetitiveness(candidate) {
-  const discount = Math.max(0, finite(candidate?.discountPercent ?? candidate?.priceDiscountRate) || 0);
-  const price = finite(candidate?.currentPrice ?? candidate?.price);
-  if (price === null || price <= 0) {
-    return { score: 0, reason: 'Preço inválido ou ausente' };
-  }
-
-  let score = 1;
-  if (discount >= 50) score = 10;
-  else if (discount >= 35) score = 8;
-  else if (discount >= 20) score = 6;
-  else if (discount >= 10) score = 4;
-  else if (discount > 0) score = 2;
-
-  const reason = discount >= 20
-    ? `Desconto promocional expressivo de ${Math.round(discount)}%`
-    : (discount > 0 ? `Desconto de ${Math.round(discount)}%` : 'Preço comercial regular');
+function calculateOfferCompetitiveness(candidate, options = {}) {
+  const peers = options.peers || options.peerCandidates || candidate?.peers || [];
+  const evalResult = evaluatePeerPriceCompetitiveness(candidate, peers);
 
   return {
-    score: clamp(score, 0, WEIGHTS_V4.offerCompetitiveness),
-    reason,
+    score: clamp(evalResult.score, 0, WEIGHTS_V4.offerCompetitiveness),
+    reason: evalResult.competitiveness_reason,
+    family_key: evalResult.family_key,
+    normalized_unit: evalResult.normalized_unit,
+    normalized_price: evalResult.normalized_price,
+    peer_count: evalResult.peer_count,
+    relative_price_position: evalResult.relative_price_position,
+    competitiveness_reason: evalResult.competitiveness_reason,
   };
 }
 
@@ -413,7 +412,7 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
   const economic = calculateEconomicReturn(candidate);
   const internal = calculateInternalConversion(candidate, options);
   const reputation = calculateReputation(candidate);
-  const competitiveness = calculateOfferCompetitiveness(candidate);
+  const competitiveness = calculateOfferCompetitiveness(candidate, options);
   const traceability = calculateIdentityTraceability(candidate);
   const visual = calculateVisualPotential(candidate);
 
@@ -454,6 +453,22 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
     breakdown,
     score_breakdown: breakdown,
     determining_reasons,
+    family_key: competitiveness.family_key,
+    normalized_unit: competitiveness.normalized_unit,
+    normalized_price: competitiveness.normalized_price,
+    peer_count: competitiveness.peer_count,
+    relative_price_position: competitiveness.relative_price_position,
+    competitiveness_reason: competitiveness.competitiveness_reason,
+    competitiveness: {
+      score: competitiveness.score,
+      reason: competitiveness.reason,
+      family_key: competitiveness.family_key,
+      normalized_unit: competitiveness.normalized_unit,
+      normalized_price: competitiveness.normalized_price,
+      peer_count: competitiveness.peer_count,
+      relative_price_position: competitiveness.relative_price_position,
+      competitiveness_reason: competitiveness.competitiveness_reason,
+    },
     economic_return: {
       estimatedCommissionPerSale: economic.estimatedCommissionPerSale,
       effectiveCommissionPercent: economic.effectiveCommissionPercent,
@@ -482,4 +497,8 @@ module.exports = {
   calculateVisualPotential,
   classifyCommercialDecision,
   calculateCommercialOpportunityScoreV4,
+  extractProductUnitAndQuantity,
+  calculateNormalizedPrice,
+  extractCompetitivenessFamilyKey,
+  evaluatePeerPriceCompetitiveness,
 };

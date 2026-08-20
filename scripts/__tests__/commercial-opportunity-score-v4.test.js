@@ -1007,5 +1007,277 @@ test('MATCHING SHOPEE: mesmo itemId em shopId diferente NÃO faz matching cruzad
   assert.equal(perfMap.size, 0, 'Não pode haver match quando o shopId for diferente, mesmo com mesmo itemId');
 });
 
+// ============================================================================
+// TASK 4: COMPETITIVIDADE REAL DE PREÇO E NORMALIZAÇÃO DE UNIDADES
+// ============================================================================
 
+test('TASK 4 (Competitividade): OMO 4kg R$95,88 vs OMO 5L R$50 -> 5L tem competitividade superior', () => {
+  const omo4kg = {
+    itemId: 'omo-4kg',
+    productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
+    currentPrice: 95.88,
+    discountPercent: 40, // 40% de desconto próprio aparente
+    sales: 1000,
+    ratingStar: 4.8,
+  };
 
+  const omo5L = {
+    itemId: 'omo-5l',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 50.00,
+    discountPercent: 10, // apenas 10% de desconto
+    sales: 1000,
+    ratingStar: 4.8,
+  };
+
+  const peers = [omo4kg, omo5L];
+
+  const score4kg = calculateCommercialOpportunityScoreV4(omo4kg, { peers });
+  const score5L = calculateCommercialOpportunityScoreV4(omo5L, { peers });
+
+  assert.equal(score5L.normalized_unit, 'L');
+  assert.equal(score5L.normalized_price, 10.00); // R$ 50 / 5 = R$ 10.00/L
+  assert.equal(score5L.relative_price_position, 'best_in_family');
+  assert.equal(score5L.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(score4kg.normalized_unit, 'kg');
+  assert.equal(score4kg.normalized_price, 23.97); // R$ 95.88 / 4 = R$ 23.97/kg
+  assert.equal(score4kg.relative_price_position, 'unfavorable');
+  assert.equal(score4kg.breakdown.offerCompetitiveness, 1);
+
+  assert.ok(
+    score5L.breakdown.offerCompetitiveness > score4kg.breakdown.offerCompetitiveness,
+    'OMO 5L (R$ 10/L) deve ter score de competitividade superior a OMO 4kg (R$ 23.97/kg)'
+  );
+});
+
+test('TASK 4 (Competitividade): Dois produtos iguais com mesma quantidade -> menor preço vence', () => {
+  const foneBarato = {
+    itemId: 'fone-25',
+    productName: 'Fone de Ouvido Bluetooth TWS i12',
+    currentPrice: 25.00,
+    discountPercent: 0,
+  };
+
+  const foneCaro = {
+    itemId: 'fone-35',
+    productName: 'Fone de Ouvido Bluetooth TWS i12',
+    currentPrice: 35.00,
+    discountPercent: 50, // 50% de desconto falso
+  };
+
+  const peers = [foneBarato, foneCaro];
+
+  const scoreBarato = calculateCommercialOpportunityScoreV4(foneBarato, { peers });
+  const scoreCaro = calculateCommercialOpportunityScoreV4(foneCaro, { peers });
+
+  assert.equal(scoreBarato.relative_price_position, 'best_in_family');
+  assert.equal(scoreBarato.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreCaro.relative_price_position, 'unfavorable');
+  assert.equal(scoreCaro.breakdown.offerCompetitiveness, 1);
+
+  assert.ok(scoreBarato.total > scoreCaro.total, 'Menor preço real deve vencer o anúncio mais caro mesmo com desconto falso');
+});
+
+test('TASK 4 (Competitividade): Kit 3 vs Kit 2 -> compara por unidade', () => {
+  const kit3 = {
+    itemId: 'kit-3',
+    productName: 'Kit 3 Camisetas Básicas Algodão',
+    currentPrice: 30.00, // R$ 10/unidade
+    discountPercent: 10,
+  };
+
+  const kit2 = {
+    itemId: 'kit-2',
+    productName: 'Kit 2 Camisetas Básicas Algodão',
+    currentPrice: 24.00, // R$ 12/unidade
+    discountPercent: 10,
+  };
+
+  const peers = [kit3, kit2];
+
+  const scoreKit3 = calculateCommercialOpportunityScoreV4(kit3, { peers });
+  const scoreKit2 = calculateCommercialOpportunityScoreV4(kit2, { peers });
+
+  assert.equal(scoreKit3.normalized_unit, 'unit');
+  assert.equal(scoreKit3.normalized_price, 10.00);
+  assert.equal(scoreKit3.relative_price_position, 'best_in_family');
+  assert.equal(scoreKit3.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreKit2.normalized_unit, 'unit');
+  assert.equal(scoreKit2.normalized_price, 12.00);
+  assert.equal(scoreKit2.relative_price_position, 'average');
+  assert.ok(scoreKit3.breakdown.offerCompetitiveness > scoreKit2.breakdown.offerCompetitiveness);
+});
+
+test('TASK 4 (Competitividade): 500g vs 1kg -> compara por kg', () => {
+  const cafe1kg = {
+    itemId: 'cafe-1kg',
+    productName: 'Café Especial Torrado em Grãos 1kg',
+    currentPrice: 40.00, // R$ 40/kg
+    discountPercent: 5,
+  };
+
+  const cafe500g = {
+    itemId: 'cafe-500g',
+    productName: 'Café Especial Torrado em Grãos 500g',
+    currentPrice: 30.00, // R$ 60/kg
+    discountPercent: 5,
+  };
+
+  const peers = [cafe1kg, cafe500g];
+
+  const score1kg = calculateCommercialOpportunityScoreV4(cafe1kg, { peers });
+  const score500g = calculateCommercialOpportunityScoreV4(cafe500g, { peers });
+
+  assert.equal(score1kg.normalized_unit, 'kg');
+  assert.equal(score1kg.normalized_price, 40.00);
+  assert.equal(score1kg.relative_price_position, 'best_in_family');
+  assert.equal(score1kg.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(score500g.normalized_unit, 'kg');
+  assert.equal(score500g.normalized_price, 60.00);
+  assert.equal(score500g.relative_price_position, 'unfavorable');
+  assert.ok(score1kg.breakdown.offerCompetitiveness > score500g.breakdown.offerCompetitiveness);
+});
+
+test('TASK 4 (Competitividade): Produto sem quantidade detectável não inventa unidade e compara se seguro', () => {
+  const mouseA = {
+    itemId: 'mouse-a',
+    productName: 'Mouse Gamer RGB Ergonômico 7200 DPI',
+    currentPrice: 50.00,
+  };
+
+  const mouseB = {
+    itemId: 'mouse-b',
+    productName: 'Mouse Gamer RGB Ergonômico 7200 DPI',
+    currentPrice: 80.00,
+  };
+
+  const peers = [mouseA, mouseB];
+
+  const scoreA = calculateCommercialOpportunityScoreV4(mouseA, { peers });
+  const scoreB = calculateCommercialOpportunityScoreV4(mouseB, { peers });
+
+  assert.equal(scoreA.normalized_unit, 'unit');
+  assert.equal(scoreA.normalized_price, 50.00);
+  assert.equal(scoreA.relative_price_position, 'best_in_family');
+  assert.equal(scoreA.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreB.normalized_price, 80.00);
+  assert.equal(scoreB.relative_price_position, 'unfavorable');
+  assert.equal(scoreB.breakdown.offerCompetitiveness, 1);
+});
+
+test('TASK 4 (Competitividade): Produtos de famílias diferentes não são comparados entre si', () => {
+  const omo = {
+    itemId: 'omo-1',
+    productName: 'Sabão Líquido OMO 5L',
+    currentPrice: 50.00,
+  };
+
+  const fone = {
+    itemId: 'fone-1',
+    productName: 'Fone Bluetooth TWS i12',
+    currentPrice: 25.00,
+  };
+
+  const peers = [omo, fone];
+
+  const scoreOmo = calculateCommercialOpportunityScoreV4(omo, { peers });
+  const scoreFone = calculateCommercialOpportunityScoreV4(fone, { peers });
+
+  assert.equal(scoreOmo.peer_count, 1, 'OMO não deve ser comparado com fone');
+  assert.equal(scoreOmo.relative_price_position, 'solo');
+
+  assert.equal(scoreFone.peer_count, 1, 'Fone não deve ser comparado com sabão');
+  assert.equal(scoreFone.relative_price_position, 'solo');
+});
+
+test('TASK 4 (Competitividade): Desconto próprio alto não supera concorrente equivalente muito mais barato', () => {
+  const caroComDesconto = {
+    itemId: 'item-caro',
+    productName: 'Suporte de Celular Veicular Magnético Saída de Ar',
+    currentPrice: 60.00,
+    discountPercent: 60, // alega 60% de desconto (de R$ 150 por R$ 60)
+  };
+
+  const baratoSemDesconto = {
+    itemId: 'item-barato',
+    productName: 'Suporte de Celular Veicular Magnético Saída de Ar',
+    currentPrice: 20.00,
+    discountPercent: 0, // 0% de desconto anunciado
+  };
+
+  const peers = [caroComDesconto, baratoSemDesconto];
+
+  const scoreCaro = calculateCommercialOpportunityScoreV4(caroComDesconto, { peers });
+  const scoreBarato = calculateCommercialOpportunityScoreV4(baratoSemDesconto, { peers });
+
+  assert.equal(scoreBarato.breakdown.offerCompetitiveness, 10);
+  assert.equal(scoreCaro.breakdown.offerCompetitiveness, 1);
+  assert.ok(scoreBarato.breakdown.offerCompetitiveness > scoreCaro.breakdown.offerCompetitiveness);
+});
+
+test('TASK 4 (Competitividade): Candidato sem concorrente no run preserva avaliação intrínseca de desconto', () => {
+  const soloComDesconto = {
+    itemId: 'item-solo-50',
+    productName: 'Câmera de Segurança Externa Wi-Fi 360',
+    currentPrice: 150.00,
+    discountPercent: 50,
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(soloComDesconto, { peers: [] });
+
+  assert.equal(score.peer_count, 1);
+  assert.equal(score.relative_price_position, 'solo');
+  assert.equal(score.breakdown.offerCompetitiveness, 10, 'Desconto solo de 50% pontua 10 pts');
+});
+
+test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra family_key, normalized_unit, normalized_price e relative_price_position no directEvidence', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const shopeeCandidate1 = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-omo-5l',
+    shopId: 'shop-1',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 50.00,
+    sales: 500,
+    ratingStar: 4.9,
+    commissionPercent: 10,
+    permalink: 'https://shopee.com.br/product/1/omo5l',
+  };
+
+  const shopeeCandidate2 = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-omo-4kg',
+    shopId: 'shop-2',
+    productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
+    currentPrice: 95.88,
+    discountPercent: 40,
+    sales: 500,
+    ratingStar: 4.8,
+    commissionPercent: 10,
+    permalink: 'https://shopee.com.br/product/2/omo4kg',
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-test-task4',
+    shopeeCandidates: [shopeeCandidate1, shopeeCandidate2],
+    mlCandidates: [],
+    maxProducts: 10,
+  });
+
+  assert.ok(products.length >= 1);
+  const bestProduct = products.find((p) => p.product_term.includes('5L'));
+  assert.ok(bestProduct, 'OMO 5L deve estar entre os produtos selecionados');
+
+  const direct = bestProduct.direct_evidence[0];
+  assert.ok(direct.family_key.includes('omo'));
+  assert.equal(direct.normalized_unit, 'L');
+  assert.equal(direct.normalized_price, 10.00);
+  assert.equal(direct.relative_price_position, 'best_in_family');
+  assert.ok(direct.competitiveness_reason.includes('Melhor preço'));
+});

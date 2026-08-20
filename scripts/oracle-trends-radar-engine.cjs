@@ -1159,6 +1159,7 @@ function buildTrendRadarProductsFromCandidates({
     }, {
       velocityInfo,
       internalPerformance,
+      peers: uniqueCandidates,
     });
 
     viableCandidates.push({
@@ -1228,12 +1229,6 @@ function buildTrendRadarProductsFromCandidates({
   }
 
   // 4. Montagem da Carteira Comercial Top 20 por Faixas de Ticket & Capping Familiar
-  // Metas estruturais quando existirem candidatos viáveis:
-  // - impulse: max 6
-  // - core: seek >= 5
-  // - upper: seek >= 4
-  // - premium: seek >= 2
-  // Vagas restantes / não preenchidas são redistribuídas para os melhores scores globais.
   const selectedCandidates = [];
   const selectedKeys = new Set();
   const familyCounts = new Map();
@@ -1335,16 +1330,13 @@ function buildTrendRadarProductsFromCandidates({
   // Pass 3: Ordenação final da carteira por Score V4 para o snapshot
   selectedCandidates.sort(sortCandidatesDeterministic);
 
-  // 5. Mapeamento final dos produtos para o snapshot
+  // 5. Formatação do Top 20 Final para Persistência e Auditoria
   const prioritizedProducts = [];
   const seenFinalKeys = new Set();
 
-  for (let index = 0; index < selectedCandidates.length; index++) {
+  for (let index = 0; index < selectedCandidates.length; index += 1) {
     const candidate = selectedCandidates[index];
-    const marketplace = candidate.marketplace;
-    const normalizedTerm = normalizeText(candidate.productName);
-    const finalKey = `${String(marketplace || '').trim().toLowerCase()}:${normalizedTerm}`;
-
+    const finalKey = `${String(candidate.marketplace || '').toLowerCase()}:${normalizeText(candidate.productName)}`;
     if (seenFinalKeys.has(finalKey)) {
       continue;
     }
@@ -1373,6 +1365,7 @@ function buildTrendRadarProductsFromCandidates({
     }, {
       velocityInfo,
       internalPerformance: candidate.internalPerformance,
+      peers: uniqueCandidates,
     });
 
     const directEvidence = [
@@ -1396,6 +1389,12 @@ function buildTrendRadarProductsFromCandidates({
         viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
         viability_classification: viability.classification,
         ticket_class: finalScoreV4.ticket_class,
+        family_key: finalScoreV4.family_key,
+        normalized_unit: finalScoreV4.normalized_unit,
+        normalized_price: finalScoreV4.normalized_price,
+        peer_count: finalScoreV4.peer_count,
+        relative_price_position: finalScoreV4.relative_price_position,
+        competitiveness_reason: finalScoreV4.competitiveness_reason,
         effective_commission_percent: finalScoreV4.economic_return.effectiveCommissionPercent,
         estimated_commission_per_sale: finalScoreV4.economic_return.estimatedCommissionPerSale,
         commission_status: finalScoreV4.economic_return.commissionStatus,
@@ -1419,6 +1418,12 @@ function buildTrendRadarProductsFromCandidates({
           sellerCommissionRate: candidate.sellerCommissionRate || 0,
           effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
           estimatedCommissionPerSale: finalScoreV4.economic_return.estimatedCommissionPerSale,
+          family_key: finalScoreV4.family_key,
+          normalized_unit: finalScoreV4.normalized_unit,
+          normalized_price: finalScoreV4.normalized_price,
+          peer_count: finalScoreV4.peer_count,
+          relative_price_position: finalScoreV4.relative_price_position,
+          competitiveness_reason: finalScoreV4.competitiveness_reason,
         },
         temporal_metrics: velocityInfo,
       },

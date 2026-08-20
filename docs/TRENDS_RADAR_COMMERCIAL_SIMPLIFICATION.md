@@ -35,8 +35,22 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
 - **Resiliência**: Falha ou timeout em uma categoria isolada não aborta a coleta das demais.
 - **Campos ricos preservados**: Preço, descontos, avaliações, comissões, tipo de loja e links são integralmente preservados para o motor de ranking V4.
 
-### Task 4 — Competitividade real
-Comparar candidatos equivalentes/famílias por preço e promoção; quando aplicável, normalizar preço por unidade/kg/litro.
+### Task 4 — Competitividade real [CONCLUÍDA]
+- **Módulo Dedicado**: `src/core/trends/commercial-price-competitiveness.cjs` integrado a `src/core/trends/commercial-opportunity-score-v4.cjs` e `scripts/oracle-trends-radar-engine.cjs`.
+- **Extração Determinística de Unidades e Quantidades**:
+  - Volume: Litros (`L`, `litros`, `lt`) e Mililitros (`ml`) normalizados para `L`. Suporte a multiplicadores (ex: `2x 5L`, `3x 500ml`).
+  - Massa: Quilos (`kg`, `quilos`) e Gramas (`g`, `gr`) normalizados para `kg`. Suporte a multiplicadores (ex: `2x 1kg`, `4x 500g`).
+  - Unidades / Kits: Kits (`kit 2`, `kit com 3`, `pack 10`) e Unidades explícitas (`10 unidades`, `2 peças`, `5 pares`) normalizados para `unit`.
+  - Consumíveis equivalentes: L e kg são comparáveis na mesma família (ex: sabão concentrado em pó vs sabão líquido).
+- **Normalização de Preço**: Cálculo de `normalized_price` em `R$/L`, `R$/kg` ou `R$/unidade`.
+- **Comparação Relativa de Concorrentes (Peers no mesmo Run)**:
+  - Candidatos da mesma família comercial têm seus preços normalizados comparados.
+  - `best_in_family` (menor preço / melhor custo-benefício): 10 pontos em `offerCompetitiveness`.
+  - `competitive` (até 15% acima do mínimo): 7-8 pontos.
+  - `average` (até 35% acima do mínimo): 4-5 pontos.
+  - `unfavorable` (claramente mais caro / desfavorável): 1 ponto (mesmo com alto desconto próprio anunciado).
+- **Sem Regressão Solo**: Candidatos isolados sem concorrentes diretos no mesmo run continuam sendo avaliados por desconto promocional intrínseco (desconto >= 50% = 10 pts, >= 35% = 8 pts, etc.).
+- **Auditoria no directEvidence**: Registro determinístico de `family_key`, `normalized_unit`, `normalized_price`, `peer_count`, `relative_price_position` e `competitiveness_reason`.
 
 ### Task 5 — Top 20 comercial
 Não usar `IGNORAR` para preencher vagas. Mostrar até 20 oportunidades realmente aprovadas pelo ranking.
