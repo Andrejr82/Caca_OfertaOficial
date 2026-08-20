@@ -107,6 +107,251 @@ test('collectShopeeMarketplaceCandidates uses broad official category discovery 
   assert.ok(capturedCalls[0].variables.productCatId !== undefined || capturedCalls[0].variables.sortType !== undefined);
 });
 
+test('TASK 3 (Shopee): paginação real busca múltiplas páginas por categoria e agrega resultados', async () => {
+  const capturedCalls = [];
+  const mockCaller = async (operation, query, variables) => {
+    capturedCalls.push({ operation, variables });
+    const p = variables.page || 1;
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [
+              {
+                itemId: `item_p${p}_1`,
+                shopId: 'shop_1',
+                productName: `Produto Pag ${p}`,
+                productLink: `https://shopee.com.br/product/shop_1/item_p${p}_1`,
+                priceMin: '50.00',
+                priceMax: '60.00',
+                sales: '100',
+              },
+            ],
+            pageInfo: { page: p, limit: 30, hasNextPage: p < 2 },
+          },
+        },
+      },
+    };
+  };
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [100010],
+    maxPagesPerCategory: 2,
+  });
+
+  assert.equal(candidates.length, 2, 'Deve coletar candidatos de ambas as páginas');
+  assert.equal(candidates[0].itemId, 'item_p1_1');
+  assert.equal(candidates[1].itemId, 'item_p2_1');
+  assert.equal(capturedCalls.length, 2, 'Deve ter feito 2 chamadas paginadas para a categoria');
+  assert.equal(capturedCalls[0].variables.page, 1);
+  assert.equal(capturedCalls[1].variables.page, 2);
+});
+
+test('TASK 3 (Shopee): parada quando página vazia ou hasNextPage = false', async () => {
+  const capturedCalls = [];
+  const mockCaller = async (operation, query, variables) => {
+    capturedCalls.push({ operation, variables });
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [],
+            pageInfo: { page: 1, limit: 30, hasNextPage: false },
+          },
+        },
+      },
+    };
+  };
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [100010],
+    maxPagesPerCategory: 3,
+  });
+
+  assert.equal(candidates.length, 0);
+  assert.equal(capturedCalls.length, 1, 'Deve interromper a paginação após página vazia');
+});
+
+test('TASK 3 (Shopee): deduplicação entre páginas e entre categorias por shopId + itemId', async () => {
+  const mockCaller = async (operation, query, variables) => {
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [
+              {
+                itemId: 'same_item_123',
+                shopId: 'same_shop_456',
+                productName: 'Produto Repetido',
+                productLink: 'https://shopee.com.br/product/same_shop_456/same_item_123',
+                priceMin: '40.00',
+                priceMax: '40.00',
+                sales: '50',
+              },
+            ],
+            pageInfo: { page: variables.page, limit: 30, hasNextPage: true },
+          },
+        },
+      },
+    };
+  };
+
+  // Coleta em 2 categorias e 2 páginas por categoria (4 chamadas, mesmo produto em todas)
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [100010, 100013],
+    maxPagesPerCategory: 2,
+  });
+
+  assert.equal(candidates.length, 1, 'Deve conter apenas 1 candidato único deduplicado');
+  assert.equal(candidates[0].itemId, 'same_item_123');
+  assert.equal(candidates[0].shopId, 'same_shop_456');
+});
+
+test('TASK 3 (Shopee): falha em uma categoria não aborta a coleta das demais categorias', async () => {
+  const mockCaller = async (operation, query, variables) => {
+    if (variables.productCatId === 999999) {
+      throw new Error('Falha simulada na API Shopee para categoria com erro');
+    }
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [
+              {
+                itemId: 'item_cat_ok',
+                shopId: 'shop_ok',
+                productName: 'Produto Categoria Saudável',
+                productLink: 'https://shopee.com.br/product/shop_ok/item_cat_ok',
+                priceMin: '70.00',
+                priceMax: '70.00',
+                sales: '20',
+              },
+            ],
+            pageInfo: { page: 1, limit: 30, hasNextPage: false },
+          },
+        },
+      },
+    };
+  };
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [999999, 100644],
+    maxPagesPerCategory: 1,
+  });
+
+  assert.equal(candidates.length, 1, 'Deve prosseguir e coletar a categoria saudável');
+  assert.equal(candidates[0].itemId, 'item_cat_ok');
+});
+
+test('TASK 3 (Shopee): candidato válido sem vendas e sem comissão continua coletado', async () => {
+  const mockCaller = async () => {
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [
+              {
+                itemId: 'item_no_sales',
+                shopId: 'shop_1',
+                productName: 'Produto Sem Vendas e Sem Comissão',
+                productLink: 'https://shopee.com.br/product/shop_1/item_no_sales',
+                priceMin: '89.90',
+                priceMax: '89.90',
+                sales: null,
+                ratingStar: null,
+                commissionRate: null,
+                sellerCommissionRate: null,
+              },
+            ],
+            pageInfo: { page: 1, limit: 30, hasNextPage: false },
+          },
+        },
+      },
+    };
+  };
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [100010],
+    maxPagesPerCategory: 1,
+  });
+
+  assert.equal(candidates.length, 1, 'Produto com preço válido e identidade deve ser coletado');
+  assert.equal(candidates[0].itemId, 'item_no_sales');
+  assert.equal(candidates[0].sales, 0);
+  assert.equal(candidates[0].rating, null);
+  assert.equal(candidates[0].commissionPercent, 0);
+});
+
+test('TASK 3 (Shopee): campos ricos Shopee continuam preservados e isAMSOffer não é restrição rígida', async () => {
+  const capturedVariables = [];
+  const mockCaller = async (operation, query, variables) => {
+    capturedVariables.push(variables);
+    return {
+      status: 200,
+      data: {
+        data: {
+          productOfferV2: {
+            nodes: [
+              {
+                itemId: 'item_rich',
+                shopId: 'shop_rich',
+                shopName: 'Loja Oficial Rich',
+                productName: 'Fone Gamer 7.1 Pro',
+                productLink: 'https://shopee.com.br/product/shop_rich/item_rich',
+                offerLink: 'https://shope.ee/xyz_rich',
+                imageUrl: 'https://cf.shopee.com.br/img_rich.jpg',
+                priceMin: '199.90',
+                priceMax: '249.90',
+                priceDiscountRate: '20',
+                officialOldPrice: '299.90',
+                ratingStar: '4.92',
+                sales: '5400',
+                commissionRate: '0.08',
+                shopeeCommissionRate: '0.05',
+                sellerCommissionRate: '0.03',
+                shopType: [1, 2],
+              },
+            ],
+            pageInfo: { page: 1, limit: 40, hasNextPage: false },
+          },
+        },
+      },
+    };
+  };
+
+  const candidates = await collectShopeeMarketplaceCandidates({
+    request: mockCaller,
+    categoryIds: [100535],
+    maxPagesPerCategory: 1,
+  });
+
+  assert.equal(candidates.length, 1);
+  const c = candidates[0];
+  assert.equal(c.itemId, 'item_rich');
+  assert.equal(c.shopId, 'shop_rich');
+  assert.equal(c.shopName, 'Loja Oficial Rich');
+  assert.equal(c.currentPrice, 199.9);
+  assert.equal(c.sales, 5400);
+  assert.equal(c.ratingStar, 4.92);
+  assert.equal(c.commissionPercent, 8);
+  assert.equal(c.sellerCommissionRate, 3);
+  assert.equal(c.permalink, 'https://shope.ee/xyz_rich');
+  assert.equal(c.imageUrl, 'https://cf.shopee.com.br/img_rich.jpg');
+  assert.deepEqual(c.shopType, [1, 2]);
+  assert.equal(c.provenance, 'shopee_openapi_productOfferV2');
+  assert.equal(capturedVariables[0].isAMSOffer, undefined, 'isAMSOffer não deve ser imposto como true por padrão');
+});
+
 test('computeCandidateSalesVelocity computes delta and window when previous history exists', () => {
   const candidate = {
     marketplace: 'Shopee',

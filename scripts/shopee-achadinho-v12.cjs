@@ -8,17 +8,22 @@ const {
 
 const ACHADINHO_STRATEGY_VERSION = 'shopee-achadinho-quality-v1.2';
 const SHOPEE_BROAD_DISCOVERY_CATEGORIES = Object.freeze([
-  100010,
-  100013,
-  100644,
-  100636,
-  100630,
-  100535,
-  100009,
-  100011,
-  100637,
-  100631,
-  100634,
+  100010, // Casa e Cozinha / Eletroportáteis
+  100013, // Celulares e Acessórios
+  100644, // Informática e Periféricos
+  100636, // Móveis e Decoração / Ferramentas
+  100630, // Beleza e Cuidados Pessoais
+  100535, // Áudio / TVs / Eletrônicos
+  100009, // Moda Masculina
+  100011, // Moda Feminina
+  100637, // Esportes e Fitness
+  100631, // Pet Shop
+  100634, // Games e Consoles
+  100632, // Brinquedos e Hobbies
+  100635, // Bebês e Crianças
+  100638, // Saúde e Bem-Estar
+  100639, // Automotivo
+  100640, // Livros e Papelaria
 ]);
 
 function normalizeText(value) {
@@ -57,8 +62,11 @@ function defaultShopeeApiCaller(env = process.env) {
 async function collectShopeeMarketplaceCandidates({
   request = null,
   categoryIds = SHOPEE_BROAD_DISCOVERY_CATEGORIES,
-  maxPerCategory = 30,
+  maxPerCategory = 40,
   maxPagesPerCategory = 2,
+  page = 1,
+  sortType = 2,
+  isAMSOffer = undefined,
   env = process.env,
 } = {}) {
   const caller = request || defaultShopeeApiCaller(env);
@@ -67,14 +75,21 @@ async function collectShopeeMarketplaceCandidates({
   const candidates = [];
   const seen = new Set();
   const targetCategories = Array.isArray(categoryIds) && categoryIds.length ? categoryIds : [null];
-  const pageLimit = Math.max(5, Number(maxPerCategory) || 30);
-  const pageCount = Math.max(1, Math.min(5, Math.floor(Number(maxPagesPerCategory) || 1)));
+  const pageLimit = Math.max(5, Math.min(50, Number(maxPerCategory) || 40));
+  const pagesToScan = Math.max(1, Math.min(5, Math.floor(Number(maxPagesPerCategory) || 2)));
+  const basePage = Math.max(1, Number(page) || 1);
 
   for (const categoryId of targetCategories) {
     try {
-      for (let page = 1; page <= pageCount; page += 1) {
-        const variables = { page, limit: pageLimit, sortType: 2, isAMSOffer: true };
+      for (let offset = 0; offset < pagesToScan; offset += 1) {
+        const currentPage = basePage + offset;
+        const variables = {
+          page: currentPage,
+          limit: pageLimit,
+          sortType: typeof sortType === 'number' ? sortType : 2,
+        };
         if (categoryId) variables.productCatId = categoryId;
+        if (typeof isAMSOffer === 'boolean') variables.isAMSOffer = isAMSOffer;
 
         const response = await caller(
           'ShopeePromotionOffers',
@@ -138,6 +153,9 @@ async function collectShopeeMarketplaceCandidates({
             observedAt: new Date().toISOString(),
           });
         }
+
+        const pageInfo = response?.data?.data?.productOfferV2?.pageInfo;
+        if (pageInfo && pageInfo.hasNextPage === false) break;
       }
     } catch (_err) {
       // Isola falha por categoria sem relaxar os gates de qualidade.

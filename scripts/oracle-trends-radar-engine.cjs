@@ -63,12 +63,17 @@ const SHOPEE_BROAD_DISCOVERY_CATEGORIES = Object.freeze([
   100644, // Informática e Periféricos
   100636, // Móveis e Decoração / Ferramentas
   100630, // Beleza e Cuidados Pessoais
-  100535, // Áudio / TVs
+  100535, // Áudio / TVs / Eletrônicos
   100009, // Moda Masculina
   100011, // Moda Feminina
   100637, // Esportes e Fitness
   100631, // Pet Shop
   100634, // Games e Consoles
+  100632, // Brinquedos e Hobbies
+  100635, // Bebês e Crianças
+  100638, // Saúde e Bem-Estar
+  100639, // Automotivo
+  100640, // Livros e Papelaria
 ]);
 
 function defaultShopeeApiCaller(env = process.env) {
@@ -160,13 +165,17 @@ async function markTrendRadarRunRunning(client, runId, existingHealth = {}) {
 }
 
 /**
- * Coleta candidatos comerciais da Shopee com paginação oficial e parada quando vazia.
+ * Coleta candidatos comerciais da Shopee com paginação oficial, exploração máxima
+ * e parada determinística quando vazia.
  */
 async function collectShopeeMarketplaceCandidates({
   request = null,
   categoryIds = SHOPEE_BROAD_DISCOVERY_CATEGORIES,
-  maxPerCategory = 30,
+  maxPerCategory = 40,
+  maxPagesPerCategory = 2,
   page = 1,
+  sortType = 2,
+  isAMSOffer = undefined,
   env = process.env,
 } = {}) {
   const caller = request || defaultShopeeApiCaller(env);
@@ -178,91 +187,105 @@ async function collectShopeeMarketplaceCandidates({
     ? categoryIds
     : [null];
 
+  const pageLimit = Math.max(5, Math.min(50, Number(maxPerCategory) || 40));
+  const pagesToScan = Math.max(1, Math.min(5, Math.floor(Number(maxPagesPerCategory) || 2)));
+  const basePage = Math.max(1, Number(page) || 1);
+
   for (const catId of targetCategories) {
     try {
-      const variables = {
-        page: Math.max(1, Number(page) || 1),
-        limit: Math.max(5, Number(maxPerCategory) || 30),
-        sortType: 2, // Popularidade / Vendas reais
-        isAMSOffer: true,
-      };
-      if (catId) {
-        variables.productCatId = catId;
-      }
+      for (let offset = 0; offset < pagesToScan; offset += 1) {
+        const currentPage = basePage + offset;
+        const variables = {
+          page: currentPage,
+          limit: pageLimit,
+          sortType: typeof sortType === 'number' ? sortType : 2, // Popularidade / Vendas reais
+        };
+        if (catId) {
+          variables.productCatId = catId;
+        }
+        if (typeof isAMSOffer === 'boolean') {
+          variables.isAMSOffer = isAMSOffer;
+        }
 
-      const response = await caller(
-        'ShopeePromotionOffers',
-        GRAPHQL_CONTRACTS.productOfferV2.query,
-        variables,
-        { timeoutMs: 15000 }
-      );
+        const response = await caller(
+          'ShopeePromotionOffers',
+          GRAPHQL_CONTRACTS.productOfferV2.query,
+          variables,
+          { timeoutMs: 15000 }
+        );
 
-      const nodes = response?.data?.data?.productOfferV2?.nodes || [];
-      if (!Array.isArray(nodes) || nodes.length === 0) {
-        // Categoria sem mais produtos nesta página
-        continue;
-      }
+        const nodes = response?.data?.data?.productOfferV2?.nodes || [];
+        if (!Array.isArray(nodes) || nodes.length === 0) {
+          // Categoria sem mais produtos nesta página -> interrompe paginação desta categoria
+          break;
+        }
 
-      for (const node of nodes) {
-        const itemId = String(node.itemId || '').trim();
-        const shopId = String(node.shopId || '').trim();
-        const productName = String(node.productName || '').trim();
-        if (!itemId || !productName) continue;
+        for (const node of nodes) {
+          const itemId = String(node.itemId || '').trim();
+          const shopId = String(node.shopId || '').trim();
+          const productName = String(node.productName || '').trim();
+          if (!itemId || !productName) continue;
 
-        const identityKey = `${shopId || '0'}:${itemId}`;
-        if (seenIdentities.has(identityKey)) continue;
-        seenIdentities.add(identityKey);
+          const identityKey = `${shopId || '0'}:${itemId}`;
+          if (seenIdentities.has(identityKey)) continue;
+          seenIdentities.add(identityKey);
 
-        const priceIntegrity = normalizePriceIntegrity({
-          price: node.price,
-          priceMin: node.priceMin,
-          priceMax: node.priceMax,
-          priceDiscountRate: node.priceDiscountRate,
-          officialOldPrice: node.officialOldPrice,
-        });
-        const price = priceIntegrity.currentPrice;
-        if (!(price > 0)) continue;
+          const priceIntegrity = normalizePriceIntegrity({
+            price: node.price,
+            priceMin: node.priceMin,
+            priceMax: node.priceMax,
+            priceDiscountRate: node.priceDiscountRate,
+            officialOldPrice: node.officialOldPrice,
+          });
+          const price = priceIntegrity.currentPrice;
+          if (!(price > 0)) continue;
 
-        const oldPrice = priceIntegrity.oldPrice;
-        const discount = priceIntegrity.discountPercent ?? 0;
-        const marketplaceReportedDiscountPercent = parseNumber(node.priceDiscountRate, 0);
-        const sales = parseInt(String(node.sales || '0'), 10) || 0;
-        const ratingStar = parseNumber(node.ratingStar, 0);
-        const commRate = parseNumber(node.commissionRate, 0);
-        const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
-        const commissionPercent = Math.round((commRate > 0 && commRate < 1 ? commRate * 100 : commRate) * 100) / 100;
-        const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate < 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
-        const shopType = Array.isArray(node.shopType) ? node.shopType : [];
-        const link = String(node.offerLink || node.productLink || '');
+          const oldPrice = priceIntegrity.oldPrice;
+          const discount = priceIntegrity.discountPercent ?? 0;
+          const marketplaceReportedDiscountPercent = parseNumber(node.priceDiscountRate, 0);
+          const sales = parseInt(String(node.sales || '0'), 10) || 0;
+          const ratingStar = parseNumber(node.ratingStar, 0);
+          const commRate = parseNumber(node.commissionRate, 0);
+          const sellerCommRate = parseNumber(node.sellerCommissionRate, 0);
+          const commissionPercent = Math.round((commRate > 0 && commRate < 1 ? commRate * 100 : commRate) * 100) / 100;
+          const sellerCommissionPercent = Math.round((sellerCommRate > 0 && sellerCommRate < 1 ? sellerCommRate * 100 : sellerCommRate) * 100) / 100;
+          const shopType = Array.isArray(node.shopType) ? node.shopType : [];
+          const link = String(node.offerLink || node.productLink || '');
 
-        candidates.push({
-          marketplace: 'Shopee',
-          itemId,
-          shopId,
-          shopName: String(node.shopName || ''),
-          productName,
-          category: 'Marketplace Deals',
-          currentPrice: price,
-          oldPrice,
-          priceDiscountRate: parseNumber(node.priceDiscountRate, discount),
-          discountPercent: discount || parseNumber(node.priceDiscountRate, 0),
-          marketplaceReportedDiscountPercent,
-          priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
-          priceAuthority: priceIntegrity.priceAuthority,
-          oldPriceAuthority: priceIntegrity.oldPriceAuthority,
-          discountAuthority: priceIntegrity.discountAuthority,
-          sales,
-          ratingStar: ratingStar > 0 ? ratingStar : null,
-          rating: ratingStar > 0 ? ratingStar : null,
-          commissionRate: commissionPercent,
-          commissionPercent,
-          sellerCommissionRate: sellerCommissionPercent,
-          shopType,
-          permalink: link,
-          imageUrl: String(node.imageUrl || ''),
-          provenance: 'shopee_openapi_productOfferV2',
-          observedAt: new Date().toISOString(),
-        });
+          candidates.push({
+            marketplace: 'Shopee',
+            itemId,
+            shopId,
+            shopName: String(node.shopName || ''),
+            productName,
+            category: 'Marketplace Deals',
+            currentPrice: price,
+            oldPrice,
+            priceDiscountRate: parseNumber(node.priceDiscountRate, discount),
+            discountPercent: discount || parseNumber(node.priceDiscountRate, 0),
+            marketplaceReportedDiscountPercent,
+            priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
+            priceAuthority: priceIntegrity.priceAuthority,
+            oldPriceAuthority: priceIntegrity.oldPriceAuthority,
+            discountAuthority: priceIntegrity.discountAuthority,
+            sales,
+            ratingStar: ratingStar > 0 ? ratingStar : null,
+            rating: ratingStar > 0 ? ratingStar : null,
+            commissionRate: commissionPercent,
+            commissionPercent,
+            sellerCommissionRate: sellerCommissionPercent,
+            shopType,
+            permalink: link,
+            imageUrl: String(node.imageUrl || ''),
+            provenance: 'shopee_openapi_productOfferV2',
+            observedAt: new Date().toISOString(),
+          });
+        }
+
+        const pageInfo = response?.data?.data?.productOfferV2?.pageInfo;
+        if (pageInfo && pageInfo.hasNextPage === false) {
+          break;
+        }
       }
     } catch (_err) {
       // Falha em uma categoria não aborta a coleta geral

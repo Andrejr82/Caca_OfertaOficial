@@ -26,8 +26,14 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
 - **Fail-closed preservado**: Preço inválido/não positivo, identidade nativa ausente ou link ausente/inválido continuam gerando `insufficient_data` (`isViable: false`). Avaliações baixas (`rating < 3.5`) ou micro-tickets inviáveis continuam classificados como `low` (`isViable: false`).
 - **Shopee**: Mantém suas regras sem regressão.
 
-### Task 3 — Shopee exploração máxima
-Expandir paginação/cobertura da API e separar descoberta de ranking, sem usar vendas/comissão como requisitos.
+### Task 3 — Shopee exploração máxima [CONCLUÍDA]
+- **Categorias ampliadas**: Cobertura expandida de 11 para 16 categorias oficiais da Shopee (adicionando Brinquedos e Hobbies `100632`, Bebês e Crianças `100635`, Saúde e Bem-Estar `100638`, Automotivo `100639` e Livros e Papelaria `100640`).
+- **Paginação real por categoria**: Suporte a múltiplas páginas por categoria (`maxPagesPerCategory = 2` por padrão, até 50 itens por página), com parada determinística quando `nodes` vier vazio ou `pageInfo.hasNextPage === false`.
+- **Estratégia de catálogo sem restrição artificial**: `isAMSOffer` não é mais forçado como `true` por padrão, permitindo explorar o catálogo amplo de produtos com link e comissão de afiliado.
+- **Descoberta ampla sem gates restritivos**: Produtos com preço válido e identidade `shopId + itemId` continuam sendo coletados mesmo sem vendas observadas ou sem comissão extraordinária (vendas/comissão atuam como bônus de ranking posterior).
+- **Deduplicação nativa**: Deduplicação em memória por `${shopId}:${itemId}` entre páginas e entre categorias.
+- **Resiliência**: Falha ou timeout em uma categoria isolada não aborta a coleta das demais.
+- **Campos ricos preservados**: Preço, descontos, avaliações, comissões, tipo de loja e links são integralmente preservados para o motor de ranking V4.
 
 ### Task 4 — Competitividade real
 Comparar candidatos equivalentes/famílias por preço e promoção; quando aplicável, normalizar preço por unidade/kg/litro.
