@@ -21,7 +21,9 @@ export interface InstagramStoryHandoffV4 {
  * Reels V4 permanece desligado por padrão até existir geração audiovisual
  * aprovada de ponta a ponta. A flag precisa ser opt-in explícito.
  */
-export function isInstagramReelsV4Enabled(env: Pick<NodeJS.ProcessEnv, "INSTAGRAM_REELS_V4_ENABLED"> = process.env) {
+export function isInstagramReelsV4Enabled(
+  env: { INSTAGRAM_REELS_V4_ENABLED?: string } = process.env,
+) {
   return env.INSTAGRAM_REELS_V4_ENABLED?.trim().toLocaleLowerCase("en-US") === "true";
 }
 
