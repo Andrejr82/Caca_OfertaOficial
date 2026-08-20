@@ -26,11 +26,22 @@ Substituir o renderer atual de Stories por uma arquitetura comercial determinís
 - nunca criar tela vazia para completar 3.
 
 ## Tasks
-### Task 1 — Classificador comercial e plano de frames
-Criar contrato determinístico `StoryV5Plan` com template, título comercial curto, fatos derivados e número de frames. TDD obrigatório.
+### Task 1 — Classificador comercial e plano de frames — CONCLUÍDA
+Contrato determinístico `StoryV5Plan` com template, título comercial curto, fatos derivados e número de frames. TDD: 6/6 PASS em validação local.
 
-### Task 2 — Renderer V5 nativo
-Criar novo renderer 1080x1920 independente do template V4 atual. Produto ocupa 50–65% da composição; preço e vantagem principal devem ser legíveis em menos de 1 segundo.
+### Task 2 — Renderer V5 nativo — IMPLEMENTADA / AGUARDANDO VALIDAÇÃO
+Novo renderer 1080x1920 independente do template V4 atual. Produto domina a composição, primeira tela é autossuficiente, preço/vantagem têm hierarquia visual alta, CTA é curto e não há texto interno de implementação/sticker.
+
+Arquivos:
+- `src/lib/social/instagram-story-v5-renderer.ts`
+- `src/tests/lib/social/instagram-story-v5-renderer.test.ts`
+
+Critérios de regressão:
+- `DISCOUNT_HERO` mostra desconto real, preço anterior e preço atual;
+- `PROOF_HERO` usa apenas prova estruturada aceita pelo plano;
+- `PRICE_HERO` não cria frames extras;
+- frames de reforço só existem quando previstos pelo `frameCount`;
+- nenhuma arte carrega instruções como `handoff`, `sticker`, `área livre` ou `preço atual informado`.
 
 ### Task 3 — Integração com endpoint/painel
 Fazer `/api/images/instagram-story` consumir `StoryV5Plan`, renderizar apenas os frames existentes e ajustar o painel para mostrar 1–3 botões dinamicamente.
