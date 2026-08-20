@@ -77,7 +77,7 @@ describe("SupabaseOfficialPublicationAdapter", () => {
     await expect(adapter.findOffer("offer-1", "tenant-1")).resolves.toEqual({ id: "offer-1", tenantId: "tenant-1", state: "approved", version: 2 });
     await expect(adapter.findPost("post-1", "tenant-1")).resolves.toMatchObject({
       id: "post-1", offerId: "offer-1", channel: "instagram", state: "draft", version: 0,
-      content: "Persistido", mediaUrl: "https://caca-oferta-oficial.vercel.app/api/images/whatsapp-premium?offerId=offer-1", destination: "instagram-account",
+      content: "Persistido", mediaUrl: "https://caca-oferta-oficial.vercel.app/api/images/whatsapp-premium?offerId=offer-1&v=neutral-v2", destination: "instagram-account",
       metadata: { instagramMode: "asynchronous" }
     });
     expect(offerBuilder.eq).toHaveBeenCalledWith("user_id", "tenant-1");
@@ -85,7 +85,7 @@ describe("SupabaseOfficialPublicationAdapter", () => {
   });
 
   it("uses the processed social image for every non-coupon publication channel", async () => {
-    const expectedMediaUrl = "https://caca-oferta-oficial.vercel.app/api/images/whatsapp-premium?offerId=offer-1";
+    const expectedMediaUrl = "https://caca-oferta-oficial.vercel.app/api/images/whatsapp-premium?offerId=offer-1&v=neutral-v2";
 
     for (const channel of ["telegram", "whatsapp", "facebook", "instagram"] as const) {
       const postBuilder = chain({
