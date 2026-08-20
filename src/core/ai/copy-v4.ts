@@ -114,7 +114,7 @@ function offerLine(facts: CopyV4Facts) {
   return `${formatBRL(facts.currentPrice)} no preço informado agora.`;
 }
 
-function commercialAngle(facts: CopyV4Facts, proofLine: string | null, benefitLine: string | null): CopyV4CommercialAngle {
+function resolveCommercialAngle(facts: CopyV4Facts, proofLine: string | null, benefitLine: string | null): CopyV4CommercialAngle {
   const saving = absoluteSaving(facts.currentPrice, facts.originalPrice);
   const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
   if (proofLine) return "proof";
@@ -145,7 +145,7 @@ export function buildConversionCopyV4Contract(facts: CopyV4Facts, channel: Offic
   const product = compactProductName(facts.shortName?.trim() || facts.productName);
   const proofLine = proofFromEvidence(facts);
   const benefitLine = benefitFromFacts(facts);
-  const commercialAngle = commercialAngle(facts, proofLine, benefitLine);
+  const commercialAngle = resolveCommercialAngle(facts, proofLine, benefitLine);
   return {
     product,
     commercialAngle,
