@@ -49,9 +49,46 @@ Arquivos da Task 1:
 A ativação no fluxo canônico da Official AI será feita somente quando o programa estiver pronto para o merge final, para preservar a meta de um único deploy de produção.
 
 ### Task 2 — Seleção de ofertas-herói
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Selecionar poucas ofertas com maior chance de clique/compra, sem substituir o Radar e sem usar ausência de comissão como veto.
+Objetivo: priorizar poucas ofertas com maior chance de clique/compra depois que a oportunidade já entrou no sistema. A Task 2 não substitui, rebaixa nem altera o Radar.
+
+Classificações:
+- `HERO`: prioridade máxima de exposição social;
+- `TEST`: boa candidata para exploração controlada;
+- `NORMAL`: oportunidade válida, sem prioridade especial;
+- `SKIP_SOCIAL`: não deve entrar na fila social por falha básica de preço/link.
+
+Sinais positivos auditáveis:
+- preço de impulso abaixo de R$100;
+- faixa de preço acessível até R$200;
+- desconto verificável por preço anterior válido;
+- economia absoluta em R$;
+- bestseller / Mais Vendido;
+- loja oficial / Mall;
+- rating forte quando persistido;
+- vendas do marketplace quando persistidas;
+- produto de leitura social simples;
+- novidade / ausência de exposição social recente.
+
+Regras duras:
+- ausência de comissão nunca elimina nem penaliza a oferta;
+- comissão não participa do score da Task 2;
+- link deve ser HTTPS válido;
+- preço atual deve ser positivo;
+- exposição recente é penalidade, não blacklist;
+- no máximo 3 HERO por seleção por padrão;
+- apenas um HERO por cluster semântico; duplicatas fortes são rebaixadas para `TEST`;
+- quota cheia rebaixa HERO excedente para `TEST`, nunca rejeita a oferta;
+- nenhuma classificação publica automaticamente.
+
+Arquivos da Task 2:
+- `src/lib/social/hero-selection.ts`
+- `src/tests/lib/social/hero-selection.test.ts`
+
+Fixture principal de regressão: Mochila Jiesipote do Mercado Livre por R$88, preço anterior R$269 e destaque BEST_SELLER Top #14 deve resultar em `HERO`, sem depender de comissão ou histórico interno.
+
+A ativação no fluxo canônico social será feita somente no fechamento do programa, junto das regras específicas por canal, para preservar a meta de um único deploy de produção.
 
 ### Task 3 — WhatsApp Conversion
 Status: PENDENTE.
