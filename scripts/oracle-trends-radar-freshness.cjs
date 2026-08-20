@@ -11,6 +11,7 @@
  */
 
 const DEFAULT_RECENCY_DAYS = 7;
+const BLOCKING_OFFER_STATUSES = Object.freeze(['approved', 'selected', 'posted']);
 
 function normalizeIdentityPart(value) {
   return String(value || '')
@@ -328,7 +329,8 @@ async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
   while (true) {
     let query = client
       .from('offers')
-      .select('platform, shopee_item_id, item_id, product_id');
+      .select('platform, shopee_item_id, item_id, product_id, status')
+      .in('status', BLOCKING_OFFER_STATUSES);
 
     if (tenantId) query = query.eq('user_id', tenantId);
 
@@ -349,6 +351,7 @@ async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
 
 module.exports = {
   DEFAULT_RECENCY_DAYS,
+  BLOCKING_OFFER_STATUSES,
   normalizeIdentityPart,
   normalizeMarketplaceSlug,
   getMarketplaceIdentityKey,
