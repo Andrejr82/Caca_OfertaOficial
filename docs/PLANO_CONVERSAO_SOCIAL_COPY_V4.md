@@ -185,9 +185,33 @@ Fixture principal: Mochila Jiesipote deve exibir Top #14 antes de R$88, depois b
 A integração com a persistência/publicação canônica ficará para o fechamento do programa, junto da ativação da Copy V4, para preservar um único deploy de produção.
 
 ### Task 6 — Facebook Conversion
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Feed orientado a confiança/prova e CTA coerente com o primeiro comentário quando aplicável.
+Objetivo: usar o feed para confiança/prova e manter o tracked URL exclusivamente no primeiro comentário, com uma única rota de ação.
+
+Contrato:
+- `feed`: hook -> prova -> preço/economia -> benefício -> condição factual -> CTA para primeiro comentário;
+- `firstComment`: uma única CTA `Conferir o preço atual` + tracked URL HTTPS.
+
+Regras:
+- feed não contém URL direta;
+- primeiro comentário contém exatamente um tracked URL;
+- prova e preço aparecem cedo;
+- máximo de 6 blocos no feed;
+- sem “Veja a oferta”, “link na bio” ou “link abaixo”;
+- sem urgência, estoque ou prazo inventados;
+- frete só aparece quando `freeShipping === true`;
+- sem prova social quando não houver evidência persistida;
+- URL inválida ou não HTTPS falha fechado;
+- nenhuma publicação automática.
+
+Arquivos da Task 6:
+- `src/lib/social/facebook-conversion.ts`
+- `src/tests/lib/social/facebook-conversion.test.ts`
+
+Fixture principal: Mochila Jiesipote deve exibir Top #14 antes de R$88 no feed, orientar uma única vez para o primeiro comentário e manter o tracked URL exclusivamente nesse comentário.
+
+A integração com a persistência/publicação canônica do Facebook ficará para o fechamento do programa; a Task 6 apenas define e testa o contrato correto, sem alterar produção nesta etapa.
 
 ### Task 7 — Telemetria comercial
 Status: PENDENTE.
