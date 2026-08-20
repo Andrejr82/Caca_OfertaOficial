@@ -32,15 +32,12 @@ describe("integração canônica Copy V4", () => {
     expect(copy).not.toMatch(/https?:\/\//u);
   });
 
-  it("transforma Instagram em handoff de Stories e não em legenda de Reel", () => {
+  it("transforma Instagram em legenda comercial de Reel", () => {
     const copy = buildCanonicalCopyV4ChannelDraft(facts, "instagram");
-    expect(copy).toContain("STORIES V4 · HANDOFF MANUAL");
-    expect(copy).toContain("TELA 1/3");
-    expect(copy).toContain("TELA 2/3");
-    expect(copy).toContain("TELA 3/3");
+    expect(copy).toMatch(/^REELS · AGUARDANDO VÍDEO/u);
     expect(copy).toContain("Top #14");
     expect(copy).toContain("R$ 88,00");
+    expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker/iu);
     expect(copy).not.toMatch(/https?:\/\//u);
-    expect(copy).not.toMatch(/REELS/iu);
   });
 });
