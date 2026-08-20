@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildStoryV5Plan } from "@/lib/social/instagram-story-v5";
 import {
   buildStoryV5FrameModel,
+  type StoryV5FrameModel,
   type StoryV5VisualFacts,
 } from "@/lib/social/instagram-story-v5-renderer";
 
@@ -9,6 +10,12 @@ const visual: StoryV5VisualFacts = {
   marketplace: "Shopee",
   imageUrl: "https://images.example.com/produto.jpg",
 };
+
+function requireFrame(frame: StoryV5FrameModel | null): StoryV5FrameModel {
+  expect(frame).not.toBeNull();
+  if (!frame) throw new Error("Story V5 frame esperado não foi gerado.");
+  return frame;
+}
 
 describe("Instagram Story Engine V5 renderer", () => {
   it("makes the first DISCOUNT_HERO frame self-sufficient", () => {
@@ -22,7 +29,7 @@ describe("Instagram Story Engine V5 renderer", () => {
       evidence: {},
     });
 
-    const frame = buildStoryV5FrameModel(plan, visual, 1);
+    const frame = requireFrame(buildStoryV5FrameModel(plan, visual, 1));
 
     expect(frame.variant).toBe("discount");
     expect(frame.imageUrl).toBe(visual.imageUrl);
@@ -58,7 +65,7 @@ describe("Instagram Story Engine V5 renderer", () => {
       evidence: { rating: 4.9 },
     });
 
-    const frame = buildStoryV5FrameModel(plan, visual, 1);
+    const frame = requireFrame(buildStoryV5FrameModel(plan, visual, 1));
 
     expect(frame.variant).toBe("proof");
     expect(frame.hero).toBe("4,9 ★");
@@ -77,11 +84,10 @@ describe("Instagram Story Engine V5 renderer", () => {
     });
 
     expect(plan.frameCount).toBe(3);
-    const frame = buildStoryV5FrameModel(plan, visual, 2);
+    const frame = requireFrame(buildStoryV5FrameModel(plan, visual, 2));
 
-    expect(frame).not.toBeNull();
-    expect(frame?.variant).toBe("reinforcement");
-    expect(["4,9 ★", "FRETE GRÁTIS"]).toContain(frame?.hero);
+    expect(frame.variant).toBe("reinforcement");
+    expect(["4,9 ★", "FRETE GRÁTIS"]).toContain(frame.hero);
   });
 
   it("never prints implementation instructions or a fake sticker area", () => {
