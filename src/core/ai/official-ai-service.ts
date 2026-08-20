@@ -14,6 +14,8 @@ import type {
 
 export { OFFICIAL_AI_PAGE_CONCURRENCY };
 
+export const INSTAGRAM_REELS_DRAFT_MARKER = "REELS · AGUARDANDO VÍDEO";
+
 function copyV4FactsFromOffer(offer: OfficialAIOffer): CopyV4Facts {
   const explainabilityMetrics = offer.explainability?.marketplace_metrics;
   return {
@@ -58,22 +60,20 @@ function decisionBlocks(facts: CopyV4Facts) {
  * Copy V4 canônica antes da materialização do tracked URL.
  * WhatsApp/Telegram terminam com uma seta vazia de propósito: o adapter oficial
  * anexa ali o único tracked URL. Facebook reserva o destino ao primeiro comentário.
- * Instagram vira um handoff de Stories e a rota de publicação impede que isso seja
- * enviado acidentalmente como Feed/Reel.
+ * Instagram agora prepara apenas a legenda comercial do futuro Reel. Não existem
+ * mais telas/cards estáticos de Stories neste contrato.
  */
 export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: OfficialAIChannel) {
-  const { contract, blocks } = decisionBlocks(facts);
+  const { blocks } = decisionBlocks(facts);
 
   if (channel === "facebook") {
     return [...blocks, "👉 Conferir o preço atual no primeiro comentário. 👇"].join("\n\n");
   }
   if (channel === "instagram") {
-    const proofOffer = [contract.proofLine, contract.offerLine].filter(Boolean).join("\n");
     return [
-      "STORIES V4 · HANDOFF MANUAL",
-      `TELA 1/3\n${contract.hook}`,
-      `TELA 2/3\n${proofOffer || contract.benefitLine || contract.product}`,
-      "TELA 3/3\n👉 Conferir o preço atual",
+      INSTAGRAM_REELS_DRAFT_MARKER,
+      ...blocks,
+      "👉 Confira a oferta pelo link disponível no perfil.",
     ].join("\n\n");
   }
   return [...blocks, "👉 Conferir o preço atual", "👉"].join("\n\n");
