@@ -276,7 +276,7 @@ function frameThree(model: CommercialStoryModel) {
     React.createElement(
       "div",
       { style: { fontSize: 31, fontWeight: 900, letterSpacing: 2.2, color: "#fde68a" } },
-      "CONFIRA ANTES QUE O PREÇO MUDE",
+      "CONFIRA O PREÇO ATUAL",
     ),
     productImage(model, 650),
     React.createElement(
