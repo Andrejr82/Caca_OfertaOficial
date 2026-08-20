@@ -1,48 +1,54 @@
 import { describe, expect, it } from "vitest";
 import {
   assertInstagramV4PublicationAllowed,
+  isInstagramReelsDraft,
   isInstagramStoriesV4Handoff,
 } from "@/lib/social/meta-publication-guard";
 
 describe("Social Copy V4 — Meta publication guard", () => {
-  it("reconhece o handoff canônico de Stories V4", () => {
+  it("recognizes legacy Stories only for quarantine", () => {
     expect(isInstagramStoriesV4Handoff("STORIES V4 · HANDOFF MANUAL\n\nTELA 1/3")).toBe(true);
-    expect(isInstagramStoriesV4Handoff("Legenda normal de feed")).toBe(false);
+    expect(isInstagramStoriesV4Handoff("REELS · AGUARDANDO VÍDEO")).toBe(false);
   });
 
-  it("impede Stories V4 de cair silenciosamente no Feed", () => {
+  it("recognizes new Reel drafts", () => {
+    expect(isInstagramReelsDraft("REELS · AGUARDANDO VÍDEO\n\nOferta")).toBe(true);
+    expect(isInstagramReelsDraft("Legenda normal de feed")).toBe(false);
+  });
+
+  it("blocks legacy static Stories from every publication transport", () => {
     expect(() => assertInstagramV4PublicationAllowed({
       content: "STORIES V4 · HANDOFF MANUAL\n\nTELA 1/3\nOferta",
       mediaType: "FEED",
       reelsEnabled: false,
-    })).toThrow(/manual link-sticker handoff/iu);
-  });
+    })).toThrow(/retired/iu);
 
-  it("impede Stories V4 de cair em Reels mesmo com a flag ligada", () => {
     expect(() => assertInstagramV4PublicationAllowed({
       content: "STORIES V4 · HANDOFF MANUAL\n\nTELA 1/3\nOferta",
       mediaType: "REELS",
       reelsEnabled: true,
-    })).toThrow(/manual link-sticker handoff/iu);
+    })).toThrow(/retired/iu);
   });
 
-  it("mantém Reels bloqueado quando a feature flag está desligada", () => {
+  it("blocks Reel drafts from falling through to Feed", () => {
     expect(() => assertInstagramV4PublicationAllowed({
-      content: "Legenda de Reel aprovado",
+      content: "REELS · AGUARDANDO VÍDEO\n\nOferta",
+      mediaType: "FEED",
+      reelsEnabled: false,
+    })).toThrow(/requires REELS transport/iu);
+  });
+
+  it("keeps Reels blocked while audiovisual generation is disabled", () => {
+    expect(() => assertInstagramV4PublicationAllowed({
+      content: "REELS · AGUARDANDO VÍDEO\n\nOferta",
       mediaType: "REELS",
       reelsEnabled: false,
     })).toThrow(/Reels V4 is disabled/iu);
   });
 
-  it("permite feed legado normal e Reel somente com opt-in explícito", () => {
+  it("allows a Reel draft only through REELS with explicit opt-in", () => {
     expect(() => assertInstagramV4PublicationAllowed({
-      content: "Legenda normal de feed",
-      mediaType: "FEED",
-      reelsEnabled: false,
-    })).not.toThrow();
-
-    expect(() => assertInstagramV4PublicationAllowed({
-      content: "Legenda de Reel aprovado",
+      content: "REELS · AGUARDANDO VÍDEO\n\nOferta",
       mediaType: "REELS",
       reelsEnabled: true,
     })).not.toThrow();
