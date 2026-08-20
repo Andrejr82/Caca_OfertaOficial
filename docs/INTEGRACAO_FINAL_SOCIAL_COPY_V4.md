@@ -27,6 +27,8 @@ Regras:
 - tracked URL HTTPS obrigatório;
 - três telas na ordem fixa;
 - o handoff canônico começa com `STORIES V4 · HANDOFF MANUAL`;
+- o painel expõe 3 artes PNG 1080x1920, uma por tela, geradas pelo endpoint `/api/images/instagram-story`;
+- a terceira arte orienta o operador a adicionar o sticker de link antes da publicação;
 - o transporte oficial falha fechado se esse handoff tentar cair em Feed ou Reels;
 - nenhuma publicação automática de Stories é introduzida.
 
@@ -46,8 +48,8 @@ Motivo: o projeto já possui transporte técnico de Reels, porém a geração au
 ## Integração Copy V4 por canal
 
 - WhatsApp/Telegram: draft canônico termina em CTA única e recebe exatamente um tracked URL na materialização;
-- Facebook: corpo permanece sem URL e orienta para o primeiro comentário;
-- Instagram: draft canônico é o handoff de Stories, sem URL direta na legenda;
+- Facebook: corpo permanece sem URL, enquanto o adapter oficial injeta o `tracked_url` persistido como `metadata.affiliateLink` para o transporte publicar o link no primeiro comentário;
+- Instagram: draft canônico é o handoff de Stories, sem URL direta na legenda, com 3 artes PNG prontas no painel;
 - Reels não é requisito para ativar o programa comercial.
 
 ## Arquivos desta integração
@@ -57,7 +59,11 @@ Motivo: o projeto já possui transporte técnico de Reels, porém a geração au
 - `src/lib/social/meta-delivery-policy.ts`
 - `src/lib/social/meta-publication-guard.ts`
 - `src/app/api/instagram/publish/route.ts`
+- `src/app/api/images/instagram-story/route.ts`
+- `src/app/(dashboard)/instagram/page.tsx`
 - `src/lib/publication/official/create-official-publication-service.ts`
+- `src/lib/publication/official/supabase-official-publication-adapter.ts`
+- `src/tests/lib/publication/facebook-first-comment-v4.test.ts`
 - `src/tests/lib/social/meta-delivery-policy.test.ts`
 - `src/tests/lib/social/meta-publication-guard.test.ts`
 - `src/tests/core/ai/social-copy-v4-canonical-integration.test.ts`
@@ -79,10 +85,10 @@ Motivo: o projeto já possui transporte técnico de Reels, porém a geração au
 
 1. confirmar regressões de Copy V4 por canal;
 2. confirmar que Stories nunca cai em Feed/Reels;
-3. confirmar Facebook sem URL no corpo;
-4. executar lint, typecheck, testes, build e security check;
-5. revisar `git diff --check` equivalente;
-6. somente então preparar o único PR/merge final e deixar a Vercel fazer o auto-deploy de produção.
+3. confirmar que as 3 artes PNG de Stories são geradas e abrem no painel;
+4. confirmar Facebook sem URL no corpo e com `affiliateLink` no transporte para o primeiro comentário;
+5. executar regressões direcionadas + `git diff --check` e comparar typecheck com baseline da `main`;
+6. somente então autorizar o merge final e deixar a Vercel fazer o auto-deploy de produção.
 
 ## Oracle
 
