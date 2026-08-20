@@ -12,6 +12,7 @@ import { evaluateInstagramPolicy } from "@/lib/instagram/policy-guard";
 import { evaluateInstagramSafety, instagramVideoFingerprint, validateInstagramReelMetadata } from "@/lib/instagram/safety";
 import { fetchInstagramContentPublishingLimit } from "@/lib/instagram/content-publishing-limit";
 import { discoverInstagramBusinessId } from "@/lib/instagram/client";
+import { isInstagramReelsV4Enabled } from "@/lib/social/meta-delivery-policy";
 
 type PublicationBody = {
   postId?: string; offerId?: string; videoJobId?: string; commandId?: string; idempotencyKey?: string;
@@ -65,6 +66,18 @@ export async function POST(request: Request) {
       }
     }
     if (!postId || !offerId) return NextResponse.json({ ok: false, message: "postId e offerId são obrigatórios." }, { status: 400 });
+
+    // Programa Copy V4: Reels permanece opt-in. A geração audiovisual atual ainda
+    // não foi homologada de ponta a ponta, portanto nenhum request consegue
+    // publicar Reel por acidente apenas por existir um videoJob aprovado.
+    if (mediaType === "REELS" && !isInstagramReelsV4Enabled()) {
+      return NextResponse.json({
+        ok: false,
+        code: "INSTAGRAM_REELS_DISABLED",
+        message: "Reels está desativado por segurança até a geração audiovisual ser homologada."
+      }, { status: 409 });
+    }
+
     if (mediaType === "REELS") {
       if (!videoUrl || !/^https:\/\//i.test(videoUrl)) {
         return NextResponse.json({ ok: false, code: "INVALID_REEL_VIDEO_URL", message: "Reels exige uma URL HTTPS pública do vídeo." }, { status: 400 });

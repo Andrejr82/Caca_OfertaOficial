@@ -1,7 +1,7 @@
 # Plano de Conversão Social — Copy V4
 
 Data: 2026-08-20
-Status: em execução
+Status: integração final em execução
 Objetivo: sair de zero vendas priorizando conversão real em redes sociais sem reabrir o Radar sem evidência.
 
 ## Princípios
@@ -46,12 +46,8 @@ Arquivos da Task 1:
 - `src/core/ai/copy-v4.ts`
 - `src/tests/core/ai/copy-v4.test.ts`
 
-A ativação no fluxo canônico da Official AI será feita somente quando o programa estiver pronto para o merge final, para preservar a meta de um único deploy de produção.
-
 ### Task 2 — Seleção de ofertas-herói
 Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
-
-Objetivo: priorizar poucas ofertas com maior chance de clique/compra depois que a oportunidade já entrou no sistema. A Task 2 não substitui, rebaixa nem altera o Radar.
 
 Classificações:
 - `HERO`: prioridade máxima de exposição social;
@@ -59,188 +55,185 @@ Classificações:
 - `NORMAL`: oportunidade válida, sem prioridade especial;
 - `SKIP_SOCIAL`: não deve entrar na fila social por falha básica de preço/link.
 
-Sinais positivos auditáveis:
-- preço de impulso abaixo de R$100;
-- faixa de preço acessível até R$200;
-- desconto verificável por preço anterior válido;
-- economia absoluta em R$;
-- bestseller / Mais Vendido;
-- loja oficial / Mall;
-- rating forte quando persistido;
-- vendas do marketplace quando persistidas;
-- produto de leitura social simples;
-- novidade / ausência de exposição social recente.
-
 Regras duras:
 - ausência de comissão nunca elimina nem penaliza a oferta;
-- comissão não participa do score da Task 2;
-- link deve ser HTTPS válido;
-- preço atual deve ser positivo;
+- comissão não participa do score;
+- link HTTPS e preço positivo são obrigatórios;
 - exposição recente é penalidade, não blacklist;
 - no máximo 3 HERO por seleção por padrão;
-- apenas um HERO por cluster semântico; duplicatas fortes são rebaixadas para `TEST`;
-- quota cheia rebaixa HERO excedente para `TEST`, nunca rejeita a oferta;
+- apenas um HERO por cluster semântico;
 - nenhuma classificação publica automaticamente.
 
 Arquivos da Task 2:
 - `src/lib/social/hero-selection.ts`
 - `src/tests/lib/social/hero-selection.test.ts`
 
-Fixture principal de regressão: Mochila Jiesipote do Mercado Livre por R$88, preço anterior R$269 e destaque BEST_SELLER Top #14 deve resultar em `HERO`, sem depender de comissão ou histórico interno.
-
-A ativação no fluxo canônico social será feita somente no fechamento do programa, junto das regras específicas por canal, para preservar a meta de um único deploy de produção.
+Fixture principal: Mochila Jiesipote por R$88, preço anterior R$269 e BEST_SELLER Top #14 deve resultar em `HERO` sem depender de comissão.
 
 ### Task 3 — WhatsApp Conversion
 Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Objetivo: transformar a Copy V4 em mensagem de alta intenção para WhatsApp, curta e diretamente acionável.
-
-Ordem de decisão:
+Ordem:
 `Hook -> prova -> preço/economia -> benefício -> condição factual -> CTA + link rastreado`.
 
 Regras:
-- prova e preço aparecem antes de contexto secundário quando existirem;
 - máximo de 6 blocos;
 - sem hashtags;
-- sem linha burocrática de marketplace;
-- sem “Veja a oferta”, “link abaixo” ou CTA genérico;
-- exatamente uma CTA: `Conferir o preço atual`;
-- exatamente um link rastreado HTTPS;
-- link é recebido já resolvido pela camada de persistência, sem placeholder;
-- URL inválida ou não HTTPS falha fechado;
-- frete só aparece quando `freeShipping === true`;
-- nenhuma urgência ou escassez sem evidência;
+- exatamente uma CTA `Conferir o preço atual`;
+- exatamente um tracked URL HTTPS;
+- frete só quando confirmado;
+- nenhuma urgência inventada;
 - nenhuma publicação automática.
 
-Arquivos da Task 3:
+Arquivos:
 - `src/lib/social/whatsapp-conversion.ts`
 - `src/tests/lib/social/whatsapp-conversion.test.ts`
 
-Fixture principal: Mochila Jiesipote deve exibir Top #14 antes do preço, preço antes do benefício, uma única CTA e um único link rastreado.
-
-A integração com `SupabaseOfficialAIAdapter/materializeDraftContent` ficará para o fechamento do programa. O renderer final já aceita o tracked URL e é compatível com a regra existente de não duplicar uma URL rastreada válida.
-
 ### Task 4 — Instagram Stories + Reels
-Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
-
-Objetivo: transformar uma oferta HERO/TEST em plano visual curto e factual para descoberta + fechamento no Instagram, sem misturar duas rotas de ação.
+Status: IMPLEMENTADA; ENTREGA META SENDO INTEGRADA COM STORIES MANUAL E REELS DESATIVADO POR PADRÃO.
 
 Stories V4 — 3 telas:
-1. `hook`: interrupção imediata;
-2. `proof_offer`: prova verificável + preço/economia;
-3. `action`: CTA única `Conferir o preço atual` com sticker de link rastreado HTTPS.
+1. hook;
+2. prova + preço/economia;
+3. CTA `Conferir o preço atual`.
 
-Reels V4 — 13 segundos:
-- `0–2s`: hook;
-- `2–6s`: prova ou benefício factual;
-- `6–10s`: preço/economia;
-- `10–13s`: CTA única para conferir o preço nos Stories.
+Decisão de integração Meta:
+- modo Stories desta fase: `manual_link_sticker`;
+- o sistema prepara as 3 telas e o tracked URL;
+- o operador adiciona manualmente o sticker de link na terceira tela;
+- `publishAutomatically: false`;
+- Reels exige opt-in explícito `INSTAGRAM_REELS_V4_ENABLED=true` e permanece desligado por padrão.
 
-Regras:
-- URL rastreada existe apenas no destino da última tela de Stories;
-- Reel não recebe URL direta no texto;
-- sem hashtags no roteiro estrutural;
-- sem “link na bio ou nos Stories” com duas rotas concorrentes;
-- bestseller/posição só aparecem quando persistidos;
-- sem prova social: usar benefício factual; se também faltar, fallback seguro;
-- sem urgência, escassez ou prazo inventados;
-- destino de Story inválido ou não HTTPS falha fechado;
-- nenhuma publicação automática;
-- não toca Remotion/renderização de vídeo nesta Task: aqui o contrato visual é definido e testado; integração audiovisual fica para o fechamento apropriado do programa.
+Motivo: a publicação de Stories via API não entrega o sticker interativo necessário para o CTA rastreável; e a geração audiovisual de Reels ainda não está homologada de ponta a ponta.
 
-Arquivos da Task 4:
+Arquivos:
 - `src/lib/social/instagram-conversion.ts`
 - `src/tests/lib/social/instagram-conversion.test.ts`
-
-Fixture principal: Mochila Jiesipote deve colocar Top #14 e R$88 na segunda tela de Stories; Reel deve apresentar hook em 0–2s, prova antes do preço e terminar em uma ação única sem URL direta.
+- `src/lib/social/meta-delivery-policy.ts`
+- `src/tests/lib/social/meta-delivery-policy.test.ts`
 
 ### Task 5 — Telegram Conversion
 Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Objetivo: substituir o formato de catálogo por um alerta comercial curto e escaneável, adequado a um canal de alta intenção.
-
-Ordem de decisão:
+Formato de alerta curto:
 `Hook -> prova -> preço/economia -> benefício -> condição factual -> CTA + link rastreado`.
 
-Regras:
-- prova e preço aparecem antes de benefício/contexto secundário quando existirem;
-- máximo de 6 blocos;
-- sem hashtags;
-- sem linha burocrática de marketplace;
-- sem “Veja a oferta”, “link abaixo” ou CTA genérico;
-- exatamente uma CTA: `Conferir o preço atual`;
-- exatamente um link rastreado HTTPS;
-- frete aparece apenas quando `freeShipping === true`;
-- sem urgência, estoque ou prazo inventados;
-- sem prova social quando não houver evidência persistida;
-- URL inválida ou não HTTPS falha fechado;
-- nenhuma publicação automática.
-
-Arquivos da Task 5:
+Arquivos:
 - `src/lib/social/telegram-conversion.ts`
 - `src/tests/lib/social/telegram-conversion.test.ts`
-
-Fixture principal: Mochila Jiesipote deve exibir Top #14 antes de R$88, depois benefício factual, terminando com um único CTA e um único tracked URL.
-
-A integração com a persistência/publicação canônica ficará para o fechamento do programa, junto da ativação da Copy V4, para preservar um único deploy de produção.
 
 ### Task 6 — Facebook Conversion
 Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Objetivo: usar o feed para confiança/prova e manter o tracked URL exclusivamente no primeiro comentário, com uma única rota de ação.
-
 Contrato:
-- `feed`: hook -> prova -> preço/economia -> benefício -> condição factual -> CTA para primeiro comentário;
-- `firstComment`: uma única CTA `Conferir o preço atual` + tracked URL HTTPS.
+- feed: hook -> prova -> preço/economia -> benefício -> condição factual -> CTA para primeiro comentário;
+- primeiro comentário: CTA + tracked URL HTTPS.
 
-Regras:
-- feed não contém URL direta;
-- primeiro comentário contém exatamente um tracked URL;
-- prova e preço aparecem cedo;
-- máximo de 6 blocos no feed;
-- sem “Veja a oferta”, “link na bio” ou “link abaixo”;
-- sem urgência, estoque ou prazo inventados;
-- frete só aparece quando `freeShipping === true`;
-- sem prova social quando não houver evidência persistida;
-- URL inválida ou não HTTPS falha fechado;
-- nenhuma publicação automática.
+A infraestrutura oficial de publicação já aceita `affiliateLink` para o primeiro comentário; a integração final deve preservar o feed sem URL direta.
 
-Arquivos da Task 6:
+Arquivos:
 - `src/lib/social/facebook-conversion.ts`
 - `src/tests/lib/social/facebook-conversion.test.ts`
 
-Fixture principal: Mochila Jiesipote deve exibir Top #14 antes de R$88 no feed, orientar uma única vez para o primeiro comentário e manter o tracked URL exclusivamente nesse comentário.
-
-A integração com a persistência/publicação canônica do Facebook ficará para o fechamento do programa; a Task 6 apenas define e testa o contrato correto, sem alterar produção nesta etapa.
-
 ### Task 7 — Telemetria comercial
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Medir por oferta x canal: publicação, clique, CTR, compra/conversão, EPC e ausência de conversão.
+Mede por oferta x canal:
+- publicação;
+- impressão quando conhecida;
+- clique / CTR;
+- compra / conversão;
+- EPC quando há ganho afiliado real;
+- estágio `unpublished | no_click | no_purchase | converted`.
+
+Ausência de denominador ou receita permanece `null`, nunca zero inventado.
+
+Arquivos:
+- `src/lib/social/commercial-telemetry.ts`
+- `src/tests/lib/social/commercial-telemetry.test.ts`
+- `docs/TASK_07_TELEMETRIA_COMERCIAL.md`
 
 ### Task 8 — Experimentos A/B
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Testar ângulos de preço, economia, prova, benefício e oportunidade sem alterar fatos.
+Compara `proof | saving | price | benefit | standard` apenas na mesma oferta e canal.
+
+Guardrails:
+- conversão comparável com pelo menos 20 cliques por variante;
+- CTR como fallback com pelo menos 200 impressões por variante;
+- pelo menos 10% de liderança relativa;
+- `leader` é observacional, não prova causal/estatística.
+
+Arquivos:
+- `src/lib/social/copy-experiments.ts`
+- `src/tests/lib/social/copy-experiments.test.ts`
+- `docs/TASK_08_EXPERIMENTOS_AB_COPY.md`
 
 ### Task 9 — Cadência e fadiga
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Evitar repetição excessiva, competição entre posts e saturação do mesmo produto/cluster.
+Decisões:
+`ALLOW | DEFER`.
+
+Política padrão:
+- mesma oferta + mesmo canal: 24h;
+- mesmo cluster + mesmo canal: 8h;
+- mesma oferta entre canais: 2h;
+- máximo de 3 posts por canal em 2h.
+
+Nunca cria blacklist permanente; `DEFER` retorna `nextEligibleAt`.
+
+Arquivos:
+- `src/lib/social/cadence-fatigue.ts`
+- `src/tests/lib/social/cadence-fatigue.test.ts`
+- `docs/TASK_09_CADENCIA_FADIGA.md`
 
 ### Task 10 — Aprendizado comercial
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Somente depois de volume de dados suficiente, usar resultados reais de canal/conversão para influenciar seleção e copy futuras.
+Recomendações:
+- `LEARN_MORE`;
+- `TEST_ANGLE`;
+- `PREFER_ANGLE`;
+- `INVESTIGATE_OFFER`;
+- `WAIT_CADENCE`.
+
+Regras:
+- CTR líder sozinho gera teste, não preferência;
+- `PREFER_ANGLE` exige liderança por conversão com compra real;
+- `autoApply: false` sempre;
+- não altera Radar, HERO score, preço ou publicação automaticamente.
+
+Arquivos:
+- `src/lib/social/commercial-learning.ts`
+- `src/tests/lib/social/commercial-learning.test.ts`
+- `docs/TASK_10_APRENDIZADO_COMERCIAL.md`
+
+## Integração final
+
+Status: EM EXECUÇÃO.
+
+Decisões confirmadas:
+- Stories é o formato prioritário de Instagram nesta fase;
+- Stories usa handoff manual com sticker de link para preservar o tracked URL clicável;
+- Reels fica desativado por padrão e só pode ser habilitado por opt-in explícito;
+- não usar a fragilidade atual de Reels como bloqueio para WhatsApp, Telegram, Facebook e Stories;
+- nenhuma publicação automática é introduzida.
+
+Documento operacional: `docs/INTEGRACAO_FINAL_SOCIAL_COPY_V4.md`.
 
 ## Critério de saída do programa
 
 Antes do merge final:
-- todas as tasks aprovadas;
+- integrar Copy V4 ao draft canônico por canal;
+- preservar Facebook com URL no primeiro comentário, não no corpo;
+- garantir Reels desligado por padrão;
+- validar o handoff de Stories com tracked URL;
 - testes verdes;
 - lint verde;
 - typecheck verde;
 - build verde;
+- security check verde;
 - `git diff --check` equivalente limpo;
 - revisão final de segurança factual;
 - confirmar que nenhuma alteração exige Oracle não executada;
