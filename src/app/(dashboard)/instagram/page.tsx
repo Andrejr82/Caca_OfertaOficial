@@ -76,7 +76,7 @@ export default async function InstagramDashboardPage() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Instagram</h1>
-          <p className="text-xs text-white/35">Stories V4 com postagem manual e link rastreado. Reels permanece desativado até homologação.</p>
+          <p className="text-xs text-white/35">Stories V4 com 3 artes prontas e link rastreado. Reels permanece desativado até homologação.</p>
         </div>
       </header>
 
@@ -95,10 +95,26 @@ export default async function InstagramDashboardPage() {
                   <p className="text-xs font-semibold uppercase tracking-wider text-pink-300">{post.offers?.platform || "Instagram"}</p>
                   <h3 className="mt-1 font-bold text-white">{post.offers?.product_name}</h3>
                 </div>
-                <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-relaxed text-white/80">{post.content}</pre>
+                <div className="grid grid-cols-3 gap-2">
+                  {[1, 2, 3].map((frame) => (
+                    <a
+                      key={frame}
+                      href={`/api/images/instagram-story?postId=${encodeURIComponent(post.id)}&frame=${frame}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="rounded-xl border border-pink-400/25 bg-pink-500/10 px-3 py-3 text-center text-xs font-bold text-pink-200 transition hover:bg-pink-500/20"
+                    >
+                      Abrir Tela {frame}
+                    </a>
+                  ))}
+                </div>
+                <details className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/75">
+                  <summary className="cursor-pointer font-semibold text-white/80">Ver roteiro textual</summary>
+                  <pre className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-white/70">{post.content}</pre>
+                </details>
                 <div className="rounded-xl border border-pink-400/20 bg-pink-500/10 p-4 text-sm text-white/75">
                   <p className="font-semibold text-pink-200">Como postar</p>
-                  <p className="mt-1">Publique as telas 1, 2 e 3 nessa ordem. Na tela 3, adicione o sticker <strong>Link</strong> do Instagram usando exatamente o endereço rastreado abaixo.</p>
+                  <p className="mt-1">Abra as artes 1, 2 e 3 e publique nessa ordem. Na tela 3, adicione o sticker <strong>Link</strong> do Instagram usando exatamente o endereço rastreado abaixo.</p>
                   {post.affiliate_links?.tracked_url ? (
                     <a
                       href={post.affiliate_links.tracked_url}
