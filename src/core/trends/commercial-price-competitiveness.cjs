@@ -26,94 +26,214 @@ function parseNumber(value, fallback = null) {
 }
 
 /**
- * Extrai unidade e quantidade normalizadas a partir do título do produto.
- * Retorna: { unit: 'L' | 'kg' | 'unit' | null, quantity: number | null, rawUnit: string | null }
+ * Verifica se o título do produto corresponde a um item durável, eletrônico, eletrodoméstico,
+ * veículo, móvel, ferramenta, vestuário ou hardware onde especificações de peso/volume não representam
+ * quantidade comercial de venda (ex: 150kg de suporte em bicicleta, 64g de memória em console, 5G de rede em celular).
  */
-function extractProductUnitAndQuantity(title = '') {
-  const normalized = normalizeText(title);
-  if (!normalized) return { unit: null, quantity: null, rawUnit: null };
+function isDurableOrTechnicalProduct(normalizedTitle = '') {
+  if (!normalizedTitle) return false;
 
-  // 1. Multiplicadores compostos (ex: 2x 5L, 3x 500ml, 2x 1kg, 4x 500g, 2x 3 un)
-  const multMatch = normalized.match(/\b(\d{1,3})\s*x\s*(\d+(?:[.,]\d+)?)\s*(l|litros?|lt|lts|ml|mls|kg|quilos?|kilos?|g|gr|gramas?|unidades?|unids?|un|pecas?|peca|pares?|par|itens|item)\b/);
-  if (multMatch) {
-    const count = parseInt(multMatch[1], 10);
-    const subAmount = parseNumber(multMatch[2], 0);
-    const rawUnit = multMatch[3];
+  const DURABLE_PATTERNS = [
+    // Smartphones, celulares, telefonia, wearables
+    /\b(?:smartphones?|celulares?|telefones?|iphones?|galaxy|motorola|moto\s+[ge]|xiaomi|redmi|poco|realme|infinix|smartwatch(?:es)?|relogios?|smartbands?|tablets?|ipads?)\b/,
+    // Áudio, vídeo, fotografia, câmeras, segurança eletrônica
+    /\b(?:cameras?|cam\b|camer\b|dvr|nvr|gopro|webcams?|tv\b|smart\s*tv|televisao|televisoes|televisores?|monitores?|displays?|telas?|fones?|headsets?|headphones?|earphones?|airdots?|airpods?|caixa\s+de\s+som|soundbars?|speakers?|alexa|echo)\b/,
+    // Games, consoles, periféricos
+    /\b(?:consoles?|video\s*games?|videogames?|r36s|game\s*sticks?|nintendo|playstation|ps[1-5]\b|xbox|gamers?|joysticks?|gamepads?|controles?)\b/,
+    // Computadores, hardware, TI, escritório durável
+    /\b(?:notebooks?|laptops?|computadores?|pc\s+gamer|placas?\s+de\s+video|placas?\s+mae|gpus?|cpus?|processadores?|memorias?\s+ram|ssd\b|hd\s+externo|pendrives?|pen\s+drives?|mouses?|teclados?|gabinetes?|fontes?\s+atx|roteadores?|repetidores?|modems?|switches?|impressoras?|multifuncionais?|projetores?|scanners?|drones?|carregadores?|cabos?\s+(?:usb|hdmi|tipo\s*c)|adaptadores?|rtx|gtx|radeon|geforce)\b/,
+    // Eletrodomésticos e eletroportáteis
+    /\b(?:geladeiras?|refrigeradores?|freezers?|fogoes?|fogao|cooktops?|fornos?|microondas|micro\s+ondas|air\s*fryers?|fritadeiras?|liquidificadores?|batedeiras?|cafeteiras?|sanduicheiras?|grills?|espremedores?|ventiladores?|circuladores?|ar\s+condicionados?|climatizadores?|aquecedores?|aspiradores?|robo\s+aspirador|ferros?\s+de\s+passar|vaporizadores?|maquinas?\s+de\s+lavar|lava\s+e\s+seca|tanquinhos?|depuradores?|coifas?)\b/,
+    // Veículos, mobilidade, esportes duráveis e fitness
+    /\b(?:bicicletas?|bikes?|ergometricas?|spinning|patinetes?|scooters?|skates?|esteiras?|halteres?|anilhas?|barras?\s+de\s+musculacao|bancos?\s+supino|estacoes?\s+de\s+musculacao|capacetes?|pneus?|rodas?|amortecedores?)\b/,
+    // Móveis, louças sanitárias e decoração durável
+    /\b(?:cadeiras?|poltronas?|sofas?|mesas?|escrivaninhas?|armarios?|guarda\s+roupas?|estantes?|racks?|paineis?|camas?|colchoes?|colchao|vasos?\s+sanitarios?|privadas?|pias?|cubas?|torneiras?|chuveiros?|espelhos?|luminarias?|lustres?|abajures?)\b/,
+    // Ferramentas duráveis
+    /\b(?:furadeiras?|parafusadeiras?|esmerilhadeiras?|serras?|trenas?|maletas?\s+de\s+ferramentas?|jogos?\s+de\s+ferramentas?|alicates?|chaves?\s+de\s+fenda)\b/,
+    // Vestuário e calçados
+    /\b(?:tenis\b|sapatos?|botas?|sandalias?|chinelos?|camisas?|camisetas?|regatas?|blusas?|calcas?|bermudas?|shorts?|vestidos?|saias?|jaquetas?|casacos?|moletons?|moletom|cuecas?|calcinhas?|sutias?|sutia|meias?|bones?|mochilas?|bolsas?|carteiras?|oculos)\b/,
+    // Brinquedos duráveis
+    /\b(?:bonecas?|carrinhos?|legos?|blocos?\s+de\s+montar|quebra\s+cabecas?)\b/
+  ];
 
-    if (count > 0 && subAmount > 0) {
-      if (/^(?:l|litros?|lt|lts)$/.test(rawUnit)) {
-        return { unit: 'L', quantity: count * subAmount, rawUnit: 'L' };
-      }
-      if (/^(?:ml|mls)$/.test(rawUnit)) {
-        return { unit: 'L', quantity: (count * subAmount) / 1000, rawUnit: 'ml' };
-      }
-      if (/^(?:kg|quilos?|kilos?)$/.test(rawUnit)) {
-        return { unit: 'kg', quantity: count * subAmount, rawUnit: 'kg' };
-      }
-      if (/^(?:g|gr|gramas?)$/.test(rawUnit)) {
-        return { unit: 'kg', quantity: (count * subAmount) / 1000, rawUnit: 'g' };
-      }
-      if (/^(?:unidades?|unids?|un|pecas?|peca|pares?|par|itens|item)$/.test(rawUnit)) {
-        return { unit: 'unit', quantity: count * subAmount, rawUnit: 'unit' };
-      }
-    }
+  return DURABLE_PATTERNS.some((pattern) => pattern.test(normalizedTitle));
+}
+
+/**
+ * Verifica se o produto pertence a categorias ou nichos consumíveis / conteúdo físico factual (L/kg/ml/g).
+ */
+function isConsumableOrContentProduct(normalizedTitle = '') {
+  if (!normalizedTitle) return false;
+
+  const CONSUMABLE_PATTERNS = [
+    // Limpeza e cuidados domésticos
+    /\b(?:sabaos?|sabao|detergentes?|amaciantes?|desinfetantes?|aguas?\s+sanitarias?|alvejantes?|multiusos?|limpadores?|lustra\s+moveis|limpa\s+vidros|soda\s+caustica|cloro|tira\s+manchas|vanish|omo|ariel|ype|downy|comfort|veja|cif|ajax|urca|girando\s+sol|minuano|brilhante|limpol)\b/,
+    // Alimentos, bebidas e suplementos
+    /\b(?:cafes?|cafe|arroz|feijao|acucar|oleos?|azeites?|farinhas?|leites?|chocolates?|cacau|bombons?|biscoitos?|bolachas?|massas?|macarrao|temperos?|sal\b|pimentas?|molhos?|maioneses?|ketchups?|mostardas?|refrigerantes?|sucos?|cervejas?|vinhos?|energeticos?|whisky|vodka|whey|creatinas?|bcaa|glutaminas?|albuminas?|proteinas?|suplementos?|colagenos?|vitaminas?|mel\b|granolas?|aveias?|castanhas?|amendoim|balas?|pirulitos?|chicletes?|doces?|leite\s+condensado|creme\s+de\s+leite|leite\s+de\s+coco)\b/,
+    // Higiene, beleza e cosméticos
+    /\b(?:shampoos?|xampus?|condicionadores?|sabonetes?|hidratantes?|cremes?|locoes?|locao|seruns?|serum|protetores?\s+solares?|bloqueadores?|oleos?\s+corporais?|perfumes?|colonias?|body\s+splash|desodorantes?|antitranspirantes?|pastas?\s+de\s+dente|cremes?\s+dentais?|enxaguantes?|mascaras?\s+capilares?|tinturas?|tonalizantes?|esmaltes?|acetonas?|algodao|ceras?\s+depilatorias?|pomadas?\s+capilares?|reparadores?\s+de\s+pontas|manteigas?\s+corporais?|principia|cerave|la\s+roche|vichy|nivea|dove|sallve|tracta|darrow|eucerin|boticario|natura|avon|elseve|pantene|head\s*(?:&|e)\s*shoulders|loreal)\b/,
+    // Pet consumível
+    /\b(?:racoes?|racao|areias?|areia\s+sanitaria|granulados?|petiscos?|bifinhos?|saches?|sache|pates?|pate|tapetes?\s+higienicos?|catbio|pipicat|whiskas|pedigree|premier|golden|purina|royal\s+canin|chocat|fino\s+trato)\b/,
+    // Insumos por peso/volume
+    /\b(?:adubos?|fertilizantes?|substratos?|terras?\s+vegetais?|sementes?|massas?\s+corridas?|argamassas?|gessos?|rejuntes?|tintas?|vernizes?|resinas?|silicones?|colas?|solventes?|tiner|aguarras|impermeabilizantes?|lubrificantes?|graxas?)\b/
+  ];
+
+  return CONSUMABLE_PATTERNS.some((pattern) => pattern.test(normalizedTitle));
+}
+
+/**
+ * Extrai quantidade de kits / multi-unidades (ex: Kit 2, Kit com 3, KIT2, 10 unidades, 2 peças).
+ */
+function extractKitOrMultiUnit(normalizedTitle = '') {
+  if (!normalizedTitle) return null;
+
+  // Kit Duo, Kit Trio
+  if (/\bkit\s*duo\b/.test(normalizedTitle)) {
+    return { unit: 'unit', quantity: 2, rawUnit: 'kit' };
+  }
+  if (/\bkit\s*trio\b/.test(normalizedTitle)) {
+    return { unit: 'unit', quantity: 3, rawUnit: 'kit' };
   }
 
-  // 2. Volume em Litros (L, litros, lt)
-  const literMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:l|litros?|lt|lts)\b/);
-  if (literMatch) {
-    const qty = parseNumber(literMatch[1], null);
-    if (qty !== null && qty > 0) {
-      return { unit: 'L', quantity: qty, rawUnit: 'L' };
-    }
-  }
-
-  // 3. Volume em Mililitros (ml, mls)
-  const mlMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:ml|mls)\b/);
-  if (mlMatch) {
-    const ml = parseNumber(mlMatch[1], null);
-    if (ml !== null && ml > 0) {
-      return { unit: 'L', quantity: ml / 1000, rawUnit: 'ml' };
-    }
-  }
-
-  // 4. Peso em Quilos (kg, quilos, kilos)
-  const kgMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|quilos?|kilos?)\b/);
-  if (kgMatch) {
-    const qty = parseNumber(kgMatch[1], null);
-    if (qty !== null && qty > 0) {
-      return { unit: 'kg', quantity: qty, rawUnit: 'kg' };
-    }
-  }
-
-  // 5. Peso em Gramas (g, gr, gramas)
-  const gMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:g|gr|gramas?)\b/);
-  if (gMatch) {
-    const g = parseNumber(gMatch[1], null);
-    if (g !== null && g > 0) {
-      return { unit: 'kg', quantity: g / 1000, rawUnit: 'g' };
-    }
-  }
-
-  // 6. Kit / Combo / Pack com N unidades (ex: kit 2, kit com 3, pack 10)
-  const kitMatch = normalized.match(/\b(?:kit|combo|pack|conjunto)\s*(?:com|de)?\s*(\d{1,4})\b/);
+  // Kit com 3, Kit c/ 2, Kit de 4, Kit 2, Kit 3, Kit 10, Pack 3, Combo 2, Conjunto 4
+  const kitMatch = normalizedTitle.match(/\b(?:kit|combo|pack|conjunto)\s*(?:com|de|c\/)?\s*(\d{1,4})\b/);
   if (kitMatch) {
     const count = parseInt(kitMatch[1], 10);
-    if (count > 0) {
+    if (count >= 2 && count <= 500) {
       return { unit: 'unit', quantity: count, rawUnit: 'kit' };
     }
   }
 
-  // 7. Unidades explícitas (ex: 10 unidades, 2 peças, 5 pares, 3 un)
-  const unitMatch = normalized.match(/\b(\d{1,4})\s*(?:unidades?|unids?|un|pecas?|peca|pares?|par|itens|item)\b/);
+  // KIT2, KIT3, KIT4, etc.
+  const kitDirectMatch = normalizedTitle.match(/\bkit(\d{1,3})\b/);
+  if (kitDirectMatch) {
+    const count = parseInt(kitDirectMatch[1], 10);
+    if (count >= 2 && count <= 500) {
+      return { unit: 'unit', quantity: count, rawUnit: 'kit' };
+    }
+  }
+
+  // Multiplicadores explícitos: 2x, 3x, 4x seguidos de un, pecas, pares, itens
+  const multUnitMatch = normalizedTitle.match(/\b(\d{1,3})\s*x\s*(\d+(?:[.,]\d+)?)\s*(?:unidades?|unids?|un|pecas?|peca|pares?|par|itens|item)\b/);
+  if (multUnitMatch) {
+    const count = parseInt(multUnitMatch[1], 10);
+    const subAmount = parseNumber(multUnitMatch[2], 0);
+    if (count > 0 && subAmount > 0) {
+      return { unit: 'unit', quantity: count * subAmount, rawUnit: 'unit' };
+    }
+  }
+
+  // 10 unidades, 2 peças, 5 pares, 3 un
+  const unitMatch = normalizedTitle.match(/\b(\d{1,4})\s*(?:unidades?|unids?|un|pecas?|peca|pares?|par|itens|item)\b/);
   if (unitMatch) {
     const count = parseInt(unitMatch[1], 10);
-    if (count > 0) {
+    if (count >= 2 && count <= 500) {
       return { unit: 'unit', quantity: count, rawUnit: 'unit' };
     }
   }
 
-  return { unit: null, quantity: null, rawUnit: null };
+  return null;
+}
+
+/**
+ * Extrai unidade e quantidade normalizadas a partir do título do produto.
+ * Regra: Normalização física (L/kg) SOMENTE quando a unidade representar CONTEÚDO COMERCIAL do produto.
+ * Para duráveis/eletrônicos, especificações físicas/técnicas nunca geram kg/L.
+ * Retorna: { unit: 'L' | 'kg' | 'unit', quantity: number, rawUnit: string | null }
+ */
+function extractProductUnitAndQuantity(title = '') {
+  const normalized = normalizeText(title);
+  if (!normalized) return { unit: 'unit', quantity: 1, rawUnit: null };
+
+  const kitInfo = extractKitOrMultiUnit(normalized);
+
+  // 1. Produtos duráveis / técnicos / hardware / eletrodomésticos / veículos / móveis / ferramentas / vestuário
+  // Normalização física (L/kg) NUNCA se aplica a duráveis.
+  if (isDurableOrTechnicalProduct(normalized)) {
+    if (kitInfo) {
+      return kitInfo;
+    }
+    return { unit: 'unit', quantity: 1, rawUnit: null };
+  }
+
+  // 2. Apenas produtos comprovadamente consumíveis ou conteúdo físico factual podem ser normalizados por L/kg
+  const isConsumable = isConsumableOrContentProduct(normalized);
+
+  if (isConsumable) {
+    // 2.1 Multiplicadores compostos de consumíveis (ex: 2x 5L, 3x 500ml, 2x 1kg, 4x 500g)
+    const multMatch = normalized.match(/\b(\d{1,3})\s*x\s*(\d+(?:[.,]\d+)?)\s*(l|litros?|lt|lts|ml|mls|kg|quilos?|kilos?|g|gr|gramas?)\b/);
+    if (multMatch) {
+      const count = parseInt(multMatch[1], 10);
+      const subAmount = parseNumber(multMatch[2], 0);
+      const rawUnit = multMatch[3];
+
+      if (count > 0 && subAmount > 0) {
+        if (/^(?:l|litros?|lt|lts)$/.test(rawUnit)) {
+          return { unit: 'L', quantity: count * subAmount, rawUnit: 'L' };
+        }
+        if (/^(?:ml|mls)$/.test(rawUnit)) {
+          return { unit: 'L', quantity: (count * subAmount) / 1000, rawUnit: 'ml' };
+        }
+        if (/^(?:kg|quilos?|kilos?)$/.test(rawUnit)) {
+          return { unit: 'kg', quantity: count * subAmount, rawUnit: 'kg' };
+        }
+        if (/^(?:g|gr|gramas?)$/.test(rawUnit)) {
+          return { unit: 'kg', quantity: (count * subAmount) / 1000, rawUnit: 'g' };
+        }
+      }
+    }
+
+    // 2.2 Volume em Litros (L, litros, lt)
+    const literMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:l|litros?|lt|lts)\b/);
+    if (literMatch) {
+      const qty = parseNumber(literMatch[1], null);
+      if (qty !== null && qty > 0) {
+        return { unit: 'L', quantity: qty, rawUnit: 'L' };
+      }
+    }
+
+    // 2.3 Volume em Mililitros (ml, mls)
+    const mlMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:ml|mls)\b/);
+    if (mlMatch) {
+      const ml = parseNumber(mlMatch[1], null);
+      if (ml !== null && ml > 0) {
+        return { unit: 'L', quantity: ml / 1000, rawUnit: 'ml' };
+      }
+    }
+
+    // 2.4 Peso em Quilos (kg, quilos, kilos) - ignorando especificações de suporte de peso
+    const isWeightLimit = /\b(?:ate|suporta|suportando|capacidade(?:\s+de)?|carga(?:\s+maxima)?|peso\s+maximo|maximo|max|suportado)\s*(\d+(?:[.,]\d+)?)\s*kg\b/.test(normalized);
+    if (!isWeightLimit) {
+      const kgMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:kg|quilos?|kilos?)\b/);
+      if (kgMatch) {
+        const qty = parseNumber(kgMatch[1], null);
+        if (qty !== null && qty > 0) {
+          return { unit: 'kg', quantity: qty, rawUnit: 'kg' };
+        }
+      }
+    }
+
+    // 2.5 Peso em Gramas (g, gr, gramas) - ignorando 5g/4g/2.4g/64g de especificações técnicas
+    const isNetworkOrTechFrequency = /\b(?:2\.4|5\.8|[2-5])\s*g\b/.test(normalized);
+    const isTechStorage = /\b(?:8|16|32|64|128|256|512)\s*g\b/.test(normalized) && !/\b(?:chocolate|bombom|creatina|cafe|tempero|sache|petisco|racao|whey|bcaa)\b/.test(normalized);
+    if (!isNetworkOrTechFrequency && !isTechStorage) {
+      const gMatch = normalized.match(/\b(\d+(?:[.,]\d+)?)\s*(?:g|gr|gramas?)\b/);
+      if (gMatch) {
+        const g = parseNumber(gMatch[1], null);
+        if (g !== null && g > 0) {
+          return { unit: 'kg', quantity: g / 1000, rawUnit: 'g' };
+        }
+      }
+    }
+  }
+
+  // 3. Se houver kit/multi-unidade (mesmo em consumíveis sem volume especificado)
+  if (kitInfo) {
+    return kitInfo;
+  }
+
+  // 4. Fallback padrão: 1 unidade
+  return { unit: 'unit', quantity: 1, rawUnit: null };
 }
 
 /**
@@ -129,8 +249,8 @@ function calculateNormalizedPrice(priceValue, unitInfo = null) {
     };
   }
 
-  const unit = unitInfo?.unit || null;
-  const quantity = unitInfo?.quantity || null;
+  const unit = unitInfo?.unit || 'unit';
+  const quantity = unitInfo?.quantity || 1;
 
   if (unit && quantity && quantity > 0) {
     const normalizedPrice = Math.round((price / quantity) * 100) / 100;
@@ -358,6 +478,9 @@ function evaluatePeerPriceCompetitiveness(candidate = {}, peers = []) {
 }
 
 module.exports = {
+  isDurableOrTechnicalProduct,
+  isConsumableOrContentProduct,
+  extractKitOrMultiUnit,
   extractProductUnitAndQuantity,
   calculateNormalizedPrice,
   extractCompetitivenessFamilyKey,
