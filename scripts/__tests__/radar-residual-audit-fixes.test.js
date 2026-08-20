@@ -79,7 +79,7 @@ test('coletor Shopee não entrega comissão duplicada ao score', async () => {
   assert.equal(candidates[0].commissionSource, 'commissionRate_total');
 });
 
-test('produto final expõe selection_decision no campo dedicado para persistência', () => {
+test('produto final persiste decision e auditoria factual de comissão sem dupla contagem', () => {
   const products = runner.buildTrendRadarProductsFromCandidates({
     radarRunId: '00000000-0000-0000-0000-000000000001',
     shopeeCandidates: [{
@@ -93,8 +93,12 @@ test('produto final expõe selection_decision no campo dedicado para persistênc
       priceDiscountRate: 50,
       sales: 1500,
       ratingStar: 4.9,
-      commissionRate: 15,
+      commissionRate: 73,
+      commissionPercent: 73,
       sellerCommissionRate: 0,
+      shopeeCommissionRate: 3,
+      sellerCommissionRateObserved: 70,
+      commissionSource: 'commissionRate_total',
       permalink: 'https://example.com/camera',
       imageUrl: 'https://example.com/camera.jpg',
       provenance: 'shopee_openapi_productOfferV2',
@@ -105,5 +109,15 @@ test('produto final expõe selection_decision no campo dedicado para persistênc
 
   assert.equal(products.length, 1);
   assert.equal(products[0].selection_decision, 'TESTAR');
-  assert.equal(products[0].direct_evidence[0].selection_decision, 'TESTAR');
+
+  const direct = products[0].direct_evidence[0];
+  assert.equal(direct.selection_decision, 'TESTAR');
+  assert.equal(direct.effective_commission_percent, 73);
+  assert.equal(direct.commission_source, 'commissionRate_total');
+  assert.equal(direct.shopee_commission_percent, 3);
+  assert.equal(direct.seller_commission_percent, 70);
+  assert.equal(direct.commercial_metrics.commissionRate, 73);
+  assert.equal(direct.commercial_metrics.shopeeCommissionRate, 3);
+  assert.equal(direct.commercial_metrics.sellerCommissionRate, 70);
+  assert.equal(direct.commercial_metrics.commissionSource, 'commissionRate_total');
 });
