@@ -53,7 +53,15 @@ export async function GET(request: Request) {
     },
   });
 
-  const model = buildStoryCommercialFrameModel(plan, { marketplace: offer.platform, imageUrl: offer.image_url }, frame as 1 | 2);
+  const model = buildStoryCommercialFrameModel(
+    plan,
+    {
+      marketplace: offer.platform,
+      imageUrl: offer.image_url,
+      channel: post.channel as "instagram" | "facebook",
+    },
+    frame as 1 | 2,
+  );
   if (!model) return NextResponse.json({ ok: false, message: "Esta oferta não precisa dessa segunda arte." }, { status: 404 });
 
   return new ImageResponse(renderStoryCommercialFrame(model), {

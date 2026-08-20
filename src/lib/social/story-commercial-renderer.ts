@@ -1,9 +1,14 @@
 import React from "react";
+import fs from "node:fs";
+import path from "node:path";
 import type { StoryCommercialPlan } from "@/lib/social/story-commercial-plan";
 
 export type StoryCommercialVisualFacts = {
   marketplace: string;
   imageUrl: string;
+  channel?: "instagram" | "facebook";
+  brandName?: string;
+  logoSrc?: string;
 };
 
 export type StoryCommercialFrameModel = {
@@ -18,7 +23,28 @@ export type StoryCommercialFrameModel = {
   originalPrice: string | null;
   support: string | null;
   cta: string;
+  channel?: "instagram" | "facebook";
+  brandName: string;
+  logoSrc: string;
 };
+
+let cachedLogoDataUri: string | null = null;
+
+export function getOfficialStoryLogoSrc(): string {
+  if (cachedLogoDataUri) return cachedLogoDataUri;
+  try {
+    const logoPath = path.join(process.cwd(), "public", "logo-caca-oferta.png");
+    if (fs.existsSync(logoPath)) {
+      const buf = fs.readFileSync(logoPath);
+      const mime = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg" : "image/png";
+      cachedLogoDataUri = `data:${mime};base64,${buf.toString("base64")}`;
+      return cachedLogoDataUri;
+    }
+  } catch {
+    // Fallback if filesystem access is restricted
+  }
+  return "/logo-caca-oferta.png";
+}
 
 function money(value: number) {
   return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -32,6 +58,9 @@ export function buildStoryCommercialFrameModel(
   if (frame > plan.frameCount) return null;
   const price = money(plan.currentPrice);
   const originalPrice = plan.originalPrice ? money(plan.originalPrice) : null;
+  const channel = visual.channel ?? "instagram";
+  const brandName = visual.brandName ?? "Caça Ofertas Oficial";
+  const logoSrc = visual.logoSrc ?? getOfficialStoryLogoSrc();
 
   if (frame === 1) {
     if (plan.template === "DISCOUNT_HERO") {
@@ -47,6 +76,9 @@ export function buildStoryCommercialFrameModel(
         originalPrice,
         support: plan.savings ? `Economize ${money(plan.savings)}` : null,
         cta: "VER OFERTA 👇",
+        channel,
+        brandName,
+        logoSrc,
       };
     }
 
@@ -63,6 +95,9 @@ export function buildStoryCommercialFrameModel(
         originalPrice: null,
         support: plan.freeShipping ? "FRETE GRÁTIS" : null,
         cta: "VER OFERTA 👇",
+        channel,
+        brandName,
+        logoSrc,
       };
     }
 
@@ -78,6 +113,9 @@ export function buildStoryCommercialFrameModel(
       originalPrice: null,
       support: null,
       cta: "VER OFERTA 👇",
+      channel,
+      brandName,
+      logoSrc,
     };
   }
 
@@ -93,6 +131,9 @@ export function buildStoryCommercialFrameModel(
     originalPrice: null,
     support: plan.template === "DISCOUNT_HERO" && plan.savings ? `Economia de ${money(plan.savings)}` : null,
     cta: "VER OFERTA 👇",
+    channel,
+    brandName,
+    logoSrc,
   };
 }
 
@@ -136,7 +177,7 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
-        padding: "58px 58px 72px",
+        padding: "72px 56px 76px",
         background: "linear-gradient(180deg,#fffaf0 0%,#fff 55%,#f8fafc 100%)",
         color: "#111827",
         fontFamily: "Arial, sans-serif",
@@ -145,18 +186,79 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
     },
     React.createElement(
       "div",
-      { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+      {
+        style: {
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          width: "100%",
+        },
+      },
       React.createElement(
         "div",
-        { style: { display: "flex", alignItems: "center", gap: 14, fontSize: 24, fontWeight: 800 } },
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+          },
+        },
         React.createElement(
           "div",
-          { style: { display: "flex", width: 44, height: 44, borderRadius: 14, background: "#facc15", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 1000 } },
-          "CAÇA",
+          {
+            style: {
+              display: "flex",
+              width: 52,
+              height: 52,
+              borderRadius: 14,
+              overflow: "hidden",
+              background: "#0f172a",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+              flexShrink: 0,
+            },
+          },
+          React.createElement("img", {
+            src: model.logoSrc,
+            alt: model.brandName,
+            style: {
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+            },
+          }),
         ),
-        "Caça Ofertas Oficial",
+        React.createElement(
+          "div",
+          {
+            style: {
+              display: "flex",
+              fontSize: 24,
+              fontWeight: 800,
+              color: "#0f172a",
+              letterSpacing: -0.4,
+            },
+          },
+          model.brandName,
+        ),
       ),
-      React.createElement("div", { style: { fontSize: 22, fontWeight: 700, opacity: 0.58 } }, model.marketplace),
+      React.createElement(
+        "div",
+        {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            padding: "8px 18px",
+            background: "rgba(15, 23, 42, 0.05)",
+            borderRadius: 999,
+            fontSize: 20,
+            fontWeight: 700,
+            color: "#64748b",
+          },
+        },
+        model.marketplace,
+      ),
     ),
     React.createElement(
       "div",
