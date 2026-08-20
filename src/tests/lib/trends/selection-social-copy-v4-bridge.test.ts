@@ -22,11 +22,11 @@ describe("Trend Social Copy V4 bridge", () => {
     expect(TREND_SOCIAL_CHANNELS).toEqual(["facebook", "instagram", "telegram", "whatsapp"]);
   });
 
-  it("creates Instagram as a Reels draft without static Story frames", () => {
+  it("creates Instagram as a manual caption without static Story or Reel markers", () => {
     const copy = buildTrendSocialDraft(facts, "instagram", trackedUrl);
 
-    expect(copy).toMatch(/^REELS · AGUARDANDO VÍDEO/u);
-    expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker/iu);
+    expect(copy).toContain("Conferir o preço atual");
+    expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker|REELS · AGUARDANDO VÍDEO/iu);
     expect(copy).not.toContain(trackedUrl);
   });
 
