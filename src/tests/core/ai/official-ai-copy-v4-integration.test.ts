@@ -32,12 +32,12 @@ describe("integração canônica Copy V4", () => {
     expect(copy).not.toMatch(/https?:\/\//u);
   });
 
-  it("transforma Instagram em legenda comercial de Reel", () => {
+  it("mantém Instagram como legenda manual sem acoplar Stories ou Reels", () => {
     const copy = buildCanonicalCopyV4ChannelDraft(facts, "instagram");
-    expect(copy).toMatch(/^REELS · AGUARDANDO VÍDEO/u);
     expect(copy).toContain("Top #14");
     expect(copy).toContain("R$ 88,00");
-    expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker/iu);
+    expect(copy).toContain("Conferir o preço atual");
+    expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker|REELS · AGUARDANDO VÍDEO/iu);
     expect(copy).not.toMatch(/https?:\/\//u);
   });
 });
