@@ -1,8 +1,12 @@
-import React from "react";
 import { ImageResponse } from "next/og";
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { INSTAGRAM_STORIES_V4_HANDOFF_MARKER } from "@/lib/social/meta-publication-guard";
+import { buildStoryV5Plan } from "@/lib/social/instagram-story-v5";
+import {
+  buildStoryV5FrameModel,
+  renderStoryV5Frame,
+} from "@/lib/social/instagram-story-v5-renderer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,113 +15,24 @@ export const revalidate = 0;
 const STORY_WIDTH = 1080;
 const STORY_HEIGHT = 1920;
 
-function parseFrame(content: string, frame: number) {
-  if (!content.trimStart().startsWith(INSTAGRAM_STORIES_V4_HANDOFF_MARKER)) return null;
-  const match = content.match(new RegExp(`TELA ${frame}\\/3\\n([\\s\\S]*?)(?=\\n\\nTELA [123]\\/3|$)`, "u"));
-  return match?.[1]?.trim() || null;
-}
+type StoryOffer = {
+  product_name?: string | null;
+  platform?: string | null;
+  category?: string | null;
+  current_price?: number | null;
+  old_price?: number | null;
+  image_url?: string | null;
+};
 
-function frameEyebrow(frame: number) {
-  if (frame === 1) return "ACHADO DO DIA";
-  if (frame === 2) return "POR QUE VALE OLHAR";
-  return "PREÇO ATUAL";
-}
-
-function frameFooter(frame: number) {
-  return frame === 3 ? "Adicione o sticker Link antes de publicar" : "Caça Ofertas Oficial";
-}
-
-function storyImage(productName: string, marketplace: string, frame: number, text: string) {
-  return React.createElement(
-    "div",
-    {
-      style: {
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        flexDirection: "column",
-        justifyContent: "space-between",
-        padding: "120px 88px 100px",
-        background: frame === 2 ? "#18181b" : frame === 3 ? "#09090b" : "#111827",
-        color: "#ffffff",
-        fontFamily: "Arial, sans-serif",
-      },
-    },
-    React.createElement(
-      "div",
-      { style: { display: "flex", flexDirection: "column", gap: "28px" } },
-      React.createElement(
-        "div",
-        { style: { fontSize: 34, letterSpacing: 5, fontWeight: 800, opacity: 0.72 } },
-        frameEyebrow(frame),
-      ),
-      React.createElement(
-        "div",
-        { style: { fontSize: 42, lineHeight: 1.15, fontWeight: 700, opacity: 0.78 } },
-        productName,
-      ),
-    ),
-    React.createElement(
-      "div",
-      {
-        style: {
-          display: "flex",
-          flexDirection: "column",
-          gap: "42px",
-          padding: "70px 64px",
-          borderRadius: 48,
-          background: "rgba(255,255,255,0.08)",
-          border: "2px solid rgba(255,255,255,0.14)",
-        },
-      },
-      React.createElement(
-        "div",
-        {
-          style: {
-            whiteSpace: "pre-wrap",
-            fontSize: frame === 3 ? 76 : 64,
-            lineHeight: 1.12,
-            fontWeight: 900,
-            letterSpacing: -1.5,
-          },
-        },
-        text,
-      ),
-      frame === 3
-        ? React.createElement(
-            "div",
-            {
-              style: {
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                padding: "30px 42px",
-                borderRadius: 999,
-                background: "#ffffff",
-                color: "#09090b",
-                fontSize: 36,
-                fontWeight: 900,
-              },
-            },
-            "VER PREÇO ATUAL",
-          )
-        : null,
-    ),
-    React.createElement(
-      "div",
-      { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: "30px" } },
-      React.createElement(
-        "div",
-        { style: { fontSize: 30, fontWeight: 800, opacity: 0.8, maxWidth: "72%" } },
-        frameFooter(frame),
-      ),
-      React.createElement(
-        "div",
-        { style: { fontSize: 28, fontWeight: 700, opacity: 0.55, textAlign: "right" } },
-        `${marketplace} · ${frame}/3`,
-      ),
-    ),
-  );
+function validHttpsImage(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  try {
+    const url = new URL(raw);
+    return url.protocol === "https:" ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 export async function GET(request: Request) {
@@ -134,7 +49,7 @@ export async function GET(request: Request) {
 
   const { data: post, error } = await supabase
     .from("posts")
-    .select("id,channel,status,content,offers(product_name,platform)")
+    .select("id,channel,status,content,offers(product_name,platform,category,current_price,old_price,image_url)")
     .eq("id", postId)
     .eq("channel", "instagram")
     .eq("status", "draft")
@@ -142,20 +57,47 @@ export async function GET(request: Request) {
 
   if (error) return NextResponse.json({ ok: false, message: error.message }, { status: 500 });
   if (!post) return NextResponse.json({ ok: false, message: "Draft de Story não encontrado." }, { status: 404 });
+  if (!post.content.trimStart().startsWith(INSTAGRAM_STORIES_V4_HANDOFF_MARKER)) {
+    return NextResponse.json({ ok: false, message: "Draft não pertence ao fluxo de Stories." }, { status: 422 });
+  }
 
-  const text = parseFrame(post.content, frame);
-  if (!text) return NextResponse.json({ ok: false, message: "Draft não contém o frame solicitado." }, { status: 422 });
+  const related = (Array.isArray(post.offers) ? post.offers[0] : post.offers) as StoryOffer | null | undefined;
+  if (!related) return NextResponse.json({ ok: false, message: "Oferta do Story não encontrada." }, { status: 422 });
 
-  const related = Array.isArray(post.offers) ? post.offers[0] : post.offers;
-  const productName = related?.product_name || "Oferta selecionada";
-  const marketplace = related?.platform || "Marketplace";
+  const imageUrl = validHttpsImage(related.image_url);
+  if (!imageUrl) {
+    return NextResponse.json({ ok: false, message: "Oferta sem imagem HTTPS válida para Story V5." }, { status: 422 });
+  }
 
-  return new ImageResponse(storyImage(productName, marketplace, frame, text), {
+  const plan = buildStoryV5Plan({
+    productName: related.product_name || "Oferta selecionada",
+    marketplace: related.platform || "Marketplace",
+    category: related.category ?? null,
+    currentPrice: Number(related.current_price ?? 0),
+    originalPrice: related.old_price === null || related.old_price === undefined ? null : Number(related.old_price),
+    evidence: {},
+    freeShipping: false,
+  });
+
+  const frameModel = buildStoryV5FrameModel(
+    plan,
+    { marketplace: related.platform || "Marketplace", imageUrl },
+    frame as 1 | 2 | 3,
+  );
+
+  if (!frameModel) {
+    return NextResponse.json(
+      { ok: false, message: `Este Story V5 possui somente ${plan.frameCount} tela(s).` },
+      { status: 404 },
+    );
+  }
+
+  return new ImageResponse(renderStoryV5Frame(frameModel), {
     width: STORY_WIDTH,
     height: STORY_HEIGHT,
     headers: {
       "Cache-Control": "private, no-store",
-      "Content-Disposition": `inline; filename=story-${postId}-${frame}.png`,
+      "Content-Disposition": `inline; filename=story-v5-${postId}-${frame}.png`,
     },
   });
 }
