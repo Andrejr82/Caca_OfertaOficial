@@ -55,6 +55,7 @@ test('TEST 2: mesmo Mercado Livre productId com itemIds diferentes -> apenas um 
       sales: 10,
       ratingStar: 4.0,
       commercialScore: 50,
+      permalink: 'https://produto.mercadolivre.com.br/MLB-item-inferior',
     },
     {
       marketplace: 'Mercado Livre',
@@ -65,6 +66,7 @@ test('TEST 2: mesmo Mercado Livre productId com itemIds diferentes -> apenas um 
       sales: 450,
       ratingStar: 4.9,
       commercialScore: 90,
+      permalink: 'https://produto.mercadolivre.com.br/MLB-item-superior',
     },
   ];
 
@@ -416,6 +418,7 @@ test('TEST 10: produto medium viability -> elegível', () => {
     itemId: 'MLB888-1',
     productName: 'Organizador de Cabos e Fios com Velcro 5 Metros',
     currentPrice: 32.90,
+    permalink: 'https://produto.mercadolivre.com.br/MLB888-1',
     sales: 45,
     ratingStar: 4.6,
   };

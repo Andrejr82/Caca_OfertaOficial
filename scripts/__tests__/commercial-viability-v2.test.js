@@ -58,6 +58,7 @@ test('calculateCommercialViabilityV2 identifies MEDIUM viability on standard dem
     sales: 80,
     ratingStar: 4.5,
     commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB100200',
   };
 
   const result = calculateCommercialViabilityV2(candidate);
@@ -158,6 +159,7 @@ test('calculateCommercialViabilityV2 never fabricates missing rating, commission
     itemId: 'MLB-bare',
     productName: 'Cadeira de Escritório Ergonômica',
     currentPrice: 350.0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-bare',
   };
 
   const result = calculateCommercialViabilityV2(candidateBare);
@@ -168,28 +170,158 @@ test('calculateCommercialViabilityV2 never fabricates missing rating, commission
   assert.equal(result.estimatedCommissionPerSale, null);
 });
 
-test('calculateCommercialViabilityV2 retorna insufficient_data para produto com preço válido mas sem demanda, comissão ou velocity observadas', () => {
-  // Produto com preço legítimo, mas absolutamente nenhum dado de demanda ou rentabilidade.
-  // NÃO pode cair como medium — deve ficar insufficient_data e fora das vagas comerciais principais.
-  const candidateNoDemandNoCommission = {
-    marketplace: 'Mercado Livre',
-    itemId: 'MLB-no-evidence',
+test('calculateCommercialViabilityV2 retorna insufficient_data para Shopee com preço válido mas sem demanda, comissão ou velocity observadas', () => {
+  // Shopee sem vendas, comissão ou velocidade continua fail-closed
+  const candidateShopeeNoEvidence = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-no-evidence',
     productName: 'Organizador Plástico Multiuso',
     currentPrice: 89.9,
-    // sales: ausente (null implícito)
-    // commissionRate: ausente
-    // velocityInfo: ausente
+    permalink: 'https://shopee.com.br/product/1/shopee-no-evidence',
   };
 
-  const result = calculateCommercialViabilityV2(candidateNoDemandNoCommission);
-  assert.equal(result.classification, 'insufficient_data',
-    'Produto com preço válido mas sem evidência de demanda/comissão/velocity deve ser insufficient_data, não medium');
+  const result = calculateCommercialViabilityV2(candidateShopeeNoEvidence);
+  assert.equal(result.classification, 'insufficient_data');
   assert.equal(result.isViable, false);
-  assert.equal(isViableForRadar(result), false,
-    'insufficient_data não deve ocupar vagas comerciais principais do Radar');
+  assert.equal(isViableForRadar(result), false);
   assert.ok(
     result.reasons.some((r) => /evidência|demanda|comissão|velocidade/i.test(r)),
     'Razão deve mencionar ausência de evidência'
   );
+});
+
+test('TASK 2 (ML): Mercado Livre com preço + identidade + link válido é elegível (medium) sem vendas/comissão/rating', () => {
+  const candidateMl = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB123456789',
+    productName: 'Cadeira de Escritório Ergonômica',
+    currentPrice: 350.0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB123456789',
+  };
+
+  const result = calculateCommercialViabilityV2(candidateMl);
+  assert.equal(result.classification, 'medium', 'ML com preço, itemId e link deve ser medium (elegível)');
+  assert.equal(result.isViable, true);
+  assert.equal(isViableForRadar(result), true);
+  assert.equal(result.effectiveCommissionPercent, 0, 'Comissão não observada permanece 0%');
+  assert.equal(result.estimatedCommissionPerSale, null, 'Comissão estimada permanece null');
+  assert.equal(result.diagnostic.sales_observed, null, 'Vendas ausentes permanecem null');
+  assert.equal(result.diagnostic.rating_observed, null, 'Rating ausente permanece null');
+  assert.equal(result.diagnostic.commission_observed, null);
+  assert.equal(result.diagnostic.sales_velocity, null);
+  assert.equal(result.diagnostic.velocity_used, false);
+});
+
+test('TASK 2 (ML): Mercado Livre com productId e link válido (sem itemId) também é elegível', () => {
+  const candidateMlProduct = {
+    marketplace: 'Mercado Livre',
+    productId: 'MLB987654',
+    productName: 'Notebook Gamer RTX 4060',
+    currentPrice: 4500.0,
+    permalink: 'https://www.mercadolivre.com.br/p/MLB987654',
+  };
+
+  const result = calculateCommercialViabilityV2(candidateMlProduct);
+  assert.equal(result.classification, 'medium');
+  assert.equal(result.isViable, true);
+  assert.equal(isViableForRadar(result), true);
+});
+
+test('TASK 2 (ML): Mercado Livre com preço inválido continua bloqueado', () => {
+  const candidateZero = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB123',
+    currentPrice: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB123',
+  };
+  const resultZero = calculateCommercialViabilityV2(candidateZero);
+  assert.equal(resultZero.classification, 'insufficient_data');
+  assert.equal(resultZero.isViable, false);
+
+  const candidateNull = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB123',
+    currentPrice: null,
+    permalink: 'https://produto.mercadolivre.com.br/MLB123',
+  };
+  const resultNull = calculateCommercialViabilityV2(candidateNull);
+  assert.equal(resultNull.classification, 'insufficient_data');
+  assert.equal(resultNull.isViable, false);
+
+  const candidateNegative = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB123',
+    currentPrice: -10,
+    permalink: 'https://produto.mercadolivre.com.br/MLB123',
+  };
+  const resultNeg = calculateCommercialViabilityV2(candidateNegative);
+  assert.equal(resultNeg.classification, 'insufficient_data');
+  assert.equal(resultNeg.isViable, false);
+});
+
+test('TASK 2 (ML): Mercado Livre sem identidade válida (sem itemId e sem productId) continua bloqueado', () => {
+  const candidateNoId = {
+    marketplace: 'Mercado Livre',
+    productName: 'Produto Sem Identidade',
+    currentPrice: 100.0,
+    permalink: 'https://produto.mercadolivre.com.br/item',
+  };
+
+  const result = calculateCommercialViabilityV2(candidateNoId);
+  assert.equal(result.classification, 'insufficient_data');
+  assert.equal(result.isViable, false);
+  assert.ok(result.reasons.some((r) => /identidade/i.test(r)));
+});
+
+test('TASK 2 (ML): Mercado Livre com link ausente ou inválido continua bloqueado', () => {
+  const candidateNoLink = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB123',
+    productName: 'Produto Sem Link',
+    currentPrice: 100.0,
+    permalink: '',
+  };
+  const resultNoLink = calculateCommercialViabilityV2(candidateNoLink);
+  assert.equal(resultNoLink.classification, 'insufficient_data');
+  assert.equal(resultNoLink.isViable, false);
+
+  const candidateInvalidLink = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB123',
+    productName: 'Produto Link Inválido',
+    currentPrice: 100.0,
+    permalink: 'not-a-valid-http-url',
+  };
+  const resultInvalidLink = calculateCommercialViabilityV2(candidateInvalidLink);
+  assert.equal(resultInvalidLink.classification, 'insufficient_data');
+  assert.equal(resultInvalidLink.isViable, false);
+});
+
+test('TASK 2 (Shopee): Shopee não regride e continua funcionando normalmente', () => {
+  const shopeeHigh = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-high',
+    currentPrice: 150.0,
+    sales: 500,
+    ratingStar: 4.9,
+    commissionPercent: 10.0,
+    permalink: 'https://shopee.com.br/product/1/shopee-high',
+  };
+  const resHigh = calculateCommercialViabilityV2(shopeeHigh);
+  assert.equal(resHigh.classification, 'high');
+  assert.equal(resHigh.isViable, true);
+
+  const shopeeLowRating = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-low-rating',
+    currentPrice: 150.0,
+    sales: 500,
+    ratingStar: 2.5,
+    commissionPercent: 10.0,
+    permalink: 'https://shopee.com.br/product/1/shopee-low-rating',
+  };
+  const resLow = calculateCommercialViabilityV2(shopeeLowRating);
+  assert.equal(resLow.classification, 'low');
+  assert.equal(resLow.isViable, false);
 });
 

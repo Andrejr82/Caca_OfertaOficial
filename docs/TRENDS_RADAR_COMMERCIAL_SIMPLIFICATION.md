@@ -20,8 +20,11 @@ Coleta ampla -> identidade/preço/link válidos -> deduplicação real -> rankin
 Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma identidade.
 `rejected`, `pending_manual_review`, `draft` e `deferred` não bloqueiam novas oportunidades.
 
-### Task 2 — Mercado Livre sem dependência de vendas/comissão
-Remover `insufficient_data` como bloqueio quando houver preço + identidade + link válidos e sinais comerciais disponíveis.
+### Task 2 — Mercado Livre sem dependência de vendas/comissão [CONCLUÍDA]
+- **Regra**: Para Mercado Livre, qualquer candidato com preço positivo (`price > 0`), identidade nativa válida (`itemId` ou `productId`) e link válido (`permalink`/`product_url` com formato http/https) é considerado elegível para o Radar (`medium`, `isViable: true`).
+- **Comportamento de dados ausentes**: Vendas, comissão, rating, velocity e BEST_SELLER continuam sendo usados quando existirem e permanecem estritamente `null` ou `0` quando ausentes (nunca fabricados/inventados). A ausência desses atributos NÃO gera `insufficient_data` nem elimina o produto do Mercado Livre.
+- **Fail-closed preservado**: Preço inválido/não positivo, identidade nativa ausente ou link ausente/inválido continuam gerando `insufficient_data` (`isViable: false`). Avaliações baixas (`rating < 3.5`) ou micro-tickets inviáveis continuam classificados como `low` (`isViable: false`).
+- **Shopee**: Mantém suas regras sem regressão.
 
 ### Task 3 — Shopee exploração máxima
 Expandir paginação/cobertura da API e separar descoberta de ranking, sem usar vendas/comissão como requisitos.

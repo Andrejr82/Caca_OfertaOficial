@@ -116,7 +116,7 @@ test('ML com sold_quantity > 0 propaga vendas até normalizeMercadoLivreRadarPro
   assert.ok(['high', 'medium'].includes(viability.classification));
 });
 
-test('ML com sold_quantity=0 ou null continua fail-closed como insufficient_data se não houver outra evidência', () => {
+test('ML com sold_quantity=0 ou null sem link continua fail-closed como insufficient_data', () => {
   const mlProductNoSales = {
     item_id: 'MLB888888',
     product_id: 'MLB777777',
@@ -124,6 +124,7 @@ test('ML com sold_quantity=0 ou null continua fail-closed como insufficient_data
     current_price: 199.90,
     sold_quantity: null,
     rating: null,
+    product_url: '', // sem link
   };
 
   const normalizedNullSales = normalizeMercadoLivreRadarProduct(mlProductNoSales);
@@ -139,6 +140,7 @@ test('ML com sold_quantity=0 ou null continua fail-closed como insufficient_data
     current_price: 199.90,
     sold_quantity: 0,
     rating: null,
+    product_url: '', // sem link
   };
 
   const normalizedZeroSales = normalizeMercadoLivreRadarProduct(mlProductZeroSales);
@@ -146,6 +148,31 @@ test('ML com sold_quantity=0 ou null continua fail-closed como insufficient_data
   const viabilityZero = calculateCommercialViabilityV2(normalizedZeroSales);
   assert.equal(viabilityZero.classification, 'insufficient_data');
   assert.equal(viabilityZero.isViable, false);
+});
+
+test('TASK 2 (ML): ML com preço + identidade + link válido sem vendas é elegível (medium)', () => {
+  const mlProductValid = {
+    item_id: 'MLB999991',
+    product_id: 'MLB999992',
+    title: 'Produto ML Elegível Sem Vendas',
+    current_price: 299.90,
+    sold_quantity: null,
+    rating: null,
+    product_url: 'https://produto.mercadolivre.com.br/MLB999991',
+  };
+
+  const normalized = normalizeMercadoLivreRadarProduct(mlProductValid);
+  assert.equal(normalized.sales, null);
+  assert.equal(normalized.rating, null);
+  assert.equal(normalized.commissionPercent, 0);
+
+  const viability = calculateCommercialViabilityV2(normalized);
+  assert.equal(viability.classification, 'medium');
+  assert.equal(viability.isViable, true);
+  assert.equal(viability.effectiveCommissionPercent, 0);
+  assert.equal(viability.estimatedCommissionPerSale, null);
+  assert.equal(viability.diagnostic.sales_observed, null);
+  assert.equal(viability.diagnostic.rating_observed, null);
 });
 
 test('campos não observados na API do Mercado Livre permanecem null sem fallback inventado', () => {

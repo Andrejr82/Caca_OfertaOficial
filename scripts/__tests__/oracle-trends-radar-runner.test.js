@@ -260,6 +260,7 @@ test('collectMercadoLivreMarketplaceCandidates marks insufficient_history when n
       currentPrice: 2200,
       sales: 120,
       rating: 4.7,
+      permalink: 'https://produto.mercadolivre.com.br/MLB777',
       provenance: 'mercadolivre_official_intent',
       observedAt: '2026-08-16T12:00:00.000Z',
     },

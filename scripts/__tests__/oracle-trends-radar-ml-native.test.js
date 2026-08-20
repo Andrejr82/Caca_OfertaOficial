@@ -262,6 +262,7 @@ test('TESTE A: MEDIUM com Score V3 maior que HIGH deve aparecer antes no ranking
     ratingStar: 4.9,
     sales: 500, // viability vira MEDIUM por commission = 0
     commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB_MED_HIGH_SCORE',
     marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: 1 },
   };
 
@@ -277,6 +278,7 @@ test('TESTE A: MEDIUM com Score V3 maior que HIGH deve aparecer antes no ranking
     ratingStar: 3.8,
     sales: 100, // viability vira HIGH por sales >= 100 e comm >= 5
     commissionPercent: 5,
+    permalink: 'https://shopee.com.br/product/1/SHP_HIGH_LOW_SCORE',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -309,6 +311,7 @@ test('TESTE B: HIGH e MEDIUM com Score V3 exatamente igual -> HIGH deve aparecer
     sales: 200,
     ratingStar: 4.8,
     commissionPercent: 5,
+    permalink: 'https://shopee.com.br/product/1/SHP_TIE_HIGH',
   };
 
   const mediumCandidate = {
@@ -322,6 +325,7 @@ test('TESTE B: HIGH e MEDIUM com Score V3 exatamente igual -> HIGH deve aparecer
     sales: null,
     ratingStar: 4.8,
     commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB_TIE_MED',
     marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: 5 },
   };
 
@@ -352,6 +356,7 @@ test('TESTE C: LOW viability com score alto continua fora da seleção do Radar'
     sales: 1000,
     ratingStar: 2.5, // rating < 3.5 -> LOW viability
     commissionPercent: 10,
+    permalink: 'https://shopee.com.br/product/1/SHP_LOW_RATING',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -378,7 +383,8 @@ test('TESTE D: INSUFFICIENT_DATA com preço válido continua fora da seleção d
     sales: null,
     ratingStar: null,
     commissionPercent: 0,
-    marketplaceDemandEvidence: null, // Sem BEST_SELLER -> insufficient_data
+    permalink: '', // Sem link -> insufficient_data
+    marketplaceDemandEvidence: null,
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -409,6 +415,7 @@ test('TESTE E: não existe cota por marketplace e permite distribuição orgâni
       sales: null,
       ratingStar: 4.9,
       commissionPercent: 0,
+      permalink: `https://produto.mercadolivre.com.br/MLB_SCORE_HIGH_${i}`,
       marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
     });
   }
@@ -427,6 +434,7 @@ test('TESTE E: não existe cota por marketplace e permite distribuição orgâni
       sales: 100,
       ratingStar: 4.0,
       commissionPercent: 5,
+      permalink: `https://shopee.com.br/product/1/SHP_${j}`,
     });
   }
 
@@ -462,6 +470,7 @@ test('TESTE F: family diversity continua funcionando após o novo sort por Score
       sales: null,
       ratingStar: 4.8,
       commissionPercent: 0,
+      permalink: `https://produto.mercadolivre.com.br/MLB_FONE_${i}`,
       marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
     });
   }
