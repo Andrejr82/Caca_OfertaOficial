@@ -22,13 +22,11 @@ describe("Trend Social Copy V4 bridge", () => {
     expect(TREND_SOCIAL_CHANNELS).toEqual(["facebook", "instagram", "telegram", "whatsapp"]);
   });
 
-  it("creates Instagram as the canonical manual Stories handoff", () => {
+  it("creates Instagram as a Reels draft without static Story frames", () => {
     const copy = buildTrendSocialDraft(facts, "instagram", trackedUrl);
 
-    expect(copy).toMatch(/^STORIES V4 · HANDOFF MANUAL/u);
-    expect(copy).toContain("TELA 1/3");
-    expect(copy).toContain("TELA 2/3");
-    expect(copy).toContain("TELA 3/3");
+    expect(copy).toMatch(/^REELS · AGUARDANDO VÍDEO/u);
+    expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker/iu);
     expect(copy).not.toContain(trackedUrl);
   });
 
