@@ -5,6 +5,8 @@ export type TrendOfferHandoffBlock = {
   message: string;
 };
 
+export const TREND_REJECTED_OFFER_MESSAGE = "Esta oportunidade está vinculada a uma oferta rejeitada. Ignore-a ou aguarde nova oportunidade.";
+
 export function supportsTrendApprovalMarketplace(marketplace: string | null | undefined): boolean {
   return marketplace === "Shopee" || marketplace === "Mercado Livre";
 }
