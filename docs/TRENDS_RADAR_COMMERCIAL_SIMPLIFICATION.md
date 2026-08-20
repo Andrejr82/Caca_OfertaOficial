@@ -100,6 +100,12 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
   - Unidades (`unit`) somente são comparadas com Unidades (`unit`).
   - Nunca há comparação cruzada ou conversão de densidade arbitrária entre R$/L e R$/kg.
   - Produtos de mesma família com unidades distintas recebem `relative_price_position = 'unit_not_comparable'` e são pontuados individualmente pelo desconto observado.
+- **Normalização Apenas por Quantidade Comercial, Nunca por Especificação Física do Produto**:
+  - Normalização física (`L`/`kg`) somente ocorre quando a unidade representar CONTEÚDO COMERCIAL de produtos consumíveis (alimentos, bebidas, limpeza, higiene, cosméticos, pet consumível e insumos vendidos por peso/volume).
+  - Produtos duráveis, eletrônicos, eletrodomésticos, hardware, veículos, móveis, ferramentas e vestuário (ex: smartphones, câmeras, TVs, consoles, bicicletas, placas de vídeo, louças sanitárias) NUNCA geram `normalized_unit = kg` ou `L` a partir de peso incidental, suporte de carga ou especificações técnicas (ex: "até 150kg", "5G", "2.4G", "64g", "128GB").
+  - Kits e multipacks (`kit N`, `kit com N`, `KIT2`, `N unidades`, `N peças`) continuam sendo normalizados por unidade (`unit`) com quantidade $N$.
+  - Se não houver quantidade comercial confiável, o fallback é estritamente `normalized_unit = 'unit'`, `normalized_quantity = 1` e `normalized_price = preço do anúncio`.
+  - Nenhum produto durável pode obter `best_in_family` por peso ou especificação técnica incidental.
 
 ## Critério final
 O Radar deve retornar Shopee + Mercado Livre com diversidade real, preço competitivo e oportunidade comercial clara, sem depender de dados que cada marketplace não fornece.

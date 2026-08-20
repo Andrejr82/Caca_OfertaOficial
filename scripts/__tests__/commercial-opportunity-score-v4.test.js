@@ -1369,6 +1369,144 @@ test('Engine registra family_key, normalized_unit, normalized_price e relative_p
   assert.ok(direct.competitiveness_reason.includes('Melhor preço'));
 });
 
+test('Bicicleta com "até 150kg" normaliza para unit e não kg', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'Bicicleta Bike Ergometrica Spinning Academia Casa Fitness Profissional Portátil Rodinhas até 150kg';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(459.00, unitInfo);
+
+  assert.equal(unitInfo.unit, 'unit', 'Bicicleta não pode ter unidade kg');
+  assert.equal(unitInfo.quantity, 1, 'Bicicleta individual deve ter quantidade 1');
+  assert.equal(norm.normalized_unit, 'unit');
+  assert.equal(norm.normalized_price, 459.00, 'Preço normalizado deve ser o preço do anúncio');
+});
+
+test('Smartphone com especificações (5G, 128GB) normaliza para unit e não kg', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'Smartphone Motorola Moto G35 5G 128GB Grafite';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(899.90, unitInfo);
+
+  assert.equal(unitInfo.unit, 'unit', 'Smartphone não pode ter unidade kg por causa de 5G');
+  assert.equal(unitInfo.quantity, 1);
+  assert.equal(norm.normalized_unit, 'unit');
+  assert.equal(norm.normalized_price, 899.90);
+});
+
+test('Câmera de segurança com wifi 2.4G e visão noturna normaliza para unit e não kg', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = "Câmera Segurança Prova D'água Infravermelho Lâmpada Externa 360 Sem Fio Wifi 2.4G-App V360 Pro -G4";
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(58.98, unitInfo);
+
+  assert.equal(unitInfo.unit, 'unit', 'Câmera não pode ter unidade kg por causa de 2.4G ou G4');
+  assert.equal(unitInfo.quantity, 1);
+  assert.equal(norm.normalized_unit, 'unit');
+  assert.equal(norm.normalized_price, 58.98);
+});
+
+test('Console com especificação 64g normaliza para unit e não kg', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'Console Portátil R36S + de 15.000 Jogos Vídeo Game 64g Linux Tela IPS 3.5 Polegadas';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(175.99, unitInfo);
+
+  assert.equal(unitInfo.unit, 'unit', 'Console não pode ter unidade kg por causa de 64g');
+  assert.equal(unitInfo.quantity, 1);
+  assert.equal(norm.normalized_unit, 'unit');
+  assert.equal(norm.normalized_price, 175.99);
+});
+
+test('Consumíveis de limpeza (OMO 5L) normalizam para L', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'Sabão Líquido OMO Lavagem Perfeita 5L';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(50.00, unitInfo);
+
+  assert.equal(unitInfo.unit, 'L');
+  assert.equal(unitInfo.quantity, 5);
+  assert.equal(norm.normalized_unit, 'L');
+  assert.equal(norm.normalized_price, 10.00);
+});
+
+test('Consumíveis pet (areia sanitária 4kg) normalizam para kg', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'Areia Catbio Biodegradável 4 Kg - Max Clean - Grãos Finos';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(47.90, unitInfo);
+
+  assert.equal(unitInfo.unit, 'kg');
+  assert.equal(unitInfo.quantity, 4);
+  assert.equal(norm.normalized_unit, 'kg');
+  assert.equal(norm.normalized_price, 11.98);
+});
+
+test('Consumíveis alimentícios (café 500g) normalizam para kg', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'Café Especial Torrado em Grãos 500g';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(30.00, unitInfo);
+
+  assert.equal(unitInfo.unit, 'kg');
+  assert.equal(unitInfo.quantity, 0.5);
+  assert.equal(norm.normalized_unit, 'kg');
+  assert.equal(norm.normalized_price, 60.00);
+});
+
+test('Kit 2 câmeras de segurança normaliza para unit com quantidade 2', () => {
+  const { extractProductUnitAndQuantity, calculateNormalizedPrice } = require('../../src/core/trends/commercial-price-competitiveness.cjs');
+
+  const title = 'KIT2 Câmera De Segurança Lente Dupla ICSEE/YOOSEE IP66 Wi-Fi 360° Sensor Movimento + MICROSD 16GB';
+  const unitInfo = extractProductUnitAndQuantity(title);
+  const norm = calculateNormalizedPrice(259.98, unitInfo);
+
+  assert.equal(unitInfo.unit, 'unit');
+  assert.equal(unitInfo.quantity, 2);
+  assert.equal(norm.normalized_unit, 'unit');
+  assert.equal(norm.normalized_price, 129.99);
+});
+
+test('Nenhum produto durável ganha best_in_family por peso incidental ou especificação de carga', () => {
+  const bikeCaraComCapacidade150kg = {
+    itemId: 'bike-cara',
+    productName: 'Bicicleta Ergométrica Spinning Academia Suporta 150kg',
+    currentPrice: 450.00,
+    discountPercent: 0,
+  };
+
+  const bikeBarataSemCapacidade = {
+    itemId: 'bike-barata',
+    productName: 'Bicicleta Ergométrica Spinning Academia Residencial',
+    currentPrice: 300.00,
+    discountPercent: 0,
+  };
+
+  const peers = [bikeCaraComCapacidade150kg, bikeBarataSemCapacidade];
+
+  const scoreCara = calculateCommercialOpportunityScoreV4(bikeCaraComCapacidade150kg, { peers });
+  const scoreBarata = calculateCommercialOpportunityScoreV4(bikeBarataSemCapacidade, { peers });
+
+  // Ambas devem ser normalizadas como unit
+  assert.equal(scoreCara.normalized_unit, 'unit');
+  assert.equal(scoreCara.normalized_price, 450.00);
+  assert.equal(scoreBarata.normalized_unit, 'unit');
+  assert.equal(scoreBarata.normalized_price, 300.00);
+
+  // A bicicleta mais barata (R$ 300) deve ser best_in_family, NUNCA a mais cara por causa de 150kg
+  assert.equal(scoreBarata.relative_price_position, 'best_in_family');
+  assert.equal(scoreBarata.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreCara.relative_price_position, 'unfavorable');
+  assert.equal(scoreCara.breakdown.offerCompetitiveness, 1);
+});
+
 // ============================================================================
 // SELEÇÃO COMERCIAL E QUOTAS SEM PREENCHIMENTO ARTIFICIAL
 // ============================================================================
