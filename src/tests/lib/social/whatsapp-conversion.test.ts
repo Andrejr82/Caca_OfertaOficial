@@ -35,7 +35,7 @@ describe("Task 3 — WhatsApp Conversion V4", () => {
     const blocks = copy.split("\n\n");
 
     expect(blocks.length).toBeLessThanOrEqual(WHATSAPP_CONVERSION_V4_MAX_BLOCKS);
-    expect(copy).not.toMatch(/#\w+/u);
+    expect(copy).not.toMatch(/#\p{L}[\p{L}\p{N}_]*/u);
     expect(copy).not.toMatch(/Veja a oferta|oferta em destaque|link abaixo/iu);
     expect(copy).not.toMatch(/últimas unidades|só hoje|corre que|antes que o preço suba/iu);
   });
