@@ -603,8 +603,8 @@ export async function generateOfficialAI(
     }))
   };
 
-  const requiredChannels = (command.channels && command.channels.length > 0) 
-    ? command.channels 
+  const requiredChannels = (command.channels && command.channels.length > 0)
+    ? command.channels
     : ["telegram", "whatsapp"];
   const availableChannels = new Set((mappedOffer.affiliate_links as Array<{ channel: string }>).map((link) => link.channel));
   const missingChannels = requiredChannels.filter((channel) => !availableChannels.has(channel as string));
