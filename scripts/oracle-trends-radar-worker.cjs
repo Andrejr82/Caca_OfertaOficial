@@ -6,7 +6,7 @@ const path = require('node:path');
 const {
   isDedicatedTrendRadarRuntimeEnabled,
   processPendingTrendRadarRuns,
-} = require('./oracle-trends-radar-runner.cjs');
+} = require('./oracle-trends-radar-runner-final.cjs');
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_LOCK_STALE_MS = 30 * 60_000;
