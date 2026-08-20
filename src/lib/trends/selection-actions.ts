@@ -186,11 +186,42 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
 }
 
 async function ensureOfferSelected(supabase: any, userId: string, offer: any, productId: string) {
-  const status = String(offer.status ?? "");
-  const resolution = resolveTrendOfferHandoff(status);
+  let status = String(offer.status ?? "");
+  let resolution = resolveTrendOfferHandoff(status);
   if (resolution === "reuse") return null;
+
+  if (resolution === "reopen") {
+    const reopenedAt = new Date().toISOString();
+    const reopenCommandId = `trend-test:${productId}:reopen:${reopenedAt}`;
+    const reopenResult = await transitionOfficialOfferState({
+      commandId: reopenCommandId,
+      idempotencyKey: reopenCommandId,
+      correlationId: `trend-test:${productId}`,
+      causationId: null,
+      tenantId: userId,
+      actor: { type: "user", id: userId, service: "trends-selection-desk" },
+      requestedAt: reopenedAt,
+      entityId: offer.id,
+      fromState: "rejected",
+      toState: "pending_manual_review",
+      origin: "trends.approve-test.reopen",
+      reason: { code: "TREND_TEST_REOPENED", detail: "Fresh Radar opportunity reopens previously rejected offer identity for a new human-approved test" },
+      evidenceRefs: [`trend_radar_product:${productId}`, `offer:${offer.id}`],
+    }, createSupabaseStateDependencies(supabase, userId));
+    if (reopenResult.status === "rejected") throw new Error(reopenResult.message);
+    status = "pending_manual_review";
+    resolution = "select";
+  }
+
   const block = resolveTrendOfferHandoffBlock(status);
   if (block) return block;
+
+  if (resolution !== "select") {
+    return {
+      code: "offer_unavailable" as const,
+      message: `Esta oportunidade está vinculada a uma oferta em estado ${status || "desconhecido"} e não pode ser aprovada automaticamente.`,
+    };
+  }
 
   const requestedAt = new Date().toISOString();
   const commandId = `trend-test:${productId}:select:${requestedAt}`;
