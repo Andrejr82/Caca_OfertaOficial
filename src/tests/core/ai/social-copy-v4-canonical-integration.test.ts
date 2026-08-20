@@ -40,7 +40,7 @@ describe("Social Copy V4 — integração canônica", () => {
     expect(materialized).not.toMatch(/https?:\/\//u);
   });
 
-  it("gera Instagram como legenda de Reel, sem cards estáticos", () => {
+  it("mantém Instagram como legenda manual e fora de Stories/Reels", () => {
     const raw = buildCanonicalCopyV4ChannelDraft(facts, "instagram");
     const materialized = materializeDraftContent(
       "instagram",
@@ -48,19 +48,19 @@ describe("Social Copy V4 — integração canônica", () => {
       "https://caca-oferta-oficial.vercel.app/go/ig_jiesipote",
     );
 
-    expect(materialized).toMatch(/^REELS · AGUARDANDO VÍDEO/u);
     expect(materialized).toContain("Top #14");
     expect(materialized).toContain("R$ 88,00");
-    expect(materialized).not.toMatch(/STORIES V4|TELA [123]\/3|sticker/iu);
+    expect(materialized).toContain("Conferir o preço atual");
+    expect(materialized).not.toMatch(/STORIES V4|TELA [123]\/3|sticker|REELS · AGUARDANDO VÍDEO/iu);
     expect(materialized).not.toMatch(/https?:\/\//u);
   });
 
-  it("impede draft de Reel de cair no transporte de Feed", () => {
+  it("mantém legenda manual compatível com transporte de Feed", () => {
     const raw = buildCanonicalCopyV4ChannelDraft(facts, "instagram");
     expect(() => assertInstagramV4PublicationAllowed({
       content: raw,
       mediaType: "FEED",
       reelsEnabled: false,
-    })).toThrow(/requires REELS transport/iu);
+    })).not.toThrow();
   });
 });
