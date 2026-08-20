@@ -121,9 +121,38 @@ Fixture principal: Mochila Jiesipote deve exibir Top #14 antes do preço, preço
 A integração com `SupabaseOfficialAIAdapter/materializeDraftContent` ficará para o fechamento do programa. O renderer final já aceita o tracked URL e é compatível com a regra existente de não duplicar uma URL rastreada válida.
 
 ### Task 4 — Instagram Stories + Reels
-Status: PENDENTE.
+Status: IMPLEMENTADA EM MÓDULO ISOLADO, AINDA NÃO ATIVADA EM PRODUÇÃO.
 
-Estrutura visual: hook em 0–2s, prova, preço/economia e ação única.
+Objetivo: transformar uma oferta HERO/TEST em plano visual curto e factual para descoberta + fechamento no Instagram, sem misturar duas rotas de ação.
+
+Stories V4 — 3 telas:
+1. `hook`: interrupção imediata;
+2. `proof_offer`: prova verificável + preço/economia;
+3. `action`: CTA única `Conferir o preço atual` com sticker de link rastreado HTTPS.
+
+Reels V4 — 13 segundos:
+- `0–2s`: hook;
+- `2–6s`: prova ou benefício factual;
+- `6–10s`: preço/economia;
+- `10–13s`: CTA única para conferir o preço nos Stories.
+
+Regras:
+- URL rastreada existe apenas no destino da última tela de Stories;
+- Reel não recebe URL direta no texto;
+- sem hashtags no roteiro estrutural;
+- sem “link na bio ou nos Stories” com duas rotas concorrentes;
+- bestseller/posição só aparecem quando persistidos;
+- sem prova social: usar benefício factual; se também faltar, fallback seguro;
+- sem urgência, escassez ou prazo inventados;
+- destino de Story inválido ou não HTTPS falha fechado;
+- nenhuma publicação automática;
+- não toca Remotion/renderização de vídeo nesta Task: aqui o contrato visual é definido e testado; integração audiovisual fica para o fechamento apropriado do programa.
+
+Arquivos da Task 4:
+- `src/lib/social/instagram-conversion.ts`
+- `src/tests/lib/social/instagram-conversion.test.ts`
+
+Fixture principal: Mochila Jiesipote deve colocar Top #14 e R$88 na segunda tela de Stories; Reel deve apresentar hook em 0–2s, prova antes do preço e terminar em uma ação única sem URL direta.
 
 ### Task 5 — Telegram Conversion
 Status: PENDENTE.
