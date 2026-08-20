@@ -14,10 +14,13 @@ test('dois itemIds diferentes com mesmo normalized_product_term no mesmo marketp
       itemId: 'shopee-item-1',
       shopId: 'shop-1',
       productName: 'Capa Para Colchão Impermeável Matelado com Elástico',
-      currentPrice: 59.90,
+      currentPrice: 120.0,
+      discountPercent: 50,
       sales: 1500,
       ratingStar: 4.9,
-      commissionPercent: 8.0,
+      commissionPercent: 12.0,
+      permalink: 'https://shopee.com.br/product/1/shopee-item-1',
+      imageUrl: 'https://cf.shopee.com.br/item1.jpg',
       provenance: 'shopee_openapi_productOfferV2',
     },
     {
@@ -25,10 +28,13 @@ test('dois itemIds diferentes com mesmo normalized_product_term no mesmo marketp
       itemId: 'shopee-item-2',
       shopId: 'shop-2',
       productName: 'Capa para colchao impermeavel matelado com elastico!', // Mesmo normalized_product_term
-      currentPrice: 65.00,
+      currentPrice: 130.0,
+      discountPercent: 50,
       sales: 300,
       ratingStar: 4.5,
-      commissionPercent: 6.0,
+      commissionPercent: 10.0,
+      permalink: 'https://shopee.com.br/product/2/shopee-item-2',
+      imageUrl: 'https://cf.shopee.com.br/item2.jpg',
       provenance: 'shopee_openapi_productOfferV2',
     },
   ];
@@ -52,10 +58,13 @@ test('ranking repõe o duplicado de normalized_product_term pelo próximo candid
       itemId: 'item-best-duplicate',
       shopId: 'shop-1',
       productName: 'Mini Ventilador Turbo Portátil LED',
-      currentPrice: 49.90,
+      currentPrice: 120.0,
+      discountPercent: 50,
       sales: 2000,
       ratingStar: 4.9,
-      commissionPercent: 10.0,
+      commissionPercent: 12.0,
+      permalink: 'https://shopee.com.br/product/1/item-best-duplicate',
+      imageUrl: 'https://cf.shopee.com.br/best.jpg',
       provenance: 'shopee_openapi_productOfferV2',
     },
     {
@@ -63,10 +72,13 @@ test('ranking repõe o duplicado de normalized_product_term pelo próximo candid
       itemId: 'item-worst-duplicate',
       shopId: 'shop-2',
       productName: 'Mini Ventilador Turbo Portatil Led - USB', // Mesmo normalized_product_term
-      currentPrice: 55.00,
+      currentPrice: 130.0,
+      discountPercent: 50,
       sales: 200,
       ratingStar: 4.2,
-      commissionPercent: 5.0,
+      commissionPercent: 8.0,
+      permalink: 'https://shopee.com.br/product/2/item-worst-duplicate',
+      imageUrl: 'https://cf.shopee.com.br/worst.jpg',
       provenance: 'shopee_openapi_productOfferV2',
     },
     {
@@ -74,10 +86,13 @@ test('ranking repõe o duplicado de normalized_product_term pelo próximo candid
       itemId: 'item-third-candidate',
       shopId: 'shop-3',
       productName: 'Comedouro Elevado Para Pet MDF',
-      currentPrice: 39.90,
-      sales: 800,
+      currentPrice: 120.0,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 8.0,
+      commissionPercent: 12.0,
+      permalink: 'https://shopee.com.br/product/3/item-third-candidate',
+      imageUrl: 'https://cf.shopee.com.br/third.jpg',
       provenance: 'shopee_openapi_productOfferV2',
     },
   ];
@@ -96,6 +111,13 @@ test('ranking repõe o duplicado de normalized_product_term pelo próximo candid
 });
 
 test('mantém target de 20 produtos únicos mesmo com colisões de títulos no catálogo', () => {
+  const categories = [
+    'Teclado Mecânico RGB', 'Mouse Gamer Sem Fio', 'Monitor Gamer 165Hz', 'Cadeira Ergonômica Pro',
+    'Headset 7.1 Surround', 'Webcam Full HD 1080p', 'Microfone Condensador USB', 'Suporte Articulado Monitor',
+    'Luminária de Mesa LED', 'Gabinete Gamer Vidro', 'Memória RAM 16GB DDR4', 'Processador Octa Core',
+    'Placa de Vídeo 8GB', 'Fonte 650W 80 Plus', 'Cooler Duplo Heatpipe', 'SSD NVMe 1TB PCIe',
+    'HD Externo 2TB USB', 'Roteador Wi-Fi 6 Mesh', 'Switch Gigabit 8 Portas', 'Cabo HDMI 2.1 8K',
+  ];
   const candidates = [];
   // Gera 30 candidatos, sendo 10 duplicatas de termos de outros 10
   for (let i = 1; i <= 20; i++) {
@@ -103,11 +125,14 @@ test('mantém target de 20 produtos únicos mesmo com colisões de títulos no c
       marketplace: 'Shopee',
       itemId: `item-unique-${i}`,
       shopId: `shop-${i}`,
-      productName: `Produto Tecnológico Único Modelo ${i}`,
-      currentPrice: 50 + i,
-      sales: 1000 - i * 10,
+      productName: `${categories[i - 1]} Modelo ${i}`,
+      currentPrice: 150 + i,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 7.0,
+      commissionPercent: 12.0,
+      permalink: `https://shopee.com.br/product/${i}/item-${i}`,
+      imageUrl: `https://cf.shopee.com.br/item-${i}.jpg`,
       provenance: 'shopee_openapi_productOfferV2',
     });
   }
@@ -117,11 +142,14 @@ test('mantém target de 20 produtos únicos mesmo com colisões de títulos no c
       marketplace: 'Shopee',
       itemId: `item-duplicate-${i}`,
       shopId: `shop-dup-${i}`,
-      productName: `Produto Tecnologico Unico Modelo ${i}!!`,
-      currentPrice: 90 + i,
+      productName: `${categories[i - 1]} Modelo ${i}!!`,
+      currentPrice: 180 + i,
+      discountPercent: 50,
       sales: 50,
       ratingStar: 4.0,
-      commissionPercent: 4.0,
+      commissionPercent: 10.0,
+      permalink: `https://shopee.com.br/product/dup/${i}`,
+      imageUrl: `https://cf.shopee.com.br/dup-${i}.jpg`,
       provenance: 'shopee_openapi_productOfferV2',
     });
   }
@@ -212,10 +240,13 @@ test('processPendingTrendRadarRuns marca o run como failed com PERSISTENCE_ERROR
       itemId: 'shopee-1',
       shopId: 'shop-1',
       productName: 'Produto Teste Falha',
-      currentPrice: 100,
-      sales: 500,
+      currentPrice: 150,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: 'https://shopee.com.br/product/1/shopee-1',
+      imageUrl: 'https://cf.shopee.com.br/shopee-1.jpg',
       provenance: 'shopee_openapi_productOfferV2',
     },
   ];

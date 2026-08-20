@@ -15,21 +15,29 @@ test('TEST 1: mesmo Shopee shopId + itemId aparecendo duas vezes -> apenas um ca
       marketplace: 'Shopee',
       shopId: '100',
       itemId: '200',
-      productName: 'Teclado Gamer Mecânico',
+      productName: 'Teclado Gamer Mecânico RGB',
       currentPrice: 150.0,
-      sales: 300,
-      commissionPercent: 8.0,
+      discountPercent: 50,
+      sales: 1500,
+      commissionPercent: 12.0,
       ratingStar: 4.8,
+      permalink: 'https://shopee.com.br/product/100/200',
+      imageUrl: 'https://cf.shopee.com.br/200.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
     {
       marketplace: 'Shopee',
       shopId: '100',
       itemId: '200',
-      productName: 'Teclado Gamer Mecânico Duplicado',
+      productName: 'Teclado Gamer Mecânico RGB Duplicado',
       currentPrice: 150.0,
-      sales: 300,
-      commissionPercent: 8.0,
+      discountPercent: 50,
+      sales: 1500,
+      commissionPercent: 12.0,
       ratingStar: 4.8,
+      permalink: 'https://shopee.com.br/product/100/200',
+      imageUrl: 'https://cf.shopee.com.br/200.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
   ];
 
@@ -55,6 +63,7 @@ test('TEST 2: mesmo Mercado Livre productId com itemIds diferentes -> apenas um 
       sales: 10,
       ratingStar: 4.0,
       commercialScore: 50,
+      permalink: 'https://produto.mercadolivre.com.br/MLB-item-inferior',
     },
     {
       marketplace: 'Mercado Livre',
@@ -62,9 +71,14 @@ test('TEST 2: mesmo Mercado Livre productId com itemIds diferentes -> apenas um 
       itemId: 'MLB-item-superior',
       productName: 'Smart TV 50 Polegadas 4K Loja Oficial',
       currentPrice: 2199.0,
-      sales: 450,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.9,
       commercialScore: 90,
+      commissionPercent: 10.0,
+      permalink: 'https://produto.mercadolivre.com.br/MLB-item-superior',
+      imageUrl: 'https://http2.mlstatic.com/MLB-item-superior.jpg',
+      provenance: 'mercadolivre_official_intent',
     },
   ];
 
@@ -87,20 +101,28 @@ test('TEST 3: dois produtos semanticamente equivalentes -> apenas o melhor repre
       shopId: 'shop-A',
       itemId: 'item-A',
       productName: 'Bola Interativa Inteligente Para Gatos com LED Brinquedo Automático',
-      currentPrice: 39.90,
-      sales: 1200,
+      currentPrice: 139.90,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.9,
-      commissionPercent: 10.0,
+      commissionPercent: 12.0,
+      permalink: 'https://shopee.com.br/product/A/item-A',
+      imageUrl: 'https://cf.shopee.com.br/item-A.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
     {
       marketplace: 'Shopee',
       shopId: 'shop-B',
       itemId: 'item-B',
       productName: 'Brinquedo Pet Bola Inteligente Interativa Gato LED Automática',
-      currentPrice: 45.00,
+      currentPrice: 145.00,
+      discountPercent: 50,
       sales: 80,
       ratingStar: 4.3,
       commissionPercent: 6.0,
+      permalink: 'https://shopee.com.br/product/B/item-B',
+      imageUrl: 'https://cf.shopee.com.br/item-B.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
   ];
 
@@ -121,11 +143,15 @@ test('TEST 4: dois produtos realmente diferentes da mesma categoria -> ambos per
       marketplace: 'Shopee',
       shopId: 'shop-1',
       itemId: 'item-airfryer',
-      productName: 'Fritadeira Elétrica Air Fryer 4L Inox',
+      productName: 'Fritadeira Elétrica Air Fryer 4L Inox Digital',
       currentPrice: 299.0,
-      sales: 500,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 6.0,
+      commissionPercent: 10.0,
+      permalink: 'https://shopee.com.br/product/1/item-airfryer',
+      imageUrl: 'https://cf.shopee.com.br/airfryer.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
     {
       marketplace: 'Shopee',
@@ -133,9 +159,13 @@ test('TEST 4: dois produtos realmente diferentes da mesma categoria -> ambos per
       itemId: 'item-liquidificador',
       productName: 'Liquidificador Turbo 1200W com Jarra de Vidro',
       currentPrice: 169.0,
-      sales: 450,
-      ratingStar: 4.7,
-      commissionPercent: 7.0,
+      discountPercent: 50,
+      sales: 1500,
+      ratingStar: 4.8,
+      commissionPercent: 10.0,
+      permalink: 'https://shopee.com.br/product/2/item-liquidificador',
+      imageUrl: 'https://cf.shopee.com.br/liquidificador.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
   ];
 
@@ -163,9 +193,14 @@ test('TEST 5: produto visto dentro da janela de recência -> bloqueado', async (
     shopId: 'shop-fresh',
     itemId: 'item-fresh-1',
     productName: 'Teclado Mecânico RGB',
-    currentPrice: 120.0,
-    sales: 200,
-    commissionPercent: 8.0,
+    currentPrice: 150.0,
+    discountPercent: 50,
+    sales: 1500,
+    commissionPercent: 12.0,
+    ratingStar: 4.8,
+    permalink: 'https://shopee.com.br/product/fresh/item-fresh-1',
+    imageUrl: 'https://cf.shopee.com.br/fresh.jpg',
+    provenance: 'shopee_openapi_productOfferV2',
   };
 
   let insertedProducts = [];
@@ -195,6 +230,7 @@ test('TEST 5: produto visto dentro da janela de recência -> bloqueado', async (
       if (table === 'trend_radar_products') {
         return {
           select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
             in: async () => ({
               data: [{
                 radar_run_id: 'run-prev-1',
@@ -204,6 +240,7 @@ test('TEST 5: produto visto dentro da janela de recência -> bloqueado', async (
               error: null,
             }),
           }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async (prods) => {
             insertedProducts = prods;
@@ -239,10 +276,14 @@ test('TEST 6: produto visto fora da janela de recência -> pode voltar a ser ele
     shopId: 'shop-old',
     itemId: 'item-old-1',
     productName: 'Umidificador de Ar Ultrassônico',
-    currentPrice: 65.0,
-    sales: 300,
-    commissionPercent: 9.0,
+    currentPrice: 150.0,
+    discountPercent: 50,
+    sales: 1500,
+    commissionPercent: 12.0,
     ratingStar: 4.8,
+    permalink: 'https://shopee.com.br/product/old/item-old-1',
+    imageUrl: 'https://cf.shopee.com.br/old.jpg',
+    provenance: 'shopee_openapi_productOfferV2',
   };
 
   let insertedProducts = [];
@@ -269,6 +310,11 @@ test('TEST 6: produto visto fora da janela de recência -> pode voltar a ser ele
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async (prods) => {
             insertedProducts = prods;
@@ -309,9 +355,14 @@ test('TEST 7: produto presente em oferta existente quando política exigir bloqu
     shopId: 'shop-fresh',
     itemId: 'item-fresh-99',
     productName: 'Nova Oferta Descoberta',
-    currentPrice: 80.0,
-    sales: 100,
-    commissionPercent: 8.0,
+    currentPrice: 150.0,
+    discountPercent: 50,
+    sales: 1500,
+    commissionPercent: 12.0,
+    ratingStar: 4.8,
+    permalink: 'https://shopee.com.br/product/fresh/item-fresh-99',
+    imageUrl: 'https://cf.shopee.com.br/fresh-99.jpg',
+    provenance: 'shopee_openapi_productOfferV2',
   };
 
   let insertedProducts = [];
@@ -335,6 +386,11 @@ test('TEST 7: produto presente em oferta existente quando política exigir bloqu
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async (prods) => {
             insertedProducts = prods;
@@ -392,11 +448,15 @@ test('TEST 9: produto high viability -> elegível', () => {
     marketplace: 'Shopee',
     shopId: 'shop-high',
     itemId: 'item-high',
-    productName: 'Monitor Gamer 24 Polegadas 165Hz IPS',
+    productName: 'Monitor Gamer 24 Polegadas 165Hz IPS Full HD',
     currentPrice: 699.0,
-    sales: 250,
+    discountPercent: 50,
+    sales: 1500,
     ratingStar: 4.85,
-    commissionPercent: 5.0,
+    commissionPercent: 8.0,
+    permalink: 'https://shopee.com.br/product/high/item-high',
+    imageUrl: 'https://cf.shopee.com.br/item-high.jpg',
+    provenance: 'shopee_openapi_productOfferV2',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -415,9 +475,14 @@ test('TEST 10: produto medium viability -> elegível', () => {
     productId: 'MLB888',
     itemId: 'MLB888-1',
     productName: 'Organizador de Cabos e Fios com Velcro 5 Metros',
-    currentPrice: 32.90,
-    sales: 45,
-    ratingStar: 4.6,
+    currentPrice: 150.0,
+    discountPercent: 50,
+    permalink: 'https://produto.mercadolivre.com.br/MLB888-1',
+    imageUrl: 'https://http2.mlstatic.com/MLB888-1.jpg',
+    sales: 1500,
+    ratingStar: 4.8,
+    commissionPercent: 12.0,
+    provenance: 'mercadolivre_official_intent',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -454,14 +519,14 @@ test('TEST 12: primeira coleta gera apenas 3 candidatos finais -> refill executa
     refillCalls += 1;
     if (page === 1) {
       return [
-        { marketplace: 'Shopee', shopId: 's1', itemId: 'p1', productName: 'Item 1', currentPrice: 50, sales: 100, commissionPercent: 8 },
-        { marketplace: 'Shopee', shopId: 's1', itemId: 'p2', productName: 'Item 2', currentPrice: 60, sales: 100, commissionPercent: 8 },
-        { marketplace: 'Shopee', shopId: 's1', itemId: 'p3', productName: 'Item 3', currentPrice: 70, sales: 100, commissionPercent: 8 },
+        { marketplace: 'Shopee', shopId: 's1', itemId: 'p1', productName: 'Teclado Mecânico Pro 1', currentPrice: 150, discountPercent: 50, sales: 1500, ratingStar: 4.8, commissionPercent: 12, permalink: 'https://shopee.com.br/product/1/p1', imageUrl: 'https://cf.shopee.com.br/p1.jpg', provenance: 'shopee_openapi_productOfferV2' },
+        { marketplace: 'Shopee', shopId: 's1', itemId: 'p2', productName: 'Mouse Sem Fio Ultra 2', currentPrice: 160, discountPercent: 50, sales: 1500, ratingStar: 4.8, commissionPercent: 12, permalink: 'https://shopee.com.br/product/1/p2', imageUrl: 'https://cf.shopee.com.br/p2.jpg', provenance: 'shopee_openapi_productOfferV2' },
+        { marketplace: 'Shopee', shopId: 's1', itemId: 'p3', productName: 'Monitor Gamer 165Hz 3', currentPrice: 170, discountPercent: 50, sales: 1500, ratingStar: 4.8, commissionPercent: 12, permalink: 'https://shopee.com.br/product/1/p3', imageUrl: 'https://cf.shopee.com.br/p3.jpg', provenance: 'shopee_openapi_productOfferV2' },
       ];
     }
     return [
-      { marketplace: 'Shopee', shopId: 's1', itemId: `p${page}_4`, productName: `Item ${page} 4`, currentPrice: 80, sales: 100, commissionPercent: 8 },
-      { marketplace: 'Shopee', shopId: 's1', itemId: `p${page}_5`, productName: `Item ${page} 5`, currentPrice: 90, sales: 100, commissionPercent: 8 },
+      { marketplace: 'Shopee', shopId: 's1', itemId: `p${page}_4`, productName: `Headset Surround Pro ${page} 4`, currentPrice: 180, discountPercent: 50, sales: 1500, ratingStar: 4.8, commissionPercent: 12, permalink: `https://shopee.com.br/product/1/p${page}_4`, imageUrl: `https://cf.shopee.com.br/p${page}_4.jpg`, provenance: 'shopee_openapi_productOfferV2' },
+      { marketplace: 'Shopee', shopId: 's1', itemId: `p${page}_5`, productName: `Webcam Full HD Pro ${page} 5`, currentPrice: 190, discountPercent: 50, sales: 1500, ratingStar: 4.8, commissionPercent: 12, permalink: `https://shopee.com.br/product/1/p${page}_5`, imageUrl: `https://cf.shopee.com.br/p${page}_5.jpg`, provenance: 'shopee_openapi_productOfferV2' },
     ];
   };
 
@@ -489,6 +554,11 @@ test('TEST 12: primeira coleta gera apenas 3 candidatos finais -> refill executa
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };
@@ -513,17 +583,28 @@ test('TEST 12: primeira coleta gera apenas 3 candidatos finais -> refill executa
 });
 
 test('TEST 13: refill consegue elevar o conjunto para 10+ -> execução continua normalmente', async () => {
+  const categories = [
+    'Teclado Mecânico RGB', 'Mouse Gamer Sem Fio', 'Monitor Gamer 165Hz', 'Cadeira Ergonômica Pro',
+    'Headset 7.1 Surround', 'Webcam Full HD 1080p', 'Microfone Condensador USB', 'Suporte Articulado Monitor',
+    'Luminária de Mesa LED', 'Gabinete Gamer Vidro', 'Memória RAM 16GB DDR4', 'Processador Octa Core',
+  ];
   const mockShopeeCollector = async ({ page = 1 } = {}) => {
     const items = [];
     for (let i = 1; i <= 6; i++) {
+      const idx = ((page - 1) * 6 + (i - 1)) % categories.length;
       items.push({
         marketplace: 'Shopee',
         shopId: `shop-${page}`,
         itemId: `item-${page}-${i}`,
-        productName: `Produto Categoria ${page} Modelo ${i}`,
-        currentPrice: 40 + i,
-        sales: 80 + i,
-        commissionPercent: 7.0,
+        productName: `${categories[idx]} Modelo ${page}_${i}`,
+        currentPrice: 140 + i,
+        discountPercent: 50,
+        sales: 1500,
+        ratingStar: 4.8,
+        commissionPercent: 12.0,
+        permalink: `https://shopee.com.br/product/${page}/item-${page}-${i}`,
+        imageUrl: `https://cf.shopee.com.br/item-${page}-${i}.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
       });
     }
     return items;
@@ -553,6 +634,11 @@ test('TEST 13: refill consegue elevar o conjunto para 10+ -> execução continua
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };
@@ -576,17 +662,31 @@ test('TEST 13: refill consegue elevar o conjunto para 10+ -> execução continua
 });
 
 test('TEST 14: refill consegue chegar a 20 -> target_reached = true', async () => {
+  const categories = [
+    'Teclado Mecânico RGB', 'Mouse Gamer Sem Fio', 'Monitor Gamer 165Hz', 'Cadeira Ergonômica Pro',
+    'Headset 7.1 Surround', 'Webcam Full HD 1080p', 'Microfone Condensador USB', 'Suporte Articulado Monitor',
+    'Luminária de Mesa LED', 'Gabinete Gamer Vidro', 'Memória RAM 16GB DDR4', 'Processador Octa Core',
+    'Placa de Vídeo 8GB', 'Fonte 650W 80 Plus', 'Cooler Duplo Heatpipe', 'SSD NVMe 1TB PCIe',
+    'HD Externo 2TB USB', 'Roteador Wi-Fi 6 Mesh', 'Switch Gigabit 8 Portas', 'Cabo HDMI 2.1 8K',
+    'Hub USB-C 7 em 1', 'Carregador GaN 65W', 'Mousepad Speed Extra Grande', 'Controle Bluetooth Gamer',
+  ];
   const mockShopeeCollector = async ({ page = 1 } = {}) => {
     const items = [];
     for (let i = 1; i <= 12; i++) {
+      const idx = ((page - 1) * 12 + (i - 1)) % categories.length;
       items.push({
         marketplace: 'Shopee',
         shopId: `s-${page}`,
         itemId: `item-${page}-${i}`,
-        productName: `Gadget Útil ${page} Tipo ${i}`,
-        currentPrice: 50 + i,
-        sales: 100 + i,
-        commissionPercent: 8.0,
+        productName: `${categories[idx]} Modelo ${page}_${i}`,
+        currentPrice: 150 + i,
+        discountPercent: 50,
+        sales: 1500,
+        ratingStar: 4.8,
+        commissionPercent: 12.0,
+        permalink: `https://shopee.com.br/product/${page}/item-${page}-${i}`,
+        imageUrl: `https://cf.shopee.com.br/item-${page}-${i}.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
       });
     }
     return items;
@@ -616,6 +716,11 @@ test('TEST 14: refill consegue chegar a 20 -> target_reached = true', async () =
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };
@@ -642,16 +747,25 @@ test('TEST 14: refill consegue chegar a 20 -> target_reached = true', async () =
 });
 
 test('TEST 15: fontes se esgotam com apenas 7 produtos -> finaliza com 7, target_reached = false e completion_reason explícita', async () => {
+  const categories = [
+    'Teclado Mecânico RGB', 'Mouse Gamer Sem Fio', 'Monitor Gamer 165Hz', 'Cadeira Ergonômica Pro',
+    'Headset 7.1 Surround', 'Webcam Full HD 1080p', 'Microfone Condensador USB',
+  ];
   const mockShopeeCollector = async ({ page = 1 } = {}) => {
     if (page === 1) {
       return Array.from({ length: 7 }, (_, i) => ({
         marketplace: 'Shopee',
         shopId: 's1',
         itemId: `item-exhaust-${i}`,
-        productName: `Produto Único ${i}`,
-        currentPrice: 45,
-        sales: 50,
-        commissionPercent: 6,
+        productName: `${categories[i]} Modelo ${i}`,
+        currentPrice: 150,
+        discountPercent: 50,
+        sales: 1500,
+        ratingStar: 4.8,
+        commissionPercent: 12,
+        permalink: `https://shopee.com.br/product/1/item-exhaust-${i}`,
+        imageUrl: `https://cf.shopee.com.br/item-exhaust-${i}.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
       }));
     }
     // Páginas subsequentes retornam vazio (fontes esgotadas)
@@ -682,6 +796,11 @@ test('TEST 15: fontes se esgotam com apenas 7 produtos -> finaliza com 7, target
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };
@@ -713,10 +832,15 @@ test('TEST 16: Top 20 não contém identidade comercial duplicada', () => {
       marketplace: 'Shopee',
       shopId: `shop-${i % 15}`,
       itemId: `item-${i % 15}`, // 15 pares de itens com mesmo itemId/shopId
-      productName: `Produto Gamer ${i % 15}`,
-      currentPrice: 100 + i,
-      sales: 200,
-      commissionPercent: 8,
+      productName: `Produto Gamer Modelo ${i % 15}`,
+      currentPrice: 150 + i,
+      discountPercent: 50,
+      sales: 1500,
+      ratingStar: 4.8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/${i % 15}/item-${i % 15}`,
+      imageUrl: `https://cf.shopee.com.br/item-${i % 15}.jpg`,
+      provenance: 'shopee_openapi_productOfferV2',
     });
   }
 
@@ -743,18 +867,28 @@ test('TEST 17: Top 20 não contém duplicatas semânticas proibidas', () => {
       shopId: 's1',
       itemId: 'i1',
       productName: 'Bola Interativa Inteligente Para Gatos com LED Brinquedo Automático',
-      currentPrice: 39.9,
-      sales: 1000,
-      commissionPercent: 10,
+      currentPrice: 139.9,
+      discountPercent: 50,
+      sales: 1500,
+      ratingStar: 4.9,
+      commissionPercent: 12,
+      permalink: 'https://shopee.com.br/product/1/i1',
+      imageUrl: 'https://cf.shopee.com.br/i1.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
     {
       marketplace: 'Shopee',
       shopId: 's2',
       itemId: 'i2',
       productName: 'Brinquedo Pet Bola Inteligente Interativa Gato LED Automática',
-      currentPrice: 42.0,
+      currentPrice: 142.0,
+      discountPercent: 50,
       sales: 80,
+      ratingStar: 4.3,
       commissionPercent: 6,
+      permalink: 'https://shopee.com.br/product/2/i2',
+      imageUrl: 'https://cf.shopee.com.br/i2.jpg',
+      provenance: 'shopee_openapi_productOfferV2',
     },
   ];
 
@@ -792,6 +926,11 @@ test('TEST 18: google_trends_used continua false em toda execução', async () =
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };
@@ -935,6 +1074,10 @@ test('TEST 21: collectMercadoLivreMarketplaceCandidates real divide keywords em 
 });
 
 test('TEST 22: fontes se esgotam (rounds retornam vazio) → completion_reason = eligible_sources_exhausted', async () => {
+  const categories = [
+    'Teclado Mecânico RGB', 'Mouse Gamer Sem Fio', 'Monitor Gamer 165Hz', 'Cadeira Ergonômica Pro',
+    'Headset 7.1 Surround',
+  ];
   // Fontes retornam candidatos apenas no round 1, depois ficam completamente vazias.
   const mockShopeeCollector = async ({ page = 1 } = {}) => {
     if (page === 1) {
@@ -942,10 +1085,15 @@ test('TEST 22: fontes se esgotam (rounds retornam vazio) → completion_reason =
         marketplace: 'Shopee',
         shopId: 's1',
         itemId: `item-exhaust-22-${i}`,
-        productName: `Produto Esgotamento ${i}`,
-        currentPrice: 45,
-        sales: 50,
-        commissionPercent: 6,
+        productName: `${categories[i]} Modelo ${i}`,
+        currentPrice: 150,
+        discountPercent: 50,
+        sales: 1500,
+        ratingStar: 4.8,
+        commissionPercent: 12,
+        permalink: `https://shopee.com.br/product/1/item-exhaust-22-${i}`,
+        imageUrl: `https://cf.shopee.com.br/item-exhaust-22-${i}.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
       }));
     }
     // Rounds 2+ retornam vazio → fontes esgotadas
@@ -976,6 +1124,11 @@ test('TEST 22: fontes se esgotam (rounds retornam vazio) → completion_reason =
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };
@@ -1004,38 +1157,37 @@ test('TEST 22: fontes se esgotam (rounds retornam vazio) → completion_reason =
 });
 
 test('TEST 23: maxRefillRounds esgota mas fontes ainda ativas → completion_reason = refill_limit_reached', async () => {
-  // Fontes SEMPRE retornam candidatos (não esgotam), mas deduplicação/recência
-  // faz os produtos viáveis finais ficarem abaixo do mínimo.
-  // Isso significa que o loop parou por limite operacional, não por esgotamento de fontes.
   let callCount = 0;
   const mockShopeeCollector = async ({ page = 1 } = {}) => {
     callCount += 1;
-    // Sempre retorna 1 candidato viável com itemId único por round
-    // mas todos já foram vistos (recência) — simulado por deduplicação nativa:
-    // mesmo shopId + itemId em todos os rounds para simular colisão de dedup.
-    // O truque: usar itemId diferente por round para não cair em dedup nativa,
-    // mas com nome semanticamente igual para forçar dedup semântica.
-    // Na prática o que importa é: fontes não estão vazias (retornam dados),
-    // mas o pool viável final < 10.
-    // Usamos 2 itens por round com itemId único, mas baixo volume (< 10 total viáveis no final).
     return [
       {
         marketplace: 'Shopee',
         shopId: 's-limit',
         itemId: `item-limit-${page}-A`,
         productName: `Produto Limite Round ${page} A`,
-        currentPrice: 45,
-        sales: 50,
-        commissionPercent: 6,
+        currentPrice: 150,
+        discountPercent: 50,
+        sales: 1500,
+        ratingStar: 4.8,
+        commissionPercent: 12,
+        permalink: `https://shopee.com.br/product/limit/item-limit-${page}-A`,
+        imageUrl: `https://cf.shopee.com.br/item-limit-${page}-A.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
       },
       {
         marketplace: 'Shopee',
         shopId: 's-limit',
         itemId: `item-limit-${page}-B`,
         productName: `Produto Limite Round ${page} B`,
-        currentPrice: 46,
-        sales: 55,
-        commissionPercent: 6,
+        currentPrice: 160,
+        discountPercent: 50,
+        sales: 1500,
+        ratingStar: 4.8,
+        commissionPercent: 12,
+        permalink: `https://shopee.com.br/product/limit/item-limit-${page}-B`,
+        imageUrl: `https://cf.shopee.com.br/item-limit-${page}-B.jpg`,
+        provenance: 'shopee_openapi_productOfferV2',
       },
     ];
   };
@@ -1064,6 +1216,11 @@ test('TEST 23: maxRefillRounds esgota mas fontes ainda ativas → completion_rea
       }
       if (table === 'trend_radar_products') {
         return {
+          select: () => ({
+            eq: () => ({ then: (resolve) => resolve({ data: [], error: null }) }),
+            in: () => ({ order: () => ({ limit: async () => ({ data: [], error: null }) }), then: (resolve) => resolve({ data: [], error: null }) }),
+          }),
+          update: () => ({ eq: () => ({ eq: async () => ({ error: null }) }) }),
           delete: () => ({ eq: async () => ({ error: null }) }),
           insert: async () => ({ error: null }),
         };

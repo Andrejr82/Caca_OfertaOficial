@@ -322,73 +322,102 @@ test('decision thresholds V4 are deterministic', () => {
 test('CARTEIRA COMERCIAL: Seleção Top 20 respeita quotas de ticket (max 6 impulse, >=5 core, >=4 upper, >=2 premium)', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
+  const impulseTitles = [
+    'Fone de Ouvido Intra-auricular', 'Cabo Tipo C Trançado', 'Suporte Celular Mesa', 'Mousepad Speed Médio',
+    'Mini Lanterna Tática LED', 'Adaptador USB OTG', 'Película de Vidro 3D', 'Limpador de Tela Spray',
+    'Organizador de Cabos', 'Capa Protetora Silicone',
+  ];
+  const coreTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Headset 7.1 Surround', 'Webcam Full HD 1080p',
+    'Microfone Condensador USB', 'Suporte Articulado Monitor', 'Luminária de Mesa LED', 'Gabinete Gamer Vidro',
+    'Memória RAM 16GB DDR4', 'Processador Octa Core',
+  ];
+  const upperTitles = [
+    'Monitor Gamer 165Hz IPS', 'Cadeira Ergonômica Pro Mesh', 'Placa de Vídeo 8GB GDDR6', 'Fonte 750W 80 Plus Gold',
+    'SSD NVMe 2TB Gen4', 'Roteador Wi-Fi 6 Mesh Tri-Band', 'Smartwatch Esportivo AMOLED', 'Impressora Tanque de Tinta',
+    'Caixa de Som Portátil 60W', 'Tablet 10 Polegadas Octa Core',
+  ];
+  const premTitles = [
+    'Notebook Gamer RTX 4060', 'Smart TV 65 Polegadas QLED 4K', 'Smartphone Flagship 256GB', 'Drone Profissional 4K Gimbal',
+    'Câmera Mirrorless Full Frame', 'Projetor Laser 4K Cinema', 'Console de Video Game 1TB', 'Bicicleta Elétrica Dobrável',
+    'Ar Condicionado Inverter 18000', 'Geladeira Frost Free Inox',
+  ];
+
   const candidates = [];
 
   // 10 Impulse (R$ 50)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `IMP_${i}`,
-      shopId: 'shop-1',
-      productName: `Item Impulso Barato ${i}`,
-      category: `Categoria Impulso ${i}`,
+      itemId: `IMP_${i + 1}`,
+      shopId: `shop-i-${i + 1}`,
+      productName: `${impulseTitles[i]} Modelo Shopee`,
+      category: `Categoria Impulso ${i + 1}`,
       currentPrice: 50,
       oldPrice: 100,
       discountPercent: 50,
       sales: 5000,
       ratingStar: 4.8,
-      commissionPercent: 10,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/1/imp_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/imp_${i + 1}.jpg`,
     });
   }
 
   // 10 Core (R$ 250)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `CORE_${i}`,
-      shopId: 'shop-2',
-      productName: `Item Core Médio ${i}`,
-      category: `Categoria Core ${i}`,
+      itemId: `CORE_${i + 1}`,
+      shopId: `shop-c-${i + 1}`,
+      productName: `${coreTitles[i]} Modelo Shopee`,
+      category: `Categoria Core ${i + 1}`,
       currentPrice: 250,
-      oldPrice: 350,
-      discountPercent: 28,
+      oldPrice: 500,
+      discountPercent: 50,
       sales: 2000,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/2/core_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/core_${i + 1}.jpg`,
     });
   }
 
   // 10 Upper (R$ 800)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `UPPER_${i}`,
-      shopId: 'shop-3',
-      productName: `Item Upper Alto ${i}`,
-      category: `Categoria Upper ${i}`,
+      itemId: `UPPER_${i + 1}`,
+      shopId: `shop-u-${i + 1}`,
+      productName: `${upperTitles[i]} Modelo Shopee`,
+      category: `Categoria Upper ${i + 1}`,
       currentPrice: 800,
-      oldPrice: 1000,
-      discountPercent: 20,
-      sales: 1000,
+      oldPrice: 1600,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 6,
+      commissionPercent: 10,
+      permalink: `https://shopee.com.br/product/3/upper_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/upper_${i + 1}.jpg`,
     });
   }
 
   // 10 Premium (R$ 2000)
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `PREM_${i}`,
-      shopId: 'shop-4',
-      productName: `Item Premium Top ${i}`,
-      category: `Categoria Premium ${i}`,
+      itemId: `PREM_${i + 1}`,
+      shopId: `shop-p-${i + 1}`,
+      productName: `${premTitles[i]} Modelo Shopee`,
+      category: `Categoria Premium ${i + 1}`,
       currentPrice: 2000,
-      oldPrice: 2500,
-      discountPercent: 20,
-      sales: 500,
+      oldPrice: 4000,
+      discountPercent: 50,
+      sales: 1000,
       ratingStar: 4.9,
-      commissionPercent: 5,
+      commissionPercent: 8,
+      permalink: `https://shopee.com.br/product/4/prem_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/prem_${i + 1}.jpg`,
     });
   }
 
@@ -415,6 +444,18 @@ test('CARTEIRA COMERCIAL: Seleção Top 20 respeita quotas de ticket (max 6 impu
 test('CARTEIRA COMERCIAL: Quotas redistribuem vagas quando uma faixa não possui candidatos suficientes sem forçar produtos ruins', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
+  const coreTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Headset 7.1 Surround', 'Webcam Full HD 1080p',
+    'Microfone Condensador USB', 'Suporte Articulado Monitor', 'Luminária de Mesa LED', 'Gabinete Gamer Vidro',
+    'Memória RAM 16GB DDR4', 'Processador Octa Core',
+  ];
+  const impulseTitles = [
+    'Fone de Ouvido Intra-auricular', 'Cabo Tipo C Trançado', 'Suporte Celular Mesa', 'Mousepad Speed Médio',
+    'Mini Lanterna Tática LED', 'Adaptador USB OTG', 'Película de Vidro 3D', 'Limpador de Tela Spray',
+    'Organizador de Cabos', 'Capa Protetora Silicone', 'Hub USB 4 Portas', 'Carregador Parede 20W',
+    'Cabo Auxiliar P2', 'Mini Caixa de Som', 'Suporte Veicular Celular',
+  ];
+
   const candidates = [];
 
   // Apenas 1 Premium viável
@@ -422,47 +463,53 @@ test('CARTEIRA COMERCIAL: Quotas redistribuem vagas quando uma faixa não possui
     marketplace: 'Shopee',
     itemId: 'PREM_SINGLE',
     shopId: 'shop-p',
-    productName: 'Notebook Ultra R$ 3500',
+    productName: 'Notebook Ultra 16GB SSD 512GB',
     category: 'Informática',
     currentPrice: 3500,
-    oldPrice: 4000,
-    discountPercent: 12,
-    sales: 300,
+    oldPrice: 7000,
+    discountPercent: 50,
+    sales: 1000,
     ratingStar: 4.8,
-    commissionPercent: 5,
+    commissionPercent: 8,
+    permalink: 'https://shopee.com.br/product/p/single',
+    imageUrl: 'https://cf.shopee.com.br/single.jpg',
   });
 
   // 10 Core
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 0; i < 10; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `CORE_R_${i}`,
-      shopId: 'shop-c',
-      productName: `Produto Core Variado ${i}`,
-      category: `Categoria C ${i}`,
+      itemId: `CORE_R_${i + 1}`,
+      shopId: `shop-c-${i + 1}`,
+      productName: `${coreTitles[i]} Modelo Shopee`,
+      category: `Categoria C ${i + 1}`,
       currentPrice: 200 + i * 10,
-      oldPrice: 300 + i * 10,
-      discountPercent: 30,
-      sales: 1000,
+      oldPrice: 400 + i * 20,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/c/core_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/core_${i + 1}.jpg`,
     });
   }
 
   // 15 Impulse
-  for (let j = 1; j <= 15; j++) {
+  for (let j = 0; j < 15; j++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `IMP_R_${j}`,
-      shopId: 'shop-i',
-      productName: `Produto Impulso Variado ${j}`,
-      category: `Categoria I ${j}`,
-      currentPrice: 40 + j,
-      oldPrice: 80,
+      itemId: `IMP_R_${j + 1}`,
+      shopId: `shop-i-${j + 1}`,
+      productName: `${impulseTitles[j]} Modelo Shopee`,
+      category: `Categoria I ${j + 1}`,
+      currentPrice: 80 + j,
+      oldPrice: 160 + j * 2,
       discountPercent: 50,
-      sales: 5000,
+      sales: 10000,
       ratingStar: 4.8,
-      commissionPercent: 10,
+      commissionPercent: 15,
+      permalink: `https://shopee.com.br/product/i/imp_${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/imp_${j + 1}.jpg`,
     });
   }
 
@@ -481,6 +528,11 @@ test('CARTEIRA COMERCIAL: Quotas redistribuem vagas quando uma faixa não possui
 
 test('CARTEIRA COMERCIAL: Quotas nunca forçam candidatos com viabilidade LOW ou INSUFFICIENT_DATA', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const coreTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Headset 7.1 Surround', 'Webcam Full HD 1080p',
+    'Microfone Condensador USB',
+  ];
 
   const candidates = [];
 
@@ -510,18 +562,21 @@ test('CARTEIRA COMERCIAL: Quotas nunca forçam candidatos com viabilidade LOW ou
   });
 
   // 5 Core viáveis
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 0; i < 5; i++) {
     candidates.push({
       marketplace: 'Shopee',
-      itemId: `CORE_GOOD_${i}`,
-      productName: `Item Core Bom ${i}`,
-      category: `Cat ${i}`,
+      itemId: `CORE_GOOD_${i + 1}`,
+      shopId: `shop-g-${i + 1}`,
+      productName: `${coreTitles[i]} Modelo Shopee`,
+      category: `Cat ${i + 1}`,
       currentPrice: 200,
-      oldPrice: 300,
-      discountPercent: 33,
-      sales: 800,
+      oldPrice: 400,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.8,
-      commissionPercent: 8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/g/core_${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/core_${i + 1}.jpg`,
     });
   }
 
@@ -744,7 +799,7 @@ test('INTEGRAÇÃO 5: Candidato com >=10 cliques humanos e 0 vendas vira observe
   }
 
   const mockClient = createMockSupabaseClient({
-    offers: [{ id: 'offer-zero', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-ZERO' }],
+    offers: [{ id: 'offer-zero', user_id: 'user-1', platform: 'Shopee', shopee_item_id: 'ITEM-ZERO', shopee_shop_id: 'shop-zero' }],
     affiliateLinks: [{ id: 'link-zero-conv', offer_id: 'offer-zero', clicks: 12 }],
     clickEvents,
     sales: [], // 0 vendas
@@ -752,15 +807,18 @@ test('INTEGRAÇÃO 5: Candidato com >=10 cliques humanos e 0 vendas vira observe
 
   const candidate = {
     marketplace: 'Shopee',
+    shopId: 'shop-zero',
     itemId: 'ITEM-ZERO',
     productName: 'Produto Muita Visita Sem Venda',
     category: 'Geral',
     currentPrice: 150,
-    oldPrice: 200,
-    discountPercent: 25,
-    sales: 1000,
+    oldPrice: 300,
+    discountPercent: 50,
+    sales: 1500,
     ratingStar: 4.8,
-    commissionPercent: 8,
+    commissionPercent: 12,
+    permalink: 'https://shopee.com.br/product/1/ITEM-ZERO',
+    imageUrl: 'https://cf.shopee.com.br/item-zero.jpg',
   };
 
   const perfMap = await fetchInternalOfferPerformanceMap(mockClient, {
@@ -1007,5 +1065,737 @@ test('MATCHING SHOPEE: mesmo itemId em shopId diferente NÃO faz matching cruzad
   assert.equal(perfMap.size, 0, 'Não pode haver match quando o shopId for diferente, mesmo com mesmo itemId');
 });
 
+// ============================================================================
+// COMPETITIVIDADE REAL DE PREÇO E NORMALIZAÇÃO DE UNIDADES
+// ============================================================================
 
+test('Produtos de mesma família com unidades incompatíveis (L vs kg) não são comparados diretamente e recebem unit_not_comparable', () => {
+  const omo4kg = {
+    itemId: 'omo-4kg',
+    productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
+    currentPrice: 95.88,
+    discountPercent: 40,
+    sales: 1000,
+    ratingStar: 4.8,
+  };
 
+  const omo5L = {
+    itemId: 'omo-5l',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 50.00,
+    discountPercent: 10,
+    sales: 1000,
+    ratingStar: 4.8,
+  };
+
+  const peers = [omo4kg, omo5L];
+
+  const score4kg = calculateCommercialOpportunityScoreV4(omo4kg, { peers });
+  const score5L = calculateCommercialOpportunityScoreV4(omo5L, { peers });
+
+  assert.equal(score5L.normalized_unit, 'L');
+  assert.equal(score5L.normalized_price, 10.00);
+  assert.equal(score5L.relative_price_position, 'unit_not_comparable', 'Unidades diferentes (L vs kg) não devem gerar best_in_family');
+
+  assert.equal(score4kg.normalized_unit, 'kg');
+  assert.equal(score4kg.normalized_price, 23.97);
+  assert.equal(score4kg.relative_price_position, 'unit_not_comparable', 'Unidades diferentes (kg vs L) não devem gerar unfavorable');
+});
+
+test('Produtos da mesma família com mesma unidade de volume (L) comparam preço normalizado R$/L', () => {
+  const omo5L = {
+    itemId: 'omo-5l',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 50.00, // R$ 10.00/L
+    discountPercent: 10,
+  };
+
+  const omo7L = {
+    itemId: 'omo-7l',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 7L',
+    currentPrice: 105.00, // R$ 15.00/L (+50%)
+    discountPercent: 10,
+  };
+
+  const peers = [omo5L, omo7L];
+
+  const score5L = calculateCommercialOpportunityScoreV4(omo5L, { peers });
+  const score7L = calculateCommercialOpportunityScoreV4(omo7L, { peers });
+
+  assert.equal(score5L.normalized_unit, 'L');
+  assert.equal(score5L.normalized_price, 10.00);
+  assert.equal(score5L.relative_price_position, 'best_in_family');
+  assert.equal(score5L.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(score7L.normalized_unit, 'L');
+  assert.equal(score7L.normalized_price, 15.00);
+  assert.equal(score7L.relative_price_position, 'unfavorable');
+  assert.equal(score7L.breakdown.offerCompetitiveness, 1);
+});
+
+test('Dois produtos iguais com mesma quantidade têm menor preço normalizado como best_in_family', () => {
+  const foneBarato = {
+    itemId: 'fone-25',
+    productName: 'Fone de Ouvido Bluetooth TWS i12',
+    currentPrice: 25.00,
+    discountPercent: 0,
+  };
+
+  const foneCaro = {
+    itemId: 'fone-35',
+    productName: 'Fone de Ouvido Bluetooth TWS i12',
+    currentPrice: 35.00,
+    discountPercent: 50, // 50% de desconto falso
+  };
+
+  const peers = [foneBarato, foneCaro];
+
+  const scoreBarato = calculateCommercialOpportunityScoreV4(foneBarato, { peers });
+  const scoreCaro = calculateCommercialOpportunityScoreV4(foneCaro, { peers });
+
+  assert.equal(scoreBarato.relative_price_position, 'best_in_family');
+  assert.equal(scoreBarato.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreCaro.relative_price_position, 'unfavorable');
+  assert.equal(scoreCaro.breakdown.offerCompetitiveness, 1);
+
+  assert.ok(scoreBarato.total > scoreCaro.total, 'Menor preço real deve vencer o anúncio mais caro mesmo com desconto falso');
+});
+
+test('Kits de unidades comparam preço normalizado por unidade', () => {
+  const kit3 = {
+    itemId: 'kit-3',
+    productName: 'Kit 3 Camisetas Básicas Algodão',
+    currentPrice: 30.00, // R$ 10/unidade
+    discountPercent: 10,
+  };
+
+  const kit2 = {
+    itemId: 'kit-2',
+    productName: 'Kit 2 Camisetas Básicas Algodão',
+    currentPrice: 24.00, // R$ 12/unidade
+    discountPercent: 10,
+  };
+
+  const peers = [kit3, kit2];
+
+  const scoreKit3 = calculateCommercialOpportunityScoreV4(kit3, { peers });
+  const scoreKit2 = calculateCommercialOpportunityScoreV4(kit2, { peers });
+
+  assert.equal(scoreKit3.normalized_unit, 'unit');
+  assert.equal(scoreKit3.normalized_price, 10.00);
+  assert.equal(scoreKit3.relative_price_position, 'best_in_family');
+  assert.equal(scoreKit3.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreKit2.normalized_unit, 'unit');
+  assert.equal(scoreKit2.normalized_price, 12.00);
+  assert.equal(scoreKit2.relative_price_position, 'average');
+  assert.ok(scoreKit3.breakdown.offerCompetitiveness > scoreKit2.breakdown.offerCompetitiveness);
+});
+
+test('Produtos de massa (g vs kg) comparam preço normalizado por kg', () => {
+  const cafe1kg = {
+    itemId: 'cafe-1kg',
+    productName: 'Café Especial Torrado em Grãos 1kg',
+    currentPrice: 40.00, // R$ 40/kg
+    discountPercent: 5,
+  };
+
+  const cafe500g = {
+    itemId: 'cafe-500g',
+    productName: 'Café Especial Torrado em Grãos 500g',
+    currentPrice: 30.00, // R$ 60/kg
+    discountPercent: 5,
+  };
+
+  const peers = [cafe1kg, cafe500g];
+
+  const score1kg = calculateCommercialOpportunityScoreV4(cafe1kg, { peers });
+  const score500g = calculateCommercialOpportunityScoreV4(cafe500g, { peers });
+
+  assert.equal(score1kg.normalized_unit, 'kg');
+  assert.equal(score1kg.normalized_price, 40.00);
+  assert.equal(score1kg.relative_price_position, 'best_in_family');
+  assert.equal(score1kg.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(score500g.normalized_unit, 'kg');
+  assert.equal(score500g.normalized_price, 60.00);
+  assert.equal(score500g.relative_price_position, 'unfavorable');
+  assert.ok(score1kg.breakdown.offerCompetitiveness > score500g.breakdown.offerCompetitiveness);
+});
+
+test('Produto sem quantidade detectável usa preço unitário e compara se seguro', () => {
+  const mouseA = {
+    itemId: 'mouse-a',
+    productName: 'Mouse Gamer RGB Ergonômico 7200 DPI',
+    currentPrice: 50.00,
+  };
+
+  const mouseB = {
+    itemId: 'mouse-b',
+    productName: 'Mouse Gamer RGB Ergonômico 7200 DPI',
+    currentPrice: 80.00,
+  };
+
+  const peers = [mouseA, mouseB];
+
+  const scoreA = calculateCommercialOpportunityScoreV4(mouseA, { peers });
+  const scoreB = calculateCommercialOpportunityScoreV4(mouseB, { peers });
+
+  assert.equal(scoreA.normalized_unit, 'unit');
+  assert.equal(scoreA.normalized_price, 50.00);
+  assert.equal(scoreA.relative_price_position, 'best_in_family');
+  assert.equal(scoreA.breakdown.offerCompetitiveness, 10);
+
+  assert.equal(scoreB.normalized_price, 80.00);
+  assert.equal(scoreB.relative_price_position, 'unfavorable');
+  assert.equal(scoreB.breakdown.offerCompetitiveness, 1);
+});
+
+test('Produtos de famílias diferentes não são comparados entre si', () => {
+  const omo = {
+    itemId: 'omo-1',
+    productName: 'Sabão Líquido OMO 5L',
+    currentPrice: 50.00,
+  };
+
+  const fone = {
+    itemId: 'fone-1',
+    productName: 'Fone Bluetooth TWS i12',
+    currentPrice: 25.00,
+  };
+
+  const peers = [omo, fone];
+
+  const scoreOmo = calculateCommercialOpportunityScoreV4(omo, { peers });
+  const scoreFone = calculateCommercialOpportunityScoreV4(fone, { peers });
+
+  assert.equal(scoreOmo.peer_count, 1, 'OMO não deve ser comparado com fone');
+  assert.equal(scoreOmo.relative_price_position, 'solo');
+
+  assert.equal(scoreFone.peer_count, 1, 'Fone não deve ser comparado com sabão');
+  assert.equal(scoreFone.relative_price_position, 'solo');
+});
+
+test('Desconto próprio anunciado não supera concorrente da mesma família muito mais barato', () => {
+  const caroComDesconto = {
+    itemId: 'item-caro',
+    productName: 'Suporte de Celular Veicular Magnético Saída de Ar',
+    currentPrice: 60.00,
+    discountPercent: 60, // alega 60% de desconto (de R$ 150 por R$ 60)
+  };
+
+  const baratoSemDesconto = {
+    itemId: 'item-barato',
+    productName: 'Suporte de Celular Veicular Magnético Saída de Ar',
+    currentPrice: 20.00,
+    discountPercent: 0, // 0% de desconto anunciado
+  };
+
+  const peers = [caroComDesconto, baratoSemDesconto];
+
+  const scoreCaro = calculateCommercialOpportunityScoreV4(caroComDesconto, { peers });
+  const scoreBarato = calculateCommercialOpportunityScoreV4(baratoSemDesconto, { peers });
+
+  assert.equal(scoreBarato.breakdown.offerCompetitiveness, 10);
+  assert.equal(scoreCaro.breakdown.offerCompetitiveness, 1);
+  assert.ok(scoreBarato.breakdown.offerCompetitiveness > scoreCaro.breakdown.offerCompetitiveness);
+});
+
+test('Candidato isolado no run preserva avaliação intrínseca de desconto promocional', () => {
+  const soloComDesconto = {
+    itemId: 'item-solo-50',
+    productName: 'Câmera de Segurança Externa Wi-Fi 360',
+    currentPrice: 150.00,
+    discountPercent: 50,
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(soloComDesconto, { peers: [] });
+
+  assert.equal(score.peer_count, 1);
+  assert.equal(score.relative_price_position, 'solo');
+  assert.equal(score.breakdown.offerCompetitiveness, 10, 'Desconto solo de 50% pontua 10 pts');
+});
+
+test('Engine registra family_key, normalized_unit, normalized_price e relative_price_position no directEvidence', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const shopeeCandidate1 = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-omo-5l',
+    shopId: 'shop-1',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 70.00,
+    oldPrice: 140.00,
+    discountPercent: 50,
+    sales: 5000,
+    ratingStar: 4.9,
+    commissionPercent: 15,
+    permalink: 'https://shopee.com.br/product/1/omo5l',
+    imageUrl: 'https://cf.shopee.com.br/omo5l.jpg',
+  };
+
+  const shopeeCandidate2 = {
+    marketplace: 'Shopee',
+    itemId: 'shopee-omo-7l',
+    shopId: 'shop-2',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 7L',
+    currentPrice: 140.00,
+    oldPrice: 180.00,
+    discountPercent: 22,
+    sales: 1500,
+    ratingStar: 4.8,
+    commissionPercent: 12,
+    permalink: 'https://shopee.com.br/product/2/omo7l',
+    imageUrl: 'https://cf.shopee.com.br/omo7l.jpg',
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-test-price-competitiveness',
+    shopeeCandidates: [shopeeCandidate1, shopeeCandidate2],
+    mlCandidates: [],
+    maxProducts: 10,
+  });
+
+  assert.ok(products.length >= 1);
+  const bestProduct = products.find((p) => p.product_term.includes('5L'));
+  assert.ok(bestProduct, 'OMO 5L deve estar entre os produtos selecionados');
+
+  const direct = bestProduct.direct_evidence[0];
+  assert.ok(direct.family_key.includes('omo'));
+  assert.equal(direct.normalized_unit, 'L');
+  assert.equal(direct.normalized_price, 14.00);
+  assert.equal(direct.relative_price_position, 'best_in_family');
+  assert.ok(direct.competitiveness_reason.includes('Melhor preço'));
+});
+
+// ============================================================================
+// SELEÇÃO COMERCIAL E QUOTAS SEM PREENCHIMENTO ARTIFICIAL
+// ============================================================================
+
+test('Seleção com 25 candidatos (20 TESTAR/PRIORIDADE + 5 IGNORAR) retorna exatamente 20 e zero IGNORAR', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+
+  // 10 PRIORIDADE (score >= 80)
+  for (let i = 0; i < 10; i++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `PRIO_${i + 1}`,
+      shopId: `shop-prio-${i + 1}`,
+      productName: `Produto Prioridade Especial ${i + 1} Original`,
+      category: `Categoria Prio ${i + 1}`,
+      currentPrice: 200,
+      oldPrice: 400,
+      discountPercent: 50,
+      sales: 15000,
+      ratingStar: 4.9,
+      commissionPercent: 15,
+      permalink: `https://shopee.com.br/product/prio/${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/prio_${i + 1}.jpg`,
+      internalPerformance: {
+        matched: true,
+        humanProbableClicks: 50,
+        attributedSales: 10,
+      },
+    });
+  }
+
+  // 10 TESTAR (score 60-79)
+  for (let j = 0; j < 10; j++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `TEST_${j + 1}`,
+      shopId: `shop-test-${j + 1}`,
+      productName: `Produto Testar Elegivel ${j + 1} Original`,
+      category: `Categoria Test ${j + 1}`,
+      currentPrice: 150,
+      oldPrice: 300,
+      discountPercent: 50,
+      sales: 3000,
+      ratingStar: 4.8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/test/${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/test_${j + 1}.jpg`,
+    });
+  }
+
+  // 5 IGNORAR (score < 60)
+  for (let k = 0; k < 5; k++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `IGN_${k + 1}`,
+      shopId: `shop-ign-${k + 1}`,
+      productName: `Produto Ruim Descartavel ${k + 1}`,
+      category: `Categoria Ign ${k + 1}`,
+      currentPrice: 10,
+      oldPrice: 10,
+      discountPercent: 0,
+      sales: 0,
+      ratingStar: 0,
+      commissionPercent: 1,
+      permalink: `https://shopee.com.br/product/ign/${k + 1}`,
+      imageUrl: `https://cf.shopee.com.br/ign_${k + 1}.jpg`,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-commercial-25-candidates',
+    shopeeCandidates: candidates,
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 20, 'Deve selecionar exatamente os 20 produtos elegíveis');
+  const ignoreInResult = products.filter(p => p.selection_decision === 'IGNORAR' || p.commercial_score < 60);
+  assert.equal(ignoreInResult.length, 0, 'Zero produtos com decisão IGNORAR no resultado final');
+});
+
+test('Seleção com 8 TESTAR + 12 IGNORAR retorna somente 8 sem preenchimento artificial', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+
+  // 8 TESTAR
+  for (let i = 0; i < 8; i++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `VALID_${i + 1}`,
+      shopId: `shop-val-${i + 1}`,
+      productName: `Produto Valido Testar ${i + 1} Oficial`,
+      category: `Categoria Val ${i + 1}`,
+      currentPrice: 180,
+      oldPrice: 360,
+      discountPercent: 50,
+      sales: 2000,
+      ratingStar: 4.8,
+      commissionPercent: 12,
+      permalink: `https://shopee.com.br/product/val/${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/val_${i + 1}.jpg`,
+    });
+  }
+
+  // 12 IGNORAR
+  for (let j = 0; j < 12; j++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `BAD_${j + 1}`,
+      shopId: `shop-bad-${j + 1}`,
+      productName: `Produto Sem Condicoes ${j + 1}`,
+      category: `Categoria Bad ${j + 1}`,
+      currentPrice: 15,
+      oldPrice: 15,
+      discountPercent: 0,
+      sales: 0,
+      ratingStar: 0,
+      commissionPercent: 0,
+      permalink: `https://shopee.com.br/product/bad/${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/bad_${j + 1}.jpg`,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-commercial-8-candidates',
+    shopeeCandidates: candidates,
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 8, 'Deve retornar exatamente os 8 produtos elegíveis');
+  const ignoreInResult = products.filter(p => p.selection_decision === 'IGNORAR' || p.commercial_score < 60);
+  assert.equal(ignoreInResult.length, 0, 'Nenhum produto IGNORAR deve ser introduzido para completar quota');
+});
+
+test('Seleção com todos candidatos IGNORAR retorna lista vazia com 0 produtos', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const candidates = [];
+  for (let i = 0; i < 15; i++) {
+    candidates.push({
+      marketplace: 'Shopee',
+      itemId: `ALL_IGN_${i + 1}`,
+      shopId: `shop-all-ign-${i + 1}`,
+      productName: `Produto Sem Atratividade ${i + 1}`,
+      category: `Categoria ${i + 1}`,
+      currentPrice: 10,
+      sales: 0,
+      ratingStar: 0,
+      commissionPercent: 0,
+      permalink: `https://shopee.com.br/product/all/${i + 1}`,
+      imageUrl: `https://cf.shopee.com.br/all_${i + 1}.jpg`,
+    });
+  }
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-commercial-all-ignore',
+    shopeeCandidates: candidates,
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 0, 'Quando todos são IGNORAR, deve retornar lista vazia');
+});
+
+test('Produtos com decisão PRIORIDADE ranqueiam acima de TESTAR', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const prioCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-PRIO',
+    shopId: 'shop-prio',
+    productName: 'Monitor Gamer 144Hz IPS 1ms FreeSync',
+    category: 'Monitores',
+    currentPrice: 800,
+    oldPrice: 1600,
+    discountPercent: 50,
+    sales: 10000,
+    ratingStar: 4.9,
+    commissionPercent: 12,
+    permalink: 'https://shopee.com.br/product/prio/1',
+    imageUrl: 'https://cf.shopee.com.br/prio.jpg',
+    internalPerformance: {
+      matched: true,
+      humanProbableClicks: 100,
+      attributedSales: 20,
+    },
+  };
+
+  const testCandidate = {
+    marketplace: 'Shopee',
+    itemId: 'ITEM-TEST',
+    shopId: 'shop-test',
+    productName: 'Cabo HDMI 2.1 8K Ultra High Speed',
+    category: 'Cabos',
+    currentPrice: 150,
+    oldPrice: 300,
+    discountPercent: 50,
+    sales: 2000,
+    ratingStar: 4.8,
+    commissionPercent: 15,
+    permalink: 'https://shopee.com.br/product/test/1',
+    imageUrl: 'https://cf.shopee.com.br/test.jpg',
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-commercial-ranking',
+    shopeeCandidates: [testCandidate, prioCandidate],
+    mlCandidates: [],
+    maxProducts: 20,
+  });
+
+  assert.equal(products.length, 2);
+  assert.equal(products[0].direct_evidence[0].decision, 'PRIORIDADE');
+  assert.equal(products[1].direct_evidence[0].decision, 'TESTAR');
+  assert.ok(products[0].commercial_score > products[1].commercial_score);
+});
+
+// ============================================================================
+// ELEGIBILIDADE SOURCE-AWARE DO MERCADO LIVRE & CONSISTÊNCIA DE DADOS
+// ============================================================================
+
+test('Mercado Livre com promoção e dados mínimos válidos é elegível para TESTAR e entra no painel', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mlPromo = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB1001',
+    productId: 'MLBU1001',
+    productName: 'Kit Ferramentas Manuais 100 Peças com Maleta',
+    category: 'Ferramentas',
+    currentPrice: 120.00,
+    oldPrice: 200.00,
+    discountPercent: 40,
+    sales: null, // sem vendas
+    ratingStar: null, // sem rating
+    commissionPercent: 0, // sem comissão
+    permalink: 'https://produto.mercadolivre.com.br/MLB-1001',
+    imageUrl: 'https://http2.mlstatic.com/D_1001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(mlPromo, { peers: [mlPromo] });
+
+  // Score total bruto reflete a ausência de dados (auditoria pura)
+  assert.ok(score.total < 60, 'Score total deve ser < 60 pela falta de vendas/comissão/rating');
+  assert.equal(score.raw_decision, 'IGNORAR');
+  assert.equal(score.selection_decision, 'TESTAR', 'Deve receber TESTAR por ter desconto promocional observado factual');
+  assert.equal(score.decision, 'TESTAR');
+
+  // Integrado no engine: chega ao painel comercial
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-ml-promo',
+    shopeeCandidates: [],
+    mlCandidates: [mlPromo],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 1);
+  assert.equal(products[0].selection_decision, 'TESTAR');
+  assert.equal(products[0].direct_evidence[0].selection_decision, 'TESTAR');
+  assert.equal(products[0].direct_evidence[0].raw_decision, 'IGNORAR');
+});
+
+test('Mercado Livre com melhor preço da família é elegível para TESTAR mesmo sem vendas/comissão', () => {
+  const mlBestPrice = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB2001',
+    productId: 'MLBU2001',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 45.00, // R$ 9.00/L
+    discountPercent: 0,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-2001',
+    imageUrl: 'https://http2.mlstatic.com/D_2001.jpg',
+  };
+
+  const mlPeer = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB2002',
+    productId: 'MLBU2002',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 75.00, // R$ 15.00/L
+    discountPercent: 0,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-2002',
+    imageUrl: 'https://http2.mlstatic.com/D_2002.jpg',
+  };
+
+  const peers = [mlBestPrice, mlPeer];
+
+  const scoreBest = calculateCommercialOpportunityScoreV4(mlBestPrice, { peers });
+  const scorePeer = calculateCommercialOpportunityScoreV4(mlPeer, { peers });
+
+  assert.equal(scoreBest.relative_price_position, 'best_in_family');
+  assert.equal(scoreBest.selection_decision, 'TESTAR');
+
+  assert.equal(scorePeer.relative_price_position, 'unfavorable');
+  assert.equal(scorePeer.selection_decision, 'IGNORAR', 'Sem desconto, sem best_in_family e sem destaque deve ser IGNORAR');
+});
+
+test('Mercado Livre com destaque oficial BEST_SELLER é elegível para TESTAR', () => {
+  const mlBestSeller = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB3001',
+    productId: 'MLBU3001',
+    productName: 'Smartwatch Relógio Inteligente Pro D20',
+    currentPrice: 59.90,
+    discountPercent: 0,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    marketplaceDemandEvidence: {
+      source: 'mercadolivre_highlights',
+      type: 'BEST_SELLER',
+      position: 3,
+    },
+    permalink: 'https://produto.mercadolivre.com.br/MLB-3001',
+    imageUrl: 'https://http2.mlstatic.com/D_3001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(mlBestSeller, { peers: [mlBestSeller] });
+
+  assert.equal(score.selection_decision, 'TESTAR', 'Destaque oficial BEST_SELLER torna produto ML elegível para TESTAR');
+});
+
+test('Mercado Livre válido sem qualquer sinal comercial adicional permanece como IGNORAR', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mlPlain = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB4001',
+    productId: 'MLBU4001',
+    productName: 'Cabo USB Tipo C 1 Metro Preto',
+    currentPrice: 20.00,
+    discountPercent: 0, // sem desconto
+    sales: null, // sem vendas
+    ratingStar: null, // sem rating
+    commissionPercent: 0, // sem comissão
+    marketplaceDemandEvidence: null, // sem destaque
+    permalink: 'https://produto.mercadolivre.com.br/MLB-4001',
+    imageUrl: 'https://http2.mlstatic.com/D_4001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(mlPlain, { peers: [mlPlain] });
+
+  assert.equal(score.selection_decision, 'IGNORAR');
+  assert.equal(score.raw_decision, 'IGNORAR');
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-ml-plain',
+    shopeeCandidates: [],
+    mlCandidates: [mlPlain],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 0, 'ML sem qualquer sinal comercial adicional não entra no painel');
+});
+
+test('Shopee mantém thresholds padrão de score comercial (<60 IGNORAR, 60-79 TESTAR, >=80 PRIORIDADE)', () => {
+  const shopeePlain = {
+    marketplace: 'Shopee',
+    itemId: 'SHP5001',
+    shopId: 'shop-5001',
+    productName: 'Item Shopee Sem Dados Suficientes',
+    currentPrice: 50.00,
+    discountPercent: 0,
+    sales: 0,
+    ratingStar: 0,
+    commissionPercent: 0,
+    permalink: 'https://shopee.com.br/product/1/5001',
+    imageUrl: 'https://cf.shopee.com.br/5001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(shopeePlain, { peers: [shopeePlain] });
+
+  assert.ok(score.total < 60);
+  assert.equal(score.selection_decision, 'IGNORAR');
+  assert.equal(score.raw_decision, 'IGNORAR');
+  assert.equal(score.decision, 'IGNORAR');
+});
+
+test('Auditoria factual preserva dados ausentes como nulos e persiste selection_decision real', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mlItem = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB6001',
+    productId: 'MLBU6001',
+    productName: 'Fritadeira Sem Óleo Air Fryer 4L Digital',
+    currentPrice: 280.00,
+    oldPrice: 400.00,
+    discountPercent: 30, // sinal factual de promoção
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-6001',
+    imageUrl: 'https://http2.mlstatic.com/D_6001.jpg',
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-ml-audit',
+    shopeeCandidates: [],
+    mlCandidates: [mlItem],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 1);
+  const p = products[0];
+  const direct = p.direct_evidence[0];
+
+  // Nenhuma fabricação de dados
+  assert.equal(direct.sold_quantity, null);
+  assert.equal(direct.rating, null);
+  assert.equal(direct.effective_commission_percent, null);
+  assert.equal(direct.estimated_commission_per_sale, null);
+  assert.equal(direct.commission_status, 'unknown');
+
+  // Metadados reais de decisão
+  assert.equal(p.selection_decision, 'TESTAR');
+  assert.equal(direct.selection_decision, 'TESTAR');
+  assert.equal(direct.raw_decision, 'IGNORAR');
+  assert.ok(p.commercial_score < 60, 'Commercial score bruto permanece auditável sem inflação artificial');
+});

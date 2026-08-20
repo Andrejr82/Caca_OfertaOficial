@@ -11,6 +11,7 @@
  */
 
 const DEFAULT_RECENCY_DAYS = 7;
+const BLOCKING_OFFER_STATUSES = Object.freeze(['approved', 'selected', 'posted']);
 
 function normalizeIdentityPart(value) {
   return String(value || '')
@@ -328,14 +329,19 @@ async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
   while (true) {
     let query = client
       .from('offers')
-      .select('platform, shopee_item_id, item_id, product_id');
+      .select('platform, shopee_item_id, item_id, product_id, status');
 
-    if (tenantId) query = query.eq('user_id', tenantId);
+    if (typeof query.in === 'function') {
+      query = query.in('status', BLOCKING_OFFER_STATUSES);
+    }
+
+    if (tenantId && typeof query.eq === 'function') query = query.eq('user_id', tenantId);
 
     const { data: offers, error } = await query.range(from, from + pageSize - 1);
     if (error || !Array.isArray(offers)) return identityKeys;
 
     for (const offer of offers) {
+      if (offer.status && !BLOCKING_OFFER_STATUSES.includes(offer.status)) continue;
       const key = getMarketplaceIdentityKey(offer);
       if (key) identityKeys.add(key);
     }
@@ -349,6 +355,7 @@ async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
 
 module.exports = {
   DEFAULT_RECENCY_DAYS,
+  BLOCKING_OFFER_STATUSES,
   normalizeIdentityPart,
   normalizeMarketplaceSlug,
   getMarketplaceIdentityKey,

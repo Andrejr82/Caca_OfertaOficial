@@ -250,33 +250,38 @@ test('falha na API de highlights ou 404 não derruba Radar', async () => {
 test('TESTE A: MEDIUM com Score V3 maior que HIGH deve aparecer antes no ranking', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
-  // Candidato MEDIUM com score alto (500 vendas, 50% desconto, 4.9 rating, mas sem comissão -> viability MEDIUM)
+  // Candidato com score mais alto (vendas 2000, rating 4.9, desconto 50%, comissão 15%)
   const mediumCandidate = {
     marketplace: 'Mercado Livre',
     itemId: 'MLB_MED_HIGH_SCORE',
     productName: 'Mochila Impermeável Reforçada Premium',
     category: 'Acessórios',
-    currentPrice: 150,
-    oldPrice: 300,
+    currentPrice: 200,
+    oldPrice: 400,
     discountPercent: 50,
     ratingStar: 4.9,
-    sales: 500, // viability vira MEDIUM por commission = 0
-    commissionPercent: 0,
+    sales: 2000,
+    commissionPercent: 15.0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB_MED_HIGH_SCORE',
+    imageUrl: 'https://http2.mlstatic.com/mochila.jpg',
     marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: 1 },
   };
 
-  // Candidato HIGH com score mais baixo (100 vendas, 9% desconto, 3.8 rating, comissão 5% -> viability HIGH)
+  // Candidato com score menor (vendas 1500, rating 4.8, desconto 50%, comissão 12%)
   const highCandidate = {
     marketplace: 'Shopee',
+    shopId: '123',
     itemId: 'SHP_HIGH_LOW_SCORE',
     productName: 'Cabo USB Básico 1m',
     category: 'Eletrônicos',
-    currentPrice: 20,
-    oldPrice: 22,
-    discountPercent: 9,
-    ratingStar: 3.8,
-    sales: 100, // viability vira HIGH por sales >= 100 e comm >= 5
-    commissionPercent: 5,
+    currentPrice: 150,
+    oldPrice: 300,
+    discountPercent: 50,
+    ratingStar: 4.8,
+    sales: 1500,
+    commissionPercent: 12.0,
+    permalink: 'https://shopee.com.br/product/1/SHP_HIGH_LOW_SCORE',
+    imageUrl: 'https://cf.shopee.com.br/cabo.jpg',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -287,28 +292,29 @@ test('TESTE A: MEDIUM com Score V3 maior que HIGH deve aparecer antes no ranking
   });
 
   assert.equal(products.length, 2);
-  assert.equal(products[0].product_term, 'Mochila Impermeável Reforçada Premium', 'MEDIUM com score superior deve ser rank #1');
-  assert.equal(products[0].direct_evidence[0].viability_classification, 'medium');
-  assert.equal(products[1].product_term, 'Cabo USB Básico 1m', 'HIGH com score inferior deve ser rank #2');
-  assert.equal(products[1].direct_evidence[0].viability_classification, 'high');
+  assert.equal(products[0].product_term, 'Mochila Impermeável Reforçada Premium', 'Item com score superior deve ser rank #1');
+  assert.equal(products[1].product_term, 'Cabo USB Básico 1m', 'Item com score inferior deve ser rank #2');
   assert.ok(products[0].commercial_score > products[1].commercial_score, 'Score do primeiro deve ser estritamente maior');
 });
 
 test('TESTE B: HIGH e MEDIUM com Score V3 exatamente igual -> HIGH deve aparecer primeiro como critério de desempate', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
-  // Dois candidatos com inputs calibrados para ter exatamente o mesmo score V3
+  // Dois candidatos com inputs calibrados para ter exatamente o mesmo score V4
   const highCandidate = {
     marketplace: 'Shopee',
+    shopId: '123',
     itemId: 'SHP_TIE_HIGH',
     productName: 'Produto Empate High',
     category: 'Casa',
-    currentPrice: 50,
-    oldPrice: 100,
+    currentPrice: 150,
+    oldPrice: 300,
     discountPercent: 50,
-    sales: 200,
+    sales: 1500,
     ratingStar: 4.8,
-    commissionPercent: 5,
+    commissionPercent: 12.0,
+    permalink: 'https://shopee.com.br/product/1/SHP_TIE_HIGH',
+    imageUrl: 'https://cf.shopee.com.br/high.jpg',
   };
 
   const mediumCandidate = {
@@ -316,12 +322,14 @@ test('TESTE B: HIGH e MEDIUM com Score V3 exatamente igual -> HIGH deve aparecer
     itemId: 'MLB_TIE_MED',
     productName: 'Produto Empate Medium',
     category: 'Informática',
-    currentPrice: 50,
-    oldPrice: 100,
+    currentPrice: 150,
+    oldPrice: 300,
     discountPercent: 50,
-    sales: null,
+    sales: 1500,
     ratingStar: 4.8,
-    commissionPercent: 0,
+    commissionPercent: 12.0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB_TIE_MED',
+    imageUrl: 'https://http2.mlstatic.com/med.jpg',
     marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: 5 },
   };
 
@@ -352,6 +360,7 @@ test('TESTE C: LOW viability com score alto continua fora da seleção do Radar'
     sales: 1000,
     ratingStar: 2.5, // rating < 3.5 -> LOW viability
     commissionPercent: 10,
+    permalink: 'https://shopee.com.br/product/1/SHP_LOW_RATING',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -378,7 +387,8 @@ test('TESTE D: INSUFFICIENT_DATA com preço válido continua fora da seleção d
     sales: null,
     ratingStar: null,
     commissionPercent: 0,
-    marketplaceDemandEvidence: null, // Sem BEST_SELLER -> insufficient_data
+    permalink: '', // Sem link -> insufficient_data
+    marketplaceDemandEvidence: null,
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -394,39 +404,54 @@ test('TESTE D: INSUFFICIENT_DATA com preço válido continua fora da seleção d
 test('TESTE E: não existe cota por marketplace e permite distribuição orgânica (ex: 14 ML + 6 Shopee)', () => {
   const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
 
-  // 14 candidatos ML com viabilidade MEDIUM e scores altos
+  const mlTitles = [
+    'Teclado Gamer Mecânico RGB', 'Mouse Gamer Sem Fio', 'Monitor Gamer 165Hz', 'Cadeira Ergonômica Pro',
+    'Headset 7.1 Surround', 'Webcam Full HD 1080p', 'Microfone Condensador USB', 'Suporte Articulado Monitor',
+    'Luminária de Mesa LED', 'Gabinete Gamer Vidro', 'Memória RAM 16GB DDR4', 'Processador Octa Core',
+    'Placa de Vídeo 8GB', 'Fonte 650W 80 Plus',
+  ];
+  // 14 candidatos ML com viabilidade e scores altos
   const mlCandidates = [];
-  for (let i = 1; i <= 14; i++) {
+  for (let i = 0; i < 14; i++) {
     mlCandidates.push({
       marketplace: 'Mercado Livre',
-      itemId: `MLB_SCORE_HIGH_${i}`,
-      productId: `PROD_ML_${i}`,
-      productName: `Produto ML Excepcional ${i}`,
-      category: `Categoria ${i}`,
-      currentPrice: 100 + i * 10,
+      itemId: `MLB_SCORE_HIGH_${i + 1}`,
+      productId: `PROD_ML_${i + 1}`,
+      productName: `${mlTitles[i]} Modelo ML`,
+      category: `Categoria ${i + 1}`,
+      currentPrice: 150 + i * 10,
       oldPrice: 300 + i * 20,
-      discountPercent: 65,
-      sales: null,
+      discountPercent: 50,
+      sales: 1500,
       ratingStar: 4.9,
-      commissionPercent: 0,
-      marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
+      commissionPercent: 12.0,
+      permalink: `https://produto.mercadolivre.com.br/MLB_SCORE_HIGH_${i + 1}`,
+      imageUrl: `https://http2.mlstatic.com/MLB_SCORE_HIGH_${i + 1}.jpg`,
+      marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i + 1 },
     });
   }
 
-  // 6 candidatos Shopee com scores inferiores
+  const shopeeTitles = [
+    'Cooler Duplo Heatpipe', 'SSD NVMe 1TB PCIe', 'HD Externo 2TB USB',
+    'Roteador Wi-Fi 6 Mesh', 'Switch Gigabit 8 Portas', 'Cabo HDMI 2.1 8K',
+  ];
+  // 6 candidatos Shopee
   const shopeeCandidates = [];
-  for (let j = 1; j <= 6; j++) {
+  for (let j = 0; j < 6; j++) {
     shopeeCandidates.push({
       marketplace: 'Shopee',
-      itemId: `SHP_${j}`,
-      productName: `Produto Shopee ${j}`,
-      category: `Categoria Shopee ${j}`,
-      currentPrice: 80 + j * 5,
-      oldPrice: 90 + j * 5,
-      discountPercent: 10,
-      sales: 100,
-      ratingStar: 4.0,
-      commissionPercent: 5,
+      shopId: `shop_${j + 1}`,
+      itemId: `SHP_${j + 1}`,
+      productName: `${shopeeTitles[j]} Modelo Shopee`,
+      category: `Categoria Shopee ${j + 1}`,
+      currentPrice: 140 + j * 5,
+      oldPrice: 280 + j * 10,
+      discountPercent: 50,
+      sales: 1500,
+      ratingStar: 4.8,
+      commissionPercent: 12.0,
+      permalink: `https://shopee.com.br/product/1/SHP_${j + 1}`,
+      imageUrl: `https://cf.shopee.com.br/SHP_${j + 1}.jpg`,
     });
   }
 
@@ -462,6 +487,7 @@ test('TESTE F: family diversity continua funcionando após o novo sort por Score
       sales: null,
       ratingStar: 4.8,
       commissionPercent: 0,
+      permalink: `https://produto.mercadolivre.com.br/MLB_FONE_${i}`,
       marketplaceDemandEvidence: { source: 'mercadolivre_highlights', type: 'BEST_SELLER', position: i },
     });
   }

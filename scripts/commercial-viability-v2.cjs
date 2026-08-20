@@ -32,6 +32,7 @@ function normalizePercentage(value) {
  */
 function calculateCommercialViabilityV2(candidate = {}, options = {}) {
   const marketplace = String(candidate.marketplace || candidate.platform || 'unknown').trim();
+  const isMercadoLivre = /mercado\s*livre|mercadolivre/i.test(marketplace);
   const price = parseNumber(candidate.currentPrice ?? candidate.price, null);
 
   // 1. Verificação de dados mínimos essenciais (Preço)
@@ -55,7 +56,56 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
     };
   }
 
-  // 2. Extração de comissão observada
+  // 2. Extração e validação de identidade e link (especialmente para Mercado Livre)
+  const itemId = String(candidate.itemId || candidate.item_id || candidate.id || '').trim();
+  const productId = String(candidate.productId || candidate.product_id || '').trim();
+  const hasIdentity = Boolean(itemId || productId);
+  const rawLink = String(candidate.permalink || candidate.product_url || candidate.productUrl || candidate.link || candidate.url || candidate.offerLink || '').trim();
+  const hasValidLink = rawLink.length > 0 && /^https?:\/\//i.test(rawLink);
+
+  if (isMercadoLivre) {
+    if (!hasIdentity) {
+      return {
+        strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+        classification: 'insufficient_data',
+        effectiveCommissionPercent: 0,
+        estimatedCommissionPerSale: null,
+        reasons: ['Identidade nativa ausente (itemId ou productId)'],
+        isViable: false,
+        diagnostic: {
+          price_observed: price,
+          sales_observed: null,
+          rating_observed: null,
+          commission_observed: null,
+          sales_velocity: null,
+          velocity_used: false,
+          ticket_class: 'invalid',
+        },
+      };
+    }
+
+    if (!hasValidLink) {
+      return {
+        strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+        classification: 'insufficient_data',
+        effectiveCommissionPercent: 0,
+        estimatedCommissionPerSale: null,
+        reasons: ['Link do produto ausente ou inválido'],
+        isViable: false,
+        diagnostic: {
+          price_observed: price,
+          sales_observed: null,
+          rating_observed: null,
+          commission_observed: null,
+          sales_velocity: null,
+          velocity_used: false,
+          ticket_class: 'invalid',
+        },
+      };
+    }
+  }
+
+  // 3. Extração de comissão observada
   const rawComm = normalizePercentage(candidate.commissionRate ?? candidate.commissionPercent);
   const rawSellerComm = normalizePercentage(candidate.sellerCommissionRate ?? candidate.sellerCommissionPercent);
   const effectiveCommissionPercent = (rawComm !== null && rawComm > 0 ? rawComm : 0) +
@@ -66,7 +116,7 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
     ? Math.round((price * effectiveCommissionPercent / 100) * 100) / 100
     : null;
 
-  // 3. Extração de demanda e velocidade
+  // 4. Extração de demanda e velocidade
   const rawSales = parseNumber(candidate.sales ?? candidate.sold_quantity, null);
   const sales = rawSales !== null && rawSales >= 0 ? Math.floor(rawSales) : null;
 
@@ -75,14 +125,14 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
 
   const discountPercent = parseNumber(candidate.discountPercent ?? candidate.priceDiscountRate, 0);
 
-  // 4. Tratamento estrito de sales_velocity
+  // 5. Tratamento estrito de sales_velocity
   const velocityInfo = candidate.velocityInfo || candidate.velocity_info || {};
   const isVelocityComputed = velocityInfo.velocity_status === 'computed' &&
     typeof velocityInfo.sales_velocity === 'number' &&
     Number.isFinite(velocityInfo.sales_velocity);
   const salesVelocity = isVelocityComputed ? velocityInfo.sales_velocity : null;
 
-  // 5. Diagnóstico de ticket
+  // 6. Diagnóstico de ticket
   let ticketClass = 'medium_ticket';
   if (price < 10) ticketClass = 'micro_ticket';
   else if (price < 30) ticketClass = 'low_ticket';
@@ -90,7 +140,7 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
 
   const reasons = [];
 
-  // 6. Regras de descarte estrito (LOW)
+  // 7. Regras de descarte estrito (LOW)
   if (rating !== null && rating < 3.5) {
     reasons.push(`poor_rating_below_threshold: Reprovado por avaliação baixa (${rating} < 3.5)`);
     return {
@@ -133,7 +183,7 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
     };
   }
 
-  // 7. Classificação HIGH
+  // 8. Classificação HIGH
   const hasStrongSales = sales !== null && sales >= 100;
   const hasStrongVelocity = isVelocityComputed && salesVelocity !== null && salesVelocity > 0;
   const hasViableCommissionValue = estimatedCommissionPerSale !== null && estimatedCommissionPerSale >= 2.00;
@@ -172,15 +222,35 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
     };
   }
 
-  // 8. Guard de evidência mínima antes de classificar como MEDIUM
-  // Sem vendas observadas, sem comissão, sem velocity e sem destaque oficial (ex: BEST_SELLER) → não há base factual para medium.
-  // Fail-closed: retorna insufficient_data para não ocupar vagas comerciais principais.
+  // 9. Classificação MEDIUM vs INSUFFICIENT_DATA
   const hasMarketplaceBestSeller = candidate?.marketplaceDemandEvidence?.type === 'BEST_SELLER';
   const hasObservedDemand = (sales !== null && sales >= 1) || hasMarketplaceBestSeller;
   const hasObservedRevenue = effectiveCommissionPercent > 0 || (estimatedCommissionPerSale !== null && estimatedCommissionPerSale > 0);
   const hasObservedVelocity = isVelocityComputed;
 
   if (!hasObservedDemand && !hasObservedRevenue && !hasObservedVelocity) {
+    if (isMercadoLivre) {
+      reasons.push('Oportunidade Mercado Livre com preço, identidade e link válidos');
+      return {
+        strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+        classification: 'medium',
+        effectiveCommissionPercent,
+        estimatedCommissionPerSale,
+        reasons,
+        isViable: true,
+        diagnostic: {
+          price_observed: price,
+          sales_observed: sales,
+          rating_observed: rating,
+          commission_observed: rawComm,
+          sales_velocity: salesVelocity,
+          velocity_used: isVelocityComputed,
+          ticket_class: ticketClass,
+          best_seller_evidence: null,
+        },
+      };
+    }
+
     return {
       strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
       classification: 'insufficient_data',
@@ -196,18 +266,19 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
         sales_velocity: salesVelocity,
         velocity_used: isVelocityComputed,
         ticket_class: ticketClass,
-        best_seller_evidence: hasMarketplaceBestSeller ? candidate.marketplaceDemandEvidence : null,
+        best_seller_evidence: null,
       },
     };
   }
 
-  // 9. Classificação MEDIUM — há pelo menos uma evidência factual de viabilidade
+  // 10. Classificação MEDIUM com evidência observada
   if (hasMarketplaceBestSeller) {
     const pos = candidate.marketplaceDemandEvidence.position ? ` pos #${candidate.marketplaceDemandEvidence.position}` : '';
     reasons.push(`Destaque oficial comprovado no marketplace (${candidate.marketplaceDemandEvidence.source}: ${candidate.marketplaceDemandEvidence.type}${pos})`);
   } else {
     reasons.push('Viabilidade comercial padrão validada');
   }
+
   return {
     strategy_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     classification: 'medium',
@@ -223,6 +294,7 @@ function calculateCommercialViabilityV2(candidate = {}, options = {}) {
       sales_velocity: salesVelocity,
       velocity_used: isVelocityComputed,
       ticket_class: ticketClass,
+      best_seller_evidence: hasMarketplaceBestSeller ? candidate.marketplaceDemandEvidence : null,
     },
   };
 }
