@@ -220,14 +220,14 @@ function extractCompetitivenessFamilyKey(candidate = {}) {
 
 /**
  * Avalia se dois candidatos possuem unidades compatíveis para comparação direta de preço.
+ * L somente compara com L.
+ * kg somente compara com kg.
+ * unit somente compara com unit.
+ * NUNCA comparar R$/L diretamente com R$/kg.
  */
 function areUnitsComparable(unitA, unitB) {
-  if (unitA === unitB) return true;
-  // Sabão / detergente / produtos de limpeza / consumíveis: L e kg são comparáveis na mesma família
-  if ((unitA === 'L' && unitB === 'kg') || (unitA === 'kg' && unitB === 'L')) {
-    return true;
-  }
-  return false;
+  if (!unitA || !unitB) return false;
+  return unitA === unitB;
 }
 
 /**
@@ -254,24 +254,26 @@ function evaluatePeerPriceCompetitiveness(candidate = {}, peers = []) {
   const priceNorm = calculateNormalizedPrice(price, unitInfo);
   const familyKey = extractCompetitivenessFamilyKey(candidate);
 
-  // Filtra pares da mesma família que possuam preço normalizado válido e unidades compatíveis
-  const relevantPeers = Array.isArray(peers) ? peers.filter((p) => {
+  // Filtra todos os pares da mesma família no run
+  const sameFamilyPeers = Array.isArray(peers) ? peers.filter((p) => {
     const peerPrice = parseNumber(p.currentPrice ?? p.price, null);
     if (peerPrice === null || peerPrice <= 0) return false;
-
     const peerKey = extractCompetitivenessFamilyKey(p);
-    if (peerKey !== familyKey) return false;
-
-    const peerTitle = p.productName || p.product_term || p.title || '';
-    const peerUnitInfo = extractProductUnitAndQuantity(peerTitle);
-    return areUnitsComparable(priceNorm.normalized_unit, peerUnitInfo.unit || 'unit');
+    return peerKey === familyKey;
   }) : [];
 
-  const peerCount = Math.max(1, relevantPeers.length);
+  // Filtra pares da mesma família com unidades estritamente compatíveis (L com L, kg com kg, unit com unit)
+  const comparablePeers = sameFamilyPeers.filter((p) => {
+    const peerTitle = p.productName || p.product_term || p.title || '';
+    const peerUnitInfo = extractProductUnitAndQuantity(peerTitle);
+    const peerNorm = calculateNormalizedPrice(parseNumber(p.currentPrice ?? p.price, 0), peerUnitInfo);
+    return areUnitsComparable(priceNorm.normalized_unit, peerNorm.normalized_unit);
+  });
 
-  // Caso 1: Sem concorrentes comparáveis no run (peer_count === 1)
-  // Preserva avaliação intrínseca de desconto comercial
-  if (relevantPeers.length <= 1) {
+  const peerCount = Math.max(1, comparablePeers.length);
+
+  // Caso 1: Sem concorrentes comparáveis no run (peer_count === 1 ou unidades incompatíveis)
+  if (comparablePeers.length <= 1) {
     let score = 1;
     if (discount >= 50) score = 10;
     else if (discount >= 35) score = 8;
@@ -279,9 +281,19 @@ function evaluatePeerPriceCompetitiveness(candidate = {}, peers = []) {
     else if (discount >= 10) score = 4;
     else if (discount > 0) score = 2;
 
-    const reason = discount >= 20
-      ? `Desconto promocional expressivo de ${Math.round(discount)}%`
-      : (discount > 0 ? `Desconto de ${Math.round(discount)}%` : 'Preço comercial regular');
+    const isUnitNotComparable = sameFamilyPeers.length > 1;
+    const relativePosition = isUnitNotComparable ? 'unit_not_comparable' : 'solo';
+
+    let reason = '';
+    if (isUnitNotComparable) {
+      reason = discount >= 20
+        ? `Unidades incompatíveis para comparação direta na família; desconto de ${Math.round(discount)}% considerado`
+        : (discount > 0 ? `Unidades incompatíveis na família; desconto de ${Math.round(discount)}%` : 'Unidades incompatíveis para comparação direta de preço na família');
+    } else {
+      reason = discount >= 20
+        ? `Desconto promocional expressivo de ${Math.round(discount)}%`
+        : (discount > 0 ? `Desconto de ${Math.round(discount)}%` : 'Preço comercial regular');
+    }
 
     return {
       score,
@@ -289,13 +301,13 @@ function evaluatePeerPriceCompetitiveness(candidate = {}, peers = []) {
       normalized_unit: priceNorm.normalized_unit,
       normalized_price: priceNorm.normalized_price,
       peer_count: 1,
-      relative_price_position: 'solo',
+      relative_price_position: relativePosition,
       competitiveness_reason: reason,
     };
   }
 
-  // Caso 2: Existem concorrentes comparáveis da mesma família
-  const peerNormalizedPrices = relevantPeers.map((p) => {
+  // Caso 2: Existem concorrentes comparáveis da mesma família com a MESMA unidade (L vs L, kg vs kg, unit vs unit)
+  const peerNormalizedPrices = comparablePeers.map((p) => {
     const peerPrice = parseNumber(p.currentPrice ?? p.price, 0);
     const peerTitle = p.productName || p.product_term || p.title || '';
     const peerUnitInfo = extractProductUnitAndQuantity(peerTitle);

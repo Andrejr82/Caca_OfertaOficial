@@ -432,6 +432,10 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
     100,
   );
 
+  const rawDecision = classifyCommercialDecision(total);
+  const isML = /mercado\s*livre|mercadolivre/i.test(candidate?.marketplace || candidate?.platform || '');
+
+  let selectionDecision = rawDecision;
   const determining_reasons = [
     demand.reason,
     economic.reason,
@@ -442,6 +446,25 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
     visual.reason,
   ].filter(Boolean);
 
+  // Decisão source-aware para Mercado Livre:
+  // Não penalizar ausência de vendas/comissão/rating se houver sinal comercial factual
+  if (isML && rawDecision === 'IGNORAR') {
+    const hasDiscount = (finite(candidate?.discountPercent ?? candidate?.priceDiscountRate) || 0) > 0;
+    const hasCompetitivePrice = competitiveness.relative_price_position === 'best_in_family' ||
+      competitiveness.relative_price_position === 'competitive' ||
+      competitiveness.score >= 7;
+    const hasOfficialDemand = candidate?.marketplaceDemandEvidence?.type === 'BEST_SELLER' ||
+      candidate?.isBestSeller === true ||
+      Boolean(candidate?.trendEvidence) ||
+      (finite(candidate?.sales ?? candidate?.sold_quantity) || 0) > 0 ||
+      (velocityInfo?.velocity_status === 'computed' && (velocityInfo?.sales_velocity || 0) > 0);
+
+    if (hasDiscount || hasCompetitivePrice || hasOfficialDemand) {
+      selectionDecision = 'TESTAR';
+      determining_reasons.push('Elegível para teste comercial no Mercado Livre por sinal factual observado');
+    }
+  }
+
   return {
     strategyVersion: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
     strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
@@ -449,7 +472,10 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
     commercial_score: total,
     commercial_score_v4: total,
     ticket_class: ticketClass,
-    decision: classifyCommercialDecision(total),
+    raw_decision: rawDecision,
+    decision: selectionDecision,
+    selection_decision: selectionDecision,
+    selectionDecision,
     breakdown,
     score_breakdown: breakdown,
     determining_reasons,

@@ -1162,9 +1162,10 @@ function buildTrendRadarProductsFromCandidates({
       peers: uniqueCandidates,
     });
 
-    // Gate Task 5: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' (60–79) entram na seleção final do Radar.
-    // Candidatos com decisão 'IGNORAR' (< 60) são excluídos antes do preenchimento de quotas/vagas.
-    if (scoreV4.decision === 'IGNORAR' || scoreV4.total < 60) {
+    // Gate Task 5 & Task Pré-Merge: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' entram na seleção final do Radar.
+    // Candidatos com decisão 'IGNORAR' são excluídos antes do preenchimento de quotas/vagas.
+    const decision = scoreV4.selection_decision || scoreV4.decision;
+    if (decision === 'IGNORAR') {
       continue;
     }
 
@@ -1176,6 +1177,7 @@ function buildTrendRadarProductsFromCandidates({
       scoreV4,
       internalPerformance,
       commercial_score: scoreV4.total,
+      selection_decision: decision,
       ticket_class: scoreV4.ticket_class,
     });
   }
@@ -1211,8 +1213,8 @@ function buildTrendRadarProductsFromCandidates({
     if (aRating !== bRating) return bRating - aRating;
 
     // 3.6 Desconto
-    const aDiscount = a.discountPercent || 0;
-    const bDiscount = b.discountPercent || 0;
+    const aDiscount = typeof a.discountPercent === 'number' ? a.discountPercent : 0;
+    const bDiscount = typeof b.discountPercent === 'number' ? b.discountPercent : 0;
     return bDiscount - aDiscount;
   };
 
@@ -1397,7 +1399,9 @@ function buildTrendRadarProductsFromCandidates({
         old_price: oldPrice,
         discount_percent: discount,
         rating,
-        decision: finalScoreV4.decision,
+        decision: finalScoreV4.selection_decision || finalScoreV4.decision,
+        selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision,
+        raw_decision: finalScoreV4.raw_decision || finalScoreV4.decision,
         strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
         score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
         viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
@@ -1453,7 +1457,7 @@ function buildTrendRadarProductsFromCandidates({
       sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
       discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
       `viability_${viability.classification}`,
-      `v4_decision_${finalScoreV4.decision.toLowerCase()}`,
+      `v4_decision_${(finalScoreV4.selection_decision || finalScoreV4.decision).toLowerCase()}`,
       `ticket_${finalScoreV4.ticket_class}`,
     ];
 
@@ -1467,6 +1471,7 @@ function buildTrendRadarProductsFromCandidates({
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
       commercial_score: finalScoreV4.total,
+      selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision,
       score_breakdown: finalScoreV4.breakdown,
       determining_reasons: determiningReasons,
       confidence: Math.min(

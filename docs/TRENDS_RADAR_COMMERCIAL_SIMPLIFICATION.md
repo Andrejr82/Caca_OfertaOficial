@@ -41,20 +41,20 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
   - Volume: Litros (`L`, `litros`, `lt`) e Mililitros (`ml`) normalizados para `L`. Suporte a multiplicadores (ex: `2x 5L`, `3x 500ml`).
   - Massa: Quilos (`kg`, `quilos`) e Gramas (`g`, `gr`) normalizados para `kg`. Suporte a multiplicadores (ex: `2x 1kg`, `4x 500g`).
   - Unidades / Kits: Kits (`kit 2`, `kit com 3`, `pack 10`) e Unidades explícitas (`10 unidades`, `2 peças`, `5 pares`) normalizados para `unit`.
-  - Consumíveis equivalentes: L e kg são comparáveis na mesma família (ex: sabão concentrado em pó vs sabão líquido).
+  - **Isolamento Estrito de Unidades**: L somente compara com L; kg somente compara com kg; unit somente compara com unit. R$/L nunca é comparado com R$/kg. Produtos da mesma família com unidades incompatíveis registram `relative_price_position = 'unit_not_comparable'` sem conversão forçada de densidade.
 - **Normalização de Preço**: Cálculo de `normalized_price` em `R$/L`, `R$/kg` ou `R$/unidade`.
 - **Comparação Relativa de Concorrentes (Peers no mesmo Run)**:
-  - Candidatos da mesma família comercial têm seus preços normalizados comparados.
+  - Candidatos da mesma família comercial têm seus preços normalizados comparados quando possuem unidades compatíveis.
   - `best_in_family` (menor preço / melhor custo-benefício): 10 pontos em `offerCompetitiveness`.
   - `competitive` (até 15% acima do mínimo): 7-8 pontos.
   - `average` (até 35% acima do mínimo): 4-5 pontos.
   - `unfavorable` (claramente mais caro / desfavorável): 1 ponto (mesmo com alto desconto próprio anunciado).
-- **Sem Regressão Solo**: Candidatos isolados sem concorrentes diretos no mesmo run continuam sendo avaliados por desconto promocional intrínseco (desconto >= 50% = 10 pts, >= 35% = 8 pts, etc.).
+- **Sem Regressão Solo**: Candidatos isolados sem concorrentes diretos (ou com unidades incompatíveis) continuam sendo avaliados por desconto promocional intrínseco (desconto >= 50% = 10 pts, >= 35% = 8 pts, etc.).
 - **Auditoria no directEvidence**: Registro determinístico de `family_key`, `normalized_unit`, `normalized_price`, `peer_count`, `relative_price_position` e `competitiveness_reason`.
 
 ### Task 5 — Top 20 comercial sem preenchimento artificial [CONCLUÍDA]
-- **Gate de Decisão V4**: O motor `buildTrendRadarProductsFromCandidates` aplica exclusão direta para candidatos com `scoreV4.decision === 'IGNORAR' || scoreV4.total < 60` antes da montagem de vagas e quotas da carteira comercial.
-- **Regra de Entrada**: Somente produtos com classificação `PRIORIDADE` (score >= 80) e `TESTAR` (score 60–79) são elegíveis para compor o painel do Radar.
+- **Gate de Decisão V4**: O motor `buildTrendRadarProductsFromCandidates` aplica exclusão direta para candidatos com `scoreV4.decision === 'IGNORAR'` antes da montagem de vagas e quotas da carteira comercial.
+- **Regra de Entrada**: Somente produtos com classificação `PRIORIDADE` (score >= 80) e `TESTAR` (score 60–79 ou elegibilidade source-aware) são elegíveis para compor o painel do Radar.
 - **Preenchimento Orgânico e Fiel à Realidade**:
   - Se existirem 20+ oportunidades `TESTAR`/`PRIORIDADE`, o Radar seleciona as melhores 20 conforme as quotas estruturais e ranking.
   - Se existirem menos de 20 (ex: 12, 8, 4 ou 0), o Radar retorna exatamente essa contagem e o run é concluído com `status: 'completed'`.
@@ -84,6 +84,22 @@ Somente ofertas com status `approved`, `selected` ou `posted` bloqueiam a mesma 
   - `marketplaces_with_candidates`: Fontes que forneceram candidatos brutos.
   - `marketplaces_with_eligible_products`: Fontes com oportunidades viáveis aprovadas.
   - `marketplaces_selected`: Fontes com produtos efetivamente alocados no Top 20 final (sem arrays estáticos artificiais).
+
+### Task Pré-Merge — Elegibilidade Source-Aware ML & Unidades Estritas [CONCLUÍDA]
+- **Decisão Comercial Source-Aware para o Mercado Livre**:
+  - O score V4 bruto (`total`, `commercial_score`) é preservado integralmente sem alteração de pesos nem fabricação de dados (auditoria pura).
+  - Candidatos do Mercado Livre válidos (preço positivo, identidade nativa, link) e não reprovados por `low` recebem `selection_decision = TESTAR` quando apresentam ao menos um sinal factual observado:
+    a) Preço competitivo / `best_in_family` na comparação com pares da mesma unidade;
+    b) Desconto promocional observado $> 0$;
+    c) Destaque oficial `BEST_SELLER` / evidência de tendência.
+  - Candidatos ML sem qualquer sinal comercial factual adicional permanecem como `IGNORAR`.
+  - A Shopee permanece com os thresholds padrão de score V4 ($< 60 = \text{IGNORAR}$, $60\text{--}79 = \text{TESTAR}$, $\ge 80 = \text{PRIORIDADE}$).
+- **Isolamento de Unidades Incompatíveis**:
+  - Litros (`L`) somente são comparados com Litros (`L`).
+  - Quilos (`kg`) somente são comparados com Quilos (`kg`).
+  - Unidades (`unit`) somente são comparadas com Unidades (`unit`).
+  - Nunca há comparação cruzada ou conversão de densidade arbitrária entre R$/L e R$/kg.
+  - Produtos de mesma família com unidades distintas recebem `relative_price_position = 'unit_not_comparable'` e são pontuados individualmente pelo desconto observado.
 
 ## Critério final
 O Radar deve retornar Shopee + Mercado Livre com diversidade real, preço competitivo e oportunidade comercial clara, sem depender de dados que cada marketplace não fornece.

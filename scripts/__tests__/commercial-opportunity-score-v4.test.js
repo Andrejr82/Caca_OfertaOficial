@@ -1069,12 +1069,12 @@ test('MATCHING SHOPEE: mesmo itemId em shopId diferente NÃO faz matching cruzad
 // TASK 4: COMPETITIVIDADE REAL DE PREÇO E NORMALIZAÇÃO DE UNIDADES
 // ============================================================================
 
-test('TASK 4 (Competitividade): OMO 4kg R$95,88 vs OMO 5L R$50 -> 5L tem competitividade superior', () => {
+test('TASK 4 (Competitividade): OMO 4kg vs OMO 5L -> NÃO comparar R$/kg com R$/L (unit_not_comparable)', () => {
   const omo4kg = {
     itemId: 'omo-4kg',
     productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
     currentPrice: 95.88,
-    discountPercent: 40, // 40% de desconto próprio aparente
+    discountPercent: 40,
     sales: 1000,
     ratingStar: 4.8,
   };
@@ -1083,7 +1083,7 @@ test('TASK 4 (Competitividade): OMO 4kg R$95,88 vs OMO 5L R$50 -> 5L tem competi
     itemId: 'omo-5l',
     productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
     currentPrice: 50.00,
-    discountPercent: 10, // apenas 10% de desconto
+    discountPercent: 10,
     sales: 1000,
     ratingStar: 4.8,
   };
@@ -1094,19 +1094,43 @@ test('TASK 4 (Competitividade): OMO 4kg R$95,88 vs OMO 5L R$50 -> 5L tem competi
   const score5L = calculateCommercialOpportunityScoreV4(omo5L, { peers });
 
   assert.equal(score5L.normalized_unit, 'L');
-  assert.equal(score5L.normalized_price, 10.00); // R$ 50 / 5 = R$ 10.00/L
+  assert.equal(score5L.normalized_price, 10.00);
+  assert.equal(score5L.relative_price_position, 'unit_not_comparable', 'Unidades diferentes (L vs kg) não devem gerar best_in_family');
+
+  assert.equal(score4kg.normalized_unit, 'kg');
+  assert.equal(score4kg.normalized_price, 23.97);
+  assert.equal(score4kg.relative_price_position, 'unit_not_comparable', 'Unidades diferentes (kg vs L) não devem gerar unfavorable');
+});
+
+test('TASK 4 (Competitividade): OMO 5L vs OMO 7L -> comparação R$/L válida', () => {
+  const omo5L = {
+    itemId: 'omo-5l',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 50.00, // R$ 10.00/L
+    discountPercent: 10,
+  };
+
+  const omo7L = {
+    itemId: 'omo-7l',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 7L',
+    currentPrice: 105.00, // R$ 15.00/L (+50%)
+    discountPercent: 10,
+  };
+
+  const peers = [omo5L, omo7L];
+
+  const score5L = calculateCommercialOpportunityScoreV4(omo5L, { peers });
+  const score7L = calculateCommercialOpportunityScoreV4(omo7L, { peers });
+
+  assert.equal(score5L.normalized_unit, 'L');
+  assert.equal(score5L.normalized_price, 10.00);
   assert.equal(score5L.relative_price_position, 'best_in_family');
   assert.equal(score5L.breakdown.offerCompetitiveness, 10);
 
-  assert.equal(score4kg.normalized_unit, 'kg');
-  assert.equal(score4kg.normalized_price, 23.97); // R$ 95.88 / 4 = R$ 23.97/kg
-  assert.equal(score4kg.relative_price_position, 'unfavorable');
-  assert.equal(score4kg.breakdown.offerCompetitiveness, 1);
-
-  assert.ok(
-    score5L.breakdown.offerCompetitiveness > score4kg.breakdown.offerCompetitiveness,
-    'OMO 5L (R$ 10/L) deve ter score de competitividade superior a OMO 4kg (R$ 23.97/kg)'
-  );
+  assert.equal(score7L.normalized_unit, 'L');
+  assert.equal(score7L.normalized_price, 15.00);
+  assert.equal(score7L.relative_price_position, 'unfavorable');
+  assert.equal(score7L.breakdown.offerCompetitiveness, 1);
 });
 
 test('TASK 4 (Competitividade): Dois produtos iguais com mesma quantidade -> menor preço vence', () => {
@@ -1313,17 +1337,17 @@ test('TASK 4 (Competitividade): buildTrendRadarProductsFromCandidates registra f
 
   const shopeeCandidate2 = {
     marketplace: 'Shopee',
-    itemId: 'shopee-omo-4kg',
+    itemId: 'shopee-omo-7l',
     shopId: 'shop-2',
-    productName: 'Sabão em Pó OMO Lavagem Perfeita 4kg',
-    currentPrice: 95.88,
-    oldPrice: 160.00,
-    discountPercent: 40,
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 7L',
+    currentPrice: 140.00,
+    oldPrice: 180.00,
+    discountPercent: 22,
     sales: 1500,
     ratingStar: 4.8,
     commissionPercent: 12,
-    permalink: 'https://shopee.com.br/product/2/omo4kg',
-    imageUrl: 'https://cf.shopee.com.br/omo4kg.jpg',
+    permalink: 'https://shopee.com.br/product/2/omo7l',
+    imageUrl: 'https://cf.shopee.com.br/omo7l.jpg',
   };
 
   const products = buildTrendRadarProductsFromCandidates({
@@ -1564,4 +1588,214 @@ test('TASK 5: PRIORIDADE ranqueia acima de TESTAR quando score for maior', () =>
   assert.equal(products[0].direct_evidence[0].decision, 'PRIORIDADE');
   assert.equal(products[1].direct_evidence[0].decision, 'TESTAR');
   assert.ok(products[0].commercial_score > products[1].commercial_score);
+});
+
+// ============================================================================
+// TASK PRÉ-MERGE: ELEGIBILIDADE SOURCE-AWARE DO MERCADO LIVRE & UNIDADES
+// ============================================================================
+
+test('TASK PRÉ-MERGE (ML): ML válido + promoção + sem vendas/comissão/rating -> selection_decision = TESTAR e entra no painel', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mlPromo = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB1001',
+    productId: 'MLBU1001',
+    productName: 'Kit Ferramentas Manuais 100 Peças com Maleta',
+    category: 'Ferramentas',
+    currentPrice: 120.00,
+    oldPrice: 200.00,
+    discountPercent: 40,
+    sales: null, // sem vendas
+    ratingStar: null, // sem rating
+    commissionPercent: 0, // sem comissão
+    permalink: 'https://produto.mercadolivre.com.br/MLB-1001',
+    imageUrl: 'https://http2.mlstatic.com/D_1001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(mlPromo, { peers: [mlPromo] });
+
+  // Score total bruto reflete a ausência de dados (auditoria pura)
+  assert.ok(score.total < 60, 'Score total deve ser < 60 pela falta de vendas/comissão/rating');
+  assert.equal(score.raw_decision, 'IGNORAR');
+  assert.equal(score.selection_decision, 'TESTAR', 'Deve receber TESTAR por ter desconto promocional observado factual');
+  assert.equal(score.decision, 'TESTAR');
+
+  // Integrado no engine: chega ao painel comercial
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-ml-promo',
+    shopeeCandidates: [],
+    mlCandidates: [mlPromo],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 1);
+  assert.equal(products[0].selection_decision, 'TESTAR');
+  assert.equal(products[0].direct_evidence[0].selection_decision, 'TESTAR');
+  assert.equal(products[0].direct_evidence[0].raw_decision, 'IGNORAR');
+});
+
+test('TASK PRÉ-MERGE (ML): ML válido + best_in_family + sem comissão/vendas -> selection_decision = TESTAR', () => {
+  const mlBestPrice = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB2001',
+    productId: 'MLBU2001',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 45.00, // R$ 9.00/L
+    discountPercent: 0,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-2001',
+    imageUrl: 'https://http2.mlstatic.com/D_2001.jpg',
+  };
+
+  const mlPeer = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB2002',
+    productId: 'MLBU2002',
+    productName: 'Sabão Líquido OMO Lavagem Perfeita 5L',
+    currentPrice: 75.00, // R$ 15.00/L
+    discountPercent: 0,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-2002',
+    imageUrl: 'https://http2.mlstatic.com/D_2002.jpg',
+  };
+
+  const peers = [mlBestPrice, mlPeer];
+
+  const scoreBest = calculateCommercialOpportunityScoreV4(mlBestPrice, { peers });
+  const scorePeer = calculateCommercialOpportunityScoreV4(mlPeer, { peers });
+
+  assert.equal(scoreBest.relative_price_position, 'best_in_family');
+  assert.equal(scoreBest.selection_decision, 'TESTAR');
+
+  assert.equal(scorePeer.relative_price_position, 'unfavorable');
+  assert.equal(scorePeer.selection_decision, 'IGNORAR', 'Sem desconto, sem best_in_family e sem destaque deve ser IGNORAR');
+});
+
+test('TASK PRÉ-MERGE (ML): ML válido + BEST_SELLER -> selection_decision = TESTAR', () => {
+  const mlBestSeller = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB3001',
+    productId: 'MLBU3001',
+    productName: 'Smartwatch Relógio Inteligente Pro D20',
+    currentPrice: 59.90,
+    discountPercent: 0,
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    marketplaceDemandEvidence: {
+      source: 'mercadolivre_highlights',
+      type: 'BEST_SELLER',
+      position: 3,
+    },
+    permalink: 'https://produto.mercadolivre.com.br/MLB-3001',
+    imageUrl: 'https://http2.mlstatic.com/D_3001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(mlBestSeller, { peers: [mlBestSeller] });
+
+  assert.equal(score.selection_decision, 'TESTAR', 'Destaque oficial BEST_SELLER torna produto ML elegível para TESTAR');
+});
+
+test('TASK PRÉ-MERGE (ML): ML válido sem qualquer sinal comercial adicional -> selection_decision = IGNORAR', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mlPlain = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB4001',
+    productId: 'MLBU4001',
+    productName: 'Cabo USB Tipo C 1 Metro Preto',
+    currentPrice: 20.00,
+    discountPercent: 0, // sem desconto
+    sales: null, // sem vendas
+    ratingStar: null, // sem rating
+    commissionPercent: 0, // sem comissão
+    marketplaceDemandEvidence: null, // sem destaque
+    permalink: 'https://produto.mercadolivre.com.br/MLB-4001',
+    imageUrl: 'https://http2.mlstatic.com/D_4001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(mlPlain, { peers: [mlPlain] });
+
+  assert.equal(score.selection_decision, 'IGNORAR');
+  assert.equal(score.raw_decision, 'IGNORAR');
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-ml-plain',
+    shopeeCandidates: [],
+    mlCandidates: [mlPlain],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 0, 'ML sem qualquer sinal comercial adicional não entra no painel');
+});
+
+test('TASK PRÉ-MERGE (Shopee): Shopee mantém thresholds normais (<60 = IGNORAR, 60-79 = TESTAR, >=80 = PRIORIDADE)', () => {
+  const shopeePlain = {
+    marketplace: 'Shopee',
+    itemId: 'SHP5001',
+    shopId: 'shop-5001',
+    productName: 'Item Shopee Sem Dados Suficientes',
+    currentPrice: 50.00,
+    discountPercent: 0,
+    sales: 0,
+    ratingStar: 0,
+    commissionPercent: 0,
+    permalink: 'https://shopee.com.br/product/1/5001',
+    imageUrl: 'https://cf.shopee.com.br/5001.jpg',
+  };
+
+  const score = calculateCommercialOpportunityScoreV4(shopeePlain, { peers: [shopeePlain] });
+
+  assert.ok(score.total < 60);
+  assert.equal(score.selection_decision, 'IGNORAR');
+  assert.equal(score.raw_decision, 'IGNORAR');
+  assert.equal(score.decision, 'IGNORAR');
+});
+
+test('TASK PRÉ-MERGE (Auditoria): Nenhuma fabricação de dados e persistência com selection_decision real', () => {
+  const { buildTrendRadarProductsFromCandidates } = require('../oracle-trends-radar-engine.cjs');
+
+  const mlItem = {
+    marketplace: 'Mercado Livre',
+    itemId: 'MLB6001',
+    productId: 'MLBU6001',
+    productName: 'Fritadeira Sem Óleo Air Fryer 4L Digital',
+    currentPrice: 280.00,
+    oldPrice: 400.00,
+    discountPercent: 30, // sinal factual de promoção
+    sales: null,
+    ratingStar: null,
+    commissionPercent: 0,
+    permalink: 'https://produto.mercadolivre.com.br/MLB-6001',
+    imageUrl: 'https://http2.mlstatic.com/D_6001.jpg',
+  };
+
+  const products = buildTrendRadarProductsFromCandidates({
+    radarRunId: 'run-ml-audit',
+    shopeeCandidates: [],
+    mlCandidates: [mlItem],
+    maxProducts: 10,
+  });
+
+  assert.equal(products.length, 1);
+  const p = products[0];
+  const direct = p.direct_evidence[0];
+
+  // Nenhuma fabricação de dados
+  assert.equal(direct.sold_quantity, null);
+  assert.equal(direct.rating, null);
+  assert.equal(direct.effective_commission_percent, null);
+  assert.equal(direct.estimated_commission_per_sale, null);
+  assert.equal(direct.commission_status, 'unknown');
+
+  // Metadados reais de decisão
+  assert.equal(p.selection_decision, 'TESTAR');
+  assert.equal(direct.selection_decision, 'TESTAR');
+  assert.equal(direct.raw_decision, 'IGNORAR');
+  assert.ok(p.commercial_score < 60, 'Commercial score bruto permanece auditável sem inflação artificial');
 });

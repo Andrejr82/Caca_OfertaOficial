@@ -332,7 +332,8 @@ async function processPendingTrendRadarRuns(options = {}) {
         else mlInsufficientDataExcluded += 1;
       } else if (isViableForRadar(viability)) {
         const scoreV4 = calculateCommercialOpportunityScoreV4(candidate, { peers: dedupAudit.uniqueCandidates });
-        if (scoreV4.decision === 'IGNORAR' || scoreV4.total < 60) {
+        const decision = scoreV4.selection_decision || scoreV4.decision;
+        if (decision === 'IGNORAR') {
           if (candidate.marketplace === 'Shopee') shopeeCommercialDecisionIgnoreExcluded += 1;
           else mlCommercialDecisionIgnoreExcluded += 1;
         } else {
