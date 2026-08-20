@@ -1,43 +1,55 @@
-# Plano — remover Stories estáticos e focar Reels
+# Plano — separar Instagram, Stories e Reels
 
-## Decisão
-A interpretação anterior de Stories como artes estáticas foi incorreta para a meta comercial. O ativo principal passa a ser vídeo curto/Reels; Stories poderá reutilizar esse mesmo vídeo quando o fluxo audiovisual for homologado.
+## Decisão final
+A mistura de posts manuais, Stories e Reels na mesma tela estava errada. A solução é separar as superfícies:
+
+- `/instagram`: posts manuais/feed e histórico;
+- `/stories`: artes comerciais para Instagram/Facebook;
+- `/reels`: fluxo de vídeo existente, sem alteração nesta etapa.
 
 ## Objetivo
-Simplificar o Instagram do Caça Ofertas Oficial e concentrar conversão comercial em vídeo.
+Organizar o painel e preservar o que funcionou comercialmente nas artes estáticas sem contaminar a operação manual do Instagram nem antecipar mudanças em Reels.
 
-## Task 1 — remover Stories estáticos — CONCLUÍDA
-- novos drafts Instagram não usam mais `STORIES V4 · HANDOFF MANUAL`;
-- removida a seção de artes estáticas e os botões Tela 1/2/3 do painel;
-- removido `/api/images/instagram-story`;
-- removido o contrato `storyFrames` do plano de conversão Instagram;
-- removido o handoff manual/sticker da política de entrega;
-- drafts históricos de Stories continuam reconhecidos apenas para quarentena e não são apagados automaticamente;
-- PR #158 fechado sem merge.
+## Task 1 — limpar Instagram — CONCLUÍDA
+- removida a seção antiga `Stories — postagem manual` da página Instagram;
+- removidos botões Tela 1/2/3 da página Instagram;
+- drafts legados `STORIES V4 · HANDOFF MANUAL` continuam reconhecidos apenas para quarentena;
+- drafts `REELS · AGUARDANDO VÍDEO` também ficam fora da fila manual/feed;
+- página `/instagram` mostra apenas drafts manuais normais e histórico.
 
-## Task 2 — limpar painel Instagram/Reels — CONCLUÍDA COMO BASE
-- página passa a se chamar `Instagram Reels`;
-- apenas drafts marcados `REELS · AGUARDANDO VÍDEO` entram na fila atual;
-- drafts legados de Stories ficam ocultos e bloqueados;
-- Reel draft não pode cair no transporte FEED;
-- Reels segue desligado por feature flag até homologação audiovisual.
+## Task 2 — criar página Stories — CONCLUÍDA
+- criada `/stories`;
+- adicionada entrada `Stories` no menu Marketing;
+- filtros/abas `Instagram` e `Facebook`;
+- a página usa drafts já existentes dos dois canais como fonte de oferta/link;
+- link rastreado fica visível para a operação manual;
+- Reels não foi alterado.
 
-## Task 3 — Reels para conversão — PRÓXIMA FASE
-- revisar a página/experiência específica de vídeo;
-- revisar qualidade real do vídeo vertical, crop, áudio/dublagem e legibilidade;
-- copy curta com produto, preço, prova/benefício factual e CTA;
-- preview claro antes de publicar;
-- reutilizar o mesmo vídeo em Stories quando o fluxo suportar;
-- manter factualidade e rastreamento.
+## Task 3 — creative comercial — CONCLUÍDA
+- novo planner `story-commercial-plan.ts`;
+- novo renderer `story-commercial-renderer.ts`;
+- novo endpoint `/api/images/story-creative`;
+- preservada a linguagem visual aprovada no exemplo Electrolux: produto grande, `ACHADINHO`, `% OFF`, preço anterior riscado, preço atual e economia real;
+- uma arte forte por padrão;
+- segunda arte somente quando existir reforço factual adicional (ex.: prova real ou frete grátis confirmado);
+- nenhuma terceira arte obrigatória.
+
+## Task 4 — contratos sociais — CONCLUÍDA
+- Instagram voltou a gerar legenda manual/feed normal;
+- Instagram não recebe marcador de Story nem marcador de Reel no draft textual;
+- Facebook mantém CTA para primeiro comentário;
+- WhatsApp/Telegram preservam o único tracked URL;
+- Stories e Reels ficam desacoplados do draft manual do Instagram.
 
 ## Guardrails
 - sem auto-publicação;
-- sem Radar/Oracle/schema nesta limpeza;
-- sem novo gerador de card estático;
-- branch precisa passar regressões direcionadas, `git diff --check` e typecheck sem erros novos além do baseline da main.
+- sem Radar;
+- sem Oracle;
+- sem schema/migrations;
+- sem alteração na página `/reels`;
+- sem merge antes da validação local do usuário.
 
 ## Validação final local
-Executar:
 
 ```powershell
 git switch fix/remove-static-stories-focus-reels
@@ -47,18 +59,22 @@ npx vitest run `
 src/tests/core/ai/official-ai-copy-v4-integration.test.ts `
 src/tests/core/ai/social-copy-v4-canonical-integration.test.ts `
 src/tests/lib/trends/selection-social-copy-v4-bridge.test.ts `
-src/tests/lib/social/instagram-conversion.test.ts `
+src/tests/lib/social/story-commercial-plan.test.ts `
 src/tests/lib/social/meta-delivery-policy.test.ts `
 src/tests/lib/social/meta-publication-guard.test.ts
 
 git diff --check main...HEAD
 npm run typecheck
+npm run dev
 ```
 
-Depois subir `npm run dev` e validar `/instagram`: nenhuma seção de Stories, nenhum botão Tela 1/2/3 e título `Instagram Reels`.
+Validar no navegador:
+- `/instagram`: apenas operação manual/feed + histórico;
+- `/stories`: página própria com Instagram/Facebook e artes comerciais;
+- `/reels`: deve permanecer visual e funcionalmente como estava antes desta alteração.
 
 ## Branch
 `fix/remove-static-stories-focus-reels`
 
 ## Branches anteriores
-`fix/instagram-stories-commercial-art` e `feat/instagram-story-engine-v5` ficam sem merge e fora da nova direção.
+`fix/instagram-stories-commercial-art` e `feat/instagram-story-engine-v5` permanecem sem merge. O que foi reaproveitado foi somente a direção visual aprovada, reimplementada de forma limpa na página `/stories`.
