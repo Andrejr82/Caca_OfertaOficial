@@ -59,4 +59,13 @@ describe("Copy V5 single final-copy authority", () => {
     expect(actions).not.toContain("copyV2");
     expect(actions).not.toContain("regenerateCopyV2");
   });
+
+  it("mantém a fachada legada de Messages incapaz de renderizar fora da V5", () => {
+    const legacyFacade = read("src/lib/messages/generate.ts");
+    expect(legacyFacade).toContain("renderCopyV5ChannelCopy");
+    expect(legacyFacade).toContain("buildDeterministicFallbackPlan");
+    expect(legacyFacade).not.toContain("buildCopyV2ChannelCopy");
+    expect(legacyFacade).not.toContain("buildCopyV3ChannelCopy");
+    expect(legacyFacade).not.toContain("buildConversionCopyV4Contract");
+  });
 });
