@@ -56,25 +56,19 @@ function decisionBlocks(facts: CopyV4Facts) {
 
 /**
  * Copy V4 canônica antes da materialização do tracked URL.
- * WhatsApp/Telegram terminam com uma seta vazia de propósito: o adapter oficial
- * anexa ali o único tracked URL. Facebook reserva o destino ao primeiro comentário.
- * Instagram vira um handoff de Stories e a rota de publicação impede que isso seja
- * enviado acidentalmente como Feed/Reel.
+ * WhatsApp/Telegram recebem um único tracked URL pelo adapter.
+ * Facebook reserva o destino ao primeiro comentário.
+ * Instagram volta a ser uma legenda manual/feed. Stories e Reels são superfícies
+ * separadas e não são codificadas dentro do draft textual do Instagram.
  */
 export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: OfficialAIChannel) {
-  const { contract, blocks } = decisionBlocks(facts);
+  const { blocks } = decisionBlocks(facts);
 
   if (channel === "facebook") {
     return [...blocks, "👉 Conferir o preço atual no primeiro comentário. 👇"].join("\n\n");
   }
   if (channel === "instagram") {
-    const proofOffer = [contract.proofLine, contract.offerLine].filter(Boolean).join("\n");
-    return [
-      "STORIES V4 · HANDOFF MANUAL",
-      `TELA 1/3\n${contract.hook}`,
-      `TELA 2/3\n${proofOffer || contract.benefitLine || contract.product}`,
-      "TELA 3/3\n👉 Conferir o preço atual",
-    ].join("\n\n");
+    return [...blocks, "👉 Conferir o preço atual."].join("\n\n");
   }
   return [...blocks, "👉 Conferir o preço atual", "👉"].join("\n\n");
 }

@@ -1,19 +1,20 @@
 export type InstagramV4PublicationMediaType = "FEED" | "REELS";
 
 export const INSTAGRAM_STORIES_V4_HANDOFF_MARKER = "STORIES V4 · HANDOFF MANUAL";
+export const INSTAGRAM_REELS_DRAFT_MARKER = "REELS · AGUARDANDO VÍDEO";
 
 export function isInstagramStoriesV4Handoff(content: string) {
   return content.trimStart().startsWith(INSTAGRAM_STORIES_V4_HANDOFF_MARKER);
 }
 
+export function isInstagramReelsDraft(content: string) {
+  return content.trimStart().startsWith(INSTAGRAM_REELS_DRAFT_MARKER);
+}
+
 /**
- * Fail-closed guard for the launch configuration of Social Copy V4.
- *
- * Stories V4 are intentionally manual in this rollout because the operator must
- * add the tracked link sticker on the third frame. The canonical handoff must
- * never fall through to the legacy Instagram FEED transport.
- *
- * Reels V4 are feature-flagged and remain disabled unless explicitly enabled.
+ * Fail-closed guard for Instagram publication.
+ * Legacy static Stories remain recognized only to quarantine historical drafts.
+ * New Instagram drafts are Reel captions and must never fall through to FEED.
  */
 export function assertInstagramV4PublicationAllowed(input: {
   content: string;
@@ -22,8 +23,12 @@ export function assertInstagramV4PublicationAllowed(input: {
 }) {
   if (isInstagramStoriesV4Handoff(input.content)) {
     throw new Error(
-      "Instagram Stories V4 uses manual link-sticker handoff and cannot be sent through the Feed/Reels transport.",
+      "Legacy static Stories handoff is retired and cannot be sent through Feed/Reels transport.",
     );
+  }
+
+  if (isInstagramReelsDraft(input.content) && input.mediaType !== "REELS") {
+    throw new Error("Instagram Reel draft requires REELS transport and an approved video.");
   }
 
   if (input.mediaType === "REELS" && !input.reelsEnabled) {
