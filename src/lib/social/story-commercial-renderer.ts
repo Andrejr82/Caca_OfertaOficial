@@ -50,6 +50,10 @@ function money(value: number) {
   return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function profileCta(channel: "instagram" | "facebook") {
+  return channel === "instagram" ? "OFERTA NO LINK DA BIO" : "OFERTA NO LINK DO PERFIL";
+}
+
 export function buildStoryCommercialFrameModel(
   plan: StoryCommercialPlan,
   visual: StoryCommercialVisualFacts,
@@ -61,6 +65,7 @@ export function buildStoryCommercialFrameModel(
   const channel = visual.channel ?? "instagram";
   const brandName = visual.brandName ?? "Caça Ofertas Oficial";
   const logoSrc = visual.logoSrc ?? getOfficialStoryLogoSrc();
+  const cta = profileCta(channel);
 
   if (frame === 1) {
     if (plan.template === "DISCOUNT_HERO") {
@@ -70,12 +75,12 @@ export function buildStoryCommercialFrameModel(
         marketplace: visual.marketplace,
         imageUrl: visual.imageUrl,
         title: plan.title,
-        eyebrow: "ACHADINHO",
+        eyebrow: "ACHADINHO DO DIA",
         hero: `${plan.discountPercent}% OFF`,
         price,
         originalPrice,
         support: plan.savings ? `Economize ${money(plan.savings)}` : null,
-        cta: "VER OFERTA 👇",
+        cta,
         channel,
         brandName,
         logoSrc,
@@ -89,12 +94,12 @@ export function buildStoryCommercialFrameModel(
         marketplace: visual.marketplace,
         imageUrl: visual.imageUrl,
         title: plan.title,
-        eyebrow: "ACHADINHO",
+        eyebrow: "ACHADINHO DO DIA",
         hero: plan.proof,
         price,
         originalPrice: null,
         support: plan.freeShipping ? "FRETE GRÁTIS" : null,
-        cta: "VER OFERTA 👇",
+        cta,
         channel,
         brandName,
         logoSrc,
@@ -107,12 +112,12 @@ export function buildStoryCommercialFrameModel(
       marketplace: visual.marketplace,
       imageUrl: visual.imageUrl,
       title: plan.title,
-      eyebrow: "OLHA ESSE PREÇO 👀",
+      eyebrow: "ACHADINHO DO DIA",
       hero: price,
       price,
       originalPrice: null,
       support: null,
-      cta: "VER OFERTA 👇",
+      cta,
       channel,
       brandName,
       logoSrc,
@@ -130,7 +135,7 @@ export function buildStoryCommercialFrameModel(
     price,
     originalPrice: null,
     support: plan.template === "DISCOUNT_HERO" && plan.savings ? `Economia de ${money(plan.savings)}` : null,
-    cta: "VER OFERTA 👇",
+    cta,
     channel,
     brandName,
     logoSrc,
@@ -318,7 +323,7 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
           ),
         ),
         model.variant !== "price"
-          ? React.createElement("div", { style: { fontSize: 62, fontWeight: 1000, letterSpacing: -2.2 } }, model.price)
+          ? React.createElement("div", { style: { fontSize: 62, fontWeight: 1000, letterSpacing: -2.2 } }, `Por ${model.price}`)
           : null,
         model.support
           ? React.createElement("div", { style: { fontSize: 31, fontWeight: 800, color: "#166534" } }, model.support)
