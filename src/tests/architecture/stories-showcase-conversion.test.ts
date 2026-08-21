@@ -19,22 +19,28 @@ describe("Stories showcase conversion", () => {
     expect(renderer).toContain("`Por ${model.price}`");
   });
 
-  it("faz Story publicado no Instagram entrar automaticamente na vitrine", () => {
+  it("faz Story publicado no Instagram entrar na vitrine diretamente pelo receipt da oferta", () => {
     const bio = read("src/app/bio/page.tsx");
     expect(bio).toContain('stories.publication.receipt.instagram.%');
-    expect(bio).toContain("receiptMap");
+    expect(bio).toContain("affiliateLinkId");
+    expect(bio).toContain("offerId");
     expect(bio).toContain("dedupeByOffer");
-    expect(bio).toContain('.eq("channel", "instagram")');
+    expect(bio).toContain('.from("offers")');
+    expect(bio).toContain('.from("affiliate_links")');
   });
 
-  it("não consome o draft do feed apenas para alimentar a vitrine", () => {
+  it("não altera status de draft/feed ao publicar Story", () => {
     const route = read("src/app/api/stories/publish/route.ts");
     expect(route).toContain("stories.publication.receipt.");
+    expect(route).not.toContain('.from("posts")');
     expect(route).not.toContain('.update({ status: "published"');
   });
 
-  it("informa no painel que a vitrine é sincronizada após publicação", () => {
+  it("mantém a oferta disponível para publicar nas duas redes de forma independente", () => {
+    const page = read("src/app/(dashboard)/stories/page.tsx");
     const client = read("src/app/(dashboard)/stories/StoriesClient.tsx");
-    expect(client).toContain("entra na vitrine automaticamente");
+    expect(page).not.toContain('.eq("status", "draft")');
+    expect(client).toContain("cada rede de forma independente");
+    expect(client).toContain("A oferta continua disponível para publicar também no Instagram");
   });
 });
