@@ -4,7 +4,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { getVideoJobPolicy, quotaMessage } from "@/lib/videos/job-policy";
 import { downloadDriveVideo, inspectVideoBytes, listDriveVideos, validateDriveVideo, validateInspectedVideo } from "@/lib/videos/google-drive";
-import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
+import { buildCanonicalCopyV5ChannelDraft } from "@/core/ai/official-ai-service";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
 export const runtime = "nodejs";
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
       const trackedUrl = createTrackedUrl(offer.original_url, subId);
       const { data: link, error: linkError } = await admin.from("affiliate_links").upsert({ user_id: userData.user.id, offer_id: offer.id, channel, original_url: offer.original_url, tracked_url: trackedUrl, sub_id: subId }, { onConflict: "offer_id,channel" }).select("id").single();
       if (linkError || !link) throw new Error(`Falha no link ${channel}: ${linkError?.message ?? "linha ausente"}`);
-      const content = buildCopyV2ChannelCopy(facts, channel);
+      const content = buildCanonicalCopyV5ChannelDraft(facts, channel);
       channelCopies[channel] = content;
       const { data: existing } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "draft").maybeSingle();
       if (existing) {
