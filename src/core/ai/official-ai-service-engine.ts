@@ -2,6 +2,9 @@ import { emitOfficialAITelemetrySafely, type AIProviderPort, type AIProviderRequ
 import type { BatchCursor } from "./ports";
 import { inspectOfficialAIHook, isCopyV2TextSafe } from "./content-schema";
 import { buildCopyV3ChannelCopy, buildOfficialPrompt } from "./prompt";
+import { planCommercialCopyV5, buildDeterministicFallbackPlan } from "./copy-v5-planner";
+import { renderCopyV5ChannelCopy } from "./copy-v5-renderer";
+import type { CopyV5Facts, CopyV5Plan } from "./copy-v5-types";
 import { validateProductTitle } from "@/core/quality/product-title-quality";
 import { OFFICIAL_CONVERSION_COPY_CONTRACT_VERSION } from "./types";
 import type {
@@ -561,23 +564,101 @@ export async function generateOfficialAI(
     });
   }
 
-  // 7. Inferência (comum a ambos os modos).
-  // 7. Inferência (comum a ambos os modos).
-  // LLM desativado por restrição de segurança (Copy determinística V2.1)
-  let inference: any = { provider: "deterministic-engine", model: "generate.ts", latencyMs: 0 };
-  let providerData = null;
+  const explainability = offer!.explainability ?? {};
+  const explainabilityMetrics = (explainability.marketplace_metrics && typeof explainability.marketplace_metrics === "object")
+    ? explainability.marketplace_metrics as Record<string, unknown>
+    : {};
+  const marketplaceMetrics = (offer!.marketplaceMetrics && typeof offer!.marketplaceMetrics === "object")
+    ? offer!.marketplaceMetrics as Record<string, unknown>
+    : {};
+  const freeShippingValue = [
+    explainability.free_shipping,
+    explainability.shipping_free,
+    marketplaceMetrics.free_shipping,
+    marketplaceMetrics.shipping_free,
+    marketplaceMetrics.shippingFree,
+    explainabilityMetrics.free_shipping,
+    explainabilityMetrics.shipping_free,
+    explainabilityMetrics.shippingFree
+  ].find((value): value is boolean => typeof value === "boolean");
 
-  await emitTelemetry(dependencies, {
-    eventType: "official_ai.inference.started", correlationId: command.correlationId, offerId: command.offerId,
-    marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
-    details: { policy: "deterministic-only" }
-  });
+  const copyV5Facts: CopyV5Facts = {
+    productName: offer!.productName,
+    shortName: offer!.shortName,
+    marketplace: offer!.marketplace,
+    category: offer!.category,
+    currentPrice: offer!.currentPrice,
+    originalPrice: offer!.originalPrice,
+    evidence: { ...explainability, marketplace_metrics: { ...explainabilityMetrics, ...marketplaceMetrics } },
+    freeShipping: freeShippingValue ?? null
+  };
 
-  await emitTelemetry(dependencies, {
-    eventType: "official_ai.inference.completed", correlationId: command.correlationId, offerId: command.offerId,
-    marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
-    durationMs: 0, details: { finishReason: "skipped-llm-by-policy" }
-  });
+  const copyV3Facts = {
+    ...copyV5Facts,
+    evidence: copyV5Facts.evidence as Record<string, unknown>
+  };
+
+  // 7. Inferência Copy V5 (LLM Commercial Planner + Factual Validator)
+  let plan: CopyV5Plan | null = null;
+  let inference: { provider: string; model: string; latencyMs: number; usage?: any; finishReason?: string } = {
+    provider: "deterministic-planner",
+    model: "copy-v5",
+    latencyMs: 0
+  };
+  const inferenceStart = Date.now();
+
+  const isLegacyMode = mode === "copy_v2" || mode === "copy_v2_auto" || mode === "copy_v2_express";
+
+  if (mode === "approval") {
+    inference = { provider: "deterministic-engine", model: "generate.ts", latencyMs: 0 };
+    plan = buildDeterministicFallbackPlan(copyV5Facts);
+  } else if (isLegacyMode) {
+    inference = { provider: "deterministic-engine", model: "generate.ts", latencyMs: 0 };
+  } else if (provider) {
+    try {
+      await emitTelemetry(dependencies, {
+        eventType: "official_ai.inference.started", correlationId: command.correlationId, offerId: command.offerId,
+        marketplace: offer!.marketplace, provider: (provider as any).name ?? "llm", model: (provider as any).model ?? "commercial-planner", stage: "inference",
+        details: { policy: "copy-v5-hybrid" }
+      });
+
+      plan = await planCommercialCopyV5(copyV5Facts, provider, {
+        correlationId: command.correlationId,
+        timeoutMs: 15000,
+        metadata: command.metadata
+      });
+      inference = {
+        provider: (provider as any).name ?? "llm",
+        model: (provider as any).model ?? "commercial-planner",
+        latencyMs: Date.now() - inferenceStart,
+        finishReason: "stop"
+      };
+
+      await emitTelemetry(dependencies, {
+        eventType: "official_ai.inference.completed", correlationId: command.correlationId, offerId: command.offerId,
+        marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
+        durationMs: inference.latencyMs, details: { finishReason: "stop" }
+      });
+    } catch {
+      plan = buildDeterministicFallbackPlan(copyV5Facts);
+    }
+  } else {
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.inference.started", correlationId: command.correlationId, offerId: command.offerId,
+      marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
+      details: { policy: "deterministic-fallback" }
+    });
+    plan = buildDeterministicFallbackPlan(copyV5Facts);
+    await emitTelemetry(dependencies, {
+      eventType: "official_ai.inference.completed", correlationId: command.correlationId, offerId: command.offerId,
+      marketplace: offer!.marketplace, provider: inference.provider, model: inference.model, stage: "inference",
+      durationMs: 0, details: { finishReason: "deterministic-fallback" }
+    });
+  }
+
+  if (!plan) {
+    plan = buildDeterministicFallbackPlan(copyV5Facts);
+  }
 
   const mappedOffer: any = {
     id: offer!.id,
@@ -620,50 +701,25 @@ export async function generateOfficialAI(
     );
   }
 
-  const explainability = offer!.explainability ?? {};
-  const explainabilityMetrics = (explainability.marketplace_metrics && typeof explainability.marketplace_metrics === "object")
-    ? explainability.marketplace_metrics as Record<string, unknown>
-    : {};
-  const marketplaceMetrics = (offer!.marketplaceMetrics && typeof offer!.marketplaceMetrics === "object")
-    ? offer!.marketplaceMetrics as Record<string, unknown>
-    : {};
-  const freeShippingValue = [
-    explainability.free_shipping,
-    explainability.shipping_free,
-    marketplaceMetrics.free_shipping,
-    marketplaceMetrics.shipping_free,
-    marketplaceMetrics.shippingFree,
-    explainabilityMetrics.free_shipping,
-    explainabilityMetrics.shipping_free,
-    explainabilityMetrics.shippingFree
-  ].find((value): value is boolean => typeof value === "boolean");
-  const copyV3Facts = {
-    productName: offer!.productName,
-    shortName: offer!.shortName,
-    marketplace: offer!.marketplace,
-    category: offer!.category,
-    currentPrice: offer!.currentPrice,
-    originalPrice: offer!.originalPrice,
-    evidence: { ...explainability, marketplace_metrics: { ...explainabilityMetrics, ...marketplaceMetrics } },
-    freeShipping: freeShippingValue ?? null
-  };
-
-  const shortName = offer!.shortName || offer!.productName;
-
+  // 8. Determinist Channel Rendering
   const content = {
     title: offer!.productName,
     description: `Oferta ${offer!.marketplace}`,
-    shortCopy: `Oferta por ${offer!.currentPrice.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`,
-    longCopy: `Oferta de ${offer!.productName}.`,
-    shortName,
+    shortCopy: plan.hook,
+    longCopy: `${plan.hook} ${plan.selectedAttributes.join(" • ")}`.trim(),
+    shortName: plan.shortProductName,
     hashtags: [],
     callToAction: "Ver oferta",
-    highlights: ["Preço atual"],
-    explanation: "Copy V3 central: campos estruturados validados e fatos comerciais determinísticos.",
+    highlights: plan.selectedAttributes,
+    explanation: isLegacyMode
+      ? "Copy V3 central: campos estruturados validados e fatos comerciais determinísticos."
+      : "Copy V5 híbrida: LLM commercial planner + factual validator + deterministic renderer.",
     channelCopies: Object.fromEntries(command.channels.map((channel) => {
-      let text = "";
-      text = buildCopyV3ChannelCopy(copyV3Facts, channel);
-      return [channel, text];
+      if (isLegacyMode) {
+        return [channel, buildCopyV3ChannelCopy(copyV3Facts, channel)];
+      }
+      const rendered = renderCopyV5ChannelCopy(plan!, copyV5Facts, channel);
+      return [channel, rendered.feed];
     }))
   };
 

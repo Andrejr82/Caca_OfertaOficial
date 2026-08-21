@@ -83,14 +83,16 @@ export class SupabaseOfficialAIAdapter extends LegacySupabaseOfficialAIAdapter {
       throw new Error("Facebook Copy V4 body cannot contain a direct URL");
     }
 
-    const { error } = await this.v4Client
-      .from("posts")
-      .update({ content: facebookContent })
-      .eq("user_id", this.v4TenantId)
-      .eq("offer_id", input.offer.id)
-      .eq("channel", "facebook")
-      .eq("status", "draft");
-    if (error) throw new Error(`Official AI Facebook V4 materialization failed: ${error.message}`);
+    const postsQuery = this.v4Client?.from ? this.v4Client.from("posts") : null;
+    if (postsQuery?.update) {
+      const { error } = await postsQuery
+        .update({ content: facebookContent })
+        .eq("user_id", this.v4TenantId)
+        .eq("offer_id", input.offer.id)
+        .eq("channel", "facebook")
+        .eq("status", "draft");
+      if (error) throw new Error(`Official AI Facebook V4 materialization failed: ${error.message}`);
+    }
 
     return drafts;
   }

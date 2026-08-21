@@ -1,8 +1,18 @@
 import {
   buildConversionCopyV4Contract,
-  getMarketplaceCtaPrefix,
+  getMarketplaceCtaPrefix as getMarketplaceCtaPrefixV4,
   type CopyV4Facts,
 } from "./copy-v4";
+import {
+  type CopyV5Facts,
+  type CopyV5Plan,
+} from "./copy-v5-types";
+import { validateCopyV5Plan } from "./copy-v5-validator";
+import { polishCopyV5Facts, polishCopyV5Plan } from "./copy-v5-polish";
+import {
+  renderCopyV5ChannelCopy,
+  getMarketplaceCtaPrefix as getMarketplaceCtaPrefixV5,
+} from "./copy-v5-renderer";
 import {
   generateOfficialAI as generateOfficialAIEngine,
   OFFICIAL_AI_PAGE_CONCURRENCY,
@@ -17,9 +27,19 @@ import type {
 } from "./types";
 
 export { OFFICIAL_AI_PAGE_CONCURRENCY };
+export const getMarketplaceCtaPrefix = getMarketplaceCtaPrefixV5;
 
-function copyV4FactsFromOffer(offer: OfficialAIOffer): CopyV4Facts {
+export function copyV5FactsFromOffer(offer: OfficialAIOffer): CopyV5Facts {
   const explainabilityMetrics = offer.explainability?.marketplace_metrics;
+  const freeShipping = [
+    offer.shippingFree,
+    offer.explainability?.free_shipping,
+    offer.explainability?.shipping_free,
+    (offer.marketplaceMetrics as Record<string, unknown> | undefined)?.free_shipping,
+    (offer.marketplaceMetrics as Record<string, unknown> | undefined)?.shipping_free,
+    (offer.marketplaceMetrics as Record<string, unknown> | undefined)?.shippingFree,
+  ].find((v): v is boolean => typeof v === "boolean") ?? null;
+
   return {
     productName: offer.productName,
     shortName: offer.shortName,
@@ -36,7 +56,7 @@ function copyV4FactsFromOffer(offer: OfficialAIOffer): CopyV4Facts {
         ...(offer.marketplaceMetrics ?? {}),
       },
     },
-    freeShipping: offer.shippingFree ?? null,
+    freeShipping,
   };
 }
 
@@ -44,7 +64,7 @@ function normalizeLine(value: string | null) {
   return value?.trim() || null;
 }
 
-function decisionBlocks(facts: CopyV4Facts) {
+function decisionBlocksV4(facts: CopyV4Facts) {
   const contract = buildConversionCopyV4Contract(facts, "whatsapp");
   return {
     contract,
@@ -62,13 +82,9 @@ function decisionBlocks(facts: CopyV4Facts) {
 
 /**
  * Copy V4 canônica antes da materialização do tracked URL.
- * WhatsApp/Telegram recebem um único tracked URL pelo adapter.
- * Facebook reserva o destino ao primeiro comentário.
- * Instagram volta a ser uma legenda manual/feed. Stories e Reels são superfícies
- * separadas e não são codificadas dentro do draft textual do Instagram.
  */
 export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: OfficialAIChannel) {
-  const { blocks } = decisionBlocks(facts);
+  const { blocks } = decisionBlocksV4(facts);
 
   if (channel === "facebook") {
     return [...blocks, "👉 Link da oferta no primeiro comentário. 👇"].join("\n\n");
@@ -76,33 +92,53 @@ export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: Of
   if (channel === "instagram") {
     return [...blocks, "🔎 Link da oferta na bio. 👇"].join("\n\n");
   }
-  const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
+  const ctaPrefix = getMarketplaceCtaPrefixV4(facts.marketplace);
   return [...blocks, ctaPrefix, "👉"].join("\n\n");
 }
 
-function buildCanonicalCopyV4Content(
+/**
+ * Copy V5 canônica híbrida com suporte ao plano comercial aprovado.
+ */
+export function buildCanonicalCopyV5ChannelDraft(
+  facts: CopyV5Facts,
+  channel: OfficialAIChannel,
+  plan?: CopyV5Plan | null
+): string {
+  const polishedFacts = polishCopyV5Facts(facts);
+  const validatedPlan = validateCopyV5Plan(plan, polishedFacts);
+  const polishedPlan = polishCopyV5Plan(validatedPlan, polishedFacts);
+  const rendered = renderCopyV5ChannelCopy(polishedPlan, polishedFacts, channel);
+  return rendered.feed;
+}
+
+export function buildCanonicalCopyV5Content(
   previous: OfficialAIContent,
   offer: OfficialAIOffer,
   channels: readonly OfficialAIChannel[],
 ): OfficialAIContent {
-  const facts = copyV4FactsFromOffer(offer);
-  const contract = buildConversionCopyV4Contract(facts, "whatsapp");
+  const facts = polishCopyV5Facts(copyV5FactsFromOffer(offer));
+  const planCandidate: Partial<CopyV5Plan> = {
+    shortProductName: previous.shortName,
+    hook: previous.shortCopy,
+    selectedAttributes: previous.highlights,
+  };
+  const validatedPlan = validateCopyV5Plan(planCandidate, facts);
+  const plan = polishCopyV5Plan(validatedPlan, facts);
+
   return {
     ...previous,
-    shortCopy: contract.hook,
-    longCopy: [contract.hook, contract.proofLine, contract.offerLine, contract.benefitLine]
-      .filter(Boolean)
-      .join(" "),
+    shortCopy: plan.hook,
+    shortName: plan.shortProductName,
+    longCopy: `${plan.hook} ${plan.selectedAttributes.join(" • ")}`.trim(),
     hashtags: [],
-    callToAction: "Conferir o preço atual",
-    highlights: [contract.proofLine, contract.offerLine, contract.benefitLine]
-      .filter((value): value is string => Boolean(value)),
-    explanation: "Copy V4 canônica: decisão comercial factual, CTA único e entrega específica por canal.",
+    callToAction: "Ver oferta",
+    highlights: plan.selectedAttributes,
+    explanation: "Copy V5 híbrida: LLM commercial planner + factual validator + deterministic renderer + commercial polish.",
     channelCopies: {
       ...previous.channelCopies,
       ...Object.fromEntries(channels.map((channel) => [
         channel,
-        buildCanonicalCopyV4ChannelDraft(facts, channel),
+        buildCanonicalCopyV5ChannelDraft(facts, channel, plan),
       ])),
     },
   };
@@ -118,7 +154,11 @@ export async function generateOfficialAI(
     ...dependencies,
     content: {
       persistDrafts: async (input) => {
-        const content = buildCanonicalCopyV4Content(input.content, input.offer, input.channels);
+        if (input.command.metadata?.copyV2 === true) {
+          latestContent = input.content;
+          return dependencies.content.persistDrafts(input);
+        }
+        const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels);
         latestContent = content;
         return dependencies.content.persistDrafts({ ...input, content });
       },
