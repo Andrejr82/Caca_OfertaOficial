@@ -1,5 +1,4 @@
-import { buildDeterministicFallbackPlan } from "@/core/ai/copy-v5-planner";
-import { renderCopyV5ChannelCopy } from "@/core/ai/copy-v5-renderer";
+import { buildCanonicalCopyV5ChannelDraft } from "@/core/ai/official-ai-service";
 import type { CopyV5Facts } from "@/core/ai/copy-v5-types";
 import type { OfficialAIChannel } from "@/core/ai/types";
 import type { AffiliateLink, Offer } from "@/types/domain";
@@ -142,30 +141,31 @@ function assertTrackedUrl(link: Pick<AffiliateLink, "tracked_url"> | { tracked_u
 }
 
 function renderOffer(offer: Offer, link: Pick<AffiliateLink, "tracked_url">, channel: OfficialAIChannel) {
-  const trackedUrl = assertTrackedUrl(link);
-  const facts = copyFacts(offer);
-  const plan = buildDeterministicFallbackPlan(facts);
-  return renderCopyV5ChannelCopy(plan, facts, channel, trackedUrl);
+  return buildCanonicalCopyV5ChannelDraft(copyFacts(offer), channel, null, assertTrackedUrl(link));
 }
 
-/** Compatibility façade: final copy is always rendered by Copy V5. */
+/** Compatibility façade: final copy is always rendered by canonical Copy V5. */
 export function generateTelegramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  return renderOffer(offer, link, "telegram").feed;
+  return renderOffer(offer, link, "telegram");
 }
 
-/** Compatibility façade: Facebook body remains URL-free under Copy V5. */
+/** Compatibility façade: Facebook body remains URL-free under canonical Copy V5. */
 export function generateFacebookMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  return renderOffer(offer, link, "facebook").feed;
+  return renderOffer(offer, link, "facebook");
 }
 
-/** Compatibility façade: final copy is always rendered by Copy V5. */
+/** Compatibility façade: final copy is always rendered by canonical Copy V5. */
 export function generateWhatsAppMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  return renderOffer(offer, link, "whatsapp").feed;
+  return renderOffer(offer, link, "whatsapp");
 }
 
 export function generateInstagramMessage(offer: Offer, link: Pick<AffiliateLink, "tracked_url">) {
-  const rendered = renderOffer(offer, link, "instagram");
-  return { feed: rendered.feed, stories: [] as string[], reels: [] as string[], carousel: [] as string[] };
+  return {
+    feed: renderOffer(offer, link, "instagram"),
+    stories: [] as string[],
+    reels: [] as string[],
+    carousel: [] as string[],
+  };
 }
 
 function linkForChannel(links: AffiliateLink[], channel: OfficialAIChannel) {
