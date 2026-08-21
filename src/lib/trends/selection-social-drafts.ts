@@ -2,6 +2,7 @@ import { buildCanonicalCopyV5ChannelDraft } from "@/core/ai/official-ai-service"
 import type { CopyV5Facts } from "@/core/ai/copy-v5-types";
 import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
+import { resolveTrendMonetizedDestination } from "@/lib/trends/monetization";
 
 export const TREND_SOCIAL_CHANNELS = ["facebook", "instagram", "telegram", "whatsapp"] as const;
 
@@ -46,6 +47,19 @@ export async function prepareTrendSocialDrafts(input: {
     .single();
   if (offerError || !offer) throw new Error("Oferta aprovada no Trends não pôde ser carregada para as redes sociais.");
 
+  const monetizedDestination = resolveTrendMonetizedDestination({
+    platform: offer.platform,
+    originalUrl: offer.original_url,
+    affiliateUrl: offer.explainability?.affiliate_url,
+  });
+  if (!monetizedDestination) {
+    throw new Error(
+      String(offer.platform || "").trim().toLowerCase() === "mercado livre"
+        ? "Oferta Mercado Livre sem monetização válida. Drafts sociais não foram criados."
+        : "Oferta sem destino seguro para publicação social.",
+    );
+  }
+
   const explainabilityMetrics = offer.explainability?.marketplace_metrics;
   const facts: CopyV5Facts = {
     productName: offer.product_name,
@@ -68,13 +82,13 @@ export async function prepareTrendSocialDrafts(input: {
   const draftIds: Record<string, string> = {};
   for (const channel of TREND_SOCIAL_CHANNELS) {
     const subId = createSubId(channel, offer.product_name, offer.id);
-    const trackedUrl = createTrackedUrl(offer.original_url, subId);
+    const trackedUrl = createTrackedUrl(monetizedDestination, subId);
     const { data: link, error: linkError } = await admin.from("affiliate_links").upsert(
       {
         user_id: input.userId,
         offer_id: offer.id,
         channel,
-        original_url: offer.original_url,
+        original_url: monetizedDestination,
         tracked_url: trackedUrl,
         sub_id: subId,
       },
