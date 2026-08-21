@@ -25,7 +25,7 @@ describe("Trend Social Copy V4 bridge", () => {
   it("creates Instagram as a manual caption without static Story or Reel markers", () => {
     const copy = buildTrendSocialDraft(facts, "instagram", trackedUrl);
 
-    expect(copy).toContain("Conferir o preço atual");
+    expect(copy).toContain("Link da oferta na bio");
     expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker|REELS · AGUARDANDO VÍDEO/iu);
     expect(copy).not.toContain(trackedUrl);
   });
@@ -41,6 +41,6 @@ describe("Trend Social Copy V4 bridge", () => {
     const copy = buildTrendSocialDraft(facts, channel, trackedUrl);
 
     expect(copy.split(trackedUrl)).toHaveLength(2);
-    expect(copy).toContain("👉 Conferir o preço atual");
+    expect(copy).toContain("👉 Achado no Mercado Livre:");
   });
 });
