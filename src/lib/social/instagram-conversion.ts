@@ -1,16 +1,24 @@
-import { buildConversionCopyV4Contract, type CopyV4Facts } from "@/core/ai/copy-v4";
+import { buildDeterministicFallbackPlan } from "@/core/ai/copy-v5-planner";
+import { polishCopyV5Facts, polishCopyV5Plan } from "@/core/ai/copy-v5-polish";
+import { renderPriceBlock } from "@/core/ai/copy-v5-renderer";
+import type { CopyV5CommercialAngle, CopyV5Facts } from "@/core/ai/copy-v5-types";
 
-export interface InstagramReelBeatV4 {
+export interface InstagramReelBeatV5 {
   startSecond: number;
   endSecond: number;
   purpose: "hook" | "proof_benefit" | "offer" | "action";
   text: string;
 }
 
-export interface InstagramConversionV4Plan {
-  commercialAngle: ReturnType<typeof buildConversionCopyV4Contract>["commercialAngle"];
-  reelBeats: readonly InstagramReelBeatV4[];
+export interface InstagramConversionV5Plan {
+  commercialAngle: CopyV5CommercialAngle;
+  reelBeats: readonly InstagramReelBeatV5[];
 }
+
+/** @deprecated Compatibilidade de tipo. O conteúdo é gerado exclusivamente pela Copy V5. */
+export type InstagramReelBeatV4 = InstagramReelBeatV5;
+/** @deprecated Compatibilidade de tipo. O conteúdo é gerado exclusivamente pela Copy V5. */
+export type InstagramConversionV4Plan = InstagramConversionV5Plan;
 
 function compact(value: string, max = 110) {
   const normalized = value.replace(/\s+/gu, " ").trim();
@@ -19,45 +27,30 @@ function compact(value: string, max = 110) {
   return `${normalized.slice(0, cut > 30 ? cut : max).replace(/[\s,;:–—-]+$/gu, "")}…`;
 }
 
-function removeLeadingEmoji(value: string) {
-  return value.replace(/^[^\p{L}\p{N}]+/u, "").trim();
-}
-
 /**
- * Plano determinístico de conversão para Instagram Reels.
- *
- * O gerador de cards estáticos de Stories foi aposentado. Stories passam a ser
- * um destino possível para reutilização do próprio vídeo, tratado no fluxo de
- * publicação audiovisual, não aqui.
+ * Plano audiovisual de conversão do Instagram derivado exclusivamente da Copy V5.
+ * Stories estáticos permanecem fora deste módulo; aqui só há beats factuais para vídeo.
  */
-function formatBRL(value: number) {
-  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
+export function buildInstagramConversionV5Plan(facts: CopyV5Facts): InstagramConversionV5Plan {
+  const polishedFacts = polishCopyV5Facts(facts);
+  const plan = polishCopyV5Plan(buildDeterministicFallbackPlan(polishedFacts), polishedFacts);
+  const hook = compact(plan.hook, 90);
+  const proofOrBenefit = plan.optionalProofAngle
+    ? compact(plan.optionalProofAngle, 90)
+    : plan.selectedAttributes.length > 0
+      ? compact(plan.selectedAttributes.join(" • "), 90)
+      : compact(plan.shortProductName, 90);
+  const priceBlock = renderPriceBlock(polishedFacts);
 
-export function buildInstagramConversionV4Plan(facts: CopyV4Facts): InstagramConversionV4Plan {
-  const contract = buildConversionCopyV4Contract(facts, "instagram");
-  const hook = compact(contract.hook, 90);
-  const proof = contract.proofLine ? compact(contract.proofLine, 90) : null;
-  const benefit = contract.benefitLine ? compact(contract.benefitLine, 90) : null;
-
-  const proofOrBenefit = proof
-    ? `⭐ ${proof}`
-    : benefit
-      ? compact(benefit, 90)
-      : compact(removeLeadingEmoji(hook), 90);
-
-  const offerText = facts.currentPrice > 0
-    ? facts.originalPrice && facts.originalPrice > facts.currentPrice
-      ? `De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}`
-      : `Por ${formatBRL(facts.currentPrice)}`
-    : null;
-
-  const reelBeats: InstagramReelBeatV4[] = [
+  const reelBeats: InstagramReelBeatV5[] = [
     { startSecond: 0, endSecond: 2, purpose: "hook", text: hook },
     { startSecond: 2, endSecond: 6, purpose: "proof_benefit", text: proofOrBenefit },
-    { startSecond: 6, endSecond: 10, purpose: "offer", text: offerText ? `💰 ${offerText}` : "Confira as condições atuais no anúncio." },
+    { startSecond: 6, endSecond: 10, purpose: "offer", text: priceBlock ? `💰 ${priceBlock}` : "Confira as condições atuais no anúncio." },
     { startSecond: 10, endSecond: 13, purpose: "action", text: "Confira a oferta no link do perfil." },
   ];
 
-  return { commercialAngle: contract.commercialAngle, reelBeats };
+  return { commercialAngle: plan.commercialAngle, reelBeats };
 }
+
+/** @deprecated Use buildInstagramConversionV5Plan. Mantido apenas para compatibilidade de chamadas existentes. */
+export const buildInstagramConversionV4Plan = buildInstagramConversionV5Plan;
