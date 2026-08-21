@@ -10,6 +10,7 @@ import {
   resolveTrendOfferHandoff,
   resolveTrendOfferHandoffBlock,
   resolveTrendSnapshotImageUrl,
+  validateTrendOfferImage,
 } from "@/lib/trends/selection-offer-state";
 import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
 import {
@@ -61,7 +62,7 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
     if (!value) continue;
     const { data, error } = await supabase
       .from("offers")
-      .select("id,status,platform,product_name,original_url,explainability")
+      .select("id,status,platform,product_name,original_url,explainability,image_url")
       .eq("user_id", userId)
       .eq("platform", marketplace)
       .eq(column, value)
@@ -77,7 +78,7 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
 async function readMaterializedOffer(persistenceClient: any, userId: string, offerId: string) {
   const { data: offer, error: offerError } = await persistenceClient
     .from("offers")
-    .select("id,status,platform,product_name,original_url,explainability")
+    .select("id,status,platform,product_name,original_url,explainability,image_url")
     .eq("id", offerId)
     .eq("user_id", userId)
     .single();
@@ -91,10 +92,13 @@ async function materializeShopeeOfferFromSnapshot(userId: string, product: any, 
   const itemId = String(identity.itemId ?? "").trim();
   const shopId = String(identity.shopId ?? "").trim();
   const affiliateUrl = validHttps(evidence.source_url);
-  const imageUrl = resolveTrendSnapshotImageUrl(evidence);
+  const imageUrl = resolveTrendSnapshotImageUrl(evidence, product);
   const price = Number(evidence.price ?? metrics.price ?? 0);
   if (!/^\d+$/.test(itemId) || !affiliateUrl || !isShopeeAffiliateUrl(affiliateUrl) || !Number.isFinite(price) || price <= 0) {
     throw new Error("Snapshot Shopee não possui identidade/link afiliado/preço suficientes para materializar a oferta com segurança.");
+  }
+  if (!imageUrl) {
+    throw new Error("Snapshot Shopee não possui imagem oficial válida para materializar a oferta.");
   }
 
   const row = {
@@ -141,12 +145,15 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
   const productId = String(identity.productId ?? "").trim();
   const marketplaceUrl = validHttps(evidence.source_url);
   const affiliateUrl = marketplaceUrl ? buildMercadoLivreAffiliateUrl(marketplaceUrl) : null;
-  const imageUrl = resolveTrendSnapshotImageUrl(evidence);
+  const imageUrl = resolveTrendSnapshotImageUrl(evidence, product);
   const price = Number(evidence.price ?? metrics.price ?? 0);
   const oldPrice = Number(evidence.old_price ?? 0);
 
   if ((!itemId && !productId) || !marketplaceUrl || !affiliateUrl || !isMercadoLivreUrl(marketplaceUrl) || !Number.isFinite(price) || price <= 0) {
     throw new Error("Snapshot Mercado Livre não possui identidade/link monetizado/preço suficientes para materializar a oferta com segurança.");
+  }
+  if (!imageUrl) {
+    throw new Error("Snapshot Mercado Livre não possui imagem oficial válida para materializar a oferta.");
   }
 
   const row = {
@@ -278,7 +285,7 @@ async function approveAndBridge(formData: FormData) {
 
   const evidence = firstEvidence(product.direct_evidence);
   let offer = product.selected_offer_id
-    ? (await supabase.from("offers").select("id,status,platform,product_name,original_url,explainability").eq("id", product.selected_offer_id).eq("user_id", user.id).maybeSingle()).data
+    ? (await supabase.from("offers").select("id,status,platform,product_name,original_url,explainability,image_url").eq("id", product.selected_offer_id).eq("user_id", user.id).maybeSingle()).data
     : null;
 
   if (!offer) offer = await findExactOffer(supabase, user.id, String(product.marketplace ?? ""), evidence);
@@ -301,6 +308,19 @@ async function approveAndBridge(formData: FormData) {
         productId: product.id,
       };
     }
+  }
+
+  // Validação fail-closed: Bloquear produto sem imagem válida antes de aprovação/publicação
+  const resolvedImageUrl = resolveTrendSnapshotImageUrl(evidence, product, offer);
+  const imageBlock = validateTrendOfferImage(resolvedImageUrl);
+  if (imageBlock) {
+    return { blocked: imageBlock, productId: product.id };
+  }
+
+  // Se a oferta existente no banco estiver com image_url vazia mas temos imagem factual resolvida, sincroniza
+  if (!validHttps(offer.image_url) && resolvedImageUrl) {
+    await supabase.from("offers").update({ image_url: resolvedImageUrl }).eq("id", offer.id).eq("user_id", user.id);
+    offer.image_url = resolvedImageUrl;
   }
 
   const block = await ensureOfferSelected(supabase, user.id, offer, product.id);

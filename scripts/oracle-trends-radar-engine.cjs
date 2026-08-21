@@ -692,6 +692,16 @@ function getCandidateOfficialIdentityKeys(candidate = {}) {
     if (itemId) {
       keys.push(`mercadolivre:item:${itemId}`);
     }
+    if (!productId && !itemId && candidate.permalink) {
+      const matchP = candidate.permalink.match(/\/p\/(MLB\d+)/i);
+      if (matchP && matchP[1]) {
+        keys.push(`mercadolivre:catalog:${normalizeIdentityPart(matchP[1])}`);
+      }
+      const matchU = candidate.permalink.match(/\/up\/(MLBU\d+)/i) || candidate.permalink.match(/MLB-?(\d+)/i);
+      if (matchU && matchU[1]) {
+        keys.push(`mercadolivre:item:${normalizeIdentityPart(matchU[1])}`);
+      }
+    }
   }
 
   return keys;
@@ -708,6 +718,7 @@ function getOfferOfficialIdentityKeys(offer = {}) {
   if (platform.includes('shopee')) {
     const itemId = normalizeIdentityPart(
       offer.shopee_item_id ||
+      offer.item_id ||
       metrics.itemId ||
       metrics.item_id ||
       metrics.sourceItemId ||
@@ -715,6 +726,7 @@ function getOfferOfficialIdentityKeys(offer = {}) {
     );
     const shopId = normalizeIdentityPart(
       offer.shopee_shop_id ||
+      offer.shop_id ||
       metrics.shopId ||
       metrics.shop_id ||
       ''
@@ -747,10 +759,15 @@ function getOfferOfficialIdentityKeys(offer = {}) {
     }
     if (itemId) {
       keys.push(`mercadolivre:item:${itemId}`);
-    } else if (offer.original_url) {
-      const match = offer.original_url.match(/MLB-?(\d+)/i);
-      if (match && match[1]) {
-        keys.push(`mercadolivre:item:mlb${match[1]}`);
+    }
+    if (!productId && !itemId && offer.original_url) {
+      const matchP = offer.original_url.match(/\/p\/(MLB\d+)/i);
+      if (matchP && matchP[1]) {
+        keys.push(`mercadolivre:catalog:${normalizeIdentityPart(matchP[1])}`);
+      }
+      const matchU = offer.original_url.match(/\/up\/(MLBU\d+)/i) || offer.original_url.match(/MLB-?(\d+)/i);
+      if (matchU && matchU[1]) {
+        keys.push(`mercadolivre:item:${normalizeIdentityPart(matchU[1])}`);
       }
     }
   }
@@ -936,7 +953,7 @@ async function fetchInternalOfferPerformanceMap(client, {
     // 1. Carrega ofertas existentes do tenant/usuário
     let offerQuery = client
       .from('offers')
-      .select('id, user_id, platform, shopee_item_id, shopee_shop_id, marketplace_metrics, original_url');
+      .select('id, user_id, platform, shopee_item_id, shopee_shop_id, item_id, product_id, marketplace_metrics, original_url');
 
     if (tenantId) {
       offerQuery = offerQuery.eq('user_id', tenantId);
@@ -1390,6 +1407,7 @@ function buildTrendRadarProductsFromCandidates({
         evidence_type: 'marketplace_snapshot',
         provenance: candidate.provenance || (candidate.marketplace === 'Shopee' ? 'shopee_openapi_productOfferV2' : 'mercadolivre_official_intent'),
         source_url: candidate.permalink || null,
+        image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
         observed_at: candidate.observedAt || now.toISOString(),
         rank_position: priority,
         best_seller_flag: sales !== null && sales >= 50,
@@ -1436,6 +1454,7 @@ function buildTrendRadarProductsFromCandidates({
           sellerCommissionRate: candidate.sellerCommissionRate || 0,
           effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
           estimatedCommissionPerSale: finalScoreV4.economic_return.estimatedCommissionPerSale,
+          image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
           family_key: finalScoreV4.family_key,
           normalized_unit: finalScoreV4.normalized_unit,
           normalized_price: finalScoreV4.normalized_price,

@@ -41,7 +41,7 @@ export async function prepareTrendSocialDrafts(input: {
   const admin = createRequiredSupabaseAdminClient();
   const { data: offer, error: offerError } = await admin
     .from("offers")
-    .select("id,product_name,platform,category,current_price,old_price,original_url,shipping_free,explainability,marketplace_metrics")
+    .select("id,product_name,platform,category,current_price,old_price,original_url,image_url,shipping_free,explainability,marketplace_metrics")
     .eq("id", input.offerId)
     .eq("user_id", input.userId)
     .single();
@@ -58,6 +58,10 @@ export async function prepareTrendSocialDrafts(input: {
         ? "Oferta Mercado Livre sem monetização válida. Drafts sociais não foram criados."
         : "Oferta sem destino seguro para publicação social.",
     );
+  }
+
+  if (!offer.image_url || !/^https:\/\//i.test(String(offer.image_url).trim())) {
+    throw new Error("Oferta do Trends sem imagem oficial válida não pode gerar drafts para redes sociais.");
   }
 
   const explainabilityMetrics = offer.explainability?.marketplace_metrics;
