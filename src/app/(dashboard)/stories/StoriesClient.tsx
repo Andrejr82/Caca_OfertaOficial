@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Download, Facebook, Instagram, Loader2, Send } from "lucide-react";
+import { AlertTriangle, Download, Facebook, Instagram, Loader2, RefreshCw, Send } from "lucide-react";
 
 type Channel = "instagram" | "facebook";
 type StoryOption = {
@@ -19,21 +19,52 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
   const [frame, setFrame] = useState<1 | 2>(1);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
+  const [previewNonce, setPreviewNonce] = useState(0);
   const selected = useMemo(() => options.find((option) => option.offerId === selectedOfferId) ?? null, [options, selectedOfferId]);
   const previewUrl = selected
-    ? `/api/images/story-creative?offerId=${encodeURIComponent(selected.offerId)}&channel=${channel}&frame=${frame}`
+    ? `/api/images/story-creative?offerId=${encodeURIComponent(selected.offerId)}&channel=${channel}&frame=${frame}&v=${previewNonce}`
     : null;
+
+  function resetPreview() {
+    setPreviewError(null);
+    setPreviewNonce((value) => value + 1);
+  }
 
   function selectOffer(id: string) {
     setSelectedOfferId(id);
     setFrame(1);
     setMessage(null);
+    resetPreview();
   }
 
   function selectChannel(next: Channel) {
     setChannel(next);
     setFrame(1);
     setMessage(null);
+    resetPreview();
+  }
+
+  function selectFrame(next: 1 | 2) {
+    setFrame(next);
+    setMessage(null);
+    resetPreview();
+  }
+
+  async function explainPreviewFailure() {
+    if (!previewUrl) return;
+    try {
+      const response = await fetch(previewUrl, { cache: "no-store" });
+      const contentType = response.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        setPreviewError(data.message || `Falha ao gerar preview (${response.status}).`);
+        return;
+      }
+      setPreviewError(`Falha ao gerar preview (${response.status}).`);
+    } catch {
+      setPreviewError("Não foi possível carregar o preview do Story.");
+    }
   }
 
   async function publish() {
@@ -81,7 +112,7 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
       {selected?.frameCount === 2 && <div>
         <p className="mb-2 text-xs font-bold uppercase tracking-wider text-white/35">Arte</p>
         <div className="grid grid-cols-2 gap-2">
-          {[1, 2].map((item) => <button key={item} type="button" onClick={() => setFrame(item as 1 | 2)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${frame === item ? "border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-200" : "border-white/10 text-white/45"}`}>Arte {item}</button>)}
+          {[1, 2].map((item) => <button key={item} type="button" onClick={() => selectFrame(item as 1 | 2)} className={`rounded-xl border px-3 py-2 text-xs font-bold ${frame === item ? "border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-200" : "border-white/10 text-white/45"}`}>Arte {item}</button>)}
         </div>
       </div>}
 
@@ -93,7 +124,7 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
           : <p className="mt-3 text-emerald-300">Oferta e link rastreado prontos. Você pode publicar cada rede de forma independente.</p>}
       </div>
 
-      <button type="button" onClick={publish} disabled={busy || !selected?.trackedUrl} className="inline-flex items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40">
+      <button type="button" onClick={publish} disabled={busy || !selected?.trackedUrl || Boolean(previewError)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40">
         {busy ? <Loader2 size={16} className="animate-spin"/> : <Send size={16}/>} {busy ? "Publicando…" : `Publicar no ${channel === "instagram" ? "Instagram" : "Facebook"}`}
       </button>
       {previewUrl && <a href={`${previewUrl}&download=1`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white/65 hover:text-white"><Download size={16}/> Baixar arte</a>}
@@ -105,7 +136,29 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
         <div><p className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">Preview</p><h2 className="mt-1 font-bold text-white">Story 1080 × 1920</h2></div>
         {selected?.frameCount === 2 && <span className="rounded-lg bg-white/[0.05] px-2 py-1 text-[10px] font-extrabold text-white/45">ARTE {frame}/2</span>}
       </div>
-      {previewUrl ? <div className="mx-auto max-w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-black"><img src={previewUrl} alt="Preview do Story selecionado" className="aspect-[9/16] w-full object-cover"/></div> : <div className="grid min-h-[520px] place-items-center rounded-2xl border border-dashed border-white/10 text-center text-sm text-white/35">Selecione uma oferta para visualizar a arte.</div>}
+      {previewUrl ? (
+        previewError ? (
+          <div className="mx-auto grid min-h-[520px] max-w-[360px] place-items-center rounded-2xl border border-amber-400/20 bg-amber-500/[0.05] p-6 text-center">
+            <div>
+              <AlertTriangle className="mx-auto mb-3 text-amber-300" size={28}/>
+              <p className="text-sm font-bold text-amber-200">Falha ao gerar preview</p>
+              <p className="mt-2 text-xs leading-relaxed text-white/55">{previewError}</p>
+              <button type="button" onClick={resetPreview} className="mt-5 inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2 text-xs font-bold text-white/70 hover:text-white"><RefreshCw size={14}/> Tentar novamente</button>
+            </div>
+          </div>
+        ) : (
+          <div className="mx-auto max-w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-black">
+            <img
+              key={previewUrl}
+              src={previewUrl}
+              alt="Preview do Story selecionado"
+              className="aspect-[9/16] w-full object-cover"
+              onLoad={() => setPreviewError(null)}
+              onError={() => void explainPreviewFailure()}
+            />
+          </div>
+        )
+      ) : <div className="grid min-h-[520px] place-items-center rounded-2xl border border-dashed border-white/10 text-center text-sm text-white/35">Selecione uma oferta para visualizar a arte.</div>}
     </section>
   </div>;
 }
