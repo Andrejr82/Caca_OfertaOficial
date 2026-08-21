@@ -137,14 +137,14 @@ export function buildStoryCommercialFrameModel(
   };
 }
 
-function imageBlock(model: StoryCommercialFrameModel) {
+function imageBlock(model: StoryCommercialFrameModel, height: number = 1010) {
   return React.createElement(
     "div",
     {
       style: {
         display: "flex",
         width: "100%",
-        height: 1010,
+        height,
         borderRadius: 54,
         overflow: "hidden",
         background: "#fff",
@@ -168,6 +168,12 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
       ? "#2563eb"
       : "#111827";
 
+  const hasExtraDetails = Boolean(model.originalPrice || model.support || model.variant === "discount");
+  const imageHeight = hasExtraDetails ? 1010 : 1080;
+  const sectionGap = hasExtraDetails ? 20 : 26;
+  const infoGap = hasExtraDetails ? 12 : 16;
+  const rootPadding = hasExtraDetails ? "64px 56px 68px" : "64px 56px 64px";
+
   return React.createElement(
     "div",
     {
@@ -177,7 +183,7 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
-        padding: "64px 56px 68px",
+        padding: rootPadding,
         background: "linear-gradient(180deg,#fffaf0 0%,#fff 55%,#f8fafc 100%)",
         color: "#111827",
         fontFamily: "Arial, sans-serif",
@@ -190,7 +196,7 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         style: {
           display: "flex",
           flexDirection: "column",
-          gap: 20,
+          gap: sectionGap,
           width: "100%",
         },
       },
@@ -287,10 +293,10 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         },
         model.eyebrow,
       ),
-      imageBlock(model),
+      imageBlock(model, imageHeight),
       React.createElement(
         "div",
-        { style: { display: "flex", flexDirection: "column", gap: 12 } },
+        { style: { display: "flex", flexDirection: "column", gap: infoGap } },
         React.createElement("div", { style: { fontSize: 44, lineHeight: 1.04, fontWeight: 900, letterSpacing: -1.3 } }, model.title),
         React.createElement(
           "div",
@@ -298,7 +304,18 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
           model.originalPrice
             ? React.createElement("div", { style: { fontSize: 30, opacity: 0.48, textDecoration: "line-through" } }, `De ${model.originalPrice}`)
             : null,
-          React.createElement("div", { style: { fontSize: model.variant === "price" ? 76 : 96, fontWeight: 1000, color: accent, letterSpacing: -3 } }, model.hero),
+          React.createElement(
+            "div",
+            {
+              style: {
+                fontSize: model.variant === "price" ? 76 : 96,
+                fontWeight: 1000,
+                color: accent,
+                letterSpacing: -3,
+              },
+            },
+            model.hero,
+          ),
         ),
         model.variant !== "price"
           ? React.createElement("div", { style: { fontSize: 62, fontWeight: 1000, letterSpacing: -2.2 } }, model.price)

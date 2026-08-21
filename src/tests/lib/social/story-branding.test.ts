@@ -196,4 +196,40 @@ describe("Branding oficial das artes de Stories (Instagram e Facebook)", () => {
     expect(priceFrame?.variant).toBe("price");
     expect(priceFrame?.hero).toContain("35,00");
   });
+
+  it("ajusta o layout vertical adaptativo para ofertas compactas e ofertas ricas", () => {
+    const compactPlan = buildStoryCommercialPlan({
+      productName: "Cabo USB-C 1m",
+      marketplace: "Shopee",
+      category: null,
+      currentPrice: 15,
+      originalPrice: null,
+      freeShipping: false,
+      evidence: {},
+    });
+    const compactFrame = buildStoryCommercialFrameModel(
+      compactPlan,
+      { marketplace: "Shopee", imageUrl: "https://images.example.com/cabo.jpg" },
+      1,
+    );
+    const compactRendered = renderStoryCommercialFrame(compactFrame!);
+    expect(React.isValidElement(compactRendered)).toBe(true);
+
+    const richPlan = buildStoryCommercialPlan({
+      productName: "Notebook Gamer Core i7 16GB SSD 512GB",
+      marketplace: "Amazon",
+      category: "Informática",
+      currentPrice: 4500,
+      originalPrice: 6000,
+      freeShipping: true,
+      evidence: {},
+    });
+    const richFrame = buildStoryCommercialFrameModel(
+      richPlan,
+      { marketplace: "Amazon", imageUrl: "https://images.example.com/notebook.jpg" },
+      1,
+    );
+    const richRendered = renderStoryCommercialFrame(richFrame!);
+    expect(React.isValidElement(richRendered)).toBe(true);
+  });
 });
