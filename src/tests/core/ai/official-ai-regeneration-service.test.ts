@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   regenerateOfficialDrafts,
-  buildCopyV3ChannelCopy,
   type OfficialAIDraftForRegeneration,
   type OfficialAIRegenerationCommand,
   type OfficialAIRegenerationDependencies
@@ -35,19 +34,15 @@ const draft: OfficialAIDraftForRegeneration = {
   evidence: {}
 };
 
-const generatedContent = {
-  title: "Tênis Casual Feminino",
-  description: "Oferta objetiva.",
-  shortCopy: "Tênis Casual Feminino por R$ 79,90.",
-  longCopy: "Tênis Casual Feminino por R$ 79,90 na Shopee.",
-  hashtags: ["#oferta"],
-  callToAction: "Aproveite",
-  highlights: ["Preço atual"],
-  explanation: "Somente fatos fornecidos.",
-    channelCopies: { whatsapp: "🔥 PREÇO BAIXOU" }
+const generatedPlan = {
+  shortProductName: "Tênis Casual Feminino",
+  commercialAngle: "saving",
+  hook: "🔥 Tênis Casual Feminino com economia",
+  selectedAttributes: [],
+  optionalProofAngle: null
 };
 
-function dependencies(content = generatedContent): OfficialAIRegenerationDependencies {
+function dependencies(content: unknown = generatedPlan): OfficialAIRegenerationDependencies {
   return {
     drafts: {
       findDrafts: vi.fn().mockResolvedValue([draft]),
@@ -69,18 +64,22 @@ function dependencies(content = generatedContent): OfficialAIRegenerationDepende
 }
 
 describe("regenerateOfficialDrafts", () => {
-  it("filtra drafts existentes e atualiza somente conteúdo, preservando identidade", async () => {
+  it("regenera o draft pela Copy V5 e preserva identidade", async () => {
     const deps = dependencies();
 
     const result = await regenerateOfficialDrafts(command, deps);
 
     expect(deps.drafts.findDrafts).toHaveBeenCalledWith("tenant-1", command.filters);
-    expect(deps.drafts.updateContent).toHaveBeenCalledWith({
+    expect(deps.drafts.updateContent).toHaveBeenCalledTimes(1);
+    const update = vi.mocked(deps.drafts.updateContent).mock.calls[0][0];
+    expect(update).toMatchObject({
       tenantId: "tenant-1",
       postId: "post-1",
       expectedContent: draft.currentContent,
-      content: `${buildCopyV3ChannelCopy(draft, "whatsapp")}\n\n${draft.trackedUrl}`
     });
+    expect(update.content).toContain("De R$ 99,90\nPor R$ 79,90");
+    expect(update.content.match(/https:\/\//gu)).toHaveLength(1);
+    expect(update.content).toContain(draft.trackedUrl);
     expect(result.items[0]).toMatchObject({
       postId: "post-1",
       offerId: "offer-1",
@@ -92,23 +91,34 @@ describe("regenerateOfficialDrafts", () => {
     });
   });
 
-  it.each([
-    "Olá! Temos um novo tênis.",
-    "Confira o tênis por R$ 79,90.",
-    "Olá! Tênis por R$ 79,90.",
-    "Tênis por R$ 79,90 [link]",
-    "Tênis: https://link-inventado.example",
-    "Tênis: www.link-inventado.example"
-  ])("recusa copy genérica ou com dado não sustentado: %s", async (copy) => {
+  it("sanitiza plano inventado pelo provider em vez de persistir alegações não factuais", async () => {
     const deps = dependencies({
-      ...generatedContent,
-      channelCopies: { whatsapp: copy }
+      shortProductName: "Tênis Casual Feminino",
+      commercialAngle: "standard",
+      hook: "CORRE! Últimas unidades, frete grátis e 10x sem juros!",
+      selectedAttributes: ["Potente", "Confortável"],
+      optionalProofAngle: "⭐ 5/5 com 1 milhão de avaliações"
     });
 
     const result = await regenerateOfficialDrafts(command, deps);
 
-    expect(result).toMatchObject({ matched: 1, updated: 0, failed: 1 });
-    expect(deps.drafts.updateContent).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ matched: 1, updated: 1, failed: 0 });
+    const content = vi.mocked(deps.drafts.updateContent).mock.calls[0][0].content;
+    expect(content).not.toMatch(/últimas unidades|10x sem juros|potente|confortável|1 milhão/iu);
+    expect(content).toContain("De R$ 99,90\nPor R$ 79,90");
+  });
+
+  it("mantém Facebook sem URL direta durante regeneração V5", async () => {
+    const facebookDraft = { ...draft, channel: "facebook" as const };
+    const deps = dependencies();
+    vi.mocked(deps.drafts.findDrafts).mockResolvedValue([facebookDraft]);
+
+    const result = await regenerateOfficialDrafts({ ...command, filters: { channel: "facebook" } }, deps);
+
+    expect(result).toMatchObject({ updated: 1, failed: 0 });
+    const content = vi.mocked(deps.drafts.updateContent).mock.calls[0][0].content;
+    expect(content).toContain("primeiro comentário");
+    expect(content).not.toContain("https://");
   });
 
   it("retorna no-op sem exigir provider quando nenhum draft corresponde", async () => {
@@ -117,15 +127,6 @@ describe("regenerateOfficialDrafts", () => {
     vi.mocked(deps.providers.resolve).mockImplementation(() => { throw new Error("provider ausente"); });
     await expect(regenerateOfficialDrafts(command, deps)).resolves.toMatchObject({ matched: 0, updated: 0, failed: 0 });
     expect(deps.providers.resolve).not.toHaveBeenCalled();
-  });
-
-  it("descarta alegações inventadas pelo provider e renderiza somente fatos confiáveis", async () => {
-    const deps = dependencies({
-      ...generatedContent,
-      channelCopies: { whatsapp: "Frete grátis, 10x sem juros e estoque acabando por R$ 1,99." }
-    });
-    await expect(regenerateOfficialDrafts(command, deps)).resolves.toMatchObject({ updated: 0, failed: 1 });
-    expect(deps.drafts.updateContent).not.toHaveBeenCalled();
   });
 
   it("retorna cursor somente para lote completo e totalmente atualizado", async () => {
