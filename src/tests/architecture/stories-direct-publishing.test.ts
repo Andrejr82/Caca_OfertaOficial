@@ -36,7 +36,7 @@ describe("Stories manual direct publishing architecture", () => {
     const client = read("src/app/(dashboard)/stories/StoriesClient.tsx");
     const image = read("src/app/api/images/story-creative/route.ts");
     expect(client).toContain("download=1");
-    expect(image).toContain("meta=1");
+    expect(image).toContain('searchParams.get("meta") === "1"');
     expect(image).toContain("image/jpeg");
     expect(image).toContain("public, max-age=300");
   });
