@@ -47,7 +47,9 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
       });
       const data = await response.json();
       setMessage(response.ok
-        ? { text: `Story publicado no ${channel === "instagram" ? "Instagram" : "Facebook"}.` }
+        ? { text: channel === "instagram"
+          ? "Story publicado no Instagram. A oferta já fica disponível automaticamente na vitrine do link da bio."
+          : "Story publicado no Facebook." }
         : { text: data.message ?? "Não foi possível publicar o Story.", error: true });
     } catch {
       setMessage({ text: "Falha de rede ao publicar o Story.", error: true });
@@ -87,7 +89,7 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
       <div className="rounded-xl border border-white/10 bg-black/15 p-4 text-sm">
         <p className="font-bold text-white">{selected?.productName}</p>
         <p className="mt-1 text-xs text-white/40">{selected?.platform}</p>
-        {!draft ? <p className="mt-3 text-amber-300">Esta oferta não possui draft de {channel === "instagram" ? "Instagram" : "Facebook"}.</p> : !draft.trackedUrl ? <p className="mt-3 text-amber-300">Sem link rastreado: publicação bloqueada.</p> : <p className="mt-3 text-emerald-300">Draft e link rastreado prontos para publicação manual.</p>}
+        {!draft ? <p className="mt-3 text-amber-300">Esta oferta não possui draft de {channel === "instagram" ? "Instagram" : "Facebook"}.</p> : !draft.trackedUrl ? <p className="mt-3 text-amber-300">Sem link rastreado: publicação bloqueada.</p> : <p className="mt-3 text-emerald-300">Draft e link rastreado prontos. No Instagram, a oferta entra na vitrine automaticamente após a publicação.</p>}
       </div>
 
       <button type="button" onClick={publish} disabled={busy || !draft?.trackedUrl} className="inline-flex items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40">
