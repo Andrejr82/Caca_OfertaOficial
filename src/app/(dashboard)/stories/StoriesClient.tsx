@@ -10,7 +10,7 @@ type StoryOption = {
   platform: string;
   currentPrice: number;
   frameCount: 1 | 2;
-  drafts: Partial<Record<Channel, { postId: string; trackedUrl: string | null }>>;
+  trackedUrl: string | null;
 };
 
 export function StoriesClient({ options }: { options: StoryOption[] }) {
@@ -20,8 +20,9 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const selected = useMemo(() => options.find((option) => option.offerId === selectedOfferId) ?? null, [options, selectedOfferId]);
-  const draft = selected?.drafts[channel] ?? null;
-  const previewUrl = draft ? `/api/images/story-creative?postId=${encodeURIComponent(draft.postId)}&frame=${frame}` : null;
+  const previewUrl = selected
+    ? `/api/images/story-creative?offerId=${encodeURIComponent(selected.offerId)}&channel=${channel}&frame=${frame}`
+    : null;
 
   function selectOffer(id: string) {
     setSelectedOfferId(id);
@@ -36,20 +37,18 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
   }
 
   async function publish() {
-    if (!draft) return;
+    if (!selected) return;
     setBusy(true);
     setMessage(null);
     try {
       const response = await fetch("/api/stories/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ postId: draft.postId, channel, frame }),
+        body: JSON.stringify({ offerId: selected.offerId, channel, frame }),
       });
       const data = await response.json();
       setMessage(response.ok
-        ? { text: channel === "instagram"
-          ? "Story publicado no Instagram. A oferta já fica disponível automaticamente na vitrine do link da bio."
-          : "Story publicado no Facebook." }
+        ? { text: `Story publicado no ${channel === "instagram" ? "Instagram" : "Facebook"}. ${channel === "instagram" ? "Oferta sincronizada com a vitrine da bio." : "A oferta continua disponível para publicar também no Instagram."}` }
         : { text: data.message ?? "Não foi possível publicar o Story.", error: true });
     } catch {
       setMessage({ text: "Falha de rede ao publicar o Story.", error: true });
@@ -59,7 +58,7 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
   }
 
   if (!options.length) {
-    return <div className="glass-card p-8 text-center text-sm text-white/50">Nenhuma oferta do ciclo atual possui draft de Story.</div>;
+    return <div className="glass-card p-8 text-center text-sm text-white/50">Nenhuma oferta com imagem válida foi encontrada no ciclo atual.</div>;
   }
 
   return <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
@@ -89,10 +88,12 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
       <div className="rounded-xl border border-white/10 bg-black/15 p-4 text-sm">
         <p className="font-bold text-white">{selected?.productName}</p>
         <p className="mt-1 text-xs text-white/40">{selected?.platform}</p>
-        {!draft ? <p className="mt-3 text-amber-300">Esta oferta não possui draft de {channel === "instagram" ? "Instagram" : "Facebook"}.</p> : !draft.trackedUrl ? <p className="mt-3 text-amber-300">Sem link rastreado: publicação bloqueada.</p> : <p className="mt-3 text-emerald-300">Draft e link rastreado prontos. No Instagram, a oferta entra na vitrine automaticamente após a publicação.</p>}
+        {!selected?.trackedUrl
+          ? <p className="mt-3 text-amber-300">Sem link rastreado: publicação bloqueada até a oferta estar monetizada.</p>
+          : <p className="mt-3 text-emerald-300">Oferta e link rastreado prontos. Você pode publicar cada rede de forma independente.</p>}
       </div>
 
-      <button type="button" onClick={publish} disabled={busy || !draft?.trackedUrl} className="inline-flex items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40">
+      <button type="button" onClick={publish} disabled={busy || !selected?.trackedUrl} className="inline-flex items-center justify-center gap-2 rounded-xl bg-fuchsia-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-fuchsia-500 disabled:cursor-not-allowed disabled:opacity-40">
         {busy ? <Loader2 size={16} className="animate-spin"/> : <Send size={16}/>} {busy ? "Publicando…" : `Publicar no ${channel === "instagram" ? "Instagram" : "Facebook"}`}
       </button>
       {previewUrl && <a href={`${previewUrl}&download=1`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-white/65 hover:text-white"><Download size={16}/> Baixar arte</a>}
@@ -104,7 +105,7 @@ export function StoriesClient({ options }: { options: StoryOption[] }) {
         <div><p className="text-xs font-bold uppercase tracking-wider text-fuchsia-300">Preview</p><h2 className="mt-1 font-bold text-white">Story 1080 × 1920</h2></div>
         {selected?.frameCount === 2 && <span className="rounded-lg bg-white/[0.05] px-2 py-1 text-[10px] font-extrabold text-white/45">ARTE {frame}/2</span>}
       </div>
-      {previewUrl ? <div className="mx-auto max-w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-black"><img src={previewUrl} alt="Preview do Story selecionado" className="aspect-[9/16] w-full object-cover"/></div> : <div className="grid min-h-[520px] place-items-center rounded-2xl border border-dashed border-white/10 text-center text-sm text-white/35">Selecione uma rede com draft disponível para visualizar a arte.</div>}
+      {previewUrl ? <div className="mx-auto max-w-[360px] overflow-hidden rounded-2xl border border-white/10 bg-black"><img src={previewUrl} alt="Preview do Story selecionado" className="aspect-[9/16] w-full object-cover"/></div> : <div className="grid min-h-[520px] place-items-center rounded-2xl border border-dashed border-white/10 text-center text-sm text-white/35">Selecione uma oferta para visualizar a arte.</div>}
     </section>
   </div>;
 }
