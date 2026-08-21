@@ -46,10 +46,10 @@ function decisionBlocks(facts: CopyV4Facts) {
     contract,
     blocks: [
       normalizeLine(contract.hook),
-      normalizeLine(contract.proofLine ? `🏆 ${contract.proofLine}` : null),
-      normalizeLine(contract.offerLine ? `💰 ${contract.offerLine}` : null),
-      normalizeLine(contract.benefitLine ? `✨ ${contract.benefitLine}` : null),
+      normalizeLine(contract.proofLine ? `⭐ ${contract.proofLine}` : null),
+      normalizeLine(contract.benefitLine),
       facts.freeShipping === true ? "🚚 Frete grátis confirmado." : null,
+      normalizeLine(contract.offerLine ? `💰 ${contract.offerLine}` : null),
     ].filter((value): value is string => Boolean(value)),
   };
 }

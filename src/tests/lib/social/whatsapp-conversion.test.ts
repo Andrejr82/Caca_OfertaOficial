@@ -14,17 +14,17 @@ const jiesipote = {
 };
 
 describe("Task 3 — WhatsApp Conversion V4", () => {
-  it("coloca prova e preço antes do benefício e termina em CTA único com link direto", () => {
+  it("coloca produto com preço na abertura seguido de prova, benefício e CTA único com link direto", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/wp_jiesipote";
     const copy = buildWhatsAppConversionV4(jiesipote, url);
 
-    const proof = copy.indexOf("Top #14");
     const offer = copy.indexOf("R$ 88,00");
+    const proof = copy.indexOf("Top #14");
     const benefit = copy.indexOf("Proteção contra água");
 
-    expect(proof).toBeGreaterThan(-1);
-    expect(offer).toBeGreaterThan(proof);
-    expect(benefit).toBeGreaterThan(offer);
+    expect(offer).toBeGreaterThan(-1);
+    expect(proof).toBeGreaterThan(offer);
+    expect(benefit).toBeGreaterThan(proof);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
     expect(copy.match(/Conferir o preço atual/gu)).toHaveLength(1);
     expect(copy).toContain(`👉 Conferir o preço atual: ${url}`);

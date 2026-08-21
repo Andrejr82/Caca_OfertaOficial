@@ -14,17 +14,17 @@ const jiesipote = {
 };
 
 describe("Task 6 — Facebook Conversion V4", () => {
-  it("mantém prova e preço no feed e deixa o tracked URL apenas no primeiro comentário", () => {
+  it("mantém preço de abertura, prova e benefício no feed e deixa o tracked URL apenas no primeiro comentário", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/fb_jiesipote";
     const result = buildFacebookConversionV4(jiesipote, url);
 
-    const proof = result.feed.indexOf("Top #14");
     const offer = result.feed.indexOf("R$ 88,00");
+    const proof = result.feed.indexOf("Top #14");
     const benefit = result.feed.indexOf("Proteção contra água");
 
-    expect(proof).toBeGreaterThan(-1);
-    expect(offer).toBeGreaterThan(proof);
-    expect(benefit).toBeGreaterThan(offer);
+    expect(offer).toBeGreaterThan(-1);
+    expect(proof).toBeGreaterThan(offer);
+    expect(benefit).toBeGreaterThan(proof);
     expect(result.feed).toContain("Conferir o preço atual no primeiro comentário");
     expect(result.feed).not.toContain("https://");
     expect(result.firstComment).toBe(`👉 Conferir o preço atual: ${url}`);

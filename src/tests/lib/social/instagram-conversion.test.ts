@@ -43,7 +43,7 @@ describe("Instagram Reels conversion plan", () => {
   });
 
   it("não mantém contrato de cards estáticos de Stories", () => {
-    const plan = buildInstagramConversionV4Plan(jiesipote) as Record<string, unknown>;
+    const plan = buildInstagramConversionV4Plan(jiesipote) as unknown as Record<string, unknown>;
     expect(plan).not.toHaveProperty("storyFrames");
     expect(JSON.stringify(plan)).not.toMatch(/sticker|TELA [123]\/3|STORIES V4/iu);
   });

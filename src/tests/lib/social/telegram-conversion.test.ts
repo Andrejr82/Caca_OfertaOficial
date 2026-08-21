@@ -14,17 +14,17 @@ const jiesipote = {
 };
 
 describe("Task 5 — Telegram Conversion V4", () => {
-  it("renderiza alerta curto com prova, preço e CTA único", () => {
+  it("renderiza alerta curto com preço na abertura, prova, benefício e CTA único", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/tg_jiesipote";
     const copy = buildTelegramConversionV4(jiesipote, url);
 
-    const proof = copy.indexOf("Top #14");
     const offer = copy.indexOf("R$ 88,00");
+    const proof = copy.indexOf("Top #14");
     const benefit = copy.indexOf("Proteção contra água");
 
-    expect(proof).toBeGreaterThan(-1);
-    expect(offer).toBeGreaterThan(proof);
-    expect(benefit).toBeGreaterThan(offer);
+    expect(offer).toBeGreaterThan(-1);
+    expect(proof).toBeGreaterThan(offer);
+    expect(benefit).toBeGreaterThan(proof);
     expect(copy.match(/Conferir o preço atual/gu)).toHaveLength(1);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
     expect(copy).toContain(`👉 Conferir o preço atual: ${url}`);

@@ -30,23 +30,32 @@ function removeLeadingEmoji(value: string) {
  * um destino possível para reutilização do próprio vídeo, tratado no fluxo de
  * publicação audiovisual, não aqui.
  */
+function formatBRL(value: number) {
+  return `R$ ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 export function buildInstagramConversionV4Plan(facts: CopyV4Facts): InstagramConversionV4Plan {
   const contract = buildConversionCopyV4Contract(facts, "instagram");
   const hook = compact(contract.hook, 90);
   const proof = contract.proofLine ? compact(contract.proofLine, 90) : null;
   const benefit = contract.benefitLine ? compact(contract.benefitLine, 90) : null;
-  const offer = contract.offerLine ? compact(contract.offerLine, 105) : null;
 
   const proofOrBenefit = proof
-    ? `🏆 ${proof}`
+    ? `⭐ ${proof}`
     : benefit
-      ? `✨ ${benefit}`
+      ? compact(benefit, 90)
       : compact(removeLeadingEmoji(hook), 90);
+
+  const offerText = facts.currentPrice > 0
+    ? facts.originalPrice && facts.originalPrice > facts.currentPrice
+      ? `De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}`
+      : `Por ${formatBRL(facts.currentPrice)}`
+    : null;
 
   const reelBeats: InstagramReelBeatV4[] = [
     { startSecond: 0, endSecond: 2, purpose: "hook", text: hook },
     { startSecond: 2, endSecond: 6, purpose: "proof_benefit", text: proofOrBenefit },
-    { startSecond: 6, endSecond: 10, purpose: "offer", text: offer ? `💰 ${offer}` : "Confira as condições atuais no anúncio." },
+    { startSecond: 6, endSecond: 10, purpose: "offer", text: offerText ? `💰 ${offerText}` : "Confira as condições atuais no anúncio." },
     { startSecond: 10, endSecond: 13, purpose: "action", text: "Confira a oferta no link do perfil." },
   ];
 

@@ -59,12 +59,11 @@ export function buildWhatsAppConversionV4(facts: CopyV4Facts, trackedUrl: string
     blocks.push(normalized);
   };
 
-  // Ordem orientada a decisão: atenção -> prova -> preço -> benefício -> condição -> ação.
   push(contract.hook);
-  push(contract.proofLine ? `🏆 ${contract.proofLine}` : null);
-  push(contract.offerLine ? `💰 ${contract.offerLine}` : null);
-  push(contract.benefitLine ? `✨ ${contract.benefitLine}` : null);
+  push(contract.proofLine ? `⭐ ${contract.proofLine}` : null);
+  push(contract.benefitLine);
   push(facts.freeShipping === true ? "🚚 Frete grátis confirmado." : null);
+  push(contract.offerLine ? `💰 ${contract.offerLine}` : null);
 
   const contentBlocks = blocks.slice(0, WHATSAPP_CONVERSION_V4_MAX_BLOCKS - 1);
   contentBlocks.push(`👉 Conferir o preço atual: ${url}`);
