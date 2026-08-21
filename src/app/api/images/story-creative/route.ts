@@ -1,3 +1,4 @@
+import sharp from "sharp";
 import { ImageResponse } from "next/og";
 import { NextResponse } from "next/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
@@ -12,6 +13,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const postId = searchParams.get("postId")?.trim();
   const frame = Number(searchParams.get("frame") || "1");
+  const forMeta = searchParams.get("meta") === "1";
+  const download = searchParams.get("download") === "1";
 
   if (!postId || !Number.isInteger(frame) || frame < 1 || frame > 2) {
     return NextResponse.json({ ok: false, message: "postId e frame=1|2 são obrigatórios." }, { status: 400 });
@@ -55,21 +58,31 @@ export async function GET(request: Request) {
 
   const model = buildStoryCommercialFrameModel(
     plan,
-    {
-      marketplace: offer.platform,
-      imageUrl: offer.image_url,
-      channel: post.channel as "instagram" | "facebook",
-    },
+    { marketplace: offer.platform, imageUrl: offer.image_url, channel: post.channel as "instagram" | "facebook" },
     frame as 1 | 2,
   );
   if (!model) return NextResponse.json({ ok: false, message: "Esta oferta não precisa dessa segunda arte." }, { status: 404 });
 
-  return new ImageResponse(renderStoryCommercialFrame(model), {
-    width: 1080,
-    height: 1920,
+  const image = new ImageResponse(renderStoryCommercialFrame(model), { width: 1080, height: 1920 });
+  const png = Buffer.from(await image.arrayBuffer());
+  const fileBase = `story-${post.channel}-${postId}-${frame}`;
+
+  if (forMeta) {
+    const jpeg = await sharp(png).jpeg({ quality: 92, mozjpeg: true }).toBuffer();
+    return new Response(new Uint8Array(jpeg), {
+      headers: {
+        "Content-Type": "image/jpeg",
+        "Cache-Control": "public, max-age=300, s-maxage=300",
+        "Content-Disposition": `inline; filename=${fileBase}.jpg`,
+      },
+    });
+  }
+
+  return new Response(new Uint8Array(png), {
     headers: {
+      "Content-Type": "image/png",
       "Cache-Control": "private, no-store",
-      "Content-Disposition": `inline; filename=story-${post.channel}-${postId}-${frame}.png`,
+      "Content-Disposition": `${download ? "attachment" : "inline"}; filename=${fileBase}.png`,
     },
   });
 }
