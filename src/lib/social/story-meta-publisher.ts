@@ -33,6 +33,34 @@ async function discoverInstagramBusinessId(token: string, fetcher: FetchLike) {
   return id;
 }
 
+async function resolveFacebookPageAccessToken(pageId: string, fetcher: FetchLike) {
+  const explicitPageToken = process.env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim();
+  if (explicitPageToken) return explicitPageToken;
+
+  const genericToken = process.env.FACEBOOK_ACCESS_TOKEN?.trim();
+  if (!genericToken) throw new Error("FACEBOOK_PAGE_ACCESS_TOKEN ou FACEBOOK_ACCESS_TOKEN não configurado.");
+
+  const meResponse = await fetcher(`${GRAPH_BASE}/me?fields=id&access_token=${encodeURIComponent(genericToken)}`);
+  const meRaw = await meResponse.text();
+  let me: { id?: string; error?: { message?: string } };
+  try { me = JSON.parse(meRaw); } catch { throw new Error("Facebook token: resposta inválida ao identificar o token."); }
+  if (!meResponse.ok || me.error) throw new Error(`Facebook token: ${me.error?.message || `HTTP ${meResponse.status}`}`);
+
+  if (me.id === pageId) return genericToken;
+
+  const accountsResponse = await fetcher(`${GRAPH_BASE}/me/accounts?fields=id,access_token&access_token=${encodeURIComponent(genericToken)}`);
+  const accountsRaw = await accountsResponse.text();
+  let accounts: { data?: Array<{ id?: string; access_token?: string }>; error?: { message?: string } };
+  try { accounts = JSON.parse(accountsRaw); } catch { throw new Error("Facebook Pages: resposta inválida ao descobrir Page access token."); }
+  if (!accountsResponse.ok || accounts.error) throw new Error(`Facebook Pages: ${accounts.error?.message || `HTTP ${accountsResponse.status}`}`);
+
+  const pageToken = accounts.data?.find((page) => page.id === pageId)?.access_token;
+  if (!pageToken) {
+    throw new Error("Facebook Page access token não encontrado para FACEBOOK_PAGE_ID. Configure FACEBOOK_PAGE_ACCESS_TOKEN ou conceda acesso à Página ao token informado.");
+  }
+  return pageToken;
+}
+
 export async function publishInstagramStory(imageUrl: string, fetcher: FetchLike = fetch): Promise<string> {
   const token = process.env.INSTAGRAM_ACCESS_TOKEN?.trim();
   if (!token) throw new Error("INSTAGRAM_ACCESS_TOKEN não configurado.");
@@ -71,10 +99,10 @@ export async function publishInstagramStory(imageUrl: string, fetcher: FetchLike
 
 export async function publishFacebookStory(imageUrl: string, fetcher: FetchLike = fetch): Promise<string> {
   const pageId = process.env.FACEBOOK_PAGE_ID?.trim();
-  const token = (process.env.FACEBOOK_ACCESS_TOKEN || process.env.FACEBOOK_PAGE_ACCESS_TOKEN)?.trim();
   if (!pageId) throw new Error("FACEBOOK_PAGE_ID não configurado.");
-  if (!token) throw new Error("FACEBOOK_ACCESS_TOKEN não configurado.");
   if (!/^https:\/\//iu.test(imageUrl)) throw new Error("Story do Facebook exige imagem HTTPS pública.");
+
+  const token = await resolveFacebookPageAccessToken(pageId, fetcher);
 
   const photoResponse = await fetcher(`${GRAPH_BASE}/${pageId}/photos`, {
     method: "POST",

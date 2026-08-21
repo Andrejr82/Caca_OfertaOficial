@@ -8,9 +8,10 @@ afterEach(() => {
 });
 
 describe("story Meta publisher", () => {
-  it("publica Story do Facebook em duas etapas sem criar feed post", async () => {
+  it("publica Story do Facebook em duas etapas usando Page access token explícito", async () => {
     process.env.FACEBOOK_PAGE_ID = "page-1";
-    process.env.FACEBOOK_ACCESS_TOKEN = "token";
+    process.env.FACEBOOK_PAGE_ACCESS_TOKEN = "page-token";
+    process.env.FACEBOOK_ACCESS_TOKEN = "user-token-que-nao-deve-ser-usado";
     const fetcher = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({ id: "photo-1" }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, post_id: "story-1" }), { status: 200 }));
@@ -20,6 +21,37 @@ describe("story Meta publisher", () => {
     expect(fetcher.mock.calls[0][0]).toMatch(/\/page-1\/photos$/u);
     expect(fetcher.mock.calls[1][0]).toMatch(/\/page-1\/photo_stories$/u);
     expect(String(fetcher.mock.calls[0][0])).not.toContain("/feed");
+    expect(JSON.parse(fetcher.mock.calls[0][1]?.body as string).access_token).toBe("page-token");
+  });
+
+  it("aceita FACEBOOK_ACCESS_TOKEN quando ele já representa a própria Página", async () => {
+    process.env.FACEBOOK_PAGE_ID = "page-1";
+    delete process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+    process.env.FACEBOOK_ACCESS_TOKEN = "page-token";
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "page-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "photo-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, post_id: "story-1" }), { status: 200 }));
+
+    await expect(publishFacebookStory("https://example.com/story.jpg", fetcher as typeof fetch)).resolves.toBe("story-1");
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(String(fetcher.mock.calls[0][0])).toContain("/me?fields=id");
+    expect(JSON.parse(fetcher.mock.calls[1][1]?.body as string).access_token).toBe("page-token");
+  });
+
+  it("deriva Page access token quando FACEBOOK_ACCESS_TOKEN é token de usuário", async () => {
+    process.env.FACEBOOK_PAGE_ID = "page-1";
+    delete process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+    process.env.FACEBOOK_ACCESS_TOKEN = "user-token";
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "user-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ data: [{ id: "page-1", access_token: "derived-page-token" }] }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ id: "photo-1" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ success: true, post_id: "story-1" }), { status: 200 }));
+
+    await expect(publishFacebookStory("https://example.com/story.jpg", fetcher as typeof fetch)).resolves.toBe("story-1");
+    expect(String(fetcher.mock.calls[1][0])).toContain("/me/accounts?fields=id,access_token");
+    expect(JSON.parse(fetcher.mock.calls[2][1]?.body as string).access_token).toBe("derived-page-token");
   });
 
   it("publica Story do Instagram com container STORIES e media_publish", async () => {
