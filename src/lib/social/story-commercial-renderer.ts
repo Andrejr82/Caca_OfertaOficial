@@ -177,7 +177,7 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         display: "flex",
         flexDirection: "column",
         justifyContent: "space-between",
-        padding: "72px 56px 76px",
+        padding: "64px 56px 68px",
         background: "linear-gradient(180deg,#fffaf0 0%,#fff 55%,#f8fafc 100%)",
         color: "#111827",
         fontFamily: "Arial, sans-serif",
@@ -189,8 +189,8 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
       {
         style: {
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
+          flexDirection: "column",
+          gap: 20,
           width: "100%",
         },
       },
@@ -199,8 +199,9 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         {
           style: {
             display: "flex",
+            justifyContent: "space-between",
             alignItems: "center",
-            gap: 16,
+            width: "100%",
           },
         },
         React.createElement(
@@ -208,39 +209,65 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
           {
             style: {
               display: "flex",
-              width: 52,
-              height: 52,
-              borderRadius: 14,
-              overflow: "hidden",
-              background: "#0f172a",
               alignItems: "center",
-              justifyContent: "center",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
-              flexShrink: 0,
+              gap: 16,
             },
           },
-          React.createElement("img", {
-            src: model.logoSrc,
-            alt: model.brandName,
-            style: {
-              width: "100%",
-              height: "100%",
-              objectFit: "cover",
+          React.createElement(
+            "div",
+            {
+              style: {
+                display: "flex",
+                width: 64,
+                height: 64,
+                borderRadius: 16,
+                overflow: "hidden",
+                background: "#0f172a",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 4px 14px rgba(0,0,0,0.08)",
+                flexShrink: 0,
+              },
             },
-          }),
+            React.createElement("img", {
+              src: model.logoSrc,
+              alt: model.brandName,
+              style: {
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+              },
+            }),
+          ),
+          React.createElement(
+            "div",
+            {
+              style: {
+                display: "flex",
+                fontSize: 26,
+                fontWeight: 800,
+                color: "#0f172a",
+                letterSpacing: -0.4,
+              },
+            },
+            model.brandName,
+          ),
         ),
         React.createElement(
           "div",
           {
             style: {
               display: "flex",
-              fontSize: 24,
-              fontWeight: 800,
-              color: "#0f172a",
-              letterSpacing: -0.4,
+              alignItems: "center",
+              padding: "8px 20px",
+              background: "rgba(15, 23, 42, 0.05)",
+              borderRadius: 999,
+              fontSize: 20,
+              fontWeight: 700,
+              color: "#64748b",
             },
           },
-          model.brandName,
+          model.marketplace,
         ),
       ),
       React.createElement(
@@ -248,24 +275,16 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         {
           style: {
             display: "flex",
-            alignItems: "center",
-            padding: "8px 18px",
-            background: "rgba(15, 23, 42, 0.05)",
+            alignSelf: "flex-start",
             borderRadius: 999,
-            fontSize: 20,
-            fontWeight: 700,
-            color: "#64748b",
+            padding: "14px 24px",
+            background: accent,
+            color: "#fff",
+            fontSize: 26,
+            fontWeight: 900,
+            letterSpacing: 1.1,
           },
         },
-        model.marketplace,
-      ),
-    ),
-    React.createElement(
-      "div",
-      { style: { display: "flex", flexDirection: "column", gap: 24 } },
-      React.createElement(
-        "div",
-        { style: { display: "flex", alignSelf: "flex-start", borderRadius: 999, padding: "14px 22px", background: accent, color: "#fff", fontSize: 26, fontWeight: 900, letterSpacing: 1.1 } },
         model.eyebrow,
       ),
       imageBlock(model),

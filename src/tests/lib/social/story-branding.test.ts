@@ -65,10 +65,15 @@ describe("Branding oficial das artes de Stories (Instagram e Facebook)", () => {
     const rendered = renderStoryCommercialFrame(frame!);
     expect(React.isValidElement(rendered)).toBe(true);
 
-    // O header deve ser o primeiro filho
+    // O bloco principal superior contém o header e o conteúdo agrupados sem vão excessivo
     const rootProps = rendered.props as unknown as { children: React.ReactNode[] };
-    const children = React.Children.toArray(rootProps.children);
-    const header = children[0] as unknown as React.ReactElement<{ children: React.ReactNode[] }>;
+    const rootChildren = React.Children.toArray(rootProps.children);
+    const topSection = rootChildren[0] as unknown as React.ReactElement<{ children: React.ReactNode[] }>;
+    expect(topSection).toBeDefined();
+
+    // Primeiro elemento dentro da seção superior é o Header
+    const topChildren = React.Children.toArray(topSection.props.children);
+    const header = topChildren[0] as unknown as React.ReactElement<{ children: React.ReactNode[] }>;
     expect(header).toBeDefined();
 
     // Inspeciona os elementos dentro do header
@@ -84,9 +89,9 @@ describe("Branding oficial das artes de Stories (Instagram e Facebook)", () => {
     const logoContainer = brandChildren[0] as React.ReactElement<{ style: React.CSSProperties; children: React.ReactElement<{ src: string; alt: string }> }>;
     const brandNameContainer = brandChildren[1] as React.ReactElement<{ children: React.ReactNode }>;
 
-    // Logo container com proporção quadrada estável
-    expect(logoContainer.props.style.width).toBe(52);
-    expect(logoContainer.props.style.height).toBe(52);
+    // Logo container com proporção quadrada e tamanho ajustado (~64px)
+    expect(logoContainer.props.style.width).toBe(64);
+    expect(logoContainer.props.style.height).toBe(64);
 
     const logoImg = logoContainer.props.children;
     expect(logoImg.type).toBe("img");
