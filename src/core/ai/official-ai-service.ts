@@ -81,7 +81,7 @@ function decisionBlocksV4(facts: CopyV4Facts) {
 }
 
 /**
- * Copy V4 canônica antes da materialização do tracked URL.
+ * Compatibilidade legada apenas para testes/migração. Não é autoridade de produção.
  */
 export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: OfficialAIChannel) {
   const { blocks } = decisionBlocksV4(facts);
@@ -97,7 +97,7 @@ export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: Of
 }
 
 /**
- * Copy V5 canônica híbrida com suporte ao plano comercial aprovado.
+ * Autoridade única de copy final: Copy V5.
  */
 export function buildCanonicalCopyV5ChannelDraft(
   facts: CopyV5Facts,
@@ -133,7 +133,7 @@ export function buildCanonicalCopyV5Content(
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: plan.selectedAttributes,
-    explanation: "Copy V5 híbrida: LLM commercial planner + factual validator + deterministic renderer + commercial polish.",
+    explanation: "Copy V5: autoridade única de copy final para todos os fluxos.",
     channelCopies: {
       ...previous.channelCopies,
       ...Object.fromEntries(channels.map((channel) => [
@@ -154,10 +154,7 @@ export async function generateOfficialAI(
     ...dependencies,
     content: {
       persistDrafts: async (input) => {
-        if (input.command.metadata?.copyV2 === true) {
-          latestContent = input.content;
-          return dependencies.content.persistDrafts(input);
-        }
+        // Qualquer modo interno/legado termina obrigatoriamente na autoridade V5.
         const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels);
         latestContent = content;
         return dependencies.content.persistDrafts({ ...input, content });
