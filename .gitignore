@@ -88,3 +88,6 @@ smoke-remote.js
 
 # SSH Keys
 keys/
+
+# Worker local libraries
+scripts/libs/

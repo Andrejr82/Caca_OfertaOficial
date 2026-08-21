@@ -75,12 +75,45 @@ export async function POST(request: Request) {
   const { data, error: createError } = await admin.rpc("create_or_reuse_auto_reel_job", {
     _user_id: user.id,
     _offer_id: parsed.data.offerId,
-    _script: "Reel demonstrativo aguardando pipeline visual.",
+    _script: "Reel demonstrativo aguardando renderização Wan 2.2.",
     _metadata: metadata,
   });
   const result = data as AtomicJobResult | null;
 
   if (createError || !result?.job) return NextResponse.json({ error: createError?.message ?? "Não foi possível criar o Reel." }, { status: 500 });
+
+  // Garantir que o job seja enfileirado diretamente para o worker Oracle (status=queued, stage=queued)
+  if (result.job.status !== "ready") {
+    if (typeof admin.from === "function") {
+      const { data: updatedJob, error: updateErr } = await admin
+        .from("video_jobs")
+        .update({
+          status: "queued",
+          stage: "queued",
+          worker_id: null,
+        })
+        .eq("id", result.job.id)
+        .select(jobSelect)
+        .single();
+
+      if (!updateErr && updatedJob) {
+        result.job = updatedJob as typeof result.job;
+      } else {
+        result.job = {
+          ...result.job,
+          status: "queued",
+          stage: "queued",
+        };
+      }
+    } else {
+      result.job = {
+        ...result.job,
+        status: "queued",
+        stage: "queued",
+      };
+    }
+  }
+
   return NextResponse.json({ job: result.job }, { status: result.created ? 201 : 200 });
 }
 

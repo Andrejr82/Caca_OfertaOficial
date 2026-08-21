@@ -30,7 +30,6 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
   const [job, setJob] = useState<Job | null>(initialJobs[0] ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const activeOperation = useRef<string | null>(null);
   const selectedOffer = offers.find((offer) => offer.id === offerId) ?? null;
 
   const applyJob = useCallback((nextJob: Job) => {
@@ -40,34 +39,21 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
 
   useEffect(() => {
     if (!job || isAutoReelTerminal(job.status)) return;
-    if (["planning", "generating_visual", "scenes_ready"].includes(job.stage)) {
-      const operation = `${job.id}:${job.stage}`;
-      if (activeOperation.current === operation) return;
-      activeOperation.current = operation;
-      const endpoint = job.stage === "scenes_ready" ? "/api/reels/complete" : "/api/reels/scenes";
-      void fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.id }) })
-        .then(async (response) => {
-          const payload = await readApiPayload<{ job?: Job; error?: string }>(response);
-          if (payload.job) applyJob(payload.job);
-          if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível avançar o Reel.");
-          setError(null);
-        })
-        .catch((cause) => setError(cause instanceof Error ? cause.message : "Não foi possível avançar o Reel."))
-        .finally(() => { activeOperation.current = null; });
-      return;
-    }
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/reels/generate?jobId=${encodeURIComponent(job.id)}`);
         if (!response.ok) return;
         const payload = await readApiPayload<{ job?: Job }>(response);
-        if (payload.job) { setJob(payload.job); setJobs((current) => current.map((item) => item.id === payload.job?.id ? payload.job as Job : item)); }
+        if (payload.job) {
+          setJob(payload.job);
+          setJobs((current) => current.map((item) => item.id === payload.job?.id ? payload.job as Job : item));
+        }
       } catch {
         // A próxima janela de polling tenta novamente sem quebrar a tela.
       }
     }, pollingMs);
     return () => window.clearInterval(timer);
-  }, [applyJob, job, pollingMs]);
+  }, [job, pollingMs]);
 
   async function generate() {
     if (!offerId || busy) return;
@@ -112,7 +98,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-300">Reels Studio Automático</p>
           <h2 className="mt-1 font-bold text-white">Gerar Reel demonstrativo</h2>
-          <p className="mt-1 text-xs text-white/50">O job usa os dados reais da oferta, cenas visuais e Dubbing V2 factual.</p>
+          <p className="mt-1 text-xs text-white/50">Vídeo demonstrativo gerado automaticamente a partir da imagem real da oferta.</p>
         </div>
       </div>
 

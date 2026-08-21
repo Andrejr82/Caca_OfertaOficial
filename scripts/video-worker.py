@@ -24,6 +24,10 @@ from textwrap import wrap
 
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 from video_worker_runtime import build_edge_tts_command, validate_video_template
+try:
+    from auto_reel_wan_provider import generate_wan_video
+except ImportError:
+    generate_wan_video = None
 
 
 PANEL_URL = os.environ["VIDEO_PANEL_URL"].rstrip("/")
@@ -495,30 +499,67 @@ def render_auto_reel(scene_paths: list[Path], audio: Path, output: Path, workdir
 
 
 def process_auto_reel(job: dict) -> None:
+    job_id = job["id"]
     metadata = job.get("metadata") or {}
     snapshot = metadata.get("factualSnapshot") or {}
-    scenes = sorted(metadata.get("visualScenes") or [], key=lambda scene: int(scene.get("number", 0)))
-    if not metadata.get("completionRequested") or len(scenes) != 4:
-        raise RuntimeError("Auto Reel sem manifest de conclusão válido.")
-    with tempfile.TemporaryDirectory(prefix=f"caca-auto-reel-{job['id'][:8]}-") as folder:
+    offer = job.get("offers") or {}
+
+    # Localizar imagem original do produto
+    image_url = (
+        offer.get("image_url") or
+        metadata.get("imageUrl") or
+        metadata.get("image_url") or
+        snapshot.get("imageUrl") or
+        snapshot.get("image_url") or
+        job.get("image_url")
+    )
+    if not image_url:
+        raise RuntimeError("Auto Reel sem imagem original válida.")
+
+    with tempfile.TemporaryDirectory(prefix=f"caca-auto-reel-{job_id[:8]}-") as folder:
         root = Path(folder)
-        scene_paths = []
-        for scene in scenes:
-            path = root / f"scene-{scene['number']}.jpg"
-            download(scene.get("mediaUrl") or scene.get("imageUrl"), path)
-            scene_paths.append(path)
-        heartbeat(job["id"], "analyzing")
-        dubbing = run_auto_dubbing(snapshot)
-        audio = root / "audio.mp3"
-        speak(dubbing["copy"], audio)
-        heartbeat(job["id"], "dubbing")
-        video = root / "video.mp4"
-        duration = render_auto_reel(scene_paths, audio, video, root)
-        heartbeat(job["id"], "rendering")
-        video_url = signed_upload(job["id"], "video", video)
-        audio_url = signed_upload(job["id"], "audio", audio)
-        api("POST", f"/api/videos/worker/{job['id']}/complete", {"videoUrl": video_url, "audioUrl": audio_url, "durationSeconds": duration, "workerId": WORKER_ID})
-        print(f"Auto Reel {job['id']} pronto: {video_url}", flush=True)
+        video_path = root / "video.mp4"
+
+        heartbeat(job_id, "analyzing")
+
+        # Construir prompt de uso real com base factual
+        product_name = (
+            snapshot.get("productName") or
+            snapshot.get("title") or
+            offer.get("product_name") or
+            "product"
+        )
+        context_suffix = f" of {product_name}" if product_name and product_name != "product" else ""
+        prompt = (
+            f"Create a realistic vertical product demonstration video using the supplied product image as the strict visual reference. "
+            f"Preserve the exact product identity, shape, colors, proportions and visible branding{context_suffix}. "
+            f"Start immediately with the product being naturally used for its real-world purpose. "
+            f"Continuous realistic motion. Do not redesign the product. Do not invent accessories. "
+            f"Do not add text, prices, labels or promotional graphics. Vertical 9:16 product demonstration."
+        )
+
+        heartbeat(job_id, "generating_video")
+
+        if generate_wan_video is None:
+            raise RuntimeError("Módulo auto_reel_wan_provider não está disponível.")
+
+        wan_result = generate_wan_video(
+            image_url=image_url,
+            prompt=prompt,
+            output_path=video_path,
+            duration_seconds=3.5,
+            steps=6
+        )
+
+        heartbeat(job_id, "rendering")
+        video_url = signed_upload(job_id, "video", video_path)
+
+        api("POST", f"/api/videos/worker/{job_id}/complete", {
+            "videoUrl": video_url,
+            "durationSeconds": wan_result.get("duration", 3.5),
+            "workerId": WORKER_ID
+        })
+        print(f"Auto Reel Wan 2.2 {job_id} pronto: {video_url} ({wan_result.get('width')}x{wan_result.get('height')}, {wan_result.get('duration')}s)", flush=True)
 
 
 def process(job: dict) -> None:
