@@ -13,8 +13,8 @@ const jiesipote = {
   },
 };
 
-describe("Task 5 — Telegram Conversion V4", () => {
-  it("renderiza alerta curto com preço na abertura, atributos, prova e CTA", () => {
+describe("Telegram conversion — V5 authority", () => {
+  it("renderiza alerta curto com preço, atributos, prova e CTA", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/tg_jiesipote";
     const copy = buildTelegramConversionV4(jiesipote, url);
 
@@ -26,7 +26,7 @@ describe("Task 5 — Telegram Conversion V4", () => {
     expect(attributes).toBeGreaterThan(offer);
     expect(proof).toBeGreaterThan(attributes);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
-    expect(copy).toContain(`👉 Achado no Mercado Livre:\n${url}`);
+    expect(copy).toContain(`👉 Ver no Mercado Livre:\n${url}`);
   });
 
   it("mantém formato escaneável e sem ruído de catálogo", () => {
@@ -35,7 +35,7 @@ describe("Task 5 — Telegram Conversion V4", () => {
 
     expect(blocks.length).toBeLessThanOrEqual(TELEGRAM_CONVERSION_V4_MAX_BLOCKS);
     expect(copy).not.toMatch(/#\p{L}[\p{L}\p{N}_]*/u);
-    expect(copy).not.toMatch(/Veja a oferta|link abaixo|oferta em destaque/iu);
+    expect(copy).not.toMatch(/link abaixo|oferta em destaque/iu);
     expect(copy).not.toMatch(/últimas unidades|só hoje|corre que|antes que o preço suba/iu);
   });
 
@@ -50,7 +50,7 @@ describe("Task 5 — Telegram Conversion V4", () => {
     }, "https://caca-oferta-oficial.vercel.app/go/tg_fone");
 
     expect(copy).toContain("R$ 59,90");
-    expect(copy).toContain("👉 Achado na Shopee:");
+    expect(copy).toContain("👉 Ver na Shopee:");
     expect(copy).not.toMatch(/Top #|mais vendidos|Loja oficial|Mall/iu);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
   });
