@@ -22,6 +22,8 @@ function receiptKey(postId: string, channel: StoryPublishChannel, frame: number)
 }
 
 export async function POST(request: Request) {
+  const supabase = await createServerSupabaseClient();
+  let claimed: { userId: string; key: string } | null = null;
   try {
     const body = await request.json() as Body;
     const postId = body.postId?.trim();
@@ -31,7 +33,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: false, message: "postId, channel e frame=1|2 são obrigatórios." }, { status: 400 });
     }
 
-    const supabase = await createServerSupabaseClient();
     if (!supabase) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
@@ -57,33 +58,39 @@ export async function POST(request: Request) {
     }
 
     const key = receiptKey(postId, channel, frame);
-    const { data: existing, error: receiptReadError } = await supabase
-      .from("app_settings")
-      .select("value")
-      .eq("user_id", user.id)
-      .eq("key", key)
-      .maybeSingle();
-    if (receiptReadError) return NextResponse.json({ ok: false, message: "Não foi possível validar duplicidade do Story." }, { status: 503 });
-    if (existing?.value) {
-      return NextResponse.json({ ok: false, code: "STORY_ALREADY_PUBLISHED", message: "Esta arte já foi publicada nessa rede." }, { status: 409 });
+    const claimedAt = new Date().toISOString();
+    const { error: claimError } = await supabase.from("app_settings").insert({
+      user_id: user.id,
+      key,
+      value: { status: "publishing", channel, postId, offerId: post.offer_id, frame, claimedAt },
+      updated_at: claimedAt,
+    });
+    if (claimError) {
+      if (claimError.code === "23505") {
+        return NextResponse.json({ ok: false, code: "STORY_ALREADY_PUBLISHED", message: "Esta arte já foi publicada ou está em publicação nessa rede." }, { status: 409 });
+      }
+      return NextResponse.json({ ok: false, message: "Não foi possível reservar a publicação do Story." }, { status: 503 });
     }
+    claimed = { userId: user.id, key };
 
     const imageUrl = `${publicAppOrigin(request)}/api/images/story-creative?postId=${encodeURIComponent(postId)}&frame=${frame}&meta=1`;
     const externalId = await publishStoryToChannel(channel, imageUrl);
     const publishedAt = new Date().toISOString();
-    const { error: receiptError } = await supabase.from("app_settings").upsert({
-      user_id: user.id,
-      key,
-      value: { channel, postId, offerId: post.offer_id, frame, externalId, imageUrl, publishedAt },
+    const { error: receiptError } = await supabase.from("app_settings").update({
+      value: { status: "published", channel, postId, offerId: post.offer_id, frame, externalId, imageUrl, publishedAt },
       updated_at: publishedAt,
-    }, { onConflict: "user_id,key" });
+    }).eq("user_id", user.id).eq("key", key);
     if (receiptError) {
-      console.error("Story publicado na Meta, mas falhou ao persistir recibo", receiptError);
-      return NextResponse.json({ ok: true, externalId, warning: "Publicado, mas o recibo local não pôde ser salvo." });
+      console.error("Story publicado na Meta, mas falhou ao finalizar recibo", receiptError);
+      return NextResponse.json({ ok: true, externalId, warning: "Publicado, mas o recibo local ficou pendente de reconciliação." });
     }
 
+    claimed = null;
     return NextResponse.json({ ok: true, externalId, publishedAt, channel, frame });
   } catch (error) {
+    if (supabase && claimed) {
+      await supabase.from("app_settings").delete().eq("user_id", claimed.userId).eq("key", claimed.key);
+    }
     return NextResponse.json({ ok: false, message: error instanceof Error ? error.message : "Falha ao publicar Story." }, { status: 500 });
   }
 }
