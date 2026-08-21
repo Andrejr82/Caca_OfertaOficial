@@ -16,25 +16,40 @@ import urllib.request
 from pathlib import Path
 from PIL import Image
 
-# Ensure local libs directory is in path
-CURRENT_DIR = Path(__file__).resolve().parent
-LIBS_DIR = CURRENT_DIR / "libs"
-if LIBS_DIR.exists() and str(LIBS_DIR) not in sys.path:
-    sys.path.insert(0, str(LIBS_DIR))
+from typing import Any
 
-# Ensure gradio_client is available (or dynamic import at runtime)
-try:
-    from gradio_client import Client, handle_file
-except ImportError:
-    # Try /tmp/wan_libs fallback if needed
+# Global references resolved dynamically at runtime
+_Client: Any = None
+_handle_file: Any = None
+
+
+def get_gradio_client() -> tuple[Any, Any]:
+    """
+    Carrega gradio_client dinamicamente em tempo de execução para evitar
+    erros de linter estático em ambientes onde a biblioteca não está instalada localmente.
+    """
+    global _Client, _handle_file
+    if _Client is not None and _handle_file is not None:
+        return _Client, _handle_file
+
+    # Incluir caminhos de bibliotecas locais e temporárias
+    if LIBS_DIR.exists() and str(LIBS_DIR) not in sys.path:
+        sys.path.insert(0, str(LIBS_DIR))
     tmp_libs = Path("/tmp/wan_libs")
     if tmp_libs.exists() and str(tmp_libs) not in sys.path:
         sys.path.insert(0, str(tmp_libs))
+
     try:
-        from gradio_client import Client, handle_file
-    except ImportError:
-        Client = None  # type: ignore
-        handle_file = None  # type: ignore
+        import importlib
+        gc = importlib.import_module("gradio_client")
+        _Client = getattr(gc, "Client")
+        _handle_file = getattr(gc, "handle_file")
+        return _Client, _handle_file
+    except Exception as exc:
+        raise RuntimeError(
+            f"Biblioteca gradio_client não encontrada no ambiente Python ({exc}). "
+            "Certifique-se de que o worker possui a dependência instalada."
+        )
 
 DEFAULT_SPACE = "r3gm/wan2-2-fp8da-aoti-preview"
 DEFAULT_NEGATIVE_PROMPT = (
@@ -161,9 +176,8 @@ def generate_wan_video(
     if not hf_token:
         raise RuntimeError("HF_TOKEN ausente. Configure o token de autenticação Hugging Face para usar o provider Wan 2.2.")
     
-    if Client is None or handle_file is None:
-        raise RuntimeError("gradio_client não está disponível no ambiente Python do worker. Instale com 'pip install gradio_client'.")
-    
+    Client, handle_file = get_gradio_client()
+
     # Configure env for huggingface hub client
     os.environ["HF_TOKEN"] = hf_token
     os.environ["HUGGING_FACE_HUB_TOKEN"] = hf_token
