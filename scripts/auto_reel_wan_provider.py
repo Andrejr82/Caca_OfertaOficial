@@ -18,6 +18,9 @@ from PIL import Image
 
 from typing import Any
 
+CURRENT_DIR = Path(__file__).resolve().parent
+LIBS_DIR = CURRENT_DIR / "libs"
+
 # Global references resolved dynamically at runtime
 _Client: Any = None
 _handle_file: Any = None
