@@ -14,6 +14,7 @@ const FINAL_COPY_PATHS = [
   "src/lib/social/whatsapp-conversion.ts",
   "src/lib/social/telegram-conversion.ts",
   "src/lib/social/facebook-conversion.ts",
+  "src/lib/social/instagram-conversion.ts",
   "src/app/(dashboard)/messages/page.tsx",
   "src/components/messages/message-actions.tsx",
   "scripts/backfill-opac-drafts.ts",
@@ -40,7 +41,7 @@ describe("Copy V5 single final-copy authority", () => {
   });
 
   it("mantém regeneração, backfill e superfícies sociais explicitamente na V5", () => {
-    expect(read("src/core/ai/official-ai-regeneration-service.ts")).toContain("renderCopyV5ChannelCopy");
+    expect(read("src/core/ai/official-ai-regeneration-service.ts")).toContain("buildCanonicalCopyV5ChannelDraft");
     expect(read("scripts/backfill-opac-drafts.ts")).toContain("renderCopyV5ChannelCopy");
     expect(read("src/lib/trends/selection-social-drafts.ts")).toContain("CopyV5");
     expect(read("src/app/api/videos/jobs/route.ts")).toContain("CopyV5");
@@ -48,6 +49,9 @@ describe("Copy V5 single final-copy authority", () => {
     expect(read("src/lib/social/whatsapp-conversion.ts")).toContain("CopyV5");
     expect(read("src/lib/social/telegram-conversion.ts")).toContain("CopyV5");
     expect(read("src/lib/social/facebook-conversion.ts")).toContain("CopyV5");
+    const instagram = read("src/lib/social/instagram-conversion.ts");
+    expect(instagram).toContain("buildInstagramConversionV5Plan");
+    expect(instagram).toContain("renderPriceBlock");
   });
 
   it("Mensagens apenas lê drafts oficiais e solicita geração sem flags legadas", () => {
@@ -60,10 +64,9 @@ describe("Copy V5 single final-copy authority", () => {
     expect(actions).not.toContain("regenerateCopyV2");
   });
 
-  it("mantém a fachada legada de Messages incapaz de renderizar fora da V5", () => {
+  it("mantém a fachada legada de Messages incapaz de renderizar fora da autoridade canônica V5", () => {
     const legacyFacade = read("src/lib/messages/generate.ts");
-    expect(legacyFacade).toContain("renderCopyV5ChannelCopy");
-    expect(legacyFacade).toContain("buildDeterministicFallbackPlan");
+    expect(legacyFacade).toContain("buildCanonicalCopyV5ChannelDraft");
     expect(legacyFacade).not.toContain("buildCopyV2ChannelCopy");
     expect(legacyFacade).not.toContain("buildCopyV3ChannelCopy");
     expect(legacyFacade).not.toContain("buildConversionCopyV4Contract");
