@@ -72,15 +72,15 @@ describe("Social Copy V4 — Padrão Brasileiro de Ofertas e Achadinhos", () => 
   });
 
   it("CASO E — loja oficial confirmada com nome ou marketplace", () => {
-    const factsWithSeller = {
+    const factsPositive = {
       productName: "Kit Body Splash Masculino 200ml",
       marketplace: "Shopee",
       category: "Beleza",
       currentPrice: 71.22,
       originalPrice: 140,
-      evidence: { seller_name: "Primacial", official_store: true },
+      evidence: { is_official_store: true, seller_name: "Primacial" },
     };
-    const copy1 = buildCopyV4ChannelCopy(factsWithSeller, "whatsapp");
+    const copy1 = buildCopyV4ChannelCopy(factsPositive, "whatsapp");
     expect(copy1).toContain("🏪 Loja oficial Primacial");
 
     const factsGenericStore = {
@@ -93,6 +93,20 @@ describe("Social Copy V4 — Padrão Brasileiro de Ofertas e Achadinhos", () => 
     };
     const copy2 = buildCopyV4ChannelCopy(factsGenericStore, "whatsapp");
     expect(copy2).toContain("🏪 Loja oficial no marketplace");
+
+    // Teste negativo: seller_name sozinho NUNCA gera Loja oficial
+    const factsSellerOnly = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { seller_name: "Loja XYZ" },
+    };
+    const contract = buildConversionCopyV4Contract(factsSellerOnly, "whatsapp");
+    expect(contract.officialStoreLine).toBeNull();
+    const copyNegative = buildCopyV4ChannelCopy(factsSellerOnly, "whatsapp");
+    expect(copyNegative).not.toContain("Loja oficial");
   });
 
   it("CASO F — rating simples 5/5 sem volume relevante é omitido", () => {
@@ -175,7 +189,7 @@ describe("Social Copy V4 — Padrão Brasileiro de Ofertas e Achadinhos", () => 
   });
 
   it("CASO PIX — formata 'no PIX' somente quando há comprovação factual", () => {
-    const facts = {
+    const factsPositive = {
       productName: "Kit Body Splash Masculino 200ml",
       marketplace: "Shopee",
       category: "Beleza",
@@ -184,8 +198,22 @@ describe("Social Copy V4 — Padrão Brasileiro de Ofertas e Achadinhos", () => 
       evidence: { payment_method: "pix" },
     };
 
-    const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
-    expect(copy).toContain("De R$ 140,00\npor R$ 71,22 no PIX");
+    const copyPositive = buildCopyV4ChannelCopy(factsPositive, "whatsapp");
+    expect(copyPositive).toContain("De R$ 140,00\npor R$ 71,22 no PIX");
+
+    // Teste negativo: menção genérica de PIX não deve alterar o preço
+    const factsGenericPix = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { generic_faq: "Aceitamos cartão e PIX em todas as compras" },
+    };
+
+    const copyNegative = buildCopyV4ChannelCopy(factsGenericPix, "whatsapp");
+    expect(copyNegative).toContain("De R$ 140,00\npor R$ 71,22");
+    expect(copyNegative).not.toContain("no PIX");
   });
 
   it("CASO K/L — WhatsApp e Telegram possuem prefixos de CTA adequados", () => {

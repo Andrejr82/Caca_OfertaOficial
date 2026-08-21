@@ -104,19 +104,36 @@ function hookFor(facts: CopyV4Facts): string {
 function priceBlock(facts: CopyV4Facts): string | null {
   if (!(facts.currentPrice > 0)) return null;
 
-  const isPix = facts.evidence && (
-    facts.evidence.is_pix === true ||
-    facts.evidence.payment_method === "pix" ||
-    facts.evidence.paymentMethod === "pix" ||
-    facts.evidence.payment === "pix" ||
-    /no pix|via pix/iu.test(persistedStrings(facts.evidence).join(" "))
-  );
+  let isPix = false;
+  let isAVista = false;
 
-  const isAVista = facts.evidence && (
-    facts.evidence.a_vista === true ||
-    facts.evidence.is_a_vista === true ||
-    /à vista|a vista/iu.test(persistedStrings(facts.evidence).join(" "))
-  );
+  if (facts.evidence && typeof facts.evidence === "object") {
+    const ev = facts.evidence as Record<string, unknown>;
+    isPix = Boolean(
+      ev.is_pix === true ||
+      ev.payment_method === "pix" ||
+      ev.paymentMethod === "pix" ||
+      ev.payment === "pix" ||
+      ev.pix === true
+    );
+
+    isAVista = Boolean(
+      ev.a_vista === true ||
+      ev.is_a_vista === true ||
+      ev.isAVista === true
+    );
+
+    if (!isPix) {
+      const strings = persistedStrings(facts.evidence).join(" ");
+      isPix = /\b(?:pre[cç]o|valor|pagamento|desconto|apenas|somente|exclusivo)\s+(?:no|via)\s+pix\b/iu.test(strings) ||
+        /\b(?:no|via)\s+pix\s+(?:com\s+desconto|[àa]\s+vista)\b/iu.test(strings);
+    }
+
+    if (!isAVista && !isPix) {
+      const strings = persistedStrings(facts.evidence).join(" ");
+      isAVista = /\b(?:pre[cç]o|valor|pagamento)\s+[àa]\s+vista\b/iu.test(strings);
+    }
+  }
 
   const priceSuffix = isPix ? " no PIX" : isAVista ? " à vista" : "";
 
@@ -166,15 +183,45 @@ function officialStoreFromEvidence(facts: CopyV4Facts): string | null {
   if (!facts.evidence || typeof facts.evidence !== "object") return null;
 
   const ev = facts.evidence as Record<string, unknown>;
-  const seller = ev.seller_name ?? ev.sellerName ?? ev.store_name ?? ev.storeName ?? ev.official_store_name;
+  const isOfficialFlag = Boolean(
+    ev.official_store === true ||
+    ev.is_official_store === true ||
+    ev.officialStore === true ||
+    ev.isOfficialStore === true
+  );
 
-  if (typeof seller === "string" && seller.trim().length > 0) {
-    return `🏪 Loja oficial ${seller.trim()}`;
+  const officialStoreName =
+    typeof ev.official_store_name === "string" && ev.official_store_name.trim().length > 0
+      ? ev.official_store_name.trim()
+      : typeof ev.officialStoreName === "string" && ev.officialStoreName.trim().length > 0
+        ? ev.officialStoreName.trim()
+        : null;
+
+  const sellerName =
+    typeof ev.seller_name === "string" && ev.seller_name.trim().length > 0
+      ? ev.seller_name.trim()
+      : typeof ev.sellerName === "string" && ev.sellerName.trim().length > 0
+        ? ev.sellerName.trim()
+        : typeof ev.store_name === "string" && ev.store_name.trim().length > 0
+          ? ev.store_name.trim()
+          : typeof ev.storeName === "string" && ev.storeName.trim().length > 0
+            ? ev.storeName.trim()
+            : null;
+
+  if (officialStoreName) {
+    return `🏪 Loja oficial ${officialStoreName}`;
+  }
+
+  if (isOfficialFlag) {
+    if (sellerName) {
+      return `🏪 Loja oficial ${sellerName}`;
+    }
+    return "🏪 Loja oficial no marketplace";
   }
 
   const strings = persistedStrings(facts.evidence).join(" ");
-  if (/loja oficial|official store|official_store/iu.test(strings)) {
-    const match = strings.match(/loja oficial\s+([A-Za-z0-9À-ÿ\s]{2,30})/iu);
+  if (/\bloja\s+oficial\b|\bofficial\s+store\b/iu.test(strings)) {
+    const match = strings.match(/\bloja\s+oficial\s+([A-Za-z0-9À-ÿ\s]{2,30})/iu);
     if (match && !/no marketplace|identificada/iu.test(match[1])) {
       return `🏪 Loja oficial ${match[1].trim()}`;
     }
