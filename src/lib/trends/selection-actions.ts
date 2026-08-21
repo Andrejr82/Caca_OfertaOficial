@@ -12,6 +12,10 @@ import {
   resolveTrendSnapshotImageUrl,
 } from "@/lib/trends/selection-offer-state";
 import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
+import {
+  buildMercadoLivreAffiliateUrl,
+  resolveTrendMonetizedDestination,
+} from "@/lib/trends/monetization";
 
 export type TrendSelectionDecision = "IGNORAR" | "APROVAR_TESTE";
 
@@ -57,7 +61,7 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
     if (!value) continue;
     const { data, error } = await supabase
       .from("offers")
-      .select("id,status,platform,product_name,explainability")
+      .select("id,status,platform,product_name,original_url,explainability")
       .eq("user_id", userId)
       .eq("platform", marketplace)
       .eq(column, value)
@@ -73,7 +77,7 @@ async function findExactOffer(supabase: any, userId: string, marketplace: string
 async function readMaterializedOffer(persistenceClient: any, userId: string, offerId: string) {
   const { data: offer, error: offerError } = await persistenceClient
     .from("offers")
-    .select("id,status,platform,product_name,explainability")
+    .select("id,status,platform,product_name,original_url,explainability")
     .eq("id", offerId)
     .eq("user_id", userId)
     .single();
@@ -112,6 +116,7 @@ async function materializeShopeeOfferFromSnapshot(userId: string, product: any, 
       commercial_score_v3: Number(product.commercial_score ?? 0),
       score_breakdown: product.score_breakdown ?? {},
       automatic_publication: false,
+      affiliate_url: affiliateUrl,
       marketplace_metrics: metrics,
     },
     notes: `Trends IA · teste aprovado · ${product.product_term}`,
@@ -135,12 +140,13 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
   const itemId = String(identity.itemId ?? "").trim();
   const productId = String(identity.productId ?? "").trim();
   const marketplaceUrl = validHttps(evidence.source_url);
+  const affiliateUrl = marketplaceUrl ? buildMercadoLivreAffiliateUrl(marketplaceUrl) : null;
   const imageUrl = resolveTrendSnapshotImageUrl(evidence);
   const price = Number(evidence.price ?? metrics.price ?? 0);
   const oldPrice = Number(evidence.old_price ?? 0);
 
-  if ((!itemId && !productId) || !marketplaceUrl || !isMercadoLivreUrl(marketplaceUrl) || !Number.isFinite(price) || price <= 0) {
-    throw new Error("Snapshot Mercado Livre não possui identidade/link/preço suficientes para materializar a oferta com segurança.");
+  if ((!itemId && !productId) || !marketplaceUrl || !affiliateUrl || !isMercadoLivreUrl(marketplaceUrl) || !Number.isFinite(price) || price <= 0) {
+    throw new Error("Snapshot Mercado Livre não possui identidade/link monetizado/preço suficientes para materializar a oferta com segurança.");
   }
 
   const row = {
@@ -148,7 +154,7 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
     platform: "Mercado Livre",
     product_name: product.product_term,
     category: product.category,
-    original_url: marketplaceUrl,
+    original_url: affiliateUrl,
     image_url: imageUrl,
     current_price: price,
     old_price: Number.isFinite(oldPrice) && oldPrice > price ? oldPrice : null,
@@ -163,6 +169,8 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
       commercial_score: Number(product.commercial_score ?? 0),
       score_breakdown: product.score_breakdown ?? {},
       automatic_publication: false,
+      marketplace_url: marketplaceUrl,
+      affiliate_url: affiliateUrl,
       marketplace_metrics: metrics,
     },
     notes: `Trends IA · teste aprovado · ${product.product_term}`,
@@ -270,13 +278,30 @@ async function approveAndBridge(formData: FormData) {
 
   const evidence = firstEvidence(product.direct_evidence);
   let offer = product.selected_offer_id
-    ? (await supabase.from("offers").select("id,status,platform,product_name,explainability").eq("id", product.selected_offer_id).eq("user_id", user.id).maybeSingle()).data
+    ? (await supabase.from("offers").select("id,status,platform,product_name,original_url,explainability").eq("id", product.selected_offer_id).eq("user_id", user.id).maybeSingle()).data
     : null;
 
   if (!offer) offer = await findExactOffer(supabase, user.id, String(product.marketplace ?? ""), evidence);
   if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(user.id, product, evidence);
   if (!offer && product.marketplace === "Mercado Livre") offer = await materializeMercadoLivreOfferFromSnapshot(user.id, product, evidence);
   if (!offer) throw new Error("Nenhuma oferta rastreável existente foi encontrada para esta oportunidade.");
+
+  if (String(offer.platform || "").trim().toLowerCase() === "mercado livre") {
+    const monetizedDestination = resolveTrendMonetizedDestination({
+      platform: offer.platform,
+      originalUrl: offer.original_url,
+      affiliateUrl: offer.explainability?.affiliate_url,
+    });
+    if (!monetizedDestination) {
+      return {
+        blocked: {
+          code: "monetization_required" as const,
+          message: "Oferta Mercado Livre sem monetização válida. Aprovação bloqueada antes da criação de links sociais.",
+        },
+        productId: product.id,
+      };
+    }
+  }
 
   const block = await ensureOfferSelected(supabase, user.id, offer, product.id);
   if (block) return { blocked: block, productId: product.id };
