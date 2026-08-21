@@ -8,6 +8,7 @@ import {
   type CopyV5Plan,
 } from "./copy-v5-types";
 import { validateCopyV5Plan } from "./copy-v5-validator";
+import { polishCopyV5Facts, polishCopyV5Plan } from "./copy-v5-polish";
 import {
   renderCopyV5ChannelCopy,
   getMarketplaceCtaPrefix as getMarketplaceCtaPrefixV5,
@@ -103,8 +104,10 @@ export function buildCanonicalCopyV5ChannelDraft(
   channel: OfficialAIChannel,
   plan?: CopyV5Plan | null
 ): string {
-  const validatedPlan = validateCopyV5Plan(plan, facts);
-  const rendered = renderCopyV5ChannelCopy(validatedPlan, facts, channel);
+  const polishedFacts = polishCopyV5Facts(facts);
+  const validatedPlan = validateCopyV5Plan(plan, polishedFacts);
+  const polishedPlan = polishCopyV5Plan(validatedPlan, polishedFacts);
+  const rendered = renderCopyV5ChannelCopy(polishedPlan, polishedFacts, channel);
   return rendered.feed;
 }
 
@@ -113,13 +116,14 @@ export function buildCanonicalCopyV5Content(
   offer: OfficialAIOffer,
   channels: readonly OfficialAIChannel[],
 ): OfficialAIContent {
-  const facts = copyV5FactsFromOffer(offer);
+  const facts = polishCopyV5Facts(copyV5FactsFromOffer(offer));
   const planCandidate: Partial<CopyV5Plan> = {
     shortProductName: previous.shortName,
     hook: previous.shortCopy,
     selectedAttributes: previous.highlights,
   };
-  const plan = validateCopyV5Plan(planCandidate, facts);
+  const validatedPlan = validateCopyV5Plan(planCandidate, facts);
+  const plan = polishCopyV5Plan(validatedPlan, facts);
 
   return {
     ...previous,
@@ -129,7 +133,7 @@ export function buildCanonicalCopyV5Content(
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: plan.selectedAttributes,
-    explanation: "Copy V5 híbrida: LLM commercial planner + factual validator + deterministic renderer.",
+    explanation: "Copy V5 híbrida: LLM commercial planner + factual validator + deterministic renderer + commercial polish.",
     channelCopies: {
       ...previous.channelCopies,
       ...Object.fromEntries(channels.map((channel) => [
