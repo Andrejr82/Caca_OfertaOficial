@@ -36,10 +36,24 @@ describe("Stories manual direct publishing architecture", () => {
     expect(route).not.toContain('.eq("status", "draft")');
   });
 
-  it("mantém download como fallback e fornece JPEG público para ingestão Meta", () => {
+  it("normaliza imagens remotas inclusive WebP antes do ImageResponse", () => {
+    const image = read("src/app/api/images/story-creative/route.ts");
+    expect(image).toContain("normalizeRemoteImageForStory");
+    expect(image).toContain("sharp(source)");
+    expect(image).toContain(".jpeg({ quality: 92, mozjpeg: true })");
+    expect(image).toContain("data:image/jpeg;base64");
+    expect(image).toContain("STORY_IMAGE_NORMALIZATION_FAILED");
+    expect(image).toContain("MAX_REMOTE_IMAGE_BYTES");
+  });
+
+  it("mantém download como fallback, fornece JPEG à Meta e mostra erro de preview ao operador", () => {
     const client = read("src/app/(dashboard)/stories/StoriesClient.tsx");
     const image = read("src/app/api/images/story-creative/route.ts");
     expect(client).toContain("download=1");
+    expect(client).toContain("previewError");
+    expect(client).toContain("explainPreviewFailure");
+    expect(client).toContain("Falha ao gerar preview");
+    expect(client).toContain("onError={() => void explainPreviewFailure()}");
     expect(image).toContain('searchParams.get("offerId")');
     expect(image).toContain('searchParams.get("channel")');
     expect(image).toContain('searchParams.get("meta") === "1"');
