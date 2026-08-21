@@ -3,7 +3,9 @@ import { pathToFileURL } from "node:url";
 import { config } from "dotenv";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import WebSocket from "ws";
-import { buildCopyV2ChannelCopy } from "../src/core/ai/prompt";
+import { buildDeterministicFallbackPlan } from "../src/core/ai/copy-v5-planner";
+import { renderCopyV5ChannelCopy } from "../src/core/ai/copy-v5-renderer";
+import type { CopyV5Facts } from "../src/core/ai/copy-v5-types";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIChannel } from "../src/core/ai/types";
 
 const DEFAULT_BATCH_SIZE = 100;
@@ -91,18 +93,19 @@ export function buildExpectedContent(draft: BackfillDraft): string {
   const valid = validateDraft(draft);
   if (typeof valid === "string") throw new Error(valid);
   const originalPrice = valid.offer.old_price == null ? null : Number(valid.offer.old_price);
-  const copy = buildCopyV2ChannelCopy({
+  const facts: CopyV5Facts = {
     productName: valid.offer.product_name,
     marketplace: valid.offer.platform,
     category: valid.offer.category,
     currentPrice: Number(valid.offer.current_price),
     originalPrice: Number.isFinite(originalPrice) ? originalPrice : null,
     evidence: {
-      explainability: valid.offer.explainability ?? {},
-      marketplaceMetrics: valid.offer.marketplace_metrics ?? {}
-    }
-  }, valid.channel);
-  return `${copy}\n\n${valid.link.tracked_url.trim()}`;
+      ...(valid.offer.explainability ?? {}),
+      marketplace_metrics: valid.offer.marketplace_metrics ?? {},
+    },
+  };
+  const plan = buildDeterministicFallbackPlan(facts);
+  return renderCopyV5ChannelCopy(plan, facts, valid.channel, valid.link.tracked_url.trim()).feed;
 }
 
 async function inConcurrentChunks<T>(items: readonly T[], concurrency: number, operation: (item: T) => Promise<void>) {
@@ -315,14 +318,16 @@ async function validateFinalState(client: SupabaseClient, updatedPostIds: readon
     }
     validRows.push(row);
     const expected = buildExpectedContent(row);
-    if (row.content !== expected) violations.push({ postId: row.id, reason: "conteúdo diverge do renderer oficial" });
+    if (row.content !== expected) violations.push({ postId: row.id, reason: "conteúdo diverge do renderer V5" });
     const urls = row.content.match(URL_PATTERN) ?? [];
-    if (urls.length !== 1 || urls[0] !== valid.link.tracked_url.trim()) {
-      violations.push({ postId: row.id, reason: `URLs inválidas: encontradas=${urls.length}` });
+    if (row.channel === "whatsapp" || row.channel === "telegram") {
+      if (urls.length !== 1 || urls[0] !== valid.link.tracked_url.trim()) {
+        violations.push({ postId: row.id, reason: `URLs inválidas: encontradas=${urls.length}` });
+      }
+    } else if (urls.length !== 0) {
+      violations.push({ postId: row.id, reason: `${row.channel} contém URL direta` });
     }
-    const hasHashtag = HASHTAG_PATTERN.test(row.content);
-    if (row.channel === "instagram" && !hasHashtag) violations.push({ postId: row.id, reason: "Instagram sem hashtags" });
-    if (row.channel !== "instagram" && hasHashtag) violations.push({ postId: row.id, reason: `${row.channel} contém hashtags` });
+    if (HASHTAG_PATTERN.test(row.content)) violations.push({ postId: row.id, reason: `${row.channel} contém hashtag fora do contrato V5` });
   }
 
   const panelIds = new Set(panelRows.map((row) => row.id));
