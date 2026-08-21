@@ -1,6 +1,10 @@
-import { buildConversionCopyV4Contract, type CopyV4Facts } from "@/core/ai/copy-v4";
+import {
+  buildConversionCopyV4Contract,
+  getMarketplaceCtaPrefix,
+  type CopyV4Facts,
+} from "@/core/ai/copy-v4";
 
-export const WHATSAPP_CONVERSION_V4_MAX_BLOCKS = 6;
+export const WHATSAPP_CONVERSION_V4_MAX_BLOCKS = 8;
 
 function assertTrackedUrl(trackedUrl: string) {
   let parsed: URL;
@@ -16,7 +20,7 @@ function assertTrackedUrl(trackedUrl: string) {
 }
 
 function normalizeLine(value: string) {
-  return value.replace(/\s+/gu, " ").trim();
+  return value.trim();
 }
 
 function isDuplicateLine(candidate: string, existing: readonly string[]) {
@@ -38,14 +42,7 @@ function isDuplicateLine(candidate: string, existing: readonly string[]) {
 }
 
 /**
- * Task 3 — renderer final de conversão para WhatsApp.
- *
- * Recebe o tracked URL já resolvido pela camada de persistência. Isso permite
- * uma única ação comercial + um único link, sem placeholder e sem depender de
- * uma segunda CTA adicionada depois.
- *
- * Ainda não está ligado ao fluxo canônico de produção; a ativação ocorrerá
- * somente no fechamento do programa Copy V4.
+ * Renderer final de conversão para WhatsApp no padrão brasileiro de ofertas.
  */
 export function buildWhatsAppConversionV4(facts: CopyV4Facts, trackedUrl: string) {
   const url = assertTrackedUrl(trackedUrl);
@@ -59,15 +56,17 @@ export function buildWhatsAppConversionV4(facts: CopyV4Facts, trackedUrl: string
     blocks.push(normalized);
   };
 
-  // Ordem orientada a decisão: atenção -> prova -> preço -> benefício -> condição -> ação.
   push(contract.hook);
-  push(contract.proofLine ? `🏆 ${contract.proofLine}` : null);
-  push(contract.offerLine ? `💰 ${contract.offerLine}` : null);
-  push(contract.benefitLine ? `✨ ${contract.benefitLine}` : null);
-  push(facts.freeShipping === true ? "🚚 Frete grátis confirmado." : null);
+  push(contract.priceBlock);
+  push(contract.couponLine);
+  push(contract.shippingLine);
+  push(contract.officialStoreLine);
+  push(contract.attributesLine);
+  push(contract.proofLine);
 
+  const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
   const contentBlocks = blocks.slice(0, WHATSAPP_CONVERSION_V4_MAX_BLOCKS - 1);
-  contentBlocks.push(`👉 Conferir o preço atual: ${url}`);
+  contentBlocks.push(`${ctaPrefix}\n${url}`);
 
   return contentBlocks.join("\n\n");
 }

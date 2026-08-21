@@ -17,7 +17,7 @@ describe("integração canônica Copy V4", () => {
       const copy = buildCanonicalCopyV4ChannelDraft(facts, channel);
       expect(copy).toContain("Top #14");
       expect(copy).toContain("R$ 88,00");
-      expect(copy.match(/Conferir o preço atual/gu)).toHaveLength(1);
+      expect(copy).toContain("Achado no Mercado Livre");
       expect(copy).toMatch(/👉$/u);
       expect(copy).not.toMatch(/https?:\/\//u);
       expect(copy).not.toMatch(/últimas unidades|só hoje|corre que/iu);
@@ -36,7 +36,7 @@ describe("integração canônica Copy V4", () => {
     const copy = buildCanonicalCopyV4ChannelDraft(facts, "instagram");
     expect(copy).toContain("Top #14");
     expect(copy).toContain("R$ 88,00");
-    expect(copy).toContain("Conferir o preço atual");
+    expect(copy).toContain("Link da oferta na bio");
     expect(copy).not.toMatch(/STORIES V4|TELA [123]\/3|sticker|REELS · AGUARDANDO VÍDEO/iu);
     expect(copy).not.toMatch(/https?:\/\//u);
   });

@@ -14,20 +14,19 @@ const jiesipote = {
 };
 
 describe("Task 5 — Telegram Conversion V4", () => {
-  it("renderiza alerta curto com prova, preço e CTA único", () => {
+  it("renderiza alerta curto com preço na abertura, atributos, prova e CTA", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/tg_jiesipote";
     const copy = buildTelegramConversionV4(jiesipote, url);
 
-    const proof = copy.indexOf("Top #14");
     const offer = copy.indexOf("R$ 88,00");
-    const benefit = copy.indexOf("Proteção contra água");
+    const attributes = copy.indexOf("À prova d'água");
+    const proof = copy.indexOf("Top #14");
 
-    expect(proof).toBeGreaterThan(-1);
-    expect(offer).toBeGreaterThan(proof);
-    expect(benefit).toBeGreaterThan(offer);
-    expect(copy.match(/Conferir o preço atual/gu)).toHaveLength(1);
+    expect(offer).toBeGreaterThan(-1);
+    expect(attributes).toBeGreaterThan(offer);
+    expect(proof).toBeGreaterThan(attributes);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
-    expect(copy).toContain(`👉 Conferir o preço atual: ${url}`);
+    expect(copy).toContain(`👉 Achado no Mercado Livre:\n${url}`);
   });
 
   it("mantém formato escaneável e sem ruído de catálogo", () => {
@@ -51,7 +50,7 @@ describe("Task 5 — Telegram Conversion V4", () => {
     }, "https://caca-oferta-oficial.vercel.app/go/tg_fone");
 
     expect(copy).toContain("R$ 59,90");
-    expect(copy).toContain("Conferir o preço atual");
+    expect(copy).toContain("👉 Achado na Shopee:");
     expect(copy).not.toMatch(/Top #|mais vendidos|Loja oficial|Mall/iu);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
   });
@@ -60,8 +59,8 @@ describe("Task 5 — Telegram Conversion V4", () => {
     const withShipping = buildTelegramConversionV4({ ...jiesipote, freeShipping: true }, "https://caca-oferta-oficial.vercel.app/go/tg_ship");
     const withoutShipping = buildTelegramConversionV4({ ...jiesipote, freeShipping: null }, "https://caca-oferta-oficial.vercel.app/go/tg_no_ship");
 
-    expect(withShipping).toContain("Frete grátis confirmado");
-    expect(withoutShipping).not.toContain("Frete grátis confirmado");
+    expect(withShipping).toContain("📦 Frete grátis");
+    expect(withoutShipping).not.toContain("Frete grátis");
   });
 
   it("falha fechado para tracked URL inválido ou não HTTPS", () => {

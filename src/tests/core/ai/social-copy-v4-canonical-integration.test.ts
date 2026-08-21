@@ -50,7 +50,7 @@ describe("Social Copy V4 — integração canônica", () => {
 
     expect(materialized).toContain("Top #14");
     expect(materialized).toContain("R$ 88,00");
-    expect(materialized).toContain("Conferir o preço atual");
+    expect(materialized).toContain("Link da oferta na bio");
     expect(materialized).not.toMatch(/STORIES V4|TELA [123]\/3|sticker|REELS · AGUARDANDO VÍDEO/iu);
     expect(materialized).not.toMatch(/https?:\/\//u);
   });

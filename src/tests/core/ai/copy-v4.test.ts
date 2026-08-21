@@ -1,85 +1,259 @@
 import { describe, expect, it } from "vitest";
-import { buildConversionCopyV4Contract, buildCopyV4ChannelCopy } from "@/core/ai/copy-v4";
+import {
+  buildConversionCopyV4Contract,
+  buildCopyV4ChannelCopy,
+  getMarketplaceCtaPrefix,
+} from "@/core/ai/copy-v4";
 
-describe("Copy V4 — contrato de decisão de compra", () => {
-  it("prioriza prova oficial de bestseller e mantém um CTA único", () => {
+describe("Social Copy V4 — Padrão Brasileiro de Ofertas e Achadinhos", () => {
+  it("CASO A — desconto factual com de/por sem avaliação automática", () => {
     const facts = {
-      marketplace: "Mercado Livre",
-      productName: "Mochila Jiesipote À Prova D'água Reforçada Expansível Cor Preto",
-      category: "Calçados, Roupas e Bolsas",
-      currentPrice: 88,
-      originalPrice: 269,
-      evidence: { mercadolivre_highlights: "BEST_SELLER pos #14" },
+      productName: "Jogo Churrasco Tramontina 12 peças",
+      marketplace: "Amazon",
+      category: "Cozinha",
+      currentPrice: 69,
+      originalPrice: 150,
+      evidence: { rating: 5 },
     };
 
-    const contract = buildConversionCopyV4Contract(facts, "whatsapp");
     const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
 
-    expect(contract.commercialAngle).toBe("proof");
-    expect(contract.proofLine).toMatch(/Top #14/iu);
-    expect(contract.offerLine).toMatch(/67% OFF/iu);
-    expect(contract.offerLine).toMatch(/R\$\s*181,00/iu);
-    expect(copy.match(/Conferir o preço atual/giu)).toHaveLength(1);
-    expect(copy).not.toMatch(/últimas unidades|só hoje|corre que|estoque acaba/iu);
+    expect(copy).toContain("🔥 Jogo Churrasco Tramontina 12 peças");
+    expect(copy).toContain("De R$ 150,00\npor R$ 69,00");
+    expect(copy).toContain("👉 Achado na Amazon:");
+    expect(copy).not.toMatch(/Avaliação|⭐/iu);
   });
 
-  it("usa economia real quando não existe prova social forte", () => {
-    const contract = buildConversionCopyV4Contract({
-      marketplace: "Shopee",
-      productName: "Fone Bluetooth Recarregável",
-      category: "Eletrônicos",
-      currentPrice: 79.9,
-      originalPrice: 129.9,
-      evidence: {},
-    }, "telegram");
-
-    expect(contract.commercialAngle).toBe("saving");
-    expect(contract.proofLine).toBeNull();
-    expect(contract.offerLine).toContain("economia de R$ 50,00");
-    expect(contract.cta).toBe("👉 Conferir o preço atual 👇");
-  });
-
-  it("favorece preço de impulso abaixo de R$100 quando não há desconto nem prova", () => {
-    const contract = buildConversionCopyV4Contract({
+  it("CASO B — sem desconto com preço único e atributos técnicos objetivos A • B • C", () => {
+    const facts = {
+      productName: "Ar Condicionado Philco Inverter 9000 BTUs Frio 220V",
       marketplace: "Mercado Livre",
+      category: "Ar e Ventilação",
+      currentPrice: 1738,
+      originalPrice: null,
+      evidence: {},
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
+
+    expect(copy).toContain("❄️ Ar Condicionado Philco Inverter 9000 BTUs Frio 220V");
+    expect(copy).toContain("R$ 1.738,00");
+    expect(copy).toContain("Inverter • 9000 BTUs • Frio • 220V");
+    expect(copy).toContain("👉 Achado no Mercado Livre:");
+  });
+
+  it("CASO C — cupom factual", () => {
+    const facts = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { coupon: "CHALEIRA" },
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
+    expect(copy).toContain("🎟️ Cupom: CHALEIRA");
+  });
+
+  it("CASO D — frete grátis confirmado", () => {
+    const facts = {
+      productName: "Jogo Churrasco Tramontina 12 peças",
+      marketplace: "Amazon",
+      category: "Cozinha",
+      currentPrice: 69,
+      originalPrice: 150,
+      freeShipping: true,
+      evidence: {},
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
+    expect(copy).toContain("📦 Frete grátis");
+  });
+
+  it("CASO E — loja oficial confirmada com nome ou marketplace", () => {
+    const factsPositive = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { is_official_store: true, seller_name: "Primacial" },
+    };
+    const copy1 = buildCopyV4ChannelCopy(factsPositive, "whatsapp");
+    expect(copy1).toContain("🏪 Loja oficial Primacial");
+
+    const factsGenericStore = {
+      productName: "Smartphone Galaxy A55",
+      marketplace: "Mercado Livre",
+      category: "Celulares",
+      currentPrice: 1899,
+      originalPrice: null,
+      evidence: { official_store: true },
+    };
+    const copy2 = buildCopyV4ChannelCopy(factsGenericStore, "whatsapp");
+    expect(copy2).toContain("🏪 Loja oficial no marketplace");
+
+    // Teste negativo: seller_name sozinho NUNCA gera Loja oficial
+    const factsSellerOnly = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { seller_name: "Loja XYZ" },
+    };
+    const contract = buildConversionCopyV4Contract(factsSellerOnly, "whatsapp");
+    expect(contract.officialStoreLine).toBeNull();
+    const copyNegative = buildCopyV4ChannelCopy(factsSellerOnly, "whatsapp");
+    expect(copyNegative).not.toContain("Loja oficial");
+  });
+
+  it("CASO F — rating simples 5/5 sem volume relevante é omitido", () => {
+    const facts = {
       productName: "Suporte para Notebook Ajustável",
+      marketplace: "Mercado Livre",
       category: "Informática",
       currentPrice: 59.9,
       originalPrice: null,
-      evidence: {},
-    }, "instagram");
+      evidence: { rating: 5 },
+    };
 
-    expect(contract.commercialAngle).toBe("price");
-    expect(contract.offerLine).toBe("R$ 59,90 no preço informado agora.");
-    expect(contract.cta).toContain("link da bio");
-  });
-
-  it("não inventa prova quando a evidência não sustenta bestseller, loja oficial ou rating", () => {
-    const contract = buildConversionCopyV4Contract({
-      marketplace: "Shopee",
-      productName: "Organizador Portátil",
-      category: "Casa",
-      currentPrice: 119,
-      originalPrice: null,
-      evidence: { source: "catalog" },
-    }, "facebook");
-
+    const contract = buildConversionCopyV4Contract(facts, "whatsapp");
     expect(contract.proofLine).toBeNull();
-    expect(contract.commercialAngle).toBe("benefit");
-    expect(contract.cta).toContain("primeiro comentário");
   });
 
-  it("não calcula desconto quando preço anterior é inválido", () => {
-    const contract = buildConversionCopyV4Contract({
-      marketplace: "Mercado Livre",
-      productName: "Produto Padrão",
-      category: "Casa",
-      currentPrice: 150,
-      originalPrice: 140,
-      evidence: {},
-    }, "whatsapp");
+  it("CASO G — rating com grande volume factual (>= 1000 avaliações) gera prova social", () => {
+    const facts = {
+      productName: "Fone JBL Tune 520BT",
+      marketplace: "Amazon",
+      category: "Áudio",
+      currentPrice: 199,
+      originalPrice: 299,
+      evidence: { rating: 4.9, reviews_count: 5000 },
+    };
 
-    expect(contract.offerLine).toBe("R$ 150,00 no preço informado agora.");
-    expect(contract.offerLine).not.toMatch(/OFF|economia/iu);
+    const contract = buildConversionCopyV4Contract(facts, "whatsapp");
+    expect(contract.proofLine).toBe("⭐ Avaliação 4,9/5 com mais de 5 mil avaliações.");
+  });
+
+  it("CASO H — poucos dados gera somente produto, preço e CTA sem inventar nada", () => {
+    const facts = {
+      productName: "Organizador Simples",
+      marketplace: "Mercado Livre",
+      category: null,
+      currentPrice: 45,
+      originalPrice: null,
+      evidence: {},
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
+    const blocks = copy.split("\n\n");
+
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0]).toBe("🔥 Organizador Simples");
+    expect(blocks[1]).toBe("R$ 45,00");
+    expect(blocks[2]).toBe("👉 Achado no Mercado Livre:");
+  });
+
+  it("CASO I — atributos técnicos sem interpretação adjetivada", () => {
+    const facts = {
+      productName: "Air Fryer Mondial 5 Litros 1900W 220V",
+      marketplace: "Amazon",
+      category: "Cozinha",
+      currentPrice: 349,
+      originalPrice: 499,
+      evidence: {},
+    };
+
+    const contract = buildConversionCopyV4Contract(facts, "whatsapp");
+    expect(contract.attributesLine).toBe("5 litros • 1900W • 220V");
+  });
+
+  it("CASO J — ausência total de expressões proibidas e adjetivos inventados", () => {
+    const facts = {
+      productName: "Mochila Jiesipote À Prova D'água Reforçada Expansível Cor Preto",
+      marketplace: "Mercado Livre",
+      category: "Mochilas",
+      currentPrice: 88,
+      originalPrice: 269,
+      evidence: { mercadolivre_highlights: "BEST_SELLER pos #14", rating: 4.8 },
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "whatsapp");
+    expect(copy).not.toMatch(/chamou atenção pela prova/iu);
+    expect(copy).not.toMatch(/informada pelo marketplace/iu);
+    expect(copy).not.toMatch(/no preço informado agora/iu);
+    expect(copy).not.toMatch(/boa opção para/iu);
+    expect(copy).not.toMatch(/praticidade|confortável|moderno|rápido|completo|ideal para|perfeito para|imperdível|últimas unidades|promoção acaba hoje|estoque acabando/iu);
+  });
+
+  it("CASO PIX — formata 'no PIX' somente quando há comprovação factual", () => {
+    const factsPositive = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { payment_method: "pix" },
+    };
+
+    const copyPositive = buildCopyV4ChannelCopy(factsPositive, "whatsapp");
+    expect(copyPositive).toContain("De R$ 140,00\npor R$ 71,22 no PIX");
+
+    // Teste negativo: menção genérica de PIX não deve alterar o preço
+    const factsGenericPix = {
+      productName: "Kit Body Splash Masculino 200ml",
+      marketplace: "Shopee",
+      category: "Beleza",
+      currentPrice: 71.22,
+      originalPrice: 140,
+      evidence: { generic_faq: "Aceitamos cartão e PIX em todas as compras" },
+    };
+
+    const copyNegative = buildCopyV4ChannelCopy(factsGenericPix, "whatsapp");
+    expect(copyNegative).toContain("De R$ 140,00\npor R$ 71,22");
+    expect(copyNegative).not.toContain("no PIX");
+  });
+
+  it("CASO K/L — WhatsApp e Telegram possuem prefixos de CTA adequados", () => {
+    expect(getMarketplaceCtaPrefix("Amazon")).toBe("👉 Achado na Amazon:");
+    expect(getMarketplaceCtaPrefix("Mercado Livre")).toBe("👉 Achado no Mercado Livre:");
+    expect(getMarketplaceCtaPrefix("Shopee")).toBe("👉 Achado na Shopee:");
+    expect(getMarketplaceCtaPrefix("Magalu")).toBe("👉 Achado no Magalu:");
+    expect(getMarketplaceCtaPrefix("Shein")).toBe("👉 Achado na Shein:");
+    expect(getMarketplaceCtaPrefix("Outro")).toBe("👉 Ver oferta:");
+  });
+
+  it("CASO M — Facebook gera CTA para o primeiro comentário e zero URL no corpo", () => {
+    const facts = {
+      productName: "Notebook Lenovo IdeaPad 16GB RAM 512GB SSD Ryzen 7",
+      marketplace: "Mercado Livre",
+      category: "Informática",
+      currentPrice: 2899,
+      originalPrice: null,
+      evidence: {},
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "facebook");
+    expect(copy).toContain("💻 Notebook Lenovo IdeaPad");
+    expect(copy).toContain("👉 Link da oferta no primeiro comentário. 👇");
+    expect(copy).not.toMatch(/https?:\/\//u);
+  });
+
+  it("CASO N — Instagram mantém CTA no link da bio e zero URL no corpo", () => {
+    const facts = {
+      productName: "Fone JBL Tune 520BT Bluetooth Sem fio",
+      marketplace: "Amazon",
+      category: "Áudio",
+      currentPrice: 199,
+      originalPrice: 299,
+      evidence: {},
+    };
+
+    const copy = buildCopyV4ChannelCopy(facts, "instagram");
+    expect(copy).toContain("🎧 Fone JBL Tune 520BT");
+    expect(copy).toContain("🔎 Link da oferta na bio. 👇");
+    expect(copy).not.toMatch(/https?:\/\//u);
   });
 });

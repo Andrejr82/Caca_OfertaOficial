@@ -14,20 +14,19 @@ const jiesipote = {
 };
 
 describe("Task 3 — WhatsApp Conversion V4", () => {
-  it("coloca prova e preço antes do benefício e termina em CTA único com link direto", () => {
+  it("coloca produto com preço, atributos, prova e CTA com link direto", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/wp_jiesipote";
     const copy = buildWhatsAppConversionV4(jiesipote, url);
 
-    const proof = copy.indexOf("Top #14");
     const offer = copy.indexOf("R$ 88,00");
-    const benefit = copy.indexOf("Proteção contra água");
+    const attributes = copy.indexOf("À prova d'água");
+    const proof = copy.indexOf("Top #14");
 
-    expect(proof).toBeGreaterThan(-1);
-    expect(offer).toBeGreaterThan(proof);
-    expect(benefit).toBeGreaterThan(offer);
+    expect(offer).toBeGreaterThan(-1);
+    expect(attributes).toBeGreaterThan(offer);
+    expect(proof).toBeGreaterThan(attributes);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
-    expect(copy.match(/Conferir o preço atual/gu)).toHaveLength(1);
-    expect(copy).toContain(`👉 Conferir o preço atual: ${url}`);
+    expect(copy).toContain(`👉 Achado no Mercado Livre:\n${url}`);
   });
 
   it("mantém mensagem curta, sem hashtags, catálogo ou falsa urgência", () => {
@@ -51,7 +50,7 @@ describe("Task 3 — WhatsApp Conversion V4", () => {
     }, "https://caca-oferta-oficial.vercel.app/go/wp_fone");
 
     expect(copy).toContain("R$ 59,90");
-    expect(copy).toContain("Conferir o preço atual");
+    expect(copy).toContain("👉 Achado na Shopee:");
     expect(copy).not.toMatch(/mais vendidos|Top #|Loja oficial|Mall/iu);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
   });

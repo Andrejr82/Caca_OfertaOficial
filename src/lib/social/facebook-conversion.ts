@@ -5,7 +5,7 @@ export interface FacebookConversionV4 {
   firstComment: string;
 }
 
-export const FACEBOOK_CONVERSION_V4_MAX_FEED_BLOCKS = 6;
+export const FACEBOOK_CONVERSION_V4_MAX_FEED_BLOCKS = 8;
 
 function assertTrackedUrl(trackedUrl: string) {
   let parsed: URL;
@@ -21,7 +21,7 @@ function assertTrackedUrl(trackedUrl: string) {
 }
 
 function normalizeLine(value: string) {
-  return value.replace(/\s+/gu, " ").trim();
+  return value.trim();
 }
 
 function semantic(value: string) {
@@ -34,11 +34,7 @@ function semantic(value: string) {
 }
 
 /**
- * Task 6 — contrato de conversão para Facebook.
- *
- * O feed constrói confiança e decisão sem URL direta. O tracked URL fica
- * exclusivamente no primeiro comentário, mantendo uma única rota de ação.
- * Ainda não está ligado ao fluxo canônico de produção.
+ * Contrato de conversão para Facebook no padrão brasileiro de ofertas.
  */
 export function buildFacebookConversionV4(facts: CopyV4Facts, trackedUrl: string): FacebookConversionV4 {
   const url = assertTrackedUrl(trackedUrl);
@@ -56,16 +52,18 @@ export function buildFacebookConversionV4(facts: CopyV4Facts, trackedUrl: string
   };
 
   push(contract.hook);
-  push(contract.proofLine ? `🏆 ${contract.proofLine}` : null);
-  push(contract.offerLine ? `💰 ${contract.offerLine}` : null);
-  push(contract.benefitLine ? `✨ ${contract.benefitLine}` : null);
-  push(facts.freeShipping === true ? "🚚 Frete grátis confirmado." : null);
+  push(contract.priceBlock);
+  push(contract.couponLine);
+  push(contract.shippingLine);
+  push(contract.officialStoreLine);
+  push(contract.attributesLine);
+  push(contract.proofLine);
 
   const contentBlocks = blocks.slice(0, FACEBOOK_CONVERSION_V4_MAX_FEED_BLOCKS - 1);
-  contentBlocks.push("👉 Conferir o preço atual no primeiro comentário. 👇");
+  contentBlocks.push("👉 Link da oferta no primeiro comentário. 👇");
 
   return {
     feed: contentBlocks.join("\n\n"),
-    firstComment: `👉 Conferir o preço atual: ${url}`,
+    firstComment: `👉 Link da oferta: ${url}`,
   };
 }

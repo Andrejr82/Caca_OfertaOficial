@@ -1,4 +1,8 @@
-import { buildConversionCopyV4Contract, type CopyV4Facts } from "./copy-v4";
+import {
+  buildConversionCopyV4Contract,
+  getMarketplaceCtaPrefix,
+  type CopyV4Facts,
+} from "./copy-v4";
 import {
   generateOfficialAI as generateOfficialAIEngine,
   OFFICIAL_AI_PAGE_CONCURRENCY,
@@ -37,7 +41,7 @@ function copyV4FactsFromOffer(offer: OfficialAIOffer): CopyV4Facts {
 }
 
 function normalizeLine(value: string | null) {
-  return value?.replace(/\s+/gu, " ").trim() || null;
+  return value?.trim() || null;
 }
 
 function decisionBlocks(facts: CopyV4Facts) {
@@ -46,10 +50,12 @@ function decisionBlocks(facts: CopyV4Facts) {
     contract,
     blocks: [
       normalizeLine(contract.hook),
-      normalizeLine(contract.proofLine ? `🏆 ${contract.proofLine}` : null),
-      normalizeLine(contract.offerLine ? `💰 ${contract.offerLine}` : null),
-      normalizeLine(contract.benefitLine ? `✨ ${contract.benefitLine}` : null),
-      facts.freeShipping === true ? "🚚 Frete grátis confirmado." : null,
+      normalizeLine(contract.priceBlock),
+      normalizeLine(contract.couponLine),
+      normalizeLine(contract.shippingLine),
+      normalizeLine(contract.officialStoreLine),
+      normalizeLine(contract.attributesLine),
+      normalizeLine(contract.proofLine),
     ].filter((value): value is string => Boolean(value)),
   };
 }
@@ -65,12 +71,13 @@ export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: Of
   const { blocks } = decisionBlocks(facts);
 
   if (channel === "facebook") {
-    return [...blocks, "👉 Conferir o preço atual no primeiro comentário. 👇"].join("\n\n");
+    return [...blocks, "👉 Link da oferta no primeiro comentário. 👇"].join("\n\n");
   }
   if (channel === "instagram") {
-    return [...blocks, "👉 Conferir o preço atual."].join("\n\n");
+    return [...blocks, "🔎 Link da oferta na bio. 👇"].join("\n\n");
   }
-  return [...blocks, "👉 Conferir o preço atual", "👉"].join("\n\n");
+  const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
+  return [...blocks, ctaPrefix, "👉"].join("\n\n");
 }
 
 function buildCanonicalCopyV4Content(

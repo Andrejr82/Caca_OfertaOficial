@@ -14,20 +14,20 @@ const jiesipote = {
 };
 
 describe("Task 6 — Facebook Conversion V4", () => {
-  it("mantém prova e preço no feed e deixa o tracked URL apenas no primeiro comentário", () => {
+  it("mantém preço de abertura, atributos e prova no feed e deixa o tracked URL apenas no primeiro comentário", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/fb_jiesipote";
     const result = buildFacebookConversionV4(jiesipote, url);
 
-    const proof = result.feed.indexOf("Top #14");
     const offer = result.feed.indexOf("R$ 88,00");
-    const benefit = result.feed.indexOf("Proteção contra água");
+    const attributes = result.feed.indexOf("À prova d'água");
+    const proof = result.feed.indexOf("Top #14");
 
-    expect(proof).toBeGreaterThan(-1);
-    expect(offer).toBeGreaterThan(proof);
-    expect(benefit).toBeGreaterThan(offer);
-    expect(result.feed).toContain("Conferir o preço atual no primeiro comentário");
+    expect(offer).toBeGreaterThan(-1);
+    expect(attributes).toBeGreaterThan(offer);
+    expect(proof).toBeGreaterThan(attributes);
+    expect(result.feed).toContain("Link da oferta no primeiro comentário");
     expect(result.feed).not.toContain("https://");
-    expect(result.firstComment).toBe(`👉 Conferir o preço atual: ${url}`);
+    expect(result.firstComment).toBe(`👉 Link da oferta: ${url}`);
     expect(result.firstComment.match(/https:\/\//gu)).toHaveLength(1);
   });
 
@@ -53,15 +53,15 @@ describe("Task 6 — Facebook Conversion V4", () => {
 
     expect(result.feed).toContain("R$ 59,90");
     expect(result.feed).not.toMatch(/Top #|mais vendidos|Loja oficial|Mall/iu);
-    expect(result.firstComment).toContain("Conferir o preço atual");
+    expect(result.firstComment).toContain("👉 Link da oferta:");
   });
 
   it("inclui frete somente quando confirmado", () => {
     const withShipping = buildFacebookConversionV4({ ...jiesipote, freeShipping: true }, "https://caca-oferta-oficial.vercel.app/go/fb_ship");
     const withoutShipping = buildFacebookConversionV4({ ...jiesipote, freeShipping: null }, "https://caca-oferta-oficial.vercel.app/go/fb_no_ship");
 
-    expect(withShipping.feed).toContain("Frete grátis confirmado");
-    expect(withoutShipping.feed).not.toContain("Frete grátis confirmado");
+    expect(withShipping.feed).toContain("📦 Frete grátis");
+    expect(withoutShipping.feed).not.toContain("Frete grátis");
   });
 
   it("falha fechado para tracked URL inválido ou não HTTPS", () => {
