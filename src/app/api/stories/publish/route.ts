@@ -4,7 +4,7 @@ import { publishStoryToChannel, type StoryPublishChannel } from "@/lib/social/st
 
 export const runtime = "nodejs";
 
-type Body = { postId?: string; channel?: StoryPublishChannel; frame?: number };
+type Body = { offerId?: string; channel?: StoryPublishChannel; frame?: number };
 
 function publicAppOrigin(request: Request) {
   const candidate = process.env.NEXT_PUBLIC_APP_URL
@@ -17,8 +17,8 @@ function publicAppOrigin(request: Request) {
   return value;
 }
 
-function receiptKey(postId: string, channel: StoryPublishChannel, frame: number) {
-  return `stories.publication.receipt.${channel}.${postId}.${frame}`;
+function receiptKey(offerId: string, channel: StoryPublishChannel, frame: number) {
+  return `stories.publication.receipt.${channel}.${offerId}.${frame}`;
 }
 
 export async function POST(request: Request) {
@@ -26,43 +26,49 @@ export async function POST(request: Request) {
   let claimed: { userId: string; key: string } | null = null;
   try {
     const body = await request.json() as Body;
-    const postId = body.postId?.trim();
+    const offerId = body.offerId?.trim();
     const channel = body.channel;
     const frame = Number(body.frame || 1);
-    if (!postId || (channel !== "instagram" && channel !== "facebook") || !Number.isInteger(frame) || frame < 1 || frame > 2) {
-      return NextResponse.json({ ok: false, message: "postId, channel e frame=1|2 são obrigatórios." }, { status: 400 });
+    if (!offerId || (channel !== "instagram" && channel !== "facebook") || !Number.isInteger(frame) || frame < 1 || frame > 2) {
+      return NextResponse.json({ ok: false, message: "offerId, channel e frame=1|2 são obrigatórios." }, { status: 400 });
     }
 
     if (!supabase) return NextResponse.json({ ok: false, message: "Supabase não configurado." }, { status: 503 });
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
-    const { data: post, error: postError } = await supabase
-      .from("posts")
-      .select("id,offer_id,channel,status,affiliate_links(tracked_url),offers(image_url)")
-      .eq("id", postId)
-      .eq("user_id", user.id)
-      .eq("channel", channel)
-      .eq("status", "draft")
-      .maybeSingle();
-    if (postError) return NextResponse.json({ ok: false, message: postError.message }, { status: 500 });
-    if (!post) return NextResponse.json({ ok: false, message: "Draft de Story não encontrado para a rede selecionada." }, { status: 404 });
-
-    const offer = Array.isArray(post.offers) ? post.offers[0] : post.offers;
-    const affiliate = Array.isArray(post.affiliate_links) ? post.affiliate_links[0] : post.affiliate_links;
-    if (!offer?.image_url || !/^https:\/\//iu.test(offer.image_url)) {
+    const [{ data: offer, error: offerError }, { data: links, error: linkError }] = await Promise.all([
+      supabase
+        .from("offers")
+        .select("id,image_url")
+        .eq("id", offerId)
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("affiliate_links")
+        .select("id,tracked_url")
+        .eq("offer_id", offerId)
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(1),
+    ]);
+    if (offerError) return NextResponse.json({ ok: false, message: offerError.message }, { status: 500 });
+    if (!offer) return NextResponse.json({ ok: false, message: "Oferta não encontrada para o usuário atual." }, { status: 404 });
+    if (linkError) return NextResponse.json({ ok: false, message: linkError.message }, { status: 500 });
+    if (!offer.image_url || !/^https:\/\//iu.test(offer.image_url)) {
       return NextResponse.json({ ok: false, message: "Oferta sem imagem HTTPS válida." }, { status: 422 });
     }
+    const affiliate = links?.[0];
     if (!affiliate?.tracked_url || !/^https:\/\//iu.test(affiliate.tracked_url)) {
       return NextResponse.json({ ok: false, message: "Story bloqueado: link rastreado ausente." }, { status: 422 });
     }
 
-    const key = receiptKey(postId, channel, frame);
+    const key = receiptKey(offerId, channel, frame);
     const claimedAt = new Date().toISOString();
     const { error: claimError } = await supabase.from("app_settings").insert({
       user_id: user.id,
       key,
-      value: { status: "publishing", channel, postId, offerId: post.offer_id, frame, claimedAt },
+      value: { status: "publishing", channel, offerId, affiliateLinkId: affiliate.id, frame, claimedAt },
       updated_at: claimedAt,
     });
     if (claimError) {
@@ -73,11 +79,11 @@ export async function POST(request: Request) {
     }
     claimed = { userId: user.id, key };
 
-    const imageUrl = `${publicAppOrigin(request)}/api/images/story-creative?postId=${encodeURIComponent(postId)}&frame=${frame}&meta=1`;
+    const imageUrl = `${publicAppOrigin(request)}/api/images/story-creative?offerId=${encodeURIComponent(offerId)}&channel=${channel}&frame=${frame}&meta=1`;
     const externalId = await publishStoryToChannel(channel, imageUrl);
     const publishedAt = new Date().toISOString();
     const { error: receiptError } = await supabase.from("app_settings").update({
-      value: { status: "published", channel, postId, offerId: post.offer_id, frame, externalId, imageUrl, publishedAt },
+      value: { status: "published", channel, offerId, affiliateLinkId: affiliate.id, frame, externalId, imageUrl, publishedAt },
       updated_at: publishedAt,
     }).eq("user_id", user.id).eq("key", key);
     if (receiptError) {
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
     }
 
     claimed = null;
-    return NextResponse.json({ ok: true, externalId, publishedAt, channel, frame });
+    return NextResponse.json({ ok: true, externalId, publishedAt, channel, frame, offerId });
   } catch (error) {
     if (supabase && claimed) {
       await supabase.from("app_settings").delete().eq("user_id", claimed.userId).eq("key", claimed.key);
