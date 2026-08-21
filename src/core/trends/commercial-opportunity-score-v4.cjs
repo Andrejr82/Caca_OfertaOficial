@@ -94,7 +94,6 @@ function calculateMarketplaceDemand(candidate, velocityInfo) {
     };
   }
 
-  // Fallback por vendas observadas
   const rawSales = finite(candidate?.sales ?? candidate?.sold_quantity);
   const sales = rawSales !== null && rawSales > 0 ? Math.floor(rawSales) : null;
   let salesScore = 0;
@@ -106,7 +105,6 @@ function calculateMarketplaceDemand(candidate, velocityInfo) {
     else if (sales > 0) salesScore = 4;
   }
 
-  // Evidência oficial de marketplace (Highlights BEST_SELLER ou trending)
   const demandEvidence = candidate?.marketplaceDemandEvidence;
   let officialEvidenceScore = 0;
   let officialEvidenceType = null;
@@ -139,18 +137,6 @@ function calculateMarketplaceDemand(candidate, velocityInfo) {
 
 /**
  * 2. Economic Return — 20 pontos
- * Quando existir comissão factual observada:
- * estimatedCommissionPerSale = price * effectiveCommissionPercent / 100
- *
- * Bandas determinísticas em Reais:
- * >= R$ 40,00: 20 pts
- * >= R$ 20,00: 17 pts
- * >= R$ 10,00: 14 pts
- * >= R$ 5,00: 10 pts
- * >= R$ 2,00: 6 pts
- * > R$ 0,00: 3 pts
- *
- * Sem comissão observada: estimatedCommissionPerSale = null, commissionStatus = 'unknown', 0 pts.
  */
 function calculateEconomicReturn(candidate) {
   const price = finite(candidate?.currentPrice ?? candidate?.price);
@@ -203,19 +189,6 @@ function calculateEconomicReturn(candidate) {
 
 /**
  * 3. Internal Conversion — 20 pontos
- * Somente matching determinístico por IDs oficiais (itemId, shopId, productId, external_id, offerId).
- * NUNCA por nome aproximado.
- *
- * Sinais:
- * - humanProbableClicks
- * - attributedSales
- * - conversionRate = attributedSales / humanProbableClicks
- *
- * Estados:
- * - no_internal_history: sem oferta interna correspondente por ID (score 0, neutro)
- * - insufficient_history: humanProbableClicks < 10 e attributedSales === 0 (score 0, neutro)
- * - observed_conversion: attributedSales > 0 (10 a 20 pts)
- * - observed_zero_conversion: humanProbableClicks >= 10 e attributedSales === 0 (score 0)
  */
 function calculateInternalConversion(candidate, options = {}) {
   const internalData = options.internalPerformance || candidate?.internalPerformance;
@@ -234,7 +207,6 @@ function calculateInternalConversion(candidate, options = {}) {
   const humanClicks = Math.max(0, finite(internalData.humanProbableClicks ?? internalData.human_probable_clicks) || 0);
   const sales = Math.max(0, finite(internalData.attributedSales ?? internalData.attributed_sales) || 0);
 
-  // Venda atribuída é evidência positiva real
   if (sales > 0) {
     const rate = humanClicks > 0 ? (sales / humanClicks) : 1;
     let score = 10;
@@ -252,7 +224,6 @@ function calculateInternalConversion(candidate, options = {}) {
     };
   }
 
-  // Amostra representativa sem conversão
   if (humanClicks >= 10) {
     return {
       score: 0,
@@ -264,7 +235,6 @@ function calculateInternalConversion(candidate, options = {}) {
     };
   }
 
-  // Amostra insuficiente
   return {
     score: 0,
     internalConversionStatus: 'insufficient_history',
@@ -277,13 +247,6 @@ function calculateInternalConversion(candidate, options = {}) {
 
 /**
  * 4. Reputation — 10 pontos
- * Baseado no rating observado:
- * >= 4.8: 10 pts
- * >= 4.6: 8 pts
- * >= 4.3: 6 pts
- * >= 4.0: 4 pts
- * >= 3.5: 2 pts
- * < 3.5 ou ausente: 0 pts
  */
 function calculateReputation(candidate) {
   const rating = finite(candidate?.ratingStar ?? candidate?.rating);
@@ -311,13 +274,6 @@ function calculateReputation(candidate) {
 
 /**
  * 5. Offer Competitiveness — 10 pontos
- * Avalia competitividade de preço real relativa aos concorrentes da mesma família
- * ou atratividade intrínseca de desconto quando sem concorrentes diretos no run:
- * - Melhor preço na família (ou desconto >= 50% solo): 10 pts
- * - Preço competitivo na família (ou desconto >= 35% solo): 7-8 pts
- * - Preço intermediário na família (ou desconto >= 20% solo): 4-5 pts
- * - Preço regular / desconto inicial (ou desconto >= 10% solo): 2-4 pts
- * - Preço desfavorável / claramente mais caro na família: 1 pt
  */
 function calculateOfferCompetitiveness(candidate, options = {}) {
   const peers = options.peers || options.peerCandidates || candidate?.peers || [];
@@ -337,11 +293,6 @@ function calculateOfferCompetitiveness(candidate, options = {}) {
 
 /**
  * 6. Identity Traceability — 10 pontos
- * Rastreabilidade oficial de produto e monetização:
- * - itemId presente: 5 pts
- * - shopId ou productId presente: 2 pts
- * - permalink válido: 2 pts
- * - imageUrl presente: 1 pt
  */
 function calculateIdentityTraceability(candidate) {
   let score = 0;
@@ -368,10 +319,6 @@ function calculateIdentityTraceability(candidate) {
 
 /**
  * 7. Visual Potential — 5 pontos
- * Imagem e potencial de conversão visual:
- * - Imagem oficial válida: 3 pts
- * - Título claro e descritivo (>= 15 chars): 1 pt
- * - Sinal de demonstração visual (desconto > 0 ou vídeo ou atributos visuais): 1 pt
  */
 function calculateVisualPotential(candidate) {
   let score = 0;
@@ -400,9 +347,6 @@ function classifyCommercialDecision(total) {
   return 'IGNORAR';
 }
 
-/**
- * Calcula o Commercial Opportunity Score V4 completo de um candidato.
- */
 function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
   const velocityInfo = options.velocityInfo || candidate?.velocityInfo;
   const price = finite(candidate?.currentPrice ?? candidate?.price);
@@ -433,7 +377,9 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
   );
 
   const rawDecision = classifyCommercialDecision(total);
-  const isML = /mercado\s*livre|mercadolivre/i.test(candidate?.marketplace || candidate?.platform || '');
+  const marketplaceName = String(candidate?.marketplace || candidate?.platform || '');
+  const isML = /mercado\s*livre|mercadolivre/i.test(marketplaceName);
+  const isShopee = /shopee/i.test(marketplaceName);
 
   let selectionDecision = rawDecision;
   const determining_reasons = [
@@ -446,8 +392,8 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
     visual.reason,
   ].filter(Boolean);
 
-  // Decisão source-aware para Mercado Livre:
-  // Não penalizar ausência de vendas/comissão/rating se houver sinal comercial factual
+  // Mercado Livre não expõe comissão/vendas/rating de forma equivalente à Shopee.
+  // Permite TESTAR quando existe sinal factual de oferta/demanda, sem inventar comissão.
   if (isML && rawDecision === 'IGNORAR') {
     const hasDiscount = (finite(candidate?.discountPercent ?? candidate?.priceDiscountRate) || 0) > 0;
     const hasCompetitivePrice = competitiveness.relative_price_position === 'best_in_family' ||
@@ -462,6 +408,26 @@ function calculateCommercialOpportunityScoreV4(candidate = {}, options = {}) {
     if (hasDiscount || hasCompetitivePrice || hasOfficialDemand) {
       selectionDecision = 'TESTAR';
       determining_reasons.push('Elegível para teste comercial no Mercado Livre por sinal factual observado');
+    }
+  }
+
+  // Shopee: após normalizar commissionRate como comissão TOTAL, não somamos novamente
+  // sellerCommissionRate. Isso reduz scores antes inflados. Produtos com evidência factual
+  // forte continuam elegíveis a partir de 50 pontos, sem reintroduzir dupla contagem.
+  if (isShopee && rawDecision === 'IGNORAR' && total >= 50) {
+    const sales = finite(candidate?.sales ?? candidate?.sold_quantity) || 0;
+    const rating = finite(candidate?.ratingStar ?? candidate?.rating) || 0;
+    const discount = finite(candidate?.discountPercent ?? candidate?.priceDiscountRate) || 0;
+    const hasObservedCommission = economic.commissionStatus === 'observed' &&
+      (economic.effectiveCommissionPercent || 0) > 0;
+    const hasDemand = sales >= 100 ||
+      (velocityInfo?.velocity_status === 'computed' && (velocityInfo?.sales_velocity || 0) > 0);
+    const hasReputation = rating >= 4.5;
+    const hasOfferSignal = discount >= 20 || competitiveness.score >= 4;
+
+    if (hasObservedCommission && hasDemand && hasReputation && hasOfferSignal) {
+      selectionDecision = 'TESTAR';
+      determining_reasons.push('Elegível para teste Shopee por comissão, demanda, reputação e oferta factuais');
     }
   }
 
