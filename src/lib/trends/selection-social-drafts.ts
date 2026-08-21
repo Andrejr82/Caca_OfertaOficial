@@ -1,5 +1,5 @@
-import { buildCanonicalCopyV4ChannelDraft } from "@/core/ai/official-ai-service";
-import type { CopyV4Facts } from "@/core/ai/copy-v4";
+import { buildCanonicalCopyV5ChannelDraft } from "@/core/ai/official-ai-service";
+import type { CopyV5Facts } from "@/core/ai/copy-v5-types";
 import { createRequiredSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
@@ -24,11 +24,11 @@ export function buildTrendSocialDraftContent(
 }
 
 export function buildTrendSocialDraft(
-  facts: CopyV4Facts,
+  facts: CopyV5Facts,
   channel: (typeof TREND_SOCIAL_CHANNELS)[number],
   trackedUrl: string,
 ) {
-  const baseContent = buildCanonicalCopyV4ChannelDraft(facts, channel);
+  const baseContent = buildCanonicalCopyV5ChannelDraft(facts, channel);
   return buildTrendSocialDraftContent(baseContent, channel, trackedUrl);
 }
 
@@ -47,7 +47,7 @@ export async function prepareTrendSocialDrafts(input: {
   if (offerError || !offer) throw new Error("Oferta aprovada no Trends não pôde ser carregada para as redes sociais.");
 
   const explainabilityMetrics = offer.explainability?.marketplace_metrics;
-  const facts: CopyV4Facts = {
+  const facts: CopyV5Facts = {
     productName: offer.product_name,
     marketplace: offer.platform,
     category: offer.category ?? null,

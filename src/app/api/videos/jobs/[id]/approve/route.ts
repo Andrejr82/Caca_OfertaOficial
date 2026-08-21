@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { buildCopyV2ChannelCopy } from "@/core/ai/prompt";
+import { buildCanonicalCopyV5ChannelDraft } from "@/core/ai/official-ai-service";
 import { createSubId, createTrackedUrl } from "@/lib/tracking/sub-id";
 
 const VIDEO_OFFER_TEMPLATES = ["gemini-drive-v1", "motion-v1"];
@@ -58,7 +58,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
         { onConflict: "offer_id,channel" }
       ).select("id").single();
       if (linkError || !link) return NextResponse.json({ error: `Falha ao preparar o link do canal ${channel}: ${linkError?.message ?? "registro ausente"}` }, { status: 502 });
-      const content = buildCopyV2ChannelCopy(facts, channel);
+      const content = buildCanonicalCopyV5ChannelDraft(facts, channel);
       channelCopies[channel] = content;
       const { data: draft } = await admin.from("posts").select("id").eq("user_id", userData.user.id).eq("offer_id", offer.id).eq("channel", channel).eq("status", "draft").maybeSingle();
       if (draft) {

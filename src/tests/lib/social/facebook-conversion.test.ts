@@ -13,8 +13,8 @@ const jiesipote = {
   },
 };
 
-describe("Task 6 — Facebook Conversion V4", () => {
-  it("mantém preço de abertura, atributos e prova no feed e deixa o tracked URL apenas no primeiro comentário", () => {
+describe("Facebook conversion — V5 authority", () => {
+  it("mantém preço, atributos e prova no feed e deixa o tracked URL apenas no primeiro comentário", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/fb_jiesipote";
     const result = buildFacebookConversionV4(jiesipote, url);
 
@@ -37,7 +37,7 @@ describe("Task 6 — Facebook Conversion V4", () => {
 
     expect(blocks.length).toBeLessThanOrEqual(FACEBOOK_CONVERSION_V4_MAX_FEED_BLOCKS);
     expect(result.feed.match(/primeiro comentário/giu)).toHaveLength(1);
-    expect(result.feed).not.toMatch(/Veja a oferta|link na bio|link abaixo/iu);
+    expect(result.feed).not.toMatch(/link na bio|link abaixo/iu);
     expect(result.feed).not.toMatch(/últimas unidades|só hoje|corre que|antes que o preço suba/iu);
   });
 

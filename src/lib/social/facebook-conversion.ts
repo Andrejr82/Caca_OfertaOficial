@@ -1,4 +1,5 @@
-import { buildConversionCopyV4Contract, type CopyV4Facts } from "@/core/ai/copy-v4";
+import { buildCanonicalCopyV5ChannelDraft } from "@/core/ai/official-ai-service";
+import type { CopyV5Facts } from "@/core/ai/copy-v5-types";
 
 export interface FacebookConversionV4 {
   feed: string;
@@ -12,58 +13,21 @@ function assertTrackedUrl(trackedUrl: string) {
   try {
     parsed = new URL(trackedUrl);
   } catch {
-    throw new Error("Facebook Conversion V4 requires a valid tracked URL");
+    throw new Error("Facebook conversion requires a valid tracked URL");
   }
   if (parsed.protocol !== "https:") {
-    throw new Error("Facebook Conversion V4 requires an HTTPS tracked URL");
+    throw new Error("Facebook conversion requires an HTTPS tracked URL");
   }
   return parsed.toString();
 }
 
-function normalizeLine(value: string) {
-  return value.trim();
-}
-
-function semantic(value: string) {
-  return normalizeLine(value)
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/gu, "")
-    .replace(/[^\p{L}\p{N}]+/gu, " ")
-    .toLocaleLowerCase("pt-BR")
-    .trim();
-}
-
 /**
- * Contrato de conversão para Facebook no padrão brasileiro de ofertas.
+ * Nome legado preservado por compatibilidade; a autoridade de conteúdo é Copy V5.
  */
-export function buildFacebookConversionV4(facts: CopyV4Facts, trackedUrl: string): FacebookConversionV4 {
+export function buildFacebookConversionV4(facts: CopyV5Facts, trackedUrl: string): FacebookConversionV4 {
   const url = assertTrackedUrl(trackedUrl);
-  const contract = buildConversionCopyV4Contract(facts, "facebook");
-  const blocks: string[] = [];
-  const seen = new Set<string>();
-
-  const push = (value: string | null) => {
-    if (!value) return;
-    const normalized = normalizeLine(value);
-    const key = semantic(normalized);
-    if (!normalized || !key || seen.has(key)) return;
-    seen.add(key);
-    blocks.push(normalized);
-  };
-
-  push(contract.hook);
-  push(contract.priceBlock);
-  push(contract.couponLine);
-  push(contract.shippingLine);
-  push(contract.officialStoreLine);
-  push(contract.attributesLine);
-  push(contract.proofLine);
-
-  const contentBlocks = blocks.slice(0, FACEBOOK_CONVERSION_V4_MAX_FEED_BLOCKS - 1);
-  contentBlocks.push("👉 Link da oferta no primeiro comentário. 👇");
-
   return {
-    feed: contentBlocks.join("\n\n"),
+    feed: buildCanonicalCopyV5ChannelDraft(facts, "facebook"),
     firstComment: `👉 Link da oferta: ${url}`,
   };
 }

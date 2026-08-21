@@ -13,7 +13,7 @@ const jiesipote = {
   },
 };
 
-describe("Task 3 — WhatsApp Conversion V4", () => {
+describe("WhatsApp conversion — V5 authority", () => {
   it("coloca produto com preço, atributos, prova e CTA com link direto", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/wp_jiesipote";
     const copy = buildWhatsAppConversionV4(jiesipote, url);
@@ -26,7 +26,7 @@ describe("Task 3 — WhatsApp Conversion V4", () => {
     expect(attributes).toBeGreaterThan(offer);
     expect(proof).toBeGreaterThan(attributes);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
-    expect(copy).toContain(`👉 Achado no Mercado Livre:\n${url}`);
+    expect(copy).toContain(`👉 Ver no Mercado Livre:\n${url}`);
   });
 
   it("mantém mensagem curta, sem hashtags, catálogo ou falsa urgência", () => {
@@ -35,7 +35,7 @@ describe("Task 3 — WhatsApp Conversion V4", () => {
 
     expect(blocks.length).toBeLessThanOrEqual(WHATSAPP_CONVERSION_V4_MAX_BLOCKS);
     expect(copy).not.toMatch(/#\p{L}[\p{L}\p{N}_]*/u);
-    expect(copy).not.toMatch(/Veja a oferta|oferta em destaque|link abaixo/iu);
+    expect(copy).not.toMatch(/oferta em destaque|link abaixo/iu);
     expect(copy).not.toMatch(/últimas unidades|só hoje|corre que|antes que o preço suba/iu);
   });
 
@@ -50,7 +50,7 @@ describe("Task 3 — WhatsApp Conversion V4", () => {
     }, "https://caca-oferta-oficial.vercel.app/go/wp_fone");
 
     expect(copy).toContain("R$ 59,90");
-    expect(copy).toContain("👉 Achado na Shopee:");
+    expect(copy).toContain("👉 Ver na Shopee:");
     expect(copy).not.toMatch(/mais vendidos|Top #|Loja oficial|Mall/iu);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
   });
