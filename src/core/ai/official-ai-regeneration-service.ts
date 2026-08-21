@@ -1,8 +1,7 @@
 import type { OfficialAIRegenerationDependencies } from "./ports";
 import { buildCopyV5PlannerPrompt } from "./copy-v5-planner";
-import { renderCopyV5ChannelCopy } from "./copy-v5-renderer";
 import type { CopyV5Facts, CopyV5Plan } from "./copy-v5-types";
-import { validateCopyV5Plan } from "./copy-v5-validator";
+import { buildCanonicalCopyV5ChannelDraft } from "./official-ai-service";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIDraftForRegeneration, type OfficialAIRegenerationCommand, type OfficialAIRegenerationItem, type OfficialAIRegenerationResult } from "./types";
 
 export const OFFICIAL_AI_REGENERATION_BATCH_LIMIT = 5;
@@ -96,8 +95,12 @@ export async function regenerateOfficialDrafts(
         maxTokens: 500,
         metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft_v5" }
       });
-      const plan = validateCopyV5Plan(parsePlanCandidate(inference.content), facts);
-      const afterContent = renderCopyV5ChannelCopy(plan, facts, draft.channel, draft.trackedUrl).feed;
+      const afterContent = buildCanonicalCopyV5ChannelDraft(
+        facts,
+        draft.channel,
+        parsePlanCandidate(inference.content) as CopyV5Plan | null,
+        draft.trackedUrl,
+      );
       const updated = await dependencies.drafts.updateContent({
         tenantId: command.tenantId,
         postId: draft.postId,
