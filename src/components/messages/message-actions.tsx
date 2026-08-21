@@ -22,11 +22,11 @@ export function GenerateAIMessagesButton({
     try {
       const requestedAt = new Date().toISOString();
       const commandId = `ui_generate_${offerId}_${Date.now()}`;
-      
+
       const response = await fetch("/api/ai/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ offerId, requestedAt, commandId, copyV2: true, regenerateCopyV2: true })
+        body: JSON.stringify({ offerId, requestedAt, commandId })
       });
       const data = await response.json();
 
@@ -44,9 +44,9 @@ export function GenerateAIMessagesButton({
 
   return (
     <div className="flex flex-col gap-1.5 shrink-0">
-      <Button 
+      <Button
         disabled={loading || hasDrafts || generated}
-        onClick={handleGenerate} 
+        onClick={handleGenerate}
         type="button"
         className="bg-moss hover:bg-ink text-white font-bold text-xs px-3 py-1.5 min-h-8"
       >
@@ -58,7 +58,7 @@ export function GenerateAIMessagesButton({
         ) : (
           <>
             <Sparkles size={12} />
-            {hasDrafts || generated ? "Copys prontas" : "Gerar Copys com Groq AI"}
+            {hasDrafts || generated ? "Copys prontas" : "Gerar Copys V5"}
           </>
         )}
       </Button>
@@ -79,10 +79,10 @@ export function CopyToClipboardButton({ text }: { text: string }) {
   }
 
   return (
-    <Button 
-      onClick={handleCopy} 
-      variant="secondary" 
-      type="button" 
+    <Button
+      onClick={handleCopy}
+      variant="secondary"
+      type="button"
       className="min-h-8 px-3 py-1 text-xs shrink-0"
     >
       {copied ? (

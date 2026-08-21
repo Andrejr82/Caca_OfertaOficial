@@ -102,12 +102,13 @@ export function buildCanonicalCopyV4ChannelDraft(facts: CopyV4Facts, channel: Of
 export function buildCanonicalCopyV5ChannelDraft(
   facts: CopyV5Facts,
   channel: OfficialAIChannel,
-  plan?: CopyV5Plan | null
+  plan?: CopyV5Plan | null,
+  trackedUrl?: string | null,
 ): string {
   const polishedFacts = polishCopyV5Facts(facts);
   const validatedPlan = validateCopyV5Plan(plan, polishedFacts);
   const polishedPlan = polishCopyV5Plan(validatedPlan, polishedFacts);
-  const rendered = renderCopyV5ChannelCopy(polishedPlan, polishedFacts, channel);
+  const rendered = renderCopyV5ChannelCopy(polishedPlan, polishedFacts, channel, trackedUrl);
   return rendered.feed;
 }
 

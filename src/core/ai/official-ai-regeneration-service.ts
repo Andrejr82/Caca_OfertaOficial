@@ -1,25 +1,11 @@
-import { isCopyV2TextSafe, validateOfficialAIHook } from "./content-schema";
 import type { OfficialAIRegenerationDependencies } from "./ports";
-import { buildCopyV3ChannelCopy, buildOfficialRegenerationPrompt, sanitizeOfficialAIHook } from "./prompt";
+import { buildCopyV5PlannerPrompt } from "./copy-v5-planner";
+import type { CopyV5Facts, CopyV5Plan } from "./copy-v5-types";
+import { buildCanonicalCopyV5ChannelDraft } from "./official-ai-service";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIDraftForRegeneration, type OfficialAIRegenerationCommand, type OfficialAIRegenerationItem, type OfficialAIRegenerationResult } from "./types";
 
-const FORBIDDEN_OPENING = /^\s*(?:[^\p{L}\p{N}]{0,4}\s*)?(?:Olá|Temos um novo|Você vai amar|Confira|Conheça|Não perca)(?=\s|[!,:;.-]|$)/iu;
-const URL = /(?:[a-z][a-z0-9+.-]*:)?\/\/\S+|\bwww\.\S+/iu;
-const INSTALLMENTS = /\b\d+\s*x\b|parcelad[oa]|sem juros/iu;
-const STOCK = /\bestoque\b|últimas unidades|últimas peças/iu;
 export const OFFICIAL_AI_REGENERATION_BATCH_LIMIT = 5;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
-
-function providerFields(value: unknown, channel: OfficialAIDraftForRegeneration["channel"]) {
-  if (!value || typeof value !== "object") return null;
-  const data = value as { hook?: unknown; benefitLine?: unknown; contextLine?: unknown; hooks?: Record<string, unknown>; channelCopies?: Record<string, unknown> };
-  const candidate = data.hooks?.[channel] ?? data.channelCopies?.[channel] ?? data;
-  const structured = candidate && typeof candidate === "object" ? candidate as { hook?: unknown; benefitLine?: unknown; contextLine?: unknown } : { hook: candidate };
-  const hook = validateOfficialAIHook(typeof structured.hook === "string"
-    ? sanitizeOfficialAIHook(structured.hook.split(/[\r\n]/u, 1)[0])
-    : structured.hook);
-  return hook ? { hook, benefitLine: typeof structured.benefitLine === "string" ? structured.benefitLine : null, contextLine: typeof structured.contextLine === "string" ? structured.contextLine : null } : null;
-}
 
 export function getOfficialAIRegenerationBatchLimit(value?: number) {
   if (!Number.isFinite(value) || !value || value < 1) return OFFICIAL_AI_REGENERATION_BATCH_LIMIT;
@@ -34,38 +20,31 @@ export function isOfficialAIRegenerationCursor(value: unknown): value is { creat
   return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === cursor.createdAt;
 }
 
-function parseBRL(raw: string) {
-  if (raw.includes(",")) return Number(raw.replace(/\./g, "").replace(",", "."));
-  return Number(raw);
+function factsFromDraft(draft: OfficialAIDraftForRegeneration): CopyV5Facts {
+  return {
+    productName: draft.productName,
+    marketplace: draft.marketplace,
+    category: draft.category,
+    currentPrice: draft.currentPrice,
+    originalPrice: draft.originalPrice,
+    freeShipping: draft.shippingFree,
+    evidence: {
+      ...draft.evidence,
+      ...(draft.coupon ? { coupon: draft.coupon } : {}),
+      ...(draft.rating !== null ? { rating: draft.rating } : {}),
+    },
+  };
 }
 
-function validateCopy(copy: string, draft: OfficialAIDraftForRegeneration) {
-  if (!isCopyV2TextSafe(copy)) throw new Error("FORBIDDEN_FINAL_COPY");
-  if (FORBIDDEN_OPENING.test(copy)) throw new Error("FORBIDDEN_GENERIC_OPENING");
-  if (URL.test(copy)) throw new Error("UNEXPECTED_URL");
-  if (INSTALLMENTS.test(copy)) throw new Error("UNSUPPORTED_INSTALLMENTS");
-  if (STOCK.test(copy)) throw new Error("UNSUPPORTED_STOCK_CLAIM");
-  if (/frete\s+grátis/iu.test(copy) && draft.shippingFree !== true) throw new Error("UNSUPPORTED_FREE_SHIPPING");
-  if (/\bcupom\b/iu.test(copy) && (!draft.coupon || !copy.toLocaleLowerCase("pt-BR").includes(draft.coupon.toLocaleLowerCase("pt-BR")))) {
-    throw new Error("UNSUPPORTED_COUPON");
-  }
-  for (const match of copy.matchAll(/(\d(?:[.,]\d)?)[ \t]*(?:estrela|⭐)/giu)) {
-    if (draft.rating === null || Math.abs(Number(match[1].replace(",", ".")) - draft.rating) >= 0.05) throw new Error("UNSUPPORTED_RATING");
-  }
-
-  const allowedPrices = [draft.currentPrice, draft.originalPrice].filter((value): value is number => value !== null);
-  for (const match of copy.matchAll(/R\$\s*(\d+\.\d{1,2}|\d+(?:\.\d{3})*(?:,\d{1,2})?)/giu)) {
-    const value = parseBRL(match[1]);
-    if (!allowedPrices.some((allowed) => Math.abs(allowed - value) < 0.01)) throw new Error("UNSUPPORTED_PRICE");
-  }
-
-  const discount = draft.originalPrice && draft.originalPrice > draft.currentPrice
-    ? Math.round((1 - draft.currentPrice / draft.originalPrice) * 100)
-    : null;
-  for (const match of copy.matchAll(/(\d{1,3})\s*%/gu)) {
-    const stated = Number(match[1]);
-    const presentInTitle = new RegExp(`(?:^|\\D)${stated}\\s*%`, "u").test(draft.productName);
-    if (!presentInTitle && (discount === null || stated !== discount)) throw new Error("UNSUPPORTED_DISCOUNT");
+function parsePlanCandidate(content: unknown): Partial<CopyV5Plan> | null {
+  if (content && typeof content === "object") return content as Partial<CopyV5Plan>;
+  if (typeof content !== "string") return null;
+  const jsonMatch = content.trim().match(/\{[\s\S]*\}/u);
+  if (!jsonMatch) return null;
+  try {
+    return JSON.parse(jsonMatch[0]) as Partial<CopyV5Plan>;
+  } catch {
+    return null;
   }
 }
 
@@ -94,6 +73,7 @@ export async function regenerateOfficialDrafts(
     const retryAfterMs = "retryAfterMs" in error ? Number(error.retryAfterMs) : NaN;
     return Number.isFinite(retryAfterMs) && retryAfterMs >= 0 ? retryAfterMs : 0;
   };
+
   const regenerate = async (draft: OfficialAIDraftForRegeneration): Promise<OfficialAIRegenerationItem> => {
     const identity = {
       postId: draft.postId,
@@ -104,20 +84,23 @@ export async function regenerateOfficialDrafts(
       createdAt: draft.createdAt,
       beforeContent: draft.currentContent
     };
+
     try {
+      const facts = factsFromDraft(draft);
       const inference = await provider.generate({
-        prompt: buildOfficialRegenerationPrompt(draft),
+        prompt: buildCopyV5PlannerPrompt(facts),
         correlationId: command.correlationId,
         timeoutMs: 30_000,
-        temperature: 0.1,
-        maxTokens: 512,
-        metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft" }
+        temperature: 0.4,
+        maxTokens: 500,
+        metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft_v5" }
       });
-      const fields = providerFields(inference.content, draft.channel);
-      if (!fields) throw new Error("INVALID_PROVIDER_OUTPUT");
-      validateCopy(fields.hook, draft);
-      const copy = buildCopyV3ChannelCopy(draft, draft.channel, fields);
-      const afterContent = `${copy}\n\n${draft.trackedUrl}`;
+      const afterContent = buildCanonicalCopyV5ChannelDraft(
+        facts,
+        draft.channel,
+        parsePlanCandidate(inference.content) as CopyV5Plan | null,
+        draft.trackedUrl,
+      );
       const updated = await dependencies.drafts.updateContent({
         tenantId: command.tenantId,
         postId: draft.postId,

@@ -1,6 +1,5 @@
 import Link from "next/link";
-import { generateAllMessages } from "@/lib/messages/generate";
-import { getOfferPosts, listAffiliateLinks, listOffers } from "@/lib/offers/queries";
+import { getOfferPosts, listOffers } from "@/lib/offers/queries";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { GenerateAIMessagesButton, CopyToClipboardButton } from "@/components/messages/message-actions";
 import { Badge } from "@/components/ui/badge";
@@ -8,14 +7,10 @@ import { Badge } from "@/components/ui/badge";
 export default async function MessagesPage(props: { searchParams: Promise<{ offerId?: string }> }) {
   const searchParams = await props.searchParams;
   const offers = await listOffers();
-  const links = await listAffiliateLinks();
 
-  // Seleciona a oferta ativa
   const selectedOfferId = searchParams.offerId;
   const offer = offers.find((o) => o.id === selectedOfferId) || offers[0];
 
-  // A variável 'link' fixa foi substituída pela filtragem offerLinks.
-  // Busca se já existem posts gerados pela IA no banco de dados para esta oferta
   let messages: { telegram: string; instagramFeed: string; whatsapp: string } | null = null;
   let isAIGenerated = false;
 
@@ -37,32 +32,6 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
     }
   }
 
-  // Fallback para o gerador de template clássico se não houver posts no banco
-  if (!messages && offer) {
-    const offerLinks = links.filter((item) => item.offer_id === offer.id);
-    if (offerLinks.length > 0) {
-      const generated = generateAllMessages(offer, offerLinks);
-      const instagram = generated.instagram ? [
-        generated.instagram.feed,
-        "",
-        "=== STORIES SUGERIDOS ===",
-        ...generated.instagram.stories.map((s) => `• ${s}`),
-        "",
-        "=== REELS SUGERIDO ===",
-        ...generated.instagram.reels.map((r) => `- ${r}`),
-        "",
-        "=== CARROSSEL SUGERIDO ===",
-        ...generated.instagram.carousel.map((c) => `- ${c}`)
-      ].join("\n") : "Sem link do Instagram disponível.";
-
-      messages = {
-        telegram: generated.telegram,
-        instagramFeed: instagram,
-        whatsapp: generated.whatsapp
-      };
-    }
-  }
-
   return (
     <div className="grid gap-6 animate-fadeIn">
       <header>
@@ -72,7 +41,6 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
 
       {offers.length ? (
         <div className="grid gap-6 lg:grid-cols-[280px_1fr] items-start">
-          {/* Menu Lateral de Ofertas */}
           <aside className="glass-card p-4 grid gap-3">
             <h2 className="text-[10px] font-bold text-white/30 uppercase tracking-[0.1em]">Selecionar Oferta</h2>
             <div className="grid gap-2 max-h-[450px] overflow-y-auto pr-1">
@@ -99,7 +67,6 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
             </div>
           </aside>
 
-          {/* Área de Visualização e Geração das Mensagens */}
           <section className="grid gap-4">
             <div className="glass-card p-5 flex flex-wrap items-center justify-between gap-4">
               <div>
@@ -109,28 +76,30 @@ export default async function MessagesPage(props: { searchParams: Promise<{ offe
                   <span className="text-xs text-white/40">Score: <strong className="text-emerald-400">{offer.score}/10</strong></span>
                   {isAIGenerated && (
                     <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md uppercase tracking-wider">
-                      Gerado por IA (Groq)
+                      Copy V5
                     </span>
                   )}
                 </div>
               </div>
-              <GenerateAIMessagesButton offerId={offer.id} />
+              <GenerateAIMessagesButton offerId={offer.id} hasDrafts={Boolean(messages)} />
             </div>
 
-            {messages && (
+            {messages ? (
               <div className="grid gap-4">
                 <MessageBlock title="Telegram (Canal)" content={messages.telegram} />
-                <MessageBlock title="Instagram (Legendas e Roteiros)" content={messages.instagramFeed} />
+                <MessageBlock title="Instagram (Feed)" content={messages.instagramFeed} />
                 <MessageBlock title="WhatsApp (Lista / Canal)" content={messages.whatsapp} />
+              </div>
+            ) : (
+              <div className="glass-card p-6 text-center">
+                <p className="text-sm text-white/40">Ainda não há drafts oficiais para esta oferta. Use “Gerar Copys” para criar conteúdo pela Copy V5.</p>
               </div>
             )}
           </section>
         </div>
       ) : (
         <div className="glass-card p-6 text-center">
-          <p className="text-sm text-white/30">
-            Cadastre uma oferta para poder gerar e visualizar as mensagens.
-          </p>
+          <p className="text-sm text-white/30">Cadastre uma oferta para poder gerar e visualizar as mensagens.</p>
         </div>
       )}
     </div>
