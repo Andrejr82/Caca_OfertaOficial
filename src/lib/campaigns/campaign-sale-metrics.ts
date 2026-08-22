@@ -65,27 +65,38 @@ export async function getCampaignSaleMetrics(
   officialLinks: CampaignOfficialLinks,
 ): Promise<CampaignSaleMetric[]> {
   const trackingKeys = CAMPAIGN_CHANNELS.map((channel) => buildCampaignTrackingKey(campaignId, channel));
-  const [{ data: affiliateLinks, error: linkError }, { data: sales, error: saleError }] = await Promise.all([
-    supabase
-      .from("affiliate_links")
-      .select("id,sub_id")
-      .eq("user_id", userId)
-      .eq("offer_id", offerId)
-      .in("sub_id", trackingKeys),
-    supabase
-      .from("sales")
-      .select("id,affiliate_link_id,source_sub_id,status,commission_value")
-      .eq("user_id", userId)
-      .eq("offer_id", offerId),
-  ]);
+  const { data: affiliateLinks, error: linkError } = await supabase
+    .from("affiliate_links")
+    .select("id,sub_id")
+    .eq("user_id", userId)
+    .eq("offer_id", offerId)
+    .in("sub_id", trackingKeys);
 
   if (linkError) throw new Error(`Falha ao carregar links para vendas: ${linkError.message}`);
-  if (saleError) throw new Error(`Falha ao carregar vendas da campanha: ${saleError.message}`);
 
-  return summarizeCampaignSales(
-    campaignId,
-    officialLinks,
-    (affiliateLinks ?? []) as AffiliateLinkRow[],
-    (sales ?? []) as SaleRow[],
-  );
+  const linkRows = (affiliateLinks ?? []) as AffiliateLinkRow[];
+  const linkIds = linkRows.map((link) => link.id);
+  const directQuery = supabase
+    .from("sales")
+    .select("id,affiliate_link_id,source_sub_id,status,commission_value")
+    .eq("user_id", userId)
+    .in("source_sub_id", trackingKeys);
+  const linkQuery = linkIds.length > 0
+    ? supabase
+        .from("sales")
+        .select("id,affiliate_link_id,source_sub_id,status,commission_value")
+        .eq("user_id", userId)
+        .in("affiliate_link_id", linkIds)
+    : Promise.resolve({ data: [], error: null });
+
+  const [directResult, linkResult] = await Promise.all([directQuery, linkQuery]);
+  if (directResult.error) throw new Error(`Falha ao carregar vendas por Sub_id/Etiqueta: ${directResult.error.message}`);
+  if (linkResult.error) throw new Error(`Falha ao carregar vendas por affiliate_link: ${linkResult.error.message}`);
+
+  const sales = [
+    ...((directResult.data ?? []) as SaleRow[]),
+    ...((linkResult.data ?? []) as SaleRow[]),
+  ];
+
+  return summarizeCampaignSales(campaignId, officialLinks, linkRows, sales);
 }
