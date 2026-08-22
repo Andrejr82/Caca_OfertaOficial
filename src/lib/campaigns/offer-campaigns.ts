@@ -45,11 +45,11 @@ export const CAMPAIGN_CHANNELS: readonly CampaignChannel[] = [
 export const CAMPAIGN_CHANNEL_STATES: readonly CampaignChannelState[] = ["pending", "ready", "published", "skipped"] as const;
 
 const CHANNEL_TRACKING_CODES: Record<CampaignChannel, string> = {
-  instagram_reel: "ig_reel",
-  instagram_story: "ig_story",
-  facebook_feed: "fb_feed",
-  facebook_group: "fb_group",
-  whatsapp: "whatsapp",
+  instagram_reel: "igr",
+  instagram_story: "igs",
+  facebook_feed: "fbf",
+  facebook_group: "fbg",
+  whatsapp: "wa",
 };
 
 export function buildInitialCampaignChecklist(): CampaignChecklist {
@@ -102,7 +102,7 @@ export function buildCampaignTrackingKey(campaignId: string, channel: CampaignCh
   if (!CAMPAIGN_CHANNELS.includes(channel)) throw new Error("Canal de campanha inválido.");
   const token = campaignId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
   if (!token) throw new Error("Campanha inválida para tracking.");
-  return `co_${token}_${CHANNEL_TRACKING_CODES[channel]}`;
+  return `co${token}${CHANNEL_TRACKING_CODES[channel]}`;
 }
 
 export function validateOfficialMarketplaceUrl(marketplace: CampaignMarketplace, rawUrl: string) {
