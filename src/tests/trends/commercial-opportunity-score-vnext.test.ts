@@ -5,6 +5,7 @@ const require = createRequire(import.meta.url);
 const {
   WEIGHTS_VNEXT,
   classifyCommercialDecisionVNext,
+  applyPriorityEconomicsGate,
   calculateCommercialOpportunityScoreVNext,
 } = require("../../core/trends/commercial-opportunity-score-vnext.cjs");
 
@@ -136,6 +137,19 @@ describe("Commercial Opportunity Score VNext", () => {
     }), { benchmark: benchmark() });
     expect(result.total).toBeLessThan(65);
     expect(result.decision).not.toBe("TESTAR");
+  });
+
+  it("blocks Shopee PRIORIDADE when factual commission is unknown", () => {
+    expect(applyPriorityEconomicsGate(base({ commissionRate: null }), { status: "unknown" }, "PRIORIDADE"))
+      .toBe("TESTAR");
+    expect(applyPriorityEconomicsGate(base({ commissionRate: 10 }), { status: "observed" }, "PRIORIDADE"))
+      .toBe("PRIORIDADE");
+  });
+
+  it("does not invent a commission gate for Mercado Livre", () => {
+    const ml = base({ marketplace: "Mercado Livre", shopId: undefined, itemId: "MLB123", productId: "MLB-PROD-1" });
+    expect(applyPriorityEconomicsGate(ml, { status: "unknown" }, "PRIORIDADE"))
+      .toBe("PRIORIDADE");
   });
 
   it("fails closed when a critical integrity gate is missing", () => {
