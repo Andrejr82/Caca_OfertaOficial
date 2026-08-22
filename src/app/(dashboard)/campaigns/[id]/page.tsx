@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { getCampaignClickMetrics } from "@/lib/campaigns/campaign-click-metrics";
+import { getCampaignSaleMetrics } from "@/lib/campaigns/campaign-sale-metrics";
 import {
   buildInitialCampaignChecklist,
   type CampaignChannel,
@@ -50,13 +51,11 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
   if (!offer?.id) notFound();
   const checklist = (campaign.channel_checklist ?? buildInitialCampaignChecklist()) as CampaignChecklist;
   const officialLinks = (campaign.official_links ?? {}) as CampaignOfficialLinks;
-  const clickMetrics = await getCampaignClickMetrics(
-    supabase,
-    userData.user.id,
-    offer.id,
-    campaign.id,
-    officialLinks,
-  );
+  const [clickMetrics, saleMetrics] = await Promise.all([
+    getCampaignClickMetrics(supabase, userData.user.id, offer.id, campaign.id, officialLinks),
+    getCampaignSaleMetrics(supabase, userData.user.id, offer.id, campaign.id, officialLinks),
+  ]);
+  const salesByChannel = new Map(saleMetrics.map((metric) => [metric.channel, metric]));
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -96,28 +95,34 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
       <section className="rounded-2xl border border-white/[0.07] bg-white/[0.025] p-5">
         <div className="mb-4">
-          <h2 className="font-bold text-white">Cliques por canal</h2>
-          <p className="mt-1 text-xs text-white/40">Cliques internos só aparecem quando existe evidência em click_events para o identificador desta campanha.</p>
+          <h2 className="font-bold text-white">Métricas por canal</h2>
+          <p className="mt-1 text-xs text-white/40">Atribuição somente por identificador exato da campanha ou affiliate_link correspondente. Sem adivinhação por oferta/canal.</p>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[620px] text-left text-sm">
+          <table className="w-full min-w-[760px] text-left text-sm">
             <thead className="text-[10px] uppercase tracking-wider text-white/35">
-              <tr><th className="pb-3">Canal</th><th className="pb-3">Cliques</th><th className="pb-3">Fonte</th></tr>
+              <tr><th className="pb-3">Canal</th><th className="pb-3">Cliques</th><th className="pb-3">Pedidos</th><th className="pb-3">Comissão confirmada</th><th className="pb-3">Fonte</th></tr>
             </thead>
             <tbody className="divide-y divide-white/[0.06]">
-              {clickMetrics.map((metric) => (
-                <tr key={metric.channel}>
-                  <td className="py-3 font-semibold text-white">{CHANNEL_LABELS[metric.channel]}</td>
-                  <td className="py-3 text-white/70">{metric.clicks === null ? "—" : metric.clicks}</td>
-                  <td className="py-3 text-xs text-white/45">
-                    {metric.measurement === "internal"
-                      ? "click_events"
-                      : metric.measurement === "marketplace_report_required"
-                        ? "Aguardando relatório do marketplace"
-                        : "Link ainda não configurado"}
-                  </td>
-                </tr>
-              ))}
+              {clickMetrics.map((metric) => {
+                const sales = salesByChannel.get(metric.channel);
+                const source = metric.measurement === "internal"
+                  ? "click_events + sales"
+                  : sales?.measurement === "canonical_sales"
+                    ? "sales"
+                    : metric.measurement === "marketplace_report_required" || sales?.measurement === "marketplace_report_required"
+                      ? "Aguardando relatório do marketplace"
+                      : "Link ainda não configurado";
+                return (
+                  <tr key={metric.channel}>
+                    <td className="py-3 font-semibold text-white">{CHANNEL_LABELS[metric.channel]}</td>
+                    <td className="py-3 text-white/70">{metric.clicks === null ? "—" : metric.clicks}</td>
+                    <td className="py-3 text-white/70">{sales?.orders ?? 0}</td>
+                    <td className="py-3 text-emerald-300">R$ {Number(sales?.confirmedCommission ?? 0).toFixed(2).replace(".", ",")}</td>
+                    <td className="py-3 text-xs text-white/45">{source}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

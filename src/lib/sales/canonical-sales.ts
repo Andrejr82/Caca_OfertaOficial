@@ -1,6 +1,6 @@
 import { channels, saleStatuses, type SaleStatus } from "@/types/domain";
 
-export type SalesChannel = Extract<(typeof channels)[number], "telegram" | "instagram" | "whatsapp">;
+export type SalesChannel = Extract<(typeof channels)[number], "telegram" | "instagram" | "whatsapp" | "facebook">;
 export type MarketplaceName = "Shopee" | "Mercado Livre";
 export type SaleAttributionMethod = "sub_id" | "affiliate_link_id" | "channel_only" | "unattributed";
 
@@ -105,7 +105,7 @@ function normalizeMoney(value: number | string, field: string): number {
 
 function normalizeChannel(value: string | null | undefined): SalesChannel | null {
   const normalized = value?.trim().toLowerCase();
-  return normalized === "telegram" || normalized === "instagram" || normalized === "whatsapp"
+  return normalized === "telegram" || normalized === "instagram" || normalized === "whatsapp" || normalized === "facebook"
     ? normalized
     : null;
 }
