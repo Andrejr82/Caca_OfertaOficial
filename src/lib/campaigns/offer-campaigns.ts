@@ -21,6 +21,16 @@ export type OfferCampaign = {
   updated_at: string;
 };
 
+export const CAMPAIGN_CHANNELS: readonly CampaignChannel[] = [
+  "instagram_reel",
+  "instagram_story",
+  "facebook_feed",
+  "facebook_group",
+  "whatsapp",
+] as const;
+
+export const CAMPAIGN_CHANNEL_STATES: readonly CampaignChannelState[] = ["pending", "ready", "published", "skipped"] as const;
+
 export function buildInitialCampaignChecklist(): CampaignChecklist {
   return {
     instagram_reel: { status: "pending", published_at: null },
@@ -37,6 +47,23 @@ export function buildCampaignWindow(startedAt: Date, hours = DEFAULT_CAMPAIGN_HO
     startedAt: startedAt.toISOString(),
     endsAt: new Date(startedAt.getTime() + hours * 60 * 60 * 1000).toISOString(),
   };
+}
+
+export function nextCampaignAction(checklist: CampaignChecklist) {
+  const order: Array<[CampaignChannel, string]> = [
+    ["instagram_reel", "Publicar Reel no Instagram"],
+    ["instagram_story", "Publicar Stories no Instagram"],
+    ["facebook_feed", "Publicar no Facebook Feed"],
+    ["facebook_group", "Publicar em grupo compatível do Facebook"],
+    ["whatsapp", "Enviar no WhatsApp"],
+  ];
+
+  for (const [channel, label] of order) {
+    const state = checklist[channel]?.status ?? "pending";
+    if (state !== "published" && state !== "skipped") return { channel, label, state };
+  }
+
+  return { channel: null, label: "Aguardar dados e revisar campanha", state: null };
 }
 
 type SupabaseLike = {
@@ -94,11 +121,50 @@ export async function startOfferCampaign(
 
   if (!error && data) return { campaign: data as OfferCampaign, created: true };
 
-  // Corrida entre duas requisições: o índice parcial do banco é a última proteção.
   if (error?.code === "23505") {
     const concurrent = await getOpenCampaignForOffer(supabase, userId, offerId);
     if (concurrent) return { campaign: concurrent, created: false };
   }
 
   throw new Error(`Falha ao iniciar campanha: ${error?.message ?? "erro desconhecido"}`);
+}
+
+export async function updateCampaignChannelState(
+  supabase: SupabaseLike,
+  userId: string,
+  campaignId: string,
+  channel: CampaignChannel,
+  status: CampaignChannelState,
+  now = new Date(),
+): Promise<OfferCampaign> {
+  if (!CAMPAIGN_CHANNELS.includes(channel)) throw new Error("Canal de campanha inválido.");
+  if (!CAMPAIGN_CHANNEL_STATES.includes(status)) throw new Error("Status de canal inválido.");
+
+  const { data: current, error: readError } = await supabase
+    .from("offer_campaigns")
+    .select("*")
+    .eq("id", campaignId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (readError) throw new Error(`Falha ao carregar campanha: ${readError.message}`);
+  if (!current) throw new Error("Campanha não encontrada.");
+  if (!OPEN_CAMPAIGN_STATUSES.includes(current.status)) throw new Error("Campanha encerrada não pode ser alterada.");
+
+  const checklist = { ...(current.channel_checklist ?? buildInitialCampaignChecklist()) } as CampaignChecklist;
+  checklist[channel] = {
+    status,
+    published_at: status === "published" ? now.toISOString() : null,
+  };
+
+  const { data, error } = await supabase
+    .from("offer_campaigns")
+    .update({ channel_checklist: checklist })
+    .eq("id", campaignId)
+    .eq("user_id", userId)
+    .select("*")
+    .single();
+
+  if (error || !data) throw new Error(`Falha ao atualizar checklist: ${error?.message ?? "erro desconhecido"}`);
+  return data as OfferCampaign;
 }

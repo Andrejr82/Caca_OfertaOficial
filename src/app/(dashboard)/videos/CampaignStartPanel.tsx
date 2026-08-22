@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Megaphone, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
@@ -15,10 +16,12 @@ type ApprovedJob = {
 export function CampaignStartPanel({ jobs }: { jobs: ApprovedJob[] }) {
   const [busyJobId, setBusyJobId] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
 
   async function startCampaign(job: ApprovedJob) {
     setBusyJobId(job.id);
     setMessage(null);
+    setCampaignId(null);
     try {
       const response = await fetch("/api/campaigns/start", {
         method: "POST",
@@ -30,6 +33,7 @@ export function CampaignStartPanel({ jobs }: { jobs: ApprovedJob[] }) {
         setMessage({ text: data.error ?? "Não foi possível iniciar a campanha.", error: true });
         return;
       }
+      setCampaignId(data.campaign?.id ?? null);
       setMessage({
         text: data.created
           ? "Campanha iniciada. Janela inicial de 48h ativa."
@@ -75,9 +79,14 @@ export function CampaignStartPanel({ jobs }: { jobs: ApprovedJob[] }) {
       </div>
 
       {message && (
-        <p className={`mt-4 rounded-xl border px-4 py-3 text-sm ${message.error ? "border-red-400/20 bg-red-400/10 text-red-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>
-          {message.text}
-        </p>
+        <div className={`mt-4 rounded-xl border px-4 py-3 text-sm ${message.error ? "border-red-400/20 bg-red-400/10 text-red-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>
+          <p>{message.text}</p>
+          {campaignId && !message.error ? (
+            <Link href={`/campaigns/${campaignId}`} className="mt-2 inline-block text-xs font-bold underline underline-offset-4">
+              Abrir campanha
+            </Link>
+          ) : null}
+        </div>
       )}
     </section>
   );
