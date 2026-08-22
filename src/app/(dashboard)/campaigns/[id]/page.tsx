@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { buildInitialCampaignChecklist, type CampaignChecklist } from "@/lib/campaigns/offer-campaigns";
+import {
+  buildInitialCampaignChecklist,
+  type CampaignChecklist,
+  type CampaignOfficialLinks,
+} from "@/lib/campaigns/offer-campaigns";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { CampaignChecklistClient } from "./CampaignChecklistClient";
+import { CampaignLinksClient } from "./CampaignLinksClient";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -24,7 +29,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   const { data: campaign, error } = await supabase
     .from("offer_campaigns")
-    .select("id,status,started_at,ends_at,channel_checklist,offers(id,product_name,platform,current_price,image_url)")
+    .select("id,status,started_at,ends_at,channel_checklist,official_links,offers(id,product_name,platform,current_price,image_url)")
     .eq("id", resolved.id)
     .eq("user_id", userData.user.id)
     .maybeSingle();
@@ -33,6 +38,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   const offer = Array.isArray(campaign.offers) ? campaign.offers[0] : campaign.offers;
   const checklist = (campaign.channel_checklist ?? buildInitialCampaignChecklist()) as CampaignChecklist;
+  const officialLinks = (campaign.official_links ?? {}) as CampaignOfficialLinks;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -68,6 +74,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         </div>
       </section>
 
+      <CampaignLinksClient campaignId={campaign.id} platform={String(offer?.platform ?? "")} initialLinks={officialLinks} />
       <CampaignChecklistClient campaignId={campaign.id} initialChecklist={checklist} campaignStatus={campaign.status} />
     </div>
   );

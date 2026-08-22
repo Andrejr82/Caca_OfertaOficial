@@ -4,8 +4,21 @@ export const DEFAULT_CAMPAIGN_HOURS = 48;
 export type OfferCampaignStatus = "draft" | "ready" | "active" | "completed" | "cancelled";
 export type CampaignChannel = "instagram_reel" | "instagram_story" | "facebook_feed" | "facebook_group" | "whatsapp";
 export type CampaignChannelState = "pending" | "ready" | "published" | "skipped";
+export type CampaignMarketplace = "Shopee" | "Mercado Livre";
+export type CampaignTrackingType = "sub_id" | "etiqueta";
 
 export type CampaignChecklist = Record<CampaignChannel, { status: CampaignChannelState; published_at: string | null }>;
+
+export type CampaignOfficialLink = {
+  marketplace: CampaignMarketplace;
+  tracking_type: CampaignTrackingType;
+  tracking_key: string;
+  official_url: string;
+  saved_at: string;
+  source: "manual_assisted";
+};
+
+export type CampaignOfficialLinks = Partial<Record<CampaignChannel, CampaignOfficialLink>>;
 
 export type OfferCampaign = {
   id: string;
@@ -16,7 +29,7 @@ export type OfferCampaign = {
   ends_at: string | null;
   completed_at: string | null;
   channel_checklist: CampaignChecklist;
-  official_links: Record<string, unknown>;
+  official_links: CampaignOfficialLinks;
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +43,14 @@ export const CAMPAIGN_CHANNELS: readonly CampaignChannel[] = [
 ] as const;
 
 export const CAMPAIGN_CHANNEL_STATES: readonly CampaignChannelState[] = ["pending", "ready", "published", "skipped"] as const;
+
+const CHANNEL_TRACKING_CODES: Record<CampaignChannel, string> = {
+  instagram_reel: "ig_reel",
+  instagram_story: "ig_story",
+  facebook_feed: "fb_feed",
+  facebook_group: "fb_group",
+  whatsapp: "whatsapp",
+};
 
 export function buildInitialCampaignChecklist(): CampaignChecklist {
   return {
@@ -64,6 +85,43 @@ export function nextCampaignAction(checklist: CampaignChecklist) {
   }
 
   return { channel: null, label: "Aguardar dados e revisar campanha", state: null };
+}
+
+export function normalizeCampaignMarketplace(value: string): CampaignMarketplace {
+  const normalized = value.trim().toLowerCase().replace(/[._-]/g, " ");
+  if (normalized === "shopee") return "Shopee";
+  if (normalized === "mercado livre" || normalized === "mercadolivre" || normalized === "mercadolibre") return "Mercado Livre";
+  throw new Error("Marketplace sem suporte a link oficial nesta campanha.");
+}
+
+export function trackingTypeForMarketplace(marketplace: CampaignMarketplace): CampaignTrackingType {
+  return marketplace === "Shopee" ? "sub_id" : "etiqueta";
+}
+
+export function buildCampaignTrackingKey(campaignId: string, channel: CampaignChannel) {
+  if (!CAMPAIGN_CHANNELS.includes(channel)) throw new Error("Canal de campanha inválido.");
+  const token = campaignId.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 8);
+  if (!token) throw new Error("Campanha inválida para tracking.");
+  return `co_${token}_${CHANNEL_TRACKING_CODES[channel]}`;
+}
+
+export function validateOfficialMarketplaceUrl(marketplace: CampaignMarketplace, rawUrl: string) {
+  let url: URL;
+  try {
+    url = new URL(rawUrl.trim());
+  } catch {
+    throw new Error("Link oficial inválido.");
+  }
+  if (url.protocol !== "https:") throw new Error("O link oficial precisa usar HTTPS.");
+
+  const host = url.hostname.toLowerCase();
+  const matches = (domain: string) => host === domain || host.endsWith(`.${domain}`);
+  const valid = marketplace === "Shopee"
+    ? matches("shopee.com.br")
+    : matches("mercadolivre.com.br") || matches("mercadolivre.com") || matches("meli.la");
+
+  if (!valid) throw new Error(`O link informado não pertence ao ${marketplace}.`);
+  return url.toString();
 }
 
 type SupabaseLike = {
