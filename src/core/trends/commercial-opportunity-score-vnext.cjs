@@ -39,6 +39,14 @@ function classifyCommercialDecisionVNext(total) {
   return 'IGNORAR';
 }
 
+function applyPriorityEconomicsGate(candidate = {}, economic = {}, rawDecision = 'IGNORAR') {
+  if (rawDecision !== 'PRIORIDADE') return rawDecision;
+  const marketplace = String(candidate.marketplace || candidate.platform || '').trim();
+  const isShopee = /shopee/i.test(marketplace);
+  if (isShopee && economic?.status !== 'observed') return 'TESTAR';
+  return rawDecision;
+}
+
 function evaluateIntegrityGate(candidate = {}) {
   const marketplace = String(candidate.marketplace || candidate.platform || '').trim();
   const isShopee = /shopee/i.test(marketplace);
@@ -215,7 +223,10 @@ function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) 
 
   const total = clamp(Object.values(breakdown).reduce((sum, value) => sum + value, 0), 0, 100);
   const rawDecision = classifyCommercialDecisionVNext(total);
-  const decision = integrity.passed ? rawDecision : 'IGNORAR';
+  const economicsDecision = applyPriorityEconomicsGate(candidate, economic, rawDecision);
+  const decision = integrity.passed ? economicsDecision : 'IGNORAR';
+  const isShopee = /shopee/i.test(String(candidate.marketplace || candidate.platform || ''));
+  const economicsPassedForPriority = !(isShopee && economic.status !== 'observed');
 
   return {
     strategyVersion: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
@@ -235,6 +246,10 @@ function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) 
         passed: benchmark.benchmarkStatus === 'authoritative',
         status: benchmark.benchmarkStatus,
       },
+      economics: {
+        passedForPriority: economicsPassedForPriority,
+        status: economic.status,
+      },
     },
   };
 }
@@ -243,6 +258,7 @@ module.exports = {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   WEIGHTS_VNEXT,
   classifyCommercialDecisionVNext,
+  applyPriorityEconomicsGate,
   evaluateIntegrityGate,
   scoreCompetitiveness,
   scoreDemandAcceleration,
