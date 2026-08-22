@@ -6,6 +6,14 @@ const {
   createSignedRequest,
   normalizePriceIntegrity,
 } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const {
+  buildRadarVNextShadowComparison,
+} = require('./radar-vnext-shadow.cjs');
+const {
+  isRadarVNextShadowEnabled,
+  buildShadowSourceHealth,
+  persistRadarVNextShadowDiagnostics,
+} = require('./radar-vnext-shadow-runtime.cjs');
 
 function normalizeShopeeCommissionPercent(value) {
   const num = engine.parseOptionalNumber(value);
@@ -159,8 +167,6 @@ async function collectShopeeMarketplaceCandidatesSafe({
             rating: ratingStar > 0 ? ratingStar : null,
             commissionRate: effectiveCommissionPercent,
             commissionPercent: effectiveCommissionPercent,
-            // O score V4 soma base + seller. Como commissionRate da OpenAPI é total quando
-            // presente, o componente seller usado pelo score fica zerado para evitar duplicidade.
             sellerCommissionRate: 0,
             shopeeCommissionRate: commission.shopeeCommissionPercent,
             sellerCommissionRateObserved: commission.sellerCommissionPercent,
@@ -185,6 +191,7 @@ async function collectShopeeMarketplaceCandidatesSafe({
 }
 
 const originalBuildTrendRadarProductsFromCandidates = engine.buildTrendRadarProductsFromCandidates;
+let latestBuildContext = null;
 
 function buildTrendRadarProductsFromCandidatesWithPersistedDecision(options = {}) {
   const shopeeByIdentity = new Map();
@@ -194,7 +201,7 @@ function buildTrendRadarProductsFromCandidatesWithPersistedDecision(options = {}
     if (itemId) shopeeByIdentity.set(`${shopId || '0'}:${itemId}`, candidate);
   }
 
-  return originalBuildTrendRadarProductsFromCandidates(options).map((product) => {
+  const products = originalBuildTrendRadarProductsFromCandidates(options).map((product) => {
     const decision = product.selection_decision
       || product.direct_evidence?.[0]?.selection_decision
       || product.direct_evidence?.[0]?.decision
@@ -231,6 +238,17 @@ function buildTrendRadarProductsFromCandidatesWithPersistedDecision(options = {}
       direct_evidence: directEvidence,
     };
   });
+
+  latestBuildContext = {
+    candidatePool: [
+      ...(Array.isArray(options.shopeeCandidates) ? options.shopeeCandidates : []),
+      ...(Array.isArray(options.mlCandidates) ? options.mlCandidates : []),
+    ],
+    v4Products: products,
+    maxProducts: Number(options.maxProducts) || 20,
+  };
+
+  return products;
 }
 
 engine.collectShopeeMarketplaceCandidates = collectShopeeMarketplaceCandidatesSafe;
@@ -238,10 +256,46 @@ engine.buildTrendRadarProductsFromCandidates = buildTrendRadarProductsFromCandid
 
 const runner = require('./oracle-trends-radar-runner.cjs');
 
+async function processPendingTrendRadarRunsWithVNextShadow(options = {}) {
+  latestBuildContext = null;
+  const result = await runner.processPendingTrendRadarRuns(options);
+  const env = options.env || process.env;
+
+  if (!isRadarVNextShadowEnabled(env) || !result?.processed || !latestBuildContext) {
+    return result;
+  }
+
+  try {
+    const comparison = buildRadarVNextShadowComparison({
+      candidatePool: latestBuildContext.candidatePool,
+      v4Products: latestBuildContext.v4Products,
+      maxProducts: latestBuildContext.maxProducts,
+      minScore: 50,
+    });
+    const sourceHealth = buildShadowSourceHealth(result.sourceHealth, comparison);
+
+    if (!options.dryRun) {
+      const client = options.client || runner.createRadarAdminClient(env);
+      if (client && result.runId) {
+        await persistRadarVNextShadowDiagnostics(client, result.runId, sourceHealth);
+      }
+    }
+
+    return {
+      ...result,
+      sourceHealth,
+    };
+  } catch (error) {
+    console.error(`[Oracle Radar VNext Shadow] diagnóstico ignorado após falha isolada: ${error.message}`);
+    return result;
+  }
+}
+
 module.exports = {
   ...runner,
   normalizeShopeeCommissionPercent,
   resolveShopeeCommission,
   collectShopeeMarketplaceCandidatesSafe,
   buildTrendRadarProductsFromCandidates: buildTrendRadarProductsFromCandidatesWithPersistedDecision,
+  processPendingTrendRadarRuns: processPendingTrendRadarRunsWithVNextShadow,
 };
