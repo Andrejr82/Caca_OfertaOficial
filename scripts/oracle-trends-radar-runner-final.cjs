@@ -4,7 +4,7 @@ const engine = require('./oracle-trends-radar-engine.cjs');
 const { isRadarVNextShadowEnabled, buildShadowSourceHealth, persistRadarVNextShadowDiagnostics } = require('./radar-vnext-shadow-runtime.cjs');
 const { buildRadarVNextShadowComparison } = require('./radar-vnext-shadow.cjs');
 const { selectRadarVNext } = require('../src/core/trends/radar-vnext-selector.cjs');
-const { COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION } = require('../src/core/trends/commercial-opportunity-score-vnext.cjs');
+const { COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION, calculateCommercialOpportunityScoreVNext } = require('../src/core/trends/commercial-opportunity-score-vnext.cjs');
 
 const VNEXT_OFFICIAL_ENV = 'TRENDS_RADAR_VNEXT_OFFICIAL';
 
@@ -269,13 +269,28 @@ function buildTrendRadarProductsVNextOfficial(options = {}) {
   const radarRunId = options.radarRunId || null;
   const now = options.now || new Date();
 
+  const contextForCandidate = typeof options.contextForCandidate === 'function'
+    ? options.contextForCandidate
+    : (candidate) => {
+        const key = engine.getMarketplaceIdentityKey ? engine.getMarketplaceIdentityKey(candidate) : null;
+        const prev = key && options.previousItemsMap?.get ? options.previousItemsMap.get(key) : null;
+        const velocityInfo = prev && engine.calculateItemSalesVelocity ? engine.calculateItemSalesVelocity(candidate, prev, now) : null;
+        const internalPerformance = key && options.internalPerformanceMap?.get ? options.internalPerformanceMap.get(key) : null;
+        return {
+          velocityInfo,
+          internalPerformance,
+          previousItemsMap: options.previousItemsMap,
+          internalPerformanceMap: options.internalPerformanceMap,
+        };
+      };
+
   const selectedRows = selectRadarVNext(candidatePool, {
     maxProducts,
     minScore,
     maxPerStore: options.maxPerStore || 2,
     maxPerFamily: options.maxPerFamily || 3,
     scoreCandidate: options.scoreCandidate,
-    contextForCandidate: options.contextForCandidate,
+    contextForCandidate,
   });
 
   const products = selectedRows.map((row, idx) => engine.materializeTrendRadarProduct({
@@ -287,10 +302,39 @@ function buildTrendRadarProductsVNextOfficial(options = {}) {
     now,
   }));
 
+  const vnextDecisionCounts = { PRIORIDADE: 0, TESTAR: 0, OBSERVAR: 0, IGNORAR: 0 };
+  const benchmarkConfidenceCounts = { HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 };
+  let scoredCount = 0;
+
+  for (const candidate of candidatePool) {
+    if (!candidate) continue;
+    scoredCount += 1;
+    const ctx = contextForCandidate(candidate) || {};
+    const score = (typeof options.scoreCandidate === 'function'
+      ? options.scoreCandidate(candidate, { ...ctx, pool: candidatePool })
+      : null) || calculateCommercialOpportunityScoreVNext(candidate, { ...ctx, pool: candidatePool });
+
+    if (score?.decision && vnextDecisionCounts[score.decision] !== undefined) {
+      vnextDecisionCounts[score.decision] += 1;
+    }
+    const conf = score?.benchmark?.peerConfidence || 'NONE';
+    if (benchmarkConfidenceCounts[conf] !== undefined) {
+      benchmarkConfidenceCounts[conf] += 1;
+    }
+  }
+
+  const vnextDiagnostics = {
+    candidate_pool_count: candidatePool.length,
+    vnext_scored_count: scoredCount,
+    vnext_decision_counts: vnextDecisionCounts,
+    benchmark_confidence_counts: benchmarkConfidenceCounts,
+  };
+
   latestBuildContext = {
     candidatePool,
     v4Products: products,
     maxProducts,
+    vnextDiagnostics,
   };
 
   return products;
@@ -374,23 +418,38 @@ async function processPendingTrendRadarRunsWithVNextShadow(options = {}) {
   const isOfficialOn = isRadarVNextOfficialEnabled(env);
   const isShadowOn = isRadarVNextShadowEnabled(env);
 
-  if (isOfficialOn && isShadowOn) {
-    const skippedHealth = {
+  if (isOfficialOn) {
+    const vnextDiag = latestBuildContext?.vnextDiagnostics || {};
+    const officialHealth = {
       ...(result?.sourceHealth || {}),
-      vnext_shadow: {
+      official_strategy: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
+      vnext_official: true,
+      strategy_version: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
+      score_strategy_version: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
+      viability_version: null,
+      candidate_pool_count: vnextDiag.candidate_pool_count ?? (result?.sourceHealth?.mercado_livre_candidates_raw + result?.sourceHealth?.shopee_candidates_raw) ?? 0,
+      vnext_scored_count: vnextDiag.vnext_scored_count ?? 0,
+      vnext_decision_counts: vnextDiag.vnext_decision_counts ?? { PRIORIDADE: 0, TESTAR: 0, OBSERVAR: 0, IGNORAR: 0 },
+      benchmark_confidence_counts: vnextDiag.benchmark_confidence_counts ?? { HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 },
+    };
+
+    if (isShadowOn) {
+      officialHealth.vnext_shadow = {
         skipped: true,
         reason: 'vnext_official_active',
-      },
-    };
+      };
+    }
+
     if (!options.dryRun) {
       const client = options.client || runner.createRadarAdminClient(env);
       if (client && result?.runId) {
-        await persistRadarVNextShadowDiagnostics(client, result.runId, skippedHealth);
+        await persistRadarVNextShadowDiagnostics(client, result.runId, officialHealth);
       }
     }
+
     return {
       ...result,
-      sourceHealth: skippedHealth,
+      sourceHealth: officialHealth,
     };
   }
 
@@ -424,7 +483,10 @@ async function processPendingTrendRadarRunsWithVNextShadow(options = {}) {
   }
 }
 
+engine.getLatestVNextDiagnostics = () => latestBuildContext?.vnextDiagnostics || null;
+
 module.exports = {
+  getLatestVNextDiagnostics: () => latestBuildContext?.vnextDiagnostics || null,
   ...runner,
   VNEXT_OFFICIAL_ENV,
   isRadarVNextOfficialEnabled,

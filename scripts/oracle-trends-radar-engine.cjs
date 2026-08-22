@@ -1681,8 +1681,14 @@ async function persistTrendRadarSnapshot({
     if (insertError) throw new Error(`Falha ao inserir produtos: ${insertError.message}`);
   }
 
-  const strategyVersion = products[0]?.direct_evidence?.[0]?.strategy_version || COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION;
-  const isVNext = strategyVersion === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
+  const isVNext = sourceHealthOverrides?.official_strategy === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION
+    || sourceHealthOverrides?.strategy_version === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION
+    || sourceHealthOverrides?.vnext_official === true
+    || products[0]?.direct_evidence?.[0]?.strategy_version === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
+
+  const strategyVersion = isVNext
+    ? COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION
+    : (products[0]?.direct_evidence?.[0]?.strategy_version || COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION);
 
   const updatedHealth = {
     ...(run.source_health || {}),
@@ -1693,12 +1699,14 @@ async function persistTrendRadarSnapshot({
     target_products: 20,
     minimum_products: 10,
     target_reached: products.length >= 20,
-    strategy_version: strategyVersion,
-    score_strategy_version: strategyVersion,
-    viability_version: isVNext ? null : COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     total_products_selected: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
     ...sourceHealthOverrides,
+    strategy_version: strategyVersion,
+    score_strategy_version: strategyVersion,
+    viability_version: isVNext ? null : (sourceHealthOverrides?.viability_version || COMMERCIAL_VIABILITY_STRATEGY_VERSION),
+    official_strategy: isVNext ? COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION : COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    vnext_official: isVNext,
   };
 
   const executiveSummary = {
