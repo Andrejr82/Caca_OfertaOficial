@@ -1,97 +1,164 @@
 'use strict';
 
 const engine = require('./oracle-trends-radar-engine.cjs');
-const {
-  GRAPHQL_CONTRACTS,
-  createSignedRequest,
-  normalizePriceIntegrity,
-} = require('./shopee-openapi-shadow-engine-v1.cjs');
-const {
-  buildRadarVNextShadowComparison,
-} = require('./radar-vnext-shadow.cjs');
-const {
-  isRadarVNextShadowEnabled,
-  buildShadowSourceHealth,
-  persistRadarVNextShadowDiagnostics,
-} = require('./radar-vnext-shadow-runtime.cjs');
+const { isRadarVNextShadowEnabled, buildShadowSourceHealth, persistRadarVNextShadowDiagnostics } = require('./radar-vnext-shadow-runtime.cjs');
+const { buildRadarVNextShadowComparison } = require('./radar-vnext-shadow.cjs');
+const { selectRadarVNext } = require('../src/core/trends/radar-vnext-selector.cjs');
+const { COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION } = require('../src/core/trends/commercial-opportunity-score-vnext.cjs');
 
-function normalizeShopeeCommissionPercent(value) {
-  const num = engine.parseOptionalNumber(value);
-  if (num === null || num <= 0) return null;
-  const percent = num < 1 ? num * 100 : num;
-  const rounded = Math.round(percent * 100) / 100;
-  return rounded > 0 && rounded <= 100 ? rounded : null;
+const VNEXT_OFFICIAL_ENV = 'TRENDS_RADAR_VNEXT_OFFICIAL';
+
+function isRadarVNextOfficialEnabled(env = process.env) {
+  const value = String(env?.[VNEXT_OFFICIAL_ENV] ?? '').trim().toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
+}
+
+function normalizeShopeeCommissionPercent(rawValue) {
+  if (rawValue === null || rawValue === undefined || rawValue === '') return null;
+  const num = Number(String(rawValue).replace(',', '.'));
+  if (!Number.isFinite(num) || num <= 0) return null;
+  if (num > 0 && num < 1) return Math.round(num * 10000) / 100;
+  return Math.round(num * 100) / 100;
 }
 
 function resolveShopeeCommission(node = {}) {
-  const total = normalizeShopeeCommissionPercent(node.commissionRate);
-  const shopee = normalizeShopeeCommissionPercent(node.shopeeCommissionRate);
-  const seller = normalizeShopeeCommissionPercent(node.sellerCommissionRate);
+  const shopeeCommissionPercent = normalizeShopeeCommissionPercent(node.commissionRate);
+  const sellerCommissionPercent = normalizeShopeeCommissionPercent(node.sellerCommissionRate);
 
-  if (total !== null) {
+  if (sellerCommissionPercent !== null) {
+    const effectiveCommissionPercent = Math.round(((shopeeCommissionPercent || 0) + sellerCommissionPercent) * 100) / 100;
     return {
-      effectiveCommissionPercent: total,
-      shopeeCommissionPercent: shopee,
-      sellerCommissionPercent: seller,
-      commissionSource: 'commissionRate_total',
+      commissionSource: 'observed',
+      shopeeCommissionPercent,
+      sellerCommissionPercent,
+      effectiveCommissionPercent,
     };
   }
 
-  const components = Math.round(((shopee || 0) + (seller || 0)) * 100) / 100;
-  if (components > 0 && components <= 100) {
+  if (shopeeCommissionPercent !== null) {
     return {
-      effectiveCommissionPercent: components,
-      shopeeCommissionPercent: shopee,
-      sellerCommissionPercent: seller,
-      commissionSource: 'official_components',
+      commissionSource: 'observed',
+      shopeeCommissionPercent,
+      sellerCommissionPercent: null,
+      effectiveCommissionPercent: shopeeCommissionPercent,
     };
   }
 
   return {
-    effectiveCommissionPercent: null,
-    shopeeCommissionPercent: shopee,
-    sellerCommissionPercent: seller,
     commissionSource: 'unknown',
+    shopeeCommissionPercent: null,
+    sellerCommissionPercent: null,
+    effectiveCommissionPercent: 0,
   };
 }
 
-function defaultShopeeApiCaller(env = process.env) {
-  const appId = env.SHOPEE_APP_ID;
-  const appSecret = env.SHOPEE_APP_SECRET;
-  if (!appId || !appSecret) return null;
-  return createSignedRequest({
-    appId,
-    appSecret,
-    request: async ({ body, headers }) => {
-      const response = await fetch('https://open-api.affiliate.shopee.com.br/graphql', {
-        method: 'POST',
-        headers,
-        body,
-        signal: AbortSignal.timeout(30000),
-      });
-      return { status: response.status, data: await response.json() };
-    },
-  });
+function normalizePriceIntegrity(node = {}) {
+  const parseNum = (v) => {
+    if (v === null || v === undefined || v === '') return null;
+    const n = Number(String(v).replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  const rawPrice = parseNum(node.price);
+  const priceMin = parseNum(node.priceMin);
+  const priceMax = parseNum(node.priceMax);
+  const priceDiscountRate = parseNum(node.priceDiscountRate);
+  const officialOldPrice = parseNum(node.officialOldPrice);
+
+  const rangeAmbiguous = priceMin !== null && priceMax !== null && priceMax > priceMin;
+
+  let currentPrice = rawPrice;
+  let priceAuthority = 'observed_price';
+
+  if (currentPrice === null || currentPrice <= 0) {
+    if (priceMin !== null && priceMin > 0) {
+      currentPrice = priceMin;
+      priceAuthority = rangeAmbiguous ? 'range_min_conservative' : 'range_exact';
+    } else if (priceMax !== null && priceMax > 0) {
+      currentPrice = priceMax;
+      priceAuthority = 'range_max_fallback';
+    }
+  }
+
+  let oldPrice = officialOldPrice;
+  let oldPriceAuthority = officialOldPrice ? 'official_old_price' : null;
+  let discountPercent = null;
+  let discountAuthority = null;
+
+  if (priceDiscountRate !== null && priceDiscountRate > 0) {
+    discountPercent = priceDiscountRate > 0 && priceDiscountRate < 1
+      ? Math.round(priceDiscountRate * 10000) / 100
+      : Math.round(priceDiscountRate * 100) / 100;
+    discountAuthority = 'marketplace_reported';
+
+    if (!oldPrice && currentPrice && discountPercent > 0 && discountPercent < 100) {
+      oldPrice = Math.round((currentPrice / (1 - (discountPercent / 100))) * 100) / 100;
+      oldPriceAuthority = 'derived_from_reported_discount';
+    }
+  } else if (oldPrice && currentPrice && oldPrice > currentPrice) {
+    discountPercent = Math.round(((oldPrice - currentPrice) / oldPrice) * 10000) / 100;
+    discountAuthority = 'derived_from_prices';
+  }
+
+  return {
+    currentPrice: currentPrice || 0,
+    oldPrice,
+    discountPercent,
+    rangeAmbiguous,
+    priceAuthority,
+    oldPriceAuthority,
+    discountAuthority,
+  };
 }
 
-async function collectShopeeMarketplaceCandidatesSafe({
-  request = null,
-  categoryIds = engine.SHOPEE_BROAD_DISCOVERY_CATEGORIES,
-  maxPerCategory = 40,
-  maxPagesPerCategory = 2,
-  page = 1,
-  sortType = 2,
-  isAMSOffer = undefined,
-  env = process.env,
-} = {}) {
-  const caller = request || defaultShopeeApiCaller(env);
-  if (!caller) return [];
+async function collectShopeeMarketplaceCandidatesSafe(options = {}) {
+  const {
+    caller = engine.callShopeeApiWithAuth,
+    targetCategories = [0],
+    page = 1,
+    limit = 50,
+    pages = 2,
+    sortType = 2,
+    isAMSOffer = true,
+  } = options;
+
+  const GRAPHQL_CONTRACTS = {
+    productOfferV2: {
+      query: `query productOfferV2($page: Int, $limit: Int, $productCatId: Int, $sortType: Int, $isAMSOffer: Boolean) {
+        productOfferV2(page: $page, limit: $limit, productCatId: $productCatId, sortType: $sortType, isAMSOffer: $isAMSOffer) {
+          nodes {
+            itemId
+            shopId
+            shopName
+            productName
+            price
+            priceMin
+            priceMax
+            priceDiscountRate
+            officialOldPrice
+            sales
+            ratingStar
+            commissionRate
+            sellerCommissionRate
+            offerLink
+            productLink
+            imageUrl
+            shopType
+          }
+          pageInfo {
+            page
+            limit
+            hasNextPage
+          }
+        }
+      }`,
+    },
+  };
 
   const candidates = [];
   const seenIdentities = new Set();
-  const targetCategories = Array.isArray(categoryIds) && categoryIds.length > 0 ? categoryIds : [null];
-  const pageLimit = Math.max(5, Math.min(50, Number(maxPerCategory) || 40));
-  const pagesToScan = Math.max(1, Math.min(5, Math.floor(Number(maxPagesPerCategory) || 2)));
+  const pagesToScan = Math.max(1, Number(pages) || 1);
+  const pageLimit = Math.max(1, Math.min(100, Number(limit) || 50));
   const basePage = Math.max(1, Number(page) || 1);
 
   for (const catId of targetCategories) {
@@ -193,7 +260,51 @@ async function collectShopeeMarketplaceCandidatesSafe({
 const originalBuildTrendRadarProductsFromCandidates = engine.buildTrendRadarProductsFromCandidates;
 let latestBuildContext = null;
 
+function buildTrendRadarProductsVNextOfficial(options = {}) {
+  if (options.__forceVNextFailure) {
+    throw new Error('[Oracle Radar VNext Official] Falha intencional para verificação fail-closed.');
+  }
+
+  const shopeeCandidates = Array.isArray(options.shopeeCandidates) ? options.shopeeCandidates : [];
+  const mlCandidates = Array.isArray(options.mlCandidates) ? options.mlCandidates : [];
+  const candidatePool = [...shopeeCandidates, ...mlCandidates];
+  const maxProducts = Number(options.maxProducts) || 20;
+  const minScore = Number.isFinite(Number(options.minScore)) ? Number(options.minScore) : 50;
+  const radarRunId = options.radarRunId || null;
+  const now = options.now || new Date();
+
+  const selectedRows = selectRadarVNext(candidatePool, {
+    maxProducts,
+    minScore,
+    maxPerStore: options.maxPerStore || 2,
+    maxPerFamily: options.maxPerFamily || 3,
+  });
+
+  const products = selectedRows.map((row, idx) => engine.materializeTrendRadarProduct({
+    candidate: row.candidate,
+    score: row.score,
+    strategyVersion: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
+    rank: idx + 1,
+    radarRunId,
+    now,
+  }));
+
+  latestBuildContext = {
+    candidatePool,
+    v4Products: products,
+    maxProducts,
+  };
+
+  return products;
+}
+
 function buildTrendRadarProductsFromCandidatesWithPersistedDecision(options = {}) {
+  const env = options.env || process.env;
+
+  if (isRadarVNextOfficialEnabled(env)) {
+    return buildTrendRadarProductsVNextOfficial(options);
+  }
+
   const shopeeByIdentity = new Map();
   for (const candidate of options.shopeeCandidates || []) {
     const itemId = String(candidate.itemId || '').trim();
@@ -258,10 +369,34 @@ const runner = require('./oracle-trends-radar-runner.cjs');
 
 async function processPendingTrendRadarRunsWithVNextShadow(options = {}) {
   latestBuildContext = null;
-  const result = await runner.processPendingTrendRadarRuns(options);
+  const runnerFn = options.runnerProcessPendingTrendRadarRuns || runner.processPendingTrendRadarRuns;
+  const result = await runnerFn(options);
   const env = options.env || process.env;
 
-  if (!isRadarVNextShadowEnabled(env) || !result?.processed || !latestBuildContext) {
+  const isOfficialOn = isRadarVNextOfficialEnabled(env);
+  const isShadowOn = isRadarVNextShadowEnabled(env);
+
+  if (isOfficialOn && isShadowOn) {
+    const skippedHealth = {
+      ...(result?.sourceHealth || {}),
+      vnext_shadow: {
+        skipped: true,
+        reason: 'vnext_official_active',
+      },
+    };
+    if (!options.dryRun) {
+      const client = options.client || runner.createRadarAdminClient(env);
+      if (client && result?.runId) {
+        await persistRadarVNextShadowDiagnostics(client, result.runId, skippedHealth);
+      }
+    }
+    return {
+      ...result,
+      sourceHealth: skippedHealth,
+    };
+  }
+
+  if (!isShadowOn || !result?.processed || !latestBuildContext) {
     return result;
   }
 
@@ -293,9 +428,12 @@ async function processPendingTrendRadarRunsWithVNextShadow(options = {}) {
 
 module.exports = {
   ...runner,
+  VNEXT_OFFICIAL_ENV,
+  isRadarVNextOfficialEnabled,
   normalizeShopeeCommissionPercent,
   resolveShopeeCommission,
   collectShopeeMarketplaceCandidatesSafe,
+  buildTrendRadarProductsVNextOfficial,
   buildTrendRadarProductsFromCandidates: buildTrendRadarProductsFromCandidatesWithPersistedDecision,
   processPendingTrendRadarRuns: processPendingTrendRadarRunsWithVNextShadow,
 };
