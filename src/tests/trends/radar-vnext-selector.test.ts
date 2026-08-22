@@ -35,14 +35,26 @@ function withPeers(target: Record<string, unknown>, prices = [40, 42, 44, 46, 48
   ];
 }
 
+function selectorScore(total: number) {
+  return {
+    total,
+    decision: total >= 80 ? "PRIORIDADE" : total >= 50 ? "TESTAR" : "IGNORAR",
+    breakdown: { competitiveness: total, demandAcceleration: 0 },
+  };
+}
+
 describe("Radar VNext selector", () => {
   it("orders strictly by VNext score before applying diversity", () => {
     const strong = candidate({ itemId: "strong", shopId: "s1", currentPrice: 20, sales: 30000 });
     const medium = candidate({ itemId: "medium", shopId: "s2", currentPrice: 29, sales: 8000 });
     const weak = candidate({ itemId: "weak", shopId: "s3", currentPrice: 39, sales: 1500 });
     const pool = [strong, medium, weak, ...withPeers(strong).slice(1)];
+    const scores: Record<string, number> = { strong: 90, medium: 80, weak: 70 };
 
-    const selected = selectRadarVNext(pool, { maxProducts: 3 });
+    const selected = selectRadarVNext(pool, {
+      maxProducts: 3,
+      scoreCandidate: (row: any) => selectorScore(scores[row.itemId] ?? 60),
+    });
 
     expect(selected).toHaveLength(3);
     expect(selected[0].score.total).toBeGreaterThanOrEqual(selected[1].score.total);
@@ -68,7 +80,10 @@ describe("Radar VNext selector", () => {
     });
     const pool = [...impulses, expensive];
 
-    const selected = selectRadarVNext(pool, { maxProducts: 8 });
+    const selected = selectRadarVNext(pool, {
+      maxProducts: 8,
+      scoreCandidate: (row: any) => selectorScore(String(row.itemId).startsWith("impulse-") ? 80 : 60),
+    });
 
     expect(selected.filter((row: any) => Number(row.candidate.currentPrice) < 100).length).toBeGreaterThan(6);
   });
@@ -128,7 +143,10 @@ describe("Radar VNext selector", () => {
       velocityInfo: { velocity_status: "computed", sales_velocity: 500 - index },
     }));
 
-    const selected = selectRadarVNext(isolated, { maxProducts: 5 });
+    const selected = selectRadarVNext(isolated, {
+      maxProducts: 5,
+      scoreCandidate: () => selectorScore(70),
+    });
 
     expect(selected).toHaveLength(5);
     expect(selected.every((row: any) => row.family.diversityKey === null)).toBe(true);

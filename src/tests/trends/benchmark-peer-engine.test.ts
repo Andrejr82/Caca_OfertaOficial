@@ -86,7 +86,7 @@ describe("Radar VNext benchmark peer engine", () => {
     const kit = candidate({
       itemId: "kit",
       shopId: "kit-shop",
-      productName: "Kit 3 Fones TWS Bluetooth X55 LED 3 unidades",
+      productName: "Kit 3 Fone TWS Bluetooth X55 LED 3 unidades",
       currentPrice: 45,
     });
     const singles = [
