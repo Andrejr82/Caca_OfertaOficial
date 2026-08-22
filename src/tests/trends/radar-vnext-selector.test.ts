@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 const require = createRequire(import.meta.url);
 const { selectRadarVNext } = require("../../core/trends/radar-vnext-selector.cjs");
 
+let sequence = 0;
 function candidate(overrides: Record<string, unknown> = {}) {
+  sequence += 1;
   return {
     marketplace: "Shopee",
-    itemId: `item-${Math.random()}`,
-    shopId: `shop-${Math.random()}`,
+    itemId: `item-${sequence}`,
+    shopId: `shop-${sequence}`,
     productName: "Fone TWS Bluetooth X55 LED",
     currentPrice: 29.9,
     sales: 12000,
@@ -51,9 +53,10 @@ describe("Radar VNext selector", () => {
     const impulses = Array.from({ length: 8 }, (_, index) => candidate({
       itemId: `impulse-${index}`,
       shopId: `impulse-shop-${index}`,
-      productName: index % 2 === 0 ? "Fone TWS Bluetooth X55 LED" : "Mixer Elétrico Portátil 2 em 1",
+      productName: `Produto Especial Econômico Modelo Z${index} Utilidade Doméstica`,
       currentPrice: 19 + index,
       sales: 20000 - index * 500,
+      velocityInfo: { velocity_status: "computed", sales_velocity: 500 - index },
     }));
     const expensive = candidate({
       itemId: "premium",
@@ -90,7 +93,8 @@ describe("Radar VNext selector", () => {
     expect(selected.filter((row: any) => row.candidate.shopId === "same-store").length).toBeLessThanOrEqual(2);
     const familyCounts = new Map<string, number>();
     for (const row of selected) {
-      const key = row.family.familyKey;
+      if (!row.family.diversityKey) continue;
+      const key = row.family.diversityKey;
       familyCounts.set(key, (familyCounts.get(key) || 0) + 1);
     }
     expect(Math.max(...familyCounts.values())).toBeLessThanOrEqual(3);
@@ -121,10 +125,12 @@ describe("Radar VNext selector", () => {
       productName: `Produto Especial Modelo Z${index} Utilidade Doméstica`,
       currentPrice: 30 + index,
       sales: 12000 - index * 100,
+      velocityInfo: { velocity_status: "computed", sales_velocity: 500 - index },
     }));
 
-    const selected = selectRadarVNext(isolated, { maxProducts: 5, minScore: 0 });
+    const selected = selectRadarVNext(isolated, { maxProducts: 5 });
 
     expect(selected).toHaveLength(5);
+    expect(selected.every((row: any) => row.family.diversityKey === null)).toBe(true);
   });
 });
