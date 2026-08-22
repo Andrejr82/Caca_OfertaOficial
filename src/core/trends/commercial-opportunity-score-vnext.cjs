@@ -254,6 +254,75 @@ function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) 
   };
 }
 
+
+/**
+ * Helper de explainability pura (somente leitura) para auditoria e inspeção do Radar VNext.
+ * Extrai todos os blocos determinísticos a partir de um registro de produto materializado/persistido.
+ */
+function buildRadarVNextExplainability(product = {}) {
+  const directEvidence = Array.isArray(product.direct_evidence) && product.direct_evidence.length > 0
+    ? (product.direct_evidence[0] || {})
+    : {};
+
+  const strategyVersion = directEvidence.strategy_version
+    || directEvidence.score_strategy_version
+    || null;
+
+  const total = typeof product.commercial_score === 'number'
+    ? product.commercial_score
+    : (typeof directEvidence.commercial_score === 'number' ? directEvidence.commercial_score : null);
+
+  const decision = product.selection_decision
+    ?? directEvidence.selection_decision
+    ?? directEvidence.decision
+    ?? null;
+
+  const rawDecision = directEvidence.raw_decision
+    ?? product.raw_decision
+    ?? null;
+
+  const breakdown = product.score_breakdown
+    ?? directEvidence.score_breakdown
+    ?? null;
+
+  const benchmarkRaw = directEvidence.benchmark ?? null;
+  const benchmark = benchmarkRaw ? {
+    peerCount: typeof benchmarkRaw.peerCount === 'number' ? benchmarkRaw.peerCount : null,
+    peerConfidence: benchmarkRaw.peerConfidence ?? null,
+    benchmarkStatus: benchmarkRaw.benchmarkStatus ?? null,
+    peerPriceMin: typeof benchmarkRaw.peerPriceMin === 'number' ? benchmarkRaw.peerPriceMin : null,
+    peerPriceMedian: typeof benchmarkRaw.peerPriceMedian === 'number' ? benchmarkRaw.peerPriceMedian : null,
+    peerPriceMax: typeof benchmarkRaw.peerPriceMax === 'number' ? benchmarkRaw.peerPriceMax : null,
+    priceVsMedianPercent: typeof benchmarkRaw.priceVsMedianPercent === 'number' ? benchmarkRaw.priceVsMedianPercent : null,
+  } : null;
+
+  const econRaw = directEvidence.economic_return ?? null;
+  const economics = {
+    status: econRaw?.status ?? directEvidence.commission_status ?? null,
+    effectiveCommissionPercent: typeof econRaw?.effectiveCommissionPercent === 'number'
+      ? econRaw.effectiveCommissionPercent
+      : (typeof directEvidence.effective_commission_percent === 'number' ? directEvidence.effective_commission_percent : null),
+    estimatedCommissionPerSale: typeof econRaw?.estimatedCommissionPerSale === 'number'
+      ? econRaw.estimatedCommissionPerSale
+      : (typeof directEvidence.estimated_commission_per_sale === 'number' ? directEvidence.estimated_commission_per_sale : null),
+  };
+
+  const marketplaceIdentity = directEvidence.marketplace_identity ?? null;
+  const commercialMetrics = directEvidence.commercial_metrics ?? null;
+
+  return {
+    strategyVersion,
+    total,
+    decision,
+    rawDecision,
+    breakdown,
+    benchmark,
+    economics,
+    marketplaceIdentity,
+    commercialMetrics,
+  };
+}
+
 module.exports = {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   WEIGHTS_VNEXT,
@@ -268,4 +337,5 @@ module.exports = {
   scoreInternalConversion,
   scoreExecutionQuality,
   calculateCommercialOpportunityScoreVNext,
+  buildRadarVNextExplainability,
 };

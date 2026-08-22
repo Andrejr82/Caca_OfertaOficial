@@ -31,6 +31,7 @@ const {
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
 const {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
+  buildRadarVNextExplainability,
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-vnext.cjs'));
 const {
   COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
@@ -1684,6 +1685,9 @@ async function persistTrendRadarSnapshot({
     if (insertError) throw new Error(`Falha ao inserir produtos: ${insertError.message}`);
   }
 
+  const strategyVersion = products[0]?.direct_evidence?.[0]?.strategy_version || COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION;
+  const isVNext = strategyVersion === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
+
   const updatedHealth = {
     ...(run.source_health || {}),
     runtime: 'oracle',
@@ -1693,9 +1697,9 @@ async function persistTrendRadarSnapshot({
     target_products: 20,
     minimum_products: 10,
     target_reached: products.length >= 20,
-    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-    score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-    viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+    strategy_version: strategyVersion,
+    score_strategy_version: strategyVersion,
+    viability_version: isVNext ? null : COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     total_products_selected: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
     ...sourceHealthOverrides,
@@ -1707,8 +1711,10 @@ async function persistTrendRadarSnapshot({
     top_product: products[0]?.product_term || null,
     top_product_score: products[0]?.commercial_score || null,
     top_product_decision: products[0]?.direct_evidence?.[0]?.decision || null,
-    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-    generated_by: 'oracle_radar_commercial_opportunity_v4_engine',
+    strategy_version: strategyVersion,
+    generated_by: isVNext
+      ? 'oracle_radar_commercial_opportunity_vnext_engine'
+      : 'oracle_radar_commercial_opportunity_v4_engine',
     contract: RUNNER_CONTRACT_VERSION,
   };
 
@@ -1746,6 +1752,7 @@ module.exports = {
   getOfferOfficialIdentityKeys,
   classifyClickEvents,
   fetchInternalOfferPerformanceMap,
+  buildRadarVNextExplainability,
   materializeTrendRadarProduct,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,
