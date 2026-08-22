@@ -342,13 +342,13 @@ test('16. Shopee without observed commission cannot be PRIORIDADE', () => {
 test('17. Fail closed: failure in VNext official path throws and does NOT fallback silently to V4', () => {
   assert.throws(() => {
     runnerFinal.buildTrendRadarProductsFromCandidates({
-      shopeeCandidates: null,
+      shopeeCandidates: [{ itemId: '101', price: 50 }],
       mlCandidates: null,
       maxProducts: 20,
       env: { TRENDS_RADAR_VNEXT_OFFICIAL: '1' },
-      __forceVNextFailure: true,
+      scoreCandidate: () => { throw new Error('VNext scorer internal error'); },
     });
-  });
+  }, /VNext scorer internal error/);
 });
 
 // 18. Official OFF + Shadow ON: Shadow comparison runs and exposes diagnostics

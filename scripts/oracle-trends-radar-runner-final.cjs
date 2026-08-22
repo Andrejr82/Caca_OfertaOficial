@@ -261,10 +261,6 @@ const originalBuildTrendRadarProductsFromCandidates = engine.buildTrendRadarProd
 let latestBuildContext = null;
 
 function buildTrendRadarProductsVNextOfficial(options = {}) {
-  if (options.__forceVNextFailure) {
-    throw new Error('[Oracle Radar VNext Official] Falha intencional para verificação fail-closed.');
-  }
-
   const shopeeCandidates = Array.isArray(options.shopeeCandidates) ? options.shopeeCandidates : [];
   const mlCandidates = Array.isArray(options.mlCandidates) ? options.mlCandidates : [];
   const candidatePool = [...shopeeCandidates, ...mlCandidates];
@@ -278,6 +274,8 @@ function buildTrendRadarProductsVNextOfficial(options = {}) {
     minScore,
     maxPerStore: options.maxPerStore || 2,
     maxPerFamily: options.maxPerFamily || 3,
+    scoreCandidate: options.scoreCandidate,
+    contextForCandidate: options.contextForCandidate,
   });
 
   const products = selectedRows.map((row, idx) => engine.materializeTrendRadarProduct({

@@ -26,10 +26,6 @@ const {
 const { runMercadoLivreNativeTop20 } = require('./mercadolivre-native-top20-v5.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
 const {
-  COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
-  calculateCommercialOpportunityScoreV3,
-} = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
-const {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   buildRadarVNextExplainability,
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-vnext.cjs'));
@@ -1433,7 +1429,7 @@ function buildTrendRadarProductsFromCandidates({
       peers: uniqueCandidates,
     });
 
-    // Gate Task 5 & Task Pré-Merge: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' entram na seleção final do Radar.
+    // Gate de Seleção: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' entram na seleção final do Radar.
     // Candidatos com decisão 'IGNORAR' são excluídos antes do preenchimento de quotas/vagas.
     const decision = scoreV4.selection_decision || scoreV4.decision;
     if (decision === 'IGNORAR') {
