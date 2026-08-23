@@ -75,7 +75,9 @@ export default async function InstagramDashboardPage() {
   }
 
   const manualFeedDrafts = draftPosts.filter((post) =>
-    !isInstagramStoriesV4Handoff(post.content) && !isInstagramReelsDraft(post.content)
+    !post.videoJobId &&
+    !isInstagramStoriesV4Handoff(post.content) &&
+    !isInstagramReelsDraft(post.content)
   );
   const historyData = await getPostHistory("instagram");
 
