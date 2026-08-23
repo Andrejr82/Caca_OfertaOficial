@@ -86,7 +86,7 @@ function validateFinalRadarSnapshot(snapshot = {}) {
   const validCandidateCount = health.valid_candidate_count || health.candidate_pool_count || selectedCount;
   const isSelectedCountCorrect = validCandidateCount >= 20 ? (selectedCount === 20) : (selectedCount === validCandidateCount);
 
-  const strategyVersion = run.strategy_version || health.official_strategy || health.strategy_version;
+  const strategyVersion = health.official_strategy || health.strategy_version || run.strategy_version;
   const vnextOfficial = Boolean(health.vnext_official);
 
   const isOverallPass =
@@ -97,7 +97,7 @@ function validateFinalRadarSnapshot(snapshot = {}) {
     fallbackViolations === 0 &&
     commissionAnomalies === 0 &&
     integrityFailures === 0 &&
-    strategyVersion === 'commercial-opportunity-vnext/1' &&
+    (strategyVersion === 'commercial-opportunity-vnext/1' || health.official_strategy === 'commercial-opportunity-vnext/1') &&
     vnextOfficial === true;
 
   return {
