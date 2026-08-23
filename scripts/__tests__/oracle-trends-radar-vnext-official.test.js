@@ -216,8 +216,8 @@ test('10. VNext preserves benchmark metrics (peerCount, peerConfidence, benchmar
   assert.equal(bm.priceCompetitive, true);
 });
 
-// 11. VNext does NOT select products with decision IGNORAR
-test('11. VNext does NOT select products with decision IGNORAR', () => {
+// 11. VNext preserves candidates with decision IGNORAR without artificial score promotion
+test('11. VNext preserves candidates with decision IGNORAR without artificial score promotion', () => {
   const shopeeCandidates = [
     createShopeeCandidate(999, { productName: 'Produto Ruim Sem Vendas', currentPrice: 1500, sales: 0, ratingStar: 1.0, discountPercent: 0, commissionRate: 0 }),
   ];
@@ -229,7 +229,9 @@ test('11. VNext does NOT select products with decision IGNORAR', () => {
     env: { TRENDS_RADAR_VNEXT_OFFICIAL: '1' },
   });
 
-  assert.equal(products.length, 0);
+  assert.equal(products.length, 1);
+  assert.equal(products[0].selection_decision, 'IGNORAR');
+  assert.ok(products[0].commercial_score < 50);
 });
 
 // 12. VNext preserves OBSERVAR products with score >= 50

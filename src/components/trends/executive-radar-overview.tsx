@@ -224,6 +224,11 @@ export function ExecutiveRadarOverview({
           <span className="text-xs text-white/35">{snapshotProducts.length} produto(s)</span>
         </div>
         <div className="grid gap-2">
+          {snapshotProducts.length > 0 && snapshotProducts.every((item) => (item.commercialScore ?? 0) < 50) ? (
+            <div className="mb-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-300">
+              Nenhum produto atingiu alta confiança neste Radar. Exibindo os melhores candidatos disponíveis para análise.
+            </div>
+          ) : null}
           {snapshotProducts.map((item) => {
             const decision = item.selectionDecision || item.scoreDecision || item.rawDecision;
             const formattedPrice = formatCurrency(item.price);

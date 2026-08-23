@@ -3,16 +3,21 @@
 /**
  * Radar VNext Benchmark Peer Engine
  *
- * Reaproveita a classificação funcional e de quantidade do Achadinho V1.2,
- * mas separa o conceito de benchmark autoritativo do score final.
- * LOW/NONE nunca afirmam competitividade comprovada.
+ * Classificação semântica de famílias funcionais, variantes e quantidades.
+ * HIGH >= 5, MEDIUM 3-4, LOW 1-2, NONE 0.
+ * Apenas HIGH e MEDIUM são autoritativos para comprovação de preço.
  */
 
-const {
-  classifyPeerIdentity,
-} = require('../../../scripts/shopee-achadinho-v12.cjs');
+const BENCHMARK_PEER_ENGINE_VERSION = 'benchmark-peer-engine/v2';
 
-const BENCHMARK_PEER_ENGINE_VERSION = 'benchmark-peer-engine/v1';
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
 
 function finitePositive(value) {
   const number = Number(value);
@@ -25,11 +30,179 @@ function median(values = []) {
   return sorted[Math.floor((sorted.length - 1) / 2)];
 }
 
+function extractQuantityClass(text) {
+  const normalized = normalizeText(text);
+  const match = normalized.match(/\b(\d{1,4})\s*(pecas|peca|pares|par|unidades|unidade|itens|item)\b/);
+  if (match) {
+    const count = Number(match[1]);
+    if (count >= 10) return 'bulk';
+    if (count >= 2) return `multi_${count}`;
+  }
+  const matchKit = normalized.match(/\bkit\s*(\d{1,2})\b/);
+  if (matchKit) {
+    const count = Number(matchKit[1]);
+    if (count >= 2) return `multi_${count}`;
+  }
+  if (/\b(kit|combo|conjunto)\b/.test(normalized)) return 'kit';
+  return 'single';
+}
+
+function extractVariantClass(text) {
+  const normalized = normalizeText(text);
+  // Capacity / mAh
+  const matchMah = normalized.match(/\b(5000|5\s*000|10000|10\s*000|20000|20\s*000|30000|30\s*000|40000|40\s*000|50000|50\s*000)\s*mah\b/);
+  if (matchMah) return `${matchMah[1].replace(/\s+/g, '')}mah`;
+
+  // Bedding thread count & size
+  const matchFios = normalized.match(/\b(200|300|400|600|800|1000)\s*fios\b/);
+  const bedSize = normalized.match(/\b(solteiro|casal|queen|king|berco)\b/);
+  if (matchFios || bedSize) {
+    const f = matchFios ? `${matchFios[1]}fios` : 'standard';
+    const s = bedSize ? bedSize[1] : 'all';
+    return `${f}_${s}`;
+  }
+
+  // Tools pieces
+  const matchPcs = normalized.match(/\b(40|46|53|82|108|120)\s*(pecas|pcs|soquetes)\b/);
+  if (matchPcs) return `${matchPcs[1]}pcs`;
+
+  return 'standard';
+}
+
+function extractFunctionalFamily(text) {
+  const t = normalizeText(text);
+
+  // Power bank / bateria portátil
+  if (/\b(power\s*bank|bateria\s*externa|carregador\s*portatil)\b/.test(t)) {
+    return { family: 'power_bank', macro: 'eletronicos' };
+  }
+
+  // Fones de ouvido bluetooth / TWS
+  if (/\b(fone|auricular|headset|earbuds|airdots)\b.*\b(bluetooth|tws|sem\s*fio)\b|\b(tws|bluetooth)\b.*\b(fone|auricular|headset)\b/.test(t)) {
+    return { family: 'fone_bluetooth_tws', macro: 'eletronicos' };
+  }
+
+  // Smartwatch / Relógio inteligente
+  if (/\b(smartwatch|relogio\s*inteligente|relogio\s*digital\s*smart)\b/.test(t)) {
+    return { family: 'smartwatch', macro: 'eletronicos' };
+  }
+
+  // Câmera de segurança
+  if (/\b(camera|lampada\s*camera)\b.*\b(seguranca|wifi|ip|360|vigilancia)\b/.test(t)) {
+    return { family: 'camera_seguranca', macro: 'eletronicos' };
+  }
+
+  // Mixer / Misturador elétrico portátil
+  if (/\b(mixer|misturador|batedor)\b.*\b(eletrico|portatil|leite|cafe|bebidas)\b/.test(t)) {
+    return { family: 'mixer_misturador_portatil', macro: 'casa' };
+  }
+
+  // Cama / Jogo de lençol
+  if (/\b(lencol|jogo\s*de\s*lencol|jogo\s*de\s*cama|colcha|fronha)\b/.test(t)) {
+    return { family: 'jogo_lencol', macro: 'casa' };
+  }
+
+  // Ferramentas / Chave catraca
+  if (/\b(maleta|jogo|kit)\b.*\b(catraca|ferramenta|soquete|chave\s*catraca)\b|\bchave\s*t\b.*\b(maquina|lavar)\b/.test(t)) {
+    return { family: 'jogo_chave_ferramentas', macro: 'ferramentas' };
+  }
+
+  // Suporte de TV
+  if (/\bsuporte\b.*\b(tv|televisao|monitor)\b/.test(t)) {
+    return { family: 'suporte_tv', macro: 'casa' };
+  }
+
+  // Suporte / organizador de parede
+  if (/\b(suporte|rack|prateleira|porta\s*shampoo)\b.*\b(parede|banheiro|cozinha|adesiv)\b/.test(t)) {
+    return { family: 'suporte_organizador_parede', macro: 'casa' };
+  }
+
+  // Cordão / Salva celular
+  if (/\b(cordao|salva\s*celular|crossbody|strap)\b.*\bcelular\b/.test(t)) {
+    return { family: 'cordao_salva_celular', macro: 'eletronicos' };
+  }
+
+  // Borrifador de azeite / vinagre
+  if (/\b(borrifador|pulverizador|spray|galheteiro)\b.*\b(azeite|oleo|vinagre|culinario)\b/.test(t)) {
+    return { family: 'borrifador_azeite', macro: 'casa' };
+  }
+
+  // Garrafa motivacional / Squeeze
+  if (/\b(garrafa|copo|squeeze)\b.*\b(motivacional|academia|termic|agua)\b/.test(t)) {
+    return { family: 'garrafa_squeeze', macro: 'utilidades' };
+  }
+
+  // Torneira 360 / Chuveirinho
+  if (/\btorneira\b.*\b(360|chuveirinho|arejador|flexivel)\b/.test(t)) {
+    return { family: 'torneira_chuveiro_360', macro: 'casa' };
+  }
+
+  // Adaptador de tomada
+  if (/\b(adaptador|benjamim|pino\s*t)\b.*\b(tomada|articulado|dobravel|eletric)\b/.test(t)) {
+    return { family: 'adaptador_tomada', macro: 'casa' };
+  }
+
+  // Umidificador / Difusor
+  if (/\b(umidificador|difusor|aromatizador)\b.*\b(ar|ambiente|ultrassonico|led)\b/.test(t)) {
+    return { family: 'umidificador_ar', macro: 'casa' };
+  }
+
+  // Ring light / Iluminador
+  if (/\b(ring\s*light|iluminador\s*led|tripe\s*ring)\b/.test(t)) {
+    return { family: 'ring_light', macro: 'eletronicos' };
+  }
+
+  // Acessórios de cabelo / Elásticos / Xuxinhas
+  if (/\b(elastico|xuxinha|rabico|amarrador|presilha|piranha)\b.*\bcabelo\b|\bcabelo\b.*\b(elastico|xuxinha|rabico|amarrador|presilha|piranha)\b|\bxuxinha(s)?\b/.test(t)) {
+    return { family: 'elastico_cabelo', macro: 'beleza' };
+  }
+
+  // Skincare / Cosméticos
+  if (/\b(karseell|mascara\s*capilar|reparador\s*pontas)\b/.test(t)) {
+    return { family: 'cabelo_tratamento', macro: 'beleza' };
+  }
+  if (/\b(serum|roll\s*on|clareador|anti\s*idade|protetor\s*solar)\b.*\b(olho|rosto|facial|pele|virilha|axila)\b/.test(t)) {
+    return { family: 'skincare_tratamento', macro: 'beleza' };
+  }
+  if (/\b(cilios|pestanas|extensao\s*cilios)\b/.test(t)) {
+    return { family: 'cilios_estojo', macro: 'beleza' };
+  }
+
+  // Vestuário básico
+  if (/\bmeia(s)?\b/.test(t) && /\b(kit|par|pares|soquete|invisivel)\b/.test(t)) {
+    return { family: 'kit_meias', macro: 'vestuario' };
+  }
+  if (/\bcueca(s)?\b/.test(t)) {
+    return { family: 'kit_cuecas', macro: 'vestuario' };
+  }
+  if (/\b(camiseta|camisa|t\s*shirt)\b.*\b(basica|algodao|lisa)\b/.test(t)) {
+    return { family: 'camiseta_basica', macro: 'vestuario' };
+  }
+
+  // Fallback: semantic key extraction (extract first 2 significant noun tokens)
+  const stopWords = new Set(['de', 'da', 'do', 'das', 'dos', 'para', 'em', 'com', 'sem', 'e', 'ou', 'por', 'um', 'uma', 'kit', 'par', 'pecas', 'unidades', 'promo', 'oferta', 'original', 'novo', 'pronta', 'entrega', 'envio', 'rapido']);
+  const tokens = t.split(' ').filter((w) => w.length > 2 && !stopWords.has(w) && !/^\d+$/.test(w));
+  if (tokens.length >= 2) {
+    return { family: `semantic_${tokens.slice(0, 2).sort().join('_')}`, macro: 'geral' };
+  }
+
+  return { family: 'item_isolado', macro: 'outros' };
+}
+
 function classifyBenchmarkFamily(candidate = {}) {
-  const identity = classifyPeerIdentity(candidate.productName || candidate.product_term || candidate.title || '');
+  const title = candidate.productName || candidate.product_term || candidate.title || '';
+  const quantityClass = extractQuantityClass(title);
+  const variantClass = extractVariantClass(title);
+  const { family, macro } = extractFunctionalFamily(title);
+
   return {
-    ...identity,
-    familyKey: `${identity.peerFamily}:${identity.peerType}:${identity.quantityClass}`,
+    functionalFamily: family,
+    peerFamily: family,
+    peerType: family,
+    macroGroup: macro,
+    variantClass,
+    quantityClass,
+    familyKey: `${family}:${variantClass}:${quantityClass}`,
   };
 }
 
@@ -51,6 +224,22 @@ function sameNativeIdentity(a = {}, b = {}) {
   const aProduct = String(a.productId || a.product_id || '').trim();
   const bProduct = String(b.productId || b.product_id || '').trim();
   return Boolean(aProduct && bProduct && aProduct === bProduct);
+}
+
+function quantityCompatible(a = {}, b = {}) {
+  const qa = a.quantityClass || 'single';
+  const qb = b.quantityClass || 'single';
+  if (qa === qb) return true;
+  if (qa === 'single' || qb === 'single') return false;
+  return false;
+}
+
+function variantsCompatible(a = {}, b = {}) {
+  const va = a.variantClass || 'standard';
+  const vb = b.variantClass || 'standard';
+  if (va === vb) return true;
+  if (va === 'standard' || vb === 'standard') return true;
+  return false;
 }
 
 function peerConfidenceForCount(peerCount) {
@@ -79,7 +268,7 @@ function buildBenchmarkContext(candidate = {}, pool = []) {
   });
 
   if (currentPrice === null) return empty('invalid_price');
-  if (family.peerType === 'item_isolado') return empty('unclassified_family');
+  if (family.functionalFamily === 'item_isolado') return empty('unclassified_family');
 
   const peers = (Array.isArray(pool) ? pool : []).filter((other) => {
     if (!other || sameNativeIdentity(candidate, other)) return false;
@@ -87,8 +276,9 @@ function buildBenchmarkContext(candidate = {}, pool = []) {
     if (otherPrice === null) return false;
 
     const otherFamily = classifyBenchmarkFamily(other);
-    return otherFamily.peerType === family.peerType
-      && otherFamily.quantityClass === family.quantityClass;
+    return otherFamily.functionalFamily === family.functionalFamily
+      && quantityCompatible(family, otherFamily)
+      && variantsCompatible(family, otherFamily);
   });
 
   const prices = peers
@@ -124,4 +314,7 @@ module.exports = {
   classifyBenchmarkFamily,
   buildBenchmarkContext,
   peerConfidenceForCount,
+  extractQuantityClass,
+  extractVariantClass,
+  extractFunctionalFamily,
 };

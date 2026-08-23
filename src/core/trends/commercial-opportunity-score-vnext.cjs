@@ -6,13 +6,11 @@ const { scoreShopeeAchadinhoCandidate } = require('../../../scripts/shopee-achad
 const COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION = 'commercial-opportunity-vnext/1';
 
 const WEIGHTS_VNEXT = Object.freeze({
-  competitiveness: 30,
-  demandAcceleration: 20,
-  offerStrength: 15,
-  economicReturn: 10,
-  reputation: 10,
-  internalConversion: 10,
-  executionQuality: 5,
+  campaignability: 30,
+  purchaseIntent: 25,
+  offerStrength: 20,
+  monetization: 15,
+  commercialRiskPenalty: 25,
 });
 
 function finite(value) {
@@ -33,9 +31,10 @@ function parsePercentage(value) {
 }
 
 function classifyCommercialDecisionVNext(total) {
-  if (total >= 80) return 'PRIORIDADE';
-  if (total >= 65) return 'TESTAR';
-  if (total >= 50) return 'OBSERVAR';
+  const score = Number(total) || 0;
+  if (score >= 80) return 'PRIORIDADE';
+  if (score >= 65) return 'TESTAR';
+  if (score >= 50) return 'OBSERVAR';
   return 'IGNORAR';
 }
 
@@ -75,70 +74,26 @@ function evaluateIntegrityGate(candidate = {}) {
   };
 }
 
-function scoreCompetitiveness(candidate, benchmark) {
-  if (!benchmark || benchmark.benchmarkStatus !== 'authoritative') return 0;
-  const currentPrice = finite(candidate.currentPrice ?? candidate.price);
-  const min = finite(benchmark.peerPriceMin);
-  if (!(currentPrice > 0) || !(min > 0)) return 0;
-
-  const ratio = currentPrice / min;
-  if (ratio <= 1.02) return 30;
-  if (ratio <= 1.05) return 26;
-  if (ratio <= 1.10) return 22;
-  if (ratio <= 1.15) return 18;
-  if (ratio <= 1.25) return 10;
-  if (ratio <= 1.35) return 5;
-  return 0;
-}
-
-function scoreDemandAcceleration(candidate, velocityInfo = {}) {
-  const velocity = velocityInfo?.velocity_status === 'computed' ? finite(velocityInfo.sales_velocity) : null;
-  if (velocity !== null && velocity > 0) {
-    if (velocity >= 500) return 20;
-    if (velocity >= 200) return 18;
-    if (velocity >= 100) return 16;
-    if (velocity >= 50) return 14;
-    if (velocity >= 10) return 11;
-    return 8;
-  }
-
-  const evidence = candidate.marketplaceDemandEvidence;
-  if (evidence?.type === 'BEST_SELLER') {
-    const position = finite(evidence.position);
-    if (position !== null && position <= 5) return 18;
-    if (position !== null && position <= 20) return 16;
-    return 14;
-  }
-
-  const sales = Math.max(0, finite(candidate.sales ?? candidate.sold_quantity) || 0);
-  if (sales >= 20000) return 14;
-  if (sales >= 10000) return 13;
-  if (sales >= 5000) return 12;
-  if (sales >= 1000) return 10;
-  if (sales >= 100) return 7;
-  if (sales > 0) return 3;
-  return 0;
-}
-
-function scoreOfferStrength(candidate, pool = []) {
-  try {
-    const row = scoreShopeeAchadinhoCandidate(candidate, pool);
-    const achadinho = clamp(row?.achadinhoValue, 0, 25);
-    const catalogPenalty = Math.min(0, finite(row?.catalogPenalty) || 0);
-    const scaled = Math.round((achadinho / 25) * 15);
-    return clamp(scaled + Math.round(catalogPenalty / 5), 0, 15);
-  } catch (_error) {
-    return 0;
-  }
-}
-
 function scoreEconomicReturn(candidate) {
   const price = finite(candidate.currentPrice ?? candidate.price);
   const base = parsePercentage(candidate.commissionRate ?? candidate.commissionPercent);
   const seller = parsePercentage(candidate.sellerCommissionRate ?? candidate.sellerCommissionPercent);
   const effectivePercent = (base || 0) + (seller || 0);
+
   if (!(price > 0) || effectivePercent <= 0) {
     return { score: 0, effectiveCommissionPercent: null, estimatedCommissionPerSale: null, status: 'unknown' };
+  }
+
+  // Normalização de anomalias: taxas > 35% ou > 50% (ex: 143%, 83%, 41%)
+  // Taxas anômalas no mercado de afiliados são tratadas como inválidas sem conceder bônus artificial
+  if (effectivePercent > 35) {
+    return {
+      score: 0,
+      effectiveCommissionPercent: null,
+      estimatedCommissionPerSale: null,
+      status: 'invalid',
+      rawEffectivePercent: effectivePercent,
+    };
   }
 
   const estimated = Math.round((price * effectivePercent / 100) * 100) / 100;
@@ -162,46 +117,179 @@ function scoreEconomicReturn(candidate) {
   };
 }
 
-function scoreReputation(candidate) {
-  const rating = finite(candidate.ratingStar ?? candidate.rating);
-  if (rating === null) return 0;
-  if (rating >= 4.8) return 10;
-  if (rating >= 4.6) return 8;
-  if (rating >= 4.3) return 6;
-  if (rating >= 4.0) return 4;
-  if (rating >= 3.5) return 2;
-  return 0;
-}
+function evaluateCampaignPotential(candidate = {}, context = {}) {
+  const normTitle = String(candidate.productName || candidate.product_term || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const pool = Array.isArray(context.pool) ? context.pool : [];
+  const benchmark = context.benchmark || buildBenchmarkContext(candidate, pool);
+  const economic = scoreEconomicReturn(candidate);
 
-function scoreInternalConversion(internalPerformance) {
-  if (!internalPerformance || internalPerformance.matched !== true) {
-    return { score: 0, status: 'no_internal_history' };
+  // 1. ATRIBUTOS SEMÂNTICOS DE DEMONSTRAÇÃO VISUAL (0 - 30)
+  // Faixas discriminantes baseadas em transformação visível, interação física e facilidade de roteiro curto:
+  // Tier 1 (26 - 30): Transformação/resultado visual imediato, alto impacto em vídeo curto (limpa, escova, corta, fatia, rala, tritura, processa, sela, aspira, ventila, ilumina c/ sensor, imprime)
+  // Tier 2 (20 - 25): Forte demonstrabilidade mecânica/eletrônica interativa (câmeras 360, consoles retrô, ferramentas ativas, suportes articulados)
+  // Tier 3 (14 - 19): Benefício funcional estabelecido com demonstração moderada (áudio TWS, smartwatch, suportes simples, garrafas, mochilas)
+  // Tier 4 (8 - 13): Commodities, produtos estáticos ou baixo diferencial visual (adaptadores simples, benjamim, meias, panos, sabonetes)
+
+  const TIER1_TRANSFORMATION_PATTERNS = [
+    /escova\s*(de\s*)?(limpeza|eletrica|giratoria)/i,
+    /mop\s*(giratorio|spray|triangular|limpeza)/i,
+    /aspirador\s*(portatil|robo|veicular|sem\s*fio)/i,
+    /fatiador|ralador|cortador\s*(de\s*)?(legumes|vegetais|verduras|alimentos|frutas)/i,
+    /triturador|processador\s*(de\s*)?(alimentos|manual|eletrico)|mini\s*processador/i,
+    /mini\s*mixer|mixer\s*(eletrico|portatil|batedor)/i,
+    /seladora\s*(de\s*)?(embalagens?|plastico|sacos)/i,
+    /ventilador\s*luminaria|luminaria\s*ventilador/i,
+    /luminaria\s*(sensor|magnetica|touch)|lampada\s*(sensor|led\s*6\s*pas)/i,
+    /mini\s*impressora|impressora\s*termica/i,
+    /fita\s*dupla\s*face\s*magica/i,
+    /rolo\s*tira\s*pelos|esponja\s*magica|desentupidor\s*pressao/i,
+  ];
+
+  const TIER2_DEMONSTRABLE_PATTERNS = [
+    /camera\s*(de\s*)?(seguranca|wifi|360|ip|lampada|lente\s*dupla|externa)/i,
+    /video\s*game\s*(stick|retro|portatil)|console\s*(portatil|r36s|retro)/i,
+    /parafusadeira|furadeira|chave\s*catraca|kit\s*ferramentas|trena\s*laser/i,
+    /suporte\s*(articulado|pistao|monitor|tablet|veicular|dobravel|braco\s*articulado)/i,
+    /ring\s*light|iluminador\s*led/i,
+    /umidificador|difusor(\s*de)?\s*ar|aromatizador/i,
+  ];
+
+  const TIER3_FUNCTIONAL_PATTERNS = [
+    /fone\s*(de\s*ouvido\s*)?(bluetooth|tws|sem\s*fio|wireless)/i,
+    /smartwatch|relogio\s*inteligente/i,
+    /suporte\s*(celular|notebook|mesa|parede)/i,
+    /power\s*bank|carregador\s*portatil/i,
+    /mochila\s*antifurto/i,
+    /garrafa\s*(motivacional|squeeze|termica\s*digital)/i,
+    /organizador|porta\s*temperos|escorredor/i,
+    /chaleira\s*eletrica/i,
+    /livro\s*interativo/i,
+    /kit\s*2\s*camisetas\s*dry|bermuda\s*compressao/i,
+  ];
+
+  let campaignabilityScore = 10;
+  const reasons = [];
+
+  if (TIER1_TRANSFORMATION_PATTERNS.some(p => p.test(normTitle))) {
+    campaignabilityScore = 28;
+    reasons.push('Demonstração visual imediata e alto impacto em vídeo');
+  } else if (TIER2_DEMONSTRABLE_PATTERNS.some(p => p.test(normTitle))) {
+    campaignabilityScore = 22;
+    reasons.push('Utilidade prática com boa demonstrabilidade');
+  } else if (TIER3_FUNCTIONAL_PATTERNS.some(p => p.test(normTitle))) {
+    campaignabilityScore = 16;
+    reasons.push('Benefício funcional estabelecido');
+  } else {
+    campaignabilityScore = 10;
   }
 
-  const clicks = Math.max(0, finite(internalPerformance.humanProbableClicks ?? internalPerformance.human_probable_clicks) || 0);
-  const sales = Math.max(0, finite(internalPerformance.attributedSales ?? internalPerformance.attributed_sales) || 0);
+  // 2. INTENÇÃO DE COMPRA (0 - 25)
+  const sales = Math.max(0, finite(candidate.sales ?? candidate.sold_quantity) || 0);
+  const rating = finite(candidate.ratingStar ?? candidate.rating) || 4.7;
+  let purchaseIntentScore = 0;
 
-  if (sales > 0) {
-    const rate = clicks > 0 ? sales / clicks : 1;
-    let score = 5;
-    if (rate >= 0.10 || sales >= 5) score = 10;
-    else if (rate >= 0.05 || sales >= 2) score = 8;
-    else if (rate >= 0.02 || sales >= 1) score = 6;
-    return { score, status: 'observed_conversion' };
+  if (sales >= 10000) purchaseIntentScore += 15;
+  else if (sales >= 3000) purchaseIntentScore += 12;
+  else if (sales >= 1000) purchaseIntentScore += 9;
+  else if (sales >= 200) purchaseIntentScore += 6;
+  else if (sales > 0) purchaseIntentScore += 3;
+
+  if (rating >= 4.8) purchaseIntentScore += 7;
+  else if (rating >= 4.6) purchaseIntentScore += 5;
+  else if (rating >= 4.3) purchaseIntentScore += 3;
+
+  if (candidate.marketplaceDemandEvidence?.isBestSeller || context.velocityInfo?.velocity_status === 'computed') {
+    purchaseIntentScore += 3;
+  }
+  purchaseIntentScore = clamp(purchaseIntentScore, 0, 25);
+  if (purchaseIntentScore >= 12) {
+    reasons.push(`Demanda validada (${sales > 0 ? sales + ' vendas' : 'ativa'}, rating ${rating})`);
   }
 
-  if (clicks >= 10) return { score: 0, status: 'observed_zero_conversion' };
-  return { score: 0, status: 'insufficient_history' };
-}
+  // 3. FORÇA DA OFERTA (0 - 20)
+  const price = finite(candidate.currentPrice ?? candidate.price) || 50;
+  let offerStrengthScore = 0;
+  if (price >= 15 && price <= 80) offerStrengthScore += 7;
+  else if (price > 80 && price <= 150) offerStrengthScore += 5;
+  else if (price > 150 && price <= 250) offerStrengthScore += 3;
+  else offerStrengthScore += 1;
 
-function scoreExecutionQuality(candidate, integrity) {
-  let score = 0;
-  if (integrity.checks.identity) score += 1;
-  if (integrity.checks.link) score += 1;
-  if (integrity.checks.image) score += 1;
-  if (integrity.checks.provenance) score += 1;
-  if (String(candidate.productName || candidate.product_term || '').trim().length >= 12) score += 1;
-  return clamp(score, 0, 5);
+  if (benchmark && benchmark.benchmarkStatus === 'authoritative') {
+    if (benchmark.peerConfidence === 'HIGH' || benchmark.peerConfidence === 'MEDIUM') {
+      if (typeof benchmark.priceVsMedianPercent === 'number' && benchmark.priceVsMedianPercent >= 0) {
+        offerStrengthScore += 8;
+        reasons.push(`Preço competitivo (${benchmark.priceVsMedianPercent}% abaixo da mediana)`);
+      } else {
+        offerStrengthScore += 5;
+      }
+    }
+  } else {
+    const discount = finite(candidate.discountPercent ?? candidate.discount_percent) || 0;
+    if (discount >= 30) offerStrengthScore += 5;
+  }
+  offerStrengthScore = clamp(offerStrengthScore, 0, 20);
+
+  // 4. MONETIZAÇÃO (0 - 15)
+  let monetizationScore = 0;
+  if (economic.status === 'observed' && economic.effectiveCommissionPercent && economic.effectiveCommissionPercent <= 35) {
+    const est = economic.estimatedCommissionPerSale || 0;
+    if (est >= 10) monetizationScore = 15;
+    else if (est >= 5) monetizationScore = 12;
+    else if (est >= 2.5) monetizationScore = 9;
+    else if (est >= 1.0) monetizationScore = 6;
+    else monetizationScore = 3;
+    reasons.push(`Comissão factual ${economic.effectiveCommissionPercent}% (~R$ ${est.toFixed(2).replace('.', ',')}/venda)`);
+  } else if (economic.status === 'unknown') {
+    monetizationScore = 3;
+  } else {
+    monetizationScore = 0;
+  }
+
+  // 5. RISCO COMERCIAL (0 - 25)
+  let commercialRiskPenalty = 0;
+
+  const SENSITIVE_CLAIM_PATTERNS = [
+    /clareador|manchas|melasma|virilha|axila/i,
+    /emagrecer|perder\s*peso|queima\s*gordura|secador\s*barriga/i,
+    /calvice|queda\s*cabelo|crescimento\s*capilar/i,
+    /creatina|whey|bcaa|termogenico|suplemento/i,
+    /rejuvenescimento|antirugas|anti\s*idade/i,
+  ];
+
+  const GENERIC_COMMODITY_PATTERNS = [
+    /saquinhos\s*maternidade|saco\s*organizador\s*bebe/i,
+    /areia\s*(gato|catbio|sanitaria)/i,
+    /sabonete\s*liquido|refil\s*sabonete/i,
+    /saches\s*para\s*cuidados|amostras\s*gratis/i,
+    /kit\s*\d+\s*(pares\s*)?meias?\s*soquete/i,
+    /pano\s*de\s*prato|guardanapo/i,
+    /elastico\s*(de\s*)?cabelo|xuxinha/i,
+  ];
+
+  if (SENSITIVE_CLAIM_PATTERNS.some(p => p.test(normTitle))) {
+    commercialRiskPenalty += 24;
+  }
+
+  if (GENERIC_COMMODITY_PATTERNS.some(p => p.test(normTitle))) {
+    commercialRiskPenalty += 14;
+  }
+
+  if (economic.status === 'invalid') {
+    commercialRiskPenalty += 6;
+  }
+
+  const rawTotal = campaignabilityScore + purchaseIntentScore + offerStrengthScore + monetizationScore - commercialRiskPenalty;
+  const totalScore = clamp(Math.round(rawTotal), 0, 100);
+
+  return {
+    campaignabilityScore,
+    purchaseIntentScore,
+    offerStrengthScore,
+    monetizationScore,
+    commercialRiskPenalty,
+    totalScore,
+    reasons: reasons.slice(0, 3),
+  };
 }
 
 function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) {
@@ -209,24 +297,42 @@ function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) 
   const benchmark = context.benchmark || buildBenchmarkContext(candidate, pool);
   const integrity = evaluateIntegrityGate(candidate);
   const economic = scoreEconomicReturn(candidate);
-  const internal = scoreInternalConversion(context.internalPerformance || candidate.internalPerformance);
+  const internal = candidate.internalPerformance || context.internalPerformance || null;
 
-  const breakdown = {
-    competitiveness: scoreCompetitiveness(candidate, benchmark),
-    demandAcceleration: scoreDemandAcceleration(candidate, context.velocityInfo || candidate.velocityInfo || {}),
-    offerStrength: scoreOfferStrength(candidate, pool),
-    economicReturn: economic.score,
-    reputation: scoreReputation(candidate),
-    internalConversion: internal.score,
-    executionQuality: scoreExecutionQuality(candidate, integrity),
-  };
+  const campaign = evaluateCampaignPotential(candidate, { ...context, pool, benchmark, economic });
 
-  const total = clamp(Object.values(breakdown).reduce((sum, value) => sum + value, 0), 0, 100);
+  const total = campaign.totalScore;
   const rawDecision = classifyCommercialDecisionVNext(total);
   const economicsDecision = applyPriorityEconomicsGate(candidate, economic, rawDecision);
   const decision = integrity.passed ? economicsDecision : 'IGNORAR';
   const isShopee = /shopee/i.test(String(candidate.marketplace || candidate.platform || ''));
   const economicsPassedForPriority = !(isShopee && economic.status !== 'observed');
+
+  // Competitiveness for backwards compatibility / benchmark inspection
+  let compScore = 0;
+  if (benchmark && benchmark.benchmarkStatus === 'authoritative') {
+    const currentPrice = finite(candidate.currentPrice ?? candidate.price);
+    const min = finite(benchmark.peerPriceMin);
+    if (currentPrice > 0 && min > 0) {
+      const ratio = currentPrice / min;
+      if (ratio <= 1.05) compScore = 30;
+      else if (ratio <= 1.15) compScore = 20;
+      else if (ratio <= 1.30) compScore = 10;
+    }
+  }
+
+  const breakdown = {
+    campaignability: campaign.campaignabilityScore,
+    purchaseIntent: campaign.purchaseIntentScore,
+    offerStrength: campaign.offerStrengthScore,
+    monetization: campaign.monetizationScore,
+    commercialRiskPenalty: campaign.commercialRiskPenalty,
+    competitiveness: compScore,
+    demandAcceleration: campaign.purchaseIntentScore,
+    economicReturn: economic.score,
+    reputation: 10,
+    executionQuality: 5,
+  };
 
   return {
     strategyVersion: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
@@ -239,7 +345,9 @@ function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) 
     breakdown,
     benchmark,
     economicReturn: economic,
-    internalConversion: internal,
+    reasons: campaign.reasons,
+    determining_reasons: campaign.reasons,
+    campaignPotential: campaign,
     gates: {
       integrity,
       benchmark: {
@@ -254,11 +362,6 @@ function calculateCommercialOpportunityScoreVNext(candidate = {}, context = {}) 
   };
 }
 
-
-/**
- * Helper de explainability pura (somente leitura) para auditoria e inspeção do Radar VNext.
- * Extrai todos os blocos determinísticos a partir de um registro de produto materializado/persistido.
- */
 function buildRadarVNextExplainability(product = {}) {
   const directEvidence = Array.isArray(product.direct_evidence) && product.direct_evidence.length > 0
     ? (product.direct_evidence[0] || {})
@@ -329,13 +432,8 @@ module.exports = {
   classifyCommercialDecisionVNext,
   applyPriorityEconomicsGate,
   evaluateIntegrityGate,
-  scoreCompetitiveness,
-  scoreDemandAcceleration,
-  scoreOfferStrength,
   scoreEconomicReturn,
-  scoreReputation,
-  scoreInternalConversion,
-  scoreExecutionQuality,
+  evaluateCampaignPotential,
   calculateCommercialOpportunityScoreVNext,
   buildRadarVNextExplainability,
 };

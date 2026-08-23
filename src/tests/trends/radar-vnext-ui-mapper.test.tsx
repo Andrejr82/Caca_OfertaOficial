@@ -94,7 +94,7 @@ describe('Radar VNext UI Query Mapper and Overview Component - Strict Economics'
       />
     );
 
-    expect(screen.getByText('Comissão 8% · ~R$ 1,51/venda')).toBeTruthy();
+    expect(screen.getByText('Comissão 8% · ~R$ 1,51/venda')).toBeDefined();
   });
 
   it('CASO 2: economic_return ausente com commercial_metrics.commissionRate = 12 NÃO fabrica comissão e exibe "Comissão não observada"', () => {
@@ -143,7 +143,7 @@ describe('Radar VNext UI Query Mapper and Overview Component - Strict Economics'
       />
     );
 
-    expect(screen.getByText('Comissão não observada')).toBeTruthy();
+    expect(screen.getByText('Comissão não observada')).toBeDefined();
     expect(screen.queryByText('Comissão 12%')).toBeNull();
     expect(screen.queryByText(/12%/)).toBeNull();
   });
@@ -198,7 +198,7 @@ describe('Radar VNext UI Query Mapper and Overview Component - Strict Economics'
       />
     );
 
-    expect(screen.getByText('Comissão não observada')).toBeTruthy();
+    expect(screen.getByText('Comissão não observada')).toBeDefined();
     expect(screen.queryByText('Comissão 15%')).toBeNull();
     expect(screen.queryByText('Comissão 0%')).toBeNull();
   });
@@ -251,7 +251,7 @@ describe('Radar VNext UI Query Mapper and Overview Component - Strict Economics'
       />
     );
 
-    expect(screen.getByText('Comissão 0% · ~R$ 0,00/venda')).toBeTruthy();
+    expect(screen.getByText('Comissão 0% · ~R$ 0,00/venda')).toBeDefined();
   });
 
   it('Compatibilidade V4: produto V4 com commission_status observed exibe comissão factual; sem observed exibe não observada', () => {
@@ -298,6 +298,54 @@ describe('Radar VNext UI Query Mapper and Overview Component - Strict Economics'
       />
     );
 
-    expect(screen.getByText('Comissão 6% · ~R$ 2,40/venda')).toBeTruthy();
+    expect(screen.getByText('Comissão 6% · ~R$ 2,40/venda')).toBeDefined();
+  });
+
+  it('CASO 5: Quando nenhum produto atinge score >= 50, exibe o aviso de baixa confiança e lista os produtos com scores reais', () => {
+    const lowConfRow = {
+      id: 'prod-low',
+      priority: 1,
+      product_term: 'Produto Baixa Confiança',
+      normalized_product_term: 'produto baixa confianca',
+      category: 'Geral',
+      marketplace: 'Shopee',
+      evidence_status: 'verified',
+      source_count: 1,
+      commercial_score: 38,
+      confidence: 40,
+      score_breakdown: { demandAcceleration: 5 },
+      determining_reasons: ['Demanda baixa'],
+      is_focus: false,
+      opportunity_id: null,
+      recommended_channel: null,
+      recommended_format: null,
+      selection_decision: 'IGNORAR',
+      selection_decided_at: null,
+      selected_offer_id: null,
+      execution_context: {},
+      direct_evidence: [
+        {
+          price: 25.00,
+          raw_decision: 'IGNORAR',
+        },
+      ],
+    };
+
+    const view = mapTrendRadarSnapshotView(baseRun, [lowConfRow as any]);
+
+    render(
+      <ExecutiveRadarOverview
+        latestSnapshot={view}
+        strongestNiches={[]}
+        ranking={[]}
+        radarSources={['Shopee']}
+        activeExperiments={[]}
+      />
+    );
+
+    expect(screen.getByText('Nenhum produto atingiu alta confiança neste Radar. Exibindo os melhores candidatos disponíveis para análise.')).toBeDefined();
+    expect(screen.getByText('38/100')).toBeDefined();
+    expect(screen.getByText('IGNORAR')).toBeDefined();
   });
 });
+

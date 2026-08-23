@@ -1242,6 +1242,7 @@ function materializeTrendRadarProduct({
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
       commercial_score: finalScoreV4.total,
+      selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision || 'TESTAR',
       score_breakdown: finalScoreV4.breakdown,
       determining_reasons: determiningReasons,
       confidence: Math.min(
