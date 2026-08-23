@@ -15,7 +15,7 @@ const PRICE_TIERS = Object.freeze({
   HIGH: 'high',
 });
 
-const MAIN_PRODUCT_TERMS = /\b(air\s*fryer|cafeteira|batedeira|liquidificador|mixer|sanduicheira|chaleira|panela|processador|forno|televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|celular|smartphone|notebook|tablet|monitor|console|climatizador|aspirador|t[eê]nis|camiseta|cal[cç]a|moletom|legging|whey|creatina|fralda|mamadeira|carrinho|cama\s*pet|ra[cç][aã]o)\b/i;
+const MAIN_PRODUCT_TERMS = /\b(air\s*fryer|cafeteira|batedeira|liquidificador|mixer|sanduicheira|chaleira|panela|processador|forno|televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|celular|smartphone|notebook|tablet|monitor|console|climatizador|aspirador|t[eê]nis|camiseta|cal[cç]a|moletom|legging|whey|creatina|fralda|mamadeira|carrinho|cama\s*pet|ra[cç][aã])\b/i;
 const ACCESSORY_ONLY_TERMS = /\b(acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente))\b/i;
 const ACCESSORY_LEAD_TERMS = /^(?:acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente)|cesto)\b/i;
 const HIGH_VALUE_TERMS = /\b(televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|forno|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|notebook|tablet|monitor|console|celular|smartphone|aspirador\s*rob[oô])\b/i;
@@ -86,7 +86,10 @@ function qualityGate(product) {
   if (!/^https:\/\//i.test(String(product?.sourceUrl || ''))) reasons.push('LINK_INVALIDO');
   if (!/^https:\/\//i.test(String(product?.imageUrl || ''))) reasons.push('IMAGEM_INVALIDA');
   if (!tier) reasons.push('PRECO_INVALIDO');
-  const accessoryAllowedByScenario = product?.allowAccessory === true;
+  const normalizedTitle = normalizeText(title);
+  const explicitSearchIntent = normalizeText(product?.searchIntent || product?.intent || '');
+  const explicitIntentMatchesTitle = explicitSearchIntent.length >= 4 && normalizedTitle.includes(explicitSearchIntent);
+  const accessoryAllowedByScenario = product?.allowAccessory === true || explicitIntentMatchesTitle;
   if (!accessoryAllowedByScenario && ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
 
   if (marketplace === 'shopee') {
