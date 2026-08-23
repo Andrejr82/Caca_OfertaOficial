@@ -11,7 +11,10 @@ const path = require('node:path');
 const engine = require('./oracle-trends-radar-engine.cjs');
 const freshness = require('./oracle-trends-radar-freshness.cjs');
 const dedup = require('./radar-semantic-dedup-v2.cjs');
-const { buildBenchmarkContext } = require('../src/core/trends/benchmark-peer-engine.cjs');
+const {
+  buildBenchmarkContext,
+  createPeerBenchmarkIndex,
+} = require('../src/core/trends/benchmark-peer-engine.cjs');
 const {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   calculateCommercialOpportunityScoreVNext,
@@ -186,7 +189,19 @@ async function runRadarVNext({
     : { uniqueCandidates: freshCandidates };
   const dedupedCandidates = Array.isArray(dedupResult) ? dedupResult : (dedupResult?.uniqueCandidates || freshCandidates);
 
-  // 3. ENRICHMENT & SCORING
+  // 3. ENRICHMENT & SCORING O(N) com índice pré-construído
+  const peerIndex = createPeerBenchmarkIndex(freshCandidates);
+  const benchmarkCache = new Map();
+
+  const getCachedBenchmark = (candidate) => {
+    let bench = benchmarkCache.get(candidate);
+    if (!bench) {
+      bench = buildBenchmarkContext(candidate, peerIndex);
+      benchmarkCache.set(candidate, bench);
+    }
+    return bench;
+  };
+
   const contextForCandidate = (candidate) => {
     const key = freshness.getMarketplaceIdentityKey(candidate);
     const prev = key && previousItemsMap?.get ? previousItemsMap.get(key) : null;
@@ -194,7 +209,7 @@ async function runRadarVNext({
     const internalPerformance = key && internalPerformanceMap?.get ? internalPerformanceMap.get(key) : null;
 
     return {
-      benchmark: buildBenchmarkContext(candidate, freshCandidates),
+      benchmark: getCachedBenchmark(candidate),
       velocityInfo,
       internalPerformance,
       previousItemsMap,
@@ -225,7 +240,8 @@ async function runRadarVNext({
     maxProducts,
     minScore,
     maxPerStore: 2,
-    maxPerFamily: 3,
+    maxPerFamily: 2,
+    maxPerMacro: 4,
     contextForCandidate,
   });
 

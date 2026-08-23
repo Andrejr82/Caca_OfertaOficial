@@ -12,7 +12,10 @@
 const engine = require('./oracle-trends-radar-engine.cjs');
 const runner = require('./oracle-trends-radar-runner.cjs');
 const dedup = require('./radar-semantic-dedup-v2.cjs');
-const { buildBenchmarkContext } = require('../src/core/trends/benchmark-peer-engine.cjs');
+const {
+  buildBenchmarkContext,
+  createPeerBenchmarkIndex,
+} = require('../src/core/trends/benchmark-peer-engine.cjs');
 const {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   calculateCommercialOpportunityScoreVNext,
@@ -54,10 +57,17 @@ function buildTrendRadarProductsFromCandidates(options = {}) {
       : { uniqueCandidates: pool };
     const dedupedCandidates = Array.isArray(dedupResult) ? dedupResult : (dedupResult?.uniqueCandidates || pool);
 
-    const contextForCandidate = (candidate) => ({
-      benchmark: buildBenchmarkContext(candidate, pool),
-      pool,
-    });
+    const peerIndex = createPeerBenchmarkIndex(pool);
+    const benchmarkCache = new Map();
+
+    const contextForCandidate = (candidate) => {
+      let benchmark = benchmarkCache.get(candidate);
+      if (!benchmark) {
+        benchmark = buildBenchmarkContext(candidate, peerIndex);
+        benchmarkCache.set(candidate, benchmark);
+      }
+      return { benchmark, pool };
+    };
 
     const scoreFn = typeof options.scoreCandidate === 'function'
       ? options.scoreCandidate
@@ -67,7 +77,8 @@ function buildTrendRadarProductsFromCandidates(options = {}) {
       maxProducts: options.maxProducts || 20,
       minScore: options.minScore !== undefined ? options.minScore : 0,
       maxPerStore: 2,
-      maxPerFamily: 3,
+      maxPerFamily: 2,
+      maxPerMacro: 4,
       contextForCandidate,
       scoreCandidate: scoreFn,
     });
@@ -84,6 +95,47 @@ function buildTrendRadarProductsFromCandidates(options = {}) {
 
   // V4 legacy fallback
   return engine.buildTrendRadarProductsFromCandidates(options);
+}
+
+async function claimTrendRadarRunAtomic(client, pendingRun, env) {
+  if (!client || !pendingRun?.id) return { claimed: true, run: pendingRun };
+  const executorId = `oracle-worker-${process.pid}-${Date.now()}`;
+
+  const currentHealth = pendingRun.source_health || {};
+  if (currentHealth.status === 'running' && currentHealth.claimed_at) {
+    const elapsedMs = Date.now() - new Date(currentHealth.claimed_at).getTime();
+    if (elapsedMs < 5 * 60 * 1000) {
+      return { claimed: false, reason: 'already_claimed', claimedBy: currentHealth.claimed_by };
+    }
+  }
+
+  const updatedHealth = {
+    ...currentHealth,
+    runtime: 'oracle',
+    status: 'running',
+    running_at: new Date().toISOString(),
+    claimed_at: new Date().toISOString(),
+    claimed_by: executorId,
+  };
+
+  const updateBuilder = client
+    .from('trend_radar_runs')
+    .update({
+      source_health: updatedHealth,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', pendingRun.id);
+
+  if (typeof updateBuilder?.select === 'function') {
+    const { data, error } = await updateBuilder.select('id, source_health');
+    if (error || !data || data.length === 0) {
+      return { claimed: false, reason: 'already_claimed' };
+    }
+  } else {
+    await updateBuilder;
+  }
+
+  return { claimed: true, executorId, run: { ...pendingRun, source_health: updatedHealth } };
 }
 
 async function processPendingTrendRadarRuns(options = {}) {
@@ -108,7 +160,10 @@ async function processPendingTrendRadarRuns(options = {}) {
     if (!pendingRun) return { processed: false, reason: 'no_pending_runs' };
 
     if (client && pendingRun.id && !options.dryRun) {
-      await runner.markTrendRadarRunRunning(client, pendingRun.id, pendingRun.source_health || {});
+      const claimResult = await claimTrendRadarRunAtomic(client, pendingRun, env);
+      if (!claimResult.claimed) {
+        return { processed: false, reason: 'already_claimed', runId: pendingRun.id };
+      }
     }
 
     const result = await runRadarVNext({

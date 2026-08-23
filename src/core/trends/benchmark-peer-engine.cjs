@@ -249,9 +249,107 @@ function peerConfidenceForCount(peerCount) {
   return 'NONE';
 }
 
-function buildBenchmarkContext(candidate = {}, pool = []) {
+function canonicalOfferKey(candidate = {}) {
+  const marketplace = String(candidate.marketplace || candidate.platform || '').trim().toLowerCase();
+  const shopId = String(candidate.shopId || candidate.shop_id || '').trim();
+  const itemId = String(candidate.itemId || candidate.item_id || '').trim();
+  const productId = String(candidate.productId || candidate.product_id || '').trim();
+
+  if (marketplace.includes('shopee') && itemId) {
+    return `${marketplace}:${shopId || '0'}:${itemId}`;
+  }
+  if (productId) return `${marketplace}:p:${productId}`;
+  if (itemId) return `${marketplace}:i:${itemId}`;
+
+  return `${marketplace}:t:${String(candidate.productName || candidate.product_term || '').trim().toLowerCase()}`;
+}
+
+function createPeerBenchmarkIndex(pool = []) {
+  const candidateList = Array.isArray(pool) ? pool.filter(Boolean) : [];
+  const peersByFunctionalFamily = new Map();
+  const classificationByCandidate = new Map();
+  const seenOfferKeys = new Set();
+
+  let classificationCalls = 0;
+  let peerComparisonsTotal = 0;
+
+  // 1. Classificação única e indexação em buckets compatíveis O(N)
+  for (const candidate of candidateList) {
+    classificationCalls += 1;
+    const family = classifyBenchmarkFamily(candidate);
+    const price = finitePositive(candidate.currentPrice ?? candidate.price);
+    const offerKey = canonicalOfferKey(candidate);
+
+    classificationByCandidate.set(candidate, {
+      family,
+      price,
+      offerKey,
+    });
+
+    if (price === null || family.functionalFamily === 'item_isolado') {
+      continue;
+    }
+
+    // Deduplicação nativa no índice de peers para evitar inflação por repetição da mesma oferta
+    if (seenOfferKeys.has(offerKey)) {
+      continue;
+    }
+    seenOfferKeys.add(offerKey);
+
+    const bucketKey = family.functionalFamily;
+    let bucket = peersByFunctionalFamily.get(bucketKey);
+    if (!bucket) {
+      bucket = [];
+      peersByFunctionalFamily.set(bucketKey, bucket);
+    }
+
+    bucket.push({
+      candidate,
+      family,
+      price,
+      offerKey,
+    });
+  }
+
+  // Estatísticas de bucket para observabilidade e testes
+  let maxBucketSize = 0;
+  let totalBucketItems = 0;
+  for (const bucket of peersByFunctionalFamily.values()) {
+    if (bucket.length > maxBucketSize) maxBucketSize = bucket.length;
+    totalBucketItems += bucket.length;
+    peerComparisonsTotal += (bucket.length * (bucket.length - 1));
+  }
+  const avgBucketSize = peersByFunctionalFamily.size > 0 ? (totalBucketItems / peersByFunctionalFamily.size) : 0;
+
+  return {
+    isPeerBenchmarkIndex: true,
+    peersByFunctionalFamily,
+    classificationByCandidate,
+    metrics: {
+      candidateCount: candidateList.length,
+      uniqueCandidateCount: seenOfferKeys.size,
+      classificationCalls,
+      peerComparisonsTotal,
+      maxBucketSize,
+      avgBucketSize,
+      bucketCount: peersByFunctionalFamily.size,
+    },
+  };
+}
+
+function buildBenchmarkContext(candidate = {}, poolOrIndex = []) {
   const currentPrice = finitePositive(candidate.currentPrice ?? candidate.price);
-  const family = classifyBenchmarkFamily(candidate);
+
+  let index = null;
+  let family = null;
+
+  if (poolOrIndex && poolOrIndex.isPeerBenchmarkIndex) {
+    index = poolOrIndex;
+    const cached = index.classificationByCandidate.get(candidate);
+    family = cached?.family || classifyBenchmarkFamily(candidate);
+  } else {
+    family = classifyBenchmarkFamily(candidate);
+  }
 
   const empty = (benchmarkStatus) => ({
     version: BENCHMARK_PEER_ENGINE_VERSION,
@@ -270,18 +368,31 @@ function buildBenchmarkContext(candidate = {}, pool = []) {
   if (currentPrice === null) return empty('invalid_price');
   if (family.functionalFamily === 'item_isolado') return empty('unclassified_family');
 
-  const peers = (Array.isArray(pool) ? pool : []).filter((other) => {
-    if (!other || sameNativeIdentity(candidate, other)) return false;
-    const otherPrice = finitePositive(other.currentPrice ?? other.price);
-    if (otherPrice === null) return false;
+  let rawPeers = [];
+  if (index) {
+    const bucket = index.peersByFunctionalFamily.get(family.functionalFamily) || [];
+    const targetKey = canonicalOfferKey(candidate);
+    for (const item of bucket) {
+      if (item.offerKey === targetKey || sameNativeIdentity(candidate, item.candidate)) continue;
+      if (quantityCompatible(family, item.family) && variantsCompatible(family, item.family)) {
+        rawPeers.push(item.candidate);
+      }
+    }
+  } else {
+    const pool = Array.isArray(poolOrIndex) ? poolOrIndex : [];
+    rawPeers = pool.filter((other) => {
+      if (!other || sameNativeIdentity(candidate, other)) return false;
+      const otherPrice = finitePositive(other.currentPrice ?? other.price);
+      if (otherPrice === null) return false;
 
-    const otherFamily = classifyBenchmarkFamily(other);
-    return otherFamily.functionalFamily === family.functionalFamily
-      && quantityCompatible(family, otherFamily)
-      && variantsCompatible(family, otherFamily);
-  });
+      const otherFamily = classifyBenchmarkFamily(other);
+      return otherFamily.functionalFamily === family.functionalFamily
+        && quantityCompatible(family, otherFamily)
+        && variantsCompatible(family, otherFamily);
+    });
+  }
 
-  const prices = peers
+  const prices = rawPeers
     .map((peer) => finitePositive(peer.currentPrice ?? peer.price))
     .filter((price) => price !== null);
   const peerCount = prices.length;
@@ -295,7 +406,7 @@ function buildBenchmarkContext(candidate = {}, pool = []) {
   return {
     version: BENCHMARK_PEER_ENGINE_VERSION,
     ...family,
-    peers,
+    peers: rawPeers,
     peerCount,
     peerConfidence,
     peerPriceMin: prices.length ? Math.min(...prices) : null,
@@ -313,6 +424,8 @@ module.exports = {
   BENCHMARK_PEER_ENGINE_VERSION,
   classifyBenchmarkFamily,
   buildBenchmarkContext,
+  createPeerBenchmarkIndex,
+  canonicalOfferKey,
   peerConfidenceForCount,
   extractQuantityClass,
   extractVariantClass,
