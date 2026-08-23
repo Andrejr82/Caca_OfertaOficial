@@ -19,6 +19,7 @@ const MAIN_PRODUCT_TERMS = /\b(air\s*fryer|cafeteira|batedeira|liquidificador|mi
 const ACCESSORY_ONLY_TERMS = /\b(acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente))\b/i;
 const ACCESSORY_LEAD_TERMS = /^(?:acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente)|cesto)\b/i;
 const HIGH_VALUE_TERMS = /\b(televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|forno|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|notebook|tablet|monitor|console|celular|smartphone|aspirador\s*rob[oô])\b/i;
+const AMAZON_GENERIC_PROMO_QUERIES = new Set(['oferta', 'desconto', 'promocao', 'mais vendido', 'frete gratis']);
 
 function normalizeText(value) {
   return String(value || '')
@@ -27,6 +28,41 @@ function normalizeText(value) {
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function amazonSearchQuery(product) {
+  const source = String(product?.rawPayload?.source_url || product?.category?.evidenceUrl || product?.marketplaceMetrics?.browseNodeEvidenceUrl || '');
+  if (!source) return '';
+  try {
+    return normalizeText(new URL(source).searchParams.get('k') || '');
+  } catch {
+    const match = source.match(/[?&]k=([^&]+)/i);
+    return match ? normalizeText(decodeURIComponent(match[1].replace(/\+/g, ' '))) : '';
+  }
+}
+
+function amazonQueryMatchesProduct(product) {
+  const query = amazonSearchQuery(product);
+  if (!query) return true;
+  const title = normalizeText(product?.title || '');
+  if (AMAZON_GENERIC_PROMO_QUERIES.has(query)) return false;
+
+  if (query === 'galaxy') {
+    return /\b(?:smartphone|celular|samsung)\b/.test(title) || /\bgalaxy\s+(?:a|m|s|z)\d{1,3}\b/.test(title);
+  }
+  if (query === 'celular' || query === 'smartphone') {
+    return /\b(?:smartphone|celular|iphone|redmi|galaxy\s+(?:a|m|s|z)\d{1,3})\b/.test(title);
+  }
+  if (query === 'tv led') {
+    return /\b(?:smart\s*tv|televisao|tv\s+(?:led|4k|uhd|qled|oled|mini\s*led))\b/.test(title);
+  }
+  if (query === 'halter') {
+    if (/\b(?:top|cropped|blusa|vestido|biquini|modelo\s+halter)\b/.test(title)) return false;
+    return /\b(?:halter|dumbbell|peso|musculacao|academia)\b/.test(title);
+  }
+
+  const significantTokens = query.split(/\s+/).filter((token) => token.length >= 4);
+  return significantTokens.length === 0 || significantTokens.some((token) => title.includes(token));
 }
 
 function classifyPriceTier(price) {
@@ -44,7 +80,7 @@ function classifyProductFamily(product) {
     if (/sofa|guarda roupa|cama|colchao|mesa|escrivaninha|cadeira|rack|painel|comoda/.test(text)) return 'home_furniture';
     return 'large_appliance';
   }
-  if (/pet|cachorro|gato|bebe|bebe|fralda|mamadeira/.test(text)) return 'pet_baby';
+  if (/pet|cachorro|gato|bebe|fralda|mamadeira/.test(text)) return 'pet_baby';
   if (/tenis|camiseta|calca|moletom|legging|whey|creatina|academia|fitness/.test(text)) return 'fashion_fitness';
   if (/beleza|perfume|skincare|hidratante|maquiagem|secador|chapinha/.test(text)) return 'beauty';
   if (/mala|viagem|camping|trilha/.test(text)) return 'travel';
@@ -86,6 +122,7 @@ function qualityGate(product) {
   if (!/^https:\/\//i.test(String(product?.sourceUrl || ''))) reasons.push('LINK_INVALIDO');
   if (!/^https:\/\//i.test(String(product?.imageUrl || ''))) reasons.push('IMAGEM_INVALIDA');
   if (!tier) reasons.push('PRECO_INVALIDO');
+
   const normalizedTitle = normalizeText(title);
   const explicitSearchIntent = normalizeText(product?.searchIntent || product?.intent || '');
   const explicitIntentMatchesTitle = explicitSearchIntent.length >= 4 && normalizedTitle.includes(explicitSearchIntent);
@@ -102,6 +139,10 @@ function qualityGate(product) {
   const hasCommercialData = Boolean(product?.originalPrice != null || metrics.rating != null || metrics.reviewCount != null || hasVerifiedCommercialSignal);
 
   if (marketplace === 'amazon') {
+    if (!amazonQueryMatchesProduct(product)) reasons.push('AMAZON_INTENCAO_INCOMPATIVEL');
+    const rating = Number(metrics.rating || 0);
+    if (rating > 0 && rating < 4.0) reasons.push('AMAZON_AVALIACAO_BAIXA');
+
     if (!hasCommercialData) {
       warnings.push('DADOS_COMERCIAIS_INDISPONIVEIS');
     } else if (discount <= 0 && !hasVerifiedCommercialSignal) {
@@ -128,11 +169,6 @@ function qualityGate(product) {
   };
 }
 
-/**
- * qualityScore — OPERACIONAL.
- * Mede integridade estrutural, preço válido, dados confiáveis.
- * Este é o score produtivo. scoreCandidate() é um alias direto.
- */
 function qualityScore(product, gate = qualityGate(product)) {
   const metrics = product?.marketplaceMetrics || {};
   const tier = gate.tier || classifyPriceTier(product?.currentPrice);
@@ -164,12 +200,6 @@ function qualityScore(product, gate = qualityGate(product)) {
   return Number(Math.max(0, base + discountScore + savingsScore + trustScore + officialStore + shipping + penalty).toFixed(2));
 }
 
-/**
- * desireScore — OBSERVACIONAL (DESIRE_SCORE_ENABLED=false por padrão).
- * Mede apelo comercial: marca, tendência, rating, avaliações, novidade.
- * NÃO altera o ranking produtivo nesta sprint.
- * Retorna null quando DESIRE_SCORE_ENABLED=false.
- */
 function desireScore(product, gate = qualityGate(product)) {
   if (!DESIRE_SCORE_ENABLED) return null;
   const metrics = product?.marketplaceMetrics || {};
@@ -179,28 +209,20 @@ function desireScore(product, gate = qualityGate(product)) {
   const hasPrime = Boolean(metrics.prime || metrics.isPrime);
   const hasCoupon = Boolean(metrics.coupon || metrics.hasVerifiedCoupon);
 
-  // Componentes experimentais — pesos a calibrar após simulação
-  const ratingSignal    = rating >= 4.7 ? 25 : rating >= 4.5 ? 18 : rating >= 4.0 ? 10 : 0;
-  const socialProof     = reviewCount >= 5000 ? 20 : reviewCount >= 1000 ? 15 : reviewCount >= 100 ? 8 : 0;
-  const discountSignal  = discount >= 30 ? 20 : discount >= 15 ? 12 : discount >= 5 ? 5 : 0;
-  const primeSignal     = hasPrime ? 10 : 0;
-  const couponSignal    = hasCoupon ? 8 : 0;
-  const noveltySignal   = product.novelty === 'NEW' ? 5 : 0;
+  const ratingSignal = rating >= 4.7 ? 25 : rating >= 4.5 ? 18 : rating >= 4.0 ? 10 : 0;
+  const socialProof = reviewCount >= 5000 ? 20 : reviewCount >= 1000 ? 15 : reviewCount >= 100 ? 8 : 0;
+  const discountSignal = discount >= 30 ? 20 : discount >= 15 ? 12 : discount >= 5 ? 5 : 0;
+  const primeSignal = hasPrime ? 10 : 0;
+  const couponSignal = hasCoupon ? 8 : 0;
+  const noveltySignal = product.novelty === 'NEW' ? 5 : 0;
 
   return Number((ratingSignal + socialProof + discountSignal + primeSignal + couponSignal + noveltySignal).toFixed(2));
 }
 
-/**
- * scoreCandidate — COMPORTAMENTO PRODUTIVO PRESERVADO.
- * É um alias direto para qualityScore().
- * desireScore é calculado internamente mas não afeta o retorno produtivo.
- */
 function scoreCandidate(product, gate = qualityGate(product)) {
-  // Calcula desire_score de forma observacional (sem efeito no retorno)
   const _desire = desireScore(product, gate);
   if (_desire !== null) {
-    // Em ambiente de debug, logar o desire_score observacional
-    // (sem console.log para não poluir produção)
+    // Observacional: não altera retorno produtivo.
   }
   return qualityScore(product, gate);
 }
@@ -212,6 +234,8 @@ module.exports = {
   classifyProductFamily,
   discountPercent,
   absoluteSavings,
+  amazonSearchQuery,
+  amazonQueryMatchesProduct,
   qualityGate,
   qualityScore,
   desireScore,
