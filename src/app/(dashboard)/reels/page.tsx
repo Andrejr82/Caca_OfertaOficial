@@ -1,9 +1,10 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
+import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions";
 
 export const dynamic = "force-dynamic";
 
-type ReelDraft = {
+type SocialDraft = {
   id: string;
   videoJobId: string;
   videoUrl: string;
@@ -27,21 +28,35 @@ type ReelDraft = {
   };
 };
 
+type VideoDistributionItem = {
+  videoJobId: string;
+  videoUrl: string;
+  instagramDraft: SocialDraft | null;
+  facebookDraft: SocialDraft | null;
+};
+
 export default async function ReelsPage() {
   const supabase = await createServerSupabaseClient();
-  let reelDrafts: ReelDraft[] = [];
+  let distributionItems: VideoDistributionItem[] = [];
 
   if (supabase) {
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
 
     if (user) {
-      const [{ data: drafts }, { data: videoJobs }] = await Promise.all([
+      const [{ data: instagramDrafts }, { data: facebookDrafts }, { data: videoJobs }] = await Promise.all([
         supabase
           .from("posts")
           .select("*, offers(*), affiliate_links(tracked_url)")
           .eq("user_id", user.id)
           .eq("channel", "instagram")
+          .eq("status", "draft")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("posts")
+          .select("*, offers(*), affiliate_links(tracked_url)")
+          .eq("user_id", user.id)
+          .eq("channel", "facebook")
           .eq("status", "draft")
           .order("created_at", { ascending: false }),
         supabase
@@ -53,41 +68,51 @@ export default async function ReelsPage() {
           .order("created_at", { ascending: false }),
       ]);
 
-      const jobsByDraftId = new Map<string, { id: string; video_url: string }>();
-      const jobsByOfferId = new Map<string, { id: string; video_url: string }>();
+      const instagramById = new Map((instagramDrafts ?? []).map((post: any) => [post.id, post]));
+      const facebookById = new Map((facebookDrafts ?? []).map((post: any) => [post.id, post]));
+      const instagramByOffer = new Map((instagramDrafts ?? []).map((post: any) => [post.offer_id, post]));
+      const facebookByOffer = new Map((facebookDrafts ?? []).map((post: any) => [post.offer_id, post]));
 
-      for (const job of videoJobs ?? []) {
-        if (!job.video_url) continue;
+      distributionItems = (videoJobs ?? [])
+        .map((job: any) => {
+          if (!job.video_url) return null;
 
-        const normalizedJob = { id: job.id, video_url: job.video_url };
-        const draftId = (job.metadata as { draftIds?: { instagram?: string } } | null)?.draftIds?.instagram;
+          const draftIds = (job.metadata as { draftIds?: { instagram?: string; facebook?: string } } | null)?.draftIds;
+          const instagramPost =
+            (draftIds?.instagram ? instagramById.get(draftIds.instagram) : null) ??
+            instagramByOffer.get(job.offer_id) ??
+            null;
+          const facebookPost =
+            (draftIds?.facebook ? facebookById.get(draftIds.facebook) : null) ??
+            facebookByOffer.get(job.offer_id) ??
+            null;
 
-        if (draftId && !jobsByDraftId.has(draftId)) jobsByDraftId.set(draftId, normalizedJob);
-        if (job.offer_id && !jobsByOfferId.has(job.offer_id)) jobsByOfferId.set(job.offer_id, normalizedJob);
-      }
+          if (!instagramPost && !facebookPost) return null;
 
-      reelDrafts = (drafts ?? [])
-        .map((post: any) => {
-          const videoJob = jobsByDraftId.get(post.id) ?? jobsByOfferId.get(post.offer_id);
-          if (!videoJob) return null;
+          const attachVideo = (post: any): SocialDraft | null => post ? {
+            ...post,
+            videoJobId: job.id,
+            videoUrl: job.video_url,
+          } as SocialDraft : null;
 
           return {
-            ...post,
-            videoJobId: videoJob.id,
-            videoUrl: videoJob.video_url,
-          } as ReelDraft;
+            videoJobId: job.id,
+            videoUrl: job.video_url,
+            instagramDraft: attachVideo(instagramPost),
+            facebookDraft: attachVideo(facebookPost),
+          } as VideoDistributionItem;
         })
-        .filter((post): post is ReelDraft => Boolean(post));
+        .filter((item): item is VideoDistributionItem => Boolean(item));
     }
   }
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <header>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-pink-400">Instagram</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-pink-400">Distribuição social</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-white">Reels</h1>
         <p className="mt-2 max-w-3xl text-sm text-white/45">
-          Vídeos aprovados em Vídeos de Ofertas, prontos para revisão da legenda e publicação no Instagram Reels.
+          Vídeos aprovados em Vídeos de Ofertas, centralizados aqui para publicação no Instagram Reels e Facebook.
         </p>
       </header>
 
@@ -95,21 +120,36 @@ export default async function ReelsPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="font-bold text-white">Aguardando publicação</h2>
-            <p className="mt-1 text-xs text-white/45">O mesmo vídeo continua disponível no Facebook; aqui ele é apenas o destino Instagram Reels.</p>
+            <p className="mt-1 text-xs text-white/45">Um único vídeo aprovado, com destinos sociais independentes e sem duplicar o arquivo.</p>
           </div>
           <span className="rounded-full bg-pink-500/15 px-3 py-1 text-xs font-bold text-pink-200">
-            {reelDrafts.length}
+            {distributionItems.length}
           </span>
         </div>
 
-        {reelDrafts.length === 0 ? (
+        {distributionItems.length === 0 ? (
           <div className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] p-5 text-sm text-white/45">
-            Nenhum vídeo aprovado aguardando publicação no Instagram Reels.
+            Nenhum vídeo aprovado aguardando publicação social.
           </div>
         ) : (
-          <div className="grid gap-4">
-            {reelDrafts.map((post) => (
-              <InstagramPostApprovalCard key={post.id} post={post} />
+          <div className="grid gap-6">
+            {distributionItems.map((item) => (
+              <article key={item.videoJobId} className="space-y-4 rounded-2xl border border-white/[0.07] bg-white/[0.025] p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-white">Distribuição do vídeo aprovado</p>
+                  <div className="flex gap-2 text-[11px] font-bold uppercase tracking-wide">
+                    <span className={`rounded-full px-2.5 py-1 ${item.instagramDraft ? "bg-pink-500/15 text-pink-200" : "bg-emerald-500/15 text-emerald-200"}`}>
+                      Instagram {item.instagramDraft ? "pendente" : "concluído"}
+                    </span>
+                    <span className={`rounded-full px-2.5 py-1 ${item.facebookDraft ? "bg-blue-500/15 text-blue-200" : "bg-emerald-500/15 text-emerald-200"}`}>
+                      Facebook {item.facebookDraft ? "pendente" : "concluído"}
+                    </span>
+                  </div>
+                </div>
+
+                {item.instagramDraft && <InstagramPostApprovalCard post={item.instagramDraft} />}
+                {item.facebookDraft && <FacebookPostApprovalCard post={item.facebookDraft} />}
+              </article>
             ))}
           </div>
         )}
