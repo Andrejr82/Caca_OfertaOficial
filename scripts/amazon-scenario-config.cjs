@@ -13,20 +13,30 @@ const AMAZON_ALIASES = Object.freeze({
   esporte_editorial: ['tênis de corrida', 'whey protein', 'creatina', 'tapete de yoga', 'halter', 'corda de pular'],
   pet_editorial: ['ração para cachorro', 'ração para gato', 'cama pet', 'brinquedo pet', 'areia para gato', 'coleira'],
   games_editorial: ['console', 'playstation', 'xbox', 'nintendo switch', 'controle gamer', 'jogo ps5'],
-  tv_audio_editorial: ['smart tv', 'televisão 4k', 'soundbar', 'caixa de som', 'fone bluetooth', 'projetor'],
-  eletrodomesticos_editorial: ['geladeira', 'freezer', 'fogão', 'cooktop', 'micro-ondas', 'máquina de lavar'],
-  moveis_editorial: ['sofá', 'guarda-roupa', 'cama', 'colchão', 'mesa de jantar', 'rack para tv'],
-  grandes_ofertas_editorial: ['oferta', 'desconto', 'mais vendido', 'frete grátis'],
+  // Cenários naturalmente caros recebem também intenções de entrada da mesma vertical.
+  // Não há quota por ticket: o ranking continua escolhendo por mérito comercial.
+  tv_audio_editorial: ['smart tv', 'televisão 4k', 'soundbar', 'caixa de som', 'caixa de som bluetooth', 'fone bluetooth', 'headphone', 'projetor'],
+  eletrodomesticos_editorial: ['geladeira', 'freezer', 'fogão', 'cooktop', 'micro-ondas', 'máquina de lavar', 'air fryer', 'cafeteira', 'liquidificador', 'ventilador', 'aspirador vertical'],
+  moveis_editorial: ['sofá', 'guarda-roupa', 'cama', 'colchão', 'mesa de jantar', 'rack para tv', 'mesa lateral', 'escrivaninha compacta', 'prateleira', 'banqueta', 'sapateira'],
+  grandes_ofertas_editorial: ['smartphone', 'fone bluetooth', 'air fryer', 'cafeteira', 'aspirador', 'monitor', 'notebook', 'smart tv', 'geladeira'],
   cupons_aprovados_editorial: [],
 });
 
-const SCENARIOS = Object.fromEntries(Object.entries(EDITORIAL_SCENARIOS).map(([id, source]) => [id, {
+const AMAZON_GENERIC_PROMO_QUERIES = new Set(['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis']);
+
+const SCENARIOS = Object.fromEntries(Object.entries(EDITORIAL_SCENARIOS).map(([id, source]) => {
+  const sourceKeywords = id === 'grandes_ofertas_editorial'
+    ? source.keywords.filter((keyword) => !AMAZON_GENERIC_PROMO_QUERIES.has(String(keyword).trim().toLowerCase()))
+    : source.keywords;
+
+  return [id, {
     ...source,
     label: `${source.name} — Amazon Brasil`,
-    keywords: [...new Set([...(AMAZON_ALIASES[id] || []), ...source.keywords])],
+    keywords: [...new Set([...(AMAZON_ALIASES[id] || []), ...sourceKeywords])],
     apiCategories: [...source.amazonBrowseNodes],
     browseNodeIds: [...source.amazonBrowseNodes],
     allowedProductTerms: [...new Set([...(AMAZON_ALIASES[id] || []), ...source.allowedProductTerms])],
-  }]));
+  }];
+}));
 
 module.exports = { SCENARIOS, AMAZON_ALIASES };
