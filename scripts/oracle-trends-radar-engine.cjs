@@ -28,7 +28,12 @@ const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('.
 const {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   buildRadarVNextExplainability,
+  decisionFromScore,
 } = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-vnext.cjs'));
+const {
+  canonicalFunctionalFamily,
+  canonicalMacroFamily,
+} = require(path.join(__dirname, '../src/core/trends/radar-vnext-selector.cjs'));
 const {
   COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
   classifyTicket,
@@ -1270,6 +1275,11 @@ function materializeTrendRadarProduct({
     };
     const bench = scoreVNext.benchmark || null;
 
+    const decision = isVNext ? decisionFromScore(scoreVNext.total) : (score.selection_decision || score.decision || 'TESTAR');
+    const rawDecision = scoreVNext.raw_decision || decision;
+    const funcFamily = canonicalFunctionalFamily(candidate);
+    const macroFamily = canonicalMacroFamily(candidate);
+
     const directEvidenceItem = {
       claim: `Produto comercial identificado em ${candidate.marketplace}`,
       evidence_type: 'marketplace_snapshot',
@@ -1288,6 +1298,8 @@ function materializeTrendRadarProduct({
       decision,
       selection_decision: decision,
       raw_decision: rawDecision,
+      functionalFamily: funcFamily,
+      macroFamily: macroFamily,
       strategy_version: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
       score_strategy_version: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
       commercial_score: scoreVNext.total,
@@ -1342,7 +1354,7 @@ function materializeTrendRadarProduct({
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
       commercial_score: scoreVNext.total,
-      selection_decision: ['PRIORIDADE', 'TESTAR', 'APROVAR_TESTE', 'IGNORAR'].includes(decision) ? decision : (decision === 'OBSERVAR' ? 'TESTAR' : null),
+      selection_decision: decision === 'OBSERVAR' ? null : decision,
       score_breakdown: scoreVNext.breakdown,
       determining_reasons: determiningReasons,
       confidence: Math.min(

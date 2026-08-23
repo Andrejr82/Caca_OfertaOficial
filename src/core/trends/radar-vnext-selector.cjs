@@ -52,14 +52,23 @@ function classifyMacroFamily(candidate = {}) {
   return 'geral';
 }
 
-function diversityFamily(candidate = {}) {
+function canonicalFunctionalFamily(candidate = {}) {
   const family = classifyBenchmarkFamily(candidate);
-  const unclassified = family.peerType === 'item_isolado';
-  const macroFamily = classifyMacroFamily(candidate);
+  return family.functionalFamily || 'item_isolado';
+}
+
+function canonicalMacroFamily(candidate = {}) {
+  return classifyMacroFamily(candidate);
+}
+
+function diversityFamily(candidate = {}) {
+  const functionalFamily = canonicalFunctionalFamily(candidate);
+  const macroFamily = canonicalMacroFamily(candidate);
+  const unclassified = functionalFamily === 'item_isolado';
   return {
-    ...family,
+    functionalFamily,
     macroFamily,
-    diversityKey: unclassified ? null : family.familyKey,
+    diversityKey: unclassified ? null : functionalFamily,
   };
 }
 
@@ -222,6 +231,8 @@ module.exports = {
   RADAR_VNEXT_SELECTOR_VERSION,
   nativeKey,
   diversityFamily,
+  canonicalFunctionalFamily,
+  canonicalMacroFamily,
   classifyMacroFamily,
   deterministicSort,
   selectRadarVNext,

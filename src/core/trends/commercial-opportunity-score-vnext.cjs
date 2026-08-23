@@ -30,12 +30,16 @@ function parsePercentage(value) {
   return Math.round(number * 100) / 100;
 }
 
-function classifyCommercialDecisionVNext(total) {
-  const score = Number(total) || 0;
-  if (score >= 80) return 'PRIORIDADE';
-  if (score >= 65) return 'TESTAR';
-  if (score >= 50) return 'OBSERVAR';
+function decisionFromScore(score) {
+  const s = Number(score) || 0;
+  if (s >= 80) return 'PRIORIDADE';
+  if (s >= 65 && s <= 79) return 'TESTAR';
+  if (s >= 50 && s <= 64) return 'OBSERVAR';
   return 'IGNORAR';
+}
+
+function classifyCommercialDecisionVNext(total) {
+  return decisionFromScore(total);
 }
 
 function applyPriorityEconomicsGate(candidate = {}, economic = {}, rawDecision = 'IGNORAR') {
@@ -429,6 +433,7 @@ function buildRadarVNextExplainability(product = {}) {
 module.exports = {
   COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
   WEIGHTS_VNEXT,
+  decisionFromScore,
   classifyCommercialDecisionVNext,
   applyPriorityEconomicsGate,
   evaluateIntegrityGate,
