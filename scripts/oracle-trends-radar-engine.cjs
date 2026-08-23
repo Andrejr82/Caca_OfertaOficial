@@ -1342,7 +1342,7 @@ function materializeTrendRadarProduct({
       evidence_status: candidate.evidenceStatus,
       source_count: 1,
       commercial_score: scoreVNext.total,
-      selection_decision: decision,
+      selection_decision: ['PRIORIDADE', 'TESTAR', 'APROVAR_TESTE', 'IGNORAR'].includes(decision) ? decision : (decision === 'OBSERVAR' ? 'TESTAR' : null),
       score_breakdown: scoreVNext.breakdown,
       determining_reasons: determiningReasons,
       confidence: Math.min(
