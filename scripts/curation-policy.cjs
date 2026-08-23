@@ -51,7 +51,8 @@ function amazonQueryMatchesProduct(product) {
     return /\b(?:smartphone|celular|samsung)\b/.test(title) || /\bgalaxy\s+(?:a|m|s|z)\d{1,3}\b/.test(title);
   }
   if (query === 'celular' || query === 'smartphone') {
-    return /\b(?:smartphone|celular|iphone|redmi|galaxy\s+(?:a|m|s|z)\d{1,3})\b/.test(title);
+    if (/\b(?:projetor|projector|capa|case|cabo|carregador|suporte|pelicula|adaptador)\b/.test(title)) return false;
+    return /\b(?:smartphone|iphone|redmi|galaxy\s+(?:a|m|s|z)\d{1,3}|celular\s+(?:desbloqueado|android|5g|4g))\b/.test(title);
   }
   if (query === 'tv led') {
     return /\b(?:smart\s*tv|televisao|tv\s+(?:led|4k|uhd|qled|oled|mini\s*led))\b/.test(title);
