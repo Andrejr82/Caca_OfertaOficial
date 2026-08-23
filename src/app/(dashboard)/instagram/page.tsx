@@ -12,6 +12,8 @@ export default async function InstagramDashboardPage() {
 
   interface PostWithOffer {
     id: string;
+    videoJobId?: string | null;
+    videoUrl?: string | null;
     content: string;
     status: string;
     external_id: string | null;
@@ -34,13 +36,42 @@ export default async function InstagramDashboardPage() {
 
   let draftPosts: PostWithOffer[] = [];
   if (supabase) {
-    const { data: drafts } = await supabase
-      .from("posts")
-      .select("*, offers(*)")
-      .eq("channel", "instagram")
-      .eq("status", "draft")
-      .order("created_at", { ascending: false });
-    draftPosts = (drafts ?? []) as PostWithOffer[];
+    const [{ data: drafts }, { data: videoJobs }] = await Promise.all([
+      supabase
+        .from("posts")
+        .select("*, offers(*)")
+        .eq("channel", "instagram")
+        .eq("status", "draft")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("video_jobs")
+        .select("id,status,video_url,offer_id,metadata")
+        .in("status", ["ready", "approved"]),
+    ]);
+
+    const jobsByDraftId = new Map<string, { id: string; status: string; video_url: string | null }>();
+    const jobsByOfferId = new Map<string, { id: string; status: string; video_url: string | null }>();
+
+    for (const job of videoJobs ?? []) {
+      const normalizedJob = {
+        id: job.id,
+        status: job.status,
+        video_url: (job as { video_url?: string | null }).video_url ?? null,
+      };
+      const draftId = (job.metadata as { draftIds?: { instagram?: string } } | null)?.draftIds?.instagram;
+      if (draftId) jobsByDraftId.set(draftId, normalizedJob);
+      if (job.offer_id) jobsByOfferId.set(job.offer_id, normalizedJob);
+    }
+
+    draftPosts = ((drafts ?? []) as PostWithOffer[])
+      .map((post) => {
+        const videoJob = jobsByDraftId.get(post.id) ?? jobsByOfferId.get(post.offers?.id);
+        return {
+          ...post,
+          videoJobId: videoJob?.status === "approved" ? videoJob.id : null,
+          videoUrl: videoJob?.status === "approved" ? videoJob.video_url : null,
+        };
+      });
   }
 
   const manualFeedDrafts = draftPosts.filter((post) =>
