@@ -26,14 +26,9 @@ const {
 const { runMercadoLivreNativeTop20 } = require('./mercadolivre-native-top20-v5.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
 const {
-  COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
-  buildRadarVNextExplainability,
-  decisionFromScore,
-} = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-vnext.cjs'));
-const {
-  canonicalFunctionalFamily,
-  canonicalMacroFamily,
-} = require(path.join(__dirname, '../src/core/trends/radar-vnext-selector.cjs'));
+  COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
+  calculateCommercialOpportunityScoreV3,
+} = require(path.join(__dirname, '../src/core/trends/commercial-opportunity-score-v3.cjs'));
 const {
   COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
   classifyTicket,
@@ -1116,264 +1111,6 @@ async function fetchInternalOfferPerformanceMap(client, {
  * Constrói e ranqueia produtos do Radar integrando Commercial Viability V2,
  * Deduplicação Semântica e Capping de Diversidade.
  */
-
-/**
- * Helper unificado para materializar um produto no formato trend_radar_products.
- * Compartilhado entre o seletor oficial V4 e o seletor oficial VNext.
- */
-function materializeTrendRadarProduct({
-  candidate,
-  score = {},
-  strategyVersion = COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-  rank = 1,
-  radarRunId = null,
-  now = new Date(),
-  extraInferredSignals = [],
-  viability = null,
-  internalPerformance = null,
-  mode = undefined,
-}) {
-  const isVNext = mode === 'vnext' || strategyVersion === 'commercial-opportunity-vnext/1';
-  const isFocus = rank <= 3;
-  const sales = typeof candidate.sales === 'number' ? candidate.sales : null;
-  const rating = typeof candidate.ratingStar === 'number'
-    ? candidate.ratingStar
-    : (typeof candidate.rating === 'number' ? candidate.rating : null);
-  const discount = candidate.discountPercent || 0;
-  const price = candidate.currentPrice || 0;
-  const oldPrice = candidate.oldPrice || null;
-  const velocityInfo = candidate.velocityInfo || {};
-  const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
-  const candViability = viability || candidate.viability;
-
-  const decision = score.selection_decision || score.decision || (isVNext ? 'TESTAR' : 'IGNORAR');
-  const rawDecision = score.raw_decision || decision;
-
-  if (!isVNext) {
-    // V4 legacy direct evidence
-    const finalScoreV4 = score;
-    const v4Viability = candViability || { classification: 'medium', reasons: [] };
-    const economicReturn = finalScoreV4.economic_return || {
-      effectiveCommissionPercent: 0,
-      estimatedCommissionPerSale: null,
-      commissionStatus: 'unknown',
-    };
-    const internalConv = finalScoreV4.internal_conversion || {};
-
-    const directEvidenceItem = {
-      claim: `Produto comercial identificado em ${candidate.marketplace}`,
-      evidence_type: 'marketplace_snapshot',
-      provenance: candidate.provenance || (candidate.marketplace === 'Shopee' ? 'shopee_openapi_productOfferV2' : 'mercadolivre_official_intent'),
-      source_url: candidate.permalink || null,
-      image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
-      observed_at: candidate.observedAt || (now instanceof Date ? now.toISOString() : new Date().toISOString()),
-      rank_position: rank,
-      best_seller_flag: sales !== null && sales >= 50,
-      trending_flag: hasVelocity && velocityInfo.sales_velocity > 0,
-      sold_quantity: sales,
-      price,
-      old_price: oldPrice,
-      discount_percent: discount,
-      rating,
-      decision: finalScoreV4.selection_decision || finalScoreV4.decision,
-      selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision,
-      raw_decision: finalScoreV4.raw_decision || finalScoreV4.decision,
-      strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-      score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-      viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
-      viability_classification: v4Viability.classification,
-      ticket_class: finalScoreV4.ticket_class,
-      family_key: finalScoreV4.family_key,
-      normalized_unit: finalScoreV4.normalized_unit,
-      normalized_price: finalScoreV4.normalized_price,
-      peer_count: finalScoreV4.peer_count,
-      relative_price_position: finalScoreV4.relative_price_position,
-      competitiveness_reason: finalScoreV4.competitiveness_reason,
-      effective_commission_percent: economicReturn.effectiveCommissionPercent,
-      estimated_commission_per_sale: economicReturn.estimatedCommissionPerSale,
-      commission_status: economicReturn.commissionStatus,
-      internal_conversion_status: internalConv.internalConversionStatus,
-      human_probable_clicks: internalConv.humanProbableClicks,
-      attributed_sales: internalConv.attributedSales,
-      internal_conversion_rate: internalConv.internalConversionRate,
-      score_breakdown: finalScoreV4.breakdown,
-      marketplace_identity: {
-        itemId: candidate.itemId || null,
-        shopId: candidate.shopId || null,
-        productId: candidate.productId || null,
-        shopType: candidate.shopType || null,
-      },
-      commercial_metrics: {
-        sales,
-        ratingStar: rating,
-        price,
-        priceDiscountRate: candidate.priceDiscountRate || discount,
-        commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
-        sellerCommissionRate: candidate.sellerCommissionRate || 0,
-        effectiveCommissionPercent: economicReturn.effectiveCommissionPercent,
-        estimatedCommissionPerSale: economicReturn.estimatedCommissionPerSale,
-        image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
-        family_key: finalScoreV4.family_key,
-        normalized_unit: finalScoreV4.normalized_unit,
-        normalized_price: finalScoreV4.normalized_price,
-        peer_count: finalScoreV4.peer_count,
-        relative_price_position: finalScoreV4.relative_price_position,
-        competitiveness_reason: finalScoreV4.competitiveness_reason,
-      },
-      temporal_metrics: velocityInfo,
-    };
-
-    const determiningReasons = [
-      ...(v4Viability.reasons || []),
-      ...(finalScoreV4.determining_reasons || []),
-    ];
-
-    const inferredSignals = [
-      hasVelocity && velocityInfo.sales_velocity > 0 ? 'real_sales_acceleration' : 'baseline_catalog_snapshot',
-      sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
-      discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
-      `viability_${v4Viability.classification}`,
-      `v4_decision_${(finalScoreV4.selection_decision || finalScoreV4.decision).toLowerCase()}`,
-      `ticket_${finalScoreV4.ticket_class}`,
-    ];
-
-    return {
-      radar_run_id: radarRunId,
-      priority: rank,
-      product_term: candidate.productName,
-      normalized_product_term: normalizeText(candidate.productName),
-      category: candidate.category || null,
-      marketplace: candidate.marketplace,
-      evidence_status: candidate.evidenceStatus,
-      source_count: 1,
-      commercial_score: finalScoreV4.total,
-      selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision || 'TESTAR',
-      score_breakdown: finalScoreV4.breakdown,
-      determining_reasons: determiningReasons,
-      confidence: Math.min(
-        95,
-        Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales !== null && sales > 50 ? 10 : 5) + (rating !== null && rating >= 4.5 ? 10 : 5)))
-      ),
-      direct_evidence: [directEvidenceItem],
-      inferred_signals: inferredSignals,
-      affiliate_potential:
-        (sales !== null && sales >= 100) || (v4Viability.effectiveCommissionPercent >= 5) ? 'high' : 'medium',
-      visual_content_potential: isFocus ? 'high' : 'medium',
-      recommended_channel: null,
-      recommended_format: null,
-      match_status: 'pending',
-      opportunity_id: null,
-      is_focus: isFocus,
-    };
-  } else {
-    // VNext direct evidence
-    const scoreVNext = score;
-    const econ = scoreVNext.economicReturn || {
-      status: 'unknown',
-      effectiveCommissionPercent: 0,
-      estimatedCommissionPerSale: null,
-    };
-    const bench = scoreVNext.benchmark || null;
-
-    const decision = isVNext ? decisionFromScore(scoreVNext.total) : (score.selection_decision || score.decision || 'TESTAR');
-    const rawDecision = scoreVNext.raw_decision || decision;
-    const funcFamily = canonicalFunctionalFamily(candidate);
-    const macroFamily = canonicalMacroFamily(candidate);
-
-    const directEvidenceItem = {
-      claim: `Produto comercial identificado em ${candidate.marketplace}`,
-      evidence_type: 'marketplace_snapshot',
-      provenance: candidate.provenance || (candidate.marketplace === 'Shopee' ? 'shopee_openapi_productOfferV2' : 'mercadolivre_official_intent'),
-      source_url: candidate.permalink || null,
-      image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
-      observed_at: candidate.observedAt || (now instanceof Date ? now.toISOString() : new Date().toISOString()),
-      rank_position: rank,
-      best_seller_flag: sales !== null && sales >= 50,
-      trending_flag: false,
-      sold_quantity: sales,
-      price,
-      old_price: oldPrice,
-      discount_percent: discount,
-      rating,
-      decision,
-      selection_decision: decision,
-      raw_decision: rawDecision,
-      functionalFamily: funcFamily,
-      macroFamily: macroFamily,
-      strategy_version: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
-      score_strategy_version: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
-      commercial_score: scoreVNext.total,
-      benchmark: bench,
-      economic_return: {
-        status: econ.status,
-        effectiveCommissionPercent: econ.effectiveCommissionPercent,
-        estimatedCommissionPerSale: econ.estimatedCommissionPerSale,
-      },
-      effective_commission_percent: econ.effectiveCommissionPercent,
-      estimated_commission_per_sale: econ.estimatedCommissionPerSale,
-      commission_status: econ.status,
-      marketplace_identity: {
-        itemId: candidate.itemId || null,
-        shopId: candidate.shopId || null,
-        productId: candidate.productId || null,
-        shopType: candidate.shopType || null,
-      },
-      commercial_metrics: {
-        sales,
-        ratingStar: rating,
-        price,
-        priceDiscountRate: discount,
-        commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
-        sellerCommissionRate: candidate.sellerCommissionRate || candidate.sellerCommissionRateObserved || 0,
-        commissionSource: candidate.commissionSource || null,
-        effectiveCommissionPercent: econ.effectiveCommissionPercent,
-        estimatedCommissionPerSale: econ.estimatedCommissionPerSale,
-        peer_confidence: bench?.peerConfidence || null,
-        peer_count: bench?.peerCount || 0,
-      },
-    };
-
-    const determiningReasons = Array.isArray(scoreVNext.determining_reasons)
-      ? scoreVNext.determining_reasons
-      : [];
-
-    const inferredSignals = [
-      sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
-      discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
-      `vnext_decision_${decision.toLowerCase()}`,
-      `benchmark_${bench?.peerConfidence?.toLowerCase() || 'none'}`,
-    ];
-
-    return {
-      radar_run_id: radarRunId,
-      priority: rank,
-      product_term: candidate.productName,
-      normalized_product_term: normalizeText(candidate.productName),
-      category: candidate.category || null,
-      marketplace: candidate.marketplace,
-      evidence_status: candidate.evidenceStatus,
-      source_count: 1,
-      commercial_score: scoreVNext.total,
-      selection_decision: decision === 'OBSERVAR' ? null : decision,
-      score_breakdown: scoreVNext.breakdown,
-      determining_reasons: determiningReasons,
-      confidence: Math.min(
-        95,
-        Math.max(60, Math.round(60 + (scoreVNext.breakdown?.demandAcceleration || 0) / 2)),
-      ),
-      direct_evidence: [directEvidenceItem],
-      inferred_signals: inferredSignals,
-      affiliate_potential: (sales !== null && sales >= 100) || (econ.effectiveCommissionPercent >= 5) ? 'high' : 'medium',
-      visual_content_potential: isFocus ? 'high' : 'medium',
-      recommended_channel: null,
-      recommended_format: null,
-      match_status: 'pending',
-      opportunity_id: null,
-      is_focus: isFocus,
-    };
-  }
-}
-
 function buildTrendRadarProductsFromCandidates({
   radarRunId,
   shopeeCandidates = [],
@@ -1442,7 +1179,7 @@ function buildTrendRadarProductsFromCandidates({
       peers: uniqueCandidates,
     });
 
-    // Gate de Seleção: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' entram na seleção final do Radar.
+    // Gate Task 5 & Task Pré-Merge: Somente 'PRIORIDADE' (>= 80) e 'TESTAR' entram na seleção final do Radar.
     // Candidatos com decisão 'IGNORAR' são excluídos antes do preenchimento de quotas/vagas.
     const decision = scoreV4.selection_decision || scoreV4.decision;
     if (decision === 'IGNORAR') {
@@ -1626,7 +1363,7 @@ function buildTrendRadarProductsFromCandidates({
   // Pass 3: Ordenação final da carteira por Score V4 para o snapshot
   selectedCandidates.sort(sortCandidatesDeterministic);
 
-  // 5. Formatação do Top 20 Final para Persistência e Auditoria via helper unificado
+  // 5. Formatação do Top 20 Final para Persistência e Auditoria
   const prioritizedProducts = [];
   const seenFinalKeys = new Set();
 
@@ -1642,7 +1379,17 @@ function buildTrendRadarProductsFromCandidates({
     if (priority > maxProducts) break;
 
     const isFocus = priority <= 3;
+    const sales = typeof candidate.sales === 'number' ? candidate.sales : null;
+    const rating = typeof candidate.ratingStar === 'number'
+      ? candidate.ratingStar
+      : (typeof candidate.rating === 'number' ? candidate.rating : null);
+    const discount = candidate.discountPercent || 0;
+    const price = candidate.currentPrice || 0;
+    const oldPrice = candidate.oldPrice || null;
     const velocityInfo = candidate.velocityInfo;
+    const hasVelocity = velocityInfo.velocity_status === 'computed' && velocityInfo.sales_velocity !== null;
+    const viability = candidate.viability;
+
     const finalScoreV4 = calculateCommercialOpportunityScoreV4({
       ...candidate,
       isFocus,
@@ -1654,18 +1401,112 @@ function buildTrendRadarProductsFromCandidates({
       peers: uniqueCandidates,
     });
 
-    const product = materializeTrendRadarProduct({
-      candidate,
-      score: finalScoreV4,
-      strategyVersion: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-      rank: priority,
-      radarRunId,
-      now,
-      viability: candidate.viability,
-      internalPerformance: candidate.internalPerformance,
-    });
+    const directEvidence = [
+      {
+        claim: `Produto comercial identificado em ${candidate.marketplace}`,
+        evidence_type: 'marketplace_snapshot',
+        provenance: candidate.provenance || (candidate.marketplace === 'Shopee' ? 'shopee_openapi_productOfferV2' : 'mercadolivre_official_intent'),
+        source_url: candidate.permalink || null,
+        image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
+        observed_at: candidate.observedAt || now.toISOString(),
+        rank_position: priority,
+        best_seller_flag: sales !== null && sales >= 50,
+        trending_flag: hasVelocity && velocityInfo.sales_velocity > 0,
+        sold_quantity: sales,
+        price,
+        old_price: oldPrice,
+        discount_percent: discount,
+        rating,
+        decision: finalScoreV4.selection_decision || finalScoreV4.decision,
+        selection_decision: finalScoreV4.selection_decision || finalScoreV4.decision,
+        raw_decision: finalScoreV4.raw_decision || finalScoreV4.decision,
+        strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+        score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+        viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
+        viability_classification: viability.classification,
+        ticket_class: finalScoreV4.ticket_class,
+        family_key: finalScoreV4.family_key,
+        normalized_unit: finalScoreV4.normalized_unit,
+        normalized_price: finalScoreV4.normalized_price,
+        peer_count: finalScoreV4.peer_count,
+        relative_price_position: finalScoreV4.relative_price_position,
+        competitiveness_reason: finalScoreV4.competitiveness_reason,
+        effective_commission_percent: finalScoreV4.economic_return.effectiveCommissionPercent,
+        estimated_commission_per_sale: finalScoreV4.economic_return.estimatedCommissionPerSale,
+        commission_status: finalScoreV4.economic_return.commissionStatus,
+        internal_conversion_status: finalScoreV4.internal_conversion.internalConversionStatus,
+        human_probable_clicks: finalScoreV4.internal_conversion.humanProbableClicks,
+        attributed_sales: finalScoreV4.internal_conversion.attributedSales,
+        internal_conversion_rate: finalScoreV4.internal_conversion.internalConversionRate,
+        score_breakdown: finalScoreV4.breakdown,
+        marketplace_identity: {
+          itemId: candidate.itemId || null,
+          shopId: candidate.shopId || null,
+          productId: candidate.productId || null,
+          shopType: candidate.shopType || null,
+        },
+        commercial_metrics: {
+          sales,
+          ratingStar: rating,
+          price,
+          priceDiscountRate: candidate.priceDiscountRate || discount,
+          commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
+          sellerCommissionRate: candidate.sellerCommissionRate || 0,
+          effectiveCommissionPercent: finalScoreV4.economic_return.effectiveCommissionPercent,
+          estimatedCommissionPerSale: finalScoreV4.economic_return.estimatedCommissionPerSale,
+          image_url: candidate.imageUrl || candidate.image_url || candidate.thumbnail || null,
+          family_key: finalScoreV4.family_key,
+          normalized_unit: finalScoreV4.normalized_unit,
+          normalized_price: finalScoreV4.normalized_price,
+          peer_count: finalScoreV4.peer_count,
+          relative_price_position: finalScoreV4.relative_price_position,
+          competitiveness_reason: finalScoreV4.competitiveness_reason,
+        },
+        temporal_metrics: velocityInfo,
+      },
+    ];
 
-    prioritizedProducts.push(product);
+    const determiningReasons = [
+      ...viability.reasons,
+      ...finalScoreV4.determining_reasons,
+    ];
+
+    const inferredSignals = [
+      hasVelocity && velocityInfo.sales_velocity > 0 ? 'real_sales_acceleration' : 'baseline_catalog_snapshot',
+      sales !== null && sales >= 50 ? 'marketplace_bestseller' : 'marketplace_catalog',
+      discount >= 10 ? 'marketplace_promotion' : 'marketplace_standard',
+      `viability_${viability.classification}`,
+      `v4_decision_${(finalScoreV4.selection_decision || finalScoreV4.decision).toLowerCase()}`,
+      `ticket_${finalScoreV4.ticket_class}`,
+    ];
+
+    prioritizedProducts.push({
+      radar_run_id: radarRunId,
+      priority,
+      product_term: candidate.productName,
+      normalized_product_term: normalizeText(candidate.productName),
+      category: candidate.category || null,
+      marketplace: candidate.marketplace,
+      evidence_status: candidate.evidenceStatus,
+      source_count: 1,
+      commercial_score: finalScoreV4.total,
+      score_breakdown: finalScoreV4.breakdown,
+      determining_reasons: determiningReasons,
+      confidence: Math.min(
+        95,
+        Math.max(60, Math.round(60 + (hasVelocity ? 20 : 0) + (sales !== null && sales > 50 ? 10 : 5) + (rating !== null && rating >= 4.5 ? 10 : 5)))
+      ),
+      direct_evidence: directEvidence,
+      inferred_signals: inferredSignals,
+      affiliate_potential:
+        (sales !== null && sales >= 100) || (viability.effectiveCommissionPercent >= 5) ? 'high' : 'medium',
+      visual_content_potential: isFocus ? 'high' : 'medium',
+      recommended_channel: null,
+      recommended_format: null,
+      match_status: 'pending',
+      opportunity_id: null,
+      is_focus: isFocus,
+    });
   }
 
   return prioritizedProducts;
@@ -1694,15 +1535,6 @@ async function persistTrendRadarSnapshot({
     if (insertError) throw new Error(`Falha ao inserir produtos: ${insertError.message}`);
   }
 
-  const isVNext = sourceHealthOverrides?.official_strategy === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION
-    || sourceHealthOverrides?.strategy_version === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION
-    || sourceHealthOverrides?.vnext_official === true
-    || products[0]?.direct_evidence?.[0]?.strategy_version === COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
-
-  const strategyVersion = isVNext
-    ? COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION
-    : (products[0]?.direct_evidence?.[0]?.strategy_version || COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION);
-
   const updatedHealth = {
     ...(run.source_health || {}),
     runtime: 'oracle',
@@ -1712,14 +1544,12 @@ async function persistTrendRadarSnapshot({
     target_products: 20,
     minimum_products: 10,
     target_reached: products.length >= 20,
+    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    score_strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    viability_version: COMMERCIAL_VIABILITY_STRATEGY_VERSION,
     total_products_selected: products.length,
     marketplaces: ['Shopee', 'Mercado Livre'],
     ...sourceHealthOverrides,
-    strategy_version: strategyVersion,
-    score_strategy_version: strategyVersion,
-    viability_version: isVNext ? null : (sourceHealthOverrides?.viability_version || COMMERCIAL_VIABILITY_STRATEGY_VERSION),
-    official_strategy: isVNext ? COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION : COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
-    vnext_official: isVNext,
   };
 
   const executiveSummary = {
@@ -1728,10 +1558,8 @@ async function persistTrendRadarSnapshot({
     top_product: products[0]?.product_term || null,
     top_product_score: products[0]?.commercial_score || null,
     top_product_decision: products[0]?.direct_evidence?.[0]?.decision || null,
-    strategy_version: strategyVersion,
-    generated_by: isVNext
-      ? 'oracle_radar_commercial_opportunity_vnext_engine'
-      : 'oracle_radar_commercial_opportunity_v4_engine',
+    strategy_version: COMMERCIAL_OPPORTUNITY_V4_STRATEGY_VERSION,
+    generated_by: 'oracle_radar_commercial_opportunity_v4_engine',
     contract: RUNNER_CONTRACT_VERSION,
   };
 
@@ -1769,8 +1597,6 @@ module.exports = {
   getOfferOfficialIdentityKeys,
   classifyClickEvents,
   fetchInternalOfferPerformanceMap,
-  buildRadarVNextExplainability,
-  materializeTrendRadarProduct,
   buildTrendRadarProductsFromCandidates,
   persistTrendRadarSnapshot,
 };

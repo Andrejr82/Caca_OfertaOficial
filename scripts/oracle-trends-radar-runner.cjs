@@ -33,14 +33,6 @@ const {
   calculateCommercialOpportunityScoreV4,
 } = require('../src/core/trends/commercial-opportunity-score-v4.cjs');
 
-const { COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION } = require('../src/core/trends/commercial-opportunity-score-vnext.cjs');
-const VNEXT_OFFICIAL_ENV = 'TRENDS_RADAR_VNEXT_OFFICIAL';
-
-function isRadarVNextOfficialEnabled(env = process.env) {
-  const value = String(env?.[VNEXT_OFFICIAL_ENV] ?? '').trim().toLowerCase();
-  return value === '1' || value === 'true' || value === 'yes' || value === 'on';
-}
-
 const DEDICATED_RUNTIME_ENV = 'TRENDS_RADAR_DEDICATED_RUNTIME';
 
 function isDedicatedTrendRadarRuntimeEnabled(env = process.env) {
@@ -300,7 +292,6 @@ async function processPendingTrendRadarRuns(options = {}) {
         previousItemsMap,
         internalPerformanceMap,
         maxProducts: targetProducts,
-        env,
       });
 
       candidatesPerRefillRound.push({
@@ -513,22 +504,6 @@ async function processPendingTrendRadarRuns(options = {}) {
       average_estimated_commission_per_sale: avgCommission,
       median_estimated_commission_per_sale: medianCommission,
     };
-
-    const isVNextOfficial = isRadarVNextOfficialEnabled(env);
-    if (isVNextOfficial) {
-      const vnextDiag = typeof engine.getLatestVNextDiagnostics === 'function' ? engine.getLatestVNextDiagnostics() : null;
-      sourceHealth.official_strategy = COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
-      sourceHealth.vnext_official = true;
-      sourceHealth.strategy_version = COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
-      sourceHealth.score_strategy_version = COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION;
-      sourceHealth.viability_version = null;
-      if (vnextDiag) {
-        sourceHealth.candidate_pool_count = vnextDiag.candidate_pool_count ?? (mlCandidatesRaw + shopeeCandidatesRaw);
-        sourceHealth.vnext_scored_count = vnextDiag.vnext_scored_count ?? 0;
-        sourceHealth.vnext_decision_counts = vnextDiag.vnext_decision_counts ?? { PRIORIDADE: 0, TESTAR: 0, OBSERVAR: 0, IGNORAR: 0 };
-        sourceHealth.benchmark_confidence_counts = vnextDiag.benchmark_confidence_counts ?? { HIGH: 0, MEDIUM: 0, LOW: 0, NONE: 0 };
-      }
-    }
 
     // 8. Persistência do snapshot
     const persistResult = await engine.persistTrendRadarSnapshot({

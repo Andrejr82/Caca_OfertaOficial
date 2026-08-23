@@ -1,220 +1,247 @@
 'use strict';
 
-/**
- * Oracle Trends Radar Runner Final — Consolidated Official Entrypoint
- *
- * Roteamento determinístico sem monkey patches:
- * - VNext ON: runRadarVNext (pipeline oficial canônico)
- * - VNext OFF: runner.processPendingTrendRadarRuns (V4 rollback preservado)
- * - Shadow Mode: mantido para backward compatibility quando VNext OFF
- */
-
 const engine = require('./oracle-trends-radar-engine.cjs');
-const runner = require('./oracle-trends-radar-runner.cjs');
-const dedup = require('./radar-semantic-dedup-v2.cjs');
 const {
-  buildBenchmarkContext,
-  createPeerBenchmarkIndex,
-} = require('../src/core/trends/benchmark-peer-engine.cjs');
-const {
-  COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
-  calculateCommercialOpportunityScoreVNext,
-} = require('../src/core/trends/commercial-opportunity-score-vnext.cjs');
-const { selectRadarVNext } = require('../src/core/trends/radar-vnext-selector.cjs');
-const {
-  runRadarVNext,
-  normalizeShopeeCandidate,
-  normalizeMlCandidate,
-  VNEXT_RUNNER_CONTRACT_VERSION,
-} = require('./oracle-trends-radar-vnext-pipeline.cjs');
+  GRAPHQL_CONTRACTS,
+  createSignedRequest,
+  normalizePriceIntegrity,
+} = require('./shopee-openapi-shadow-engine-v1.cjs');
 
-const VNEXT_OFFICIAL_ENV = 'TRENDS_RADAR_VNEXT_OFFICIAL';
-const VNEXT_SHADOW_ENV = 'TRENDS_RADAR_VNEXT_SHADOW';
-
-function isRadarVNextOfficialEnabled(env = process.env) {
-  const raw = String(env?.[VNEXT_OFFICIAL_ENV] ?? '').trim().toLowerCase();
-  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+function normalizeShopeeCommissionPercent(value) {
+  const num = engine.parseOptionalNumber(value);
+  if (num === null || num <= 0) return null;
+  const percent = num < 1 ? num * 100 : num;
+  const rounded = Math.round(percent * 100) / 100;
+  return rounded > 0 && rounded <= 100 ? rounded : null;
 }
 
-function isRadarVNextShadowEnabled(env = process.env) {
-  const raw = String(env?.[VNEXT_SHADOW_ENV] ?? '').trim().toLowerCase();
-  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
-}
+function resolveShopeeCommission(node = {}) {
+  const total = normalizeShopeeCommissionPercent(node.commissionRate);
+  const shopee = normalizeShopeeCommissionPercent(node.shopeeCommissionRate);
+  const seller = normalizeShopeeCommissionPercent(node.sellerCommissionRate);
 
-function buildTrendRadarProductsFromCandidates(options = {}) {
-  const env = options.env || process.env;
-  if (isRadarVNextOfficialEnabled(env)) {
-    const shopeeRaw = Array.isArray(options.shopeeCandidates) ? options.shopeeCandidates : [];
-    const mlRaw = Array.isArray(options.mlCandidates) ? options.mlCandidates : [];
-
-    const pool = [
-      ...shopeeRaw.map(c => normalizeShopeeCandidate(c, options.now)),
-      ...mlRaw.map(c => normalizeMlCandidate(c, options.now)),
-    ];
-
-    const dedupResult = dedup.deduplicateCatalogAndSemantic
-      ? dedup.deduplicateCatalogAndSemantic(pool)
-      : { uniqueCandidates: pool };
-    const dedupedCandidates = Array.isArray(dedupResult) ? dedupResult : (dedupResult?.uniqueCandidates || pool);
-
-    const peerIndex = createPeerBenchmarkIndex(pool);
-    const benchmarkCache = new Map();
-
-    const contextForCandidate = (candidate) => {
-      let benchmark = benchmarkCache.get(candidate);
-      if (!benchmark) {
-        benchmark = buildBenchmarkContext(candidate, peerIndex);
-        benchmarkCache.set(candidate, benchmark);
-      }
-      return { benchmark, pool };
+  if (total !== null) {
+    return {
+      effectiveCommissionPercent: total,
+      shopeeCommissionPercent: shopee,
+      sellerCommissionPercent: seller,
+      commissionSource: 'commissionRate_total',
     };
-
-    const scoreFn = typeof options.scoreCandidate === 'function'
-      ? options.scoreCandidate
-      : (candidate, context) => calculateCommercialOpportunityScoreVNext(candidate, context);
-
-    const selectedRows = selectRadarVNext(dedupedCandidates, {
-      maxProducts: options.maxProducts || 20,
-      minScore: options.minScore !== undefined ? options.minScore : 0,
-      maxPerStore: 2,
-      maxPerFamily: 2,
-      maxPerMacro: 4,
-      contextForCandidate,
-      scoreCandidate: scoreFn,
-    });
-
-    return selectedRows.map((row, idx) => engine.materializeTrendRadarProduct({
-      candidate: row.candidate,
-      score: row.score,
-      strategyVersion: COMMERCIAL_OPPORTUNITY_VNEXT_STRATEGY_VERSION,
-      rank: idx + 1,
-      radarRunId: options.radarRunId || 'test-run',
-      now: options.now || new Date(),
-    }));
   }
 
-  // V4 legacy fallback
-  return engine.buildTrendRadarProductsFromCandidates(options);
-}
-
-async function claimTrendRadarRunAtomic(client, pendingRun, env) {
-  if (!client || !pendingRun?.id) return { claimed: true, run: pendingRun };
-  const executorId = `oracle-worker-${process.pid}-${Date.now()}`;
-
-  const currentHealth = pendingRun.source_health || {};
-  if (currentHealth.status === 'running' && currentHealth.claimed_at) {
-    const elapsedMs = Date.now() - new Date(currentHealth.claimed_at).getTime();
-    if (elapsedMs < 5 * 60 * 1000) {
-      return { claimed: false, reason: 'already_claimed', claimedBy: currentHealth.claimed_by };
-    }
+  const components = Math.round(((shopee || 0) + (seller || 0)) * 100) / 100;
+  if (components > 0 && components <= 100) {
+    return {
+      effectiveCommissionPercent: components,
+      shopeeCommissionPercent: shopee,
+      sellerCommissionPercent: seller,
+      commissionSource: 'official_components',
+    };
   }
 
-  const updatedHealth = {
-    ...currentHealth,
-    runtime: 'oracle',
-    status: 'running',
-    running_at: new Date().toISOString(),
-    claimed_at: new Date().toISOString(),
-    claimed_by: executorId,
+  return {
+    effectiveCommissionPercent: null,
+    shopeeCommissionPercent: shopee,
+    sellerCommissionPercent: seller,
+    commissionSource: 'unknown',
   };
-
-  const updateBuilder = client
-    .from('trend_radar_runs')
-    .update({
-      source_health: updatedHealth,
-      updated_at: new Date().toISOString(),
-    })
-    .eq('id', pendingRun.id);
-
-  if (typeof updateBuilder?.select === 'function') {
-    const { data, error } = await updateBuilder.select('id, source_health');
-    if (error || !data || data.length === 0) {
-      return { claimed: false, reason: 'already_claimed' };
-    }
-  } else {
-    await updateBuilder;
-  }
-
-  return { claimed: true, executorId, run: { ...pendingRun, source_health: updatedHealth } };
 }
 
-async function processPendingTrendRadarRuns(options = {}) {
-  const env = options.env || process.env;
-  const isOfficialOn = isRadarVNextOfficialEnabled(env);
-  const isShadowOn = isRadarVNextShadowEnabled(env);
+function defaultShopeeApiCaller(env = process.env) {
+  const appId = env.SHOPEE_APP_ID;
+  const appSecret = env.SHOPEE_APP_SECRET;
+  if (!appId || !appSecret) return null;
+  return createSignedRequest({
+    appId,
+    appSecret,
+    request: async ({ body, headers }) => {
+      const response = await fetch('https://open-api.affiliate.shopee.com.br/graphql', {
+        method: 'POST',
+        headers,
+        body,
+        signal: AbortSignal.timeout(30000),
+      });
+      return { status: response.status, data: await response.json() };
+    },
+  });
+}
 
-  if (isOfficialOn) {
-    if (typeof options.runnerProcessPendingTrendRadarRuns === 'function') {
-      const res = await options.runnerProcessPendingTrendRadarRuns(options);
-      if (res && res.sourceHealth && isShadowOn) {
-        res.sourceHealth.vnext_shadow = {
-          skipped: true,
-          reason: 'vnext_official_active',
+async function collectShopeeMarketplaceCandidatesSafe({
+  request = null,
+  categoryIds = engine.SHOPEE_BROAD_DISCOVERY_CATEGORIES,
+  maxPerCategory = 40,
+  maxPagesPerCategory = 2,
+  page = 1,
+  sortType = 2,
+  isAMSOffer = undefined,
+  env = process.env,
+} = {}) {
+  const caller = request || defaultShopeeApiCaller(env);
+  if (!caller) return [];
+
+  const candidates = [];
+  const seenIdentities = new Set();
+  const targetCategories = Array.isArray(categoryIds) && categoryIds.length > 0 ? categoryIds : [null];
+  const pageLimit = Math.max(5, Math.min(50, Number(maxPerCategory) || 40));
+  const pagesToScan = Math.max(1, Math.min(5, Math.floor(Number(maxPagesPerCategory) || 2)));
+  const basePage = Math.max(1, Number(page) || 1);
+
+  for (const catId of targetCategories) {
+    try {
+      for (let offset = 0; offset < pagesToScan; offset += 1) {
+        const currentPage = basePage + offset;
+        const variables = {
+          page: currentPage,
+          limit: pageLimit,
+          sortType: typeof sortType === 'number' ? sortType : 2,
         };
+        if (catId) variables.productCatId = catId;
+        if (typeof isAMSOffer === 'boolean') variables.isAMSOffer = isAMSOffer;
+
+        const response = await caller(
+          'ShopeePromotionOffers',
+          GRAPHQL_CONTRACTS.productOfferV2.query,
+          variables,
+          { timeoutMs: 15000 },
+        );
+
+        const nodes = response?.data?.data?.productOfferV2?.nodes || [];
+        if (!Array.isArray(nodes) || nodes.length === 0) break;
+
+        for (const node of nodes) {
+          const itemId = String(node.itemId || '').trim();
+          const shopId = String(node.shopId || '').trim();
+          const productName = String(node.productName || '').trim();
+          if (!itemId || !productName) continue;
+
+          const identityKey = `${shopId || '0'}:${itemId}`;
+          if (seenIdentities.has(identityKey)) continue;
+          seenIdentities.add(identityKey);
+
+          const priceIntegrity = normalizePriceIntegrity({
+            price: node.price,
+            priceMin: node.priceMin,
+            priceMax: node.priceMax,
+            priceDiscountRate: node.priceDiscountRate,
+            officialOldPrice: node.officialOldPrice,
+          });
+          const price = priceIntegrity.currentPrice;
+          if (!(price > 0)) continue;
+
+          const oldPrice = priceIntegrity.oldPrice;
+          const discount = priceIntegrity.discountPercent ?? 0;
+          const marketplaceReportedDiscountPercent = engine.parseNumber(node.priceDiscountRate, 0);
+          const sales = parseInt(String(node.sales || '0'), 10) || 0;
+          const ratingStar = engine.parseNumber(node.ratingStar, 0);
+          const commission = resolveShopeeCommission(node);
+          const effectiveCommissionPercent = commission.effectiveCommissionPercent || 0;
+          const shopType = Array.isArray(node.shopType) ? node.shopType : [];
+          const link = String(node.offerLink || node.productLink || '');
+
+          candidates.push({
+            marketplace: 'Shopee',
+            itemId,
+            shopId,
+            shopName: String(node.shopName || ''),
+            productName,
+            category: 'Marketplace Deals',
+            currentPrice: price,
+            oldPrice,
+            priceDiscountRate: engine.parseNumber(node.priceDiscountRate, discount),
+            discountPercent: discount || engine.parseNumber(node.priceDiscountRate, 0),
+            marketplaceReportedDiscountPercent,
+            priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
+            priceAuthority: priceIntegrity.priceAuthority,
+            oldPriceAuthority: priceIntegrity.oldPriceAuthority,
+            discountAuthority: priceIntegrity.discountAuthority,
+            sales,
+            ratingStar: ratingStar > 0 ? ratingStar : null,
+            rating: ratingStar > 0 ? ratingStar : null,
+            commissionRate: effectiveCommissionPercent,
+            commissionPercent: effectiveCommissionPercent,
+            // O score V4 soma base + seller. Como commissionRate da OpenAPI é total quando
+            // presente, o componente seller usado pelo score fica zerado para evitar duplicidade.
+            sellerCommissionRate: 0,
+            shopeeCommissionRate: commission.shopeeCommissionPercent,
+            sellerCommissionRateObserved: commission.sellerCommissionPercent,
+            commissionSource: commission.commissionSource,
+            shopType,
+            permalink: link,
+            imageUrl: String(node.imageUrl || ''),
+            provenance: 'shopee_openapi_productOfferV2',
+            observedAt: new Date().toISOString(),
+          });
+        }
+
+        const pageInfo = response?.data?.data?.productOfferV2?.pageInfo;
+        if (pageInfo && pageInfo.hasNextPage === false) break;
       }
-      return res;
+    } catch (_err) {
+      // Falha isolada de categoria não aborta a coleta geral.
     }
-
-    const client = options.client || (options.dryRun ? null : runner.createRadarAdminClient(env));
-    const pendingRun = client ? await runner.findPendingTrendRadarRun(client) : (options.dryRun ? { id: 'dry-run-123' } : null);
-    if (!pendingRun) return { processed: false, reason: 'no_pending_runs' };
-
-    if (client && pendingRun.id && !options.dryRun) {
-      const claimResult = await claimTrendRadarRunAtomic(client, pendingRun, env);
-      if (!claimResult.claimed) {
-        return { processed: false, reason: 'already_claimed', runId: pendingRun.id };
-      }
-    }
-
-    const result = await runRadarVNext({
-      run: pendingRun,
-      client,
-      env,
-      shopeeCollector: options.shopeeCollector,
-      mlCollector: options.mlCollector,
-      recencyCollector: options.recencyCollector,
-      offersCollector: options.offersCollector,
-      historyCollector: options.historyCollector,
-      dryRun: options.dryRun,
-      maxProducts: options.maxProducts || 20,
-    });
-
-    if (result && result.sourceHealth && isShadowOn) {
-      result.sourceHealth.vnext_shadow = {
-        skipped: true,
-        reason: 'vnext_official_active',
-      };
-    }
-
-    return result;
   }
 
-  // Legacy V4 rollback path
-  const runnerFn = typeof options.runnerProcessPendingTrendRadarRuns === 'function'
-    ? options.runnerProcessPendingTrendRadarRuns
-    : runner.processPendingTrendRadarRuns;
-
-  const result = await runnerFn(options);
-
-  if (result && result.sourceHealth && isShadowOn) {
-    result.sourceHealth.vnext_shadow = {
-      version: 'radar-vnext-shadow/v1',
-      mode: 'shadow',
-      evaluated_at: new Date().toISOString(),
-    };
-  }
-
-  return result;
+  return candidates;
 }
+
+const originalBuildTrendRadarProductsFromCandidates = engine.buildTrendRadarProductsFromCandidates;
+
+function buildTrendRadarProductsFromCandidatesWithPersistedDecision(options = {}) {
+  const shopeeByIdentity = new Map();
+  for (const candidate of options.shopeeCandidates || []) {
+    const itemId = String(candidate.itemId || '').trim();
+    const shopId = String(candidate.shopId || '').trim();
+    if (itemId) shopeeByIdentity.set(`${shopId || '0'}:${itemId}`, candidate);
+  }
+
+  return originalBuildTrendRadarProductsFromCandidates(options).map((product) => {
+    const decision = product.selection_decision
+      || product.direct_evidence?.[0]?.selection_decision
+      || product.direct_evidence?.[0]?.decision
+      || null;
+
+    const directEvidence = Array.isArray(product.direct_evidence)
+      ? product.direct_evidence.map((entry, index) => {
+          if (index !== 0 || product.marketplace !== 'Shopee') return entry;
+
+          const itemId = String(entry?.marketplace_identity?.itemId || '').trim();
+          const shopId = String(entry?.marketplace_identity?.shopId || '').trim();
+          const candidate = shopeeByIdentity.get(`${shopId || '0'}:${itemId}`);
+          if (!candidate) return entry;
+
+          return {
+            ...entry,
+            commission_source: candidate.commissionSource || null,
+            shopee_commission_percent: candidate.shopeeCommissionRate ?? null,
+            seller_commission_percent: candidate.sellerCommissionRateObserved ?? null,
+            commercial_metrics: {
+              ...(entry.commercial_metrics || {}),
+              commissionRate: candidate.commissionRate || candidate.commissionPercent || 0,
+              shopeeCommissionRate: candidate.shopeeCommissionRate ?? null,
+              sellerCommissionRate: candidate.sellerCommissionRateObserved ?? null,
+              commissionSource: candidate.commissionSource || null,
+            },
+          };
+        })
+      : product.direct_evidence;
+
+    return {
+      ...product,
+      selection_decision: decision,
+      direct_evidence: directEvidence,
+    };
+  });
+}
+
+engine.collectShopeeMarketplaceCandidates = collectShopeeMarketplaceCandidatesSafe;
+engine.buildTrendRadarProductsFromCandidates = buildTrendRadarProductsFromCandidatesWithPersistedDecision;
+
+const runner = require('./oracle-trends-radar-runner.cjs');
 
 module.exports = {
   ...runner,
-  VNEXT_OFFICIAL_ENV,
-  VNEXT_SHADOW_ENV,
-  VNEXT_RUNNER_CONTRACT_VERSION,
-  isRadarVNextOfficialEnabled,
-  isRadarVNextShadowEnabled,
-  buildTrendRadarProductsFromCandidates,
-  processPendingTrendRadarRuns,
-  runRadarVNext,
+  normalizeShopeeCommissionPercent,
+  resolveShopeeCommission,
+  collectShopeeMarketplaceCandidatesSafe,
+  buildTrendRadarProductsFromCandidates: buildTrendRadarProductsFromCandidatesWithPersistedDecision,
 };

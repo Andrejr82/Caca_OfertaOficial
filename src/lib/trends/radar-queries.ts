@@ -10,29 +10,6 @@ export interface TrendExperimentMetricsView {
   windowEnd: string | null;
 }
 
-export interface TrendRadarBenchmarkView {
-  peerCount: number | null;
-  peerConfidence: string | null;
-  benchmarkStatus: string | null;
-  peerPriceMin: number | null;
-  peerPriceMedian: number | null;
-  peerPriceMax: number | null;
-  priceVsMedianPercent: number | null;
-}
-
-export interface TrendRadarEconomicReturnView {
-  status: string | null;
-  effectiveCommissionPercent: number | null;
-  estimatedCommissionPerSale: number | null;
-}
-
-export interface TrendRadarMarketplaceIdentityView {
-  itemId: string | null;
-  shopId: string | null;
-  productId: string | null;
-  shopType: string | null;
-}
-
 export interface TrendRadarSnapshotProductView {
   id: string;
   priority: number;
@@ -58,10 +35,6 @@ export interface TrendRadarSnapshotProductView {
   velocityStatus: string | null;
   scoreDecision: string | null;
   scoreStrategyVersion: string | null;
-  rawDecision: string | null;
-  benchmark: TrendRadarBenchmarkView | null;
-  economicReturn: TrendRadarEconomicReturnView | null;
-  marketplaceIdentity: TrendRadarMarketplaceIdentityView | null;
   recommendedChannel: string | null;
   recommendedFormat: string | null;
   selectionDecision: string | null;
@@ -163,52 +136,6 @@ function emptyMetrics(start: string | null): TrendExperimentMetricsView {
   return { clicks: 0, orders: 0, commissionValue: 0, grossValue: 0, conversionRate: 0, windowStart: start, windowEnd: end };
 }
 
-function extractBenchmark(value: unknown): TrendRadarBenchmarkView | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const b = value as Record<string, unknown>;
-  return {
-    peerCount: finiteNumber(b.peerCount ?? b.peer_count),
-    peerConfidence: typeof b.peerConfidence === "string" ? b.peerConfidence : (typeof b.peer_confidence === "string" ? b.peer_confidence : null),
-    benchmarkStatus: typeof b.benchmarkStatus === "string" ? b.benchmarkStatus : (typeof b.benchmark_status === "string" ? b.benchmark_status : null),
-    peerPriceMin: finiteNumber(b.peerPriceMin ?? b.peer_price_min),
-    peerPriceMedian: finiteNumber(b.peerPriceMedian ?? b.peer_price_median),
-    peerPriceMax: finiteNumber(b.peerPriceMax ?? b.peer_price_max),
-    priceVsMedianPercent: finiteNumber(b.priceVsMedianPercent ?? b.price_vs_median_percent),
-  };
-}
-
-function extractEconomicReturn(evidence: Record<string, unknown>): TrendRadarEconomicReturnView | null {
-  const raw = evidence.economic_return;
-  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-    const econ = raw as Record<string, unknown>;
-    return {
-      status: typeof econ.status === "string" ? econ.status : null,
-      effectiveCommissionPercent: finiteNumber(econ.effectiveCommissionPercent ?? econ.effective_commission_percent),
-      estimatedCommissionPerSale: finiteNumber(econ.estimatedCommissionPerSale ?? econ.estimated_commission_per_sale),
-    };
-  }
-  const status = typeof evidence.commission_status === "string" ? evidence.commission_status : null;
-  if (status !== null) {
-    return {
-      status,
-      effectiveCommissionPercent: finiteNumber(evidence.effective_commission_percent),
-      estimatedCommissionPerSale: finiteNumber(evidence.estimated_commission_per_sale),
-    };
-  }
-  return null;
-}
-
-function extractMarketplaceIdentity(value: unknown): TrendRadarMarketplaceIdentityView | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const m = value as Record<string, unknown>;
-  return {
-    itemId: typeof m.itemId === "string" ? m.itemId : (typeof m.item_id === "string" ? m.item_id : null),
-    shopId: typeof m.shopId === "string" ? m.shopId : (typeof m.shop_id === "string" ? m.shop_id : null),
-    productId: typeof m.productId === "string" ? m.productId : (typeof m.product_id === "string" ? m.product_id : null),
-    shopType: typeof m.shopType === "string" ? m.shopType : (typeof m.shop_type === "string" ? m.shop_type : null),
-  };
-}
-
 export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): TrendRadarSnapshotView {
   return {
     id: run.id,
@@ -249,10 +176,6 @@ export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): 
         velocityStatus: typeof temporal.velocity_status === "string" ? temporal.velocity_status : null,
         scoreDecision: typeof evidence.decision === "string" ? evidence.decision : null,
         scoreStrategyVersion: typeof evidence.strategy_version === "string" ? evidence.strategy_version : null,
-        rawDecision: typeof evidence.raw_decision === "string" ? evidence.raw_decision : null,
-        benchmark: extractBenchmark(evidence.benchmark),
-        economicReturn: extractEconomicReturn(evidence),
-        marketplaceIdentity: extractMarketplaceIdentity(evidence.marketplace_identity),
         recommendedChannel: row.recommended_channel,
         recommendedFormat: row.recommended_format,
         selectionDecision: row.selection_decision,
