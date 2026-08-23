@@ -30,6 +30,20 @@ function normalizeText(value) {
     .trim();
 }
 
+function explicitAccessoryIntentMatchesTitle(intent, title) {
+  const normalizedIntent = normalizeText(intent);
+  const normalizedTitle = normalizeText(title);
+  if (!normalizedIntent || !normalizedTitle) return false;
+
+  const intentAccessory = normalizedIntent.match(ACCESSORY_ONLY_TERMS)?.[0];
+  if (!intentAccessory) return false;
+
+  const normalizedAccessory = normalizeText(intentAccessory);
+  const titleWords = ` ${normalizedTitle.replace(/[^a-z0-9]+/g, ' ')} `;
+  const accessoryWords = ` ${normalizedAccessory.replace(/[^a-z0-9]+/g, ' ')} `;
+  return titleWords.includes(accessoryWords);
+}
+
 function amazonSearchQuery(product) {
   const source = String(product?.rawPayload?.source_url || product?.category?.evidenceUrl || product?.marketplaceMetrics?.browseNodeEvidenceUrl || '');
   if (!source) return '';
@@ -127,7 +141,8 @@ function qualityGate(product) {
   const normalizedTitle = normalizeText(title);
   const explicitSearchIntent = normalizeText(product?.searchIntent || product?.intent || '');
   const explicitIntentMatchesTitle = explicitSearchIntent.length >= 4 && normalizedTitle.includes(explicitSearchIntent);
-  const accessoryAllowedByScenario = product?.allowAccessory === true || explicitIntentMatchesTitle;
+  const explicitAccessoryMatch = explicitAccessoryIntentMatchesTitle(explicitSearchIntent, normalizedTitle);
+  const accessoryAllowedByScenario = product?.allowAccessory === true || explicitIntentMatchesTitle || explicitAccessoryMatch;
   if (!accessoryAllowedByScenario && ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
 
   if (marketplace === 'shopee') {
@@ -237,6 +252,7 @@ module.exports = {
   absoluteSavings,
   amazonSearchQuery,
   amazonQueryMatchesProduct,
+  explicitAccessoryIntentMatchesTitle,
   qualityGate,
   qualityScore,
   desireScore,
