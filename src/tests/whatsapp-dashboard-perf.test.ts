@@ -47,6 +47,21 @@ describe("A) WhatsApp dashboard draft loader user_id enforcement", () => {
     expect(mockClient.from).not.toHaveBeenCalled();
   });
 
+  it("fails closed and does not query database when selectedOfferIds is empty (e.g. preparation failure or exhausted batch)", async () => {
+    const mockClient = {
+      from: vi.fn(),
+    };
+
+    const drafts = await loadWhatsappDashboardDrafts({
+      supabase: mockClient as any,
+      userId: "user-123",
+      selectedOfferIds: new Set<string>(),
+    });
+
+    expect(drafts).toEqual([]);
+    expect(mockClient.from).not.toHaveBeenCalled();
+  });
+
   it("filters explicitly by user_id when loading drafts", async () => {
     const calls: Array<{ method: string; args: unknown[] }> = [];
     const mockQuery: any = {
@@ -111,8 +126,8 @@ describe("B) Fast-path opening with valid editorial state", () => {
   });
 });
 
-describe("C) getPostHistory with limit and channel filtering", () => {
-  it("applies limit to the query and returns at most specified count", async () => {
+describe("C) getPostHistory with limit, userId and channel filtering", () => {
+  it("applies limit and userId to the query and returns at most specified count", async () => {
     const calls: Array<{ table: string; method: string; args: unknown[] }> = [];
     const mockPosts = Array.from({ length: 60 }, (_, i) => ({
       id: `post-${i}`,
@@ -144,16 +159,12 @@ describe("C) getPostHistory with limit and channel filtering", () => {
       },
     };
 
-    const mockSalesQuery: any = {
-      select: vi.fn(() => mockSalesQuery),
-      in: vi.fn(() => mockSalesQuery),
-      then: (resolve: (val: unknown) => unknown) => resolve({ data: [], error: null }),
-    };
-
-    // Test query execution simulation
-    mockQuery.select("*").eq("channel", "whatsapp").neq("status", "deleted").order("created_at", { ascending: false }).limit(50);
+    // Test query execution simulation with userId and channel
+    mockQuery.select("*").eq("channel", "whatsapp").eq("user_id", "user-123").neq("status", "deleted").order("created_at", { ascending: false }).limit(50);
     const { data } = await mockQuery;
     expect(data.length).toBe(50);
+    expect(calls).toContainEqual({ table: "posts", method: "eq", args: ["channel", "whatsapp"] });
+    expect(calls).toContainEqual({ table: "posts", method: "eq", args: ["user_id", "user-123"] });
     expect(calls).toContainEqual({ table: "posts", method: "limit", args: [50] });
   });
 

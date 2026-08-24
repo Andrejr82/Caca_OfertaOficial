@@ -17,13 +17,17 @@ export default async function WhatsappDashboardPage() {
 
   async function fetchDraftPosts(): Promise<PostWithOffer[]> {
     if (!supabase || !user?.id) return [];
-    let selectedOfferIds = new Set<string>();
+    let selectedOfferIds: Set<string>;
     try {
       const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
       selectedOfferIds = new Set(top30.selectedOfferIds);
     } catch {
-      // Fail closed: a preparation read failure must not render the raw draft cohort.
-      selectedOfferIds = new Set();
+      // Fail closed: a preparation read failure must return empty array without querying generic drafts.
+      return [];
+    }
+
+    if (selectedOfferIds.size === 0) {
+      return [];
     }
 
     return loadWhatsappDashboardDrafts({
@@ -34,10 +38,10 @@ export default async function WhatsappDashboardPage() {
     });
   }
 
-  // Execução em paralelo das consultas independentes (drafts operacionais + histórico recente)
+  // Execução em paralelo das consultas independentes (drafts operacionais + histórico recente do usuário)
   const [draftPosts, historyData] = await Promise.all([
     fetchDraftPosts(),
-    getPostHistory("whatsapp", { limit: 50 }),
+    getPostHistory("whatsapp", { limit: 50, userId: user?.id || undefined }),
   ]);
 
   return (

@@ -150,8 +150,9 @@ export async function getDashboardData() {
   };
 }
 
-export async function getPostHistory(channel?: string, options?: { limit?: number } | number) {
+export async function getPostHistory(channel?: string, options?: { limit?: number; userId?: string } | number) {
   const limit = typeof options === "number" ? options : options?.limit;
+  const userId = typeof options === "object" ? options?.userId : undefined;
   const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   if (!supabase) return [];
 
@@ -179,6 +180,10 @@ export async function getPostHistory(channel?: string, options?: { limit?: numbe
 
   if (channel) {
     query = query.eq("channel", channel);
+  }
+
+  if (userId) {
+    query = query.eq("user_id", userId);
   }
 
   query = query.neq("status", "deleted").order("created_at", { ascending: false });

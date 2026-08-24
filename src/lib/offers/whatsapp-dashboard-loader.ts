@@ -46,7 +46,7 @@ export async function loadWhatsappDashboardDrafts({
   todayStart = getTodayBrtStart(),
   limit = 30,
 }: LoadWhatsappDashboardDraftsInput): Promise<PostWithOffer[]> {
-  if (!supabase || !userId) {
+  if (!supabase || !userId || !selectedOfferIds || selectedOfferIds.size === 0) {
     return [];
   }
 
@@ -56,11 +56,8 @@ export async function loadWhatsappDashboardDrafts({
     .eq("user_id", userId)
     .eq("channel", "whatsapp")
     .eq("status", "draft")
+    .in("offer_id", Array.from(selectedOfferIds))
     .order("created_at", { ascending: false });
-
-  if (selectedOfferIds.size > 0) {
-    query = query.in("offer_id", Array.from(selectedOfferIds));
-  }
 
   if (typeof limit === "number" && limit > 0) {
     query = query.limit(limit);
