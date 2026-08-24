@@ -130,3 +130,33 @@ test('falha local de products/search não derruba a intenção e permite fallbac
   assert.equal(result.products.length, 1);
   assert.equal(result.products[0].title, 'Cafeteira Programável');
 });
+
+test('falha em um domínio continua no próximo domínio', async () => {
+  const domain1 = { domain_id: 'MLB-COFFEE_ACCESSORIES', category_id: 'MLB9999', category_name: 'Acessórios de Café' };
+  const domain2 = { domain_id: 'MLB-COFFEE_MAKERS', category_id: 'MLB1576', category_name: 'Cafeteiras' };
+  const { productId } = productFixtures();
+  const fixture = productResponse({ title: 'Cafeteira Italiana Inox' });
+
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken: 'fixture-token',
+    keywords: ['cafeteira'],
+    maxPerIntent: 20,
+    delayMs: 0,
+    fetchImpl: async (url) => {
+      const value = String(url);
+      if (value.includes('/domain_discovery/search')) return json([domain1, domain2]);
+      if (value.includes('domain_id=MLB-COFFEE_ACCESSORIES')) return json({ results: [] });
+      if (value.includes('/highlights/MLB/category/MLB9999')) return json({ content: [] });
+      if (value.includes('domain_id=MLB-COFFEE_MAKERS')) return json({ results: [{ id: productId }] });
+      if (value.includes(`/products/${productId}/items`)) return json(fixture.catalogItems);
+      if (value.endsWith(`/products/${productId}`)) return json(fixture.productMeta);
+      if (value.includes('/items?ids=')) return json(fixture.details);
+      throw new Error(`URL fixture inesperada: ${value}`);
+    },
+  });
+
+  assert.equal(result.products.length, 1);
+  assert.equal(result.products[0].title, 'Cafeteira Italiana Inox');
+  assert.equal(result.queries[0].domain_id, 'MLB-COFFEE_MAKERS');
+});
+

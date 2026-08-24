@@ -260,18 +260,8 @@ async function runMercadoLivreOfficialIntentCoverage({
         for (const domain of rankDomains(domains, intent)) {
           if (intentProducts.length >= maxPerIntent) break;
           try {
-            let highlights = { content: [] };
-            try {
-              highlights = await apiGet(`/highlights/MLB/category/${domain.category_id}`, { fetchImpl, accessToken }); calls += 1;
-            } catch {
-              // O fallback de catálogo abaixo continua sendo oficial.
-            }
-            let productIds = (highlights.content || []).filter((entry) => entry.type === 'PRODUCT').map((entry) => entry.id).slice(0, 20);
-            // Alguns domínios (principalmente moda/fitness) não expõem
-            // highlights. A busca oficial de catálogo por q + domain_id é o
-            // fallback documentado pelo Mercado Livre.
-            const clothingIntent = /masculin|fitness|legging|camiseta|bermuda|moletom|jaqueta|calça|roupa/i.test(`${intent} ${searchTerm}`);
-            if (!productIds.length && clothingIntent) {
+            let productIds = [];
+            if (domain.domain_id) {
               try {
                 const catalogSearch = await apiGet(`/products/search?status=active&site_id=MLB&q=${encodeURIComponent(searchTerm)}&domain_id=${encodeURIComponent(domain.domain_id)}&limit=20`, { fetchImpl, accessToken }); calls += 1;
                 productIds = (catalogSearch.results || []).map((entry) => entry.id).filter(Boolean).slice(0, 20);
@@ -279,9 +269,13 @@ async function runMercadoLivreOfficialIntentCoverage({
                 productIds = [];
               }
             }
-            if (!productIds.length && clothingIntent) {
-              const broadSearch = await apiGet(`/products/search?status=active&site_id=MLB&q=${encodeURIComponent(searchTerm)}&limit=100`, { fetchImpl, accessToken }); calls += 1;
-              productIds = catalogFallbackProducts(broadSearch.results, searchTerm);
+            if (!productIds.length && domain.category_id) {
+              try {
+                const highlights = await apiGet(`/highlights/MLB/category/${domain.category_id}`, { fetchImpl, accessToken }); calls += 1;
+                productIds = (highlights.content || []).filter((entry) => entry.type === 'PRODUCT').map((entry) => entry.id).slice(0, 20);
+              } catch {
+                productIds = [];
+              }
             }
             if (!productIds.length) continue;
             selectedDomain = domain;
