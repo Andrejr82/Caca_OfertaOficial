@@ -34,7 +34,7 @@ function scenario(id, name, queueHour, keywords, allowedProductTerms, blockedPro
 const EDITORIAL_SCENARIOS = Object.freeze({
   casa_cozinha_editorial: scenario('casa_cozinha_editorial', 'Casa e Cozinha', 7,
     ['jogo de cama', 'toalha de banho', 'aparelho de jantar', 'faqueiro', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
-    ['cama', 'lençol', 'toalha', 'faqueiro', 'jantar', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
+    ['jogo de cama', 'lençol', 'toalha', 'faqueiro', 'aparelho de jantar', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
     ['pet', 'cachorro', 'gato', 'automotivo', 'celular', 'tênis'],
     ['size', 'material', 'pieces', 'capacity', 'voltage'], { apiCategories: [100010, 100636], amazonBrowseNodes: ['17100532011', '17124722011', '17124716011'] }),
 
@@ -46,25 +46,25 @@ const EDITORIAL_SCENARIOS = Object.freeze({
 
   ferramentas_editorial: scenario('ferramentas_editorial', 'Ferramentas', 9,
     ['furadeira', 'parafusadeira', 'kit ferramentas', 'chave de fenda', 'alicate', 'serra', 'trena', 'maleta ferramentas', 'ferramenta elétrica', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
-    ['furadeira', 'parafusadeira', 'ferramenta', 'alicate', 'serra', 'trena', 'chave', 'maleta ferramentas', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
+    ['furadeira', 'parafusadeira', 'kit ferramentas', 'ferramenta elétrica', 'chave de fenda', 'alicate', 'serra', 'trena', 'maleta ferramentas', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
     ['infantil', 'brinquedo', 'automotivo', 'cosmético', 'cosmetico'],
     ['brand', 'model', 'voltage', 'power', 'pieces'], { apiCategories: [100636], amazonBrowseNodes: ['165793011', '165796011'] }),
 
   informatica_editorial: scenario('informatica_editorial', 'Informática', 10,
     ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd externo', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
-    ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
+    ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd externo', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
     ['celular', 'smartphone', 'tablet infantil', 'cabo isolado', 'suporte'],
     ['brand', 'model', 'memory', 'screen', 'connectivity'], { apiCategories: [100644, 100013], amazonBrowseNodes: ['16243803011', '16243794011', '24035344011'] }),
 
   celulares_editorial: scenario('celulares_editorial', 'Celulares', 11,
-    ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi', 'samsung galaxy', 'xiaomi redmi', 'poco', 'motorola', 'realme'],
-    ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi', 'samsung galaxy', 'xiaomi redmi', 'poco', 'motorola', 'realme'],
+    ['smartphone', 'celular', 'iphone', 'samsung galaxy smartphone', 'xiaomi redmi smartphone', 'poco smartphone', 'celular motorola', 'realme smartphone'],
+    ['smartphone', 'celular', 'iphone', 'samsung galaxy smartphone', 'xiaomi redmi smartphone', 'poco smartphone', 'celular motorola', 'realme smartphone'],
     ['notebook', 'monitor', 'cabo avulso', 'película avulsa'],
-    ['brand', 'model', 'memory', 'screen', 'battery'], { apiCategories: [100013], amazonBrowseNodes: ['16243809011', '16243802011', '16243799011'] }),
+    ['brand', 'model', 'memory', 'screen', 'battery'], { apiCategories: [100013], amazonBrowseNodes: ['16243809011', '16243799011'] }),
 
   beleza_editorial: scenario('beleza_editorial', 'Beleza', 12,
     ['protetor solar', 'hidratante facial', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova secadora', 'aparador', 'máquina de cortar cabelo', 'modelador', 'escova alisadora', 'depilador'],
-    ['protetor solar', 'hidratante', 'serum', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova', 'aparador', 'máquina de cortar cabelo', 'modelador', 'escova alisadora', 'depilador'],
+    ['protetor solar', 'hidratante', 'serum', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova secadora', 'escova alisadora', 'aparador', 'máquina de cortar cabelo', 'modelador', 'depilador'],
     ['pet', 'bebê', 'suplemento', 'medicamento', 'alimento'],
     ['brand', 'volume', 'function', 'skin_type', 'fragrance'], { apiCategories: [100630, 100001], amazonBrowseNodes: ['16754345011', '16754346011', '16754347011'] }),
 
@@ -76,13 +76,13 @@ const EDITORIAL_SCENARIOS = Object.freeze({
 
   esporte_editorial: scenario('esporte_editorial', 'Esporte', 14,
     ['tênis de corrida', 'legging fitness', 'whey protein', 'creatina', 'tapete de yoga', 'halter', 'corda de pular', 'faixa elástica', 'luva academia', 'kettlebell', 'banco de musculação', 'bicicleta ergométrica', 'esteira', 'bicicleta'],
-    ['corrida', 'fitness', 'whey', 'creatina', 'yoga', 'halter', 'corda', 'faixa elástica', 'academia', 'kettlebell', 'banco de musculação', 'bicicleta ergométrica', 'esteira', 'bicicleta'],
+    ['tênis de corrida', 'legging fitness', 'whey', 'creatina', 'tapete de yoga', 'halter', 'corda de pular', 'faixa elástica', 'luva academia', 'kettlebell', 'banco de musculação', 'bicicleta ergométrica', 'esteira', 'bicicleta'],
     ['pet', 'bebê', 'moda social', 'automotivo'],
     ['brand', 'size', 'weight', 'material', 'volume'], { apiCategories: [100637, 100001], amazonBrowseNodes: ['17833921011', '17833929011', '17833917011'] }),
 
   pet_editorial: scenario('pet_editorial', 'Pet', 15,
     ['ração cachorro', 'ração gato', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia gato', 'coleira', 'caixa transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
-    ['ração', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia', 'coleira', 'transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
+    ['ração', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia gato', 'coleira', 'caixa transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
     ['bebê', 'bebe', 'humano', 'automotivo'],
     ['species', 'size', 'weight', 'material', 'flavor'], { apiCategories: [100631], amazonBrowseNodes: ['19653951011', '19653950011', '19653948011'] }),
 
@@ -105,8 +105,8 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['material', 'dimensions', 'seats', 'color', 'assembly'], { apiCategories: [100636], amazonBrowseNodes: ['17100553011', '17100552011', '17100547011'] }),
 
   grandes_ofertas_editorial: scenario('grandes_ofertas_editorial', 'Grandes Ofertas', 21,
-    ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'ar condicionado', 'fritadeira', 'micro-ondas', 'lavadora', 'monitor', 'aspirador', 'liquidificador', 'caixa de som', 'fone', 'iphone', 'galaxy'],
-    ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'lavadora', 'ar condicionado', 'monitor', 'caixa de som', 'console', 'fritadeira', 'micro-ondas', 'aspirador', 'liquidificador', 'fone', 'iphone', 'galaxy'],
+    ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'ar condicionado', 'fritadeira', 'micro-ondas', 'lavadora', 'monitor', 'aspirador', 'liquidificador', 'caixa de som', 'fone', 'iphone', 'samsung galaxy smartphone'],
+    ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'lavadora', 'ar condicionado', 'monitor', 'caixa de som', 'fritadeira', 'micro-ondas', 'aspirador', 'liquidificador', 'fone', 'iphone', 'samsung galaxy smartphone'],
     ['cupom sem aprovação', 'usado', 'recondicionado', 'serviço', 'servico'],
     ['price', 'old_price', 'discount', 'seller', 'shipping'], { priority: 'critical', maxAgeHours: 2, apiCategories: [100013, 100644, 100636], amazonBrowseNodes: ['16243809011', '16243803011', '16243794011', '17100532011'] }),
 

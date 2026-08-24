@@ -85,8 +85,12 @@ const SEARCH_ALIASES = {
   'mochila trilha': ['mochila trilha', 'mochila trekking', 'mochila camping'],
   'capa chuva impermeável': ['capa chuva impermeável', 'capa de chuva', 'capa chuva adulto'],
   'mala média viagem': ['mala média viagem', 'mala média', 'mala viagem'],
-  'organizador compressão mala': ['organizador compressão mala', 'organizador mala', 'saco compressão mala'],
-  'capa mala': ['capa mala', 'capa protetora mala', 'capa para mala']
+  'capa mala': ['capa mala', 'capa protetora mala', 'capa para mala'],
+  'samsung galaxy smartphone': ['samsung galaxy smartphone', 'smartphone samsung galaxy', 'celular samsung galaxy'],
+  'xiaomi redmi smartphone': ['xiaomi redmi smartphone', 'smartphone xiaomi redmi', 'celular xiaomi redmi'],
+  'poco smartphone': ['poco smartphone', 'smartphone poco', 'celular poco'],
+  'celular motorola': ['celular motorola', 'smartphone motorola', 'motorola smartphone'],
+  'realme smartphone': ['realme smartphone', 'smartphone realme', 'celular realme']
 };
 const PREFERRED_DOMAINS = {
   mouse: ['MLB-COMPUTER_MICE'],

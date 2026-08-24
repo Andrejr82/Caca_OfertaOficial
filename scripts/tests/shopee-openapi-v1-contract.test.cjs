@@ -40,13 +40,13 @@ test('controlled persistence rejects shadow and missing write guards', () => {
     SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true',
     NO_PUBLISH: '1', ARGV: [],
   };
-  assert.equal(getControlledPersistDecision('casa_cozinha_editorial', safe).enabled, true);
+  assert.equal(getControlledPersistDecision('casa_cozinha_editorial', safe, { maxCandidates: 5 }).enabled, true);
   assert.equal(getControlledPersistDecision('casa_cozinha_editorial', {
     ...safe, ARGV: ['node', 'worker', '--shopee-ranking-v1-shadow'],
-  }).reason, 'shadow_mode_enabled');
+  }, { maxCandidates: 5 }).reason, 'shadow_mode_enabled');
   assert.equal(getControlledPersistDecision('casa_cozinha_editorial', {
     ...safe, NO_PUBLISH: '0',
-  }).reason, 'publish_flags_required');
+  }, { maxCandidates: 5 }).reason, 'publish_flags_required');
 });
 
 test('controlled persistence produces deterministic idempotency and checkpoint identities', () => {
@@ -59,7 +59,7 @@ test('controlled persistence produces deterministic idempotency and checkpoint i
   };
   const context = {
     scenarioId: 'casa_cozinha_editorial', tenantId: 'tenant-1', correlationId: 'run-1',
-    requestedAt: '2026-08-13T16:00:00.000Z',
+    requestedAt: '2026-08-13T16:00:00.000Z', maxNewCandidates: 5,
   };
   const first = buildControlledPersistIngestions([product], context);
   const second = buildControlledPersistIngestions([product], context);

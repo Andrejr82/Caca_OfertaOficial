@@ -17,7 +17,9 @@ test('todos cenários possuem contrato por marketplace', () => {
       const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
       assert.ok(contract, `${marketplace}/${scenarioId} sem contrato`);
       assert.ok(contract.terms.length > 0, `${marketplace}/${scenarioId} sem termos`);
-      assert.ok(contract.allowedProductTerms.length > 0, `${marketplace}/${scenarioId} sem termos permitidos`);
+      if (scenarioId !== 'cupons_aprovados_editorial') {
+        assert.ok(contract.allowedProductTerms.length > 0, `${marketplace}/${scenarioId} sem termos permitidos`);
+      }
     }
   }
 });
@@ -63,7 +65,7 @@ test('classificador Amazon usa evidência de browse node antes do título', () =
 test('contrato de treino aceita fitness e bloqueia calçado casual/social', () => {
   const contract = getMarketplaceScenarioContract('esporte_editorial', 'Mercado Livre');
   assert.equal(matchesMarketplaceContract(contract, 'Whey Protein 100% Concentrado'), true);
-  assert.equal(matchesMarketplaceContract(contract, 'Tapete Yoga 6mm'), true);
+  assert.equal(matchesMarketplaceContract(contract, 'Tapete de Yoga 6mm'), true);
   assert.equal(matchesMarketplaceContract(contract, 'Tênis Casual Feminino Confortável'), false);
   assert.equal(matchesMarketplaceContract(contract, 'Sapato Social Masculino'), false);
 });

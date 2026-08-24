@@ -96,20 +96,21 @@ assert.equal(validateEditorialSchedule({
 
 // Verificação de exclusão de intenções proibidas e presença de produtos autônomos
 const celulares = EDITORIAL_SCENARIOS.celulares_editorial;
-for (const excluded of ['carregador turbo', 'carregador', 'power bank', 'capa celular']) {
+for (const excluded of ['carregador turbo', 'carregador', 'power bank', 'capa celular', 'galaxy', 'redmi', 'poco', 'motorola', 'realme']) {
   assert.ok(!celulares.keywords.includes(excluded), `celulares não deve conter ${excluded} em keywords`);
   assert.ok(!celulares.allowedProductTerms.includes(excluded), `celulares não deve conter ${excluded} em allowedProductTerms`);
 }
-for (const added of ['samsung galaxy', 'xiaomi redmi', 'poco', 'motorola', 'realme']) {
+for (const added of ['samsung galaxy smartphone', 'xiaomi redmi smartphone', 'poco smartphone', 'celular motorola', 'realme smartphone', 'iphone', 'smartphone', 'celular']) {
   assert.ok(celulares.keywords.includes(added), `celulares deve conter ${added} em keywords`);
   assert.ok(celulares.allowedProductTerms.includes(added), `celulares deve conter ${added} em allowedProductTerms`);
 }
 
 const grandesOfertas = EDITORIAL_SCENARIOS.grandes_ofertas_editorial;
-for (const excluded of ['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis']) {
+for (const excluded of ['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis', 'console', 'galaxy']) {
   assert.ok(!grandesOfertas.keywords.includes(excluded), `grandes_ofertas não deve conter ${excluded} em keywords`);
+  assert.ok(!grandesOfertas.allowedProductTerms.includes(excluded), `grandes_ofertas não deve conter ${excluded} em allowedProductTerms`);
 }
-for (const added of ['lavadora', 'monitor', 'aspirador', 'liquidificador', 'caixa de som', 'fone', 'iphone', 'galaxy']) {
+for (const added of ['lavadora', 'monitor', 'aspirador', 'liquidificador', 'caixa de som', 'fone', 'iphone', 'samsung galaxy smartphone']) {
   assert.ok(grandesOfertas.keywords.includes(added), `grandes_ofertas deve conter ${added} em keywords`);
   assert.ok(grandesOfertas.allowedProductTerms.includes(added), `grandes_ofertas deve conter ${added} em allowedProductTerms`);
 }
