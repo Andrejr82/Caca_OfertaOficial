@@ -62,6 +62,11 @@ export function normalizeTrafficSource(source: string | null | undefined): strin
   }
 
   const normalizedHost = host.replace(/^www\./, "");
+  if (normalizedHost === "t.me" || normalizedHost.endsWith(".t.me")) return "telegram";
+  if (normalizedHost === "wa.me" || normalizedHost.endsWith(".wa.me")) return "whatsapp";
+  if (normalizedHost === "fb.me" || normalizedHost.endsWith(".fb.me")) return "facebook";
+  if (normalizedHost === "ig.me" || normalizedHost.endsWith(".ig.me")) return "instagram";
+
   const knownSource = KNOWN_SOURCES.find((candidate) =>
     normalizedHost === candidate || normalizedHost.endsWith(`.${candidate}.com`)
       || normalizedHost.includes(candidate)
@@ -69,6 +74,36 @@ export function normalizeTrafficSource(source: string | null | undefined): strin
   );
 
   return knownSource || "direct/other";
+}
+
+export const BRAZIL_TIME_ZONE = "America/Sao_Paulo";
+
+export function getBrtDayKey(dateInput: string | number | Date): string {
+  const date = typeof dateInput === "string" || typeof dateInput === "number" ? new Date(dateInput) : dateInput;
+  if (!date || Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BRAZIL_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function getBrtCivilWindowStart(days: number, now = new Date()): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: BRAZIL_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(now);
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+
+  const offsetDays = Math.max(0, days - 1);
+  const todayUtcMidnight = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), 3, 0, 0, 0);
+  const windowStartMs = todayUtcMidnight - offsetDays * 24 * 60 * 60 * 1000;
+  return new Date(windowStartMs);
 }
 
 export function countClicksByAffiliateLink(events: ClickEventMetric[]): Record<string, number> {
@@ -87,7 +122,8 @@ export function summarizeClickEvents(events: ClickEventMetric[], sales: SaleMetr
 
   const trafficByDate = events.reduce<Record<string, number>>((counts, event) => {
     if (!event.created_at) return counts;
-    const date = new Date(event.created_at).toISOString().slice(0, 10);
+    const date = getBrtDayKey(event.created_at);
+    if (!date) return counts;
     counts[date] = (counts[date] || 0) + 1;
     return counts;
   }, {});

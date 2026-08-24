@@ -1,12 +1,18 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
-import { countClicksByAffiliateLink, summarizeClickEvents, summarizeSales, type ClickEventMetric, type SaleMetric } from "@/lib/analytics/metrics";
+import {
+  countClicksByAffiliateLink,
+  getBrtCivilWindowStart,
+  summarizeClickEvents,
+  summarizeSales,
+  type ClickEventMetric,
+  type SaleMetric,
+} from "@/lib/analytics/metrics";
 
 export async function getGrowthMetrics(days = 30) {
   const supabase = await createServerSupabaseClient();
   if (!supabase) return null;
 
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
+  const startDate = getBrtCivilWindowStart(days);
 
   // 1. Fetch raw clicks for the period
   const { data: clicksData } = await supabase

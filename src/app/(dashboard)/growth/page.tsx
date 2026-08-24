@@ -124,8 +124,9 @@ export default async function GrowthDashboardPage({
         <section className="glass-card min-w-0 p-6 border border-white/[0.04]">
           <div className="border-b border-white/[0.04] pb-3 mb-5">
             <h2 className="text-sm font-bold text-white/50 uppercase tracking-[0.08em] flex items-center gap-2">
-              <BarChart3 size={16} /> Performance por Canal
+              <BarChart3 size={16} /> Origem do Tráfego
             </h2>
+            <p className="text-xs text-white/30 mt-1">Origem identificada do clique; tráfego sem referrer aparece como direct/other.</p>
           </div>
           <div className="space-y-4">
             {sourceData.length === 0 ? (
@@ -221,9 +222,9 @@ export default async function GrowthDashboardPage({
                 <th className="py-3 px-4 text-[10px] font-bold uppercase tracking-wider text-white/30">Canal</th>
                 <th className="py-3 px-4 text-center text-[10px] font-bold uppercase tracking-wider text-white/30">Cliques</th>
                 <th className="py-3 px-4 text-center text-[10px] font-bold uppercase tracking-wider text-white/30">Vendas</th>
-                <th className="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-white/30">Receita Total</th>
+                <th className="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-white/30">Comissão</th>
                 <th className="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-emerald-400/80">Conversão (CR%)</th>
-                <th className="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-purple-400/80">Rec. / Clique</th>
+                <th className="py-3 px-4 text-right text-[10px] font-bold uppercase tracking-wider text-purple-400/80">Comissão / Clique</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/[0.03] text-sm">
