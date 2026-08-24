@@ -30,6 +30,7 @@ describe("commercial channel router", () => {
   });
 
   it("contains a broad new cohort to 30 unique operational panel slots", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
     const cycle = "cycle-panel";
     const discovery = { correlation_id: cycle, discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } };
     const offers = Array.from({ length: 430 }, (_, index) => ({
@@ -37,12 +38,13 @@ describe("commercial channel router", () => {
       user_id: "u1", status: "pending_manual_review", score: 50, old_price: 49, rating: 4.8, marketplace_metrics: { sales: 500, rating: 4.8, discount: 20 }, created_at: "2026-08-08T10:00:01.000Z", updated_at: "2026-08-08T10:00:02.000Z", explainability: discovery,
       shopee_item_id: `item-${index}`,
     }));
-    const selected = selectOperationalPanelTop30(offers as any);
+    const selected = selectOperationalPanelTop30(offers as any, 30, now);
     expect(selected).toHaveLength(30);
     expect(new Set(selected.map((item) => item.id)).size).toBe(30);
   });
 
   it("blocks protected history and old rows updated during the current cycle", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
     const discovery = { correlation_id: "cycle-current", discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } };
     const make = (id: string, status: string, created_at: string, item: string) => ({ ...candidate({ id, shopee_item_id: item }), user_id: "u1", status, created_at, updated_at: "2026-08-08T10:05:00.000Z", explainability: discovery });
     const offers = [
@@ -54,16 +56,18 @@ describe("commercial channel router", () => {
       make("deleted", "deleted", "2026-08-08T10:00:05.000Z", "deleted"),
       make("new", "pending_manual_review", "2026-08-08T10:00:06.000Z", "new"),
     ];
-    const selected = selectOperationalPanelTop30(offers as any);
+    const selected = selectOperationalPanelTop30(offers as any, 30, now);
     expect(selected.map((item) => item.id)).toEqual(["new"]);
   });
 
   it("does not publish or invoke Telegram while selecting the panel top 30", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
     const offer = { ...candidate({ id: "panel-only", shopee_item_id: "panel-only" }), user_id: "u1", status: "pending_manual_review", created_at: "2026-08-08T10:00:01.000Z", updated_at: "2026-08-08T10:05:00.000Z", explainability: { correlation_id: "cycle", discovery_evidence: { discoveredAt: "2026-08-08T10:00:00.000Z" } } };
-    expect(selectOperationalPanelTop30([offer] as any)).toHaveLength(1);
+    expect(selectOperationalPanelTop30([offer] as any, 30, now)).toHaveLength(1);
   });
 
   it("keeps valid latest-cycle offers when freshness evidence is partial", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
     const make = (id: string, created_at: string, explainability: Record<string, unknown>, overrides: any = {}) => ({
       ...candidate({ id, product_name: `Organizador de gaveta ${id}`, shopee_item_id: id }),
       user_id: "u1", status: "pending_manual_review", score: 50, old_price: 49, rating: 4.8,
@@ -76,23 +80,25 @@ describe("commercial channel router", () => {
       [make("created-brt-new", "2026-08-08T03:30:00.000Z", {}), make("created-brt-old", "2026-08-08T02:59:00.000Z", {})],
     ];
     for (const [newOffer, oldOffer] of cases) {
-      const eligible = filterOperationalPanelOffers([newOffer, oldOffer] as any);
+      const eligible = filterOperationalPanelOffers([newOffer, oldOffer] as any, now);
       expect(eligible.map((offer) => offer.id)).toEqual([newOffer.id]);
-      expect(selectOperationalPanelTop30([newOffer] as any)).toHaveLength(1);
+      expect(selectOperationalPanelTop30([newOffer] as any, 30, now)).toHaveLength(1);
     }
   });
 
   it("blocks an old offer updated today and returns zero only when no new offer exists", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
     const make = (id: string, status = "pending_manual_review", overrides: any = {}) => ({
       ...candidate({ id, product_name: `Organizador de gaveta ${id}`, shopee_item_id: id }),
       user_id: "u1", status, score: 50, old_price: 49, rating: 4.8, marketplace_metrics: { sales: 500 },
       created_at: "2026-08-07T10:00:00.000Z", updated_at: "2026-08-08T12:00:00.000Z", explainability: {}, ...overrides,
     });
-    expect(filterOperationalPanelOffers([make("old-updated")] as any)).toHaveLength(0);
-    expect(filterOperationalPanelOffers([make("protected", "posted")] as any)).toHaveLength(0);
+    expect(filterOperationalPanelOffers([make("old-updated")] as any, now)).toHaveLength(0);
+    expect(filterOperationalPanelOffers([make("protected", "posted")] as any, now)).toHaveLength(0);
   });
 
   it("normalizes the real cross-market cycle before cohort grouping", () => {
+    const now = new Date("2026-08-08T12:00:00.000Z");
     const correlation = "b278725c-f8e7-4777-812f-3bb8a883454f";
     expect(normalizeDiscoveryCorrelationId(correlation)).toBe(correlation);
     expect(normalizeDiscoveryCorrelationId(`shopee-openapi-v1:${correlation}`)).toBe(correlation);
@@ -109,20 +115,20 @@ describe("commercial channel router", () => {
       ...Array.from({ length: 8 }, (_, index) => make(`amazon-${index}`, "Amazon", correlation)),
       ...Array.from({ length: 8 }, (_, index) => make(`ml-${index}`, "Mercado Livre", correlation)),
     ];
-    const cohort = identifyLatestDiscoveryCohort(realCycle as any, new Date("2026-08-08T12:00:00.000Z"));
+    const cohort = identifyLatestDiscoveryCohort(realCycle as any, now);
     expect(cohort).toHaveLength(43);
-    expect(filterOperationalPanelOffers(realCycle as any)).toHaveLength(43);
+    expect(filterOperationalPanelOffers(realCycle as any, now)).toHaveLength(43);
     const built = buildCommercialQueue(realCycle as any);
     expect(built.length).toBeGreaterThan(0);
     expect(routeCommercialCandidates(built).some((item) => item.targetQueue !== "panel_only")).toBe(true);
-    const selected = selectOperationalPanelTop30(realCycle as any);
+    const selected = selectOperationalPanelTop30(realCycle as any, 30, now);
     expect(selected.length).toBeGreaterThan(0);
     expect(selected.length).toBeLessThanOrEqual(30);
 
     const differentCycle = make("different-cycle", "Shopee", "different-cycle", "2026-08-08T10:00:02.000Z");
-    expect(identifyLatestDiscoveryCohort([...realCycle, differentCycle] as any, new Date("2026-08-08T12:00:00.000Z"))).toHaveLength(1);
+    expect(identifyLatestDiscoveryCohort([...realCycle, differentCycle] as any, now)).toHaveLength(1);
     const historical = make("historical", "Shopee", `shopee-openapi-v1:${correlation}`, "2026-08-07T10:00:01.000Z");
     historical.updated_at = "2026-08-08T12:00:00.000Z";
-    expect(filterOperationalPanelOffers([...realCycle, historical] as any).some((offer) => offer.id === historical.id)).toBe(false);
+    expect(filterOperationalPanelOffers([...realCycle, historical] as any, now).some((offer) => offer.id === historical.id)).toBe(false);
   });
 });

@@ -5,8 +5,8 @@ import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
 import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
-import { getTodayBrtStart, prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
-import { mergePanelDrafts } from "@/lib/offers/panel-draft-selection";
+import { prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
+import { loadWhatsappDashboardDrafts, type PostWithOffer } from "@/lib/offers/whatsapp-dashboard-loader";
 
 export const dynamic = "force-dynamic";
 
@@ -14,40 +14,10 @@ export default async function WhatsappDashboardPage() {
   const authClient = await createServerSupabaseClient();
   const supabase = createSupabaseAdminClient() || authClient;
   const { data: { user } } = authClient ? await authClient.auth.getUser() : { data: { user: null } };
-  
-  interface PostWithOffer {
-    id: string;
-    content: string;
-    status: string;
-    external_id: string | null;
-    posted_at: string | null;
-    created_at: string;
-    deleted_at?: string | null;
-    affiliate_links?: {
-      tracked_url: string;
-    } | null;
-    offers: {
-      id: string;
-      product_name: string;
-      platform: string;
-      marketplace?: string | null;
-      category?: string | null;
-      current_price: number;
-      old_price: number | null;
-      image_url: string | null;
-      original_url: string;
-      coupon: string | null;
-      notes: string | null;
-      status: string;
-      created_at: string;
-      explainability?: Record<string, unknown> | null;
-    };
-  }
 
-  let draftPosts: PostWithOffer[] = [];
-
-  let selectedOfferIds = new Set<string>();
-  if (supabase && user?.id) {
+  async function fetchDraftPosts(): Promise<PostWithOffer[]> {
+    if (!supabase || !user?.id) return [];
+    let selectedOfferIds = new Set<string>();
     try {
       const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
       selectedOfferIds = new Set(top30.selectedOfferIds);
@@ -55,21 +25,21 @@ export default async function WhatsappDashboardPage() {
       // Fail closed: a preparation read failure must not render the raw draft cohort.
       selectedOfferIds = new Set();
     }
+
+    return loadWhatsappDashboardDrafts({
+      supabase,
+      userId: user.id,
+      selectedOfferIds,
+      limit: 30,
+    });
   }
 
-  if (supabase) {
-    const todayStart = getTodayBrtStart();
-    const { data: drafts } = await supabase
-      .from("posts")
-      .select("*, offers(*), affiliate_links(tracked_url)")
-      .eq("channel", "whatsapp")
-      .eq("status", "draft")
-      .order("created_at", { ascending: false });
+  // Execução em paralelo das consultas independentes (drafts operacionais + histórico recente)
+  const [draftPosts, historyData] = await Promise.all([
+    fetchDraftPosts(),
+    getPostHistory("whatsapp", { limit: 50 }),
+  ]);
 
-    draftPosts = mergePanelDrafts(drafts || [], selectedOfferIds, todayStart, undefined, true);
-  }
-
-  const historyData = await getPostHistory("whatsapp");
   return (
     <div className="grid gap-6 animate-fadeIn">
       {/* Header */}

@@ -55,7 +55,8 @@ describe("editorial Top30 channel separation", () => {
       explainability: { manual_source: true },
     });
 
-    const selected = selectEditorialTop30([...editorial, manual], 30);
+    const now = new Date("2026-08-09T12:00:00.000Z");
+    const selected = selectEditorialTop30([...editorial, manual], 30, now);
 
     expect(selected).toHaveLength(30);
     expect(selected.every((candidate) => candidate.id !== manual.id)).toBe(true);
@@ -82,10 +83,11 @@ describe("editorial Top30 channel separation", () => {
   });
 
   it("keeps historical editorial rows out even when updated today", () => {
+    const now = new Date("2026-08-09T12:00:00.000Z");
     const historical = editorialOffer("historical", {
       created_at: "2026-08-07T10:00:00.000Z",
       updated_at: "2026-08-08T12:00:00.000Z",
     });
-    expect(selectEditorialTop30([historical])).toHaveLength(0);
+    expect(selectEditorialTop30([historical], 30, now)).toHaveLength(0);
   });
 });

@@ -406,13 +406,24 @@ export class SupabaseTop30WhatsappRepository implements Top30WhatsappRepository 
   }
 
   async listWhatsappPosts() {
-    const { data, error } = await this.client.from("posts").select("id,offer_id,channel,status,created_at,posted_at,external_id").eq("user_id", this.userId).eq("channel", WHATSAPP_CHANNEL);
+    const { data, error } = await this.client
+      .from("posts")
+      .select("id,offer_id,channel,status,created_at,posted_at,external_id")
+      .eq("user_id", this.userId)
+      .eq("channel", WHATSAPP_CHANNEL)
+      .order("created_at", { ascending: false })
+      .limit(5000);
     if (error) throw new Error(error.message);
     return (data ?? []) as WhatsappPostRow[];
   }
 
   async listHistoricalOffers() {
-    const { data, error } = await this.client.from("offers").select("id,platform,item_id,product_id,shopee_item_id,shopee_shop_id,original_url").eq("user_id", this.userId);
+    const { data, error } = await this.client
+      .from("offers")
+      .select("id,platform,item_id,product_id,shopee_item_id,shopee_shop_id,original_url")
+      .eq("user_id", this.userId)
+      .order("created_at", { ascending: false })
+      .limit(5000);
     if (error) throw new Error(error.message);
     return (data ?? []) as HistoricalOfferIdentityRow[];
   }

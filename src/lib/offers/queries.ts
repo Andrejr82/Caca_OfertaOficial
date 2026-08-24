@@ -150,7 +150,8 @@ export async function getDashboardData() {
   };
 }
 
-export async function getPostHistory(channel?: string) {
+export async function getPostHistory(channel?: string, options?: { limit?: number } | number) {
+  const limit = typeof options === "number" ? options : options?.limit;
   const supabase = createSupabaseAdminClient() || (await createServerSupabaseClient());
   if (!supabase) return [];
 
@@ -180,22 +181,47 @@ export async function getPostHistory(channel?: string) {
     query = query.eq("channel", channel);
   }
 
-  query = query.neq("status", "deleted");
+  query = query.neq("status", "deleted").order("created_at", { ascending: false });
 
-  const { data: postsData } = await query.order("created_at", { ascending: false });
+  if (typeof limit === "number" && limit > 0) {
+    query = query.limit(limit);
+  }
+
+  const { data: postsData } = await query;
   if (!postsData) return [];
 
-  // Busca as vendas para agregar conversões e receita
-  const { data: salesData } = await supabase.from("sales").select("affiliate_link_id, commission_value, status");
+  // Otimização: Coleta IDs de links afiliados dos posts e faz agregação única O(sales) em Map
+  const linkIds = [...new Set(postsData.map((post: any) => post.affiliate_links?.id).filter(Boolean))];
+
+  let salesData: Array<{ affiliate_link_id: string; commission_value: number; status: string }> = [];
+  if (linkIds.length > 0) {
+    const { data } = await supabase
+      .from("sales")
+      .select("affiliate_link_id, commission_value, status")
+      .in("affiliate_link_id", linkIds);
+    salesData = (data || []) as typeof salesData;
+  }
+
+  type LinkSalesAgg = { conversions: number; revenue: number };
+  const salesByLinkId = new Map<string, LinkSalesAgg>();
+  for (const sale of salesData) {
+    if (!sale.affiliate_link_id) continue;
+    let agg = salesByLinkId.get(sale.affiliate_link_id);
+    if (!agg) {
+      agg = { conversions: 0, revenue: 0 };
+      salesByLinkId.set(sale.affiliate_link_id, agg);
+    }
+    agg.conversions += 1;
+    if (sale.status === "confirmed") {
+      agg.revenue += Number(sale.commission_value || 0);
+    }
+  }
 
   return postsData.map((post: any) => {
     const link = post.affiliate_links;
-    const postSales = salesData?.filter((sale) => sale.affiliate_link_id === link?.id) || [];
-
-    const conversions = postSales.length;
-    const revenue = postSales
-      .filter((sale) => sale.status === "confirmed")
-      .reduce((sum, sale) => sum + Number(sale.commission_value || 0), 0);
+    const agg = link?.id ? salesByLinkId.get(link.id) : undefined;
+    const conversions = agg?.conversions || 0;
+    const revenue = agg?.revenue || 0;
 
     const postDate = post.posted_at || post.created_at;
     const dateObj = new Date(postDate);
