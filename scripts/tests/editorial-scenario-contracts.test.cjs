@@ -100,11 +100,40 @@ for (const excluded of ['carregador turbo', 'carregador', 'power bank', 'capa ce
   assert.ok(!celulares.keywords.includes(excluded), `celulares não deve conter ${excluded} em keywords`);
   assert.ok(!celulares.allowedProductTerms.includes(excluded), `celulares não deve conter ${excluded} em allowedProductTerms`);
 }
-assert.deepEqual(celulares.keywords, ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi']);
+for (const added of ['samsung galaxy', 'xiaomi redmi', 'poco', 'motorola', 'realme']) {
+  assert.ok(celulares.keywords.includes(added), `celulares deve conter ${added} em keywords`);
+  assert.ok(celulares.allowedProductTerms.includes(added), `celulares deve conter ${added} em allowedProductTerms`);
+}
 
 const grandesOfertas = EDITORIAL_SCENARIOS.grandes_ofertas_editorial;
 for (const excluded of ['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis']) {
   assert.ok(!grandesOfertas.keywords.includes(excluded), `grandes_ofertas não deve conter ${excluded} em keywords`);
 }
-assert.deepEqual(grandesOfertas.keywords, ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'ar condicionado', 'fritadeira', 'micro-ondas']);
+for (const added of ['lavadora', 'monitor', 'aspirador', 'liquidificador', 'caixa de som', 'fone', 'iphone', 'galaxy']) {
+  assert.ok(grandesOfertas.keywords.includes(added), `grandes_ofertas deve conter ${added} em keywords`);
+  assert.ok(grandesOfertas.allowedProductTerms.includes(added), `grandes_ofertas deve conter ${added} em allowedProductTerms`);
+}
+
+// Verificação de expansões nos demais cenários
+const expectedExpansions = {
+  casa_cozinha_editorial: ['aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
+  organizacao_editorial: ['organizador de gaveta', 'organizador de armário', 'estante organizadora', 'prateleira organizadora', 'organizador de banheiro'],
+  ferramentas_editorial: ['esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
+  informatica_editorial: ['mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
+  beleza_editorial: ['aparador', 'máquina de cortar cabelo', 'modelador', 'escova alisadora', 'depilador'],
+  moda_editorial: ['jaqueta', 'vestido', 'mochila', 'tênis masculino', 'tênis feminino', 'calça social'],
+  esporte_editorial: ['kettlebell', 'banco de musculação', 'bicicleta ergométrica', 'esteira', 'bicicleta'],
+  pet_editorial: ['bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
+  tv_audio_editorial: ['smart tv oled', 'smart tv qled', 'caixa bluetooth', 'receiver', 'amplificador', 'monitor smart'],
+  eletrodomesticos_editorial: ['aspirador', 'forno elétrico', 'coifa', 'depurador', 'frigobar', 'adega climatizada'],
+  moveis_editorial: ['poltrona', 'estante', 'painel tv', 'mesa lateral', 'mesa de centro', 'mesa escritório'],
+};
+
+for (const [scenarioId, terms] of Object.entries(expectedExpansions)) {
+  const scen = EDITORIAL_SCENARIOS[scenarioId];
+  for (const term of terms) {
+    assert.ok(scen.keywords.includes(term), `${scenarioId} deve conter keyword '${term}'`);
+    assert.ok(scen.allowedProductTerms.includes(term), `${scenarioId} deve conter allowedProductTerm '${term}'`);
+  }
+}
 
