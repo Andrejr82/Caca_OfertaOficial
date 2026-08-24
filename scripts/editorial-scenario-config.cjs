@@ -86,19 +86,6 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['bebê', 'bebe', 'humano', 'automotivo'],
     ['species', 'size', 'weight', 'material', 'flavor'], { apiCategories: [100631], amazonBrowseNodes: ['19653951011', '19653950011', '19653948011'] }),
 
-  automotivo_editorial: scenario('automotivo_editorial', 'Automotivo', 16,
-    ['acessórios automotivos', 'ferramenta automotiva', 'som automotivo', 'manutenção carro', 'limpeza automotiva', 'organizador carro', 'capacete', 'pneu', 'compressor automotivo'],
-    ['automotivo', 'carro', 'veículo', 'veiculo', 'moto', 'motocicleta', 'capacete', 'pneu', 'compressor', 'ferramenta automotiva', 'som automotivo', 'limpeza automotiva'],
-    ['bebê', 'bebe', 'pet', 'infantil', 'brinquedo'],
-    ['brand', 'model', 'compatibility', 'voltage', 'material'], { apiCategories: [100011, 100636], amazonBrowseNodes: ['15706940011', '15706941011', '15706942011'] }),
-
-
-  games_editorial: scenario('games_editorial', 'Games', 17,
-    ['console', 'playstation', 'xbox', 'nintendo switch', 'controle gamer', 'jogo ps5', 'jogo xbox', 'cadeira gamer', 'headset gamer'],
-    ['console', 'playstation', 'xbox', 'nintendo', 'controle', 'jogo', 'cadeira gamer', 'headset gamer'],
-    ['pet', 'bebê', 'bebe', 'software ilegal', 'conta digital'],
-    ['platform', 'brand', 'model', 'storage', 'connectivity'], { apiCategories: [100634], amazonBrowseNodes: ['16364751011', '16364749011', '16253313011'] }),
-
   tv_audio_editorial: scenario('tv_audio_editorial', 'TV e Áudio', 18,
     ['smart tv', 'televisão 4k', 'tv led', 'soundbar', 'caixa de som', 'fone bluetooth', 'headphone', 'home theater', 'projetor'],
     ['smart tv', 'televisão', 'tv', 'soundbar', 'caixa de som', 'fone', 'headphone', 'home theater', 'projetor'],
@@ -134,8 +121,8 @@ const EDITORIAL_SCENARIOS = Object.freeze({
 });
 
 const EDITORIAL_SCENARIO_IDS = Object.freeze(Object.keys(EDITORIAL_SCENARIOS));
-const EXPECTED_PUBLICATION_HOURS = Object.freeze([...Array(16)].map((_, index) => index + 7));
-const EXPECTED_DISCOVERY_HOURS = Object.freeze([...Array(15)].map((_, index) => index + 6));
+const EXPECTED_PUBLICATION_HOURS = Object.freeze([7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22]);
+const EXPECTED_DISCOVERY_HOURS = Object.freeze([6, 7, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20]);
 function buildQueueByHour(scenarios) {
   const queue = {};
   for (const id of EDITORIAL_SCENARIO_IDS) {
@@ -169,7 +156,7 @@ function validateEditorialSchedule(scenarios = EDITORIAL_SCENARIOS) {
   }
   if (queueHours.some((hour) => !Number.isInteger(hour) || hour < 7 || hour > 22)) errors.push('queueHour outside 07-22');
   if (seenHours.size !== EXPECTED_PUBLICATION_HOURS.length || EXPECTED_PUBLICATION_HOURS.some((hour) => !seenHours.has(hour))) {
-    errors.push('publication hours must be exactly 07-22');
+    errors.push('publication hours must match expected schedule');
   }
 
   for (let index = 0; index < expectedIds.length; index += 1) {
@@ -182,6 +169,10 @@ function validateEditorialSchedule(scenarios = EDITORIAL_SCENARIOS) {
     const publication = getEditorialScenarioForDiscoveryHour(hour);
     const expected = scenarios[QUEUE_BY_HOUR[hour + 1]];
     if (!publication || !expected || publication.id !== expected.id) errors.push(`discovery mapping mismatch=${hour}`);
+  }
+  for (const hour of [15, 16]) {
+    const publication = getEditorialScenarioForDiscoveryHour(hour);
+    if (publication !== null) errors.push(`discovery hour ${hour} must return null`);
   }
   const coupons = scenarios.cupons_aprovados_editorial;
   if (!coupons || coupons.discoveryMode !== 'manual_only') errors.push('cupons_aprovados_editorial must be manual_only');
@@ -202,7 +193,9 @@ function getEditorialScenarioById(id) {
 function getEditorialScenarioForHour(hour) {
   const normalized = ((Number(hour) % 24) + 24) % 24;
   if (normalized < 7) return EDITORIAL_SCENARIOS.casa_cozinha_editorial;
-  return EDITORIAL_SCENARIOS[QUEUE_BY_HOUR[normalized] || 'cupons_aprovados_editorial'];
+  const scenarioId = QUEUE_BY_HOUR[normalized];
+  if (!scenarioId) return null;
+  return EDITORIAL_SCENARIOS[scenarioId] || null;
 }
 
 function getEditorialScenarioForDiscoveryHour(hour) {

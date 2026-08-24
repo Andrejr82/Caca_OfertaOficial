@@ -26,12 +26,6 @@ export const TELEGRAM_CYCLE_INTROS: Record<number, string> = {
   // Disparado às 14h → anuncia publicação das 15h: pet_editorial
   14: `Boa tarde! 🐾 \nEm breve: seleção de Pet Shop chegando! 🐕 \n\nRação premium, caminhas, petiscos e brinquedos pro seu melhor amigo com descontão.\n👉 Conhece alguém que mima muito o pet? Avisa que as ofertas chegam logo!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
 
-  // Disparado às 15h → anuncia publicação das 16h: achadinhos_beleza_editorial
-  15: `Boa tarde! 💄 \nSeleção de Achadinhos de Beleza chegando em breve! ✨ \n\nMaquiagem, skincare, produtos para cabelo e tudo pra você brilhar gastando muito pouco.\n👉 Manda praquela amiga que ama uma comprinha de beleza e autocuidado!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
-
-  // Disparado às 16h → anuncia publicação das 17h: games_editorial
-  16: `Boa tarde! 🎮 \nEm breve: seleção de Games e Consoles chegando! 🕹️ \n\nJogos, consoles, periféricos gamers e tudo pra dar o play com o menor preço.\n👉 Manda pro seu player 2 aproveitar esses descontos junto com você!\n\n📲 Ative as notificações nos nossos canais:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
-
   // Disparado às 17h → anuncia publicação das 18h: tv_audio_editorial
   17: `Boa noite! 📺 \nSeleção de TV e Áudio chegando em instantes! 🎧 \n\nTVs 4K, soundbars, caixas de som e fones Bluetooth pra você curtir em alta qualidade.\n👉 Manda pra quem precisa de uma tela gigante nova pra ver o jogo de hoje!\n\n📲 Faça parte da nossa comunidade oficial:\n✈️ Telegram: https://t.me/caca_ofertaoficial\n💬 WhatsApp: https://chat.whatsapp.com/Icve5dpTlVTLiZRp7YvXNW?s=em&p=a&mlu=0\n📸 Instagram: https://instagram.com/caca.ofertaoficial`,
 

@@ -21,7 +21,6 @@ const scenarios = {
 const editorialScenarios = {
   celulares_editorial: { id: 'celulares_editorial', name: 'Celulares' },
   informatica_editorial: { id: 'informatica_editorial', name: 'Informática' },
-  games_editorial: { id: 'games_editorial', name: 'Games' },
   tv_audio_editorial: { id: 'tv_audio_editorial', name: 'TV e Áudio' },
   casa_cozinha_editorial: { id: 'casa_cozinha_editorial', name: 'Casa e Cozinha' },
   moveis_editorial: { id: 'moveis_editorial', name: 'Móveis' },
@@ -86,7 +85,7 @@ test('aceita tendência originada no Mercado Livre como evidência para descober
 test('roteia termos comerciais para cenários editoriais determinísticos e não inventa cenário', () => {
   assert.equal(resolveShopeeScenarioForIntent({ productTerm: 'iphone 15 pro max', category: 'Eletrônicos' }, editorialScenarios), 'celulares_editorial');
   assert.equal(resolveShopeeScenarioForIntent({ productTerm: 'notebook', category: 'Eletrônicos' }, editorialScenarios), 'informatica_editorial');
-  assert.equal(resolveShopeeScenarioForIntent({ productTerm: 'playstation 5', category: 'Videogames' }, editorialScenarios), 'games_editorial');
+  assert.equal(resolveShopeeScenarioForIntent({ productTerm: 'playstation 5', category: 'Videogames' }, editorialScenarios), null);
   assert.equal(resolveShopeeScenarioForIntent({ productTerm: 'fone de ouvido', category: 'Eletrônicos' }, editorialScenarios), 'tv_audio_editorial');
   assert.equal(resolveShopeeScenarioForIntent({ productTerm: 'calendario 2026', category: 'Papéis e Escritório' }, editorialScenarios), null);
 });

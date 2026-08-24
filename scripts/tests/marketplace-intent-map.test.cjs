@@ -3,7 +3,7 @@
 const assert = require('node:assert/strict');
 const { INTENT_MAP, MARKETPLACES, getMarketplaceTerms } = require('../marketplace-intent-map.cjs');
 
-assert.equal(Object.keys(INTENT_MAP).length, 16);
+assert.equal(Object.keys(INTENT_MAP).length, 14);
 for (const scenario of Object.values(INTENT_MAP)) {
   for (const marketplace of MARKETPLACES) {
     assert.ok(scenario.marketplaces[marketplace].terms.length > 0);

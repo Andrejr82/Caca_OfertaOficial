@@ -12,7 +12,6 @@ const AMAZON_ALIASES = Object.freeze({
   moda_editorial: ['camiseta masculina', 'camisa', 'calça jeans', 'tênis masculino', 'bolsa', 'relógio'],
   esporte_editorial: ['tênis de corrida', 'whey protein', 'creatina', 'tapete de yoga', 'halter', 'corda de pular'],
   pet_editorial: ['ração para cachorro', 'ração para gato', 'cama pet', 'brinquedo pet', 'areia para gato', 'coleira'],
-  games_editorial: ['console', 'playstation', 'xbox', 'nintendo switch', 'controle gamer', 'jogo ps5'],
   // Cenários naturalmente caros recebem também intenções de entrada da mesma vertical.
   // Não há quota por ticket: o ranking continua escolhendo por mérito comercial.
   tv_audio_editorial: ['smart tv', 'televisão 4k', 'soundbar', 'caixa de som', 'caixa de som bluetooth', 'fone bluetooth', 'headphone', 'projetor'],

@@ -14,7 +14,6 @@ const CONTROLLED_PERSIST_SCENARIOS = new Set([
   'moda_editorial',
   'esporte_editorial',
   'pet_editorial',
-  'games_editorial',
   'tv_audio_editorial',
   'eletrodomesticos_editorial',
   'moveis_editorial',

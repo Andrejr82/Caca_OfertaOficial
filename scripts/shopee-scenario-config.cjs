@@ -227,13 +227,16 @@ const SCENARIO_WINDOWS = Object.freeze(EDITORIAL_SCENARIO_IDS.map((id) => ({
 })));
 
 function getCanonicalCycleScenarioId(startHour) {
-  return getEditorialScenarioForDiscoveryHour(startHour).id;
+  return getEditorialScenarioForDiscoveryHour(startHour)?.id || null;
 }
 
 function getScenarioWindow(currentHour) {
   const hour = ((Number(currentHour) % 24) + 24) % 24;
-  return SCENARIO_WINDOWS.find((window) => hour >= window.start && hour < window.end)
-    || { start: hour, end: hour + 1, scenarioId: getEditorialScenarioForHour(hour).id, label: getEditorialScenarioForHour(hour).name };
+  const window = SCENARIO_WINDOWS.find((w) => hour >= w.start && hour < w.end);
+  if (window) return window;
+  const scenario = getEditorialScenarioForHour(hour);
+  if (!scenario) return null;
+  return { start: hour, end: hour + 1, scenarioId: scenario.id, label: scenario.name };
 }
 
 function getSaoPauloHour(date = new Date()) {
@@ -246,13 +249,16 @@ function getSaoPauloHour(date = new Date()) {
 
 function getActiveScenario(currentHour) {
   const window = getScenarioWindow(currentHour);
+  if (!window) return null;
   const scenario = SCENARIOS[window.scenarioId];
+  if (!scenario) return null;
   return { ...scenario, name: window.label, schedule: window };
 }
 
 function getCycleScenario(startHour, durationHours = 4) {
   const hour = ((Number(startHour) % 24) + 24) % 24;
   const scenario = getEditorialScenarioForDiscoveryHour(hour);
+  if (!scenario) return null;
   const scenarioId = scenario.id;
   const window = getScenarioWindow(scenario.queueHour);
   return {

@@ -105,7 +105,7 @@ function allowsAccessoryByIntent(marketplace, product) {
   const normalizedMarketplace = String(marketplace || '').toLowerCase();
   if (!['amazon', 'mercado livre'].includes(normalizedMarketplace)) return false;
   const intent = String(product?.intent || '').toLowerCase();
-  return ['informatica_editorial', 'celulares_editorial', 'games_editorial', 'tv_audio_editorial', 'moda_editorial'].includes(intent);
+  return ['informatica_editorial', 'celulares_editorial', 'tv_audio_editorial', 'moda_editorial'].includes(intent);
 }
 
 

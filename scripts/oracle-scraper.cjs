@@ -1428,8 +1428,7 @@ function resolveManualScenarioId(category) {
     ['ferramentas', 'ferramentas_editorial'], ['informatica', 'informatica_editorial'],
     ['celulares', 'celulares_editorial'], ['beleza', 'beleza_editorial'],
     ['moda', 'moda_editorial'], ['esporte', 'esporte_editorial'],
-    ['petshop', 'pet_editorial'], ['automotivo', 'automotivo_editorial'],
-    ['games', 'games_editorial'], ['tv_e_audio', 'tv_audio_editorial'],
+    ['petshop', 'pet_editorial'], ['tv_e_audio', 'tv_audio_editorial'],
     ['eletrodomesticos', 'eletrodomesticos_editorial'], ['moveis', 'moveis_editorial'],
     ['grandes_ofertas', 'grandes_ofertas_editorial'], ['cupons', 'cupons_aprovados_editorial'],
   ]);

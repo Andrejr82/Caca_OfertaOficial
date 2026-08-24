@@ -10,8 +10,6 @@ const schedule = [
   { discovery: "12h", time: "13h", focus: "Roupas, calçados, bolsas, relógios e acessórios", marketplaces: "moda_editorial" },
   { discovery: "13h", time: "14h", focus: "Academia, corrida, yoga, fitness e esportes", marketplaces: "esporte_editorial" },
   { discovery: "14h", time: "15h", focus: "Ração, brinquedos, camas, higiene e transporte pet", marketplaces: "pet_editorial" },
-  { discovery: "15h", time: "16h", focus: "Acessórios, ferramentas automotivas, som e manutenção", marketplaces: "automotivo_editorial" },
-  { discovery: "16h", time: "17h", focus: "Consoles, jogos, controles, cadeiras e acessórios", marketplaces: "games_editorial" },
   { discovery: "17h", time: "18h", focus: "TVs, soundbars, caixas de som, fones", marketplaces: "tv_audio_editorial" },
   { discovery: "18h", time: "19h", focus: "Geladeiras, fogões, micro-ondas, lavadoras", marketplaces: "eletrodomesticos_editorial" },
   { discovery: "19h", time: "20h", focus: "Camas, sofás, mesas, cadeiras, racks, escritórios", marketplaces: "moveis_editorial" },

@@ -36,12 +36,11 @@ const INTENTS = [
 
 const CURRENT_SCENARIOS = [
   ['tv_audio_editorial', /fone|headphone|caixa de som|soundbar|microfone|bluetooth/],
-  ['games_editorial', /gamer|jogo|gamepad|controle|playstation|xbox|nintendo/],
   ['casa_cozinha_editorial', /cozinha|panela|pote|utens[ií]lio|limpeza|casa/], ['organizacao_editorial', /organiza|gaveta|cabide|prateleira|caixa|cesto/],
   ['ferramentas_editorial', /ferramenta|furadeira|parafuso|chave|broca|alicate/], ['informatica_editorial', /notebook|teclado|mouse|monitor|computador/],
   ['celulares_editorial', /celular|smartphone|carregador|power bank|cabo|capinha/], ['beleza_editorial', /beleza|maquiagem|skincare|hidratante|secador|perfume/],
   ['moda_editorial', /camisa|cal[cç]a|vestido|blusa|jaqueta|t[eê]nis|bolsa/], ['esporte_editorial', /fitness|academia|halter|yoga|esporte|legging/],
-  ['pet_editorial', /pet|cachorro|gato|areia|ra[cç][aã]o|coleira/], ['automotivo_editorial', /carro|automotivo|ve[ií]culo|moto|capacete/],
+  ['pet_editorial', /pet|cachorro|gato|areia|ra[cç][aã]o|coleira/],
   ['eletrodomesticos_editorial', /air fryer|liquidificador|cafeteira|aspirador|geladeira|lavadora/], ['moveis_editorial', /m[oó]vel|cadeira|mesa|estante/],
   ['grandes_ofertas_editorial', /oferta|promo[cç][aã]o|desconto/], ['cupons_aprovados_editorial', /cupom/],
 ];

@@ -18,12 +18,16 @@ const {
 const expected = [
   'casa_cozinha_editorial', 'organizacao_editorial', 'ferramentas_editorial',
   'informatica_editorial', 'celulares_editorial', 'beleza_editorial',
-  'moda_editorial', 'esporte_editorial', 'pet_editorial', 'automotivo_editorial', 'games_editorial',
+  'moda_editorial', 'esporte_editorial', 'pet_editorial',
   'tv_audio_editorial', 'eletrodomesticos_editorial', 'moveis_editorial',
   'grandes_ofertas_editorial', 'cupons_aprovados_editorial',
 ];
 
 assert.deepEqual(EDITORIAL_SCENARIO_IDS, expected);
+assert.equal(EDITORIAL_SCENARIOS.automotivo_editorial, undefined);
+assert.equal(EDITORIAL_SCENARIOS.games_editorial, undefined);
+assert.equal(getEditorialScenarioById('automotivo_editorial'), null);
+assert.equal(getEditorialScenarioById('games_editorial'), null);
 
 for (const id of expected) {
   const scenario = getEditorialScenarioById(id);
@@ -38,14 +42,14 @@ for (const id of expected) {
 const expectedHourMap = [
   'casa_cozinha_editorial', 'organizacao_editorial', 'ferramentas_editorial',
   'informatica_editorial', 'celulares_editorial', 'beleza_editorial',
-  'moda_editorial', 'esporte_editorial', 'pet_editorial', 'automotivo_editorial',
-  'games_editorial', 'tv_audio_editorial', 'eletrodomesticos_editorial',
+  'moda_editorial', 'esporte_editorial', 'pet_editorial', null, null,
+  'tv_audio_editorial', 'eletrodomesticos_editorial',
   'moveis_editorial', 'grandes_ofertas_editorial', 'cupons_aprovados_editorial',
 ];
 
 assert.deepEqual(
   [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]
-    .map((hour) => getEditorialScenarioForHour(hour).id),
+    .map((hour) => getEditorialScenarioForHour(hour)?.id || null),
   expectedHourMap,
 );
 
@@ -60,13 +64,23 @@ for (const marketplace of ['Shopee', 'Amazon', 'Mercado Livre']) {
   }
 }
 
-assert.equal(getEditorialScenarioForHour(23).id, 'cupons_aprovados_editorial');
+assert.equal(getEditorialScenarioForHour(23), null);
+
+const expectedDiscoveryMap = [
+  'casa_cozinha_editorial', 'organizacao_editorial', 'ferramentas_editorial',
+  'informatica_editorial', 'celulares_editorial', 'beleza_editorial',
+  'moda_editorial', 'esporte_editorial', 'pet_editorial', null, null,
+  'tv_audio_editorial', 'eletrodomesticos_editorial',
+  'moveis_editorial', 'grandes_ofertas_editorial',
+];
+
 assert.deepEqual(
   [6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
-    .map((hour) => getEditorialScenarioForDiscoveryHour(hour).id),
-  expected.slice(0, 15),
+    .map((hour) => getEditorialScenarioForDiscoveryHour(hour)?.id || null),
+  expectedDiscoveryMap,
 );
-assert.equal(EDITORIAL_SCENARIOS.automotivo_editorial.queueHour, 16);
+
+assert.equal(EDITORIAL_SCENARIOS.tv_audio_editorial.queueHour, 18);
 assert.equal(EDITORIAL_SCENARIOS.grandes_ofertas_editorial.priority, 'critical');
 assert.equal(EDITORIAL_SCENARIOS.cupons_aprovados_editorial.discoveryMode, 'manual_only');
 assert.equal(validateEditorialSchedule().valid, true);
