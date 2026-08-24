@@ -1,5 +1,5 @@
 [Unit]
-Description=Oracle Capacity Hunter operational check
+Description=Oracle VPS health monitor
 After=network-online.target
 Wants=network-online.target
 

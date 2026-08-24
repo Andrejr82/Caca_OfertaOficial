@@ -23,7 +23,7 @@ test('formats one concise daily report without secret values', () => {
     overall: 'ATENCAO',
   });
 
-  assert.match(report, /Oracle Capacity Hunter/);
+  assert.match(report, /Oracle VPS Monitor/);
   assert.match(report, /13\/07\/2026 08:00/);
   assert.match(report, /oracle-api: online/);
   assert.match(report, /Custo atual: INDETERMINADO/);

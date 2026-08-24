@@ -1,21 +1,34 @@
-# Oracle Capacity Hunter v2
+# Oracle VPS Monitor
 
 Monitor operacional one-shot da VPS do Caça Oferta Oficial. Coleta somente métricas locais, metadata read-only da VM, PM2, scheduler e Git. Não cria nem altera recursos OCI, não usa IA e não chama marketplaces.
 
+> [!IMPORTANT]
+> **Esclarecimento sobre Hunting OCI**:
+> - O serviço periódico (`oracle-capacity-hunter.timer` / `oracle-capacity-hunter.service`) **NÃO** caça capacidade OCI nem tenta instanciar máquinas virtuais.
+> - Sua função exclusiva é monitorar a saúde operacional da VPS em produção.
+> - O código em `src/hunter/` é legado/inativo e **NÃO** é executado pelo timer nem pelo fluxo padrão de `src/index.js`.
+> - `launchInstance` **NÃO** deve ser ativado sem decisão explícita da liderança e revisão formal de quota/custos no OCI.
+
 ## Arquitetura e fluxo
 
-`oracle-capacity-hunter.timer` executa o service a cada cinco minutos. Cada execução coleta CPU, RAM, disco, uptime, metadata OCI, processos PM2, reinícios, duplicidades, o único `cron.schedule` esperado no scraper e o SHA Git. O estado em `data/state.json` impede relatório diário duplicado e aplica cooldown aos alertas.
+`oracle-capacity-hunter.timer` executa o service a cada 30 minutos (`OnCalendar=*-*-* *:0/30:00 America/Sao_Paulo`). Cada execução coleta CPU, RAM, disco, uptime, metadata OCI, processos PM2, reinícios, duplicidades, o único `cron.schedule` esperado no scraper e o SHA Git. O estado em `data/state.json` impede relatório diário duplicado e aplica cooldown aos alertas.
 
-O relatório é enviado uma vez entre 08:00–08:59 em `America/Sao_Paulo`. Alertas críticos são enviados no máximo uma vez por chave dentro de `ALERT_COOLDOWN_MINUTES`. O processo termina após cada verificação.
+O relatório diário é enviado uma vez entre 08:00–08:59 em `America/Sao_Paulo`. Alertas críticos são enviados no máximo uma vez por chave dentro de `ALERT_COOLDOWN_MINUTES` (padrão 60 minutos). O processo termina após cada verificação.
 
-Módulos:
+Módulos ativos:
 
+- `src/index.js`: Ponto de entrada executado pelo systemd (`node src/index.js --run`).
 - `src/monitor/metrics.js`: métricas locais e metadata Oracle.
 - `src/monitor/alerts.js`: regras críticas e cooldown.
 - `src/monitor/report.js`: mensagens curtas em HTML Telegram.
 - `src/monitor/schedule.js`: horário e trava diária.
 - `src/monitor/state.js`: estado atômico local.
 - `src/telegram/bot.js`: envio HTTPS com timeout de 8 s.
+
+Módulos inativos / legados (não chamados pelo timer):
+- `src/hunter/hunter.js`
+- `src/hunter/ociClient.js`
+- `src/hunter/find-image.js`
 
 ## Instalação
 
@@ -33,7 +46,7 @@ Não habilite o service diretamente: o timer é o único owner.
 
 ## Configuração OCI
 
-O monitor não recebe OCIDs nem credenciais. Como a VPS não possui permissão de billing, os campos `OCI_*` de custo são valores declarativos opcionais e só devem ser preenchidos após certificação read-only no Console/CLI. Vazios são exibidos como `INDETERMINADO`; isso produz status `ATENÇÃO`, nunca uma falsa garantia financeira.
+O monitor não recebe OCIDs nem credenciais de escrita. Como a VPS não possui permissão de billing, os campos `OCI_*` de custo são valores declarativos opcionais e só devem ser preenchidos após certificação read-only no Console/CLI. Vazios são exibidos como `INDETERMINADO`; isso produz status `ATENÇÃO`, nunca uma falsa garantia financeira.
 
 ## Operação e testes controlados
 

@@ -26,7 +26,7 @@ function formatDailyReport(s) {
   const resources = s.billing?.potentiallyBillable == null ? 'INDETERMINADO' : s.billing.potentiallyBillable ? 'SIM' : 'NÃO';
   const end = status === 'OK' ? 'Tudo funcionando normalmente.' : 'Verifique os itens sinalizados.';
   return [
-    '🟢 <b>Oracle Capacity Hunter</b>', '', when, '',
+    '🟢 <b>Oracle VPS Monitor</b>', '', when, '',
     `<b>Oracle</b>: ${s.oracleReachable ? 'acessível' : 'inacessível'}`,
     `CPU: ${valueOrUnknown(s.cpuPercent?.toFixed(1), '%')}`,
     `RAM: ${valueOrUnknown(s.ramPercent?.toFixed(1), '%')}`,
@@ -41,7 +41,7 @@ function formatDailyReport(s) {
 }
 
 function formatAlert(events) {
-  return ['🔴 <b>Oracle Capacity Hunter — ALERTA</b>', '', ...events.map((event) => `• ${event.message}`)].join('\n');
+  return ['🔴 <b>Oracle VPS Monitor — ALERTA</b>', '', ...events.map((event) => `• ${event.message}`)].join('\n');
 }
 
 module.exports = { formatDailyReport, formatAlert };

@@ -9,7 +9,7 @@ const { loadState, saveState } = require('./monitor/state');
 
 async function run(mode = '--run') {
   if (mode === '--test') {
-    if (!await telegramService.sendMessage('🟢 Oracle Capacity Hunter\nTeste de conexão concluído.')) throw new Error('Telegram test failed');
+    if (!await telegramService.sendMessage('🟢 Oracle VPS Monitor\nTeste de conexão concluído.')) throw new Error('Telegram test failed');
     return;
   }
 
