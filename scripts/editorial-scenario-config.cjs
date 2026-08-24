@@ -8,7 +8,53 @@ const COMMON_BLOCKED = Object.freeze([
   'réplica', 'replica', 'download', 'ebook', 'serviço', 'servico',
 ]);
 
+function normalize(value) {
+  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function sanitizeBlockedTerms(blockedTerms = [], allowedTerms = [], keywords = []) {
+  const allowedNorm = allowedTerms.map(normalize).filter(Boolean);
+  const keywordsNorm = keywords.map(normalize).filter(Boolean);
+
+  if (allowedNorm.length === 0) {
+    return [...new Set(blockedTerms)].map((t) => String(t || '').trim()).filter(Boolean);
+  }
+
+  const intentTokens = new Set();
+  for (const phrase of [...allowedNorm, ...keywordsNorm]) {
+    const tokens = phrase.split(/[^a-z0-9]+/g).map((t) => t.trim()).filter((t) => t.length >= 2);
+    for (const token of tokens) {
+      intentTokens.add(token);
+    }
+  }
+
+  const isContradictory = (blockedTerm) => {
+    const normalizedBlocked = normalize(blockedTerm).replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!normalizedBlocked) return true;
+
+    const blockedTokens = normalizedBlocked.split(/\s+/).filter(Boolean);
+    for (const bToken of blockedTokens) {
+      if (intentTokens.has(bToken)) return true;
+    }
+
+    for (const allowedPhrase of [...allowedNorm, ...keywordsNorm]) {
+      const paddedAllowed = ` ${allowedPhrase} `;
+      if (paddedAllowed.includes(` ${normalizedBlocked} `) || allowedPhrase === normalizedBlocked) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
+  return [...new Set(blockedTerms)]
+    .map((term) => String(term || '').trim())
+    .filter((term) => term && !isContradictory(term));
+}
+
 function scenario(id, name, queueHour, keywords, allowedProductTerms, blockedProductTerms, attributes, options = {}) {
+  const allBlocked = [...new Set([...COMMON_BLOCKED, ...blockedProductTerms])];
+  const sanitizedBlocked = sanitizeBlockedTerms(allBlocked, allowedProductTerms, keywords);
   return {
     id,
     name,
@@ -16,7 +62,7 @@ function scenario(id, name, queueHour, keywords, allowedProductTerms, blockedPro
     marketplaces: [...MARKETPLACES],
     keywords: [...new Set(keywords)],
     allowedProductTerms: [...new Set(allowedProductTerms)],
-    blockedProductTerms: [...new Set([...COMMON_BLOCKED, ...blockedProductTerms])],
+    blockedProductTerms: sanitizedBlocked,
     attributes: [...new Set(attributes)],
     maxAgeHours: options.maxAgeHours ?? 4,
     priority: options.priority || 'medium',
@@ -234,6 +280,9 @@ module.exports = {
   EDITORIAL_SCENARIOS,
   EDITORIAL_SCENARIO_IDS,
   QUEUE_BY_HOUR,
+  COMMON_BLOCKED,
+  normalize,
+  sanitizeBlockedTerms,
   getEditorialScenarioById,
   getEditorialScenarioForHour,
   getEditorialScenarioForDiscoveryHour,

@@ -2,14 +2,17 @@
 
 const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
+const {
+  COMMON_BLOCKED,
+  normalize,
+  sanitizeBlockedTerms,
+} = require('./editorial-scenario-config.cjs');
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Amazon', 'Mercado Livre']);
-const COMMON_BLOCKED = Object.freeze(['pet', 'cachorro', 'gato', 'ração']);
 
 function contract(terms, categories, allowed, blocked = []) {
-  const allowedNormalized = allowed.map(normalize);
-  const blockedProductTerms = [...new Set([...COMMON_BLOCKED, ...blocked])]
-    .filter((term) => !allowedNormalized.some((allowedTerm) => allowedTerm.includes(normalize(term))));
+  const allBlocked = [...new Set([...COMMON_BLOCKED, ...blocked])];
+  const blockedProductTerms = sanitizeBlockedTerms(allBlocked, allowed, terms);
   return { terms, categories, allowedProductTerms: allowed, blockedProductTerms };
 }
 
@@ -18,10 +21,6 @@ const EXPLICIT = {
   Amazon: {},
   'Mercado Livre': {},
 };
-
-function normalize(value) {
-  return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
-}
 
 // IDs observados nas árvores públicas do catálogo Amazon Brasil. Não são IDs
 // inventados: são mantidos como evidência de origem pública e devem ser
@@ -86,6 +85,10 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
   const explicit = EXPLICIT[marketplace]?.[scenarioId];
   const terms = explicit?.terms || [...(base.keywords || [])];
   const browseNodes = (explicit?.categories || base.apiCategories || base.browseNodeIds || []).map(String).filter((id) => id !== '16243802011');
+  const allowed = [...new Set(SHOPEE_SCENARIOS[scenarioId]?.allowedProductTerms || base.allowedProductTerms || [])];
+  const rawBlocked = [...new Set([...COMMON_BLOCKED, ...(explicit?.blockedProductTerms || base.blockedProductTerms || [])])];
+  const blocked = sanitizeBlockedTerms(rawBlocked, allowed, terms);
+
   return {
     ...base,
     id: scenarioId,
@@ -95,7 +98,7 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
     splitInto: [],
     amazonIntelligence: marketplace === 'Amazon'
       ? (AMAZON_ATTRIBUTES_BY_SCENARIO[scenarioId] || {
-        productTypes: [...(base.allowedProductTerms || [])].slice(0, 8),
+        productTypes: [...allowed].slice(0, 8),
         attributes: [...(base.attributes || [])],
         priority: base.priority || 'medium',
       })
@@ -105,8 +108,8 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
     categories: marketplace === 'Amazon' ? browseNodes : [...(explicit?.categories || base.apiCategories || [])],
     apiCategories: marketplace === 'Amazon' ? browseNodes : [...(explicit?.categories || base.apiCategories || [])],
     browseNodeIds: marketplace === 'Amazon' ? browseNodes : [],
-    allowedProductTerms: [...new Set(SHOPEE_SCENARIOS[scenarioId]?.allowedProductTerms || base.allowedProductTerms || [])],
-    blockedProductTerms: [...new Set(SHOPEE_SCENARIOS[scenarioId]?.blockedProductTerms || base.blockedProductTerms || [])],
+    allowedProductTerms: allowed,
+    blockedProductTerms: blocked,
     queueHour: Number(base.queueHour),
     maxAgeHours: Number(base.maxAgeHours || 4),
     priority: base.priority || 'medium',

@@ -251,3 +251,49 @@ test('I) Nenhum Games/Automotivo reaparece no registro', () => {
   assert.equal(getEditorialScenarioById('automotivo_editorial'), null);
   assert.equal(getEditorialScenarioById('games_editorial'), null);
 });
+
+test('J) pet_editorial aceita produtos válidos em todos os marketplaces e bloqueios não contradizem intents', () => {
+  for (const marketplace of MARKETPLACES) {
+    const contract = getMarketplaceScenarioContract('pet_editorial', marketplace);
+    
+    // Aceitações obrigatórias
+    assert.equal(matchesMarketplaceContract(contract, 'Ração cachorro Premium 10kg'), true, `${marketplace} deve aceitar Ração cachorro Premium 10kg`);
+    assert.equal(matchesMarketplaceContract(contract, 'Ração gato Castrado 3kg'), true, `${marketplace} deve aceitar Ração gato Castrado 3kg`);
+    assert.equal(matchesMarketplaceContract(contract, 'Cama pet cachorro grande'), true, `${marketplace} deve aceitar Cama pet cachorro grande`);
+    assert.equal(matchesMarketplaceContract(contract, 'Areia gato biodegradável'), true, `${marketplace} deve aceitar Areia gato biodegradável`);
+
+    // Rejeições externas legítimas mantidas
+    assert.equal(matchesMarketplaceContract(contract, 'Ração para bebê humano'), false, `${marketplace} deve rejeitar produto para bebê`);
+    assert.equal(matchesMarketplaceContract(contract, 'Pneu automotivo aro 15'), false, `${marketplace} deve rejeitar produto automotivo`);
+  }
+});
+
+test('K) Teste genérico: nenhum blockedProductTerm derivado contradiz tokens/termos do próprio cenário', () => {
+  for (const scenarioId of EDITORIAL_SCENARIO_IDS) {
+    const canonical = EDITORIAL_SCENARIOS[scenarioId];
+    if (canonical.discoveryMode === 'manual_only' || canonical.allowedProductTerms.length === 0) continue;
+    
+    // Coletar tokens de intenção canônicos
+    const intentTokens = new Set();
+    const allIntentPhrases = [...canonical.keywords, ...canonical.allowedProductTerms].map((s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    for (const phrase of allIntentPhrases) {
+      const tokens = phrase.split(/[^a-z0-9]+/g).filter((t) => t.length >= 2);
+      for (const token of tokens) intentTokens.add(token);
+    }
+
+    for (const marketplace of MARKETPLACES) {
+      const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
+      for (const blocked of contract.blockedProductTerms) {
+        const normBlocked = String(blocked || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const blockedTokens = normBlocked.split(/[^a-z0-9]+/g).filter(Boolean);
+        
+        for (const bToken of blockedTokens) {
+          assert.ok(
+            !intentTokens.has(bToken),
+            `Contradição detectada em ${marketplace}/${scenarioId}: blockedProductTerm '${blocked}' contém token '${bToken}' que é parte de intent canônica!`
+          );
+        }
+      }
+    }
+  }
+});
