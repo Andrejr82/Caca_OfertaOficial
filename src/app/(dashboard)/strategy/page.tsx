@@ -1,6 +1,6 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Compass, MessageCircle, ShieldCheck, Target } from "lucide-react";
 
-const schedule = [
+export const schedule = [
   { discovery: "06h", time: "07h", focus: "Cama, mesa, banho, utensílios, cafeteiras, air fryers", marketplaces: "casa_cozinha_editorial" },
   { discovery: "07h", time: "08h", focus: "Organizadores, caixas, cestos, cabides, limpeza", marketplaces: "organizacao_editorial" },
   { discovery: "08h", time: "09h", focus: "Furadeiras, parafusadeiras, manuais, kits", marketplaces: "ferramentas_editorial" },
@@ -13,9 +13,11 @@ const schedule = [
   { discovery: "17h", time: "18h", focus: "TVs, soundbars, caixas de som, fones", marketplaces: "tv_audio_editorial" },
   { discovery: "18h", time: "19h", focus: "Geladeiras, fogões, micro-ondas, lavadoras", marketplaces: "eletrodomesticos_editorial" },
   { discovery: "19h", time: "20h", focus: "Camas, sofás, mesas, cadeiras, racks, escritórios", marketplaces: "moveis_editorial" },
-  { discovery: "20h", time: "21h", focus: "Ofertas de qualquer categoria com maior desconto", marketplaces: "grandes_ofertas_editorial" },
-  { discovery: "21h", time: "22h", focus: "Apenas cupons cadastrados, aprovados manualmente", marketplaces: "cupons_aprovados_editorial" },
+  { discovery: "20h", time: "21h", focus: "Grandes ofertas em famílias prioritárias de eletrônicos, linha branca e utilidades de alto potencial comercial", marketplaces: "grandes_ofertas_editorial" },
+  { discovery: "Manual", time: "22h", focus: "Apenas cupons cadastrados e aprovados manualmente", marketplaces: "cupons_aprovados_editorial" },
 ];
+
+export const commercialPriorityText = "Eletrônicos, telefonia, informática, eletrodomésticos, casa, beleza, moda, esporte, pet e móveis.";
 
 const channelPlan = [
   ["WhatsApp", "3–5 ofertas/dia no início; intervalo mínimo de 2 h", "Canal principal: conversão e cupons"],
@@ -41,7 +43,7 @@ export default function StrategyPage() {
         <article className="glass-card border border-emerald-500/15 p-5">
           <Target size={18} className="text-emerald-300" />
           <h2 className="mt-3 font-bold text-white">Prioridade comercial</h2>
-          <p className="mt-2 text-sm leading-6 text-white/45">Eletrônicos, telefonia, informática, eletroportáteis, casa, beleza, esporte e games.</p>
+          <p className="mt-2 text-sm leading-6 text-white/45">{commercialPriorityText}</p>
         </article>
         <article className="glass-card border border-sky-500/15 p-5">
           <ShieldCheck size={18} className="text-sky-300" />
@@ -58,7 +60,7 @@ export default function StrategyPage() {
       <section className="glass-card overflow-hidden border border-white/[0.05]">
         <div className="border-b border-white/[0.05] p-5">
           <h2 className="flex items-center gap-2 font-bold text-white"><CalendarClock size={18} className="text-violet-300" /> Grade diária de cenários (Brasília)</h2>
-          <p className="mt-1 text-sm text-white/40">Oracle descobre 1h antes da publicação. Intro Telegram disparada no horário de discovery.</p>
+          <p className="mt-1 text-sm text-white/40">Nos cenários automáticos, o discovery ocorre 1h antes da publicação. Cupons são manuais. Intro Telegram disparada no horário de discovery.</p>
         </div>
         <div className="divide-y divide-white/[0.04]">
           <div className="hidden lg:grid lg:grid-cols-[5rem_5rem_1fr_14rem] gap-3 px-5 py-2 text-[11px] font-semibold uppercase tracking-widest text-white/25">
