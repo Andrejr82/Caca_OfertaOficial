@@ -24,6 +24,9 @@ test('B) Service preserves ExecStart pointing to src/index.js --run and updated 
   const serviceContent = fs.readFileSync(servicePath, 'utf8');
   assert.match(serviceContent, /ExecStart=\/usr\/bin\/node\s+src\/index\.js\s+--run/);
   assert.match(serviceContent, /Description=Oracle VPS health monitor/);
+  assert.match(serviceContent, /WorkingDirectory=\/home\/ubuntu\/Caca_OfertaOficial\/apps\/oracle-capacity-hunter/);
+  assert.match(serviceContent, /EnvironmentFile=\/home\/ubuntu\/Caca_OfertaOficial\/apps\/oracle-capacity-hunter\/\.env/);
+  assert.match(serviceContent, /ReadWritePaths=.*\/apps\/oracle-capacity-hunter\/logs\s+.*\/apps\/oracle-capacity-hunter\/data/);
 });
 
 test('C) src/index.js does not invoke launchInstance or import hunter.js', () => {

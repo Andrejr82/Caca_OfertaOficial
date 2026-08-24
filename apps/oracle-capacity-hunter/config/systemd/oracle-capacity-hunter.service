@@ -7,14 +7,14 @@ Wants=network-online.target
 Type=oneshot
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter
-EnvironmentFile=/home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter/.env
+WorkingDirectory=/home/ubuntu/Caca_OfertaOficial/apps/oracle-capacity-hunter
+EnvironmentFile=/home/ubuntu/Caca_OfertaOficial/apps/oracle-capacity-hunter/.env
 ExecStart=/usr/bin/node src/index.js --run
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter/logs /home/ubuntu/Caca_OfertaOficial/oracle-capacity-hunter/data
+ReadWritePaths=/home/ubuntu/Caca_OfertaOficial/apps/oracle-capacity-hunter/logs /home/ubuntu/Caca_OfertaOficial/apps/oracle-capacity-hunter/data
 
 [Install]
 WantedBy=multi-user.target
