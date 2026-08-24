@@ -114,9 +114,10 @@ export function classifyMLAffiliateInput(rawUrl: string): MLAffiliateClassificat
   if (url.searchParams.get("partner_id")?.trim()) {
     return {
       kind: "internally_generated_affiliate_url",
-      monetized: false,
+      monetized: true,
+      affiliateUrl: value,
       host,
-      reasonCode: "LEGACY_INTERNAL_LINK_REQUIRES_VALIDATION",
+      reasonCode: "OFFICIAL_AFFILIATE_FULL_URL",
     };
   }
 

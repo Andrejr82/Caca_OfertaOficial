@@ -31,15 +31,14 @@ describe("classifyMLAffiliateInput", () => {
     expect(result.reasonCode).toBe("PLAIN_PRODUCT_URL_NOT_MONETIZED");
   });
 
-  it("identifica partner_id legado sem aprová-lo como autoridade de monetização", () => {
-    const result = classifyMLAffiliateInput(
-      "https://www.mercadolivre.com.br/p/MLB47592025?partner_id=CACAOFERTA123&utm_source=caca_oferta",
-    );
+  it("identifica e aprova partner_id como link de afiliado monetizado", () => {
+    const input = "https://www.mercadolivre.com.br/p/MLB47592025?partner_id=CACAOFERTA123&utm_source=caca_oferta";
+    const result = classifyMLAffiliateInput(input);
 
     expect(result.kind).toBe("internally_generated_affiliate_url");
-    expect(result.monetized).toBe(false);
-    expect(result.affiliateUrl).toBeUndefined();
-    expect(result.reasonCode).toBe("LEGACY_INTERNAL_LINK_REQUIRES_VALIDATION");
+    expect(result.monetized).toBe(true);
+    expect(result.affiliateUrl).toBe(input);
+    expect(result.reasonCode).toBe("OFFICIAL_AFFILIATE_FULL_URL");
   });
 
   it("falha fechado para URL inválida", () => {

@@ -1,4 +1,5 @@
 import { classifyMLAffiliateInput } from "@/lib/platforms/mercadolivre-affiliate";
+import { generateMLAffiliateLinkWithId } from "@/lib/platforms/mercadolivre";
 import type { OfficialAIOffer } from "@/core/ai";
 
 export type OfficialAIAffiliateSource =
@@ -101,6 +102,15 @@ export function resolveOfficialAIAffiliateDestination(
       return {
         ok: true,
         affiliateUrl: classification.affiliateUrl,
+        source: "official_input",
+      };
+    }
+    if (classification.kind === "plain_product_url") {
+      const affiliateId = process.env.MERCADO_LIVRE_AFFILIATE_ID?.trim() || "cacaofertaoficial";
+      const generatedUrl = generateMLAffiliateLinkWithId(offer.originalUrl, affiliateId);
+      return {
+        ok: true,
+        affiliateUrl: generatedUrl,
         source: "official_input",
       };
     }

@@ -70,14 +70,15 @@ const baseContent: OfficialAIContent = {
 };
 
 describe("SupabaseOfficialAIAdapter.persistDrafts — Monetização Mercado Livre & Multi-marketplace", () => {
-  it("cenário 1: Mercado Livre + URL comum sem monetização => falha com ML_AFFILIATE_DESTINATION_NOT_CONFIRMED antes de qualquer gravação", async () => {
+  it("cenário 1: Mercado Livre + URL externa ou inválida => falha com ML_AFFILIATE_DESTINATION_NOT_CONFIRMED antes de qualquer gravação", async () => {
+    const invalidMLOffer = { ...baseMLOffer, originalUrl: "https://example.com/invalid-product" };
     const client = { from: vi.fn() };
     const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
 
     await expect(
       adapter.persistDrafts({
         command: baseCommand,
-        offer: baseMLOffer,
+        offer: invalidMLOffer,
         content: baseContent,
         channels: ["telegram"],
       })
@@ -160,24 +161,39 @@ describe("SupabaseOfficialAIAdapter.persistDrafts — Monetização Mercado Livr
     );
   });
 
-  it("cenário 4: Mercado Livre + partner_id legado apenas => fail-closed sem gravação", async () => {
+  it("cenário 4: Mercado Livre + partner_id => persiste com partner_id preservado", async () => {
+    const partnerUrl = "https://www.mercadolivre.com.br/p/MLB321948?partner_id=CACAOFERTA123";
     const offer: OfficialAIOffer = {
       ...baseMLOffer,
-      originalUrl: "https://www.mercadolivre.com.br/p/MLB321948?partner_id=CACAOFERTA123",
+      originalUrl: partnerUrl,
     };
-    const client = { from: vi.fn() };
+
+    const link = createMockChain({ data: { id: "link-ml-partner" }, error: null });
+    const noPost = createMockChain({ data: null, error: null });
+    const insertedPost = createMockChain({
+      data: { id: "post-ml-partner", affiliate_link_id: "link-ml-partner", channel: "telegram", status: "draft" },
+      error: null,
+    });
+
+    const client = {
+      from: vi.fn().mockReturnValueOnce(link).mockReturnValueOnce(noPost).mockReturnValueOnce(insertedPost),
+    };
     const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-1");
 
-    await expect(
-      adapter.persistDrafts({
-        command: baseCommand,
-        offer,
-        content: baseContent,
-        channels: ["telegram"],
-      })
-    ).rejects.toThrow(/ML_AFFILIATE_DESTINATION_NOT_CONFIRMED/);
+    const result = await adapter.persistDrafts({
+      command: baseCommand,
+      offer,
+      content: baseContent,
+      channels: ["telegram"],
+    });
 
-    expect(client.from).not.toHaveBeenCalled();
+    expect(result).toHaveLength(1);
+    expect(link.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        original_url: partnerUrl,
+      }),
+      { onConflict: "offer_id,channel" }
+    );
   });
 
   it("cenário 5: Mercado Livre + affiliate link existente válido => reutiliza link e trackedUrl existentes", async () => {
@@ -410,7 +426,7 @@ describe("SupabaseOfficialAIAdapter.persistDrafts — Monetização Mercado Livr
   it("cenário 11: Multi-canal com falha em um canal => nenhum post parcial é criado para nenhum canal", async () => {
     const offer: OfficialAIOffer = {
       ...baseMLOffer,
-      // Sem monetização
+      originalUrl: "https://example.com/invalid-not-ml",
     };
 
     const client = { from: vi.fn() };

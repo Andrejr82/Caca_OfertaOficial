@@ -31,12 +31,22 @@ describe("resolveOfficialAIAffiliateDestination", () => {
     expect(isMercadoLivreMarketplace(null)).toBe(false);
   });
 
-  it("cenário 1: Mercado Livre + originalUrl comum + sem affiliateUrl válido => fail-closed", () => {
-    const result = resolveOfficialAIAffiliateDestination(baseOffer, "telegram");
+  it("cenário 1: Mercado Livre + URL externa ou inválida => fail-closed", () => {
+    const invalidOffer = { ...baseOffer, originalUrl: "https://example.com/not-ml-product" };
+    const result = resolveOfficialAIAffiliateDestination(invalidOffer, "telegram");
     expect(result).toEqual({
       ok: false,
       reasonCode: "ML_AFFILIATE_DESTINATION_NOT_CONFIRMED",
     });
+  });
+
+  it("cenário 1b: Mercado Livre + originalUrl de produto válida => gera destino com partner_id", () => {
+    const result = resolveOfficialAIAffiliateDestination(baseOffer, "telegram");
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.affiliateUrl).toContain("partner_id=");
+      expect(result.source).toBe("official_input");
+    }
   });
 
   it("cenário 2: Mercado Livre + originalUrl meli.la oficial => aprova com source official_input", () => {
@@ -66,15 +76,16 @@ describe("resolveOfficialAIAffiliateDestination", () => {
     });
   });
 
-  it("cenário 4: Mercado Livre + partner_id legado apenas => fail-closed", () => {
+  it("cenário 4: Mercado Livre + link com partner_id => aprova e preserva partner_id", () => {
     const offer: OfficialAIOffer = {
       ...baseOffer,
       originalUrl: "https://www.mercadolivre.com.br/p/MLB21473210?partner_id=CACAOFERTA123",
     };
     const result = resolveOfficialAIAffiliateDestination(offer, "telegram");
     expect(result).toEqual({
-      ok: false,
-      reasonCode: "ML_AFFILIATE_DESTINATION_NOT_CONFIRMED",
+      ok: true,
+      affiliateUrl: "https://www.mercadolivre.com.br/p/MLB21473210?partner_id=CACAOFERTA123",
+      source: "official_input",
     });
   });
 

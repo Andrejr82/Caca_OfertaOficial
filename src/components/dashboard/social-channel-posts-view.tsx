@@ -72,7 +72,7 @@ function normalizeValue(value?: string | null) {
     .trim();
 }
 
-function matchesMarketplaceFilter(
+export function matchesMarketplaceFilter(
   filter: MarketplaceFilterKey,
   offer: PostOfferMetadata | HistoryPostItem["marketplace"] | null | undefined,
   fallbackPlatform?: string | null,
