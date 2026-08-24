@@ -101,8 +101,8 @@ test('executa somente uma busca Shopee real pelo termo exato e bloqueia categori
   assert.equal(category.data.data.productOfferV2.nodes.length, 0);
   assert.equal(calls.length, 0);
 
-  await request('ShopeePromotionOffers', 'query', { keyword: 'carregador turbo', page: 1 });
-  await request('ShopeePromotionOffers', 'query', { keyword: 'capinha celular', page: 1 });
+  await request('ShopeePromotionOffers', 'query', { keyword: 'iphone 16', page: 1 });
+  await request('ShopeePromotionOffers', 'query', { keyword: 'smartphone 5g', page: 1 });
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].variables.keyword, 'iphone 16');

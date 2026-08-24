@@ -93,3 +93,18 @@ assert.equal(validateEditorialSchedule({
   ...EDITORIAL_SCENARIOS,
   extra_runtime: { ...EDITORIAL_SCENARIOS.casa_cozinha_editorial, id: 'extra_runtime', queueHour: 23 },
 }).valid, false);
+
+// Verificação de exclusão de intenções proibidas e presença de produtos autônomos
+const celulares = EDITORIAL_SCENARIOS.celulares_editorial;
+for (const excluded of ['carregador turbo', 'carregador', 'power bank', 'capa celular']) {
+  assert.ok(!celulares.keywords.includes(excluded), `celulares não deve conter ${excluded} em keywords`);
+  assert.ok(!celulares.allowedProductTerms.includes(excluded), `celulares não deve conter ${excluded} em allowedProductTerms`);
+}
+assert.deepEqual(celulares.keywords, ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi']);
+
+const grandesOfertas = EDITORIAL_SCENARIOS.grandes_ofertas_editorial;
+for (const excluded of ['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis']) {
+  assert.ok(!grandesOfertas.keywords.includes(excluded), `grandes_ofertas não deve conter ${excluded} em keywords`);
+}
+assert.deepEqual(grandesOfertas.keywords, ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'ar condicionado', 'fritadeira', 'micro-ondas']);
+

@@ -5,7 +5,7 @@ const schedule = [
   { discovery: "07h", time: "08h", focus: "Organizadores, caixas, cestos, cabides, limpeza", marketplaces: "organizacao_editorial" },
   { discovery: "08h", time: "09h", focus: "Furadeiras, parafusadeiras, manuais, kits", marketplaces: "ferramentas_editorial" },
   { discovery: "09h", time: "10h", focus: "Notebooks, computadores, monitores, impressoras", marketplaces: "informatica_editorial" },
-  { discovery: "10h", time: "11h", focus: "Smartphones, celulares, capas, carregadores", marketplaces: "celulares_editorial" },
+  { discovery: "10h", time: "11h", focus: "Smartphones, celulares e aparelhos", marketplaces: "celulares_editorial" },
   { discovery: "11h", time: "12h", focus: "Skincare, maquiagem, perfumes, cabelo e autocuidado", marketplaces: "beleza_editorial" },
   { discovery: "12h", time: "13h", focus: "Roupas, calçados, bolsas, relógios e acessórios", marketplaces: "moda_editorial" },
   { discovery: "13h", time: "14h", focus: "Academia, corrida, yoga, fitness e esportes", marketplaces: "esporte_editorial" },

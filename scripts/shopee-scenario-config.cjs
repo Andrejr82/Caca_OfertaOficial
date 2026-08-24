@@ -115,7 +115,7 @@ const SCENARIOS = {
     keywords: [
       'mouse gamer rgb', 'teclado mecânico switch', 'fone bluetooth sem fio',
       'cadeira gamer ergonômica', 'smartwatch relógio inteligente', 'suporte notebook alumínio',
-      'carregador turbo', 'cabo iphone', 'ring light', 'tripé celular',
+      'cabo iphone', 'ring light', 'tripé celular',
       'headset gamer', 'mouse sem fio', 'teclado gamer', 'suporte celular mesa', 'webcam gamer'
     ]
   },

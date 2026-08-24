@@ -57,8 +57,8 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['brand', 'model', 'memory', 'screen', 'connectivity'], { apiCategories: [100644, 100013], amazonBrowseNodes: ['16243803011', '16243794011', '24035344011'] }),
 
   celulares_editorial: scenario('celulares_editorial', 'Celulares', 11,
-    ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi', 'carregador turbo', 'power bank', 'capa celular'],
-    ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi', 'carregador', 'power bank', 'capa celular'],
+    ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi'],
+    ['smartphone', 'celular', 'iphone', 'galaxy', 'redmi'],
     ['notebook', 'monitor', 'cabo avulso', 'película avulsa'],
     ['brand', 'model', 'memory', 'screen', 'battery'], { apiCategories: [100013], amazonBrowseNodes: ['16243809011', '16243802011', '16243799011'] }),
 
@@ -105,7 +105,7 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     ['material', 'dimensions', 'seats', 'color', 'assembly'], { apiCategories: [100636], amazonBrowseNodes: ['17100553011', '17100552011', '17100547011'] }),
 
   grandes_ofertas_editorial: scenario('grandes_ofertas_editorial', 'Grandes Ofertas', 21,
-    ['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis', 'smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'ar condicionado', 'fritadeira', 'micro-ondas'],
+    ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'ar condicionado', 'fritadeira', 'micro-ondas'],
     ['smartphone', 'smart tv', 'notebook', 'geladeira', 'fogão', 'lavadora', 'ar condicionado', 'monitor', 'caixa de som', 'console', 'fritadeira', 'micro-ondas', 'aspirador', 'liquidificador', 'fone', 'iphone', 'galaxy'],
     ['cupom sem aprovação', 'usado', 'recondicionado', 'serviço', 'servico'],
     ['price', 'old_price', 'discount', 'seller', 'shipping'], { priority: 'critical', maxAgeHours: 2, apiCategories: [100013, 100644, 100636], amazonBrowseNodes: ['16243809011', '16243803011', '16243794011', '17100532011'] }),

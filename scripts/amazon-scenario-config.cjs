@@ -7,7 +7,7 @@ const AMAZON_ALIASES = Object.freeze({
   organizacao_editorial: ['organizador', 'caixa organizadora', 'cesto organizador', 'cabide', 'lixeira'],
   ferramentas_editorial: ['furadeira', 'parafusadeira', 'kit ferramentas', 'ferramenta elétrica', 'trena'],
   informatica_editorial: ['notebook', 'computador', 'monitor', 'impressora', 'ssd', 'roteador'],
-  celulares_editorial: ['smartphone', 'celular desbloqueado', 'iphone', 'galaxy', 'carregador turbo', 'power bank'],
+  celulares_editorial: ['smartphone', 'celular desbloqueado', 'iphone', 'galaxy'],
   beleza_editorial: ['protetor solar facial', 'hidratante facial', 'shampoo', 'secador', 'perfume', 'maquiagem'],
   moda_editorial: ['camiseta masculina', 'camisa', 'calça jeans', 'tênis masculino', 'bolsa', 'relógio'],
   esporte_editorial: ['tênis de corrida', 'whey protein', 'creatina', 'tapete de yoga', 'halter', 'corda de pular'],

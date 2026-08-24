@@ -20,7 +20,7 @@ const COMMERCIAL_SAFETY_RULES = Object.freeze([
 ]);
 const EDITORIAL_SCENARIO_RULES = Object.freeze([
   { id: 'informatica_editorial', pattern: /\b(?:notebook|computador|pc gamer|monitor|teclado|mouse|webcam|ssd|roteador)\b/i },
-  { id: 'celulares_editorial', pattern: /\b(?:iphone|celular|smartphone|galaxy|redmi|xiaomi|power bank|carregador portatil|carregador portátil)\b/i },
+  { id: 'celulares_editorial', pattern: /\b(?:iphone|celular|smartphone|galaxy|redmi|xiaomi)\b/i },
   { id: 'tv_audio_editorial', pattern: /\b(?:fone|headphone|earbuds|soundbar|caixa de som|speaker|home theater|projetor|microfone)\b/i },
   { id: 'casa_cozinha_editorial', pattern: /\b(?:chaleira|air fryer|airfryer|liquidificador|cafeteira|panela|sanduicheira|mixer)\b/i },
   { id: 'moveis_editorial', pattern: /\b(?:comoda|cômoda|sofa|sofá|guarda roupa|cama|colchao|colchão|mesa|escrivaninha|cadeira|rack)\b/i },
