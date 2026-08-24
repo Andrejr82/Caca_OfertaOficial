@@ -222,6 +222,86 @@ describe("Marketplace Draft Generation Flow — Amazon, Shopee e Mercado Livre",
     expect(createdPost.channel).toBe("whatsapp");
   });
 
+  it("3b. Offer Mercado Livre com plain product URL + env configurada → draft criado", async () => {
+    const originalEnv = process.env.MERCADO_LIVRE_AFFILIATE_ID;
+    try {
+      process.env.MERCADO_LIVRE_AFFILIATE_ID = "cacaofertaoficial";
+      const client = createMockSupabaseClient();
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-flow-1");
+
+      const mlPlainOffer: OfficialAIOffer = {
+        id: "offer-ml-plain",
+        tenantId: "tenant-flow-1",
+        state: "pending_manual_review",
+        version: 1,
+        marketplace: "Mercado Livre",
+        productName: "Air Fryer 4L",
+        originalUrl: "https://www.mercadolivre.com.br/p/MLB123456",
+        imageUrl: "https://http2.mlstatic.com/D_air.jpg",
+        currentPrice: 299.9,
+        originalPrice: 499.9,
+        category: "Eletroportáteis",
+        explainability: {},
+        createdAt: "2026-08-24T12:00:00.000Z",
+      };
+
+      const drafts = await adapter.persistDrafts({
+        command: { ...baseCommand, offerId: mlPlainOffer.id },
+        offer: mlPlainOffer,
+        content: baseContent,
+        channels: ["whatsapp"],
+      });
+
+      expect(drafts).toHaveLength(1);
+      expect(drafts[0].channel).toBe("whatsapp");
+      expect(drafts[0].state).toBe("draft");
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.MERCADO_LIVRE_AFFILIATE_ID = originalEnv;
+      } else {
+        delete process.env.MERCADO_LIVRE_AFFILIATE_ID;
+      }
+    }
+  });
+
+  it("3c. Offer Mercado Livre com plain product URL SEM env configurada → fail-closed", async () => {
+    const originalEnv = process.env.MERCADO_LIVRE_AFFILIATE_ID;
+    try {
+      delete process.env.MERCADO_LIVRE_AFFILIATE_ID;
+      const client = createMockSupabaseClient();
+      const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-flow-1");
+
+      const mlPlainOffer: OfficialAIOffer = {
+        id: "offer-ml-plain-no-env",
+        tenantId: "tenant-flow-1",
+        state: "pending_manual_review",
+        version: 1,
+        marketplace: "Mercado Livre",
+        productName: "Air Fryer 4L",
+        originalUrl: "https://www.mercadolivre.com.br/p/MLB123456",
+        imageUrl: "https://http2.mlstatic.com/D_air.jpg",
+        currentPrice: 299.9,
+        originalPrice: 499.9,
+        category: "Eletroportáteis",
+        explainability: {},
+        createdAt: "2026-08-24T12:00:00.000Z",
+      };
+
+      await expect(
+        adapter.persistDrafts({
+          command: { ...baseCommand, offerId: mlPlainOffer.id },
+          offer: mlPlainOffer,
+          content: baseContent,
+          channels: ["whatsapp"],
+        })
+      ).rejects.toThrow(/ML_AFFILIATE_DESTINATION_NOT_CONFIRMED/);
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.MERCADO_LIVRE_AFFILIATE_ID = originalEnv;
+      }
+    }
+  });
+
   it("4. Todos os 3 marketplaces geram drafts estruturados com offers.platform correto, posts.channel correto e posts.status='draft'", async () => {
     const client = createMockSupabaseClient();
     const adapter = new SupabaseOfficialAIAdapter(client as never, "tenant-flow-1");

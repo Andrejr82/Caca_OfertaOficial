@@ -31,22 +31,48 @@ describe("resolveOfficialAIAffiliateDestination", () => {
     expect(isMercadoLivreMarketplace(null)).toBe(false);
   });
 
-  it("cenário 1: Mercado Livre + URL externa ou inválida => fail-closed", () => {
+  it("cenário 1a: Mercado Livre + plain product URL SEM env => fail-closed", () => {
+    const originalEnv = process.env.MERCADO_LIVRE_AFFILIATE_ID;
+    try {
+      delete process.env.MERCADO_LIVRE_AFFILIATE_ID;
+      const result = resolveOfficialAIAffiliateDestination(baseOffer, "telegram");
+      expect(result).toEqual({
+        ok: false,
+        reasonCode: "ML_AFFILIATE_DESTINATION_NOT_CONFIRMED",
+      });
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.MERCADO_LIVRE_AFFILIATE_ID = originalEnv;
+      }
+    }
+  });
+
+  it("cenário 1b: Mercado Livre + plain product URL COM env válida => gera destino com partner_id", () => {
+    const originalEnv = process.env.MERCADO_LIVRE_AFFILIATE_ID;
+    try {
+      process.env.MERCADO_LIVRE_AFFILIATE_ID = "cacaofertaoficial";
+      const result = resolveOfficialAIAffiliateDestination(baseOffer, "telegram");
+      expect(result).toEqual({
+        ok: true,
+        affiliateUrl: "https://www.mercadolivre.com.br/p/MLB21473210?partner_id=cacaofertaoficial&utm_source=caca_oferta&utm_medium=afiliado&utm_campaign=express_publication",
+        source: "official_input",
+      });
+    } finally {
+      if (originalEnv !== undefined) {
+        process.env.MERCADO_LIVRE_AFFILIATE_ID = originalEnv;
+      } else {
+        delete process.env.MERCADO_LIVRE_AFFILIATE_ID;
+      }
+    }
+  });
+
+  it("cenário 1c: Mercado Livre + URL externa ou inválida => fail-closed", () => {
     const invalidOffer = { ...baseOffer, originalUrl: "https://example.com/not-ml-product" };
     const result = resolveOfficialAIAffiliateDestination(invalidOffer, "telegram");
     expect(result).toEqual({
       ok: false,
       reasonCode: "ML_AFFILIATE_DESTINATION_NOT_CONFIRMED",
     });
-  });
-
-  it("cenário 1b: Mercado Livre + originalUrl de produto válida => gera destino com partner_id", () => {
-    const result = resolveOfficialAIAffiliateDestination(baseOffer, "telegram");
-    expect(result.ok).toBe(true);
-    if (result.ok) {
-      expect(result.affiliateUrl).toContain("partner_id=");
-      expect(result.source).toBe("official_input");
-    }
   });
 
   it("cenário 2: Mercado Livre + originalUrl meli.la oficial => aprova com source official_input", () => {

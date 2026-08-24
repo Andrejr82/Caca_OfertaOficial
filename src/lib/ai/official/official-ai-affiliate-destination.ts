@@ -36,12 +36,13 @@ export function isMercadoLivreMarketplace(marketplace: string | null | undefined
  *
  * Para Mercado Livre:
  * - Separa identificação de produto da autoridade de monetização (produto identificado != produto monetizado).
- * - Uma URL comum de produto (ex: /p/MLB...) NÃO pode ser usada como destino de affiliate_links.
  * - Ordem de prioridade:
- *   1. Link afiliado persistido existente para o canal, se monetizado.
- *   2. explainability.manual_resolution.affiliate_url da oferta (Publicação Expressa), se monetizado.
- *   3. originalUrl da oferta se for link oficial comprovado (meli.la ou matt_tool + ua).
- *   4. Fail-closed com ML_AFFILIATE_DESTINATION_NOT_CONFIRMED.
+ *   1. Link afiliado persistido existente para o canal, se monetizado (meli.la, matt_tool + ua ou partner_id).
+ *   2. explainability.manual_resolution.affiliate_url / explainability.affiliate_url da oferta, se monetizado.
+ *   3. originalUrl da oferta se for link oficial comprovado (meli.la, matt_tool + ua ou partner_id).
+ *   4. Se originalUrl for URL comum de produto no Mercado Livre e MERCADO_LIVRE_AFFILIATE_ID estiver configurado,
+ *      gera o link de afiliado oficial com partner_id.
+ *   5. Caso contrário, fail-closed com ML_AFFILIATE_DESTINATION_NOT_CONFIRMED (não inventa affiliate id).
  *
  * Para outros marketplaces (Shopee, Amazon, Shein, etc.):
  * - Preserva integralmente o comportamento existente (utiliza originalUrl).
@@ -106,13 +107,15 @@ export function resolveOfficialAIAffiliateDestination(
       };
     }
     if (classification.kind === "plain_product_url") {
-      const affiliateId = process.env.MERCADO_LIVRE_AFFILIATE_ID?.trim() || "cacaofertaoficial";
-      const generatedUrl = generateMLAffiliateLinkWithId(offer.originalUrl, affiliateId);
-      return {
-        ok: true,
-        affiliateUrl: generatedUrl,
-        source: "official_input",
-      };
+      const affiliateId = process.env.MERCADO_LIVRE_AFFILIATE_ID?.trim();
+      if (affiliateId) {
+        const generatedUrl = generateMLAffiliateLinkWithId(offer.originalUrl, affiliateId);
+        return {
+          ok: true,
+          affiliateUrl: generatedUrl,
+          source: "official_input",
+        };
+      }
     }
   }
 
