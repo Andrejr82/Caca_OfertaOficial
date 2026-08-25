@@ -7,6 +7,7 @@ on:
       - "scripts/**"
       - "supabase/**"
       - "apps/**"
+      - ".github/workflows/docs-audit.yml"
       - ".env.example"
       - "package.json"
       - "next.config.ts"
@@ -25,5 +26,8 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - run: node scripts/docs-audit.mjs
+          node-version: "24"
+      - name: Test documentation domain rules
+        run: node --test scripts/tests/docs-audit-rules.test.mjs
+      - name: Audit required documentation
+        run: node scripts/docs-audit.mjs
