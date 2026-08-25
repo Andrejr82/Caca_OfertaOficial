@@ -105,6 +105,33 @@ export async function loadWhatsappDashboardDrafts({
     }
   }
 
+  // Draft de canal pendente: se outra rede já aprovou a oferta global, o draft WhatsApp
+  // continua operacionalmente válido até ser publicado, deletado, rejeitado ou deferido.
+  let approvedChannelDrafts: PostWithOffer[] = [];
+  try {
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*, offers(*), affiliate_links(tracked_url)")
+      .eq("user_id", userId)
+      .eq("channel", "whatsapp")
+      .eq("status", "draft")
+      .gte("created_at", todayStart.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(Math.max(requestedLimit, 100));
+
+    if (error) throw error;
+
+    approvedChannelDrafts = dedupeByOfferId(
+      ((data || []) as unknown as PostWithOffer[])
+        .filter((post) => isActiveWhatsappDraft(post)
+          && String(post.offers?.status || "").toLowerCase() === "approved"
+          && !isManualExpressDraft(post as any)),
+    );
+  } catch (error) {
+    console.error("[WhatsApp] Falha ao carregar drafts de canal aprovados globalmente", error);
+    approvedChannelDrafts = [];
+  }
+
   // Express: trilha independente do Top30, identificada exclusivamente por manual_source=true.
   let expressDrafts: PostWithOffer[] = [];
   try {
@@ -145,6 +172,7 @@ export async function loadWhatsappDashboardDrafts({
     expressDrafts = [];
   }
 
-  // Express vem primeiro no painel e não disputa posição/ranking com o Top30 editorial.
-  return dedupeByOfferId([...expressDrafts, ...editorialDrafts]).slice(0, requestedLimit);
+  // Express vem primeiro. Drafts de canal já aprovados globalmente ficam visíveis sem
+  // disputar novamente ranking com o Top30; dedupe preserva uma única oferta no painel.
+  return dedupeByOfferId([...expressDrafts, ...approvedChannelDrafts, ...editorialDrafts]).slice(0, requestedLimit);
 }
