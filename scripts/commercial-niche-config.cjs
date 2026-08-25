@@ -55,9 +55,12 @@ const COMMERCIAL_NICHES = Object.freeze({
         'forno eletrico', 'chaleira eletrica', 'grill', 'sanduicheira'
       ]),
       blockedProductTerms: Object.freeze([
-        'peca', 'pecas', 'resistencia', 'borracha de panela', 'filtro industrial',
-        'motor de reposicao', 'lampada avulsa', 'valvula avulsa', 'cabo avulso',
-        'reparo', 'conserto', 'adesivo'
+        'peca', 'pecas', 'resistencia para forno', 'resistencia reposicao', 'resistencia compativel',
+        'peca de resistencia', 'kit resistencia', 'elemento aquecedor avulso',
+        'borracha de panela', 'filtro industrial', 'motor de reposicao', 'lampada avulsa',
+        'valvula avulsa', 'cabo avulso', 'reparo', 'conserto', 'adesivo',
+        'forma para air fryer', 'papel descartavel', 'cesto de silicone', 'assadeira air fryer',
+        'forro air fryer', 'tapete air fryer', 'formas descartavel', 'forma descartavel'
       ]),
     }),
   }),
@@ -96,7 +99,8 @@ const COMMERCIAL_NICHES = Object.freeze({
         'protetor solar', 'protetor solar facial', 'hidratante facial', 'serum', 'serum facial',
         'shampoo', 'condicionador', 'mascara capilar', 'tratamento capilar', 'oleo capilar',
         'perfume', 'eau de parfum', 'maquiagem', 'base facial', 'batom', 'rimel',
-        'escova secadora', 'secador', 'secador de cabelo', 'chapinha', 'prancha de cabelo',
+        'escova secadora', 'secador', 'secador de cabelo', 'chapinha', 'prancha', 'prancha alisadora',
+        'prancha de cabelo', 'prancha profissional',
         'modelador', 'modelador de cachos', 'aparador', 'aparador de pelos',
         'maquina de cortar cabelo', 'escova alisadora', 'depilador'
       ]),
@@ -232,7 +236,10 @@ const COMMERCIAL_NICHES = Object.freeze({
       ]),
       blockedProductTerms: Object.freeze([
         'parafuso', 'cabo sata avulso', 'pasta termica avulsa', 'tecla avulsa',
-        'cooler avulso 80mm', 'adesivo para teclado', 'case vazia', 'gaveta de hd'
+        'cooler avulso 80mm', 'adesivo para teclado', 'case vazia', 'gaveta de hd',
+        'suporte para notebook', 'suporte articulado para notebook', 'base para notebook',
+        'suporte articulado para monitor', 'braco para monitor', 'suporte para monitor',
+        'suporte a gas para monitor', 'tripe para webcam', 'suporte para webcam', 'ring light avulso'
       ]),
     }),
   }),
@@ -277,7 +284,8 @@ const COMMERCIAL_NICHES = Object.freeze({
         'compressor', 'compressor de ar', 'maleta de ferramentas', 'lixadeira', 'soprador'
       ]),
       blockedProductTerms: Object.freeze([
-        'broca avulsa', 'disco de corte avulso', 'mandril avulso', 'parafuso avulso',
+        'broca avulsa', 'jogo de brocas', 'kit de brocas', 'kit brocas', 'brocas para furadeira',
+        'disco de corte avulso', 'mandril avulso', 'parafuso avulso',
         'porca avulsa', 'arruela', 'escova de carvao', 'bateria avulsa sem maquina'
       ]),
     }),
@@ -311,14 +319,17 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'racao cachorro', 'racao para cachorro', 'racao gato', 'racao para gato',
-        'areia para gato', 'areia sanitaria gato', 'tapete higienico', 'tapete higienico cachorro',
+        'racao cachorro', 'racao para cachorro', 'racao caes', 'racao para caes', 'racao de caes',
+        'racao gato', 'racao para gato',
+        'areia para gato', 'areia sanitaria gato', 'granulado sanitario',
+        'tapete higienico', 'tapete higienico cachorro',
         'cama pet', 'caminha pet', 'fonte pet', 'fonte de agua pet',
         'bebedouro automatico', 'comedouro automatico', 'caixa de transporte',
         'arranhador', 'arranhador gato', 'caixa de areia', 'brinquedo pet'
       ]),
       blockedProductTerms: Object.freeze([
-        'refil avulso sem fonte', 'sache unitario', 'pecas plasticas', 'tampa avulsa'
+        'refil avulso sem fonte', 'sache unitario', 'pecas plasticas', 'tampa avulsa',
+        'pa para areia', 'pa coletora', 'pa de areia', 'tapete coletor de areia', 'saco para bandeja'
       ]),
     }),
   }),

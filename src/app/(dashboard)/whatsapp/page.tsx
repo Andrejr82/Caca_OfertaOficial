@@ -17,23 +17,20 @@ export default async function WhatsappDashboardPage() {
 
   async function fetchDraftPosts(): Promise<PostWithOffer[]> {
     if (!supabase || !user?.id) return [];
-    let selectedOfferIds: Set<string>;
+    let displayOfferIds = new Set<string>();
     try {
       const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
-      selectedOfferIds = new Set(top30.selectedOfferIds);
+      const selected = top30.selectedOfferIds || [];
+      const cohort = top30.currentCohortOfferIds || [];
+      displayOfferIds = new Set([...selected, ...cohort]);
     } catch {
-      // Fail closed: a preparation read failure must return empty array without querying generic drafts.
-      return [];
-    }
-
-    if (selectedOfferIds.size === 0) {
-      return [];
+      displayOfferIds = new Set<string>();
     }
 
     return loadWhatsappDashboardDrafts({
       supabase,
       userId: user.id,
-      selectedOfferIds,
+      selectedOfferIds: displayOfferIds,
       limit: 30,
     });
   }

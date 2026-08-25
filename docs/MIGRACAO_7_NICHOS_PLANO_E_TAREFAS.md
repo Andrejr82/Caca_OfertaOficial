@@ -33,11 +33,12 @@ A nova arquitetura comercial substitui as antigas buscas genéricas por 7 vertic
   - [x] `scripts/tests/commercial-niche-affinity.test.cjs`
 - [x] Reverter alterações prematuras em `scripts/oracle-scraper.cjs` e `scripts/scenario-runtime-contract.cjs` (idênticos à `main`).
 - [x] Remover runners de discovery paralelo não-aprovados (`commercial-niche-shadow-runner.cjs`).
+- [x] Criar runner e testes de validação de eficácia comparativa (`commercial-niche-efficacy-runner.cjs` e `commercial-niche-efficacy.test.cjs`).
 
-### Fase 2: Integração Controlada no Scraper e Testes na Oracle VPS (Pendente)
-- [ ] Conectar a nova configuração aos motores existentes de forma controlada.
-- [ ] Executar teste controlado na VPS Oracle para coleta de métricas reais de descoberta.
-- [ ] Validar tempo de execução do ciclo e ausência de HTTP 429.
+### Fase 2: Validação de Eficácia Controlada na Oracle VPS (Pendente)
+- [ ] Executar o teste de eficácia isolado na VPS Oracle em modo estritamente read-only (`writes = 0`).
+- [ ] Coletar relatório comparativo de métricas reais (Relevância, Cobertura, Qualidade, Ruído, Diversidade).
+- [ ] Validar tempo de resposta e ausência de HTTP 429.
 
 ### Fase 3: Transição Ativa e Alinhamento de Grade / UI (Pendente)
 - [ ] Atualizar grade de horários de discovery e cron no `oracle-scraper.cjs` quando aprovada a transição para modo ativo.
@@ -122,10 +123,29 @@ Nesta etapa de auditoria e limpeza cirúrgica, foram corrigidos e eliminados tod
 5. **Reversão de Arquivos Prematuros**:
    - `scripts/oracle-scraper.cjs` revertido e mantido 100% idêntico à `main`.
    - `scripts/scenario-runtime-contract.cjs` revertido e mantido 100% idêntico à `main`.
-6. **Alinhamento do Dry-Run**:
-   - Registrado que simulações locais ou dry-runs em mock não devem ser tratados como prova de eficácia real de scraping antes do teste de campo na Oracle VPS.
-7. **Preservação de Integridade**:
+6. **Preservação de Integridade**:
    - Motores Amazon, Shopee e Mercado Livre permanecem intactos.
    - `CRON_SCHEDULE = '0 6-20 * * *'` intacto.
    - Zero escritas no Supabase.
    - Oracle em produção não alterada.
+
+---
+
+## 6. VALIDAÇÃO DE EFICÁCIA ANTES DA MIGRAÇÃO
+
+A validação de eficácia é o portão de controle obrigatório antes de qualquer ativação ou migração de cenários:
+
+1. **Nenhuma migração ocorrerá antes da validação**: O runtime legado continua autoritativo e em execução inalterada.
+2. **Motores de busca permanecem 100% intactos**: Nenhuma alteração é realizada em `amazon-native-top20-v5.cjs`, `shopee-openapi-shadow-engine-v1.cjs` ou `mercadolivre-official-intents-v5.cjs`.
+3. **Princípio do Teste**:
+   $$\text{Mesmo Motor} + \text{Configuração Legacy} \quad \text{VS} \quad \text{Mesmo Motor} + \text{Configuração Nova}$$
+   A única variável é a configuração.
+4. **Métricas Comparadas**:
+   - Quantidade bruta e válida de candidatos
+   - Rejeições e motivos (`blocked_term`, `out_of_niche`, `invalid_price`, `duplicate`)
+   - Diversidade de famílias/produtos
+   - Cobertura de Core Products e Expansion Products
+   - Ruído (acessórios/peças) e produtos fora do nicho
+   - Latência, erros de API e ocorrências de HTTP 429
+5. **Critério de Avaliação**: O runner gera a comparação com deltas e classifica as métricas em `IMPROVED`, `EQUIVALENT`, `WORSE` ou `INSUFFICIENT_DATA` (sem tomar decisão automática de GO/NO-GO).
+6. **Ambiente de Teste**: O runner (`scripts/tests/commercial-niche-efficacy-runner.cjs`) opera de forma totalmente isolada (`writes = 0`), e a Oracle VPS será utilizada apenas na fase subsequente para execução controlada e read-only desse mesmo teste.

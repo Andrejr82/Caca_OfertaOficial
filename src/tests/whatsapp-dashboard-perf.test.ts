@@ -47,9 +47,18 @@ describe("A) WhatsApp dashboard draft loader user_id enforcement", () => {
     expect(mockClient.from).not.toHaveBeenCalled();
   });
 
-  it("fails closed and does not query database when selectedOfferIds is empty (e.g. preparation failure or exhausted batch)", async () => {
+  it("queries express drafts even when selectedOfferIds is empty and filters by user_id", async () => {
+    const calls: Array<{ method: string; args: unknown[] }> = [];
+    const mockQuery: any = {
+      select: vi.fn((...args) => { calls.push({ method: "select", args }); return mockQuery; }),
+      eq: vi.fn((...args) => { calls.push({ method: "eq", args }); return mockQuery; }),
+      order: vi.fn((...args) => { calls.push({ method: "order", args }); return mockQuery; }),
+      limit: vi.fn((...args) => { calls.push({ method: "limit", args }); return mockQuery; }),
+      then: (resolve: (val: unknown) => unknown) => resolve({ data: [], error: null }),
+    };
+
     const mockClient = {
-      from: vi.fn(),
+      from: vi.fn(() => mockQuery),
     };
 
     const drafts = await loadWhatsappDashboardDrafts({
@@ -59,7 +68,8 @@ describe("A) WhatsApp dashboard draft loader user_id enforcement", () => {
     });
 
     expect(drafts).toEqual([]);
-    expect(mockClient.from).not.toHaveBeenCalled();
+    expect(mockClient.from).toHaveBeenCalledWith("posts");
+    expect(calls).toContainEqual({ method: "eq", args: ["user_id", "user-123"] });
   });
 
   it("filters explicitly by user_id when loading drafts", async () => {
