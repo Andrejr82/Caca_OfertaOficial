@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
 import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions";
+import { ReelsPromptStudio } from "./ReelsPromptStudio";
+import type { ReelsPromptOffer } from "@/lib/videos/reels-playbook";
 
 export const dynamic = "force-dynamic";
 
@@ -38,13 +40,14 @@ type VideoDistributionItem = {
 export default async function ReelsPage() {
   const supabase = await createServerSupabaseClient();
   let distributionItems: VideoDistributionItem[] = [];
+  let promptOffers: ReelsPromptOffer[] = [];
 
   if (supabase) {
     const { data: userData } = await supabase.auth.getUser();
     const user = userData.user;
 
     if (user) {
-      const [{ data: instagramDrafts }, { data: facebookDrafts }, { data: videoJobs }] = await Promise.all([
+      const [{ data: instagramDrafts }, { data: facebookDrafts }, { data: videoJobs }, { data: recentOffers }] = await Promise.all([
         supabase
           .from("posts")
           .select("*, offers(*), affiliate_links(tracked_url)")
@@ -66,7 +69,27 @@ export default async function ReelsPage() {
           .eq("status", "approved")
           .not("video_url", "is", null)
           .order("created_at", { ascending: false }),
+        supabase
+          .from("offers")
+          .select("id,product_name,platform,current_price,old_price,image_url,category,status,created_at")
+          .eq("user_id", user.id)
+          .in("status", ["approved", "posted"])
+          .not("image_url", "is", null)
+          .order("created_at", { ascending: false })
+          .limit(30),
       ]);
+
+      promptOffers = (recentOffers ?? [])
+        .filter((offer: any) => offer?.id && offer?.product_name && Number(offer?.current_price) > 0)
+        .map((offer: any) => ({
+          id: offer.id,
+          product_name: offer.product_name,
+          platform: offer.platform,
+          current_price: Number(offer.current_price),
+          old_price: offer.old_price == null ? null : Number(offer.old_price),
+          image_url: offer.image_url,
+          category: offer.category,
+        }));
 
       const instagramById = new Map((instagramDrafts ?? []).map((post: any) => [post.id, post]));
       const facebookById = new Map((facebookDrafts ?? []).map((post: any) => [post.id, post]));
@@ -109,18 +132,20 @@ export default async function ReelsPage() {
   return (
     <div className="mx-auto max-w-7xl space-y-6">
       <header>
-        <p className="text-xs font-bold uppercase tracking-[0.18em] text-pink-400">Distribuição social</p>
+        <p className="text-xs font-bold uppercase tracking-[0.18em] text-pink-400">Criativos e distribuição social</p>
         <h1 className="mt-2 text-3xl font-black tracking-tight text-white">Reels</h1>
         <p className="mt-2 max-w-3xl text-sm text-white/45">
-          Vídeos aprovados em Vídeos de Ofertas, centralizados aqui para publicação no Instagram Reels e Facebook.
+          Prepare os prompts do Google Vids em duas cenas de 10s. Depois, importe o vídeo final em Vídeos de Ofertas para usar o fluxo de recorte já existente.
         </p>
       </header>
+
+      <ReelsPromptStudio offers={promptOffers} />
 
       <section className="space-y-4">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="font-bold text-white">Aguardando publicação</h2>
-            <p className="mt-1 text-xs text-white/45">Um único vídeo aprovado, com destinos sociais independentes e sem duplicar o arquivo.</p>
+            <p className="mt-1 text-xs text-white/45">Vídeos já aprovados em Vídeos de Ofertas continuam aqui para distribuição social, sem duplicar o arquivo.</p>
           </div>
           <span className="rounded-full bg-pink-500/15 px-3 py-1 text-xs font-bold text-pink-200">
             {distributionItems.length}
