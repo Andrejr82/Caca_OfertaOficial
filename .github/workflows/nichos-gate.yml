@@ -25,4 +25,5 @@ jobs:
             scripts/tests/commercial-niche-config.test.cjs \
             scripts/tests/commercial-niche-contracts.test.cjs \
             scripts/tests/commercial-niche-runtime-adapter.test.cjs \
-            scripts/tests/commercial-niche-golden-set.test.cjs
+            scripts/tests/commercial-niche-golden-set.test.cjs \
+            scripts/tests/canonical-seven-niche-schedule.test.cjs
