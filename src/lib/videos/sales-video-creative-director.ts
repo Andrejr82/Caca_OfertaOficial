@@ -11,6 +11,7 @@ export type SalesVideoArchetype =
   | "beauty"
   | "pet"
   | "power_tool"
+  | "sewing_tool"
   | "electronics"
   | "cleaning_organization"
   | "generic";
@@ -44,6 +45,7 @@ export function classifySalesVideoArchetype(offer: SalesVideoOffer): SalesVideoA
   if (/(panela|frigideira|assadeira|forma|utensilio de cozinha)/.test(text)) return "cookware";
   if (/(secador|chapinha|escova modeladora|maquiagem|batom|serum|creme|perfume|barbeador|aparador|beleza)/.test(text)) return "beauty";
   if (/(pet|cachorro|gato|tapete higienico|areia para gato|comedouro|coleira|brinquedo.*gato|brinquedo.*cachorro)/.test(text)) return "pet";
+  if (/(maquina de costura|máquina de costura|costura|costurador|costuradora)/.test(text)) return "sewing_tool";
   if (/(furadeira|parafusadeira|serra|lixadeira|esmerilhadeira|ferramenta)/.test(text)) return "power_tool";
   if (/(notebook|smartphone|celular|fone|headset|monitor|teclado|mouse|console|controle|tablet|power bank|carregador)/.test(text)) return "electronics";
   if (/(organizador|mop|aspirador|lavadora|limpeza|percarbonato|tira manchas|esponja)/.test(text)) return "cleaning_organization";
@@ -150,6 +152,20 @@ export function getSalesVideoDirection(offer: SalesVideoOffer): SalesVideoDirect
         lighting: "luz funcional de oficina, contraste natural e produto bem legível",
         antiPresentation: "não usar pessoa mostrando a ferramenta parada como catálogo",
         restrictions: "não inventar potência, torque, autonomia, velocidade, material suportado ou acessórios",
+      };
+    case "sewing_tool":
+      return {
+        archetype,
+        label: "Costura em tarefa real",
+        desire: "reparo simples + praticidade + controle visual",
+        environment: "mesa doméstica de costura organizada, tecido neutro, iluminação clara e ambiente realista",
+        openingAction: "abrir com mãos adultas posicionando tecido e a máquina já pronta para executar um pequeno reparo, sem mostrar o produto parado para a câmera",
+        mainAction: "mostrar uma costura curta e simples somente se a forma de operação for compatível com o produto visível",
+        proofAction: "close das mãos guiando o tecido, área de costura e pequeno trecho concluído sem inventar acabamento perfeito",
+        camera: "close superior e lateral suave acompanhando mãos, tecido e mecanismo visível",
+        lighting: "luz funcional clara, textura real do tecido e produto totalmente legível",
+        antiPresentation: "não usar pessoa segurando a máquina de costura para a câmera ou explicando como vendedor",
+        restrictions: "não inventar velocidade, tipos de ponto, alimentação, compatibilidade, acessórios, potência, materiais suportados ou acabamento profissional",
       };
     case "electronics":
       return {
