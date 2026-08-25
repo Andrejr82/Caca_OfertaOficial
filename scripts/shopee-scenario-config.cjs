@@ -1,8 +1,6 @@
 'use strict';
 
 // Shopee usa exclusivamente a matriz editorial canônica de produção.
-// Não manter cenários paralelos/legados aqui: isso evita reintrodução de
-// acessórios, Games/Gamer ou intenções já removidas da configuração oficial.
 const {
   EDITORIAL_SCENARIOS,
   EDITORIAL_SCENARIO_IDS,
@@ -10,16 +8,19 @@ const {
   getEditorialScenarioForDiscoveryHour,
   assertEditorialScheduleValid,
 } = require('./editorial-scenario-config.cjs');
+const { buildCommercialScenarioMap } = require('./commercial-niche-scenario-bridge.cjs');
 
 assertEditorialScheduleValid();
 
-const SCENARIOS = Object.freeze({ ...EDITORIAL_SCENARIOS });
+// Para os 7 nichos mapeados, termos/categorias/guardrails vêm da configuração
+// comercial canônica. Cenários legacy_only permanecem exatamente como antes.
+const SCENARIOS = buildCommercialScenarioMap(EDITORIAL_SCENARIOS, 'Shopee');
 
 const SCENARIO_WINDOWS = Object.freeze(EDITORIAL_SCENARIO_IDS.map((id) => ({
-  start: EDITORIAL_SCENARIOS[id].queueHour,
-  end: EDITORIAL_SCENARIOS[id].queueHour + 1,
+  start: SCENARIOS[id].queueHour,
+  end: SCENARIOS[id].queueHour + 1,
   scenarioId: id,
-  label: EDITORIAL_SCENARIOS[id].name,
+  label: SCENARIOS[id].name,
 })));
 
 function getCanonicalCycleScenarioId(startHour) {
@@ -53,9 +54,10 @@ function getActiveScenario(currentHour) {
 
 function getCycleScenario(startHour, durationHours = 4) {
   const hour = ((Number(startHour) % 24) + 24) % 24;
-  const scenario = getEditorialScenarioForDiscoveryHour(hour);
-  if (!scenario) return null;
-  const scenarioId = scenario.id;
+  const editorialScenario = getEditorialScenarioForDiscoveryHour(hour);
+  if (!editorialScenario) return null;
+  const scenarioId = editorialScenario.id;
+  const scenario = SCENARIOS[scenarioId];
   const window = getScenarioWindow(scenario.queueHour);
   return {
     ...scenario,
