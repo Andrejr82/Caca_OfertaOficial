@@ -1,23 +1,17 @@
 import { AlertTriangle, CalendarClock, CheckCircle2, Compass, MessageCircle, ShieldCheck, Target } from "lucide-react";
 
 export const schedule = [
-  { discovery: "06h", time: "07h", focus: "Cama, mesa, banho, utensílios, cafeteiras, air fryers", marketplaces: "casa_cozinha_editorial" },
-  { discovery: "07h", time: "08h", focus: "Organizadores, caixas, cestos, cabides, limpeza", marketplaces: "organizacao_editorial" },
-  { discovery: "08h", time: "09h", focus: "Furadeiras, parafusadeiras, manuais, kits", marketplaces: "ferramentas_editorial" },
-  { discovery: "09h", time: "10h", focus: "Notebooks, computadores, monitores, impressoras", marketplaces: "informatica_editorial" },
-  { discovery: "10h", time: "11h", focus: "Smartphones, celulares e aparelhos", marketplaces: "celulares_editorial" },
-  { discovery: "11h", time: "12h", focus: "Skincare, maquiagem, perfumes, cabelo e autocuidado", marketplaces: "beleza_editorial" },
-  { discovery: "12h", time: "13h", focus: "Roupas, calçados, bolsas, relógios e acessórios", marketplaces: "moda_editorial" },
-  { discovery: "13h", time: "14h", focus: "Academia, corrida, yoga, fitness e esportes", marketplaces: "esporte_editorial" },
-  { discovery: "14h", time: "15h", focus: "Ração, brinquedos, camas, higiene e transporte pet", marketplaces: "pet_editorial" },
-  { discovery: "17h", time: "18h", focus: "TVs, soundbars, caixas de som, fones", marketplaces: "tv_audio_editorial" },
-  { discovery: "18h", time: "19h", focus: "Geladeiras, fogões, micro-ondas, lavadoras", marketplaces: "eletrodomesticos_editorial" },
-  { discovery: "19h", time: "20h", focus: "Camas, sofás, mesas, cadeiras, racks, escritórios", marketplaces: "moveis_editorial" },
-  { discovery: "20h", time: "21h", focus: "Grandes ofertas em famílias prioritárias de eletrônicos, linha branca e utilidades de alto potencial comercial", marketplaces: "grandes_ofertas_editorial" },
+  { discovery: "06h", time: "07h", focus: "Casa, cozinha, organização, cama e banho e eletroportáteis", marketplaces: "casa_cozinha_editorial" },
+  { discovery: "08h", time: "09h", focus: "Furadeiras, parafusadeiras, serras, kits e equipamentos", marketplaces: "ferramentas_editorial" },
+  { discovery: "09h", time: "10h", focus: "Notebooks, monitores, SSDs, impressoras e rede", marketplaces: "informatica_editorial" },
+  { discovery: "11h", time: "12h", focus: "Skincare, cabelo, perfumes, maquiagem e aparelhos", marketplaces: "beleza_editorial" },
+  { discovery: "12h", time: "13h", focus: "Tênis, roupas, bolsas, mochilas, relógios e acessórios", marketplaces: "moda_editorial" },
+  { discovery: "14h", time: "15h", focus: "Ração, higiene, camas, fontes, comedouros e acessórios pet", marketplaces: "pet_editorial" },
+  { discovery: "18h", time: "19h", focus: "Geladeiras, lavadoras, micro-ondas, fogões, cooktops e climatização", marketplaces: "eletrodomesticos_editorial" },
   { discovery: "Manual", time: "22h", focus: "Apenas cupons cadastrados e aprovados manualmente", marketplaces: "cupons_aprovados_editorial" },
 ];
 
-export const commercialPriorityText = "Eletrônicos, telefonia, informática, eletrodomésticos, casa, beleza, moda, esporte, pet e móveis.";
+export const commercialPriorityText = "Casa/Cozinha/Organização, Beleza, Moda, Eletrodomésticos, Informática, Ferramentas e Pet.";
 
 const channelPlan = [
   ["WhatsApp", "3–5 ofertas/dia no início; intervalo mínimo de 2 h", "Canal principal: conversão e cupons"],
@@ -35,7 +29,7 @@ export default function StrategyPage() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Estratégia de Publicação</h1>
-          <p className="mt-1 max-w-3xl text-sm leading-6 text-white/45">Grade adaptada à audiência atual: WhatsApp é o canal principal; Instagram concentra descoberta em Reels; Telegram recebe apenas uma seleção curta.</p>
+          <p className="mt-1 max-w-3xl text-sm leading-6 text-white/45">Grade dos sete nichos comerciais: WhatsApp é o canal principal; Instagram concentra descoberta em Reels; Telegram recebe uma seleção curta.</p>
         </div>
       </header>
 
@@ -60,7 +54,7 @@ export default function StrategyPage() {
       <section className="glass-card overflow-hidden border border-white/[0.05]">
         <div className="border-b border-white/[0.05] p-5">
           <h2 className="flex items-center gap-2 font-bold text-white"><CalendarClock size={18} className="text-violet-300" /> Grade diária de cenários (Brasília)</h2>
-          <p className="mt-1 text-sm text-white/40">Nos cenários automáticos, o discovery ocorre 1h antes da publicação. Cupons são manuais. Intro Telegram disparada no horário de discovery.</p>
+          <p className="mt-1 text-sm text-white/40">Nos sete nichos automáticos, o discovery ocorre 1h antes da publicação. Cupons são manuais. Intro Telegram acompanha apenas os horários ativos de discovery.</p>
         </div>
         <div className="divide-y divide-white/[0.04]">
           <div className="hidden lg:grid lg:grid-cols-[5rem_5rem_1fr_14rem] gap-3 px-5 py-2 text-[11px] font-semibold uppercase tracking-widest text-white/25">
