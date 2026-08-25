@@ -3,11 +3,21 @@
 const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const { SEARCH_ALIASES: ML_ALIASES } = require('./mercadolivre-official-intents-v5.cjs');
+const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 
 const MARKETPLACES = ['Shopee', 'Amazon', 'Mercado Livre'];
 
 function normalize(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR').replace(/\s+/g, ' ').trim();
+}
+
+function mercadoLivreTermsForScenario(scenarioId, fallbackKeywords) {
+  const resolved = resolveNichePlanFromLegacyScenario(scenarioId, ['Mercado Livre']);
+  const baseTerms = resolved.mode === 'niche_mapped'
+    ? resolved.plans['Mercado Livre'].terms.all
+    : fallbackKeywords;
+
+  return [...new Set(baseTerms.flatMap((term) => ML_ALIASES[term] || [term]))];
 }
 
 function buildIntentMap() {
@@ -17,11 +27,12 @@ function buildIntentMap() {
     map[id] = {
       canonical_id: id,
       label: shopee.name,
+      commercial_niche: shopee.commercialNiche || null,
       marketplaces: {
         Shopee: { terms: [...shopee.keywords], categories: shopee.apiCategories || [] },
-        Amazon: { terms: [...amazon.keywords], categories: [] },
+        Amazon: { terms: [...amazon.keywords], categories: amazon.browseNodeIds || [] },
         'Mercado Livre': {
-          terms: [...new Set(shopee.keywords.flatMap((term) => ML_ALIASES[term] || [term]))],
+          terms: mercadoLivreTermsForScenario(id, shopee.keywords),
           categories: []
         }
       }
