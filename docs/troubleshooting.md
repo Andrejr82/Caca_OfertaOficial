@@ -21,7 +21,10 @@
 | Oferta repetida | identidade histórica, IDs do marketplace e status publicado |
 | Draft ausente | estado da oferta, janela controlada, Official AI e `posts.content` |
 | Top 30 incorreto | ciclo mais recente, diversidade, canal e filtros editoriais |
+| WhatsApp mostra poucos produtos apesar de haver drafts | comparar `posts.channel=whatsapp` com `posts.status=draft`; um `offers.status=approved` não deve esconder um draft WhatsApp ativo ainda não publicado |
+| Draft Express não aparece no WhatsApp | confirmar `explainability.manual_source=true`, `posts.channel=whatsapp`, `status=draft` e ausência de `posted_at`/`external_id`/`deleted_at` |
 | WhatsApp indisponível | sessão Baileys, action client e processo `whatsapp-bot` |
+| Falso positivo de Beleza no Mercado Livre | verificar o contrato `beleza_editorial`; `modelador nasal`, `nose up`, `aro/modelador de arroz` e equivalentes devem ser bloqueados sem bloquear `modelador de cachos` |
 | Instagram bloqueia antes de publicar | conferir `code`, `rule` e evento `instagram.policy.blocked`; distinguir Policy Guard de erro da Graph API |
 | Instagram retorna `INSTAGRAM_POLICY_BLOCKED` | revisar nome/categoria/notas/legenda; não contornar o guard; corrigir falso positivo com teste |
 | Instagram retorna `INSTAGRAM_POLICY_INPUT_INVALID` | verificar leitura de oferta/post no Supabase, vínculo `offerId`/`postId`, autenticação e contexto disponível |
@@ -30,11 +33,13 @@
 | Imagem Shein inválida | confirmação, upload, bucket e acessibilidade pública |
 | Vídeo parado | claim, heartbeat, worker Oracle, FFmpeg e status do job |
 | Shopee V1 não persiste | flags, overlay, paginação, limites e logs fail-closed |
-| `Documentation Audit` falha por documento desatualizado | confirmar os marcadores `docs-status`/`verified-against` e se houve commits em paths de runtime após a última atualização documental |
+| `Documentation Audit` falha por documento relacionado | verificar os domínios detectados no log do audit e atualizar somente os documentos obrigatórios indicados para aquele diff |
 
 ## Recuperação
 
 Prefira desativar a flag específica e preservar dados. Não reinicie processos em loop nem publique manualmente para “testar” antes de identificar a fronteira da falha. Após correção, execute testes, uma coorte limitada e valide recibos antes de ampliar.
+
+Para WhatsApp, diferencie o estado global da oferta do estado do post do canal. Se o post WhatsApp ainda é um draft ativo, aprovação global causada por outro canal não equivale a publicação no WhatsApp.
 
 Para Instagram, um bloqueio do Policy Guard é comportamento preventivo esperado e acontece antes da Graph API. Não transformar esse bloqueio em retry automático. Se a regra estiver incorreta para um produto legítimo, estreitar o matcher e cobrir o caso com regressão.
 
