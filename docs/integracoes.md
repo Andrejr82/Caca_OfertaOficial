@@ -1,48 +1,51 @@
 # Integrações atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
-<!-- verified-on: 2026-08-18 -->
+<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
+<!-- verified-on: 2026-08-25 -->
 
-| Integração | Capacidade versionada | Condição para declarar ativa |
-|---|---|---|
-| Supabase | Auth, dados, RPCs, auditoria, Storage e snapshots de Trends | migrations aplicadas, RLS e smoke test |
-| Shopee | OpenAPI V1, extração/ingestão, Express e evidência de Trends | credenciais, flags e persistência validadas |
-| Mercado Livre | OAuth, descoberta, monetização, evidência de Trends e contratos de domínio por nicho | token válido, callback configurado e guardrails de cenário validados |
-| Amazon | descoberta com contrato próprio e intenção Radar quando comprovada | provider e monetização confirmados |
-| Shein | Express assistido e imagem pública | confirmação do produto e URL pública válida |
-| Telegram | teste, publicação, editorial Top 30 e leitura de audiência | bot/chat configurados e recibo confirmado |
-| Instagram | publicação de Feed/Reels, disclosure de parceria paga, segurança anti-duplicidade/cota e Policy Guard fail-closed | app Meta, token, permissões e smoke test controlado |
-| Facebook | imagem/vídeo, webhook, comentários e capacidade de Insights; link afiliado no primeiro comentário | página, token e processamento de mídia |
-| WhatsApp | Baileys, publicação, fila Top 30, trilha Express e drafts de canal pendentes | sessão externa saudável e ação disponível |
-| Google Drive | upload de mídia | OAuth/service account e pasta configurados |
-| Inngest | funções assíncronas delegadas | app sincronizado; jobs desabilitados não são ativos |
-| Oracle | discovery, scraping auxiliar, workers e contrato Radar → Oracle | PM2/systemd, overlay e reachability validados |
-| Trend Executive | Radar, Score V2, shadow, feedback experimental e governança | `off` por padrão; `active` bloqueado sem readiness e autorização |
-| Radar Oracle dedicado | entrypoint independente que reutiliza o engine atual e consulta Shopee/ML | `TRENDS_RADAR_DEDICATED_RUNTIME=true`, processo Oracle dedicado e validação de execução única |
+| Integração | Capacidade/estado atual |
+|---|---|
+| Supabase | Auth, dados, RPCs, auditoria, Storage e snapshots de Trends |
+| Shopee | OpenAPI V1, extração/ingestão, Express e evidência de Trends |
+| Mercado Livre | OAuth, descoberta, monetização, Trends e guardrails por nicho |
+| Amazon | descoberta com contrato próprio |
+| Telegram | publicação editorial Top 30 |
+| Instagram | Feed/Reels, disclosure de parceria paga, Safety e Policy Guard |
+| Facebook | imagem/vídeo, comentários e link afiliado no primeiro comentário |
+| WhatsApp | Baileys, publicação, Top30 editorial, trilha Express e drafts pendentes por canal |
+| Oracle | Discovery, API técnica, Radar dedicado, vídeo e serviços auxiliares |
+| Radar Oracle dedicado | ativo na auditoria de 25/08/2026 com `TRENDS_RADAR_DEDICATED_RUNTIME=true` |
 
-## WhatsApp — autoridade do draft do canal
+## WhatsApp
 
-- O Top 30 editorial continua separado da Publicação Expressa.
-- Drafts Express usam `manual_source=true` e não entram no ranking editorial.
-- Um `posts.channel=whatsapp` ainda em `draft`, sem `posted_at`, `external_id` ou exclusão, permanece válido para exibição mesmo se `offers.status=approved` por ação/publicação em outro canal.
-- Estados publicados, rejeitados, deferidos ou deletados continuam protegidos e não devem reaparecer como pendentes.
+- Top30 editorial permanece separado da Publicação Expressa.
+- Express usa `manual_source=true` e não disputa ranking editorial.
+- Um post `channel=whatsapp` em `draft`, sem `posted_at`, `external_id` ou exclusão, permanece válido mesmo se `offers.status=approved` por outro canal.
+- Estados publicados, deletados, rejeitados ou deferidos permanecem protegidos.
 
 ## Mercado Livre — guardrails por nicho
 
-O motor Mercado Livre não é alterado pelos guardrails editoriais. O contrato do nicho pode rejeitar falsos positivos sem trocar provider, parser ou fluxo OAuth. Em Beleza, expressões como `modelador nasal`, `nose up`, `aro modelador` e `modelador de arroz` são bloqueadas, preservando produtos válidos como `modelador de cachos`, chapinha e escova secadora.
+O motor Mercado Livre não foi alterado. O contrato do nicho pode rejeitar falsos positivos. Em Beleza, sinais como `nasal`, `nariz`, `nose up`, `arroz` e `padaria` bloqueiam resultados fora do domínio sem bloquear `modelador de cachos`, chapinha ou escova secadora.
 
-## Instagram — fronteira de política
+## Oracle auditada em 25/08/2026
 
-A rota `/api/instagram/publish` executa, antes da aprovação/publicação oficial, validações de legenda, mídia, duplicidade, cota e o `Instagram Policy Guard`. O guard consulta o contexto da oferta e do draft; quando detecta categoria sensível/proibida ou não consegue validar o contexto, bloqueia antes da chamada à Graph API e registra `instagram.policy.blocked`. O documento de referência é `docs/INSTAGRAM_POLICY_GUARD.md`.
+PM2 confirmou online:
+
+- `oracle-scraper`
+- `oracle-api`
+- `whatsapp-bot`
+- `oracle-trends-radar`
+- `authorized-reel-verifier`
+- `video-worker`
+
+`shopee-feed-sync` estava parado.
+
+`oracle-api` opera na porta `3002`; `whatsapp-bot` na porta `3001`. O Radar dedicado estava ativo com `TREND_EXECUTIVE_MODE=off`, polling de 30s e lock local `/tmp/caca-oferta-trends-radar.lock`.
 
 ## Fronteiras
 
-- Descoberta não autoriza publicação.
+- Discovery não autoriza publicação.
 - Copy publicada vem de `posts.content`.
-- Links, preços, descontos e identidades não podem ser sintetizados.
-- Código existente representa capacidade; ativação externa exige verificação no provedor.
-- Ofertas rejeitadas não podem ser publicadas pelos fluxos sociais oficiais.
-- Radar interpreta sinais, mas collectors determinísticos provam fatos.
-- `shadow` não substitui `legacy_scenario`; mudanças de score/pesos exigem revisão explícita.
-- O runtime dedicado do Radar não cria outro engine: `scripts/oracle-trends-radar-worker.cjs` delega ao runner/engine existente e mantém `publishCalls=0`, `postsWrites=0` e `offersWrites=0` durante o snapshot.
+- Código versionado representa capacidade; estado externo exige verificação no provedor.
+- O SHA da VPS auditado foi `febe66abb28bd47c738d925befc50ad365c59371`; compare com a `main` antes de qualquer operação.

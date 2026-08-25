@@ -1,8 +1,8 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
-<!-- verified-on: 2026-08-18 -->
+<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
+<!-- verified-on: 2026-08-25 -->
 
 ## Pré-deploy
 
@@ -17,42 +17,61 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 ## Vercel
 
 - Executa o painel Next.js, APIs e integrações server-side.
-- Validar build, variáveis, cron declarado em `vercel.json`, `/api/health` e `/api/readiness`.
+- Validar build, variáveis, `/api/health` e `/api/readiness`.
 - Confirmar que rotas de publicação exigem autenticação e entidades oficiais.
-- Builds Git automáticos prosseguem somente para `main`; branches deliberadas podem ser publicadas manualmente com `vercel --build-env VERCEL_FORCE_BUILD=1`.
-- Para mudanças de publicação social, observar logs estruturados após o deploy; bloqueios do Instagram Policy Guard aparecem como `instagram.policy.blocked` e não devem ser tratados como falha de transporte.
 
 ## Supabase
 
 - Aplicar migrations em ordem e registrar o SHA implantado.
-- Verificar tabelas, funções/RPCs, constraints, RLS e buckets públicos/privados.
+- Verificar tabelas, RPCs, constraints, RLS e buckets.
 - Executar validações read-only antes de liberar ingestão.
 
 ## Oracle
 
-- Validar overlay allowlisted e flags fail-closed antes de reiniciar PM2.
-- Processos esperados incluem worker/scraper, API técnica e WhatsApp quando habilitado.
-- Confirmar scheduler único, `noOverlap`, reachability, logs e SHA do checkout.
-- O runtime dedicado do Radar está preparado no repositório, mas não deve ser iniciado até a task operacional correspondente. A ativação deve configurar `TRENDS_RADAR_DEDICATED_RUNTIME=true` no `oracle-scraper` e no novo processo de Radar na mesma janela, validar consumo exclusivo e manter rollback por flag.
+Antes de qualquer alteração:
+
+1. comparar o SHA da VPS com a `main`;
+2. confirmar `git status --short` limpo;
+3. validar PM2 e flags efetivas;
+4. não executar Discovery manual sem autorização explícita.
+
+Estado auditado em 25/08/2026:
+
+- `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online;
+- scheduler `0 6,8,9,11,12,14,18 * * *` em `America/Sao_Paulo`, `noOverlap=true`;
+- Cupons 22h `manual_only`;
+- `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
+- `TREND_EXECUTIVE_MODE=off`;
+- `oracle-scraper` não consome Radar no ciclo editorial;
+- VPS auditada no SHA `febe66abb28bd47c738d925befc50ad365c59371`.
+
+O processo dedicado do Radar **já está ativo**. Não use instruções antigas que tratem esse worker como futuro ou não implantado.
+
+## Radar — rollback
+
+Como o runtime dedicado está ativo, rollback não deve assumir automaticamente que o `oracle-scraper` voltará a consumir Radar apenas ao desligar a flag. Antes de qualquer rollback:
+
+1. validar no código/ambiente qual consumidor ficará autorizado;
+2. garantir autoridade única;
+3. parar/reconfigurar somente o processo relacionado;
+4. confirmar lock/processos e logs;
+5. manter `TREND_EXECUTIVE_MODE=off` salvo autorização específica.
+
+Não executar rollback de Radar apenas com base em documentação histórica.
+
+## Capacity Hunter
+
+Na auditoria, `oracle-capacity-hunter.timer` estava ativo a cada 30 minutos; o service estava `failed` por ausência de `apps/oracle-capacity-hunter/.env`. O mecanismo é passivo e não reinicia serviços automaticamente.
 
 ## Liberação gradual
 
-1. Deploy com publicação bloqueada.
+1. Deploy com publicação bloqueada quando aplicável.
 2. Saúde, readiness e migrations.
 3. Discovery controlada e persistência observada.
 4. Geração limitada de drafts.
 5. Aprovação manual e smoke test por canal.
-6. Para Instagram, usar uma oferta comum de varejo e confirmar que Safety + Policy Guard permitem o fluxo; validar também um caso bloqueado sem enviar mídia à Meta.
-7. Expansão somente com recibos e métricas saudáveis.
+6. Expansão somente com recibos e métricas saudáveis.
 
-## Rollback
+## Rollback geral
 
-Reverter o artefato/commit e as flags primeiro. Migrations destrutivas exigem plano próprio; não presumir rollback automático do banco. Preservar logs, correlation IDs e recibos para investigação.
-
-O Instagram Policy Guard faz parte do caminho de segurança da publicação. Não o contorne durante incidentes; se houver falso positivo, corrigir a regra com teste de regressão e novo deploy.
-
-Para o Radar dedicado, o rollback operacional é parar o processo dedicado e remover/desabilitar `TRENDS_RADAR_DEDICATED_RUNTIME`; isso restaura o consumo pelo `oracle-scraper` sem alterar schema ou snapshots existentes.
-
-## Trend Executive
-
-A implementação de Trends não autoriza ativação produtiva. Antes de qualquer mudança futura de `TREND_EXECUTIVE_MODE`, exigir evidência shadow suficiente, readiness gate aprovado, coorte limitada, revisão técnica e autorização explícita. O rollback definido restaura `off` e `legacy_scenario`; nenhuma migration de Trends deve ser aplicada fora do procedimento operacional aprovado.
+Reverter artefato/commit e flags primeiro. Migrations destrutivas exigem plano próprio. Preservar logs, correlation IDs e recibos para investigação.

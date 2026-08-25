@@ -1,8 +1,8 @@
 # Segurança
 
 <!-- docs-status: current -->
-<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
-<!-- verified-on: 2026-08-18 -->
+<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
+<!-- verified-on: 2026-08-25 -->
 
 ## Fronteiras de confiança
 
@@ -15,42 +15,33 @@
 
 - RLS deve permanecer habilitado e coberto por políticas explícitas.
 - Migrations precisam preservar constraints de estado, identidade e idempotência.
-- Uploads Shein/vídeo devem produzir URLs públicas somente nos buckets destinados a conteúdo público.
 - Nunca tornar sessões, logs, arquivos temporários ou credenciais publicamente acessíveis.
 
 ## Publicação
 
 - Discovery e geração de draft não podem publicar implicitamente.
-- Rotas exigem `postId`/`offerId`, aprovação e conteúdo oficial em `posts.content`.
+- Rotas exigem entidades oficiais e conteúdo de `posts.content`.
 - Ofertas `rejected` são bloqueadas antes da publicação social.
 - Guardas históricas evitam republicação por ID ou identidade comercial equivalente.
 - Preço, desconto, frete, rating, cupom e link precisam de evidência do marketplace.
-- Instagram Feed e Reels usam disclosure de parceria paga no transporte atual para conteúdo afiliado.
-- `/api/instagram/publish` executa Safety + `Instagram Policy Guard` antes da aprovação/publicação e antes de qualquer chamada de mídia à Meta.
-- O Policy Guard opera fail-closed: contexto ausente ou categoria preventiva acionada bloqueiam o envio e geram evento `instagram.policy.blocked`.
+- `/api/instagram/publish` executa Safety + `Instagram Policy Guard` antes de qualquer chamada de mídia à Meta.
 
 ## Segredos e logs
 
 - Valores reais ficam fora do Git; `.env.example` contém apenas nomes seguros.
 - Sanitizar bearer tokens, cookies, payloads pessoais, URLs assinadas e service-role keys.
-- Logs do Policy Guard devem registrar regra/código/IDs operacionais, nunca tokens ou conteúdo secreto.
+- Nunca registrar tokens, chaves privadas, conteúdo de `.env` ou material de sessão em documentação.
 - Executar `npm run security:check` antes do merge e do deploy.
+
+## Segurança do Radar dedicado
+
+- Na auditoria Oracle de 25/08/2026, `TRENDS_RADAR_DEDICATED_RUNTIME=true` estava ativo no processo PM2 `oracle-trends-radar`.
+- `TREND_EXECUTIVE_MODE=off` permanece o estado seguro auditado.
+- O `oracle-scraper` não consome solicitações Radar no ciclo editorial.
+- O worker dedicado reutiliza o engine existente e usa lock local `/tmp/caca-oferta-trends-radar.lock`.
+- O lock é proteção de host, não garantia distribuída entre múltiplos hosts.
+- Qualquer mudança de autoridade deve preservar exatamente um consumidor do Radar.
 
 ## Resposta a incidente
 
-Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afetados, avaliar dados persistidos e só reativar após smoke tests controlados. Em falso positivo do Policy Guard, corrigir a regra e adicionar teste de regressão; não criar bypass de produção.
-
-## Segurança do Trend Executive
-
-- Evidência direta e inferência permanecem separadas; fato desconhecido não é sintetizado.
-- Fonte degradada, não confiável ou com drift material é bloqueada para novas contribuições até revisão.
-- `TREND_EXECUTIVE_MODE=active` permanece inacessível no runtime atual.
-- Shadow não publica, não altera autoridade e não aplica pesos automaticamente.
-- Feedback de experimentos e sinais internos só usam venda/conversão quando a atribuição é explicitamente confiável.
-
-## Segurança do runtime dedicado do Radar
-
-- `TRENDS_RADAR_DEDICATED_RUNTIME` é fail-closed e permanece `false` por padrão.
-- O processo dedicado reutiliza o engine existente e não possui caminho de publicação, criação de posts ou ofertas durante a geração do snapshot.
-- Um lock de processo no host Oracle serializa execuções do worker dedicado; ele não deve ser usado como garantia distribuída entre múltiplos hosts.
-- A ativação deve manter apenas uma autoridade de consumo: com a flag habilitada, o consumidor legado do `oracle-scraper` se abstém e o worker dedicado assume o Radar.
+Bloquear publicação, preservar correlation IDs/logs, rotacionar segredos afetados e só reativar após smoke tests controlados. Não criar bypass de produção para contornar guardas de segurança.

@@ -1,136 +1,90 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
-<!-- verified-on: 2026-08-18 -->
+<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
+<!-- verified-on: 2026-08-25 -->
 
-> Fonte canônica documental do runtime versionado. A implementação, as migrations, os testes e o manifesto de release continuam sendo a autoridade final.
-
-## Evoluções incorporadas em agosto de 2026
-
-- Shopee OpenAPI V1 opera como fonte oficial isolada e controlada por flags; o caminho legado não deve ser inferido como equivalente.
-- Curadoria Comercial V1 adiciona intenção, score, riscos, aprovação e filas Top 30 por canal.
-- A identidade comercial e o histórico de publicação impedem reentrada indevida de ofertas equivalentes.
-- `posts.content` concentra a copy oficial; Copy V3 e hashtags dinâmicas alimentam os transportes.
-- Telegram e WhatsApp possuem fluxo editorial Top 30. O WhatsApp também expõe rotação `next`; Publicação Expressa continua independente.
-- No painel WhatsApp, o estado do post do canal é autoritativo para drafts pendentes: um draft ativo não desaparece apenas porque `offers.status` virou `approved` por outro canal.
-- Guardrails por marketplace podem rejeitar falsos positivos de nicho sem alterar os motores. O contrato Mercado Livre/Beleza bloqueia modeladores fora do domínio de beleza, preservando modelador de cachos e equivalentes válidos.
-- Shein Express usa confirmação assistida e imagem pública validada antes de persistência/publicação.
-- Guardas fail-closed separam descoberta, geração controlada de drafts e publicação; Oracle não publica por efeito colateral do ciclo.
-- Ofertas `rejected` são bloqueadas nos fluxos sociais oficiais.
-- Instagram Feed e Reels usam disclosure de parceria paga para conteúdo afiliado; Safety valida legenda, cota, duplicidade e mídia.
-- O `Instagram Policy Guard` é executado em `/api/instagram/publish` antes da aprovação/publicação e antes da Graph API, bloqueando fail-closed categorias sensíveis ou contexto indisponível.
-- O Radar de Tendências possui engine, runner e worker dedicado separados do ciclo editorial; o worker dedicado continua protegido por `TRENDS_RADAR_DEDICATED_RUNTIME=true`.
+> Fonte canônica documental do runtime versionado. A implementação, migrations e testes continuam sendo a autoridade final. Estado de produção é confirmado separadamente por auditoria operacional.
 
 ## Visão geral
 
-O Caça Oferta Oficial coleta candidatos de marketplaces, grava ofertas no Supabase, executa validações e scoring determinísticos, gera drafts de copy pela Official AI, apresenta esses drafts no painel administrativo e publica manualmente por transportes de canal. A topologia é híbrida: o Next.js/Vercel concentra painel, rotas e serviços oficiais; o Oracle Worker executa Discovery; a Oracle API é um gateway técnico de scraping; o motor WhatsApp é um processo separado.
+O Caça Oferta Oficial coleta candidatos de Shopee, Mercado Livre e Amazon, persiste ofertas no Supabase, executa validações e scoring, gera drafts pela Official AI e publica manualmente por transportes oficiais.
 
 ```mermaid
 flowchart LR
-  M["Shopee / Mercado Livre / Amazon"] --> O["Oracle Worker\nDiscovery-Only"]
-  O -->|"RPC/upsert idempotente"| S[("Supabase")]
-  O -->|"POST PROCESS_OFFERS"| V["Next.js / Vercel\n/api/ai/generate"]
-  S --> P["Painel administrativo\ncuradoria de ofertas e drafts"]
-  P --> AI["Official AI"]
-  AI --> D["posts em draft\n+ ai_copy_logs"]
-  P --> T["Publicação oficial"]
-  T --> TG["Telegram"]
-  T --> IG["Instagram\nSafety + Policy Guard"]
-  T --> WA["WhatsApp Engine"]
-  T --> FB["Facebook"]
+  M["Shopee / Mercado Livre / Amazon"] --> O["Oracle Scraper\nDiscovery-Only"]
+  O --> S[("Supabase")]
+  O --> V["Next.js / Vercel\nOfficial AI"]
+  S --> P["Painel administrativo"]
+  P --> TG["Telegram"]
+  P --> IG["Instagram"]
+  P --> WA["WhatsApp"]
+  P --> FB["Facebook"]
   O -. "scraping técnico" .-> OA["Oracle API :3002"]
-  WA --> WS["WhatsApp :3001\nBaileys"]
+  WA --> WE["WhatsApp Engine :3001"]
+  R["Oracle Trends Radar"] --> S
 ```
 
-## Componentes e responsabilidades
+## Componentes
 
-| Componente | Responsabilidade verificada | Fonte principal |
-|---|---|---|
-| Next.js/Vercel | UI, autenticação, APIs e serviços de estado/AI/publicação | `src/app`, `src/core`, `src/lib`, `vercel.json` |
-| Oracle Worker | Discovery dos marketplaces, persistência e disparo controlado da Official AI | `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs` |
-| Oracle Radar Worker | Consumo independente das solicitações do Radar; fail-closed sem flag dedicada | `scripts/oracle-trends-radar-worker.cjs`, `scripts/oracle-trends-radar-runner.cjs`, `scripts/oracle-trends-radar-engine.cjs` |
-| Oracle API | Gateway Express em `:3002`; scraping técnico autenticado | `scripts/oracle-api.cjs` |
-| WhatsApp Engine | Express/Baileys em `:3001`, status e envio autenticado | `scripts/whatsapp-engine.cjs` |
-| Supabase | Auth, tabelas de ofertas/posts/links/logs, auditoria e Storage | `supabase/schema.sql`, `supabase/migrations`, `src/lib/supabase` |
-| Official AI | Geração/regeneração de copy e persistência de drafts | `src/core/ai`, `src/lib/ai/official`, `/api/ai/generate` |
-| Publicação oficial | Aprovação, idempotência, transportes, recibos e observabilidade | `src/core/publication`, `src/lib/publication/official` |
-| Instagram Safety/Policy | validação preventiva de legenda, cota, duplicidade, mídia e política comercial | `src/lib/instagram/safety.ts`, `src/lib/instagram/policy-guard.ts`, `/api/instagram/publish` |
-| Painel | Lista ofertas/posts, curadoria, aprovação/rejeição e acionamento de publicação | `src/app/(dashboard)`, `src/components/dashboard` |
-| Capacity Hunter | Monitoramento read-only da VPS, PM2, scheduler, Git e recursos | `apps/oracle-capacity-hunter/src` |
+| Componente | Responsabilidade |
+|---|---|
+| Next.js/Vercel | UI, autenticação, APIs, IA e publicação |
+| `oracle-scraper` | scheduler e Discovery dos marketplaces |
+| `oracle-api` | gateway técnico autenticado na porta 3002 |
+| `whatsapp-bot` | motor Baileys na porta 3001 |
+| `oracle-trends-radar` | consumo independente do Radar |
+| Supabase | Auth, ofertas, posts, links, logs e Storage |
+| Capacity Hunter | monitoramento passivo/read-only da VPS |
 
-## Pipeline implementado
+## Scheduler e matriz editorial
 
-1. Discovery no Oracle Worker para os marketplaces habilitados.
-2. Deduplicação e validação do contrato de candidato.
-3. Persistência idempotente no Supabase; candidatos seguem para revisão manual.
-4. O worker chama `/api/ai/generate` em lotes controlados com service-role e checkpoint.
-5. A Official AI gera drafts para os canais habilitados sem transformar Discovery em autorização de publicação.
-6. O painel opera sobre ofertas/posts persistidos e mantém ações de aprovação/rejeição explícitas.
-7. Rotas oficiais de publicação validam autenticação, relacionamento entre oferta/post, estado e idempotência antes do transporte.
-8. Instagram acrescenta Safety + Policy Guard antes da aprovação/publicação; bloqueios preventivos não chamam a Graph API.
-9. Transportes registram resultado, recibos e observabilidade conforme o adaptador oficial.
+O scheduler canônico usa sete janelas em `America/Sao_Paulo` com `noOverlap`:
 
-```mermaid
-stateDiagram-v2
-  [*] --> draft
-  draft --> pending_manual_review: Discovery / ingestão
-  pending_manual_review --> selected: curadoria/serviço de estado
-  selected --> approved: aprovação oficial
-  approved --> posted: publicação oficial
-  draft --> rejected: rejeição
-  pending_manual_review --> rejected: rejeição
-```
+- 06h → Casa/Cozinha/Organização
+- 08h → Ferramentas
+- 09h → Informática
+- 11h → Beleza
+- 12h → Moda
+- 14h → Pet
+- 18h → Eletrodomésticos
 
-O schema de `offers` aceita estados como `draft`, `pending_manual_review`, `selected`, `approved`, `posted` e `rejected`. O schema de `posts` aceita `draft`, `published`, `failed` e `deleted`. Componentes legados ainda executáveis não devem ser confundidos com o caminho canônico.
+Cupons permanece `manual_only` às 22h e não participa do cron. O scraper não executa Discovery automaticamente no boot sem `--run-now`.
 
-Para publicação multicanal, o estado global da oferta não substitui automaticamente o estado específico de cada post. Em particular, um post WhatsApp ainda em `draft`, sem evidência de publicação/exclusão e sem estado bloqueado, permanece pendente para o canal mesmo se a oferta já tiver sido aprovada por outro fluxo.
+## Curadoria e contratos
 
-## Official AI
+- Os sete nichos comerciais são universos de procura, com Core, Expansion e Opportunity.
+- Guardrails por marketplace podem rejeitar falsos positivos sem alterar os motores de busca.
+- Mercado Livre/Beleza bloqueia sinais fora do domínio como `nasal`, `nariz`, `nose up`, `arroz` e `padaria`, preservando `modelador de cachos` e demais produtos válidos.
+- Discovery não autoriza publicação.
 
-`POST /api/ai/generate` é a rota oficial. Uma chamada individual recebe `offerId`; um ciclo recebe `command=PROCESS_OFFERS` e exige autorização de serviço. O Oracle Worker envia IDs em páginas controladas e usa checkpoint até conclusão do batch.
+## Publicação social
 
-A seleção do provider/modelo depende da composição efetiva em `src/lib/ai/official` e `src/core/ai/providers`. A IA não deve fabricar links, preços, descontos, frete, rating, identidade ou compliance. Idempotência é aplicada por command/idempotency keys, persistência de drafts e adaptadores oficiais.
+`posts.content` é a autoridade da copy do canal. O estado global da oferta não substitui automaticamente o estado específico de cada post.
 
-## Supabase
+No WhatsApp:
 
-O Supabase mantém autenticação, ofertas, links afiliados, posts, registros de integração, settings, auditoria, logs de IA, jobs e Storage. Migrations e RPCs protegem ingestão/idempotência e RLS permanece parte da fronteira de segurança. Operações administrativas usam clients server-side.
+- Top30 editorial e Publicação Expressa são trilhas separadas;
+- Express usa `manual_source=true`;
+- draft WhatsApp ativo permanece pendente mesmo se `offers.status=approved` por outro canal;
+- posts publicados, deletados, rejeitados ou deferidos permanecem protegidos.
 
-## APIs e publicação social
+Instagram executa Safety + Policy Guard antes da Graph API. Facebook mantém o link afiliado no primeiro comentário conforme o transporte atual.
 
-Rotas de negócio incluem `/api/ai/generate`, `/api/ai/regenerate`, rotas de scraper/Express, `/api/telegram/publish`, `/api/instagram/publish`, `/api/whatsapp/publish`, `/api/facebook/publish`, ações de posts, autenticação de marketplace e health/readiness.
+## Radar independente
 
-No Instagram, a fronteira oficial é `/api/instagram/publish`: a rota valida o draft, mídia/Reel, histórico recente, cota da Meta quando disponível, legenda duplicada, vídeo duplicado e o contexto de política da oferta. `evaluateInstagramPolicy` roda antes de `approveOfficialOfferForPublication`. Um bloqueio retorna `INSTAGRAM_POLICY_BLOCKED` ou `INSTAGRAM_POLICY_INPUT_INVALID` e registra `instagram.policy.blocked` com IDs, regra, código e motivo. Feed e Reels usam `is_paid_partnership: true` no container atual.
+A auditoria Oracle de 25/08/2026 confirmou `oracle-trends-radar` online, `TRENDS_RADAR_DEDICATED_RUNTIME=true` e `TREND_EXECUTIVE_MODE=off`. O `oracle-scraper` não consome Radar no ciclo editorial. O worker dedicado usa polling de 30s e lock local `/tmp/caca-oferta-trends-radar.lock`.
 
-No Facebook, o fluxo atual mantém o link afiliado fora da copy principal e usa o primeiro comentário quando solicitado pelo transporte.
+## Estado operacional Oracle auditado
 
-## Marketplaces e integrações
+Na auditoria read-only de 25/08/2026 estavam online no PM2: `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker`. `shopee-feed-sync` estava parado.
 
-- Shopee, Mercado Livre e Amazon são os principais caminhos de Discovery materializados pelo worker oficial; cada adapter possui contrato próprio.
-- Os contratos comerciais por nicho podem adicionar termos bloqueados específicos do marketplace sem alterar o engine/provider correspondente.
-- Magalu, Netshoes e Shein possuem capacidades separadas no repositório e não devem ser inferidos como parte garantida do ciclo Discovery-Only.
-- Telegram, Instagram, WhatsApp e Facebook são canais de publicação oficial; disponibilidade externa exige validação de credenciais e smoke test.
+O checkout auditado da VPS estava em `main`, SHA `febe66abb28bd47c738d925befc50ad365c59371`, working tree limpo. Como a `main` pode avançar após a auditoria, o SHA da VPS deve ser comparado antes de qualquer operação.
 
-## Oracle Cloud e operação
+## Capacity Hunter
 
-O código versionado do scheduler editorial está alinhado às sete janelas canônicas `06h`, `08h`, `09h`, `11h`, `12h`, `14h` e `18h`. A configuração efetiva de timezone e supervisão da VPS deve ser confirmada no ambiente Oracle; o checkout isoladamente não comprova o estado operacional. O endpoint Oracle `/api/scrape` é gateway técnico e não é a autoridade de Discovery.
-
-A Publicação Expressa permanece separada: resolve/valida produto e marketplace, monetiza quando possível, persiste o vínculo e só então gera copy. Falhas de confirmação permanecem explícitas.
-
-Para o Radar `/trends`, `scripts/oracle-trends-radar-engine.cjs` mantém o engine marketplace-first, `scripts/oracle-trends-radar-runner.cjs` seleciona/valida o consumidor e recusa origem editorial aposentada (`editorial_consumer_retired`), e `scripts/oracle-trends-radar-worker.cjs` é o loop automático dedicado. `TRENDS_RADAR_DEDICATED_RUNTIME=true` é requisito fail-closed para o worker dedicado. O ciclo editorial do `oracle-scraper` não volta a consumir solicitações do Radar; CLI/manual controlado permanece disponível para diagnóstico. O lock do worker é local ao host e não substitui claim distribuído entre múltiplas instâncias.
-
-## Variáveis e operação
-
-`.env.example` é o inventário seguro; valores reais nunca são versionados. Para inspeção operacional use health/readiness, logs da Vercel, PM2/systemd, logs estruturados e dados/auditoria no Supabase. Capacidade versionada não prova ativação produtiva de Vercel, Oracle, Supabase, Meta, Inngest ou marketplaces.
-
-## Avaliação de qualidade V2
-
-A camada V2 de qualidade permanece protegida por flags. `OFFER_QUALITY_PIPELINE_V2=false` mantém o caminho atual; shadow compara resultados sem mudar a autoridade e active exige aprovação explícita e rollout controlado.
-
-## Radar Executivo de Tendências
-
-Collectores determinísticos persistem evidências; o Radar agrega nichos, Score V2, Top 3/Top 20 e performance interna em snapshots. O contrato Radar → Oracle carrega intenção e provenance auditável. `TREND_EXECUTIVE_MODE=off` continua sendo o estado seguro; `shadow` não substitui a autoridade do cenário legado e `active` permanece bloqueado até readiness e autorização.
+O timer `oracle-capacity-hunter.timer` estava ativo a cada 30 minutos. O service estava em `failed` por ausência de `apps/oracle-capacity-hunter/.env`. O Capacity Hunter é passivo e não reinicia serviços automaticamente.
 
 ## Fontes de verdade
 
-`src/app/api/**`; `src/core/**`; `src/lib/**`; `src/app/(dashboard)/**`; `scripts/oracle-scraper.cjs`; `scripts/oracle-worker-discovery-only.cjs`; `scripts/oracle-api.cjs`; `scripts/oracle-trends-radar-engine.cjs`; `scripts/oracle-trends-radar-runner.cjs`; `scripts/oracle-trends-radar-worker.cjs`; `scripts/whatsapp-engine.cjs`; `apps/oracle-capacity-hunter/src/**`; `supabase/schema.sql`; `supabase/migrations/**`; `.env.example`; `src/lib/env.ts`; `package.json`; `vercel.json`.
+`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-api.cjs`, `scripts/oracle-trends-radar-worker.cjs`, `scripts/whatsapp-engine.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
