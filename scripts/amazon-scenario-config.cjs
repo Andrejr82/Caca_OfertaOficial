@@ -1,6 +1,7 @@
 'use strict';
 
 const { EDITORIAL_SCENARIOS } = require('./editorial-scenario-config.cjs');
+const { buildCommercialScenarioMap } = require('./commercial-niche-scenario-bridge.cjs');
 
 const AMAZON_ALIASES = Object.freeze({
   casa_cozinha_editorial: ['jogo de cama', 'toalha de banho', 'cafeteira elétrica', 'air fryer', 'batedeira', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
@@ -12,8 +13,6 @@ const AMAZON_ALIASES = Object.freeze({
   moda_editorial: ['camiseta masculina', 'camisa', 'calça jeans', 'tênis masculino', 'bolsa', 'relógio', 'jaqueta', 'vestido', 'mochila', 'tênis feminino', 'calça social'],
   esporte_editorial: ['tênis de corrida', 'whey protein', 'creatina', 'tapete de yoga', 'halter', 'corda de pular', 'kettlebell', 'banco de musculação', 'bicicleta ergométrica', 'esteira', 'bicicleta'],
   pet_editorial: ['ração para cachorro', 'ração para gato', 'cama pet', 'brinquedo pet', 'areia para gato', 'coleira', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
-  // Cenários naturalmente caros recebem também intenções de entrada da mesma vertical.
-  // Não há quota por ticket: o ranking continua escolhendo por mérito comercial.
   tv_audio_editorial: ['smart tv', 'televisão 4k', 'soundbar', 'caixa de som', 'caixa de som bluetooth', 'fone bluetooth', 'headphone', 'projetor', 'smart tv oled', 'smart tv qled', 'caixa bluetooth', 'receiver', 'amplificador', 'monitor smart'],
   eletrodomesticos_editorial: ['geladeira', 'freezer', 'fogão', 'cooktop', 'micro-ondas', 'máquina de lavar', 'aspirador', 'forno elétrico', 'coifa', 'depurador', 'frigobar', 'adega climatizada'],
   moveis_editorial: ['sofá', 'guarda-roupa', 'cama', 'colchão', 'mesa de jantar', 'rack para tv', 'mesa lateral', 'escrivaninha compacta', 'poltrona', 'estante', 'painel tv', 'mesa de centro', 'mesa escritório'],
@@ -22,18 +21,24 @@ const AMAZON_ALIASES = Object.freeze({
 });
 
 const AMAZON_GENERIC_PROMO_QUERIES = new Set(['oferta', 'desconto', 'promoção', 'mais vendido', 'frete grátis']);
+const COMMERCIAL_SCENARIOS = buildCommercialScenarioMap(EDITORIAL_SCENARIOS, 'Amazon');
 
-const SCENARIOS = Object.fromEntries(Object.entries(EDITORIAL_SCENARIOS).map(([id, source]) => {
+const SCENARIOS = Object.fromEntries(Object.entries(COMMERCIAL_SCENARIOS).map(([id, source]) => {
+  const isCommercialNiche = Boolean(source.commercialNiche);
   const sourceKeywords = id === 'grandes_ofertas_editorial'
     ? source.keywords.filter((keyword) => !AMAZON_GENERIC_PROMO_QUERIES.has(String(keyword).trim().toLowerCase()))
     : source.keywords;
 
+  const keywords = isCommercialNiche
+    ? sourceKeywords
+    : [...new Set([...(AMAZON_ALIASES[id] || []), ...sourceKeywords])];
+
   return [id, {
     ...source,
     label: `${source.name} — Amazon Brasil`,
-    keywords: [...new Set([...(AMAZON_ALIASES[id] || []), ...sourceKeywords])],
-    apiCategories: [...source.amazonBrowseNodes],
-    browseNodeIds: [...source.amazonBrowseNodes],
+    keywords: [...new Set(keywords)],
+    apiCategories: [...(source.amazonBrowseNodes || source.browseNodeIds || [])],
+    browseNodeIds: [...(source.amazonBrowseNodes || source.browseNodeIds || [])],
     allowedProductTerms: [...source.allowedProductTerms],
   }];
 }));
