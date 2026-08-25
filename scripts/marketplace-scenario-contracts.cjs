@@ -29,20 +29,15 @@ const EXPLICIT = {
   'Mercado Livre': {},
 };
 
+// Metadados auxiliares limitados à matriz editorial ativa.
 const AMAZON_BROWSE_NODES = Object.freeze({
-  casa_cozinha_editorial: ['17100532011', '17124722011', '17124716011'],
-  organizacao_editorial: ['17100533011', '17100522011', '17124717011'],
+  casa_cozinha_editorial: ['17100532011', '17124722011', '17124716011', '17100533011', '17100522011', '17124717011'],
   ferramentas_editorial: ['165793011', '165796011'],
   informatica_editorial: ['16243803011', '16243794011', '24035344011'],
-  celulares_editorial: ['16243809011', '16243799011'],
   beleza_editorial: ['16754345011', '16754346011', '16754347011'],
   moda_editorial: ['17681970011', '17681966011', '23577004011'],
-  esporte_editorial: ['17833921011', '17833929011', '17833917011'],
   pet_editorial: ['19653951011', '19653950011', '19653948011'],
-  tv_audio_editorial: ['16243803011', '16243794011', '16243809011'],
   eletrodomesticos_editorial: ['16745371011', '17124786011', '16745366011'],
-  moveis_editorial: ['17100553011', '17100552011', '17100547011'],
-  grandes_ofertas_editorial: ['16243809011', '16243803011', '16243794011', '17100532011'],
   cupons_aprovados_editorial: [],
 });
 
@@ -50,19 +45,13 @@ const AMAZON_BLOCKED_BY_SCENARIO = Object.freeze({});
 const AMAZON_SCENARIO_SPLITS = Object.freeze({});
 
 const AMAZON_ATTRIBUTES_BY_SCENARIO = Object.freeze({
-  casa_cozinha_editorial: { productTypes: ['bedding', 'bath', 'tableware', 'coffee_maker', 'air_fryer', 'blender'], attributes: ['size', 'material', 'pieces', 'capacity', 'voltage'], priority: 'medium' },
-  organizacao_editorial: { productTypes: ['organizer', 'box', 'basket', 'rack'], attributes: ['material', 'dimensions', 'quantity', 'capacity'], priority: 'medium' },
+  casa_cozinha_editorial: { productTypes: ['bedding', 'bath', 'tableware', 'organizer', 'coffee_maker', 'air_fryer', 'blender'], attributes: ['size', 'material', 'pieces', 'capacity', 'voltage'], priority: 'medium' },
   ferramentas_editorial: { productTypes: ['drill', 'screwdriver', 'tool_kit', 'grinder'], attributes: ['brand', 'model', 'voltage', 'power', 'pieces'], priority: 'medium' },
   informatica_editorial: { productTypes: ['notebook', 'computer', 'monitor', 'printer', 'ssd'], attributes: ['brand', 'model', 'memory', 'screen', 'connectivity'], priority: 'medium' },
-  celulares_editorial: { productTypes: ['smartphone', 'cellphone', 'iphone'], attributes: ['brand', 'model', 'memory', 'screen', 'battery'], priority: 'medium' },
   beleza_editorial: { productTypes: ['skin_care', 'hair_care', 'perfume', 'makeup'], attributes: ['brand', 'volume', 'function', 'skin_type', 'fragrance'], priority: 'medium' },
   moda_editorial: { productTypes: ['shirt', 'pants', 'shoe', 'accessory'], attributes: ['brand', 'size', 'color', 'material', 'gender'], priority: 'medium' },
-  esporte_editorial: { productTypes: ['running_shoe', 'fitness_clothing', 'weight', 'yoga', 'supplement'], attributes: ['brand', 'size', 'weight', 'material', 'volume'], priority: 'medium' },
   pet_editorial: { productTypes: ['pet_food', 'bed', 'toy', 'hygiene'], attributes: ['species', 'size', 'weight', 'material', 'flavor'], priority: 'medium' },
-  tv_audio_editorial: { productTypes: ['tv', 'soundbar', 'speaker', 'headphone'], attributes: ['brand', 'screen', 'resolution', 'power', 'connectivity'], priority: 'medium' },
   eletrodomesticos_editorial: { productTypes: ['refrigerator', 'stove', 'microwave', 'washer'], attributes: ['brand', 'model', 'capacity', 'dimensions', 'voltage'], priority: 'medium' },
-  moveis_editorial: { productTypes: ['sofa', 'wardrobe', 'bed', 'table', 'chair'], attributes: ['material', 'dimensions', 'seats', 'color', 'assembly'], priority: 'medium' },
-  grandes_ofertas_editorial: { productTypes: ['smartphone', 'tv', 'notebook', 'appliance'], attributes: ['price', 'old_price', 'discount', 'seller', 'shipping'], priority: 'high' },
   cupons_aprovados_editorial: { productTypes: ['coupon'], attributes: ['code', 'rules', 'valid_until', 'marketplace'], priority: 'high' },
 });
 
