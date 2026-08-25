@@ -6,7 +6,18 @@ const assert = require('node:assert/strict');
 const { EDITORIAL_SCENARIOS } = require('../editorial-scenario-config.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS } = require('../shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS, AMAZON_ALIASES } = require('../amazon-scenario-config.cjs');
+
+// Este gate valida apenas o roteamento do mapa de intents. Evita carregar o motor
+// Mercado Livre e suas dependências externas no CI determinístico.
+const mlModulePath = require.resolve('../mercadolivre-official-intents-v5.cjs');
+require.cache[mlModulePath] = {
+  id: mlModulePath,
+  filename: mlModulePath,
+  loaded: true,
+  exports: { SEARCH_ALIASES: {} },
+};
 const { INTENT_MAP } = require('../marketplace-intent-map.cjs');
+
 const {
   MARKETPLACES,
   MARKETPLACE_CONTRACTS,
