@@ -17,5 +17,7 @@ jobs:
       - run: npm ci
       - run: npx vitest run src/tests/lib/videos/reels-playbook.test.ts
       - name: Typecheck Task1 files
-        run: npx tsc --noEmit --skipLibCheck --target ES2022 --module esnext --moduleResolution bundler --jsx preserve --allowJs false --esModuleInterop true --resolveJsonModule true --isolatedModules true --strict true --lib ES2022,DOM,DOM.Iterable 'src/lib/videos/reels-playbook.ts' 'src/app/(dashboard)/reels/ReelsPromptStudio.tsx'
+        run: |
+          node -e "require('fs').writeFileSync('tsconfig.task1.json', JSON.stringify({extends:'./tsconfig.json',compilerOptions:{noEmit:true,skipLibCheck:true},include:['src/lib/videos/reels-playbook.ts','src/app/(dashboard)/reels/ReelsPromptStudio.tsx']},null,2))"
+          npx tsc -p tsconfig.task1.json
       - run: npx eslint 'src/lib/videos/reels-playbook.ts' 'src/app/(dashboard)/reels/ReelsPromptStudio.tsx'
