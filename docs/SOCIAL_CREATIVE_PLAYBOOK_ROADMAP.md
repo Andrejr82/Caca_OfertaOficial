@@ -10,25 +10,40 @@ Transformar ofertas de marketplace em campanhas de venda, evitando o comportamen
 
 ## Direção aprovada para validação
 
+### Camada compartilhada — Sales Video Creative Director
+- `/reels` e **Vídeos de Ofertas** passam a compartilhar uma camada de direção criativa por **tipo de produto**, não apenas por nicho.
+- A direção escolhe ambiente, desejo, ação inicial, ação principal, prova visual, câmera, iluminação, regra anti-apresentação e restrições de claims.
+- Arquétipos atuais: calçado, moda, eletroportátil de cozinha, panela/utensílio, beleza, pet, ferramenta, costura, eletrônicos, organização/limpeza e fallback geral.
+- Regra principal: **a ação começa no primeiro segundo**. Não iniciar com produto parado, packshot, hero shot ou avatar apresentando oferta.
+- O produto deve ser desejado pela **situação de uso**, não apenas exibido.
+- A imagem anexada continua sendo a autoridade visual do produto.
+- A estrutura segue a orientação oficial do Google Vids de detalhar assunto/ação, câmera, iluminação, diálogo/voz, som e tom e, ao trabalhar com imagem, priorizar instruções claras de movimento.
+
 ### Reels / Google Vids
 - Vídeos verticais de até 20s.
 - Produção em 2 cenas independentes de 10s.
 - A aba `/reels` deve exibir dois prompts completos, prontos para copiar/usar no Google Vids.
-- Cada prompt deve incluir internamente: duração, formato 9:16, cenário, produto de referência, ação, avatar hiper-realista, fala exata em português do Brasil, sincronização labial, texto na tela e regras de segurança comercial.
-- A fala do avatar não deve depender de um segundo bloco separado para funcionar no Google Vids.
-- O painel deve permitir **baixar a imagem do produto**, reaproveitando o mesmo proxy usado em **Vídeos de Ofertas**.
-- A mesma imagem de referência deve ser reutilizada nas duas gerações quando possível para reforçar continuidade.
-- A Cena 2 deve declarar explicitamente que é continuação direta da Cena 1 e preservar avatar, rosto, cabelo, roupa, acessórios, iluminação, cenário, posição relativa do produto e linguagem de câmera.
-- O produto deve manter marca, formato, cor, proporções e detalhes reconhecíveis da imagem de referência.
+- Cada prompt inclui internamente: duração, 9:16, cenário, produto, ação, câmera, iluminação, avatar hiper-realista, fala em pt-BR, texto na tela, continuidade e restrições comerciais.
+- O avatar deve estar integrado ao uso real; não deve ficar parado segurando o produto ou atuando como apresentador.
+- A fala do avatar fica incorporada ao próprio prompt.
+- O texto final deve combinar oferta + CTA proporcional, como `R$ X • Toque no link`, sem dominar a tela.
+- O painel permite **baixar a imagem do produto** usando o mesmo proxy de **Vídeos de Ofertas**.
+- A Cena 2 deve preservar avatar, roupa, cenário, luz, produto e direção do movimento da Cena 1.
 - Não inventar funções, acessórios, descontos, cupons, selos, urgência ou preços.
-- `/reels` não deve duplicar upload, recorte ou processamento de vídeo.
-- Depois da criação no Google Vids, o usuário continuará importando o vídeo final em **Vídeos de Ofertas**, preservando a estrutura existente de recorte e fluxo posterior.
+- `/reels` não duplica upload, recorte ou processamento de vídeo.
+- Depois da criação no Google Vids, o vídeo final continua sendo importado em **Vídeos de Ofertas**.
+
+### Vídeos de Ofertas
+- O prompt de usabilidade deixa de usar sequência genérica `apresentação → hero shot`.
+- Nova sequência: **uso já começou → gesto principal → prova visual → continuidade → fechamento em contexto**.
+- Continua sem avatar ofertando, sem narração e sem texto promocional, pois esta aba gera o material visual de usabilidade.
+- O objetivo é que, mesmo sem áudio, a pessoa entenda como o produto entra na rotina e por que vale avaliar a oferta.
 
 ### Facebook
 - Evitar texto de catálogo.
 - Priorizar conversa, rotina, dor/desejo e contexto de uso.
 - Para grupos, usar linguagem natural e pergunta/observação que convide interação.
-- Exemplo de referência: `Alguém aqui usa sanduicheira todo dia? Achei essa Mondial por R$89,30...`.
+- Exemplo: `Alguém aqui usa sanduicheira todo dia? Achei essa Mondial por R$89,30...`.
 
 ### Instagram / Reels
 - Criativo principal será o vídeo produzido no Google Vids.
@@ -37,13 +52,8 @@ Transformar ofertas de marketplace em campanhas de venda, evitando o comportamen
 ### WhatsApp
 - Evitar fundo branco como padrão principal.
 - Criar imagem contextual por nicho, mantendo o produto em destaque.
-- Exemplos de cenário:
-  - Casa/Cozinha: cozinha realista.
-  - Beleza: penteadeira/banheiro elegante.
-  - Moda: ambiente lifestyle.
-  - Pet: ambiente doméstico com contexto pet.
-  - Ferramentas: oficina/garagem organizada.
-- Imagem contextual exige revisão visual; não deve ser liberada automaticamente quando houver artefatos, distorção ou perda de fidelidade do produto.
+- Cenários: Casa/Cozinha → cozinha; Beleza → penteadeira/banheiro; Moda → lifestyle; Pet → ambiente doméstico; Ferramentas → oficina/garagem.
+- Imagem contextual exige revisão visual antes de publicação.
 
 ## Regra de avanço
 
@@ -61,37 +71,34 @@ As tasks são sequenciais e bloqueadas por aprovação explícita do usuário.
 ### Task 1 — `/reels`: prompts em 2 cenas
 **Status:** testes focados aprovados; aguardando aprovação manual do usuário.
 
-**Objetivo:** adaptar a aba `/reels` para um vídeo de 20s dividido em 2 cenas de 10s.
+**Objetivo:** adaptar `/reels` para vídeo de 20s em 2 cenas de 10s e elevar a qualidade dos prompts compartilhando direção criativa com Vídeos de Ofertas.
 
 Entregáveis:
 - Prompt Cena 1 completo.
 - Prompt Cena 2 completo.
-- Fala do avatar incorporada dentro de cada prompt.
-- Texto na tela incorporado dentro de cada prompt.
-- Botão **Baixar imagem** do produto, igual ao fluxo de Vídeos de Ofertas.
-- Imagem de referência reutilizável nas duas cenas.
-- CTA final.
-- Sem upload/recorte novo em `/reels`; vídeo final permanece no fluxo de **Vídeos de Ofertas**.
+- Fala do avatar incorporada.
+- Texto na tela incorporado.
+- **Baixar imagem** do produto.
+- CTA de clique proporcional.
+- Direção criativa por arquétipo de produto.
+- Ação real desde o primeiro segundo.
+- Sem apresentação estática do produto.
+- Sem upload/recorte novo em `/reels`.
 
 Teste de aceitação:
-- Usar 1 produto real: Sanduicheira Mondial do ciclo Casa/Cozinha.
-- Confirmar duas cenas de 10s.
-- Confirmar 9:16, avatar hiper-realista e fala pt-BR dentro do prompt.
-- Confirmar sincronização labial e continuidade explícitas.
-- Confirmar fidelidade visual do produto.
-- Confirmar preço e desconto sem invenção.
-- Confirmar ausência de urgência falsa, cupom/selos inventados e funções não comprovadas.
-- Confirmar que a Cena 2 funciona como continuação e fecha com CTA.
-- Confirmar download da imagem via mesmo proxy de Vídeos de Ofertas.
-- Confirmar que `/reels` não cria novo fluxo de upload/recorte.
-- Nenhum deploy de produção antes da aprovação do resultado.
+- Sanduicheira Mondial real de Casa/Cozinha.
+- Tênis real do piloto para validar calçado em movimento.
+- Casos adicionais de eletrônico, moda, pet e costura.
+- Confirmar 2 cenas de 10s, 9:16, continuidade, fidelidade e CTA.
+- Confirmar ausência de apresentação estática e claims inventados.
+- Confirmar que Vídeos de Ofertas também usa direção de uso real.
+- Nenhum deploy de produção antes da aprovação.
 
 Validação técnica concluída:
-- Vitest focado: 2/2 PASS;
-- contrato do prompt final: PASS;
-- typecheck somente dos arquivos da Task 1: PASS;
-- ESLint somente dos arquivos da Task 1: PASS;
-- typecheck global do repositório possui falhas pré-existentes fora deste escopo e não foi usado como gate da Task 1.
+- Vitest focado `/reels` + `Vídeos de Ofertas`: **9/9 PASS**;
+- typecheck focado: **PASS**;
+- ESLint focado: **PASS**;
+- workflow temporário removido após o gate.
 
 ### Task 2 — Facebook: copy de conversa e desejo
 **Status:** bloqueada pela aprovação da Task 1.
@@ -132,4 +139,4 @@ Teste de aceitação:
 
 ## Critério de sucesso
 
-A métrica final é venda atribuída. Views, retenção, cliques e CTR são métricas de diagnóstico para melhorar o criativo e a distribuição, não o objetivo final.
+A métrica final é venda atribuída. Views, retenção, cliques e CTR são métricas de diagnóstico para melhorar criativo e distribuição, não o objetivo final.
