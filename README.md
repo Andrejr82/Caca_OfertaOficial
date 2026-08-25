@@ -1,8 +1,8 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: bbc19859e630c0db15aeb162056cfb56673bba19 -->
-<!-- verified-on: 2026-08-18 -->
+<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
+<!-- verified-on: 2026-08-25 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
 
@@ -30,7 +30,9 @@ Fluxo principal:
 4. O painel permite curadoria, aprovação e rejeição.
 5. As publicações aprovadas são enviadas pelos transportes oficiais configurados.
 
-O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `08:00`, `12:00`, `16:00` e `20:00`, `America/Sao_Paulo`). O ciclo Discovery-Only atual materializa candidatos de Shopee, Mercado Livre e Amazon; Shein, Magalu e Netshoes permanecem capacidades separadas até homologação própria. A Publicação Expressa é um fluxo independente de ingestão de links, com validação de marketplace e monetização antes da geração de copy.
+O Oracle agenda Discovery em sete horários canônicos (`06:00`, `08:00`, `09:00`, `11:00`, `12:00`, `14:00` e `18:00`, `America/Sao_Paulo`) para os sete nichos ativos: Casa/Cozinha/Organização, Ferramentas, Informática, Beleza, Moda, Pet e Eletrodomésticos. Cupons permanece `manual_only` às 22h e não participa do cron de Discovery.
+
+O ciclo Discovery-Only materializa candidatos de Shopee, Mercado Livre e Amazon; Shein, Magalu e Netshoes permanecem capacidades separadas até homologação própria. A Publicação Expressa é um fluxo independente de ingestão de links, com validação de marketplace e monetização antes da geração de copy.
 
 ## Proteções atuais de publicação social
 
@@ -39,6 +41,7 @@ O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `
 - O Instagram aplica validação de legenda, cota móvel de 24 horas, duplicidade de legenda/vídeo e validações conservadoras de mídia.
 - O `Instagram Policy Guard` executa fail-closed antes da publicação e bloqueia categorias sensíveis/proibidas, registrando `instagram.policy.blocked` com regra e motivo.
 - Facebook mantém o link afiliado no primeiro comentário, conforme o fluxo atual.
+- WhatsApp mantém o Top30 editorial separado da Publicação Expressa; drafts ativos do canal não desaparecem apenas porque a oferta global foi aprovada em outra rede.
 
 ## Estrutura do repositório
 
@@ -68,14 +71,11 @@ O Oracle agenda o Discovery em seis horários fixos por dia (`00:00`, `04:00`, `
 - [Fluxos](docs/fluxos.md)
 - [Integrações](docs/integracoes.md)
 - [Oracle Cloud](docs/oracle.md)
+- [Runbook Oracle](docs/oracle-scripts-runbook.md)
 - [Scripts](docs/scripts.md)
 - [Troubleshooting](docs/troubleshooting.md)
 - [Segurança](docs/SECURITY.md)
-- [Instagram Policy Guard](docs/INSTAGRAM_POLICY_GUARD.md)
-- [PMAV5 e contratos](docs/PMAV5/README.md)
-- [Operação de vídeo](docs/VIDEO_WORKER_CURRENT.md)
 - [Governança da documentação](docs/DOCUMENTATION_GOVERNANCE.md)
-- [Auditoria documental de 2026-08-09](docs/DOCUMENTATION_AUDIT_2026-08-09.md)
 
 ## Desenvolvimento local
 
@@ -101,17 +101,14 @@ npm run verify
 ## Serviços e scripts principais
 
 - `scripts/oracle-worker-discovery-only.cjs`: worker oficial de descoberta.
-- `scripts/oracle-scraper.cjs`: scraper Oracle e integração do ciclo de ofertas.
-- `scripts/oracle-api.cjs`: gateway técnico Oracle, normalmente na porta `3002`.
-- `scripts/whatsapp-engine.cjs`: motor Baileys, normalmente na porta `3001`.
+- `scripts/oracle-scraper.cjs`: scheduler e integração do ciclo Oracle.
+- `scripts/oracle-api.cjs`: gateway técnico Oracle na porta `3002`.
+- `scripts/whatsapp-engine.cjs`: motor Baileys na porta `3001`.
+- `scripts/oracle-trends-radar-worker.cjs`: worker dedicado do Radar, separado do ciclo editorial.
 - `scripts/video-worker.py` e `scripts/video_worker_runtime.py`: processamento de vídeo quando configurado.
-- `scripts/github-publish.ts`: fluxo de publicação de vídeos via GitHub/Storage quando habilitado.
-- `scripts/oracle-trends-radar-worker.cjs`: entrypoint dedicado preparado para consumir o Radar independentemente do ciclo editorial, desligado por padrão até rollout Oracle aprovado.
 
-Ativação produtiva de Oracle, Vercel, Supabase, PM2, GitHub Actions e provedores externos não é inferida apenas pelo checkout. Confirme o ambiente e siga os runbooks antes de executar operações de produção.
+Auditoria read-only da VPS em 25/08/2026 confirmou `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online no PM2; `TRENDS_RADAR_DEDICATED_RUNTIME=true`; `TREND_EXECUTIVE_MODE=off`; scheduler único com `noOverlap`; e Capacity Hunter passivo a cada 30 minutos. O checkout da VPS auditado estava em `febe66abb28bd47c738d925befc50ad365c59371`, portanto o SHA implantado deve sempre ser comparado com a `main` antes de qualquer operação.
 
 ## IA Executiva de Tendências
 
-O runtime versionado inclui o Radar Executivo de Tendências em `/trends`, com evidência direta, snapshots auditáveis, Score V2, Top 3/Top 20, performance interna e contratos de integração Radar → Oracle. O modo operacional de Trend Executive permanece **fail-closed em `off`**; `shadow` não substitui a autoridade do cenário legado e `active` continua bloqueado até evidência suficiente e autorização explícita. Consulte `docs/AI_EXECUTIVE_TRENDS.md` e os relatórios `docs/TREND_EXECUTIVE_*`.
-
-A arquitetura de execução independente do Radar está preparada no repositório e documentada em `docs/TRENDS_IA_INDEPENDENT_ORACLE_RUNTIME_ARCHITECTURE.md`. `TRENDS_RADAR_DEDICATED_RUNTIME=false` preserva o comportamento atual; a Oracle produtiva só deve usar o worker dedicado após validação operacional específica.
+O runtime inclui o Radar Executivo de Tendências em `/trends`, com evidência direta, snapshots auditáveis, Score V2, Top 3/Top 20, performance interna e contratos de integração Radar → Oracle. `TREND_EXECUTIVE_MODE=off` permanece o estado seguro. O worker dedicado do Radar está operacional na Oracle com `TRENDS_RADAR_DEDICATED_RUNTIME=true`; o `oracle-scraper` não consome solicitações do Radar no ciclo editorial.
