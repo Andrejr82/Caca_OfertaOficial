@@ -22,7 +22,8 @@ describe("Reels approved video social copy", () => {
 
     expect(content).toContain("Quem também usa água quente várias vezes ao dia?");
     expect(content).toContain("Hoje aparece por R$ 39,90.");
-    expect(content).toContain("primeiro comentário");
+    expect(content).toContain("👉 Veja o preço, condições e disponibilidade no primeiro comentário.");
+    expect(content).not.toContain("antes que o preço mude");
     expect(content).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
   });
 
@@ -31,7 +32,8 @@ describe("Reels approved video social copy", () => {
 
     expect(content).toContain("Água quente no dia a dia sem transformar isso numa tarefa.");
     expect(content).toContain("Hoje aparece por R$ 39,90.");
-    expect(content).toContain("link está na bio");
+    expect(content).toContain("👉 Veja o preço, condições e disponibilidade no link da bio.");
+    expect(content).not.toContain("antes que o preço mude");
     expect(content).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
   });
 
