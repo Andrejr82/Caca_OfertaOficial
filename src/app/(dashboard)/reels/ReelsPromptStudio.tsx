@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Copy, Film, ImageIcon } from "lucide-react";
+import { Check, Copy, Download, Film, ImageIcon } from "lucide-react";
 
 import { buildTwoSceneReelsPlan, type ReelsPromptOffer } from "@/lib/videos/reels-playbook";
 
@@ -31,6 +31,15 @@ export function ReelsPromptStudio({ offers }: { offers: ReelsPromptOffer[] }) {
   const selectedOffer = offers.find((offer) => offer.id === offerId) ?? null;
   const plan = useMemo(() => selectedOffer ? buildTwoSceneReelsPlan(selectedOffer) : null, [selectedOffer]);
 
+  function downloadImage() {
+    if (!selectedOffer?.image_url) return;
+    const url = `/api/images/proxy?url=${encodeURIComponent(selectedOffer.image_url)}`;
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${selectedOffer.product_name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.jpg`;
+    anchor.click();
+  }
+
   return (
     <section className="rounded-2xl border border-fuchsia-400/20 bg-fuchsia-500/[0.04] p-5">
       <div className="flex items-start gap-3">
@@ -38,7 +47,7 @@ export function ReelsPromptStudio({ offers }: { offers: ReelsPromptOffer[] }) {
         <div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-fuchsia-300">Google Vids • 20 segundos</p>
           <h2 className="mt-1 font-bold text-white">Roteiro em 2 cenas de 10s</h2>
-          <p className="mt-1 text-xs text-white/50">Aqui você prepara os prompts. O vídeo final continua sendo importado em Vídeos de Ofertas para recorte e fluxo existente.</p>
+          <p className="mt-1 text-xs text-white/50">Baixe a imagem, copie cada prompt e gere as duas cenas no Google Vids. O vídeo final continua em Vídeos de Ofertas para importação e recorte.</p>
         </div>
       </div>
 
@@ -61,7 +70,11 @@ export function ReelsPromptStudio({ offers }: { offers: ReelsPromptOffer[] }) {
         <div className="mt-4 space-y-4">
           <div className="grid gap-4 rounded-xl border border-white/10 bg-black/20 p-3 sm:grid-cols-[120px_1fr]">
             {selectedOffer.image_url ? (
-              <img src={selectedOffer.image_url} alt={selectedOffer.product_name} className="h-28 w-full rounded-lg object-contain bg-white" />
+              <img
+                src={`/api/images/proxy?url=${encodeURIComponent(selectedOffer.image_url)}`}
+                alt={selectedOffer.product_name}
+                className="h-28 w-full rounded-lg bg-white object-contain"
+              />
             ) : (
               <div className="flex h-28 items-center justify-center rounded-lg bg-white/5 text-white/30"><ImageIcon size={24} /></div>
             )}
@@ -70,6 +83,16 @@ export function ReelsPromptStudio({ offers }: { offers: ReelsPromptOffer[] }) {
               <p className="mt-1 text-xs text-white/45">{selectedOffer.platform} • {plan.niche}</p>
               <p className="mt-2 text-sm font-bold text-emerald-300">{selectedOffer.current_price.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</p>
               <p className="mt-2 text-xs text-fuchsia-200">Ângulo: {plan.angle}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={downloadImage}
+                  disabled={!selectedOffer.image_url}
+                  className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-40"
+                >
+                  <Download size={14} /> Baixar imagem
+                </button>
+              </div>
               <p className="mt-2 text-[11px] text-white/40">Use a mesma imagem de referência nas duas gerações para reforçar a continuidade.</p>
             </div>
           </div>
@@ -87,22 +110,12 @@ export function ReelsPromptStudio({ offers }: { offers: ReelsPromptOffer[] }) {
 
                 <div className="mt-4 space-y-3 text-xs">
                   <div>
-                    <p className="font-bold text-white/55">Prompt Google Vids</p>
+                    <p className="font-bold text-white/55">Prompt completo para Google Vids</p>
                     <p className="mt-1 whitespace-pre-wrap rounded-lg bg-white/[0.035] p-3 leading-5 text-white/70">{scene.prompt}</p>
                   </div>
                   <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-bold text-white/55">Fala do avatar</p>
-                      <CopyButton value={scene.avatarSpeech} label="Copiar fala" />
-                    </div>
-                    <p className="mt-1 rounded-lg bg-white/[0.035] p-3 leading-5 text-white/70">{scene.avatarSpeech}</p>
-                  </div>
-                  <div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="font-bold text-white/55">Texto na tela</p>
-                      <CopyButton value={scene.overlayText} label="Copiar texto" />
-                    </div>
-                    <p className="mt-1 rounded-lg bg-white/[0.035] p-3 font-semibold text-white/80">{scene.overlayText}</p>
+                    <p className="font-bold text-white/55">Resumo do que o prompt já inclui</p>
+                    <p className="mt-1 rounded-lg bg-white/[0.035] p-3 leading-5 text-white/60">Fala do avatar: {scene.avatarSpeech}<br />Texto na tela: {scene.overlayText}</p>
                   </div>
                 </div>
               </article>
