@@ -36,14 +36,17 @@ const MERCADOLIVRE_NICHE_POLICY = Object.freeze({
   useBestSellerSignal: true,
 });
 
+// Termos deliberadamente sem sobreposição com o permitido genérico "modelador".
+// O sanitizador remove bloqueios conflitantes com termos permitidos, por isso a
+// exclusão usa a evidência do domínio incorreto (nasal/arroz/padaria), não o nome
+// válido da classe de beleza.
 const MERCADOLIVRE_BLOCKED_BY_NICHE = Object.freeze({
   beleza: Object.freeze([
-    'modelador nasal',
-    'modelador de nariz',
+    'nasal',
+    'nariz',
     'nose up',
-    'modelador de arroz',
-    'aro modelador',
-    'modelador de padaria',
+    'arroz',
+    'padaria',
     'modelador de alimentos',
   ]),
 });
