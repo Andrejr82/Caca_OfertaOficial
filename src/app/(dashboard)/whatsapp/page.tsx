@@ -17,17 +17,16 @@ export default async function WhatsappDashboardPage() {
 
   async function fetchDraftPosts(): Promise<PostWithOffer[]> {
     if (!supabase || !user?.id) return [];
-    let selectedOfferIds: Set<string>;
+
+    // O Top30 continua autoritativo somente para os drafts editoriais.
+    // Drafts Express são carregados separadamente pelo loader e nunca entram no ranking.
+    let selectedOfferIds = new Set<string>();
     try {
       const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
       selectedOfferIds = new Set(top30.selectedOfferIds);
     } catch {
-      // Fail closed: a preparation read failure must return empty array without querying generic drafts.
-      return [];
-    }
-
-    if (selectedOfferIds.size === 0) {
-      return [];
+      // Falha na preparação editorial não deve esconder um draft Express já existente.
+      selectedOfferIds = new Set<string>();
     }
 
     return loadWhatsappDashboardDrafts({
@@ -38,7 +37,6 @@ export default async function WhatsappDashboardPage() {
     });
   }
 
-  // Execução em paralelo das consultas independentes (drafts operacionais + histórico recente do usuário)
   const [draftPosts, historyData] = await Promise.all([
     fetchDraftPosts(),
     getPostHistory("whatsapp", { limit: 50, userId: user?.id || undefined }),
@@ -46,7 +44,6 @@ export default async function WhatsappDashboardPage() {
 
   return (
     <div className="grid gap-6 animate-fadeIn">
-      {/* Header */}
       <header className="flex items-center gap-3">
         <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 shadow-lg shadow-emerald-500/20">
           <MessageCircle size={20} className="text-white" />
