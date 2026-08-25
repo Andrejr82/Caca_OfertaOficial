@@ -36,6 +36,21 @@ const MERCADOLIVRE_NICHE_POLICY = Object.freeze({
   useBestSellerSignal: true,
 });
 
+// Termos deliberadamente sem sobreposição com o permitido genérico "modelador".
+// O sanitizador remove bloqueios conflitantes com termos permitidos, por isso a
+// exclusão usa a evidência do domínio incorreto (nasal/arroz/padaria), não o nome
+// válido da classe de beleza.
+const MERCADOLIVRE_BLOCKED_BY_NICHE = Object.freeze({
+  beleza: Object.freeze([
+    'nasal',
+    'nariz',
+    'nose up',
+    'arroz',
+    'padaria',
+    'modelador de alimentos',
+  ]),
+});
+
 function getMarketplaceNicheContract(nicheId, marketplace) {
   const niche = getCommercialNiche(nicheId);
   if (!niche) return null;
@@ -52,6 +67,16 @@ function getMarketplaceNicheContract(nicheId, marketplace) {
     apiCategories = SHOPEE_CATEGORIES_BY_NICHE[nicheId] || [];
   }
 
+  const marketplaceBlockedTerms = market === 'Mercado Livre'
+    ? (MERCADOLIVRE_BLOCKED_BY_NICHE[nicheId] || [])
+    : [];
+  const guardrails = {
+    ...niche.guardrails,
+    blockedProductTerms: Object.freeze([
+      ...new Set([...(niche.guardrails?.blockedProductTerms || []), ...marketplaceBlockedTerms]),
+    ]),
+  };
+
   return {
     nicheId,
     name: niche.name,
@@ -59,7 +84,7 @@ function getMarketplaceNicheContract(nicheId, marketplace) {
     affinity,
     coreProducts: niche.coreProducts,
     expansionProducts: niche.expansionProducts,
-    guardrails: niche.guardrails,
+    guardrails,
     amazonBrowseNodes: browseNodes,
     shopeeApiCategories: apiCategories,
     mercadoLivrePolicy: market === 'Mercado Livre' ? MERCADOLIVRE_NICHE_POLICY : null,
@@ -70,5 +95,6 @@ module.exports = {
   AMAZON_BROWSE_NODES_BY_NICHE,
   SHOPEE_CATEGORIES_BY_NICHE,
   MERCADOLIVRE_NICHE_POLICY,
+  MERCADOLIVRE_BLOCKED_BY_NICHE,
   getMarketplaceNicheContract,
 };

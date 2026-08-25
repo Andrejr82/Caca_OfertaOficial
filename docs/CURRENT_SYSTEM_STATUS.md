@@ -11,7 +11,7 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 - Next.js 16/React 19: painel, APIs, curadoria, Official AI, Publicação Expressa, vídeos e transportes sociais.
 - Supabase: autenticação, ofertas, posts, links, auditoria, classificação, jobs e Storage de imagens/vídeos.
 - Oracle: Discovery-Only, Shopee OpenAPI V1 isolada, scraping auxiliar, processamento de vídeo e serviços operacionais.
-- Scheduler principal: seis janelas em `America/Sao_Paulo` (`00h`, `04h`, `08h`, `12h`, `16h`, `20h`) com proteção contra sobreposição.
+- O código versionado do scheduler editorial usa sete janelas canônicas (`06h`, `08h`, `09h`, `11h`, `12h`, `14h`, `18h`); a confirmação do timezone efetivo da VPS permanece uma verificação operacional do ambiente Oracle.
 
 ## Descoberta e curadoria
 
@@ -19,6 +19,8 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 - Shopee OpenAPI V1 é uma fonte oficial isolada por flags, com paginação limitada e persistência controlada.
 - Curadoria Comercial V1 produz score, riscos, intenção editorial e filas por canal.
 - O painel operacional contém coortes e filas Top 30; identidade histórica e ofertas já publicadas são protegidas contra repetição.
+- A matriz editorial ativa possui sete nichos automáticos; Cupons permanece `manual_only`.
+- Contratos por marketplace podem aplicar guardrails específicos de domínio sem alterar o motor de busca. No Mercado Livre/Beleza, termos como `modelador nasal` e `aro/modelador de arroz` são bloqueados para evitar falsos positivos fora do nicho.
 - Discovery não autoriza publicação. O runtime Oracle opera com guardas fail-closed e publicação bloqueada fora dos fluxos oficiais.
 
 ## IA e conteúdo
@@ -32,7 +34,8 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 
 - Transportes implementados: Telegram, Instagram, Facebook e WhatsApp.
 - Telegram possui publicação editorial Top 30; WhatsApp possui fila Top 30 do ciclo mais recente e rotação `next`.
-- Publicação Expressa multicanal permanece separada do Top 30 editorial.
+- Um draft WhatsApp ativo continua elegível para exibição mesmo quando a oferta global já foi marcada `approved` por outro canal; a autoridade para esse caso é o estado do post WhatsApp, preservadas as proteções de publicado/deletado/rejeitado/deferido.
+- Publicação Expressa multicanal permanece separada do Top 30 editorial e seus drafts WhatsApp são carregados por trilha própria.
 - Shein possui fluxo Express assistido, incluindo texto compartilhado, fallback de imagem e upload para Storage público validado.
 - Ofertas `rejected` são bloqueadas nos fluxos sociais oficiais e não podem ser aprovadas para publicação.
 - Instagram Feed e Reels enviam o disclosure de parceria paga para conteúdo afiliado.
@@ -47,9 +50,8 @@ Baseado no código versionado. Disponibilidade externa de Vercel, Supabase, Orac
 ## Qualidade e verificação
 
 - `npm run verify` executa lint, typecheck, testes, build e verificação de segurança.
-- `npm run docs:audit` detecta commits de runtime posteriores à verificação documental.
+- `npm run docs:audit` é seletivo por domínio: identifica os paths de runtime alterados e exige somente os documentos relacionados, com fallback fail-closed para `CURRENT_SYSTEM_STATUS.md` em runtime não classificado.
 - Endpoints de saúde: `/api/health` e `/api/readiness`.
-- O `Documentation Audit` considera os oito documentos canônicos e exige `docs-status: current` e um `verified-against` pertencente ao histórico atual.
 
 ## Limites
 

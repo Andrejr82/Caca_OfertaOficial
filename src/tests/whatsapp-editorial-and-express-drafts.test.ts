@@ -49,6 +49,7 @@ function readOnlyClient(options: {
   const query = (data: unknown[]) => ({
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
+    gte: vi.fn().mockReturnThis(),
     contains: vi.fn().mockReturnThis(),
     in: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
@@ -75,7 +76,7 @@ describe("WhatsApp: Express separado do Top30 editorial", () => {
     const express = offer("4a759a1f-2029-422f-8049-9782b3109552", { manual: true });
     const { client } = readOnlyClient({
       expressOffers: [{ id: express.id }],
-      postsByCall: [[post("whatsapp-express", express)]],
+      postsByCall: [[], [post("whatsapp-express", express)]],
     });
 
     const drafts = await loadWhatsappDashboardDrafts({
@@ -92,7 +93,7 @@ describe("WhatsApp: Express separado do Top30 editorial", () => {
     const editorial = offer("editorial-1");
     const { client } = readOnlyClient({
       expressOffers: [],
-      postsByCall: [[post("whatsapp-editorial", editorial)]],
+      postsByCall: [[post("whatsapp-editorial", editorial)], []],
     });
 
     const drafts = await loadWhatsappDashboardDrafts({
@@ -106,7 +107,8 @@ describe("WhatsApp: Express separado do Top30 editorial", () => {
   });
 
   it("não exibe draft comum fora do Top30 como se fosse Express", async () => {
-    const { client } = readOnlyClient({ expressOffers: [], postsByCall: [] });
+    const comum = offer("comum-1", { status: "pending_manual_review" });
+    const { client } = readOnlyClient({ expressOffers: [], postsByCall: [[post("comum", comum)]] });
 
     const drafts = await loadWhatsappDashboardDrafts({
       supabase: client,
@@ -125,6 +127,7 @@ describe("WhatsApp: Express separado do Top30 editorial", () => {
       expressOffers: [{ id: express.id }],
       postsByCall: [
         [post("editorial", editorial)],
+        [],
         [post("express", express)],
       ],
     });
@@ -146,7 +149,7 @@ describe("WhatsApp: Express separado do Top30 editorial", () => {
 
     const { client, writes } = readOnlyClient({
       expressOffers: [{ id: express.id }],
-      postsByCall: [[post("express", express)]],
+      postsByCall: [[], [post("express", express)]],
     });
 
     await loadWhatsappDashboardDrafts({

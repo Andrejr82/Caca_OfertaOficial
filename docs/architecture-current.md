@@ -13,6 +13,8 @@
 - A identidade comercial e o histórico de publicação impedem reentrada indevida de ofertas equivalentes.
 - `posts.content` concentra a copy oficial; Copy V3 e hashtags dinâmicas alimentam os transportes.
 - Telegram e WhatsApp possuem fluxo editorial Top 30. O WhatsApp também expõe rotação `next`; Publicação Expressa continua independente.
+- No painel WhatsApp, o estado do post do canal é autoritativo para drafts pendentes: um draft ativo não desaparece apenas porque `offers.status` virou `approved` por outro canal.
+- Guardrails por marketplace podem rejeitar falsos positivos de nicho sem alterar os motores. O contrato Mercado Livre/Beleza bloqueia modeladores fora do domínio de beleza, preservando modelador de cachos e equivalentes válidos.
 - Shein Express usa confirmação assistida e imagem pública validada antes de persistência/publicação.
 - Guardas fail-closed separam descoberta, geração controlada de drafts e publicação; Oracle não publica por efeito colateral do ciclo.
 - Ofertas `rejected` são bloqueadas nos fluxos sociais oficiais.
@@ -82,6 +84,8 @@ stateDiagram-v2
 
 O schema de `offers` aceita estados como `draft`, `pending_manual_review`, `selected`, `approved`, `posted` e `rejected`. O schema de `posts` aceita `draft`, `published`, `failed` e `deleted`. Componentes legados ainda executáveis não devem ser confundidos com o caminho canônico.
 
+Para publicação multicanal, o estado global da oferta não substitui automaticamente o estado específico de cada post. Em particular, um post WhatsApp ainda em `draft`, sem evidência de publicação/exclusão e sem estado bloqueado, permanece pendente para o canal mesmo se a oferta já tiver sido aprovada por outro fluxo.
+
 ## Official AI
 
 `POST /api/ai/generate` é a rota oficial. Uma chamada individual recebe `offerId`; um ciclo recebe `command=PROCESS_OFFERS` e exige autorização de serviço. O Oracle Worker envia IDs em páginas controladas e usa checkpoint até conclusão do batch.
@@ -103,12 +107,13 @@ No Facebook, o fluxo atual mantém o link afiliado fora da copy principal e usa 
 ## Marketplaces e integrações
 
 - Shopee, Mercado Livre e Amazon são os principais caminhos de Discovery materializados pelo worker oficial; cada adapter possui contrato próprio.
+- Os contratos comerciais por nicho podem adicionar termos bloqueados específicos do marketplace sem alterar o engine/provider correspondente.
 - Magalu, Netshoes e Shein possuem capacidades separadas no repositório e não devem ser inferidos como parte garantida do ciclo Discovery-Only.
 - Telegram, Instagram, WhatsApp e Facebook são canais de publicação oficial; disponibilidade externa exige validação de credenciais e smoke test.
 
 ## Oracle Cloud e operação
 
-O scheduler principal usa seis janelas diárias em `America/Sao_Paulo` com proteção contra sobreposição. O endpoint Oracle `/api/scrape` é gateway técnico e não é a autoridade de Discovery.
+O código versionado do scheduler editorial está alinhado às sete janelas canônicas `06h`, `08h`, `09h`, `11h`, `12h`, `14h` e `18h`. A configuração efetiva de timezone e supervisão da VPS deve ser confirmada no ambiente Oracle; o checkout isoladamente não comprova o estado operacional. O endpoint Oracle `/api/scrape` é gateway técnico e não é a autoridade de Discovery.
 
 A Publicação Expressa permanece separada: resolve/valida produto e marketplace, monetiza quando possível, persiste o vínculo e só então gera copy. Falhas de confirmação permanecem explícitas.
 

@@ -7,9 +7,11 @@ const {
   AMAZON_BROWSE_NODES_BY_NICHE,
   SHOPEE_CATEGORIES_BY_NICHE,
   MERCADOLIVRE_NICHE_POLICY,
+  MERCADOLIVRE_BLOCKED_BY_NICHE,
   getMarketplaceNicheContract,
 } = require('../commercial-niche-contracts.cjs');
 const { COMMERCIAL_NICHE_IDS } = require('../commercial-niche-config.cjs');
+const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('../marketplace-scenario-contracts.cjs');
 
 test('1. Fusão de Casa e Organização na Amazon combina os 6 Browse Nodes aprovados', () => {
   const casaNodes = AMAZON_BROWSE_NODES_BY_NICHE.casa_cozinha_organizacao;
@@ -43,7 +45,7 @@ test('3. Categorias Shopee correspondem exatamente às aprovadas para todos os 7
   assert.equal(SHOPEE_CATEGORIES_BY_NICHE.moda.includes(100532), false);
 });
 
-test('4. Mercado Livre NÃO possui nova matriz hardcoded de domínios por nicho e preserva política', () => {
+test('4. Mercado Livre preserva política oficial e não cria nova matriz de busca', () => {
   const contractML = getMarketplaceNicheContract('casa_cozinha_organizacao', 'Mercado Livre');
   assert.equal(contractML.mercadoLivreDomains, undefined);
   assert.deepEqual(contractML.mercadoLivrePolicy, {
@@ -54,4 +56,15 @@ test('4. Mercado Livre NÃO possui nova matriz hardcoded de domínios por nicho 
     mode: 'official-domain-then-catalog',
     useBestSellerSignal: true,
   });
+});
+
+test('5. Beleza no Mercado Livre bloqueia modeladores fora do domínio sem quebrar modelador de cachos', () => {
+  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('nasal'));
+  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('arroz'));
+
+  const contract = getMarketplaceScenarioContract('beleza_editorial', 'Mercado Livre');
+  assert.equal(matchesMarketplaceContract(contract, 'Afinador Modelador Nasal Acessories Nose Up Plástico Lilás Tamanho 5'), false);
+  assert.equal(matchesMarketplaceContract(contract, 'Formaster Aro Modelador de Arroz Inox 8cm x 5cm Conjunto 5 Peças'), false);
+  assert.equal(matchesMarketplaceContract(contract, 'Modelador de Cachos Profissional Bivolt'), true);
+  assert.equal(matchesMarketplaceContract(contract, 'Chapinha de Cabelo Portátil Mini Chapinha'), true);
 });
