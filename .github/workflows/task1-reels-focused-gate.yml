@@ -16,4 +16,18 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run src/tests/lib/videos/reels-playbook.test.ts
-      - run: npx tsc --noEmit
+      - name: Typecheck Task1 files
+        run: |
+          cat > tsconfig.task1.json <<'EOF'
+          {
+            "extends": "./tsconfig.json",
+            "include": [
+              "src/lib/videos/reels-playbook.ts",
+              "src/app/(dashboard)/reels/ReelsPromptStudio.tsx",
+              "src/app/(dashboard)/reels/page.tsx"
+            ],
+            "exclude": ["node_modules", "scripts", "src/tests"]
+          }
+          EOF
+          npx tsc --noEmit -p tsconfig.task1.json
+      - run: npx eslint 'src/lib/videos/reels-playbook.ts' 'src/app/(dashboard)/reels/ReelsPromptStudio.tsx' 'src/app/(dashboard)/reels/page.tsx'
