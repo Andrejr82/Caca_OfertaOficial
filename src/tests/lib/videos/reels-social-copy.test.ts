@@ -17,22 +17,24 @@ const staleDraft = {
 };
 
 describe("Reels approved video social copy", () => {
-  it("substitui copy antiga de catálogo pela narrativa Facebook Copy V5", () => {
+  it("substitui copy antiga por Facebook curto e comercial", () => {
     const content = buildReelsSocialDraftContent(staleDraft, "facebook");
 
-    expect(content).toContain("Quem também usa água quente várias vezes ao dia?");
-    expect(content).toContain("Hoje aparece por R$ 39,90.");
+    expect(content).toContain("☕ Café, chá ou água quente sem complicar a rotina.");
+    expect(content).toContain("💰 R$ 39,90");
     expect(content).toContain("👉 Veja o preço, condições e disponibilidade no primeiro comentário.");
+    expect(content.split("\n\n")).toHaveLength(4);
     expect(content).not.toContain("antes que o preço mude");
     expect(content).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
   });
 
-  it("substitui copy antiga de catálogo pela narrativa Instagram Copy V5", () => {
+  it("substitui copy antiga por Instagram curto e próprio", () => {
     const content = buildReelsSocialDraftContent(staleDraft, "instagram");
 
-    expect(content).toContain("Água quente no dia a dia sem transformar isso numa tarefa.");
-    expect(content).toContain("Hoje aparece por R$ 39,90.");
+    expect(content).toContain("☕ Um atalho simples para café, chá e água quente.");
+    expect(content).toContain("💰 R$ 39,90");
     expect(content).toContain("👉 Veja o preço, condições e disponibilidade no link da bio.");
+    expect(content.split("\n\n")).toHaveLength(4);
     expect(content).not.toContain("antes que o preço mude");
     expect(content).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
   });
