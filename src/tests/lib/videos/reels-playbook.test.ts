@@ -63,6 +63,6 @@ describe("buildTwoSceneReelsPlan", () => {
     expect(plan.scenes[1].overlayText).toBe("R$ 34,90 • Toque no link");
     expect(plan.scenes[1].avatarSpeech).not.toContain("% OFF");
     expect(plan.scenes[1].prompt).not.toContain("% OFF");
-    expect(plan.scenes[1].prompt).toContain("não inventar cupons, urgência, avaliações, selos");
+    expect(plan.scenes[1].prompt).toContain("Não inventar cupons, urgência, avaliações, selos");
   });
 });
