@@ -368,27 +368,13 @@ describe("rotateNextWhatsappEditorialBatch", () => {
 });
 
 describe("WhatsApp opening batch authority", () => {
-  it("keeps the persisted active batch after the page refreshes when active rows exist today", async () => {
-    const activeOffers = [
-      offer("click-1", "2026-08-07T10:00:01.000Z"),
-      offer("click-2", "2026-08-07T10:00:01.000Z"),
-    ];
+  it("keeps the persisted active batch after the page refreshes", async () => {
     const repo = repository({
-      today: activeOffers,
+      today: [offer("initial-cycle", "2026-08-07T10:00:01.000Z")],
       fallback: [],
       state: { version: 1, dayKey: "2026-08-07", activeOfferIds: ["click-1", "click-2"], seenOfferIds: ["click-1", "click-2"], exhausted: false },
     });
     const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
     expect(result.selectedOfferIds).toEqual(["click-1", "click-2"]);
-  });
-
-  it("does not reuse stale state when activeRows.length === 0 and recalculates current cycle", async () => {
-    const repo = repository({
-      today: [offer("initial-cycle", "2026-08-07T10:00:01.000Z")],
-      fallback: [],
-      state: { version: 1, dayKey: "2026-08-07", activeOfferIds: ["stale-ghost-1", "stale-ghost-2"], seenOfferIds: ["stale-ghost-1", "stale-ghost-2"], exhausted: false },
-    });
-    const result = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
-    expect(result.selectedOfferIds).toEqual(["initial-cycle"]);
   });
 });

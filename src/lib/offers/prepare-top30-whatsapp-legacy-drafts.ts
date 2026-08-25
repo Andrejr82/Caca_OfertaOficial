@@ -92,7 +92,7 @@ async function prepare(repository: Top30WhatsappRepository, options: { now?: Dat
     const activeIds = new Set(existingState.activeOfferIds);
     const activeRows = todayOffersForState.filter((offer) => activeIds.has(offer.id));
     const latestCohort = new Set(currentCohortOfferIds);
-    const stateHasCurrentCohort = activeRows.length > 0 && (latestCohort.size === 0 || activeRows.some((offer) => latestCohort.has(offer.id)));
+    const stateHasCurrentCohort = activeRows.length === 0 || latestCohort.size === 0 || activeRows.some((offer) => latestCohort.has(offer.id));
     if (stateHasCurrentCohort) return { ...emptyOpeningResult(), selectedOfferIds: existingState.activeOfferIds, currentCohortOfferIds, windowUsed: "today_brt" };
   }
   const fallbackStart = new Date(now.getTime() - 24 * 60 * 60 * 1000);
