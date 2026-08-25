@@ -124,7 +124,8 @@ const COMMERCIAL_NICHES = Object.freeze({
         'frigobar', 'adega climatizada', 'coifa', 'depurador',
       ]),
       blockedProductTerms: Object.freeze([
-        'placa eletrica', 'motor de geladeira', 'gas refrigerante', 'termostato avulso',
+        'placa eletrica', 'motor de geladeira', 'compressor geladeira', 'compressor de geladeira', 'compressor para geladeira',
+        'gas refrigerante', 'termostato avulso',
         'borracha de geladeira', 'grade de fogao', 'pes de lavadora', 'filtro de coifa',
         'suporte de ar condicionado', 'tubulacao', 'valvula avulsa',
         'papel de parede para geladeira', 'papel adesivo para geladeira', 'adesivo para geladeira',
