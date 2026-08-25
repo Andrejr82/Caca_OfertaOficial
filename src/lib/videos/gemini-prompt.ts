@@ -12,9 +12,15 @@ export type GeminiPromptOffer = {
 
 export { classifyGeminiUsabilityCategory } from "@/lib/videos/gemini-usability-prompt";
 import { buildGeminiUsabilityPrompt } from "@/lib/videos/gemini-usability-prompt";
+import { getSalesVideoDirection } from "@/lib/videos/sales-video-creative-director";
 
 export function buildGeminiVideoPrompt(offer: GeminiPromptOffer) {
-  return buildGeminiUsabilityPrompt(offer);
+  const base = buildGeminiUsabilityPrompt(offer);
+  const direction = getSalesVideoDirection(offer);
+
+  const creativeDirection = `\n\nDIREÇÃO CRIATIVA DE CONVERSÃO — PRIORIDADE ALTA\nARQUÉTIPO: ${direction.label}\nDESEJO A EXPLORAR: ${direction.desire}\n\nABERTURA\n${direction.openingAction}. A ação deve começar no primeiro segundo. Não usar abertura de catálogo, packshot estático ou pessoa apresentando o produto.\n\nUSO PRINCIPAL\n${direction.mainAction}.\n\nPROVA VISUAL\n${direction.proofAction}.\n\nCÂMERA\n${direction.camera}. Cada movimento de câmera deve revelar uso, escala, gesto ou resultado; evitar movimento decorativo sem função comercial.\n\nILUMINAÇÃO\n${direction.lighting}.\n\nREGRA ANTI-APRESENTAÇÃO\n${direction.antiPresentation}.\n\nRESTRIÇÕES ESPECÍFICAS\n${direction.restrictions}.\n\nCRITÉRIO DE SUCESSO\nAo assistir sem áudio, a pessoa deve entender em poucos segundos: como o produto entra na rotina, como ele é usado e por que vale abrir a oferta para avaliar a compra. O vídeo deve despertar desejo pela situação de uso, não apenas mostrar o objeto.`;
+
+  return `${base}${creativeDirection}`;
 }
 
 function numeroPorExtenso(num: number): string {
