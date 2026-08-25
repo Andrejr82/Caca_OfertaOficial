@@ -4,6 +4,7 @@ import {
   calculateDiscountPercent,
   formatBRL,
   persistedStrings,
+  semantic,
 } from "./copy-v5-validator";
 import { buildChannelNativeNarrative } from "./copy-v5-social-director";
 
@@ -17,7 +18,6 @@ export function getMarketplaceCtaPrefix(marketplace?: string | null): string {
   return "👉 Ver oferta:";
 }
 
-// Mantido por compatibilidade com testes e consumidores internos. A copy social nova usa preço em frase natural.
 export function renderPriceBlock(facts: CopyV5Facts): string | null {
   if (!(facts.currentPrice > 0)) return null;
   if (facts.originalPrice && facts.originalPrice > facts.currentPrice) {
@@ -76,33 +76,52 @@ export function officialStoreFromEvidence(facts: CopyV5Facts): string | null {
   return null;
 }
 
-export function buildCopyV5Blocks(
-  plan: CopyV5Plan,
-  facts: CopyV5Facts,
-  channel: OfficialAIChannel,
-  trackedUrl?: string | null
-): { blocks: string[]; firstComment?: string | null } {
-  const blocks = buildChannelNativeNarrative(plan, facts, channel);
-  const discount = calculateDiscountPercent(facts.currentPrice, facts.originalPrice);
-
+function appendTrustBlocks(blocks: string[], plan: CopyV5Plan, facts: CopyV5Facts) {
   const coupon = couponFromEvidence(facts);
   if (coupon) blocks.push(coupon);
   const shipping = shippingFromEvidence(facts);
   if (shipping) blocks.push(shipping);
   const store = officialStoreFromEvidence(facts);
   if (store) blocks.push(store);
-  if (plan.optionalProofAngle && !blocks.some((block) => block.includes(plan.optionalProofAngle!))) blocks.push(plan.optionalProofAngle);
+  if (plan.optionalProofAngle) blocks.push(plan.optionalProofAngle);
+}
 
-  // Não cria badge isolado de desconto: quando válido, o percentual entra na frase de preço.
-  void discount;
-
+export function buildCopyV5Blocks(
+  plan: CopyV5Plan,
+  facts: CopyV5Facts,
+  channel: OfficialAIChannel,
+  trackedUrl?: string | null
+): { blocks: string[]; firstComment?: string | null } {
   let firstComment: string | null = null;
-  if (channel === "facebook") {
-    if (trackedUrl) firstComment = `👉 Confira a oferta: ${trackedUrl}`;
-  } else if (channel !== "instagram") {
-    const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
-    blocks.push(trackedUrl ? `${ctaPrefix}\n${trackedUrl}` : `${ctaPrefix}\n👉`);
+
+  if (channel === "facebook" || channel === "instagram") {
+    const blocks = buildChannelNativeNarrative(plan, facts, channel);
+    appendTrustBlocks(blocks, plan, facts);
+    if (channel === "facebook") {
+      blocks.push("👉 Link da oferta no primeiro comentário. 👇");
+      if (trackedUrl) firstComment = `👉 Link da oferta: ${trackedUrl}`;
+    } else {
+      blocks.push("🔎 Link da oferta na bio. 👇");
+    }
+    return { blocks, firstComment };
   }
+
+  // WhatsApp / Telegram permanecem estáveis nesta etapa.
+  const blocks: string[] = [plan.hook];
+  const hookSem = semantic(plan.hook);
+  const prodSem = semantic(plan.shortProductName);
+  const isHookJustProductName = hookSem === prodSem || hookSem.replace(/^[^\p{L}\p{N}]+/gu, "").trim() === prodSem;
+  if (!isHookJustProductName && plan.shortProductName) blocks.push(plan.shortProductName);
+
+  const price = renderPriceBlock(facts);
+  if (price) blocks.push(price);
+  const discountPercent = calculateDiscountPercent(facts.currentPrice, facts.originalPrice);
+  if (discountPercent !== null && discountPercent >= 50 && !plan.hook.includes("% OFF")) blocks.push(`🔥 ${discountPercent}% OFF`);
+  appendTrustBlocks(blocks, plan, facts);
+  if (plan.selectedAttributes && plan.selectedAttributes.length > 0) blocks.push(plan.selectedAttributes.join(" • "));
+
+  const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
+  blocks.push(trackedUrl ? `${ctaPrefix}\n${trackedUrl}` : `${ctaPrefix}\n👉`);
   return { blocks, firstComment };
 }
 
