@@ -5,16 +5,9 @@ import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
 import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
-import { prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository, type WhatsappEditorialBatchState } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 import { loadWhatsappDashboardDrafts, type PostWithOffer } from "@/lib/offers/whatsapp-dashboard-loader";
 
 export const dynamic = "force-dynamic";
-
-class ReadOnlyWhatsappDashboardRepository extends SupabaseTop30WhatsappRepository {
-  override async saveWhatsappEditorialBatchState(_state: WhatsappEditorialBatchState): Promise<void> {
-    // Dashboard rendering is read-only. State changes belong to explicit operational actions.
-  }
-}
 
 export default async function WhatsappDashboardPage() {
   const authClient = await createServerSupabaseClient();
@@ -23,26 +16,13 @@ export default async function WhatsappDashboardPage() {
 
   async function fetchDraftPosts(): Promise<PostWithOffer[]> {
     if (!supabase || !user?.id) return [];
-    let displayOfferIds = new Set<string>();
-    try {
-      const repository = new ReadOnlyWhatsappDashboardRepository(supabase, user.id);
-      const top30 = await prepareTop30WhatsappLegacyDrafts(repository);
-      const selected = top30.selectedOfferIds || [];
-      const cohort = top30.currentCohortOfferIds || [];
-      displayOfferIds = new Set([...selected, ...cohort]);
-    } catch {
-      displayOfferIds = new Set<string>();
-    }
-
     return loadWhatsappDashboardDrafts({
       supabase,
       userId: user.id,
-      selectedOfferIds: displayOfferIds,
       limit: 30,
     });
   }
 
-  // Execução em paralelo das consultas independentes (drafts operacionais + histórico recente do usuário)
   const [draftPosts, historyData] = await Promise.all([
     fetchDraftPosts(),
     getPostHistory("whatsapp", { limit: 50, userId: user?.id || undefined }),
@@ -50,7 +30,6 @@ export default async function WhatsappDashboardPage() {
 
   return (
     <div className="grid gap-6 animate-fadeIn">
-      {/* Header */}
       <header className="flex items-center gap-3">
         <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-emerald-400 to-green-600 shadow-lg shadow-emerald-500/20">
           <MessageCircle size={20} className="text-white" />
