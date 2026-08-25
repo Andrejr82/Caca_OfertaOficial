@@ -31,7 +31,7 @@ export interface CommercialPortfolioSelection {
 const TYPE_PATTERNS: readonly [string, RegExp][] = [
   ["tapete-higienico", /\btapete\s+higienic/],
   ["caixa-areia", /\b(caixa|bandeja|sanitario|banheiro).*\b(areia|gato)|\bfurba\b|\bfurbox\b/],
-  ["areia-gato", /\bareia\b.*\b(gato|gatos|silica|biodegradavel)/],
+  ["areia-gato", /\bareia\b.*\b(gato|gatos|silica|biodegradavel)|\b(areia\s+biodegradavel|areia\s+silica)\b/],
   ["racao", /\bracao\b/],
   ["cama-pet", /\b(cama|caminha)\b.*\b(pet|cachorro|gato)/],
   ["arranhador", /\barranhador\b/],
