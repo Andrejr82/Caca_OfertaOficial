@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const { EDITORIAL_SCENARIOS } = require('../editorial-scenario-config.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS } = require('../shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS, AMAZON_ALIASES } = require('../amazon-scenario-config.cjs');
+const { INTENT_MAP } = require('../marketplace-intent-map.cjs');
 const {
   MARKETPLACES,
   MARKETPLACE_CONTRACTS,
@@ -43,6 +44,7 @@ test('somente 7 nichos + cupons permanecem ativos em todas as matrizes de roteam
   assert.deepEqual(keys(AMAZON_SCENARIOS), ACTIVE);
   assert.deepEqual(keys(AMAZON_ALIASES), ACTIVE);
   assert.deepEqual(keys(AMAZON_ATTRIBUTES_BY_SCENARIO), ACTIVE);
+  assert.deepEqual(keys(INTENT_MAP), ACTIVE);
 
   for (const marketplace of MARKETPLACES) {
     assert.deepEqual(keys(MARKETPLACE_CONTRACTS[marketplace]), ACTIVE, marketplace);
@@ -53,6 +55,7 @@ test('cenários desativados não podem ser resolvidos por nenhum marketplace', (
   for (const scenarioId of INACTIVE) {
     assert.equal(SHOPEE_SCENARIOS[scenarioId], undefined, `Shopee/${scenarioId}`);
     assert.equal(AMAZON_SCENARIOS[scenarioId], undefined, `Amazon/${scenarioId}`);
+    assert.equal(INTENT_MAP[scenarioId], undefined, `Mercado Livre/${scenarioId}`);
     for (const marketplace of MARKETPLACES) {
       assert.equal(getMarketplaceScenarioContract(scenarioId, marketplace), null, `${marketplace}/${scenarioId}`);
     }
