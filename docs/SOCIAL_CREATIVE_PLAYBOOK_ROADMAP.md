@@ -15,7 +15,10 @@ Transformar ofertas de marketplace em campanhas de venda, evitando o comportamen
 - Produção em 2 cenas independentes de 10s.
 - Cada cena terá prompt próprio, imagem de apoio, fala do avatar hiper-realista, texto na tela e objetivo.
 - A aba `/reels` deve exibir os dois prompts de forma operacional para copiar/usar no Google Vids.
-- Continuidade perfeita entre cenas não é garantida; o sistema deve facilitar consistência de avatar, cenário, produto e narrativa.
+- A mesma imagem de referência deve ser reutilizada nas duas gerações quando possível para reforçar continuidade.
+- Continuidade perfeita entre cenas não é garantida; o prompt deve reforçar avatar, roupa, cabelo, iluminação, cenário e produto.
+- `/reels` não deve duplicar upload, recorte ou processamento de vídeo.
+- Depois da criação no Google Vids, o usuário continuará importando o vídeo final em **Vídeos de Ofertas**, preservando a estrutura existente de recorte e fluxo posterior.
 
 ### Facebook
 - Evitar texto de catálogo.
@@ -52,6 +55,8 @@ As tasks são sequenciais e bloqueadas por aprovação explícita do usuário.
 ## Tasks
 
 ### Task 1 — `/reels`: prompts em 2 cenas
+**Status:** em validação, aguardando testes e aprovação manual do usuário.
+
 **Objetivo:** adaptar a aba `/reels` para um vídeo de 20s dividido em 2 cenas de 10s.
 
 Entregáveis:
@@ -62,13 +67,20 @@ Entregáveis:
 - Imagem de apoio/referência por cena.
 - CTA final.
 - Prévia simples dos dois blocos no painel.
+- Sem upload/recorte novo em `/reels`; vídeo final permanece no fluxo de **Vídeos de Ofertas**.
 
 Teste de aceitação:
-- Usar 1 produto real.
-- Confirmar que os dois prompts podem ser usados separadamente no Google Vids e formam uma narrativa contínua de 20s.
-- Nenhum deploy antes da aprovação do resultado.
+- Usar 1 produto real: Sanduicheira Mondial do ciclo Casa/Cozinha.
+- Confirmar duas cenas de 10s.
+- Confirmar preço e desconto sem invenção.
+- Confirmar instruções explícitas de continuidade visual.
+- Confirmar que a Cena 2 funciona como continuação e fecha com CTA.
+- Confirmar que `/reels` não cria novo fluxo de upload/recorte.
+- Nenhum deploy de produção antes da aprovação do resultado.
 
 ### Task 2 — Facebook: copy de conversa e desejo
+**Status:** bloqueada pela aprovação da Task 1.
+
 **Objetivo:** gerar copy própria para Feed e grupos, sem formato de catálogo.
 
 Teste de aceitação:
@@ -77,6 +89,8 @@ Teste de aceitação:
 - Aprovação manual antes de avançar.
 
 ### Task 3 — Instagram/Reels: publicação orientada a vídeo
+**Status:** bloqueada.
+
 **Objetivo:** usar o vídeo aprovado da Task 1 como criativo principal do Instagram/Reels.
 
 Teste de aceitação:
@@ -84,6 +98,8 @@ Teste de aceitação:
 - Aprovação manual antes de avançar.
 
 ### Task 4 — WhatsApp: imagem contextual por nicho
+**Status:** bloqueada.
+
 **Objetivo:** substituir a apresentação de fundo branco por cenário coerente com o nicho quando o produto permitir.
 
 Teste de aceitação:
@@ -92,6 +108,8 @@ Teste de aceitação:
 - Aprovação manual antes de avançar.
 
 ### Task 5 — Playbook por nicho
+**Status:** bloqueada.
+
 **Objetivo:** consolidar regras de ângulo, criativo, roteiro e CTA para os 7 nichos.
 
 Teste de aceitação:
