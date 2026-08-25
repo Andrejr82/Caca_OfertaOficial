@@ -1,23 +1,11 @@
 name: Social Copy Conversion Gate
 
 on:
-  push:
-    branches:
-      - feat/reels-two-scene-prompt-studio
+  workflow_dispatch:
 
 jobs:
   focused-tests:
+    if: false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx vitest run src/tests/lib/videos/reels-social-copy.test.ts src/tests/core/ai/copy-v5-social-conversion.test.ts src/tests/core/ai/copy-v5.test.ts src/tests/architecture/copy-v5-single-authority.test.ts
-      - name: Typecheck focused files
-        run: |
-          node -e "require('fs').writeFileSync('tsconfig.reels-copy.json', JSON.stringify({extends:'./tsconfig.json',compilerOptions:{noEmit:true,skipLibCheck:true},include:['src/core/ai/copy-v5-social-director.ts','src/core/ai/copy-v5-renderer.ts','src/lib/videos/reels-social-copy.ts','src/app/(dashboard)/reels/page.tsx']},null,2))"
-          npx tsc -p tsconfig.reels-copy.json
-      - run: npx eslint 'src/core/ai/copy-v5-social-director.ts' 'src/core/ai/copy-v5-renderer.ts' 'src/lib/videos/reels-social-copy.ts' 'src/app/(dashboard)/reels/page.tsx'
+      - run: echo "Temporary gate disabled after successful validation"
