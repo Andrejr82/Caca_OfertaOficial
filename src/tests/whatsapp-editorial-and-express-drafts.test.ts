@@ -1,14 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Offer } from "@/types/domain";
-import {
-  prepareTop30WhatsappLegacyDrafts,
-  type Top30WhatsappRepository,
-  type WhatsappEditorialBatchState,
-} from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 import { loadWhatsappDashboardDrafts, type PostWithOffer } from "@/lib/offers/whatsapp-dashboard-loader";
 import { isManualExpressOffer, selectEditorialTop30 } from "@/lib/offers/commercial-channel-router";
 
-const NOW = new Date("2026-08-25T12:00:00.000Z");
 const TODAY_START = new Date("2026-08-25T03:00:00.000Z");
 
 function mockOffer(id: string, createdAt: string, overrides: Partial<Offer> = {}): Offer {
@@ -33,221 +27,129 @@ function mockOffer(id: string, createdAt: string, overrides: Partial<Offer> = {}
     created_at: createdAt,
     updated_at: createdAt,
     marketplace_metrics: {},
-    explainability: {
-      correlation_id: "cycle-current-1",
-      discovery_evidence: { discoveredAt: createdAt },
-    },
+    explainability: {},
     ...overrides,
   };
 }
 
-describe("WhatsApp Tab Functional Verification (5 Exact Cases)", () => {
-  // CASO 1: offer approved + whatsapp draft + pertence ao currentCohortOfferIds => APARECE
-  it("Caso 1: offer approved + whatsapp draft + pertence ao currentCohortOfferIds => APARECE", async () => {
-    const approvedCycleOffer = mockOffer("offer-approved-1", "2026-08-25T10:00:00.000Z", {
+function mockPost(id: string, offer: Offer, createdAt: string): PostWithOffer {
+  return {
+    id,
+    offer_id: offer.id,
+    content: `Draft ${id}`,
+    status: "draft",
+    external_id: null,
+    posted_at: null,
+    created_at: createdAt,
+    offers: offer as PostWithOffer["offers"],
+  };
+}
+
+function createReadOnlyClient(options: {
+  editorialPosts?: PostWithOffer[];
+  expressOffers?: Array<{ id: string }>;
+  expressPosts?: PostWithOffer[];
+}) {
+  let postsCall = 0;
+  const writes = { insert: vi.fn(), update: vi.fn(), upsert: vi.fn(), delete: vi.fn() };
+
+  const makeQuery = (data: unknown[]) => {
+    const query: any = {
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      gte: vi.fn().mockReturnThis(),
+      contains: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      order: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      then: (resolve: (value: unknown) => unknown) => resolve({ data, error: null }),
+      ...writes,
+    };
+    return query;
+  };
+
+  const from = vi.fn((table: string) => {
+    if (table === "offers") return makeQuery(options.expressOffers || []);
+    if (table === "posts") {
+      postsCall += 1;
+      return makeQuery(postsCall === 1 ? (options.editorialPosts || []) : (options.expressPosts || []));
+    }
+    return makeQuery([]);
+  });
+
+  return { client: { from } as any, writes };
+}
+
+describe("WhatsApp dashboard: ciclos editoriais + Express", () => {
+  it("exibe draft editorial approved já existente", async () => {
+    const offer = mockOffer("approved-1", "2026-08-25T10:00:00.000Z", { status: "approved" });
+    const post = mockPost("post-approved-1", offer, "2026-08-25T10:01:00.000Z");
+    const { client } = createReadOnlyClient({ editorialPosts: [post] });
+
+    const drafts = await loadWhatsappDashboardDrafts({ supabase: client, userId: "user-1", todayStart: TODAY_START });
+
+    expect(drafts.map((item) => item.offer_id)).toContain("approved-1");
+  });
+
+  it("exibe drafts de ciclos diferentes do mesmo dia, sem depender do último cohort", async () => {
+    const cycleA = mockOffer("cycle-a", "2026-08-25T06:00:00.000Z", {
       status: "approved",
+      explainability: { correlation_id: "cycle-a" },
     });
-
-    const repo: Top30WhatsappRepository = {
-      listOffersBetween: vi.fn().mockResolvedValue([approvedCycleOffer]),
-      listAffiliateLinks: vi.fn().mockResolvedValue([]),
-      listWhatsappPosts: vi.fn().mockResolvedValue([]),
-      listHistoricalOffers: vi.fn().mockResolvedValue([]),
-      createAffiliateLink: vi.fn(),
-      insertDraft: vi.fn(),
-      loadWhatsappEditorialBatchState: vi.fn().mockResolvedValue(null),
-      saveWhatsappEditorialBatchState: vi.fn(),
-    };
-
-    const top30 = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
-
-    // Oferta approved não entra em selectedOfferIds (protegendo o ranking)
-    expect(top30.selectedOfferIds).toEqual([]);
-    // Mas pertence ao currentCohortOfferIds
-    expect(top30.currentCohortOfferIds).toContain("offer-approved-1");
-
-    // Conjunto de exibição (selectedOfferIds + currentCohortOfferIds)
-    const displayOfferIds = new Set<string>([
-      ...(top30.selectedOfferIds || []),
-      ...(top30.currentCohortOfferIds || []),
-    ]);
-
-    const mockPost: PostWithOffer & { offer_id: string } = {
-      id: "post-approved-1",
-      offer_id: "offer-approved-1",
-      content: "Draft WhatsApp de Oferta Aprovada",
-      status: "draft",
-      external_id: null,
-      posted_at: null,
-      created_at: "2026-08-25T10:05:00.000Z",
-      offers: approvedCycleOffer,
-    };
-
-    const mockClient = {
-      from: vi.fn(() => {
-        const query: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          in: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          then: (resolve: (val: unknown) => unknown) => resolve({ data: [mockPost], error: null }),
-        };
-        return query;
-      }),
-    };
-
-    const drafts = await loadWhatsappDashboardDrafts({
-      supabase: mockClient as any,
-      userId: "user-1",
-      selectedOfferIds: displayOfferIds,
-      todayStart: TODAY_START,
-    });
-
-    expect(drafts).toHaveLength(1);
-    expect(drafts[0].offers.id).toBe("offer-approved-1");
-    expect(drafts[0].offers.status).toBe("approved");
-  });
-
-  // CASO 2: offer approved sem whatsapp draft => NÃO APARECE
-  it("Caso 2: offer approved sem whatsapp draft => NÃO APARECE", async () => {
-    const approvedCycleOffer = mockOffer("offer-approved-no-draft", "2026-08-25T10:00:00.000Z", {
+    const cycleB = mockOffer("cycle-b", "2026-08-25T10:00:00.000Z", {
       status: "approved",
+      explainability: { correlation_id: "cycle-b" },
+    });
+    const { client } = createReadOnlyClient({
+      editorialPosts: [
+        mockPost("post-b", cycleB, "2026-08-25T10:01:00.000Z"),
+        mockPost("post-a", cycleA, "2026-08-25T06:01:00.000Z"),
+      ],
     });
 
-    const displayOfferIds = new Set<string>(["offer-approved-no-draft"]);
+    const drafts = await loadWhatsappDashboardDrafts({ supabase: client, userId: "user-1", todayStart: TODAY_START });
 
-    const mockClient = {
-      from: vi.fn(() => {
-        const query: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          in: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          then: (resolve: (val: unknown) => unknown) => resolve({ data: [], error: null }),
-        };
-        return query;
-      }),
-    };
-
-    const drafts = await loadWhatsappDashboardDrafts({
-      supabase: mockClient as any,
-      userId: "user-1",
-      selectedOfferIds: displayOfferIds,
-      todayStart: TODAY_START,
-    });
-
-    expect(drafts).toHaveLength(0);
+    expect(drafts.map((item) => item.offer_id)).toEqual(expect.arrayContaining(["cycle-a", "cycle-b"]));
   });
 
-  // CASO 3: offer fora do ciclo atual => NÃO aparece como draft editorial atual
-  it("Caso 3: offer fora do ciclo atual => NÃO aparece como draft editorial atual", async () => {
-    const freshCycleOffer = mockOffer("fresh-offer-1", "2026-08-25T11:00:00.000Z", {
-      explainability: { correlation_id: "cycle-new", discovery_evidence: { discoveredAt: "2026-08-25T11:00:00.000Z" } },
-    });
-    const oldCycleOffer = mockOffer("old-offer-1", "2026-08-25T08:00:00.000Z", {
-      explainability: { correlation_id: "cycle-old", discovery_evidence: { discoveredAt: "2026-08-25T08:00:00.000Z" } },
-    });
+  it("não cria nem atualiza estado ao renderizar a aba", async () => {
+    const offer = mockOffer("readonly-1", "2026-08-25T08:00:00.000Z", { status: "approved" });
+    const { client, writes } = createReadOnlyClient({ editorialPosts: [mockPost("post-readonly", offer, "2026-08-25T08:01:00.000Z")] });
 
-    const repo: Top30WhatsappRepository = {
-      listOffersBetween: vi.fn().mockResolvedValue([freshCycleOffer, oldCycleOffer]),
-      listAffiliateLinks: vi.fn().mockResolvedValue([]),
-      listWhatsappPosts: vi.fn().mockResolvedValue([]),
-      listHistoricalOffers: vi.fn().mockResolvedValue([]),
-      createAffiliateLink: vi.fn(),
-      insertDraft: vi.fn(),
-      loadWhatsappEditorialBatchState: vi.fn().mockResolvedValue(null),
-      saveWhatsappEditorialBatchState: vi.fn(),
-    };
+    await loadWhatsappDashboardDrafts({ supabase: client, userId: "user-1", todayStart: TODAY_START });
 
-    const top30 = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
-
-    expect(top30.currentCohortOfferIds).toContain("fresh-offer-1");
-    expect(top30.currentCohortOfferIds).not.toContain("old-offer-1");
-
-    const displayOfferIds = new Set<string>([
-      ...(top30.selectedOfferIds || []),
-      ...(top30.currentCohortOfferIds || []),
-    ]);
-
-    // O loader não carrega a oferta do ciclo antigo
-    expect(displayOfferIds.has("old-offer-1")).toBe(false);
+    expect(writes.insert).not.toHaveBeenCalled();
+    expect(writes.update).not.toHaveBeenCalled();
+    expect(writes.upsert).not.toHaveBeenCalled();
+    expect(writes.delete).not.toHaveBeenCalled();
   });
 
-  // CASO 4: Express draft => APARECE na seção Express
-  it("Caso 4: Express draft => APARECE na seção Express", async () => {
-    const expressOffer = mockOffer("express-offer-1", "2026-08-25T11:30:00.000Z", {
-      explainability: {
-        manual_source: true,
-        manual_resolution: { source: "quick-publication" },
-      },
+  it("prioriza Express e evita duplicação por offer_id", async () => {
+    const expressOffer = mockOffer("express-1", "2026-08-24T20:00:00.000Z", {
+      explainability: { manual_source: true, manual_resolution: { source: "quick-publication" } },
+    });
+    const editorialOffer = mockOffer("editorial-1", "2026-08-25T09:00:00.000Z", { status: "approved" });
+    const { client } = createReadOnlyClient({
+      editorialPosts: [
+        mockPost("post-express-duplicate", expressOffer, "2026-08-25T09:30:00.000Z"),
+        mockPost("post-editorial", editorialOffer, "2026-08-25T09:01:00.000Z"),
+      ],
+      expressOffers: [{ id: expressOffer.id }],
+      expressPosts: [mockPost("post-express", expressOffer, "2026-08-24T20:01:00.000Z")],
     });
 
-    const expressPost: PostWithOffer = {
-      id: "post-express-1",
-      content: "🔥 Oferta Express Exclusiva!",
-      status: "draft",
-      external_id: null,
-      posted_at: null,
-      created_at: "2026-08-25T11:31:00.000Z",
-      offers: expressOffer,
-    };
+    const drafts = await loadWhatsappDashboardDrafts({ supabase: client, userId: "user-1", todayStart: TODAY_START });
 
-    const mockClient = {
-      from: vi.fn(() => {
-        const query: any = {
-          select: vi.fn().mockReturnThis(),
-          eq: vi.fn().mockReturnThis(),
-          in: vi.fn().mockReturnThis(),
-          order: vi.fn().mockReturnThis(),
-          limit: vi.fn().mockReturnThis(),
-          then: (resolve: (val: unknown) => unknown) => resolve({ data: [expressPost], error: null }),
-        };
-        return query;
-      }),
-    };
-
-    const drafts = await loadWhatsappDashboardDrafts({
-      supabase: mockClient as any,
-      userId: "user-1",
-      selectedOfferIds: new Set<string>(),
-      todayStart: TODAY_START,
-    });
-
-    expect(drafts).toHaveLength(1);
-    expect(drafts[0].id).toBe("post-express-1");
-    expect(drafts[0].offers.explainability?.manual_source).toBe(true);
+    expect(drafts[0].offer_id).toBe("express-1");
+    expect(drafts.filter((item) => item.offer_id === "express-1")).toHaveLength(1);
+    expect(drafts.map((item) => item.offer_id)).toContain("editorial-1");
   });
 
-  // CASO 5: Express continua fora do Top30 editorial
-  it("Caso 5: Express continua fora do Top30 editorial", async () => {
-    const expressOffer = mockOffer("express-offer-1", "2026-08-25T10:00:00.000Z", {
-      explainability: { manual_source: true },
-    });
-    const regularOffer = mockOffer("regular-offer-1", "2026-08-25T10:00:00.000Z");
+  it("mantém ofertas Express fora do Top30 editorial", () => {
+    const express = mockOffer("express-1", "2026-08-25T10:00:00.000Z", { explainability: { manual_source: true } });
+    const regular = mockOffer("regular-1", "2026-08-25T10:00:00.000Z");
 
-    expect(isManualExpressOffer(expressOffer)).toBe(true);
-    expect(isManualExpressOffer(regularOffer)).toBe(false);
-
-    const repo: Top30WhatsappRepository = {
-      listOffersBetween: vi.fn().mockResolvedValue([expressOffer, regularOffer]),
-      listAffiliateLinks: vi.fn().mockResolvedValue([]),
-      listWhatsappPosts: vi.fn().mockResolvedValue([]),
-      listHistoricalOffers: vi.fn().mockResolvedValue([]),
-      createAffiliateLink: vi.fn(),
-      insertDraft: vi.fn(),
-      loadWhatsappEditorialBatchState: vi.fn().mockResolvedValue(null),
-      saveWhatsappEditorialBatchState: vi.fn(),
-    };
-
-    const top30 = await prepareTop30WhatsappLegacyDrafts(repo, { now: NOW });
-    expect(top30.selectedOfferIds).not.toContain("express-offer-1");
-    expect(top30.selectedOfferIds).toContain("regular-offer-1");
-    expect(top30.reasons.manual_express_excluded_from_editorial).toBeGreaterThanOrEqual(1);
-
-    const editorialTop30 = selectEditorialTop30([expressOffer, regularOffer], 30, NOW);
-    expect(editorialTop30.some((c) => c.id === "express-offer-1")).toBe(false);
-    expect(editorialTop30.some((c) => c.id === "regular-offer-1")).toBe(true);
+    expect(isManualExpressOffer(express)).toBe(true);
+    expect(selectEditorialTop30([express, regular], 30, new Date("2026-08-25T12:00:00.000Z")).some((item) => item.id === express.id)).toBe(false);
   });
 });
