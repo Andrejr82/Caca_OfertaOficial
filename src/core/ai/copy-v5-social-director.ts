@@ -37,29 +37,29 @@ export function classifySocialCopyArchetype(facts: CopyV5Facts): SocialCopyArche
 
 function opening(archetype: SocialCopyArchetype, channel: OfficialAIChannel) {
   const facebook: Record<SocialCopyArchetype, string> = {
-    hot_water: "Quem também usa água quente várias vezes ao dia?",
-    kitchen: "Tem coisa que só vale espaço na cozinha quando facilita a rotina.",
-    footwear: "Quem procura um calçado para usar de verdade no dia a dia sabe que só a foto não basta.",
-    fashion: "Tem peça que chama atenção quando a gente imagina como ela entra no look, não quando fica parada na foto.",
-    beauty: "Na rotina de beleza, o que mais conta é quando o produto faz sentido no uso do dia a dia.",
-    pet: "Quem tem pet sabe: produto bom é o que encaixa na rotina do animal e do tutor.",
-    tool: "Quando aparece uma tarefa chata, a ferramenta certa é o que separa improviso de praticidade.",
-    electronics: "Tem eletrônico que chama atenção pela ficha técnica. E tem o que faz sentido quando entra na rotina.",
-    cleaning: "Quem gosta de casa organizada sabe que praticidade pesa mais do que embalagem bonita.",
-    generic: "Esse é o tipo de achado que vale olhar pelo uso real, não só pela foto.",
+    hot_water: "☕ Café, chá ou água quente sem complicar a rotina.",
+    kitchen: "🍳 Mais praticidade no preparo do dia a dia.",
+    footwear: "👟 Para quem quer conforto e uso real no dia a dia.",
+    fashion: "✨ Uma peça para imaginar no look, não só na foto.",
+    beauty: "💄 Um achado para encaixar na rotina de beleza.",
+    pet: "🐾 Praticidade para quem cuida de pet todos os dias.",
+    tool: "🛠️ Menos improviso para resolver a tarefa.",
+    electronics: "⚡ Tecnologia que precisa fazer sentido na rotina.",
+    cleaning: "🧽 Mais praticidade para cuidar da casa.",
+    generic: "✨ Um achado para olhar pelo uso real.",
   };
 
   const instagram: Record<SocialCopyArchetype, string> = {
-    hot_water: "Água quente no dia a dia sem transformar isso numa tarefa.",
-    kitchen: "Praticidade de verdade é quando o produto entra na rotina sem complicar.",
-    footwear: "O que importa é como ele fica em movimento — não parado na caixa.",
-    fashion: "O desejo começa quando dá para imaginar a peça no corpo e em movimento.",
-    beauty: "Produto de beleza faz mais sentido quando a gente consegue imaginar o ritual de uso.",
-    pet: "Mais praticidade para a rotina de quem cuida de pet todos os dias.",
-    tool: "Menos improviso. Mais facilidade para resolver a tarefa.",
-    electronics: "Tecnologia boa é a que faz sentido quando entra na rotina.",
-    cleaning: "Organização e praticidade aparecem no uso — não na embalagem.",
-    generic: "Um achado que faz mais sentido quando você imagina usando no dia a dia.",
+    hot_water: "☕ Um atalho simples para café, chá e água quente.",
+    kitchen: "🍳 Praticidade que dá vontade de usar na cozinha.",
+    footwear: "👟 O produto faz sentido quando entra em movimento.",
+    fashion: "✨ O desejo começa quando você imagina no look.",
+    beauty: "💄 Mais um item para deixar o ritual mais prático.",
+    pet: "🐾 Um achado para facilitar a rotina com o pet.",
+    tool: "🛠️ Resolver a tarefa com menos improviso.",
+    electronics: "⚡ Tecnologia para uso real, sem enrolação.",
+    cleaning: "🧽 Organização e praticidade no uso real.",
+    generic: "✨ Um achado que faz sentido no dia a dia.",
   };
 
   if (channel === "facebook") return facebook[archetype];
@@ -67,37 +67,24 @@ function opening(archetype: SocialCopyArchetype, channel: OfficialAIChannel) {
   return instagram[archetype];
 }
 
-function priceSentence(facts: CopyV5Facts) {
+function productLine(plan: CopyV5Plan) {
+  const attributes = (plan.selectedAttributes ?? [])
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  return attributes.length > 0
+    ? `🔎 ${plan.shortProductName} • ${attributes.join(" • ")}`
+    : `🔎 ${plan.shortProductName}`;
+}
+
+function priceLine(facts: CopyV5Facts) {
   const discount = calculateDiscountPercent(facts.currentPrice, facts.originalPrice);
   if (facts.originalPrice && facts.originalPrice > facts.currentPrice) {
-    return discount && discount >= 10
-      ? `E o preço chamou atenção: de ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} (${discount}% de desconto).`
-      : `Hoje aparece de ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}.`;
+    return discount !== null && discount >= 10
+      ? `💰 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)} • ${discount}% OFF`
+      : `💰 De ${formatBRL(facts.originalPrice)} por ${formatBRL(facts.currentPrice)}`;
   }
-  return `Hoje aparece por ${formatBRL(facts.currentPrice)}.`;
-}
-
-function attributeSentence(plan: CopyV5Plan) {
-  const attributes = (plan.selectedAttributes ?? []).filter(Boolean).slice(0, 2);
-  if (attributes.length === 0) return null;
-  if (attributes.length === 1) return `Um detalhe informado na oferta: ${attributes[0].replace(/^[A-ZÁÉÍÓÚ]/u, (m) => m.toLowerCase())}.`;
-  return `Entre os detalhes informados na oferta: ${attributes.join(" e ")}.`;
-}
-
-function productSentence(plan: CopyV5Plan, archetype: SocialCopyArchetype) {
-  const name = plan.shortProductName;
-  switch (archetype) {
-    case "hot_water": return `A ${name} entra justamente nessa rotina de quem precisa ferver água com frequência.`;
-    case "kitchen": return `O ${name} é um desses produtos feitos para entrar no preparo do dia a dia.`;
-    case "footwear": return `O ${name} é para quem quer avaliar o produto pensando em caminhada, treino ou rotina real de uso.`;
-    case "fashion": return `A proposta do ${name} faz mais sentido quando você pensa em caimento, movimento e combinação no dia a dia.`;
-    case "beauty": return `O ${name} entra como opção para quem está olhando praticidade e uso real na rotina de beleza.`;
-    case "pet": return `O ${name} entra como opção para a rotina do pet, onde uso e praticidade importam mais que promessa.`;
-    case "tool": return `O ${name} entra como opção para quem quer resolver a tarefa com menos improviso.`;
-    case "electronics": return `O ${name} merece ser avaliado pelo que entrega na rotina e pelos detalhes reais da oferta.`;
-    case "cleaning": return `O ${name} entra como opção para facilitar uma tarefa doméstica sem transformar a copy em promessa milagrosa.`;
-    default: return `O ${name} chamou atenção como uma opção para uso real no dia a dia.`;
-  }
+  return `💰 ${formatBRL(facts.currentPrice)}`;
 }
 
 export function buildChannelNativeNarrative(
@@ -107,42 +94,26 @@ export function buildChannelNativeNarrative(
 ) {
   const archetype = classifySocialCopyArchetype(facts);
   const lead = opening(archetype, channel);
-  const product = productSentence(plan, archetype);
-  const attribute = attributeSentence(plan);
-  const price = priceSentence(facts);
+  const product = productLine(plan);
+  const price = priceLine(facts);
 
   if (channel === "facebook") {
     return [
       lead,
       product,
-      attribute,
       price,
       "👉 Veja o preço, condições e disponibilidade no primeiro comentário.",
-    ].filter((line): line is string => Boolean(line));
+    ];
   }
 
   if (channel === "instagram") {
     return [
       lead,
       product,
-      attribute,
       price,
       "👉 Veja o preço, condições e disponibilidade no link da bio.",
-    ].filter((line): line is string => Boolean(line));
+    ];
   }
 
-  if (channel === "whatsapp") {
-    return [
-      lead,
-      product,
-      attribute,
-      price,
-    ].filter((line): line is string => Boolean(line));
-  }
-
-  return [
-    lead,
-    product,
-    price,
-  ].filter((line): line is string => Boolean(line));
+  return [lead, product, price];
 }
