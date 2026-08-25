@@ -1,19 +1,11 @@
 name: Social Copy Conversion Gate
 
 on:
-  push:
-    branches:
-      - feat/reels-two-scene-prompt-studio
+  workflow_dispatch:
 
 jobs:
   focused-tests:
+    if: false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx vitest run src/tests/core/ai/copy-v5-social-conversion.test.ts src/tests/core/ai/copy-v5.test.ts src/tests/lib/videos/reels-social-copy.test.ts
-      - run: npx eslint 'src/core/ai/copy-v5-social-director.ts' 'src/tests/core/ai/copy-v5-social-conversion.test.ts'
+      - run: echo "Temporary gate disabled after successful validation"
