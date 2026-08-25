@@ -86,6 +86,16 @@ function appendTrustBlocks(blocks: string[], plan: CopyV5Plan, facts: CopyV5Fact
   if (plan.optionalProofAngle) blocks.push(plan.optionalProofAngle);
 }
 
+function appendCompactSocialTrust(blocks: string[], plan: CopyV5Plan, facts: CopyV5Facts) {
+  const candidates = [
+    couponFromEvidence(facts),
+    shippingFromEvidence(facts),
+    officialStoreFromEvidence(facts),
+    plan.optionalProofAngle,
+  ].filter((value): value is string => Boolean(value));
+  blocks.splice(Math.max(0, blocks.length - 1), 0, ...candidates.slice(0, 2));
+}
+
 export function buildCopyV5Blocks(
   plan: CopyV5Plan,
   facts: CopyV5Facts,
@@ -96,13 +106,8 @@ export function buildCopyV5Blocks(
 
   if (channel === "facebook" || channel === "instagram") {
     const blocks = buildChannelNativeNarrative(plan, facts, channel);
-    appendTrustBlocks(blocks, plan, facts);
-    if (channel === "facebook") {
-      blocks.push("👉 Link da oferta no primeiro comentário. 👇");
-      if (trackedUrl) firstComment = `👉 Link da oferta: ${trackedUrl}`;
-    } else {
-      blocks.push("🔎 Link da oferta na bio. 👇");
-    }
+    appendCompactSocialTrust(blocks, plan, facts);
+    if (channel === "facebook" && trackedUrl) firstComment = `👉 Link da oferta: ${trackedUrl}`;
     return { blocks, firstComment };
   }
 
