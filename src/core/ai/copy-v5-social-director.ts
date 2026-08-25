@@ -117,7 +117,7 @@ export function buildChannelNativeNarrative(
       product,
       attribute,
       price,
-      "Se você estava procurando algo assim, vale conferir os detalhes e o preço no primeiro comentário.",
+      "👉 Veja o preço, condições e disponibilidade no primeiro comentário.",
     ].filter((line): line is string => Boolean(line));
   }
 
@@ -127,7 +127,7 @@ export function buildChannelNativeNarrative(
       product,
       attribute,
       price,
-      "Quer ver os detalhes e confirmar se o preço continua assim? O link está na bio.",
+      "👉 Veja o preço, condições e disponibilidade no link da bio.",
     ].filter((line): line is string => Boolean(line));
   }
 
