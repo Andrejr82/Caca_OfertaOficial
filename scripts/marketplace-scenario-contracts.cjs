@@ -2,6 +2,7 @@
 
 const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
+const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 const {
   COMMON_BLOCKED,
   normalize,
@@ -16,15 +17,18 @@ function contract(terms, categories, allowed, blocked = []) {
   return { terms, categories, allowedProductTerms: allowed, blockedProductTerms };
 }
 
+function commercialPlanForScenario(scenarioId, marketplace) {
+  const resolved = resolveNichePlanFromLegacyScenario(scenarioId, [marketplace]);
+  if (resolved.mode !== 'niche_mapped') return null;
+  return resolved.plans[marketplace] || null;
+}
+
 const EXPLICIT = {
   Shopee: {},
   Amazon: {},
   'Mercado Livre': {},
 };
 
-// IDs observados nas árvores públicas do catálogo Amazon Brasil. Não são IDs
-// inventados: são mantidos como evidência de origem pública e devem ser
-// atualizados quando a Amazon alterar a árvore.
 const AMAZON_BROWSE_NODES = Object.freeze({
   casa_cozinha_editorial: ['17100532011', '17124722011', '17124716011'],
   organizacao_editorial: ['17100533011', '17100522011', '17124717011'],
@@ -43,7 +47,6 @@ const AMAZON_BROWSE_NODES = Object.freeze({
 });
 
 const AMAZON_BLOCKED_BY_SCENARIO = Object.freeze({});
-
 const AMAZON_SCENARIO_SPLITS = Object.freeze({});
 
 const AMAZON_ATTRIBUTES_BY_SCENARIO = Object.freeze({
@@ -66,6 +69,24 @@ const AMAZON_ATTRIBUTES_BY_SCENARIO = Object.freeze({
 for (const marketplace of MARKETPLACES) {
   for (const [scenarioId, scenario] of Object.entries(SHOPEE_SCENARIOS)) {
     const source = marketplace === 'Amazon' ? (AMAZON_SCENARIOS[scenarioId] || scenario) : scenario;
+    const commercialPlan = commercialPlanForScenario(scenarioId, marketplace);
+
+    if (commercialPlan?.contract) {
+      const nicheContract = commercialPlan.contract;
+      const categories = marketplace === 'Amazon'
+        ? [...(nicheContract.amazonBrowseNodes || [])]
+        : marketplace === 'Shopee'
+          ? [...(nicheContract.shopeeApiCategories || [])]
+          : [];
+      EXPLICIT[marketplace][scenarioId] = contract(
+        [...commercialPlan.terms.all],
+        categories,
+        [...(nicheContract.guardrails?.allowedProductTerms || [])],
+        [...(nicheContract.guardrails?.blockedProductTerms || [])],
+      );
+      continue;
+    }
+
     const browseNodes = (AMAZON_BROWSE_NODES[scenarioId] || source.amazonBrowseNodes || source.browseNodeIds || source.apiCategories || []).filter((id) => id !== '16243802011');
     const categories = marketplace === 'Amazon' ? browseNodes : (source.apiCategories || []);
     EXPLICIT[marketplace][scenarioId] = contract(
@@ -85,16 +106,24 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
   const explicit = EXPLICIT[marketplace]?.[scenarioId];
   const terms = explicit?.terms || [...(base.keywords || [])];
   const browseNodes = (explicit?.categories || base.apiCategories || base.browseNodeIds || []).map(String).filter((id) => id !== '16243802011');
-  const allowed = [...new Set(SHOPEE_SCENARIOS[scenarioId]?.allowedProductTerms || base.allowedProductTerms || [])];
+  const allowed = [...new Set(explicit?.allowedProductTerms || base.allowedProductTerms || [])];
   const rawBlocked = [...new Set([...COMMON_BLOCKED, ...(explicit?.blockedProductTerms || base.blockedProductTerms || [])])];
   const blocked = sanitizeBlockedTerms(rawBlocked, allowed, terms);
+  const commercialPlan = commercialPlanForScenario(scenarioId, marketplace);
 
   return {
     ...base,
     id: scenarioId,
     scenarioId,
     marketplace,
-    source: 'explicit_marketplace_contract',
+    source: commercialPlan ? 'commercial_niche_contract' : 'explicit_marketplace_contract',
+    commercialNiche: commercialPlan ? {
+      id: commercialPlan.nicheId,
+      name: commercialPlan.nicheName,
+      affinity: commercialPlan.affinity,
+      candidateLimit: commercialPlan.rules.candidateLimit,
+      maxPagesPerTerm: commercialPlan.rules.maxPagesPerTerm,
+    } : (base.commercialNiche || null),
     splitInto: [],
     amazonIntelligence: marketplace === 'Amazon'
       ? (AMAZON_ATTRIBUTES_BY_SCENARIO[scenarioId] || {
@@ -118,15 +147,15 @@ function getMarketplaceScenarioContract(scenarioId, marketplace) {
   };
 }
 
-function matchesMarketplaceContract(contract, title) {
+function matchesMarketplaceContract(contractValue, title) {
   const value = normalize(title);
-  if (!value || !contract) return false;
+  if (!value || !contractValue) return false;
   const containsTerm = (term) => {
     const normalizedTerm = normalize(term).replace(/[^a-z0-9]+/g, ' ').trim();
     return normalizedTerm && (` ${value.replace(/[^a-z0-9]+/g, ' ')} `).includes(` ${normalizedTerm} `);
   };
-  if ((contract.blockedProductTerms || []).some(containsTerm)) return false;
-  const allowed = contract.allowedProductTerms || [];
+  if ((contractValue.blockedProductTerms || []).some(containsTerm)) return false;
+  const allowed = contractValue.allowedProductTerms || [];
   return allowed.length === 0 || allowed.some(containsTerm);
 }
 
