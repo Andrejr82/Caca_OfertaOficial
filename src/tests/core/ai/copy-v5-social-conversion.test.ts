@@ -32,7 +32,7 @@ describe("Copy V5 — social conversion director", () => {
 
     expect(rendered.feed).toContain("Quem também usa água quente várias vezes ao dia?");
     expect(rendered.feed).toContain("entra justamente nessa rotina");
-    expect(rendered.feed).toContain("Hoje aparece por R$ 39,90.");
+    expect(rendered.feed).toMatch(/Hoje aparece por R\$\s39,90\./);
     expect(rendered.feed).toContain("Um detalhe informado na oferta: sem fio.");
     expect(rendered.feed).toContain("primeiro comentário");
     expect(rendered.feed).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
@@ -50,7 +50,7 @@ describe("Copy V5 — social conversion director", () => {
     );
 
     expect(rendered.feed).toContain("Água quente no dia a dia sem transformar isso numa tarefa.");
-    expect(rendered.feed).toContain("Hoje aparece por R$ 39,90.");
+    expect(rendered.feed).toMatch(/Hoje aparece por R\$\s39,90\./);
     expect(rendered.feed).toContain("Quer ver os detalhes e confirmar se o preço continua assim?");
     expect(rendered.feed).toContain("🔎 Link da oferta na bio. 👇");
     expect(rendered.feed).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
