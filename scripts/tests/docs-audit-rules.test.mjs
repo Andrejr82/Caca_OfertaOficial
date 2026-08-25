@@ -60,6 +60,10 @@ test("ferramenta do Documentation Audit exige governança, não todos os docs", 
   assert.deepEqual(docsFor("scripts/docs-audit.mjs"), ["docs/DOCUMENTATION_GOVERNANCE.md"]);
 });
 
+test("workflow do próprio audit não exige documentação de deploy", () => {
+  assert.deepEqual(docsFor(".github/workflows/docs-audit.yml"), ["docs/DOCUMENTATION_GOVERNANCE.md"]);
+});
+
 test("une domínios sem duplicar documentos", () => {
   assert.deepEqual(docsFor(
     "scripts/oracle-scraper.cjs",

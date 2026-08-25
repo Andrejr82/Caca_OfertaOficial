@@ -1,5 +1,6 @@
 const RUNTIME_PREFIXES = ["src/", "scripts/", "supabase/", "apps/"];
 const RUNTIME_FILES = new Set([".env.example", "package.json", "next.config.ts", "vercel.json"]);
+const DOCS_AUDIT_WORKFLOW = ".github/workflows/docs-audit.yml";
 
 function normalizePath(path) {
   return String(path || "").replace(/\\/g, "/").replace(/^\.\//, "");
@@ -17,7 +18,7 @@ const DOMAIN_RULES = [
     matches: (path) => [
       "scripts/docs-audit.mjs",
       "scripts/docs-audit-rules.mjs",
-      ".github/workflows/docs-audit.yml",
+      DOCS_AUDIT_WORKFLOW,
     ].includes(path) || path.startsWith("scripts/tests/docs-audit"),
     documents: ["docs/DOCUMENTATION_GOVERNANCE.md"],
   },
@@ -71,7 +72,8 @@ const DOMAIN_RULES = [
   },
   {
     name: "deployment",
-    matches: (path) => path === "vercel.json" || path.startsWith(".github/workflows/"),
+    matches: (path) => path === "vercel.json"
+      || (path.startsWith(".github/workflows/") && path !== DOCS_AUDIT_WORKFLOW),
     documents: ["docs/deployment.md"],
   },
   {
