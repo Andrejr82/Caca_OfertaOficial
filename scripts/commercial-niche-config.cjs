@@ -221,7 +221,7 @@ const COMMERCIAL_NICHES = Object.freeze({
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
         'racao cachorro', 'racao para cachorro', 'racao caes', 'racao para caes', 'racao de caes',
-        'racao gato', 'racao para gato', 'areia para gato', 'areia sanitaria gato',
+        'racao gato', 'racao para gato', 'areia para gato', 'areia sanitaria gato', 'areia sanitaria para gato',
         'granulado sanitario', 'tapete higienico', 'tapete higienico cachorro',
         'cama pet', 'caminha pet', 'fonte pet', 'fonte de agua pet',
         'bebedouro automatico', 'comedouro automatico', 'caixa de transporte',
