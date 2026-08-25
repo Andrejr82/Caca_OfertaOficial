@@ -55,7 +55,7 @@ As tasks são sequenciais e bloqueadas por aprovação explícita do usuário.
 ## Tasks
 
 ### Task 1 — `/reels`: prompts em 2 cenas
-**Status:** em validação, aguardando testes e aprovação manual do usuário.
+**Status:** testes focados aprovados; aguardando aprovação manual do usuário.
 
 **Objetivo:** adaptar a aba `/reels` para um vídeo de 20s dividido em 2 cenas de 10s.
 
@@ -77,6 +77,13 @@ Teste de aceitação:
 - Confirmar que a Cena 2 funciona como continuação e fecha com CTA.
 - Confirmar que `/reels` não cria novo fluxo de upload/recorte.
 - Nenhum deploy de produção antes da aprovação do resultado.
+
+Validação técnica concluída:
+- teste funcional do playbook: PASS;
+- Vitest focado: 2/2 PASS;
+- typecheck somente dos arquivos da Task 1: PASS;
+- ESLint somente dos arquivos da Task 1: PASS;
+- typecheck global do repositório possui falhas pré-existentes fora deste escopo e não foi usado como gate da Task 1.
 
 ### Task 2 — Facebook: copy de conversa e desejo
 **Status:** bloqueada pela aprovação da Task 1.
