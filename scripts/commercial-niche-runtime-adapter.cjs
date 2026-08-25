@@ -8,7 +8,8 @@ const {
 const { getMarketplaceNicheContract } = require('./commercial-niche-contracts.cjs');
 
 /**
- * Monta o plano de execução shadow por marketplace com base na afinidade (1-3).
+ * Monta o plano/configuração de execução por marketplace com base na afinidade (1-3).
+ * Função pura de configuração, sem efeitos colaterais de rede ou persistência.
  */
 function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
   const niche = getCommercialNiche(nicheId);
@@ -26,7 +27,7 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
   const expansionCount = Math.ceil(niche.expansionProducts.length * rules.expansionPercent);
   const selectedExpansion = niche.expansionProducts.slice(0, expansionCount);
 
-  // 3. Opportunity Products (Dinâmico a partir de sinais externos como highlights/best sellers)
+  // 3. Opportunity Products (Dinâmico a partir de sinais como highlights/best sellers)
   const dynamicOpportunities = Array.isArray(options.opportunityCandidates)
     ? options.opportunityCandidates.map((c) => (typeof c === 'string' ? c : c.title || c.query)).filter(Boolean)
     : [];
@@ -55,16 +56,16 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
 }
 
 /**
- * Resolve o plano completo para todos os marketplaces a partir de um cenário legado.
+ * Resolve a configuração completa para todos os marketplaces a partir de um cenário legado.
  */
-function resolveShadowNichePlanFromLegacy(legacyScenarioId, marketplaces = ['Shopee', 'Amazon', 'Mercado Livre'], options = {}) {
+function resolveNichePlanFromLegacyScenario(legacyScenarioId, marketplaces = ['Shopee', 'Amazon', 'Mercado Livre'], options = {}) {
   const resolution = resolveNicheFromLegacyScenario(legacyScenarioId);
-  if (resolution.mode !== 'shadow_compatible') {
+  if (resolution.mode !== 'niche_mapped') {
     return {
       mode: resolution.mode,
       legacyScenarioId,
       nicheId: null,
-      reason: resolution.reason || 'not_shadow_compatible',
+      reason: resolution.reason || 'not_niche_mapped',
       plans: {},
     };
   }
@@ -75,7 +76,7 @@ function resolveShadowNichePlanFromLegacy(legacyScenarioId, marketplaces = ['Sho
   }
 
   return {
-    mode: 'shadow_compatible',
+    mode: 'niche_mapped',
     legacyScenarioId,
     nicheId: resolution.nicheId,
     nicheName: resolution.niche.name,
@@ -85,5 +86,5 @@ function resolveShadowNichePlanFromLegacy(legacyScenarioId, marketplaces = ['Sho
 
 module.exports = {
   buildNicheMarketplacePlan,
-  resolveShadowNichePlanFromLegacy,
+  resolveNichePlanFromLegacyScenario,
 };

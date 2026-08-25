@@ -87,10 +87,6 @@ function createDiscoveryScenarioRuntimeContract({
   marketplaceContract = null,
   effectiveMercadoLivreDomains = [],
   coverageStatus = 'pending',
-  commercialNicheId = null,
-  commercialNicheAffinity = null,
-  commercialNicheTier = null,
-  commercialShadow = false,
 } = {}) {
   const scheduleAudit = getScenarioScheduleAudit();
   const normalizedHour = normalizeHour(discoveryHour);
@@ -176,10 +172,6 @@ function createDiscoveryScenarioRuntimeContract({
     blockedProductTerms: uniqueStrings(contract?.blockedProductTerms || resolvedScenario?.blockedProductTerms),
     fallbackPolicy: createFallbackPolicy(resolvedScenario, marketplace, contract),
     coverageStatus: String(coverageStatus || 'pending'),
-    commercialNicheId: commercialNicheId ? String(commercialNicheId) : null,
-    commercialNicheAffinity: commercialNicheAffinity ? Number(commercialNicheAffinity) : null,
-    commercialNicheTier: commercialNicheTier ? String(commercialNicheTier) : null,
-    commercialShadow: Boolean(commercialShadow),
     flags: {
       hasHourCollision,
       isOrphanScenario,

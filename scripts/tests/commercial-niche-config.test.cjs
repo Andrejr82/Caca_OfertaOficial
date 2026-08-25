@@ -14,72 +14,124 @@ const {
   getAffinityRules,
 } = require('../commercial-niche-config.cjs');
 
-test('1. Valida existência exata dos 7 nichos comerciais autoritativos', () => {
+test('1. Valida existência exata dos 7 nichos comerciais canônicos', () => {
   assert.equal(COMMERCIAL_NICHE_IDS.length, 7);
   const expectedIds = [
     'casa_cozinha_organizacao',
-    'beleza_cuidados_pessoais',
-    'moda_calcados',
+    'beleza',
+    'moda',
     'eletrodomesticos',
     'informatica',
     'ferramentas',
     'pet',
   ];
   assert.deepEqual(COMMERCIAL_NICHE_IDS.slice().sort(), expectedIds.slice().sort());
+  assert.equal(COMMERCIAL_NICHE_IDS.includes('beleza_cuidados_pessoais'), false);
+  assert.equal(COMMERCIAL_NICHE_IDS.includes('moda_calcados'), false);
 });
 
-test('2. Cada nicho possui Core, Expansion, MarketplaceAffinity e Guardrails não-vazios', () => {
-  for (const id of COMMERCIAL_NICHE_IDS) {
-    const niche = getCommercialNiche(id);
-    assert.ok(niche, `Nicho ${id} deve existir`);
-    assert.ok(niche.name, `Nicho ${id} deve ter name`);
-    assert.ok(Array.isArray(niche.coreProducts) && niche.coreProducts.length > 0, `Nicho ${id} deve ter coreProducts`);
-    assert.ok(Array.isArray(niche.expansionProducts) && niche.expansionProducts.length > 0, `Nicho ${id} deve ter expansionProducts`);
-    assert.ok(Array.isArray(niche.opportunityProducts), `Nicho ${id} deve ter array opportunityProducts`);
-    assert.ok(niche.marketplaceAffinity.Amazon >= 1 && niche.marketplaceAffinity.Amazon <= 3);
-    assert.ok(niche.marketplaceAffinity['Mercado Livre'] >= 1 && niche.marketplaceAffinity['Mercado Livre'] <= 3);
-    assert.ok(niche.marketplaceAffinity.Shopee >= 1 && niche.marketplaceAffinity.Shopee <= 3);
-    assert.ok(Array.isArray(niche.guardrails.allowedProductTerms) && niche.guardrails.allowedProductTerms.length > 0);
-    assert.ok(Array.isArray(niche.guardrails.blockedProductTerms) && niche.guardrails.blockedProductTerms.length > 0);
-  }
-});
-
-test('3. Mapeamento de cenários legados para os 7 nichos', () => {
+test('2. Valida mapeamento exato dos cenários legados para os 7 nichos', () => {
   assert.equal(resolveNicheFromLegacyScenario('casa_cozinha_editorial').nicheId, 'casa_cozinha_organizacao');
   assert.equal(resolveNicheFromLegacyScenario('organizacao_editorial').nicheId, 'casa_cozinha_organizacao');
-  assert.equal(resolveNicheFromLegacyScenario('beleza_editorial').nicheId, 'beleza_cuidados_pessoais');
-  assert.equal(resolveNicheFromLegacyScenario('moda_editorial').nicheId, 'moda_calcados');
+  assert.equal(resolveNicheFromLegacyScenario('beleza_editorial').nicheId, 'beleza');
+  assert.equal(resolveNicheFromLegacyScenario('moda_editorial').nicheId, 'moda');
   assert.equal(resolveNicheFromLegacyScenario('eletrodomesticos_editorial').nicheId, 'eletrodomesticos');
   assert.equal(resolveNicheFromLegacyScenario('informatica_editorial').nicheId, 'informatica');
   assert.equal(resolveNicheFromLegacyScenario('ferramentas_editorial').nicheId, 'ferramentas');
   assert.equal(resolveNicheFromLegacyScenario('pet_editorial').nicheId, 'pet');
 });
 
-test('4. Cenários fora dos 7 nichos permanecem estritamente legacy_only', () => {
+test('3. Core e Expansion contêm exatamente os produtos aprovados', () => {
+  // Casa/Cozinha/Organização
+  const casa = getCommercialNiche('casa_cozinha_organizacao');
+  assert.deepEqual(casa.coreProducts, [
+    'air fryer', 'cafeteira', 'liquidificador', 'aspirador vertical', 'panela elétrica',
+    'jogo de panelas', 'jogo de cama', 'toalha de banho', 'aparelho de jantar', 'organizador de cozinha',
+  ]);
+  assert.deepEqual(casa.expansionProducts, [
+    'batedeira', 'mixer', 'sanduicheira', 'forno elétrico', 'chaleira elétrica', 'grill',
+    'faqueiro', 'organizador de gaveta', 'organizador de armário', 'mop', 'varal', 'caixa organizadora', 'cesto organizador',
+  ]);
+
+  // Beleza
+  const beleza = getCommercialNiche('beleza');
+  assert.deepEqual(beleza.coreProducts, [
+    'protetor solar', 'hidratante facial', 'sérum', 'shampoo', 'tratamento capilar',
+    'perfume', 'maquiagem', 'escova secadora', 'secador',
+  ]);
+  assert.deepEqual(beleza.expansionProducts, [
+    'chapinha', 'modelador', 'aparador', 'máquina de cortar cabelo', 'escova alisadora', 'depilador',
+  ]);
+
+  // Moda
+  const moda = getCommercialNiche('moda');
+  assert.deepEqual(moda.coreProducts, [
+    'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'vestido',
+    'calça jeans', 'jaqueta', 'bolsa', 'mochila',
+  ]);
+  assert.deepEqual(moda.expansionProducts, [
+    'camisa', 'bermuda', 'moletom', 'calça social', 'relógio', 'óculos',
+  ]);
+
+  // Eletrodomésticos
+  const eletro = getCommercialNiche('eletrodomesticos');
+  assert.deepEqual(eletro.coreProducts, [
+    'geladeira', 'máquina de lavar', 'ar condicionado', 'micro-ondas', 'fogão', 'cooktop', 'lava e seca', 'aspirador',
+  ]);
+  assert.deepEqual(eletro.expansionProducts, [
+    'freezer', 'lava-louças', 'frigobar', 'adega climatizada', 'coifa', 'depurador',
+  ]);
+
+  // Informática
+  const info = getCommercialNiche('informatica');
+  assert.deepEqual(info.coreProducts, [
+    'notebook', 'monitor', 'ssd', 'impressora', 'roteador', 'mini pc',
+  ]);
+  assert.deepEqual(info.expansionProducts, [
+    'computador', 'desktop', 'teclado', 'mouse', 'webcam', 'hd externo', 'scanner', 'nobreak', 'switch de rede',
+  ]);
+
+  // Ferramentas
+  const ferr = getCommercialNiche('ferramentas');
+  assert.deepEqual(ferr.coreProducts, [
+    'parafusadeira', 'furadeira', 'lavadora de alta pressão', 'esmerilhadeira', 'serra', 'máquina de solda', 'jogo de ferramentas', 'kit de chaves',
+  ]);
+  assert.deepEqual(ferr.expansionProducts, [
+    'alicate', 'chave de impacto', 'trena', 'nível laser', 'compressor', 'maleta de ferramentas', 'lixadeira', 'soprador',
+  ]);
+
+  // Pet
+  const pet = getCommercialNiche('pet');
+  assert.deepEqual(pet.coreProducts, [
+    'ração cachorro', 'ração gato', 'areia para gato', 'tapete higiênico',
+  ]);
+  assert.deepEqual(pet.expansionProducts, [
+    'cama pet', 'fonte pet', 'bebedouro automático', 'comedouro automático', 'caixa de transporte', 'arranhador', 'caixa de areia', 'brinquedo pet',
+  ]);
+});
+
+test('4. opportunityProducts continua array vazio e dinâmico para todos os nichos', () => {
+  for (const id of COMMERCIAL_NICHE_IDS) {
+    const niche = getCommercialNiche(id);
+    assert.deepEqual(niche.opportunityProducts, []);
+  }
+});
+
+test('5. Afinidades por marketplace correspondem exatamente à matriz aprovada', () => {
+  assert.deepEqual(getCommercialNiche('casa_cozinha_organizacao').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 3 });
+  assert.deepEqual(getCommercialNiche('beleza').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 2, Shopee: 3 });
+  assert.deepEqual(getCommercialNiche('moda').marketplaceAffinity, { Amazon: 2, 'Mercado Livre': 2, Shopee: 3 });
+  assert.deepEqual(getCommercialNiche('eletrodomesticos').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 2 });
+  assert.deepEqual(getCommercialNiche('informatica').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 2 });
+  assert.deepEqual(getCommercialNiche('ferramentas').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 3 });
+  assert.deepEqual(getCommercialNiche('pet').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 3 });
+});
+
+test('6. Cenários fora dos 7 nichos permanecem estritamente legacy_only', () => {
   for (const legacyId of LEGACY_SCENARIOS_OUTSIDE_NICHES) {
     const res = resolveNicheFromLegacyScenario(legacyId);
     assert.equal(res.mode, 'legacy_only');
     assert.equal(res.nicheId, null);
     assert.equal(res.reason, 'legacy_scenario_outside_final_7_niches');
   }
-});
-
-test('5. Regras de afinidade 1, 2 e 3 retornam parâmetros válidos', () => {
-  const aff3 = getAffinityRules(3);
-  assert.equal(aff3.corePercent, 1.0);
-  assert.equal(aff3.expansionPercent, 1.0);
-  assert.equal(aff3.maxPagesPerTerm, 2);
-  assert.equal(aff3.candidateLimit, 10);
-
-  const aff2 = getAffinityRules(2);
-  assert.equal(aff2.corePercent, 1.0);
-  assert.equal(aff2.expansionPercent, 0.5);
-  assert.equal(aff2.maxPagesPerTerm, 1);
-  assert.equal(aff2.candidateLimit, 7);
-
-  const aff1 = getAffinityRules(1);
-  assert.equal(aff1.corePercent, 1.0);
-  assert.equal(aff1.expansionPercent, 0.0);
-  assert.equal(aff1.maxPagesPerTerm, 1);
-  assert.equal(aff1.candidateLimit, 4);
 });

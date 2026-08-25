@@ -2,12 +2,12 @@
 
 /**
  * Configuração Autoritativa dos 7 Nichos Comerciais do Caça Oferta Oficial.
- * Cada nicho possui Core Products, Expansion Products, Opportunity Products (dinâmicos),
- * Afinidade por Marketplace (1-3) e Guardrails estritos.
+ * Fornece parâmetros de catálogo (Core, Expansion, Opportunity), Guardrails,
+ * Mapeamento de Cenários Legados e Regras de Afinidade por Marketplace.
  */
 
 const COMMERCIAL_NICHES = Object.freeze({
-  casa_cozinha_organizacao: {
+  casa_cozinha_organizacao: Object.freeze({
     id: 'casa_cozinha_organizacao',
     name: 'Casa, Cozinha e Organização',
     role: 'volume_e_recorrencia',
@@ -38,7 +38,7 @@ const COMMERCIAL_NICHES = Object.freeze({
       'caixa organizadora',
       'cesto organizador',
     ]),
-    opportunityProducts: Object.freeze([]), // Dinâmico via signals/trends
+    opportunityProducts: Object.freeze([]),
     marketplaceAffinity: Object.freeze({
       Amazon: 3,
       'Mercado Livre': 3,
@@ -60,31 +60,30 @@ const COMMERCIAL_NICHES = Object.freeze({
         'reparo', 'conserto', 'adesivo'
       ]),
     }),
-  },
+  }),
 
-  beleza_cuidados_pessoais: {
-    id: 'beleza_cuidados_pessoais',
+  beleza: Object.freeze({
+    id: 'beleza',
     name: 'Beleza e Cuidados Pessoais',
     role: 'conversao_e_recorrencia',
     coreProducts: Object.freeze([
-      'protetor solar facial',
+      'protetor solar',
       'hidratante facial',
-      'sérum facial',
+      'sérum',
       'shampoo',
+      'tratamento capilar',
       'perfume',
       'maquiagem',
       'escova secadora',
-      'secador de cabelo',
+      'secador',
     ]),
     expansionProducts: Object.freeze([
       'chapinha',
-      'modelador de cachos',
-      'aparador de pelos',
+      'modelador',
+      'aparador',
       'máquina de cortar cabelo',
       'escova alisadora',
-      'depilador elétrico',
-      'máscara capilar',
-      'óleo capilar',
+      'depilador',
     ]),
     opportunityProducts: Object.freeze([]),
     marketplaceAffinity: Object.freeze({
@@ -94,21 +93,22 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'protetor solar', 'protetor solar facial', 'hidratante facial', 'serum facial', 'serum',
-        'shampoo', 'condicionador', 'mascara capilar', 'oleo capilar', 'perfume', 'eau de parfum',
-        'maquiagem', 'base facial', 'batom', 'rimel', 'escova secadora', 'secador de cabelo',
-        'secador', 'chapinha', 'prancha de cabelo', 'modelador de cachos', 'aparador de pelos',
-        'maquina de cortar cabelo', 'escova alisadora', 'depilador eletrico'
+        'protetor solar', 'protetor solar facial', 'hidratante facial', 'serum', 'serum facial',
+        'shampoo', 'condicionador', 'mascara capilar', 'tratamento capilar', 'oleo capilar',
+        'perfume', 'eau de parfum', 'maquiagem', 'base facial', 'batom', 'rimel',
+        'escova secadora', 'secador', 'secador de cabelo', 'chapinha', 'prancha de cabelo',
+        'modelador', 'modelador de cachos', 'aparador', 'aparador de pelos',
+        'maquina de cortar cabelo', 'escova alisadora', 'depilador'
       ]),
       blockedProductTerms: Object.freeze([
         'amostra gratis', 'tester', 'frasco vazio', 'embalagem vazia', 'lamina avulsa',
         'pente avulso de maquina', 'carregador avulso', 'manual', 'tampa avulsa'
       ]),
     }),
-  },
+  }),
 
-  moda_calcados: {
-    id: 'moda_calcados',
+  moda: Object.freeze({
+    id: 'moda',
     name: 'Moda e Calçados',
     role: 'grande_volume',
     coreProducts: Object.freeze([
@@ -119,18 +119,16 @@ const COMMERCIAL_NICHES = Object.freeze({
       'vestido',
       'calça jeans',
       'jaqueta',
-      'bolsa feminina',
+      'bolsa',
       'mochila',
     ]),
     expansionProducts: Object.freeze([
-      'camisa polo',
-      'camisa social',
-      'bermuda masculina',
+      'camisa',
+      'bermuda',
       'moletom',
       'calça social',
-      'relógio de pulso',
-      'óculos de sol',
-      'carteira de couro',
+      'relógio',
+      'óculos',
     ]),
     opportunityProducts: Object.freeze([]),
     marketplaceAffinity: Object.freeze({
@@ -140,40 +138,39 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'tenis masculino', 'tenis feminino', 'tenis casual', 'tenis corrida', 'tenis',
-        'camiseta masculina', 'camiseta', 'camisa polo', 'camisa social', 'vestido',
-        'calca jeans', 'calca social', 'bermuda', 'jaqueta', 'moletom', 'bolsa feminina',
-        'bolsa', 'mochila', 'relogio de pulso', 'relogio', 'oculos de sol', 'carteira'
+        'tenis masculino', 'tenis feminino', 'tenis casual', 'tenis corrida',
+        'camiseta masculina', 'camiseta feminina', 'vestido', 'calca jeans',
+        'jaqueta', 'bolsa', 'bolsa feminina', 'bolsa transversal', 'mochila', 'mochila escolar',
+        'camisa', 'bermuda', 'moletom', 'calca social', 'relogio', 'oculos', 'oculos de sol'
       ]),
       blockedProductTerms: Object.freeze([
-        'cadarco', 'cadarco avulso', 'palmilha avulsa', 'palmilha', 'botao', 'ziper',
-        'retalho', 'tecido por metro', 'linha de costura', 'etiqueta', 'fivela avulsa'
+        'palmilha avulsa', 'cadarco avulso', 'botao avulso', 'etiqueta',
+        'cabide avulso', 'ziper avulso', 'tecido por metro', 'retalho'
       ]),
     }),
-  },
+  }),
 
-  eletrodomesticos: {
+  eletrodomesticos: Object.freeze({
     id: 'eletrodomesticos',
     name: 'Eletrodomésticos',
     role: 'ticket_alto',
     coreProducts: Object.freeze([
       'geladeira',
       'máquina de lavar',
-      'ar-condicionado',
+      'ar condicionado',
       'micro-ondas',
       'fogão',
       'cooktop',
       'lava e seca',
-      'aspirador de pó',
+      'aspirador',
     ]),
     expansionProducts: Object.freeze([
-      'freezer vertical',
+      'freezer',
       'lava-louças',
       'frigobar',
       'adega climatizada',
-      'coifa de parede',
-      'depurador de ar',
-      'forno de embutir',
+      'coifa',
+      'depurador',
     ]),
     opportunityProducts: Object.freeze([]),
     marketplaceAffinity: Object.freeze({
@@ -183,22 +180,21 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'geladeira', 'refrigerador', 'maquina de lavar', 'lavadora de roupas', 'lava e seca',
-        'ar-condicionado', 'ar condicionado split', 'micro-ondas', 'microondas', 'fogao',
-        'fogao 4 bocas', 'fogao 5 bocas', 'cooktop', 'cooktop por inducao', 'aspirador de po',
-        'freezer vertical', 'freezer', 'lava-loucas', 'lava loucas', 'frigobar', 'adega climatizada',
-        'coifa de parede', 'coifa', 'depurador de ar', 'forno de embutir', 'forno eletrico embutir'
+        'geladeira', 'refrigerador', 'maquina de lavar', 'lavadora de roupas',
+        'ar condicionado', 'ar-condicionado', 'split', 'micro-ondas', 'microondas',
+        'fogao', 'fogao a gas', 'cooktop', 'cooktop por inducao', 'lava e seca',
+        'aspirador', 'aspirador de po', 'freezer', 'lava loucas', 'lava-loucas',
+        'frigobar', 'adega climatizada', 'coifa', 'depurador'
       ]),
       blockedProductTerms: Object.freeze([
-        'placa', 'placa eletronica', 'placa potencia', 'placa interface', 'motor',
-        'compressor', 'resistencia', 'mangueira', 'gas refrigerante', 'correia',
-        'peca', 'pecas', 'pecas de reposicao', 'suporte avulso', 'tampa avulsa',
-        'gaveta avulsa', 'prateleira de geladeira', 'pe de geladeira', 'termostato avulso'
+        'peca', 'pecas', 'placa eletrica', 'motor de geladeira', 'gas refrigerante',
+        'termostato avulso', 'borracha de geladeira', 'grade de fogao', 'pes de lavadora',
+        'filtro de coifa', 'suporte de ar condicionado', 'tubulacao', 'valvula avulsa'
       ]),
     }),
-  },
+  }),
 
-  informatica: {
+  informatica: Object.freeze({
     id: 'informatica',
     name: 'Informática',
     role: 'ticket_medio_alto',
@@ -207,15 +203,17 @@ const COMMERCIAL_NICHES = Object.freeze({
       'monitor',
       'ssd',
       'impressora',
-      'roteador wi-fi',
+      'roteador',
       'mini pc',
     ]),
     expansionProducts: Object.freeze([
-      'computador desktop',
-      'teclado mecânico',
-      'mouse sem fio',
-      'webcam full hd',
+      'computador',
+      'desktop',
+      'teclado',
+      'mouse',
+      'webcam',
       'hd externo',
+      'scanner',
       'nobreak',
       'switch de rede',
     ]),
@@ -227,39 +225,41 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'notebook', 'computador', 'desktop', 'monitor', 'monitor gamer', 'ssd', 'ssd nvme',
-        'impressora', 'impressora multifuncional', 'roteador', 'roteador wi-fi', 'mini pc',
-        'teclado mecanico', 'teclado sem fio', 'mouse sem fio', 'mouse gamer', 'webcam',
-        'hd externo', 'nobreak', 'switch de rede'
+        'notebook', 'laptop', 'monitor', 'monitor gamer', 'ssd', 'ssd nvme',
+        'impressora', 'multifuncional', 'roteador', 'roteador mesh', 'mini pc',
+        'computador', 'desktop', 'teclado', 'teclado mecanico', 'mouse', 'mouse sem fio',
+        'webcam', 'hd externo', 'scanner', 'nobreak', 'switch de rede'
       ]),
       blockedProductTerms: Object.freeze([
-        'memoria ram avulsa', 'placa-mae', 'placa mae', 'processador avulso', 'cooler avulso',
-        'fonte atx avulsa', 'cabo sata', 'pasta termica', 'parafusos', 'gabinete vazio',
-        'adaptador simples', 'extensao usb'
+        'parafuso', 'cabo sata avulso', 'pasta termica avulsa', 'tecla avulsa',
+        'cooler avulso 80mm', 'adesivo para teclado', 'case vazia', 'gaveta de hd'
       ]),
     }),
-  },
+  }),
 
-  ferramentas: {
+  ferramentas: Object.freeze({
     id: 'ferramentas',
     name: 'Ferramentas',
     role: 'demanda_consistente',
     coreProducts: Object.freeze([
-      'furadeira',
       'parafusadeira',
-      'kit de ferramentas',
+      'furadeira',
+      'lavadora de alta pressão',
       'esmerilhadeira',
-      'trena a laser',
-      'serra circular',
+      'serra',
+      'máquina de solda',
+      'jogo de ferramentas',
+      'kit de chaves',
     ]),
     expansionProducts: Object.freeze([
-      'martelete perfurador',
-      'serra tico-tico',
+      'alicate',
       'chave de impacto',
-      'lixadeira orbital',
-      'jogo de soquetes',
+      'trena',
+      'nível laser',
+      'compressor',
       'maleta de ferramentas',
-      'lavadora de alta pressão',
+      'lixadeira',
+      'soprador',
     ]),
     opportunityProducts: Object.freeze([]),
     marketplaceAffinity: Object.freeze({
@@ -269,36 +269,39 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'furadeira', 'parafusadeira', 'furadeira de impacto', 'parafusadeira impacto',
-        'kit ferramentas', 'jogo de ferramentas', 'maleta de ferramentas', 'esmerilhadeira',
-        'trena a laser', 'trena', 'serra circular', 'martelete', 'serra tico-tico',
-        'chave de impacto', 'lixadeira', 'jogo de soquetes', 'lavadora de alta pressao'
+        'parafusadeira', 'parafusadeira a bateria', 'furadeira', 'furadeira de impacto',
+        'lavadora de alta pressao', 'esmerilhadeira', 'esmerilhadeira angular',
+        'serra', 'serra circular', 'serra tico tico', 'maquina de solda',
+        'jogo de ferramentas', 'kit de ferramentas', 'kit de chaves', 'jogo de chaves',
+        'alicate', 'chave de impacto', 'trena', 'trena a laser', 'nivel laser',
+        'compressor', 'compressor de ar', 'maleta de ferramentas', 'lixadeira', 'soprador'
       ]),
       blockedProductTerms: Object.freeze([
-        'broca avulsa', 'jogo de brocas sem furadeira', 'parafuso', 'bucha', 'carvao reposicao',
-        'mandril avulso', 'lamina solta', 'disco avulso', 'carvao de motor'
+        'broca avulsa', 'disco de corte avulso', 'mandril avulso', 'parafuso avulso',
+        'porca avulsa', 'arruela', 'escova de carvao', 'bateria avulsa sem maquina'
       ]),
     }),
-  },
+  }),
 
-  pet: {
+  pet: Object.freeze({
     id: 'pet',
     name: 'Pet',
     role: 'forte_recorrencia',
     coreProducts: Object.freeze([
-      'ração para cachorro',
-      'ração para gato',
+      'ração cachorro',
+      'ração gato',
       'areia para gato',
-      'tapete higiênico cachorro',
+      'tapete higiênico',
     ]),
     expansionProducts: Object.freeze([
       'cama pet',
-      'fonte de água pet',
+      'fonte pet',
+      'bebedouro automático',
       'comedouro automático',
-      'caixa de transporte pet',
-      'arranhador para gato',
-      'casinha pet',
-      'coleira peitoral',
+      'caixa de transporte',
+      'arranhador',
+      'caixa de areia',
+      'brinquedo pet',
     ]),
     opportunityProducts: Object.freeze([]),
     marketplaceAffinity: Object.freeze({
@@ -308,16 +311,17 @@ const COMMERCIAL_NICHES = Object.freeze({
     }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'racao para cachorro', 'racao cachorro', 'racao para gato', 'racao gato',
+        'racao cachorro', 'racao para cachorro', 'racao gato', 'racao para gato',
         'areia para gato', 'areia sanitaria gato', 'tapete higienico', 'tapete higienico cachorro',
-        'cama pet', 'caminha pet', 'fonte de agua pet', 'bebedouro pet', 'comedouro automatico',
-        'caixa de transporte pet', 'arranhador gato', 'casinha pet', 'coleira peitoral', 'guia peitoral'
+        'cama pet', 'caminha pet', 'fonte pet', 'fonte de agua pet',
+        'bebedouro automatico', 'comedouro automatico', 'caixa de transporte',
+        'arranhador', 'arranhador gato', 'caixa de areia', 'brinquedo pet'
       ]),
       blockedProductTerms: Object.freeze([
         'refil avulso sem fonte', 'sache unitario', 'pecas plasticas', 'tampa avulsa'
       ]),
     }),
-  },
+  }),
 });
 
 const COMMERCIAL_NICHE_IDS = Object.freeze(Object.keys(COMMERCIAL_NICHES));
@@ -325,8 +329,8 @@ const COMMERCIAL_NICHE_IDS = Object.freeze(Object.keys(COMMERCIAL_NICHES));
 const LEGACY_SCENARIO_TO_NICHE_MAP = Object.freeze({
   casa_cozinha_editorial: 'casa_cozinha_organizacao',
   organizacao_editorial: 'casa_cozinha_organizacao',
-  beleza_editorial: 'beleza_cuidados_pessoais',
-  moda_editorial: 'moda_calcados',
+  beleza_editorial: 'beleza',
+  moda_editorial: 'moda',
   eletrodomesticos_editorial: 'eletrodomesticos',
   informatica_editorial: 'informatica',
   ferramentas_editorial: 'ferramentas',
@@ -371,11 +375,11 @@ function getCommercialNiche(nicheId) {
 function resolveNicheFromLegacyScenario(legacyScenarioId) {
   const id = String(legacyScenarioId || '').trim();
   if (!id) return { mode: 'invalid', nicheId: null, reason: 'missing_scenario_id' };
-  
+
   if (LEGACY_SCENARIO_TO_NICHE_MAP[id]) {
     const nicheId = LEGACY_SCENARIO_TO_NICHE_MAP[id];
     return {
-      mode: 'shadow_compatible',
+      mode: 'niche_mapped',
       legacyScenarioId: id,
       nicheId,
       niche: COMMERCIAL_NICHES[nicheId],

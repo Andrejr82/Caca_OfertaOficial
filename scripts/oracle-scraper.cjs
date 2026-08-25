@@ -1667,26 +1667,6 @@ async function runScrapingCycleCore() {
   } catch (trendsError) {
     console.error(`[Oracle Trends Radar] ${trendsError.message}`);
   }
-
-  // Execução Shadow de Nichos Comerciais (Paralelo, Zero Persistência)
-  if (process.env.COMMERCIAL_NICHE_SHADOW === '1' || process.argv.includes('--commercial-niche-shadow')) {
-    try {
-      const { runCommercialNicheShadowCycle } = require('./commercial-niche-shadow-runner.cjs');
-      const legacyResultByMarketplace = {};
-      for (const summary of result.marketplaces || []) {
-        legacyResultByMarketplace[summary.marketplace] = summary.candidates || [];
-      }
-      const shadowComparison = await runCommercialNicheShadowCycle({
-        legacyScenarioId: plannedScenarioId,
-        legacyResultByMarketplace,
-        marketplaces: ['Shopee', 'Amazon', 'Mercado Livre'],
-      });
-      console.log(`[Commercial Niche Shadow] ${JSON.stringify(shadowComparison)}`);
-    } catch (shadowError) {
-      console.warn(`[Commercial Niche Shadow] Falha não-bloqueante: ${shadowError.message}`);
-    }
-  }
-
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
   return result;
 }
@@ -1879,19 +1859,6 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
       console.error('[Oracle Trends Radar] ' + error.message);
       process.exitCode = 1;
     });
-  } else if (process.argv.includes('--commercial-niche-shadow')) {
-    const { runCommercialNicheShadowCycle } = require('./commercial-niche-shadow-runner.cjs');
-    const scenario = CLI_SCENARIO_ID || 'casa_cozinha_editorial';
-    runCommercialNicheShadowCycle({
-      legacyScenarioId: scenario,
-      legacyResultByMarketplace: {},
-      marketplaces: ['Shopee', 'Amazon', 'Mercado Livre'],
-    }).then((res) => {
-      console.log(JSON.stringify(res, null, 2));
-    }).catch((error) => {
-      console.error('[Commercial Niche Shadow CLI] ' + error.message);
-      process.exitCode = 1;
-    });
   } else {
     startOracleScraper();
   }
@@ -1933,5 +1900,4 @@ module.exports = {
   mercadoLivreIdentityKey,
   isEquivalentMercadoLivreProduct,
   processPendingTrendRadarRuns: require('./oracle-trends-radar-runner.cjs').processPendingTrendRadarRuns,
-  runCommercialNicheShadowCycle: require('./commercial-niche-shadow-runner.cjs').runCommercialNicheShadowCycle,
 };
