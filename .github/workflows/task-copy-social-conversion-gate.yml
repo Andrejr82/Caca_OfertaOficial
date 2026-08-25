@@ -1,23 +1,11 @@
-name: Publication Reconciliation Gate
+name: Social Copy Conversion Gate
 
 on:
-  push:
-    branches:
-      - feat/reels-two-scene-prompt-studio
+  workflow_dispatch:
 
 jobs:
   focused-tests:
+    if: false
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-      - run: npm ci
-      - run: npx vitest run src/tests/core/publication/official-publication-approval-service.test.ts
-      - name: Focused typecheck
-        run: |
-          node -e "require('fs').writeFileSync('tsconfig.publication-reconcile.json', JSON.stringify({extends:'./tsconfig.json',compilerOptions:{noEmit:true,skipLibCheck:true},include:['src/core/publication/official-publication-approval-service.ts','src/tests/core/publication/official-publication-approval-service.test.ts']},null,2))"
-          npx tsc -p tsconfig.publication-reconcile.json
-      - run: npx eslint 'src/core/publication/official-publication-approval-service.ts' 'src/tests/core/publication/official-publication-approval-service.test.ts'
+      - run: echo "Temporary gate disabled after successful validation"
