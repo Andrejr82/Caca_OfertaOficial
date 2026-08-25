@@ -3,5 +3,5 @@
   "version": 2,
   "buildCommand": "next build",
   "installCommand": "npm install",
-  "ignoreCommand": "node -e \"const ref=process.env.VERCEL_GIT_COMMIT_REF;const message=process.env.VERCEL_GIT_COMMIT_MESSAGE||'';const force=process.env.VERCEL_FORCE_BUILD==='1';const oneShotPreview=message.includes('[preview]');process.exit(force||oneShotPreview||!ref||ref==='main'||ref==='feat/shopee-search-engine-v1-v2'||ref==='fix/trends-approved-offer-handoff'?1:0)\""
+  "ignoreCommand": "node -e \"process.exit((process.env.VERCEL_GIT_COMMIT_MESSAGE||'').includes('[preview]')?1:0)\""
 }
