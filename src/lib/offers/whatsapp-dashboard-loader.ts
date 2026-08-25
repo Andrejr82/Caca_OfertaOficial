@@ -11,9 +11,7 @@ export interface PostWithOffer {
   posted_at: string | null;
   created_at: string;
   deleted_at?: string | null;
-  affiliate_links?: {
-    tracked_url: string;
-  } | null;
+  affiliate_links?: { tracked_url: string } | null;
   offers: {
     id: string;
     product_name: string;
@@ -35,6 +33,7 @@ export interface PostWithOffer {
 export interface LoadWhatsappDashboardDraftsInput {
   supabase: SupabaseClient | null;
   userId: string | null | undefined;
+  selectedOfferIds?: Set<string>;
   todayStart?: Date;
   limit?: number;
 }
@@ -67,6 +66,7 @@ function dedupeByOfferId(posts: PostWithOffer[]): PostWithOffer[] {
 export async function loadWhatsappDashboardDrafts({
   supabase,
   userId,
+  selectedOfferIds,
   todayStart = getTodayBrtStart(),
   limit = 30,
 }: LoadWhatsappDashboardDraftsInput): Promise<PostWithOffer[]> {
@@ -74,32 +74,42 @@ export async function loadWhatsappDashboardDrafts({
 
   const requestedLimit = typeof limit === "number" && limit > 0 ? limit : 30;
 
-  // Editorial: a aba exibe drafts ativos já gerados pelos ciclos do dia.
-  // A renderização não depende do Top30, cohort atual ou status approved da oferta pai.
+  // Editorial: exibe drafts ativos já gerados pelos ciclos do dia.
+  // selectedOfferIds permanece apenas como filtro opcional de compatibilidade;
+  // a página WhatsApp não depende mais de Top30/cohort para renderizar.
   let editorialDrafts: PostWithOffer[] = [];
   try {
-    const { data, error } = await supabase
+    let editorialQuery = supabase
       .from("posts")
       .select("*, offers(*), affiliate_links(tracked_url)")
       .eq("user_id", userId)
       .eq("channel", "whatsapp")
       .eq("status", "draft")
-      .gte("created_at", todayStart.toISOString())
-      .order("created_at", { ascending: false })
-      .limit(Math.max(requestedLimit * 4, 120));
+      .order("created_at", { ascending: false });
 
+    if (selectedOfferIds && selectedOfferIds.size > 0) {
+      editorialQuery = editorialQuery.in("offer_id", Array.from(selectedOfferIds));
+    }
+
+    const { data, error } = await editorialQuery.limit(Math.max(requestedLimit * 4, 120));
     if (error) throw error;
 
     editorialDrafts = dedupeByOfferId(
       ((data || []) as PostWithOffer[])
-        .filter((post) => isActiveWhatsappDraft(post) && !isManualExpressDraft(post)),
+        .filter((post) => {
+          const createdAt = new Date(post.created_at).getTime();
+          return Number.isFinite(createdAt)
+            && createdAt >= todayStart.getTime()
+            && isActiveWhatsappDraft(post)
+            && !isManualExpressDraft(post);
+        }),
     );
   } catch (error) {
     console.error("[WhatsApp] Falha ao carregar drafts editoriais", error);
     editorialDrafts = [];
   }
 
-  // Express: continua fora do Top30 e é resolvido pela origem manual_source=true.
+  // Express: permanece fora do Top30 e é resolvido pela origem manual_source=true.
   let expressDrafts: PostWithOffer[] = [];
   try {
     const { data: expressOffers, error: expressOffersError } = await supabase
@@ -139,6 +149,5 @@ export async function loadWhatsappDashboardDrafts({
     expressDrafts = [];
   }
 
-  // Express tem prioridade visual; editorial completa o restante da capacidade da aba.
   return dedupeByOfferId([...expressDrafts, ...editorialDrafts]).slice(0, requestedLimit);
 }
