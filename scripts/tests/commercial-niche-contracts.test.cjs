@@ -59,8 +59,8 @@ test('4. Mercado Livre preserva política oficial e não cria nova matriz de bus
 });
 
 test('5. Beleza no Mercado Livre bloqueia modeladores fora do domínio sem quebrar modelador de cachos', () => {
-  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('modelador nasal'));
-  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('aro modelador'));
+  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('nasal'));
+  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('arroz'));
 
   const contract = getMarketplaceScenarioContract('beleza_editorial', 'Mercado Livre');
   assert.equal(matchesMarketplaceContract(contract, 'Afinador Modelador Nasal Acessories Nose Up Plástico Lilás Tamanho 5'), false);
