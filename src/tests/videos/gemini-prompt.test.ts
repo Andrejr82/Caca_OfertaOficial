@@ -36,7 +36,7 @@ describe("Gemini usability video prompt", () => {
     expect(prompt).toContain("não mostrar avatar parado, segurando o calçado para a câmera");
   });
 
-  it("preserva identidade do produto e impede invenção de recursos", () => {
+  it("preserva identidade e usa direção específica para costura", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Mini Máquina de Costura Manual Portátil",
       current_price: 10.99,
@@ -46,7 +46,9 @@ describe("Gemini usability video prompt", () => {
     expect(prompt).toContain("REFERÊNCIA VISUAL PRINCIPAL, ABSOLUTA E OBRIGATÓRIA");
     expect(prompt).toContain("MESMO OBJETO FÍSICO");
     expect(prompt).toContain("NÃO inventar acessórios");
-    expect(prompt).toContain("não inventar potência, capacidade, durabilidade, compatibilidade");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Costura em tarefa real");
+    expect(prompt).toContain("mãos adultas posicionando tecido");
+    expect(prompt).toContain("não inventar velocidade, tipos de ponto, alimentação, compatibilidade");
   });
 
   it("usa roteiro específico de moda com foco em caimento", () => {
