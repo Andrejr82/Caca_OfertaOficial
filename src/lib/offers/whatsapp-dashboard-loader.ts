@@ -52,7 +52,7 @@ export async function loadWhatsappDashboardDrafts({
 
   const editorialIds = selectedOfferIds ? Array.from(selectedOfferIds) : [];
 
-  // 1. Carregar drafts editoriais Top30 (se houver IDs selecionados)
+  // 1. Carregar drafts editoriais do conjunto permitido para exibição.
   let editorialDrafts: PostWithOffer[] = [];
   if (editorialIds.length > 0) {
     let query = supabase
@@ -78,35 +78,59 @@ export async function loadWhatsappDashboardDrafts({
     ) as unknown as PostWithOffer[];
   }
 
-  // 2. Carregar separadamente drafts de Publicação Expressa (manual_source === true)
+  // 2. Resolver as ofertas Express pela origem, em vez de filtrar apenas os N drafts mais recentes.
   let expressDrafts: PostWithOffer[] = [];
   try {
-    const { data: expressData } = await supabase
-      .from("posts")
-      .select("*, offers(*), affiliate_links(tracked_url)")
+    const { data: expressOffers, error: expressOffersError } = await supabase
+      .from("offers")
+      .select("id")
       .eq("user_id", userId)
-      .eq("channel", "whatsapp")
-      .eq("status", "draft")
+      .contains("explainability", { manual_source: true })
       .order("created_at", { ascending: false })
-      .limit(50);
+      .limit(100);
 
-    expressDrafts = (expressData || [])
-      .filter((post: any) => {
-        if (!post || !post.offers) return false;
-        const isManual = isManualExpressDraft(post);
-        const offerStatus = String(post.offers.status || "").toLowerCase();
-        const isActive = post.status === "draft"
-          && !post.deleted_at
-          && !post.posted_at
-          && !post.external_id
-          && !["posted", "rejected", "deferred"].includes(offerStatus);
-        return isManual && isActive;
-      }) as unknown as PostWithOffer[];
-  } catch {
+    if (expressOffersError) throw expressOffersError;
+
+    const expressOfferIds = (expressOffers || [])
+      .map((offer: { id?: string | null }) => offer.id)
+      .filter((id): id is string => Boolean(id));
+
+    if (expressOfferIds.length > 0) {
+      let expressQuery = supabase
+        .from("posts")
+        .select("*, offers(*), affiliate_links(tracked_url)")
+        .eq("user_id", userId)
+        .eq("channel", "whatsapp")
+        .eq("status", "draft")
+        .in("offer_id", expressOfferIds)
+        .order("created_at", { ascending: false });
+
+      if (typeof limit === "number" && limit > 0) {
+        expressQuery = expressQuery.limit(limit);
+      }
+
+      const { data: expressData, error: expressDraftsError } = await expressQuery;
+      if (expressDraftsError) throw expressDraftsError;
+
+      expressDrafts = (expressData || [])
+        .filter((post: any) => {
+          if (!post || !post.offers) return false;
+          const isManual = isManualExpressDraft(post);
+          const offerStatus = String(post.offers.status || "").toLowerCase();
+          const isActive = post.status === "draft"
+            && !post.deleted_at
+            && !post.posted_at
+            && !post.external_id
+            && !["posted", "rejected", "deferred"].includes(offerStatus);
+          return isManual && isActive;
+        }) as unknown as PostWithOffer[];
+    }
+  } catch (error) {
+    console.error("[WhatsApp] Falha ao carregar drafts Express", error);
     expressDrafts = [];
   }
 
-  // 3. Unificar: Express primeiro no topo, depois Editorial Top30, sem duplicações por offer_id
+  // 3. Unificar: Express primeiro no topo, depois Editorial, sem duplicações por offer_id.
   const seenOfferIds = new Set<string>();
   const combined: PostWithOffer[] = [];
 
