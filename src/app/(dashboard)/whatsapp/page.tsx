@@ -5,10 +5,16 @@ import { getPostHistory } from "@/lib/offers/queries";
 import { SocialChannelPostsView } from "@/components/dashboard/social-channel-posts-view";
 import { MessageCircle } from "lucide-react";
 import { WhatsappTop30Action } from "@/components/whatsapp/whatsapp-top30-action";
-import { prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
+import { prepareTop30WhatsappLegacyDrafts, SupabaseTop30WhatsappRepository, type WhatsappEditorialBatchState } from "@/lib/offers/prepare-top30-whatsapp-legacy-drafts";
 import { loadWhatsappDashboardDrafts, type PostWithOffer } from "@/lib/offers/whatsapp-dashboard-loader";
 
 export const dynamic = "force-dynamic";
+
+class ReadOnlyWhatsappDashboardRepository extends SupabaseTop30WhatsappRepository {
+  override async saveWhatsappEditorialBatchState(_state: WhatsappEditorialBatchState): Promise<void> {
+    // Dashboard rendering is read-only. State changes belong to explicit operational actions.
+  }
+}
 
 export default async function WhatsappDashboardPage() {
   const authClient = await createServerSupabaseClient();
@@ -19,7 +25,8 @@ export default async function WhatsappDashboardPage() {
     if (!supabase || !user?.id) return [];
     let displayOfferIds = new Set<string>();
     try {
-      const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
+      const repository = new ReadOnlyWhatsappDashboardRepository(supabase, user.id);
+      const top30 = await prepareTop30WhatsappLegacyDrafts(repository);
       const selected = top30.selectedOfferIds || [];
       const cohort = top30.currentCohortOfferIds || [];
       displayOfferIds = new Set([...selected, ...cohort]);
