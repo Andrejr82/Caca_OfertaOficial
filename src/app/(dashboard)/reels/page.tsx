@@ -3,6 +3,7 @@ import { InstagramPostApprovalCard } from "@/components/instagram/instagram-acti
 import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions";
 import { ReelsPromptStudio } from "./ReelsPromptStudio";
 import type { ReelsPromptOffer } from "@/lib/videos/reels-playbook";
+import { buildReelsSocialDraftContent } from "@/lib/videos/reels-social-copy";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ type SocialDraft = {
     id: string;
     product_name: string;
     platform: string;
+    category?: string | null;
     status?: string | null;
     current_price: number;
     old_price: number | null;
@@ -27,6 +29,9 @@ type SocialDraft = {
     original_url: string;
     coupon: string | null;
     notes: string | null;
+    shipping_free?: boolean | null;
+    explainability?: Record<string, unknown> | null;
+    marketplace_metrics?: Record<string, unknown> | null;
   };
 };
 
@@ -112,8 +117,9 @@ export default async function ReelsPage() {
 
           if (!instagramPost && !facebookPost) return null;
 
-          const attachVideo = (post: any): SocialDraft | null => post ? {
+          const attachVideo = (post: any, channel: "facebook" | "instagram"): SocialDraft | null => post ? {
             ...post,
+            content: buildReelsSocialDraftContent(post, channel),
             videoJobId: job.id,
             videoUrl: job.video_url,
           } as SocialDraft : null;
@@ -121,8 +127,8 @@ export default async function ReelsPage() {
           return {
             videoJobId: job.id,
             videoUrl: job.video_url,
-            instagramDraft: attachVideo(instagramPost),
-            facebookDraft: attachVideo(facebookPost),
+            instagramDraft: attachVideo(instagramPost, "instagram"),
+            facebookDraft: attachVideo(facebookPost, "facebook"),
           } as VideoDistributionItem;
         })
         .filter((item): item is VideoDistributionItem => Boolean(item));
@@ -145,7 +151,7 @@ export default async function ReelsPage() {
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="font-bold text-white">Aguardando publicação</h2>
-            <p className="mt-1 text-xs text-white/45">Vídeos já aprovados em Vídeos de Ofertas continuam aqui para distribuição social, sem duplicar o arquivo.</p>
+            <p className="mt-1 text-xs text-white/45">Vídeos aprovados usam a Copy V5 de conversão específica para Instagram e Facebook.</p>
           </div>
           <span className="rounded-full bg-pink-500/15 px-3 py-1 text-xs font-bold text-pink-200">
             {distributionItems.length}
