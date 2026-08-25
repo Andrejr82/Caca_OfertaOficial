@@ -5,6 +5,7 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
 import { advanceCycleCheckpoint, loadCycleCheckpoint } from "@/lib/ai/official/official-ai-cycle-checkpoint";
+import { selectCycleCommercialPortfolio } from "@/lib/ai/official/select-cycle-commercial-portfolio";
 import { hasFacebookEnv } from "@/lib/env";
 import { publishOfficialPost } from "@/core/publication";
 import { createOfficialPublicationServiceDependencies } from "@/lib/publication/official/create-official-publication-service";
@@ -76,15 +77,35 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false, code: "FORBIDDEN", message: "PROCESS_OFFERS é exclusivo do Oracle Worker." }, { status: 403 });
       }
       const correlationId = body.correlationId || request.headers.get("x-correlation-id");
-      const offerIds = [...new Set((body.offerIds || []).filter((id) => typeof id === "string" && id.trim().length > 0))];
-      if (!correlationId || offerIds.length === 0) {
+      const receivedOfferIds = [...new Set((body.offerIds || []).filter((id) => typeof id === "string" && id.trim().length > 0))];
+      if (!correlationId || receivedOfferIds.length === 0) {
         return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "correlationId e offerIds são obrigatórios." }, { status: 400 });
       }
+
+      let offerIds = receivedOfferIds;
+      let portfolio: Record<string, unknown> = {
+        received: receivedOfferIds.length,
+        selected: receivedOfferIds.length,
+        rejected: 0,
+        rejectionReasons: {},
+        mode: "fallback_passthrough",
+      };
+      try {
+        const commercialPortfolio = await selectCycleCommercialPortfolio(supabase, userId, receivedOfferIds);
+        if (commercialPortfolio.selectedOfferIds.length > 0) {
+          offerIds = [...commercialPortfolio.selectedOfferIds];
+          portfolio = { ...commercialPortfolio, mode: "cross_market_v1" };
+        }
+      } catch (portfolioError) {
+        console.warn("[Official AI] Commercial portfolio selector fallback:", portfolioError instanceof Error ? portfolioError.message : portfolioError);
+      }
+
       const pages = createOfficialAICyclePages(correlationId, offerIds);
       const checkpoint = await loadCycleCheckpoint(supabase, userId, correlationId, offerIds, pages.length);
       if (checkpoint.status === "completed") {
         return NextResponse.json({
-          ok: true, status: "completed", correlationId, offerIdsReceived: offerIds.length,
+          ok: true, status: "completed", correlationId,
+          offerIdsReceived: receivedOfferIds.length, offerIdsSelected: offerIds.length, portfolio,
           pageNumber: null, totalPages: pages.length, nextPage: null,
           batchCompleted: true, metrics: checkpoint.metrics, pageStatuses: checkpoint.pageStatuses
         });
@@ -98,9 +119,6 @@ export async function POST(request: Request) {
         channels: resolveOfficialAIChannels(), requestedAt: body.requestedAt || new Date().toISOString(),
         actor: { type: "service", id: "oracle-worker", service: "oracle-worker" }, origin: "oracle.discovery",
         reason: { code: "GENERATE_OFFICIAL_CONTENT" },
-        // Automatic Oracle cycles must use the same deterministic Copy V2
-        // renderer as manual/Express generation. Without these flags the
-        // service falls back to the legacy copy renderer.
         metadata: { copyV2: true, copyV2Auto: true },
         batch: { operation: "PROCESS_OFFERS", offerIds: page.offerIds, pageNumber: page.pageNumber, totalPages: page.totalPages }
       };
@@ -112,14 +130,14 @@ export async function POST(request: Request) {
         const { error: auditError } = await supabase.from("integration_logs").insert({
           user_id: userId, integration: "official-ai-service", action: "ai_cycle_completed", status: "success",
           message: `${correlationId}:cycle_completed`,
-          metadata: { correlationId, offerIds, offerIdsReceived: offerIds.length, ...advanced.metrics,
+          metadata: { correlationId, offerIds, offerIdsReceived: receivedOfferIds.length, offerIdsSelected: offerIds.length, portfolio, ...advanced.metrics,
             pageStatuses: advanced.pageStatuses, batchCompleted: true }
         });
         if (auditError) throw new Error(`Official AI cycle completion audit failed: ${auditError.message}`);
         try {
           await dependencies.telemetry?.emit({
             eventType: "official_ai.cycle.completed", correlationId, stage: "cycle_summary",
-            details: { offerIdsReceived: offerIds.length, ...advanced.metrics, batchCompleted: true }
+            details: { offerIdsReceived: receivedOfferIds.length, offerIdsSelected: offerIds.length, portfolio, ...advanced.metrics, batchCompleted: true }
           });
         } catch { /* telemetry cannot alter the completed cycle */ }
       }
@@ -148,7 +166,8 @@ export async function POST(request: Request) {
       }
       return NextResponse.json({
         ok: result.status !== "rejected", status: advanced.status, correlationId,
-        offerIdsReceived: offerIds.length, pageNumber: page.pageNumber, totalPages: pages.length,
+        offerIdsReceived: receivedOfferIds.length, offerIdsSelected: offerIds.length, portfolio,
+        pageNumber: page.pageNumber, totalPages: pages.length,
         nextPage: batchCompleted ? null : advanced.nextPage, batchCompleted,
         metrics: advanced.metrics, pageStatuses: advanced.pageStatuses, result
       });
@@ -160,7 +179,6 @@ export async function POST(request: Request) {
     }
     const commandId = body.commandId || request.headers.get("x-command-id") || `ai:${offerId}:v1`;
 
-    // O comando não inclui expectedState nem mode — a IA determina internamente (ADR-014).
     const command: OfficialAICommand = {
       contractVersion: "pmav5.ai/v1",
       commandId,
@@ -191,8 +209,6 @@ export async function POST(request: Request) {
       createOfficialAIServiceDependencies(supabase, userId)
     );
 
-    // drafted = Modo 1 (Draft Generation): sucesso sem mudança de estado
-    // approved = Modo 2 (Approval): sucesso com promoção de estado
     const ok = result.status === "approved" || result.status === "drafted";
     
     if (result.status === "approved" && 'drafts' in result && result.drafts) {

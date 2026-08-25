@@ -1,7 +1,7 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
+<!-- verified-against: b2f51dbb4c198cfbd14864a6e7eff2f136834be8 -->
 <!-- verified-on: 2026-08-25 -->
 
 Baseado no código versionado e, quando indicado, na auditoria operacional read-only da VPS Oracle realizada em 25/08/2026. Disponibilidade externa de Vercel, Supabase, Meta, Telegram, WhatsApp e marketplaces deve ser confirmada no ambiente correspondente.
@@ -32,6 +32,9 @@ Baseado no código versionado e, quando indicado, na auditoria operacional read-
 - Curadoria Comercial V1 produz score, riscos, intenção editorial e filas por canal.
 - O painel operacional contém coortes e filas Top 30; identidade histórica e ofertas já publicadas são protegidas contra repetição.
 - Contratos por marketplace podem aplicar guardrails específicos de domínio sem alterar o motor de busca. No Mercado Livre/Beleza, sinais fora do domínio como `nasal`, `nariz`, `nose up`, `arroz` e `padaria` bloqueiam falsos positivos preservando produtos válidos como modelador de cachos.
+- Antes da geração automática de drafts de um ciclo, a aplicação executa seleção comercial cross-marketplace sobre a coorte persistida. O ranking considera preço comparável por unidade/peso/volume, desconto comprovável, prova social, rating, comissão, posição de origem e sinais de confiança.
+- A seleção também reduz variantes quase idênticas e excesso do mesmo tipo comercial. Os limites padrão são 18 ofertas por ciclo e no máximo 2 por tipo, ajustáveis por `COMMERCIAL_PORTFOLIO_MAX_TOTAL` e `COMMERCIAL_PORTFOLIO_MAX_PER_TYPE`.
+- A seleção comercial não altera os motores de busca nem impede o Supabase de registrar descoberta válida; ela decide quais ofertas seguem para geração de conteúdo social.
 - Discovery não autoriza publicação.
 
 ## Publicação
@@ -54,7 +57,7 @@ PM2 confirmou online:
 - `authorized-reel-verifier`
 - `video-worker`
 
-`shopee-feed-sync` estava parado. O checkout da VPS auditado estava limpo na branch `main`, SHA `febe66abb28bd47c738d925befc50ad365c59371`.
+`shopee-feed-sync` estava parado. Após sincronização controlada concluída em 25/08/2026, o checkout da VPS ficou limpo na branch `main`, SHA `b2f51dbb4c198cfbd14864a6e7eff2f136834be8`, com `oracle-scraper` em instância única e sem crash loop.
 
 ## Radar
 
