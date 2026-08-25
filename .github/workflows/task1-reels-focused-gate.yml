@@ -1,0 +1,19 @@
+name: Task1 Reels Focused Gate
+
+on:
+  push:
+    branches:
+      - feat/reels-two-scene-prompt-studio
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx vitest run src/tests/lib/videos/reels-playbook.test.ts
+      - run: npx tsc --noEmit
