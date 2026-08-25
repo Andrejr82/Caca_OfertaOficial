@@ -1,0 +1,21 @@
+name: PR172 Focused Gate
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  focused-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: WhatsApp regressions
+        run: npx vitest run src/tests/whatsapp-editorial-and-express-drafts.test.ts src/tests/whatsapp-approved-offer-draft-regression.test.ts
+      - name: Niche contract regressions
+        run: node --test scripts/tests/commercial-niche-contracts.test.cjs scripts/tests/beleza-mercadolivre-domain-guard.test.cjs
