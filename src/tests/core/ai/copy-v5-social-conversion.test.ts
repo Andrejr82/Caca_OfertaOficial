@@ -22,7 +22,7 @@ const kettlePlan: CopyV5Plan = {
 };
 
 describe("Copy V5 — social conversion director", () => {
-  it("Facebook deixa de ser catálogo e cria conversa + contexto + preço + CTA", () => {
+  it("Facebook usa copy curta de desejo + produto + preço + CTA", () => {
     const rendered = renderCopyV5ChannelCopy(
       kettlePlan,
       kettleFacts,
@@ -30,19 +30,18 @@ describe("Copy V5 — social conversion director", () => {
       "https://caca-oferta-oficial.vercel.app/go/fb_kettle",
     );
 
-    expect(rendered.feed).toContain("Quem também usa água quente várias vezes ao dia?");
-    expect(rendered.feed).toContain("entra justamente nessa rotina");
-    expect(rendered.feed).toMatch(/Hoje aparece por R\$\s39,90\./);
-    expect(rendered.feed).toContain("Um detalhe informado na oferta: sem fio.");
+    expect(rendered.feed).toContain("☕ Café, chá ou água quente sem complicar a rotina.");
+    expect(rendered.feed).toContain("🔎 Chaleira Elétrica 2L Inox • Sem fio");
+    expect(rendered.feed).toContain("💰 R$ 39,90");
     expect(rendered.feed).toContain("👉 Veja o preço, condições e disponibilidade no primeiro comentário.");
+    expect(rendered.feed.split("\n\n")).toHaveLength(4);
     expect(rendered.feed).not.toContain("antes que o preço mude");
     expect(rendered.feed).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
-    expect(rendered.feed).not.toMatch(/Chaleira Elétrica 2L Inox 220V Fervedor de Água\n\nChaleira Elétrica/i);
     expect(rendered.feed).not.toMatch(/https?:\/\//);
     expect(rendered.firstComment).toBe("👉 Link da oferta: https://caca-oferta-oficial.vercel.app/go/fb_kettle");
   });
 
-  it("Instagram usa desejo de rotina e CTA de bio sem repetir título", () => {
+  it("Instagram usa copy curta própria e CTA de bio", () => {
     const rendered = renderCopyV5ChannelCopy(
       kettlePlan,
       kettleFacts,
@@ -50,13 +49,29 @@ describe("Copy V5 — social conversion director", () => {
       "https://caca-oferta-oficial.vercel.app/go/ig_kettle",
     );
 
-    expect(rendered.feed).toContain("Água quente no dia a dia sem transformar isso numa tarefa.");
-    expect(rendered.feed).toMatch(/Hoje aparece por R\$\s39,90\./);
+    expect(rendered.feed).toContain("☕ Um atalho simples para café, chá e água quente.");
+    expect(rendered.feed).toContain("🔎 Chaleira Elétrica 2L Inox • Sem fio");
+    expect(rendered.feed).toContain("💰 R$ 39,90");
     expect(rendered.feed).toContain("👉 Veja o preço, condições e disponibilidade no link da bio.");
+    expect(rendered.feed.split("\n\n")).toHaveLength(4);
     expect(rendered.feed).not.toContain("antes que o preço mude");
-    expect(rendered.feed).toContain("🔎 Link da oferta na bio. 👇");
-    expect(rendered.feed).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
     expect(rendered.feed).not.toMatch(/https?:\/\//);
+  });
+
+  it("limita sinais comerciais extras a dois", () => {
+    const facts: CopyV5Facts = {
+      ...kettleFacts,
+      freeShipping: true,
+      evidence: { coupon: "CASA10", is_official_store: true, seller_name: "Loja Teste" },
+    };
+    const plan: CopyV5Plan = { ...kettlePlan, optionalProofAngle: "⭐ Avaliação 4,8/5" };
+    const rendered = renderCopyV5ChannelCopy(plan, facts, "instagram");
+
+    expect(rendered.feed).toContain("🎟️ Cupom: CASA10");
+    expect(rendered.feed).toContain("📦 Frete grátis");
+    expect(rendered.feed).not.toContain("Loja oficial");
+    expect(rendered.feed).not.toContain("Avaliação 4,8/5");
+    expect(rendered.feed.split("\n\n")).toHaveLength(6);
   });
 
   it("mantém WhatsApp no contrato atual nesta etapa", () => {
