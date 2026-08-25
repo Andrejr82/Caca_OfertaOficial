@@ -74,6 +74,17 @@ function normalize(value: unknown): string {
     .trim();
 }
 
+function normalizeMeasurementText(value: unknown): string {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/,/g, ".")
+    .replace(/[^a-z0-9.]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function number(value: unknown): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
@@ -93,7 +104,7 @@ function commercialType(offer: CommercialPortfolioOffer): string {
 }
 
 function parseComparableAmount(title: string, type: string): { kind: CommercialPortfolioRankedOffer["measureKind"]; amount: number } {
-  const text = normalize(title).replace(/,/g, ".");
+  const text = normalizeMeasurementText(title);
   const multipack = text.match(/\b(\d{1,3})\s*x\s*(\d+(?:\.\d+)?)\s*(kg|g|l|ml)\b/);
   if (multipack) {
     const count = number(multipack[1]);
