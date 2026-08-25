@@ -23,27 +23,18 @@ function sanitizeBlockedTerms(blockedTerms = [], allowedTerms = [], keywords = [
   const intentTokens = new Set();
   for (const phrase of [...allowedNorm, ...keywordsNorm]) {
     const tokens = phrase.split(/[^a-z0-9]+/g).map((t) => t.trim()).filter((t) => t.length >= 2);
-    for (const token of tokens) {
-      intentTokens.add(token);
-    }
+    for (const token of tokens) intentTokens.add(token);
   }
 
   const isContradictory = (blockedTerm) => {
     const normalizedBlocked = normalize(blockedTerm).replace(/[^a-z0-9]+/g, ' ').trim();
     if (!normalizedBlocked) return true;
-
     const blockedTokens = normalizedBlocked.split(/\s+/).filter(Boolean);
-    for (const bToken of blockedTokens) {
-      if (intentTokens.has(bToken)) return true;
-    }
-
+    for (const bToken of blockedTokens) if (intentTokens.has(bToken)) return true;
     for (const allowedPhrase of [...allowedNorm, ...keywordsNorm]) {
       const paddedAllowed = ` ${allowedPhrase} `;
-      if (paddedAllowed.includes(` ${normalizedBlocked} `) || allowedPhrase === normalizedBlocked) {
-        return true;
-      }
+      if (paddedAllowed.includes(` ${normalizedBlocked} `) || allowedPhrase === normalizedBlocked) return true;
     }
-
     return false;
   };
 
@@ -77,7 +68,9 @@ function scenario(id, name, queueHour, keywords, allowedProductTerms, blockedPro
   };
 }
 
-const EDITORIAL_SCENARIOS = Object.freeze({
+// Catálogo histórico mantido para rastreabilidade. Somente os cenários listados
+// em ACTIVE_EDITORIAL_SCENARIO_IDS participam da descoberta/publicação ativa.
+const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
   casa_cozinha_editorial: scenario('casa_cozinha_editorial', 'Casa e Cozinha', 7,
     ['jogo de cama', 'toalha de banho', 'aparelho de jantar', 'faqueiro', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
     ['jogo de cama', 'lençol', 'toalha', 'faqueiro', 'aparelho de jantar', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
@@ -162,20 +155,31 @@ const EDITORIAL_SCENARIOS = Object.freeze({
     blockedProductTerms: ['produto_sem_cupom', 'cupom_expirado'], attributes: ['code', 'rules', 'valid_until', 'marketplace'], maxAgeHours: 24,
     priority: 'high', discoveryMode: 'manual_only', apiCategories: [], amazonBrowseNodes: [], aliases: [],
   },
-
-
 });
 
-const EDITORIAL_SCENARIO_IDS = Object.freeze(Object.keys(EDITORIAL_SCENARIOS));
-const EXPECTED_PUBLICATION_HOURS = Object.freeze([7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22]);
-const EXPECTED_DISCOVERY_HOURS = Object.freeze([6, 7, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20]);
+const ACTIVE_EDITORIAL_SCENARIO_IDS = Object.freeze([
+  'casa_cozinha_editorial',
+  'ferramentas_editorial',
+  'informatica_editorial',
+  'beleza_editorial',
+  'moda_editorial',
+  'pet_editorial',
+  'eletrodomesticos_editorial',
+  'cupons_aprovados_editorial',
+]);
+
+const EDITORIAL_SCENARIOS = Object.freeze(Object.fromEntries(
+  ACTIVE_EDITORIAL_SCENARIO_IDS.map((id) => [id, EDITORIAL_SCENARIO_CATALOG[id]]),
+));
+const EDITORIAL_SCENARIO_IDS = ACTIVE_EDITORIAL_SCENARIO_IDS;
+const EXPECTED_PUBLICATION_HOURS = Object.freeze([7, 9, 10, 12, 13, 15, 19, 22]);
+const EXPECTED_DISCOVERY_HOURS = Object.freeze([6, 8, 9, 11, 12, 14, 18]);
+
 function buildQueueByHour(scenarios) {
   const queue = {};
   for (const id of EDITORIAL_SCENARIO_IDS) {
     const hour = Number(scenarios[id]?.queueHour);
-    if (Object.prototype.hasOwnProperty.call(queue, hour)) {
-      throw new Error(`CONFIGURAÇÃO INVÁLIDA\nduplicate queueHour=${hour}`);
-    }
+    if (Object.prototype.hasOwnProperty.call(queue, hour)) throw new Error(`CONFIGURAÇÃO INVÁLIDA\nduplicate queueHour=${hour}`);
     queue[hour] = id;
   }
   return Object.freeze(queue);
@@ -207,18 +211,12 @@ function validateEditorialSchedule(scenarios = EDITORIAL_SCENARIOS) {
 
   for (let index = 0; index < expectedIds.length; index += 1) {
     const entry = scenarios[expectedIds[index]];
-    if (!entry || Number(entry.queueHour) !== EXPECTED_PUBLICATION_HOURS[index]) {
-      errors.push(`queueHour mismatch for ${expectedIds[index]}`);
-    }
+    if (!entry || Number(entry.queueHour) !== EXPECTED_PUBLICATION_HOURS[index]) errors.push(`queueHour mismatch for ${expectedIds[index]}`);
   }
   for (const hour of EXPECTED_DISCOVERY_HOURS) {
     const publication = getEditorialScenarioForDiscoveryHour(hour);
     const expected = scenarios[QUEUE_BY_HOUR[hour + 1]];
     if (!publication || !expected || publication.id !== expected.id) errors.push(`discovery mapping mismatch=${hour}`);
-  }
-  for (const hour of [15, 16]) {
-    const publication = getEditorialScenarioForDiscoveryHour(hour);
-    if (publication !== null) errors.push(`discovery hour ${hour} must return null`);
   }
   const coupons = scenarios.cupons_aprovados_editorial;
   if (!coupons || coupons.discoveryMode !== 'manual_only') errors.push('cupons_aprovados_editorial must be manual_only');
@@ -246,7 +244,9 @@ function getEditorialScenarioForHour(hour) {
 
 function getEditorialScenarioForDiscoveryHour(hour) {
   const normalized = ((Number(hour) % 24) + 24) % 24;
-  const publicationHour = normalized < 6 ? 7 : Math.min(normalized + 1, 21);
+  if (normalized < 6) return EDITORIAL_SCENARIOS.casa_cozinha_editorial;
+  const publicationHour = normalized + 1;
+  if (publicationHour >= 22) return null;
   return getEditorialScenarioForHour(publicationHour);
 }
 
@@ -277,6 +277,8 @@ function getScenarioScheduleAudit() {
 module.exports = {
   MARKETPLACES,
   EDITORIAL_SCHEDULE_TIMEZONE,
+  EDITORIAL_SCENARIO_CATALOG,
+  ACTIVE_EDITORIAL_SCENARIO_IDS,
   EDITORIAL_SCENARIOS,
   EDITORIAL_SCENARIO_IDS,
   QUEUE_BY_HOUR,
