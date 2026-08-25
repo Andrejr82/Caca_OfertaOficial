@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildGeminiVideoPrompt, classifyGeminiUsabilityCategory, formatLongPriceForSpeech } from "@/lib/videos/gemini-prompt";
 
 describe("Gemini usability video prompt", () => {
-  it("gera prompt de usabilidade sem avatar ofertando e com direção criativa de conversão", () => {
+  it("gera prompt de usabilidade sem apresentação e com ação desde o primeiro segundo", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Console Portátil R36S 64GB Tela IPS 3.5",
       current_price: 175.99,
@@ -12,11 +12,14 @@ describe("Gemini usability video prompt", () => {
 
     expect(prompt).toContain("VÍDEO DE USABILIDADE DO PRODUTO");
     expect(prompt).toContain("aproximadamente 15 segundos");
-    expect(prompt).toContain("DIREÇÃO CRIATIVA DE CONVERSÃO — PRIORIDADE ALTA");
-    expect(prompt).toContain("ação deve começar no primeiro segundo");
-    expect(prompt).toContain("não usar abertura de catálogo");
+    expect(prompt).toContain("OBJETIVO COMERCIAL");
+    expect(prompt).toContain("ação começa no primeiro segundo");
+    expect(prompt).toContain("NÃO criar vídeo de catálogo");
+    expect(prompt).toContain("CENA 1 — 0–3s — USO JÁ COMEÇOU");
     expect(prompt).toContain("SEM AVATAR OFERTANDO");
     expect(prompt).toContain("SEM NARRAÇÃO");
+    expect(prompt).not.toContain("CENA 1 — 0–3s — APRESENTAÇÃO");
+    expect(prompt).not.toContain("HERO SHOT FINAL");
   });
 
   it("para tênis, força uso no pé e câmera acompanhando movimento", () => {
@@ -27,7 +30,7 @@ describe("Gemini usability video prompt", () => {
       category: "Esporte",
     });
 
-    expect(prompt).toContain("ARQUÉTIPO: Calçado em movimento");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Calçado em movimento");
     expect(prompt).toContain("calçado sendo colocado no pé ou com o primeiro passo em movimento");
     expect(prompt).toContain("câmera baixa acompanhando os pés");
     expect(prompt).toContain("não mostrar avatar parado, segurando o calçado para a câmera");
@@ -54,8 +57,8 @@ describe("Gemini usability video prompt", () => {
     });
 
     expect(classifyGeminiUsabilityCategory({ product_name: "Vestido Saída de Praia Verde", current_price: 1 })).toBe("moda");
-    expect(prompt).toContain("caimento, proporções, comprimento");
-    expect(prompt).toContain("ARQUÉTIPO: Moda em uso");
+    expect(prompt).toContain("caimento, comprimento, proporção e movimento do tecido");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Moda em uso");
     expect(prompt).toContain("pessoa já vestindo a peça e entrando em movimento");
   });
 
@@ -66,8 +69,8 @@ describe("Gemini usability video prompt", () => {
       category: "Pet",
     });
     expect(prompt).toContain("CATEGORIA DE ROTEIRO: Pet");
-    expect(prompt).toContain("animal doméstico interagindo naturalmente");
-    expect(prompt).toContain("ARQUÉTIPO: Pet em interação");
+    expect(prompt).toContain("animal ou tutor já interagindo com o produto");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Pet em interação");
   });
 
   it("mantém utilitário legado de preço", () => {
