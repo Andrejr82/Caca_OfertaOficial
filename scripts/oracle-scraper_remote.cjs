@@ -19,8 +19,14 @@ if (require.main === module && retiredWorkerFlag) {
   process.exit(1);
 }
 
-const scenarioArgIndex = process.argv.indexOf('--scenario');
-const CLI_SCENARIO_ID = scenarioArgIndex !== -1 ? process.argv[scenarioArgIndex + 1] : null;
+function parseScenarioArg(argv = process.argv) {
+  const equalsArg = argv.find((arg) => String(arg).startsWith('--scenario='));
+  if (equalsArg) return String(equalsArg).slice('--scenario='.length).trim() || null;
+  const scenarioArgIndex = argv.indexOf('--scenario');
+  return scenarioArgIndex !== -1 ? String(argv[scenarioArgIndex + 1] || '').trim() || null : null;
+}
+
+const CLI_SCENARIO_ID = parseScenarioArg();
 
 global.WebSocket = require('ws');
 
@@ -156,9 +162,9 @@ function createQualityAdmissionRunner() {
 }
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-// Executa uma descoberta por hora antes de cada fila editorial (06h–20h).
+// Executa descoberta nos 7 horários canônicos dos nichos editoriais ativos (06h, 08h, 09h, 11h, 12h, 14h, 18h).
 // A fila de cupons das 22h permanece manual e não dispara busca de produtos.
-const CRON_SCHEDULE = '0 6-20 * * *';
+const CRON_SCHEDULE = '0 6,8,9,11,12,14,18 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
@@ -1446,6 +1452,7 @@ if (require.main === module && process.env.ORACLE_SCRAPER_DISABLE_AUTORUN !== '1
 
 module.exports = {
   CRON_SCHEDULE,
+  parseScenarioArg,
   calculateScoreV1,
   executeShopeeNativeDiscoveryV5,
   fetchAmazonHtmlViaScrapedo,
