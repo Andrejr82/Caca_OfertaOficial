@@ -60,9 +60,13 @@ Status: implementado na branch; validação local pendente.
 - Teste arquitetural exige ausência física do módulo e bloqueia sua reintrodução no renderer.
 
 ### Task 6 — Fallback e telemetria
-Status: pendente.
+Status: implementado na branch; validação local pendente.
 
-Fallback explícito e auditável; provider/modelo real devem aparecer corretamente na telemetria.
+- Fallback permanece exclusivamente dentro da Copy V5 e nunca retorna para V2/V3.
+- Outcome técnico distingue `source: llm` de `source: deterministic-fallback`.
+- Fallback informa motivo: `no_provider`, `provider_error`, `invalid_output` ou `invalid_json`.
+- Telemetria grava `fallback`, provider, model e motivo em geração oficial e regeneração.
+- Fallback é identificado como `deterministic-fallback / copy-v5-fallback`, sem mascarar como LLM.
 
 ### Task 7 — Prova de autoridade única
 Status: pendente.
