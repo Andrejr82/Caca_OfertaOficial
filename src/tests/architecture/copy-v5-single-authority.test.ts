@@ -43,6 +43,24 @@ describe("Copy V5 single final-copy authority", () => {
     expect(service).not.toContain("if (input.command.metadata?.copyV2 === true)");
   });
 
+  it("neutraliza o roteamento legado de Expressa e ciclos antes do engine", () => {
+    const service = read("src/core/ai/official-ai-service.ts");
+    expect(service).toContain("neutralizeLegacyCopyRouting(command)");
+    expect(service).toContain('command.origin === "oracle.discovery"');
+    expect(service).toContain('command.origin === "publish.quick-publication"');
+    expect(service).toContain("copyV2Auto: _copyV2Auto");
+    expect(service).toContain("copyV3Express: _copyV3Express");
+    expect(service).toContain("generateOfficialAIEngine(canonicalCommand, wrappedDependencies)");
+  });
+
+  it("impede qualquer caller produtivo de importar o engine diretamente", () => {
+    const service = read("src/core/ai/official-ai-service.ts");
+    expect(service).toContain('from "./official-ai-service-engine"');
+    for (const path of FINAL_COPY_PATHS.filter((path) => path !== "src/core/ai/official-ai-service.ts")) {
+      expect(read(path), path).not.toContain("official-ai-service-engine");
+    }
+  });
+
   it("faz a regeneração usar o mesmo planCommercialCopyV5 sem provider.generate paralelo", () => {
     const regeneration = read("src/core/ai/official-ai-regeneration-service.ts");
     expect(regeneration).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
