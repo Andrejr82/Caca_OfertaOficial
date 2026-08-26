@@ -1,4 +1,4 @@
-import type { OfficialAIRegenerationDependencies } from "./ports";
+import { emitOfficialAITelemetrySafely, type OfficialAIRegenerationDependencies } from "./ports";
 import { planCommercialCopyV5 } from "./copy-v5-planner";
 import type { CopyV5Facts } from "./copy-v5-types";
 import { buildCanonicalCopyV5ChannelDraft } from "./official-ai-service";
@@ -78,7 +78,23 @@ export async function regenerateOfficialDrafts(
       const plan = await planCommercialCopyV5(facts, provider, {
         correlationId: command.correlationId,
         timeoutMs: 30_000,
-        metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft_v5" }
+        metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft_v5" },
+        onOutcome: (outcome) => emitOfficialAITelemetrySafely(dependencies.telemetry, {
+          eventType: "official_ai.copy_v5.regeneration.completed",
+          correlationId: command.correlationId,
+          offerId: draft.offerId,
+          marketplace: draft.marketplace,
+          provider: outcome.provider,
+          model: outcome.model,
+          fallback: outcome.fallback,
+          stage: "copy_v5_regeneration",
+          details: {
+            source: outcome.source,
+            fallbackReason: outcome.reason,
+            postId: draft.postId,
+            channel: draft.channel,
+          },
+        }),
       });
       const afterContent = buildCanonicalCopyV5ChannelDraft(
         facts,
