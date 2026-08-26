@@ -18,7 +18,7 @@ import {
   generateOfficialAI as generateOfficialAIEngine,
   OFFICIAL_AI_PAGE_CONCURRENCY,
 } from "./official-ai-service-engine";
-import type { OfficialAIServiceDependencies } from "./ports";
+import { emitOfficialAITelemetrySafely, type OfficialAIServiceDependencies } from "./ports";
 import type {
   OfficialAIChannel,
   OfficialAICommand,
@@ -198,12 +198,26 @@ export async function generateOfficialAI(
         try {
           provider = dependencies.providers.resolve(input.command.providerPreference);
         } catch {
-          // planCommercialCopyV5 possui o fallback factual canônico quando provider não está disponível.
+          // O planner registra no_provider e usa somente o fallback factual V5.
         }
         const plan = await planCommercialCopyV5(facts, provider, {
           correlationId: input.command.correlationId,
           timeoutMs: 15_000,
           metadata: input.command.metadata,
+          onOutcome: (outcome) => emitOfficialAITelemetrySafely(dependencies.telemetry, {
+            eventType: "official_ai.copy_v5.planning.completed",
+            correlationId: input.command.correlationId,
+            offerId: input.offer.id,
+            marketplace: input.offer.marketplace,
+            provider: outcome.provider,
+            model: outcome.model,
+            fallback: outcome.fallback,
+            stage: "copy_v5_planning",
+            details: {
+              source: outcome.source,
+              fallbackReason: outcome.reason,
+            },
+          }),
         });
         const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan);
         latestContent = content;
