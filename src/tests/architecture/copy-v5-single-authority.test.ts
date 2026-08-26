@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -87,6 +87,11 @@ describe("Copy V5 single final-copy authority", () => {
     expect(renderer).not.toContain("classifySocialCopyArchetype");
     expect(renderer).not.toContain("calculateDiscountPercent");
     expect(renderer).not.toContain("50 &&");
+  });
+
+  it("remove fisicamente o social director que criava narrativa paralela", () => {
+    expect(existsSync(resolve(root, "src/core/ai/copy-v5-social-director.ts"))).toBe(false);
+    expect(read("src/core/ai/copy-v5-renderer.ts")).not.toContain("copy-v5-social-director");
   });
 
   it("mantém backfill e superfícies sociais explicitamente na V5", () => {
