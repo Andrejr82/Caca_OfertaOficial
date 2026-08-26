@@ -64,6 +64,100 @@ describe("Copy V5 factual guard", () => {
     expect(result.hook).not.toMatch(/1[.]?900\s+compradores/iu);
   });
 
+  it("não transforma vendas de Moda em clientes que avaliaram", async () => {
+    const facts: CopyV5Facts = {
+      productName: "Tênis Masculino Polo Vili Madri Branco Casual",
+      marketplace: "Shopee",
+      category: "moda_editorial",
+      currentPrice: 98.55,
+      originalPrice: null,
+      evidence: { sales: 202, rating: 4.9, attributes: ["masculino", "branco", "casual"] },
+    };
+
+    const result = await plan(facts, {
+      shortProductName: "Tênis Polo Vili Madri Masculino Branco",
+      commercialIntent: "proof",
+      commercialAngle: "product",
+      hook: "Mais de 200 clientes avaliaram este tênis com 4.9",
+      benefitLine: null,
+      selectedAttributes: ["masculino", "branco", "casual"],
+      optionalProofAngle: null,
+    });
+
+    expect(result.hook).not.toMatch(/clientes\s+avaliaram/iu);
+  });
+
+  it("não transforma vendas de Pet em donos que confiam", async () => {
+    const facts: CopyV5Facts = {
+      productName: "Caixa de Areia Gatos Grande 62x50x20 Furba Jumbox Pet Injet",
+      marketplace: "Shopee",
+      category: "pet_editorial",
+      currentPrice: 50.4,
+      originalPrice: null,
+      evidence: { sales: 559, rating: 4.9, attributes: ["62x50x20 cm", "Furba Jumbox"] },
+    };
+
+    const result = await plan(facts, {
+      shortProductName: "Caixa de Areia Furba Jumbox 62x50x20 cm",
+      commercialIntent: "proof",
+      commercialAngle: "product",
+      hook: "Mais de 500 donos de gatos já confiam na Furba Jumbox",
+      benefitLine: null,
+      selectedAttributes: ["62x50x20 cm", "Furba Jumbox"],
+      optionalProofAngle: null,
+    });
+
+    expect(result.hook).not.toMatch(/donos\s+de\s+gatos/iu);
+    expect(result.hook).not.toMatch(/confiam/iu);
+  });
+
+  it("remove claim de performance sem evidência explícita", async () => {
+    const facts: CopyV5Facts = {
+      productName: "Parafusadeira Furadeira Sem Fio 12V Com Maleta Bateria Brocas e 13 Acessórios FP12X NKF",
+      marketplace: "Shopee",
+      category: "ferramentas_editorial",
+      currentPrice: 94.59,
+      originalPrice: null,
+      evidence: { sales: 422, rating: 4.9, attributes: ["12V", "Sem fio", "Maleta", "13 acessórios"] },
+    };
+
+    const result = await plan(facts, {
+      shortProductName: "Parafusadeira Furadeira Sem Fio 12V com Maleta",
+      commercialIntent: "proof",
+      commercialAngle: "product",
+      hook: "Mais de 400 unidades vendidas e avaliação 4.9: a parafusadeira que entrega performance sem fio",
+      benefitLine: null,
+      selectedAttributes: ["12V", "Sem fio", "Maleta"],
+      optionalProofAngle: null,
+    });
+
+    expect(result.hook).not.toMatch(/performance/iu);
+  });
+
+  it("preserva prova social quando vendas e rating permanecem separados", async () => {
+    const facts: CopyV5Facts = {
+      productName: "Parafusadeira Furadeira Sem Fio 12V",
+      marketplace: "Shopee",
+      category: "ferramentas_editorial",
+      currentPrice: 94.59,
+      originalPrice: null,
+      evidence: { sales: 422, rating: 4.9, attributes: ["12V", "Sem fio"] },
+    };
+    const hook = "Mais de 400 unidades vendidas e avaliação 4.9";
+
+    const result = await plan(facts, {
+      shortProductName: "Parafusadeira Furadeira Sem Fio 12V",
+      commercialIntent: "proof",
+      commercialAngle: "product",
+      hook,
+      benefitLine: null,
+      selectedAttributes: ["12V", "Sem fio"],
+      optionalProofAngle: null,
+    });
+
+    expect(result.hook).toBe(hook);
+  });
+
   it("remove adequação inferida sem evidência explícita", async () => {
     const facts: CopyV5Facts = {
       productName: "Caixa de Areia Gatos Grande 62x50x20 Furba Jumbox Pet Injet",
