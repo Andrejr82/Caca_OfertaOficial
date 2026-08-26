@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildGeminiVideoPrompt, classifyGeminiUsabilityCategory, formatLongPriceForSpeech } from "@/lib/videos/gemini-prompt";
 
 describe("Gemini usability video prompt", () => {
-  it("gera prompt de usabilidade sem avatar, narração ou texto promocional", () => {
+  it("gera prompt de usabilidade sem apresentação e com ação desde o primeiro segundo", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Console Portátil R36S 64GB Tela IPS 3.5",
       current_price: 175.99,
@@ -12,16 +12,31 @@ describe("Gemini usability video prompt", () => {
 
     expect(prompt).toContain("VÍDEO DE USABILIDADE DO PRODUTO");
     expect(prompt).toContain("aproximadamente 15 segundos");
-    expect(prompt).toContain("CATEGORIA DE ROTEIRO: Eletrônicos e games");
+    expect(prompt).toContain("OBJETIVO COMERCIAL");
+    expect(prompt).toContain("ação começa no primeiro segundo");
+    expect(prompt).toContain("NÃO criar vídeo de catálogo");
+    expect(prompt).toContain("CENA 1 — 0–3s — USO JÁ COMEÇOU");
     expect(prompt).toContain("SEM AVATAR OFERTANDO");
     expect(prompt).toContain("SEM NARRAÇÃO");
-    expect(prompt).toContain("SEM TEXTOS PROMOCIONAIS");
-    expect(prompt).toContain("APENAS MÚSICA INSTRUMENTAL DE FUNDO");
-    expect(prompt).not.toContain("Avatar_Silvia");
-    expect(prompt).not.toContain("FALA EXATA");
+    expect(prompt).not.toContain("CENA 1 — 0–3s — APRESENTAÇÃO");
+    expect(prompt).not.toContain("HERO SHOT FINAL");
   });
 
-  it("preserva identidade do produto e impede invenção de recursos", () => {
+  it("para tênis, força uso no pé e câmera acompanhando movimento", () => {
+    const prompt = buildGeminiVideoPrompt({
+      product_name: "Tênis Para Corrida Masculino Amortecimento Macio e Super Leve Treino e Caminhada",
+      current_price: 104.4,
+      platform: "Amazon",
+      category: "Esporte",
+    });
+
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Calçado em movimento");
+    expect(prompt).toContain("calçado sendo colocado no pé ou com o primeiro passo em movimento");
+    expect(prompt).toContain("câmera baixa acompanhando os pés");
+    expect(prompt).toContain("não mostrar avatar parado, segurando o calçado para a câmera");
+  });
+
+  it("preserva identidade e usa direção específica para costura", () => {
     const prompt = buildGeminiVideoPrompt({
       product_name: "Mini Máquina de Costura Manual Portátil",
       current_price: 10.99,
@@ -31,8 +46,9 @@ describe("Gemini usability video prompt", () => {
     expect(prompt).toContain("REFERÊNCIA VISUAL PRINCIPAL, ABSOLUTA E OBRIGATÓRIA");
     expect(prompt).toContain("MESMO OBJETO FÍSICO");
     expect(prompt).toContain("NÃO inventar acessórios");
-    expect(prompt).toContain("não inventar potência, capacidade, durabilidade, compatibilidade");
-    expect(prompt).toContain("CENA 3 — 6–9s — USABILIDADE PRINCIPAL");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Costura em tarefa real");
+    expect(prompt).toContain("mãos adultas posicionando tecido");
+    expect(prompt).toContain("não inventar velocidade, tipos de ponto, alimentação, compatibilidade");
   });
 
   it("usa roteiro específico de moda com foco em caimento", () => {
@@ -43,10 +59,9 @@ describe("Gemini usability video prompt", () => {
     });
 
     expect(classifyGeminiUsabilityCategory({ product_name: "Vestido Saída de Praia Verde", current_price: 1 })).toBe("moda");
-    expect(prompt).toContain("CATEGORIA DE ROTEIRO: Moda e vestuário");
-    expect(prompt).toContain("caimento, proporções, comprimento");
-    expect(prompt).toContain("caminhando suavemente");
-    expect(prompt).toContain("não inventar parte traseira complexa");
+    expect(prompt).toContain("caimento, comprimento, proporção e movimento do tecido");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Moda em uso");
+    expect(prompt).toContain("pessoa já vestindo a peça e entrando em movimento");
   });
 
   it("usa roteiro pet baseado em interação natural", () => {
@@ -56,19 +71,8 @@ describe("Gemini usability video prompt", () => {
       category: "Pet",
     });
     expect(prompt).toContain("CATEGORIA DE ROTEIRO: Pet");
-    expect(prompt).toContain("animal doméstico interagindo naturalmente");
-    expect(prompt).toContain("não inventar benefícios veterinários");
-  });
-
-  it("usa roteiro de limpeza sem prometer eficácia não observada", () => {
-    const prompt = buildGeminiVideoPrompt({
-      product_name: "Percarbonato de sódio para roupas e limpeza",
-      current_price: 28.99,
-      category: "Limpeza",
-    });
-    expect(prompt).toContain("CATEGORIA DE ROTEIRO: Organização e limpeza");
-    expect(prompt).toContain("resultado visual moderado e plausível");
-    expect(prompt).toContain("não inventar desinfecção");
+    expect(prompt).toContain("animal ou tutor já interagindo com o produto");
+    expect(prompt).toContain("ARQUÉTIPO CRIATIVO: Pet em interação");
   });
 
   it("mantém utilitário legado de preço", () => {

@@ -106,7 +106,25 @@ export async function approveOfficialOfferForPublication(
   }
 
   if (offerState === "posted") {
-    return rejected(command, "OFFER_ALREADY_POSTED", "Esta oferta já foi publicada e não pode ser aprovada novamente.", "offer_state");
+    const relatedPosts = await dependencies.repository.findPostsByOffer(command.offerId, command.tenantId);
+    const channelAlreadyPublished = relatedPosts.some((relatedPost) =>
+      relatedPost.channel === command.channel && relatedPost.state === "published"
+    );
+
+    if (channelAlreadyPublished) {
+      return rejected(
+        command,
+        "CHANNEL_ALREADY_PUBLISHED",
+        "Esta oferta já foi publicada neste canal.",
+        "channel_state"
+      );
+    }
+
+    const reconciliation = await dependencies.reconciliation.reconcile(command);
+    if (reconciliation.status === "rejected") {
+      return rejected(command, reconciliation.code, reconciliation.message, "reconciliation");
+    }
+    offerState = "approved";
   }
 
   if (offerState !== "approved") {

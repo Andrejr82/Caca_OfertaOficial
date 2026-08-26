@@ -24,7 +24,7 @@ function dependencies(offerState: string): OfficialPublicationApprovalDependenci
   let approvedCalls = 0;
   return {
     repository: {
-      findOffer: vi.fn(async () => ({ id: "offer-1", tenantId: "tenant-1", state: offerState, version: offerState === "approved" ? 2 : offerState === "selected" ? 1 : 0 })),
+      findOffer: vi.fn(async () => ({ id: "offer-1", tenantId: "tenant-1", state: offerState, version: offerState === "posted" ? 3 : offerState === "approved" ? 2 : offerState === "selected" ? 1 : 0 })),
       findPost: vi.fn(async () => ({
         id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "telegram",
         state: "draft", version: 0, content: "content", mediaUrl: null, destination: "@offers"
@@ -99,16 +99,54 @@ describe("approveOfficialOfferForPublication", () => {
     expect(result).toMatchObject({ status: "rejected", code: "STATE_CONFLICT", failureStage: "approval" });
   });
 
-  it("rejects a posted offer without attempting the forbidden posted-to-approved transition", async () => {
+  it("reconciles a globally posted offer when only another channel was published", async () => {
+    const deps = dependencies("posted");
+    const facebookCommand = { ...command, channel: "facebook" as const };
+    deps.repository.findPost = vi.fn(async () => ({
+      id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "facebook",
+      state: "draft", version: 0, content: "facebook content", mediaUrl: null, destination: "page"
+    }));
+    deps.repository.findPostsByOffer = vi.fn(async () => [
+      { id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "facebook", state: "draft", version: 0, content: "facebook content", mediaUrl: null, destination: "page" },
+      { id: "post-2", tenantId: "tenant-1", offerId: "offer-1", channel: "whatsapp", state: "published", version: 1, content: "whatsapp content", mediaUrl: null, destination: "group" },
+      { id: "post-3", tenantId: "tenant-1", offerId: "offer-1", channel: "telegram", state: "published", version: 1, content: "telegram content", mediaUrl: null, destination: "@offers" }
+    ]);
+
+    const result = await approveOfficialOfferForPublication(facebookCommand, deps);
+
+    expect(result).toMatchObject({ status: "approved", offerState: "approved" });
+    expect(deps.reconciliation.reconcile).toHaveBeenCalledTimes(1);
+    expect(deps.reconciliation.reconcile).toHaveBeenCalledWith(facebookCommand);
+  });
+
+  it("keeps blocking when the same channel already has a published post", async () => {
+    const deps = dependencies("posted");
+    const facebookCommand = { ...command, channel: "facebook" as const };
+    deps.repository.findPost = vi.fn(async () => ({
+      id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "facebook",
+      state: "draft", version: 0, content: "new facebook content", mediaUrl: null, destination: "page"
+    }));
+    deps.repository.findPostsByOffer = vi.fn(async () => [
+      { id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "facebook", state: "draft", version: 0, content: "new facebook content", mediaUrl: null, destination: "page" },
+      { id: "post-old", tenantId: "tenant-1", offerId: "offer-1", channel: "facebook", state: "published", version: 1, content: "old facebook content", mediaUrl: null, destination: "page" }
+    ]);
+
+    const result = await approveOfficialOfferForPublication(facebookCommand, deps);
+
+    expect(result).toMatchObject({ status: "rejected", code: "CHANNEL_ALREADY_PUBLISHED", failureStage: "channel_state" });
+    expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
+  });
+
+  it("returns reconciliation failure without allowing publication", async () => {
     const deps = dependencies("posted");
     deps.repository.findPostsByOffer = vi.fn(async () => [
       { id: "post-1", tenantId: "tenant-1", offerId: "offer-1", channel: "telegram", state: "draft", version: 0, content: "content", mediaUrl: null, destination: "@offers" },
       { id: "post-2", tenantId: "tenant-1", offerId: "offer-1", channel: "whatsapp", state: "published", version: 1, content: "content", mediaUrl: null, destination: "group" }
     ]);
+    deps.reconciliation.reconcile = vi.fn(async () => ({ status: "rejected" as const, code: "STATE_CONFLICT", message: "conflict" }));
 
     const result = await approveOfficialOfferForPublication(command, deps);
 
-    expect(result).toMatchObject({ status: "rejected", code: "OFFER_ALREADY_POSTED", failureStage: "offer_state" });
-    expect(deps.reconciliation.reconcile).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ status: "rejected", code: "STATE_CONFLICT", failureStage: "reconciliation" });
   });
 });

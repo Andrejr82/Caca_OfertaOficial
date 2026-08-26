@@ -42,7 +42,6 @@ describe("Copy V5 — Hybrid Commercial Architecture", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/tv_lg";
     const rendered = renderCopyV5ChannelCopy(validated, facts, "whatsapp", url);
 
-    // Visual price rule: De and Por on separate lines
     expect(rendered.feed).toContain("De R$ 2.290,00\nPor R$ 1.529,00");
     expect(rendered.feed).not.toMatch(/De R\$ 2\.290,00 por R\$ 1\.529,00/i);
     expect(rendered.feed).toContain("Alexa • webOS • Processador A5");
@@ -206,7 +205,8 @@ describe("Copy V5 — Hybrid Commercial Architecture", () => {
     const rendered = renderCopyV5ChannelCopy(plan, facts, "facebook", url);
 
     expect(rendered.feed).not.toMatch(/https?:\/\//);
-    expect(rendered.feed).toContain("👉 Link da oferta no primeiro comentário. 👇");
+    expect(rendered.feed).toContain("👉 Veja o preço, condições e disponibilidade no primeiro comentário.");
+    expect(rendered.feed).not.toContain("👉 Link da oferta no primeiro comentário. 👇");
     expect(rendered.firstComment).toBe(`👉 Link da oferta: ${url}`);
   });
 
@@ -225,7 +225,8 @@ describe("Copy V5 — Hybrid Commercial Architecture", () => {
     const rendered = renderCopyV5ChannelCopy(plan, facts, "instagram", url);
 
     expect(rendered.feed).not.toMatch(/https?:\/\//);
-    expect(rendered.feed).toContain("🔎 Link da oferta na bio. 👇");
+    expect(rendered.feed).toContain("👉 Veja o preço, condições e disponibilidade no link da bio.");
+    expect(rendered.feed).not.toContain("🔎 Link da oferta na bio. 👇");
   });
 
   it("CASO 10 — Rating 5/5 sem volume relevante não é exibido", () => {
@@ -332,14 +333,12 @@ describe("Copy V5 — Hybrid Commercial Architecture", () => {
 
       const rendered = renderCopyV5ChannelCopy(plan, offer, "whatsapp", `https://caca-oferta-oficial.vercel.app/go/${encodeURIComponent(offer.productName.slice(0, 10))}`);
 
-      // Visual price separation verification
       if (offer.originalPrice && offer.originalPrice > offer.currentPrice) {
         expect(rendered.feed).toMatch(/De R\$ [\d.,]+\nPor R\$ [\d.,]+/);
         expect(rendered.feed).not.toMatch(/De R\$ [\d.,]+ [pP]or R\$ [\d.,]+/);
       }
     }
 
-    // Varied hooks check
     expect(hooks.size).toBe(sampleOffers.length);
   });
 });
