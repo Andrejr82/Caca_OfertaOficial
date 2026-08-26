@@ -28,14 +28,19 @@ Status: implementado na branch; validação local pendente por indisponibilidade
 - Teste arquitetural reforçado para impedir novo cérebro paralelo.
 
 ### Task 2 — Remover bypass legado
-Status: pendente.
+Status: implementado na branch; validação local pendente.
 
-Eliminar do engine a decisão comercial via `copy_v2_auto`, `copy_v2_express` e `buildCopyV3ChannelCopy`.
+- Flags de roteamento legado de ciclo/Expressa são neutralizados antes do engine.
+- `copy_v2_auto` e `copy_v2_express` não escolhem mais o cérebro de copy.
+- Callers produtivos continuam passando pela fachada única `generateOfficialAI()`.
 
 ### Task 3 — Planner comercial de conversão
-Status: pendente.
+Status: implementado na branch; validação local pendente.
 
-Aprimorar o planner para decidir desejo/dor, ângulo, hook, benefício e prova factual.
+- `planCommercialCopyV5()` decide `commercialIntent`: dor, desejo, rotina, economia, prova ou produto.
+- O mesmo planner decide ângulo, hook, benefício factual, atributos e prova.
+- `benefitLine` é opcional e descartada quando não encontra suporte nos fatos persistidos.
+- Teste focado cobre intenção, benefício factual e rejeição de benefício inventado.
 
 ### Task 4 — Renderers puros por canal
 Status: pendente.
