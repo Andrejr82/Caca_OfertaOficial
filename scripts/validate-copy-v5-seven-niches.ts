@@ -3,11 +3,56 @@ import { config as loadEnv } from "dotenv";
 import { planCommercialCopyV5 } from "../src/core/ai/copy-v5-planner";
 import { renderCopyV5ChannelCopy } from "../src/core/ai/copy-v5-renderer";
 import type { CopyV5Facts } from "../src/core/ai/copy-v5-types";
+import type { AIProviderPort, AIProviderRequest, AIProviderResponse } from "../src/core/ai/ports";
 import { OfficialAIProviderRegistry } from "../src/lib/ai/official/create-official-ai-service";
 
 loadEnv({ path: ".env.local", override: false });
 
 type Sample = { niche: string; facts: CopyV5Facts };
+type ProviderDiagnostic = {
+  name: string;
+  message: string;
+  code?: unknown;
+  status?: unknown;
+  provider?: unknown;
+  model?: unknown;
+  timeout?: unknown;
+  network?: unknown;
+  retryAfterMs?: unknown;
+  attempts?: unknown;
+};
+
+function sanitizeProviderError(error: unknown): ProviderDiagnostic {
+  if (!(error instanceof Error)) return { name: "UnknownError", message: String(error) };
+  const record = error as Error & Record<string, unknown>;
+  return {
+    name: error.name,
+    message: error.message,
+    code: record.code,
+    status: record.status,
+    provider: record.provider,
+    model: record.model,
+    timeout: record.timeout,
+    network: record.network,
+    retryAfterMs: record.retryAfterMs,
+    attempts: record.attempts,
+  };
+}
+
+function diagnosticProvider(provider: AIProviderPort, onError: (diagnostic: ProviderDiagnostic) => void): AIProviderPort {
+  return {
+    name: provider.name,
+    model: provider.model,
+    async generate(request: AIProviderRequest): Promise<AIProviderResponse> {
+      try {
+        return await provider.generate(request);
+      } catch (error) {
+        onError(sanitizeProviderError(error));
+        throw error;
+      }
+    },
+  };
+}
 
 const samples: Sample[] = [
   {
@@ -91,13 +136,20 @@ const samples: Sample[] = [
 
 async function main() {
   const registry = new OfficialAIProviderRegistry();
-  const provider = registry.resolve();
+  const baseProvider = registry.resolve();
 
-  console.log(`COPY_V5_RUNTIME_VALIDATION provider=${provider.name} model=${provider.model}`);
-  console.log("READ_ONLY=true PUBLISH=false PERSIST=false\n");
+  console.log(`COPY_V5_RUNTIME_VALIDATION provider=${baseProvider.name} model=${baseProvider.model}`);
+  console.log("READ_ONLY=true PUBLISH=false PERSIST=false");
+  console.log(`ENV LLM_PROVIDER=${process.env.LLM_PROVIDER ?? "(inferred)"} LLM_FALLBACK=${process.env.LLM_FALLBACK ?? "(none)"}`);
+  console.log(`KEYS GROQ=${Boolean(process.env.GROQ_API_KEY)} GROQ_2=${Boolean(process.env.GROQ_API_KEY_2)} CEREBRAS=${Boolean(process.env.CEREBRAS_API_KEY)} CEREBRAS_2=${Boolean(process.env.CEREBRAS_API_KEY_2)}\n`);
 
   for (const sample of samples) {
     let outcome: Record<string, unknown> = {};
+    let diagnostic: ProviderDiagnostic | null = null;
+    const provider = diagnosticProvider(baseProvider, (value) => {
+      diagnostic = value;
+    });
+
     const plan = await planCommercialCopyV5(sample.facts, provider, {
       correlationId: `copy-v5-seven-niches-${sample.niche.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
       timeoutMs: 30_000,
@@ -111,6 +163,7 @@ async function main() {
 
     console.log(`=== ${sample.niche} ===`);
     console.log(`SOURCE=${String(outcome.source ?? "unknown")} PROVIDER=${String(outcome.provider ?? "unknown")} MODEL=${String(outcome.model ?? "unknown")} REASON=${String(outcome.reason ?? "none")}`);
+    if (diagnostic) console.log(`PROVIDER_DIAGNOSTIC=${JSON.stringify(diagnostic)}`);
     console.log(JSON.stringify(plan, null, 2));
     console.log("--- FACEBOOK ---");
     console.log(facebook.feed);
@@ -119,6 +172,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error("COPY_V5_RUNTIME_VALIDATION_FAILED", error instanceof Error ? error.message : String(error));
+  console.error("COPY_V5_RUNTIME_VALIDATION_FAILED", JSON.stringify(sanitizeProviderError(error)));
   process.exitCode = 1;
 });
