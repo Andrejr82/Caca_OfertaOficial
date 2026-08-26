@@ -147,17 +147,45 @@ export function buildCanonicalCopyV5Content(
   };
 }
 
+/**
+ * Os flags V2/V3 antigos ainda podem existir nos callers por compatibilidade,
+ * mas não podem selecionar um cérebro ou renderer alternativo nos dois fluxos
+ * produtivos que geram drafts em pending_manual_review.
+ */
+export function neutralizeLegacyCopyRouting(command: OfficialAICommand): OfficialAICommand {
+  const isCycle = command.origin === "oracle.discovery"
+    && command.actor.type === "service"
+    && command.metadata?.copyV2Auto === true;
+  const isExpress = command.origin === "publish.quick-publication"
+    && (command.metadata?.copyV2Express === true || command.metadata?.copyV3Express === true);
+
+  if (!isCycle && !isExpress) return command;
+
+  const {
+    copyV2: _copyV2,
+    copyV2Auto: _copyV2Auto,
+    copyV2Express: _copyV2Express,
+    copyV3Express: _copyV3Express,
+    ...metadata
+  } = command.metadata ?? {};
+
+  return {
+    ...command,
+    metadata,
+  };
+}
+
 export async function generateOfficialAI(
   command: OfficialAICommand,
   dependencies: OfficialAIServiceDependencies,
 ): Promise<OfficialAIResult> {
   let latestContent: OfficialAIContent | null = null;
+  const canonicalCommand = neutralizeLegacyCopyRouting(command);
 
   const wrappedDependencies: OfficialAIServiceDependencies = {
     ...dependencies,
-    // O engine mantém os modos legados somente como máquina de estado/compatibilidade.
-    // Ele não pode executar um segundo cérebro de copy: a inferência final acontece
-    // exclusivamente no interceptador de persistência abaixo.
+    // O engine permanece como máquina de estado/compatibilidade. Ele não tem
+    // autoridade para escolher outro cérebro: a inferência final é V5 abaixo.
     providers: {
       resolve() {
         throw new Error("COPY_V5_SINGLE_BRAIN_ENFORCED");
@@ -184,8 +212,8 @@ export async function generateOfficialAI(
     },
   };
 
-  const result = await generateOfficialAIEngine(command, wrappedDependencies);
-  if (latestContent && result.status !== "rejected" && command.offerId !== "ALL_PENDING" && !command.batch) {
+  const result = await generateOfficialAIEngine(canonicalCommand, wrappedDependencies);
+  if (latestContent && result.status !== "rejected" && canonicalCommand.offerId !== "ALL_PENDING" && !canonicalCommand.batch) {
     return { ...result, content: latestContent };
   }
   return result;
