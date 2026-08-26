@@ -171,7 +171,7 @@ export async function planCommercialCopyV5(
       correlationId: options?.correlationId ?? `copy-v5-${Date.now()}`,
       timeoutMs: options?.timeoutMs ?? 15000,
       temperature: 0.4,
-      maxTokens: 650,
+      maxTokens: 1000,
       metadata: options?.metadata ?? {},
     });
 

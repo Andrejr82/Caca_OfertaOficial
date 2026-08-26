@@ -20,7 +20,7 @@ type AttemptSummary = {
   network?: boolean;
 };
 
-const RETRYABLE_STATUSES = new Set([401, 403, 408, 429, 500, 502, 503, 504]);
+const RETRYABLE_STATUSES = new Set([401, 402, 403, 408, 429, 500, 502, 503, 504]);
 const credentialCooldowns = new Map<string, number>();
 const GROQ_MODEL = "openai/gpt-oss-120b";
 const CEREBRAS_MODEL = "gpt-oss-120b";
