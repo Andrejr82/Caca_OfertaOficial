@@ -1,6 +1,6 @@
 import type { OfficialAIRegenerationDependencies } from "./ports";
-import { buildCopyV5PlannerPrompt } from "./copy-v5-planner";
-import type { CopyV5Facts, CopyV5Plan } from "./copy-v5-types";
+import { planCommercialCopyV5 } from "./copy-v5-planner";
+import type { CopyV5Facts } from "./copy-v5-types";
 import { buildCanonicalCopyV5ChannelDraft } from "./official-ai-service";
 import { OFFICIAL_AI_CHANNELS, type OfficialAIDraftForRegeneration, type OfficialAIRegenerationCommand, type OfficialAIRegenerationItem, type OfficialAIRegenerationResult } from "./types";
 
@@ -34,18 +34,6 @@ function factsFromDraft(draft: OfficialAIDraftForRegeneration): CopyV5Facts {
       ...(draft.rating !== null ? { rating: draft.rating } : {}),
     },
   };
-}
-
-function parsePlanCandidate(content: unknown): Partial<CopyV5Plan> | null {
-  if (content && typeof content === "object") return content as Partial<CopyV5Plan>;
-  if (typeof content !== "string") return null;
-  const jsonMatch = content.trim().match(/\{[\s\S]*\}/u);
-  if (!jsonMatch) return null;
-  try {
-    return JSON.parse(jsonMatch[0]) as Partial<CopyV5Plan>;
-  } catch {
-    return null;
-  }
 }
 
 function assertCommand(command: OfficialAIRegenerationCommand) {
@@ -87,18 +75,15 @@ export async function regenerateOfficialDrafts(
 
     try {
       const facts = factsFromDraft(draft);
-      const inference = await provider.generate({
-        prompt: buildCopyV5PlannerPrompt(facts),
+      const plan = await planCommercialCopyV5(facts, provider, {
         correlationId: command.correlationId,
         timeoutMs: 30_000,
-        temperature: 0.4,
-        maxTokens: 500,
         metadata: { commandId: command.commandId, postId: draft.postId, channel: draft.channel, operation: "regenerate_draft_v5" }
       });
       const afterContent = buildCanonicalCopyV5ChannelDraft(
         facts,
         draft.channel,
-        parsePlanCandidate(inference.content) as CopyV5Plan | null,
+        plan,
         draft.trackedUrl,
       );
       const updated = await dependencies.drafts.updateContent({
