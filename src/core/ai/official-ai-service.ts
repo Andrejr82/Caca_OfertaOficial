@@ -3,6 +3,7 @@ import {
   getMarketplaceCtaPrefix as getMarketplaceCtaPrefixV4,
   type CopyV4Facts,
 } from "./copy-v4";
+import { planCommercialCopyV5 } from "./copy-v5-planner";
 import {
   type CopyV5Facts,
   type CopyV5Plan,
@@ -116,9 +117,10 @@ export function buildCanonicalCopyV5Content(
   previous: OfficialAIContent,
   offer: OfficialAIOffer,
   channels: readonly OfficialAIChannel[],
+  authoritativePlan?: CopyV5Plan | null,
 ): OfficialAIContent {
   const facts = polishCopyV5Facts(copyV5FactsFromOffer(offer));
-  const planCandidate: Partial<CopyV5Plan> = {
+  const planCandidate: Partial<CopyV5Plan> | CopyV5Plan = authoritativePlan ?? {
     shortProductName: previous.shortName,
     hook: previous.shortCopy,
     selectedAttributes: previous.highlights,
@@ -134,7 +136,7 @@ export function buildCanonicalCopyV5Content(
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: plan.selectedAttributes,
-    explanation: "Copy V5: autoridade única de copy final para todos os fluxos.",
+    explanation: "Copy V5: planCommercialCopyV5 é o cérebro único da copy final.",
     channelCopies: {
       ...previous.channelCopies,
       ...Object.fromEntries(channels.map((channel) => [
@@ -153,10 +155,29 @@ export async function generateOfficialAI(
 
   const wrappedDependencies: OfficialAIServiceDependencies = {
     ...dependencies,
+    // O engine mantém os modos legados somente como máquina de estado/compatibilidade.
+    // Ele não pode executar um segundo cérebro de copy: a inferência final acontece
+    // exclusivamente no interceptador de persistência abaixo.
+    providers: {
+      resolve() {
+        throw new Error("COPY_V5_SINGLE_BRAIN_ENFORCED");
+      },
+    },
     content: {
       persistDrafts: async (input) => {
-        // Qualquer modo interno/legado termina obrigatoriamente na autoridade V5.
-        const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels);
+        const facts = polishCopyV5Facts(copyV5FactsFromOffer(input.offer));
+        let provider = null;
+        try {
+          provider = dependencies.providers.resolve(input.command.providerPreference);
+        } catch {
+          // planCommercialCopyV5 possui o fallback factual canônico quando provider não está disponível.
+        }
+        const plan = await planCommercialCopyV5(facts, provider, {
+          correlationId: input.command.correlationId,
+          timeoutMs: 15_000,
+          metadata: input.command.metadata,
+        });
+        const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan);
         latestContent = content;
         return dependencies.content.persistDrafts({ ...input, content });
       },
