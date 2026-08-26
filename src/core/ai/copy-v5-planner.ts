@@ -11,6 +11,16 @@ import {
   validateCopyV5Plan,
 } from "./copy-v5-validator";
 
+export type CopyV5FallbackReason = "no_provider" | "provider_error" | "invalid_output" | "invalid_json";
+
+export interface CopyV5PlanningOutcome {
+  source: "llm" | "deterministic-fallback";
+  fallback: boolean;
+  reason: CopyV5FallbackReason | null;
+  provider: string;
+  model: string;
+}
+
 export const COPY_V5_SYSTEM_PROMPT = `Você é o Commercial Planner de ofertas da Official AI do Caça Oferta Oficial.
 Você é o único cérebro de decisão comercial da copy. Os canais apenas renderizam o plano que você criar.
 Responda EXCLUSIVAMENTE um objeto JSON válido, sem comentários, sem markdown e sem introduções.
@@ -121,6 +131,17 @@ export function buildDeterministicFallbackPlan(facts: CopyV5Facts): CopyV5Plan {
   return finalizePlan(null, facts);
 }
 
+function reportOutcome(
+  onOutcome: ((outcome: CopyV5PlanningOutcome) => void | Promise<void>) | undefined,
+  outcome: CopyV5PlanningOutcome,
+) {
+  try {
+    void onOutcome?.(outcome);
+  } catch {
+    // Observabilidade nunca deve interromper a geração da copy.
+  }
+}
+
 export async function planCommercialCopyV5(
   facts: CopyV5Facts,
   provider?: AIProviderPort | null,
@@ -128,9 +149,19 @@ export async function planCommercialCopyV5(
     correlationId?: string;
     timeoutMs?: number;
     metadata?: Readonly<Record<string, string | number | boolean>>;
+    onOutcome?: (outcome: CopyV5PlanningOutcome) => void | Promise<void>;
   }
 ): Promise<CopyV5Plan> {
-  if (!provider) return buildDeterministicFallbackPlan(facts);
+  if (!provider) {
+    reportOutcome(options?.onOutcome, {
+      source: "deterministic-fallback",
+      fallback: true,
+      reason: "no_provider",
+      provider: "deterministic-fallback",
+      model: "copy-v5-fallback",
+    });
+    return buildDeterministicFallbackPlan(facts);
+  }
 
   const prompt = buildCopyV5PlannerPrompt(facts);
 
@@ -145,16 +176,58 @@ export async function planCommercialCopyV5(
     });
 
     if (response.content && typeof response.content === "object") {
+      reportOutcome(options?.onOutcome, {
+        source: "llm",
+        fallback: false,
+        reason: null,
+        provider: response.provider || provider.name,
+        model: response.model || provider.model,
+      });
       return finalizePlan(response.content as Partial<CopyV5Plan>, facts);
     }
 
     if (typeof response.content === "string") {
       const jsonMatch = response.content.trim().match(/\{[\s\S]*\}/u);
-      if (jsonMatch) return finalizePlan(JSON.parse(jsonMatch[0]) as Partial<CopyV5Plan>, facts);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]) as Partial<CopyV5Plan>;
+          reportOutcome(options?.onOutcome, {
+            source: "llm",
+            fallback: false,
+            reason: null,
+            provider: response.provider || provider.name,
+            model: response.model || provider.model,
+          });
+          return finalizePlan(parsed, facts);
+        } catch {
+          reportOutcome(options?.onOutcome, {
+            source: "deterministic-fallback",
+            fallback: true,
+            reason: "invalid_json",
+            provider: "deterministic-fallback",
+            model: "copy-v5-fallback",
+          });
+          return buildDeterministicFallbackPlan(facts);
+        }
+      }
     }
 
+    reportOutcome(options?.onOutcome, {
+      source: "deterministic-fallback",
+      fallback: true,
+      reason: "invalid_output",
+      provider: "deterministic-fallback",
+      model: "copy-v5-fallback",
+    });
     return buildDeterministicFallbackPlan(facts);
   } catch {
+    reportOutcome(options?.onOutcome, {
+      source: "deterministic-fallback",
+      fallback: true,
+      reason: "provider_error",
+      provider: "deterministic-fallback",
+      model: "copy-v5-fallback",
+    });
     return buildDeterministicFallbackPlan(facts);
   }
 }
