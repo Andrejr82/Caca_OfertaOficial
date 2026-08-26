@@ -9,6 +9,9 @@ const FINAL_COPY_PATHS = [
   "src/core/ai/official-ai-service.ts",
   "src/core/ai/official-ai-regeneration-service.ts",
   "src/lib/trends/selection-social-drafts.ts",
+  "src/app/api/ai/generate/route.ts",
+  "src/app/api/publish/extension/route.ts",
+  "src/lib/publish/actions.ts",
   "src/app/api/videos/jobs/route.ts",
   "src/app/api/videos/jobs/[id]/approve/route.ts",
   "src/lib/social/whatsapp-conversion.ts",
@@ -37,7 +40,8 @@ describe("Copy V5 single final-copy authority", () => {
   it("obriga a persistência oficial a obter o plano do único cérebro Copy V5", () => {
     const service = read("src/core/ai/official-ai-service.ts");
     expect(service).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
-    expect(service).toContain("const plan = await planCommercialCopyV5(facts, provider");
+    expect(service).toContain("const outcome = await planCommercialCopyV5(facts, provider");
+    expect(service).toContain("const plan = outcome.plan");
     expect(service).toContain("buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan)");
     expect(service).toContain("COPY_V5_SINGLE_BRAIN_ENFORCED");
     expect(service).not.toContain("if (input.command.metadata?.copyV2 === true)");
@@ -61,6 +65,21 @@ describe("Copy V5 single final-copy authority", () => {
     }
   });
 
+  it("torna o engine legado incapaz de ser autoridade da copy final", () => {
+    const service = read("src/core/ai/official-ai-service.ts");
+    const engine = read("src/core/ai/official-ai-service-engine.ts");
+
+    // O engine pode manter código de compatibilidade interna, mas nunca recebe
+    // um provider real pela fachada pública e nunca persiste a copy final sem
+    // passar pelo interceptador V5.
+    expect(service).toContain('throw new Error("COPY_V5_SINGLE_BRAIN_ENFORCED")');
+    expect(service).toContain("content: {");
+    expect(service).toContain("persistDrafts: async (input) => {");
+    expect(service).toContain("planCommercialCopyV5(facts, provider");
+    expect(service).toContain("dependencies.content.persistDrafts({ ...input, content })");
+    expect(engine).not.toContain("export default");
+  });
+
   it("faz a regeneração usar o mesmo planCommercialCopyV5 sem provider.generate paralelo", () => {
     const regeneration = read("src/core/ai/official-ai-regeneration-service.ts");
     expect(regeneration).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
@@ -70,11 +89,13 @@ describe("Copy V5 single final-copy authority", () => {
     expect(regeneration).toContain("buildCanonicalCopyV5ChannelDraft");
   });
 
-  it("mantém Expressa e ciclos como clientes da mesma Official AI", () => {
+  it("mantém Expressa, ciclo e extensão como clientes da mesma Official AI", () => {
     const express = read("src/lib/publish/actions.ts");
     const cycle = read("src/app/api/ai/generate/route.ts");
+    const extension = read("src/app/api/publish/extension/route.ts");
     expect(express).toContain("generateOfficialAI(command");
     expect(cycle).toContain("generateOfficialAI(command");
+    expect(extension).toContain("generateOfficialAI(command");
   });
 
   it("mantém renderer puro: sem segundo cérebro, classificação social ou ângulo próprio", () => {
