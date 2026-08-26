@@ -52,9 +52,12 @@ Status: implementado na branch; validação local pendente.
 - Teste arquitetural bloqueia reintrodução de `buildChannelNativeNarrative`, classificação social ou cálculo de novo ângulo no renderer.
 
 ### Task 5 — Remover narrativa fixa paralela
-Status: pendente.
+Status: implementado na branch; validação local pendente.
 
-Impedir `copy-v5-social-director` de substituir o pensamento comercial do planner.
+- `copy-v5-social-director.ts` foi removido.
+- Não existe mais tabela de aberturas fixas por arquétipo social.
+- O renderer não importa nem chama social director.
+- Teste arquitetural exige ausência física do módulo e bloqueia sua reintrodução no renderer.
 
 ### Task 6 — Fallback e telemetria
 Status: pendente.
