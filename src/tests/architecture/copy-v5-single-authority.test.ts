@@ -77,6 +77,18 @@ describe("Copy V5 single final-copy authority", () => {
     expect(cycle).toContain("generateOfficialAI(command");
   });
 
+  it("mantém renderer puro: sem segundo cérebro, classificação social ou ângulo próprio", () => {
+    const renderer = read("src/core/ai/copy-v5-renderer.ts");
+    expect(renderer).toContain("plan.hook");
+    expect(renderer).toContain("plan.benefitLine");
+    expect(renderer).toContain("plan.selectedAttributes");
+    expect(renderer).toContain("plan.optionalProofAngle");
+    expect(renderer).not.toContain("buildChannelNativeNarrative");
+    expect(renderer).not.toContain("classifySocialCopyArchetype");
+    expect(renderer).not.toContain("calculateDiscountPercent");
+    expect(renderer).not.toContain("50 &&");
+  });
+
   it("mantém backfill e superfícies sociais explicitamente na V5", () => {
     expect(read("scripts/backfill-opac-drafts.ts")).toContain("renderCopyV5ChannelCopy");
     expect(read("src/lib/trends/selection-social-drafts.ts")).toContain("CopyV5");
