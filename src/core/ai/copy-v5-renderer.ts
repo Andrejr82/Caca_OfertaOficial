@@ -1,12 +1,10 @@
 import type { OfficialAIChannel } from "./types";
 import type { CopyV5Facts, CopyV5Plan, CopyV5RenderedResult } from "./copy-v5-types";
 import {
-  calculateDiscountPercent,
   formatBRL,
   persistedStrings,
   semantic,
 } from "./copy-v5-validator";
-import { buildChannelNativeNarrative } from "./copy-v5-social-director";
 
 export function getMarketplaceCtaPrefix(marketplace?: string | null): string {
   const norm = marketplace?.trim().toLowerCase();
@@ -86,14 +84,37 @@ function appendTrustBlocks(blocks: string[], plan: CopyV5Plan, facts: CopyV5Fact
   if (plan.optionalProofAngle) blocks.push(plan.optionalProofAngle);
 }
 
-function appendCompactSocialTrust(blocks: string[], plan: CopyV5Plan, facts: CopyV5Facts) {
-  const candidates = [
-    couponFromEvidence(facts),
-    shippingFromEvidence(facts),
-    officialStoreFromEvidence(facts),
-    plan.optionalProofAngle,
-  ].filter((value): value is string => Boolean(value));
-  blocks.splice(Math.max(0, blocks.length - 1), 0, ...candidates.slice(0, 2));
+function appendPlanNarrative(blocks: string[], plan: CopyV5Plan) {
+  blocks.push(plan.hook);
+  if (plan.benefitLine) blocks.push(plan.benefitLine);
+
+  const hookSem = semantic(plan.hook);
+  const prodSem = semantic(plan.shortProductName);
+  const isHookJustProductName = hookSem === prodSem || hookSem.replace(/^[^\p{L}\p{N}]+/gu, "").trim() === prodSem;
+  if (!isHookJustProductName && plan.shortProductName) blocks.push(plan.shortProductName);
+
+  if (plan.selectedAttributes?.length) blocks.push(plan.selectedAttributes.join(" • "));
+}
+
+function appendChannelCta(
+  blocks: string[],
+  facts: CopyV5Facts,
+  channel: OfficialAIChannel,
+  trackedUrl?: string | null,
+): { firstComment?: string | null } {
+  if (channel === "facebook") {
+    blocks.push("👉 Veja o preço, condições e disponibilidade no primeiro comentário.");
+    return { firstComment: trackedUrl ? `👉 Link da oferta: ${trackedUrl}` : null };
+  }
+
+  if (channel === "instagram") {
+    blocks.push("👉 Veja o preço, condições e disponibilidade no link da bio.");
+    return {};
+  }
+
+  const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
+  blocks.push(trackedUrl ? `${ctaPrefix}\n${trackedUrl}` : `${ctaPrefix}\n👉`);
+  return {};
 }
 
 export function buildCopyV5Blocks(
@@ -102,31 +123,16 @@ export function buildCopyV5Blocks(
   channel: OfficialAIChannel,
   trackedUrl?: string | null
 ): { blocks: string[]; firstComment?: string | null } {
-  let firstComment: string | null = null;
+  const blocks: string[] = [];
 
-  if (channel === "facebook" || channel === "instagram") {
-    const blocks = buildChannelNativeNarrative(plan, facts, channel);
-    appendCompactSocialTrust(blocks, plan, facts);
-    if (channel === "facebook" && trackedUrl) firstComment = `👉 Link da oferta: ${trackedUrl}`;
-    return { blocks, firstComment };
-  }
-
-  // WhatsApp / Telegram permanecem estáveis nesta etapa.
-  const blocks: string[] = [plan.hook];
-  const hookSem = semantic(plan.hook);
-  const prodSem = semantic(plan.shortProductName);
-  const isHookJustProductName = hookSem === prodSem || hookSem.replace(/^[^\p{L}\p{N}]+/gu, "").trim() === prodSem;
-  if (!isHookJustProductName && plan.shortProductName) blocks.push(plan.shortProductName);
+  appendPlanNarrative(blocks, plan);
 
   const price = renderPriceBlock(facts);
   if (price) blocks.push(price);
-  const discountPercent = calculateDiscountPercent(facts.currentPrice, facts.originalPrice);
-  if (discountPercent !== null && discountPercent >= 50 && !plan.hook.includes("% OFF")) blocks.push(`🔥 ${discountPercent}% OFF`);
-  appendTrustBlocks(blocks, plan, facts);
-  if (plan.selectedAttributes && plan.selectedAttributes.length > 0) blocks.push(plan.selectedAttributes.join(" • "));
 
-  const ctaPrefix = getMarketplaceCtaPrefix(facts.marketplace);
-  blocks.push(trackedUrl ? `${ctaPrefix}\n${trackedUrl}` : `${ctaPrefix}\n👉`);
+  appendTrustBlocks(blocks, plan, facts);
+  const { firstComment } = appendChannelCta(blocks, facts, channel, trackedUrl);
+
   return { blocks, firstComment };
 }
 
