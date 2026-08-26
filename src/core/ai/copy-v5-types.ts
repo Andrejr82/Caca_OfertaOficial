@@ -13,6 +13,14 @@ export type CopyV5CommercialAngle =
   | "product"
   | "standard";
 
+export type CopyV5CommercialIntent =
+  | "pain"
+  | "desire"
+  | "routine"
+  | "saving"
+  | "proof"
+  | "product";
+
 export interface CopyV5Facts {
   productName: string;
   shortName?: string | null;
@@ -26,8 +34,10 @@ export interface CopyV5Facts {
 
 export interface CopyV5Plan {
   shortProductName: string;
+  commercialIntent?: CopyV5CommercialIntent;
   commercialAngle: CopyV5CommercialAngle;
   hook: string;
+  benefitLine?: string | null;
   selectedAttributes: string[];
   optionalProofAngle: string | null;
 }
