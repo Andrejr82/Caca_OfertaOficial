@@ -16,21 +16,21 @@ const { resolveNicheFromLegacyScenario } = require('../commercial-niche-config.c
 
 const ACTIVE_PRODUCT_SCENARIOS = [
   'casa_cozinha_editorial',
-  'ferramentas_editorial',
-  'informatica_editorial',
   'beleza_editorial',
+  'informatica_editorial',
   'moda_editorial',
+  'ferramentas_editorial',
   'pet_editorial',
   'eletrodomesticos_editorial',
 ];
 
 const EXPECTED_DISCOVERY_MAP = new Map([
   [6, 'casa_cozinha_editorial'],
-  [8, 'ferramentas_editorial'],
-  [9, 'informatica_editorial'],
-  [11, 'beleza_editorial'],
+  [8, 'beleza_editorial'],
+  [10, 'informatica_editorial'],
   [12, 'moda_editorial'],
-  [14, 'pet_editorial'],
+  [14, 'ferramentas_editorial'],
+  [16, 'pet_editorial'],
   [18, 'eletrodomesticos_editorial'],
 ]);
 
@@ -65,8 +65,8 @@ test('cenários substituídos saem da matriz ativa mas permanecem no catálogo h
 });
 
 test('horários ativos e horários de descoberta são exatamente os aprovados pela substituição', () => {
-  assert.deepEqual(EXPECTED_PUBLICATION_HOURS, [7, 9, 10, 12, 13, 15, 19, 22]);
-  assert.deepEqual(EXPECTED_DISCOVERY_HOURS, [6, 8, 9, 11, 12, 14, 18]);
+  assert.deepEqual(EXPECTED_PUBLICATION_HOURS, [7, 9, 11, 13, 15, 17, 19, 22]);
+  assert.deepEqual(EXPECTED_DISCOVERY_HOURS, [6, 8, 10, 12, 14, 16, 18]);
   assert.doesNotThrow(() => assertEditorialScheduleValid());
 });
 
@@ -74,7 +74,7 @@ test('cada horário de descoberta aponta somente para um dos 7 nichos e nunca pa
   for (const [hour, expectedId] of EXPECTED_DISCOVERY_MAP) {
     assert.equal(getEditorialScenarioForDiscoveryHour(hour)?.id, expectedId, `hora ${hour}`);
   }
-  for (const hour of [7, 10, 13, 15, 16, 17, 19, 20, 21]) {
+  for (const hour of [7, 9, 11, 13, 15, 17, 19, 20, 21]) {
     assert.equal(getEditorialScenarioForDiscoveryHour(hour), null, `hora inativa ${hour}`);
   }
 });

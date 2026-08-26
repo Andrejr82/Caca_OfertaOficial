@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -9,6 +9,9 @@ const FINAL_COPY_PATHS = [
   "src/core/ai/official-ai-service.ts",
   "src/core/ai/official-ai-regeneration-service.ts",
   "src/lib/trends/selection-social-drafts.ts",
+  "src/app/api/ai/generate/route.ts",
+  "src/app/api/publish/extension/route.ts",
+  "src/lib/publish/actions.ts",
   "src/app/api/videos/jobs/route.ts",
   "src/app/api/videos/jobs/[id]/approve/route.ts",
   "src/lib/social/whatsapp-conversion.ts",
@@ -34,14 +37,85 @@ describe("Copy V5 single final-copy authority", () => {
     }
   });
 
-  it("não permite bypass V2 na persistência oficial", () => {
+  it("obriga a persistência oficial a obter o plano do único cérebro Copy V5", () => {
     const service = read("src/core/ai/official-ai-service.ts");
+    expect(service).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
+    expect(service).toContain("const outcome = await planCommercialCopyV5(facts, provider");
+    expect(service).toContain("const plan = outcome.plan");
+    expect(service).toContain("buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan)");
+    expect(service).toContain("COPY_V5_SINGLE_BRAIN_ENFORCED");
     expect(service).not.toContain("if (input.command.metadata?.copyV2 === true)");
-    expect(service).toContain("buildCanonicalCopyV5Content(input.content, input.offer, input.channels)");
   });
 
-  it("mantém regeneração, backfill e superfícies sociais explicitamente na V5", () => {
-    expect(read("src/core/ai/official-ai-regeneration-service.ts")).toContain("buildCanonicalCopyV5ChannelDraft");
+  it("neutraliza o roteamento legado de Expressa e ciclos antes do engine", () => {
+    const service = read("src/core/ai/official-ai-service.ts");
+    expect(service).toContain("neutralizeLegacyCopyRouting(command)");
+    expect(service).toContain('command.origin === "oracle.discovery"');
+    expect(service).toContain('command.origin === "publish.quick-publication"');
+    expect(service).toContain("copyV2Auto: _copyV2Auto");
+    expect(service).toContain("copyV3Express: _copyV3Express");
+    expect(service).toContain("generateOfficialAIEngine(canonicalCommand, wrappedDependencies)");
+  });
+
+  it("impede qualquer caller produtivo de importar o engine diretamente", () => {
+    const service = read("src/core/ai/official-ai-service.ts");
+    expect(service).toContain('from "./official-ai-service-engine"');
+    for (const path of FINAL_COPY_PATHS.filter((path) => path !== "src/core/ai/official-ai-service.ts")) {
+      expect(read(path), path).not.toContain("official-ai-service-engine");
+    }
+  });
+
+  it("torna o engine legado incapaz de ser autoridade da copy final", () => {
+    const service = read("src/core/ai/official-ai-service.ts");
+    const engine = read("src/core/ai/official-ai-service-engine.ts");
+
+    // O engine pode manter código de compatibilidade interna, mas nunca recebe
+    // um provider real pela fachada pública e nunca persiste a copy final sem
+    // passar pelo interceptador V5.
+    expect(service).toContain('throw new Error("COPY_V5_SINGLE_BRAIN_ENFORCED")');
+    expect(service).toContain("content: {");
+    expect(service).toContain("persistDrafts: async (input) => {");
+    expect(service).toContain("planCommercialCopyV5(facts, provider");
+    expect(service).toContain("dependencies.content.persistDrafts({ ...input, content })");
+    expect(engine).not.toContain("export default");
+  });
+
+  it("faz a regeneração usar o mesmo planCommercialCopyV5 sem provider.generate paralelo", () => {
+    const regeneration = read("src/core/ai/official-ai-regeneration-service.ts");
+    expect(regeneration).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
+    expect(regeneration).toContain("await planCommercialCopyV5(facts, provider");
+    expect(regeneration).not.toContain("provider.generate(");
+    expect(regeneration).not.toContain("buildCopyV5PlannerPrompt");
+    expect(regeneration).toContain("buildCanonicalCopyV5ChannelDraft");
+  });
+
+  it("mantém Expressa, ciclo e extensão como clientes da mesma Official AI", () => {
+    const express = read("src/lib/publish/actions.ts");
+    const cycle = read("src/app/api/ai/generate/route.ts");
+    const extension = read("src/app/api/publish/extension/route.ts");
+    expect(express).toContain("generateOfficialAI(command");
+    expect(cycle).toContain("generateOfficialAI(command");
+    expect(extension).toContain("generateOfficialAI(command");
+  });
+
+  it("mantém renderer puro: sem segundo cérebro, classificação social ou ângulo próprio", () => {
+    const renderer = read("src/core/ai/copy-v5-renderer.ts");
+    expect(renderer).toContain("plan.hook");
+    expect(renderer).toContain("plan.benefitLine");
+    expect(renderer).toContain("plan.selectedAttributes");
+    expect(renderer).toContain("plan.optionalProofAngle");
+    expect(renderer).not.toContain("buildChannelNativeNarrative");
+    expect(renderer).not.toContain("classifySocialCopyArchetype");
+    expect(renderer).not.toContain("calculateDiscountPercent");
+    expect(renderer).not.toContain("50 &&");
+  });
+
+  it("remove fisicamente o social director que criava narrativa paralela", () => {
+    expect(existsSync(resolve(root, "src/core/ai/copy-v5-social-director.ts"))).toBe(false);
+    expect(read("src/core/ai/copy-v5-renderer.ts")).not.toContain("copy-v5-social-director");
+  });
+
+  it("mantém backfill e superfícies sociais explicitamente na V5", () => {
     expect(read("scripts/backfill-opac-drafts.ts")).toContain("renderCopyV5ChannelCopy");
     expect(read("src/lib/trends/selection-social-drafts.ts")).toContain("CopyV5");
     expect(read("src/app/api/videos/jobs/route.ts")).toContain("CopyV5");

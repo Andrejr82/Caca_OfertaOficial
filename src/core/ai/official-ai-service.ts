@@ -3,6 +3,7 @@ import {
   getMarketplaceCtaPrefix as getMarketplaceCtaPrefixV4,
   type CopyV4Facts,
 } from "./copy-v4";
+import { planCommercialCopyV5 } from "./copy-v5-planner";
 import {
   type CopyV5Facts,
   type CopyV5Plan,
@@ -17,7 +18,7 @@ import {
   generateOfficialAI as generateOfficialAIEngine,
   OFFICIAL_AI_PAGE_CONCURRENCY,
 } from "./official-ai-service-engine";
-import type { OfficialAIServiceDependencies } from "./ports";
+import { emitOfficialAITelemetrySafely, type OfficialAIServiceDependencies } from "./ports";
 import type {
   OfficialAIChannel,
   OfficialAICommand,
@@ -116,9 +117,10 @@ export function buildCanonicalCopyV5Content(
   previous: OfficialAIContent,
   offer: OfficialAIOffer,
   channels: readonly OfficialAIChannel[],
+  authoritativePlan?: CopyV5Plan | null,
 ): OfficialAIContent {
   const facts = polishCopyV5Facts(copyV5FactsFromOffer(offer));
-  const planCandidate: Partial<CopyV5Plan> = {
+  const planCandidate: Partial<CopyV5Plan> | CopyV5Plan = authoritativePlan ?? {
     shortProductName: previous.shortName,
     hook: previous.shortCopy,
     selectedAttributes: previous.highlights,
@@ -134,7 +136,7 @@ export function buildCanonicalCopyV5Content(
     hashtags: [],
     callToAction: "Ver oferta",
     highlights: plan.selectedAttributes,
-    explanation: "Copy V5: autoridade única de copy final para todos os fluxos.",
+    explanation: "Copy V5: planCommercialCopyV5 é o cérebro único da copy final.",
     channelCopies: {
       ...previous.channelCopies,
       ...Object.fromEntries(channels.map((channel) => [
@@ -145,26 +147,87 @@ export function buildCanonicalCopyV5Content(
   };
 }
 
+/**
+ * Os flags V2/V3 antigos ainda podem existir nos callers por compatibilidade,
+ * mas não podem selecionar um cérebro ou renderer alternativo nos dois fluxos
+ * produtivos que geram drafts em pending_manual_review.
+ */
+export function neutralizeLegacyCopyRouting(command: OfficialAICommand): OfficialAICommand {
+  const isCycle = command.origin === "oracle.discovery"
+    && command.actor.type === "service"
+    && command.metadata?.copyV2Auto === true;
+  const isExpress = command.origin === "publish.quick-publication"
+    && (command.metadata?.copyV2Express === true || command.metadata?.copyV3Express === true);
+
+  if (!isCycle && !isExpress) return command;
+
+  const {
+    copyV2: _copyV2,
+    copyV2Auto: _copyV2Auto,
+    copyV2Express: _copyV2Express,
+    copyV3Express: _copyV3Express,
+    ...metadata
+  } = command.metadata ?? {};
+
+  return {
+    ...command,
+    metadata,
+  };
+}
+
 export async function generateOfficialAI(
   command: OfficialAICommand,
   dependencies: OfficialAIServiceDependencies,
 ): Promise<OfficialAIResult> {
   let latestContent: OfficialAIContent | null = null;
+  const canonicalCommand = neutralizeLegacyCopyRouting(command);
 
   const wrappedDependencies: OfficialAIServiceDependencies = {
     ...dependencies,
+    // O engine permanece como máquina de estado/compatibilidade. Ele não tem
+    // autoridade para escolher outro cérebro: a inferência final é V5 abaixo.
+    providers: {
+      resolve() {
+        throw new Error("COPY_V5_SINGLE_BRAIN_ENFORCED");
+      },
+    },
     content: {
       persistDrafts: async (input) => {
-        // Qualquer modo interno/legado termina obrigatoriamente na autoridade V5.
-        const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels);
+        const facts = polishCopyV5Facts(copyV5FactsFromOffer(input.offer));
+        let provider = null;
+        try {
+          provider = dependencies.providers.resolve(input.command.providerPreference);
+        } catch {
+          // O planner registra no_provider e usa somente o fallback factual V5.
+        }
+        const plan = await planCommercialCopyV5(facts, provider, {
+          correlationId: input.command.correlationId,
+          timeoutMs: 15_000,
+          metadata: input.command.metadata,
+          onOutcome: (outcome) => emitOfficialAITelemetrySafely(dependencies.telemetry, {
+            eventType: "official_ai.copy_v5.planning.completed",
+            correlationId: input.command.correlationId,
+            offerId: input.offer.id,
+            marketplace: input.offer.marketplace,
+            provider: outcome.provider,
+            model: outcome.model,
+            fallback: outcome.fallback,
+            stage: "copy_v5_planning",
+            details: {
+              source: outcome.source,
+              fallbackReason: outcome.reason,
+            },
+          }),
+        });
+        const content = buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan);
         latestContent = content;
         return dependencies.content.persistDrafts({ ...input, content });
       },
     },
   };
 
-  const result = await generateOfficialAIEngine(command, wrappedDependencies);
-  if (latestContent && result.status !== "rejected" && command.offerId !== "ALL_PENDING" && !command.batch) {
+  const result = await generateOfficialAIEngine(canonicalCommand, wrappedDependencies);
+  if (latestContent && result.status !== "rejected" && canonicalCommand.offerId !== "ALL_PENDING" && !canonicalCommand.batch) {
     return { ...result, content: latestContent };
   }
   return result;

@@ -38,7 +38,7 @@ Antes de qualquer alteração:
 Estado auditado em 25/08/2026:
 
 - `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online;
-- scheduler `0 6,8,9,11,12,14,18 * * *` em `America/Sao_Paulo`, `noOverlap=true`;
+- scheduler `0 6,8,10,12,14,16,18 * * *` em `America/Sao_Paulo`, `noOverlap=true`;
 - Cupons 22h `manual_only`;
 - `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
 - `TREND_EXECUTIVE_MODE=off`;

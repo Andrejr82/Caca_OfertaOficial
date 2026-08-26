@@ -172,9 +172,9 @@ function createQualityAdmissionRunner() {
 }
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
-// Executa descoberta nos 7 horários canônicos dos nichos editoriais ativos (06h, 08h, 09h, 11h, 12h, 14h, 18h).
+// Executa descoberta nos 7 horários canônicos dos nichos editoriais ativos (06h, 08h, 10h, 12h, 14h, 16h, 18h).
 // A fila de cupons das 22h permanece manual e não dispara busca de produtos.
-const CRON_SCHEDULE = '0 6,8,9,11,12,14,18 * * *';
+const CRON_SCHEDULE = '0 6,8,10,12,14,16,18 * * *';
 const SHOPEE_API_URL = 'https://open-api.affiliate.shopee.com.br/graphql';
 const SHOPEE_APP_ID = process.env.SHOPEE_APP_ID || '';
 const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';

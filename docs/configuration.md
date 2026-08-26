@@ -25,7 +25,7 @@
 
 ## Scheduler Oracle
 
-O scheduler canônico usa `0 6,8,9,11,12,14,18 * * *` em `America/Sao_Paulo`, com `noOverlap: true`. O scraper agenda os ciclos no startup, mas não executa Discovery imediatamente sem `--run-now`. Cupons às 22h permanece `manual_only` e fora do cron.
+O scheduler canônico usa `0 6,8,10,12,14,16,18 * * *` em `America/Sao_Paulo`, com `noOverlap: true`. O scraper agenda os ciclos no startup, mas não executa Discovery imediatamente sem `--run-now`. Cupons às 22h permanece `manual_only` e fora do cron.
 
 ## Instagram e Meta
 

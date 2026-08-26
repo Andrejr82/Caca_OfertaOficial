@@ -141,6 +141,7 @@ export interface OfficialAIRegenerationPort {
 export interface OfficialAIRegenerationDependencies {
   drafts: OfficialAIRegenerationPort;
   providers: AIProviderRegistryPort;
+  telemetry?: OfficialAITelemetryPort;
 }
 
 export interface OfficialAIServiceDependencies {

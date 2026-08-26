@@ -192,10 +192,20 @@ describe("OfficialAIProviderRegistry", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
-  it.each([401, 403])("avança em HTTP %s", async (status) => {
+  it.each([401, 402, 403])("avança em HTTP %s", async (status) => {
     const fetcher = vi.fn().mockResolvedValueOnce(httpError(status)).mockResolvedValueOnce(success());
     await registry(canonicalEnv(), fetcher).registry.resolve().generate(request);
     expect(fetcher).toHaveBeenCalledTimes(2);
+  });
+
+  it("avança de Cerebras (402) para Groq com sucesso", async () => {
+    const fetcher = vi.fn()
+      .mockResolvedValueOnce(httpError(402))
+      .mockResolvedValueOnce(httpError(402))
+      .mockResolvedValueOnce(success());
+    const res = await registry(canonicalEnv(), fetcher).registry.resolve().generate(request);
+    expect(res.provider).toBe("groq");
+    expect(calledKeys(fetcher)).toEqual(["cerebras-primary-secret", "cerebras-secondary-secret", "groq-primary-secret"]);
   });
 
   it.each([400, 404])("não avança em HTTP %s", async (status) => {

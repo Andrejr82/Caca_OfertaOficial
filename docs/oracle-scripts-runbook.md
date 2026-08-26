@@ -58,7 +58,7 @@ pm2 logs oracle-trends-radar --raw --lines 100 --nostream
 Cron esperado:
 
 ```text
-0 6,8,9,11,12,14,18 * * *
+0 6,8,10,12,14,16,18 * * *
 ```
 
 Timezone: `America/Sao_Paulo`. `noOverlap=true`.
@@ -67,10 +67,10 @@ Cenários automáticos válidos:
 
 ```text
 casa_cozinha_editorial
-ferramentas_editorial
-informatica_editorial
 beleza_editorial
+informatica_editorial
 moda_editorial
+ferramentas_editorial
 pet_editorial
 eletrodomesticos_editorial
 ```

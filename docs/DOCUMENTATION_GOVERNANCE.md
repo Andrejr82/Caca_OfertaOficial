@@ -33,7 +33,7 @@ Afirmações sobre processos PM2, flags efetivas, timezone, SHA implantado, port
 
 A atualização de 25/08/2026 usa uma auditoria Oracle read-only que confirmou:
 
-- scheduler `0 6,8,9,11,12,14,18 * * *` em `America/Sao_Paulo`;
+- scheduler `0 6,8,10,12,14,16,18 * * *` em `America/Sao_Paulo`;
 - sete cenários automáticos + Cupons manual;
 - `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online;
 - `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
