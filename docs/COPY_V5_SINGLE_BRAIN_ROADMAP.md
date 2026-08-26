@@ -43,9 +43,13 @@ Status: implementado na branch; validação local pendente.
 - Teste focado cobre intenção, benefício factual e rejeição de benefício inventado.
 
 ### Task 4 — Renderers puros por canal
-Status: pendente.
+Status: implementado na branch; validação local pendente.
 
-Garantir que Facebook, Instagram, WhatsApp e Telegram apenas renderizem o plano.
+- Facebook, Instagram, WhatsApp e Telegram consomem o mesmo `CopyV5Plan`.
+- Renderer não classifica produto, não cria nova abertura e não escolhe ângulo comercial.
+- Renderer apenas organiza hook, benefício, atributos e prova do plano e acrescenta fatos determinísticos: preço, cupom, frete, loja, CTA e link.
+- Regra paralela de `50% OFF` foi removida do renderer.
+- Teste arquitetural bloqueia reintrodução de `buildChannelNativeNarrative`, classificação social ou cálculo de novo ângulo no renderer.
 
 ### Task 5 — Remover narrativa fixa paralela
 Status: pendente.
