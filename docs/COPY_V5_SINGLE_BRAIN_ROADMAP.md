@@ -69,9 +69,13 @@ Status: implementado na branch; validação local pendente.
 - Fallback é identificado como `deterministic-fallback / copy-v5-fallback`, sem mascarar como LLM.
 
 ### Task 7 — Prova de autoridade única
-Status: pendente.
+Status: implementado na branch; validação local pendente.
 
-Testes que falham se qualquer fluxo final criar hook/ângulo/benefício fora de `planCommercialCopyV5()`.
+- Teste arquitetural cobre Expressa, ciclos, extensão, regeneração e superfícies finais.
+- Apenas `official-ai-service.ts` pode importar o engine interno.
+- A fachada pública bloqueia provider real no engine e intercepta `persistDrafts`.
+- A copy final persistida é replanejada por `planCommercialCopyV5()` antes de chegar ao storage.
+- Renderer, social director removido e fachadas legadas não podem criar um segundo cérebro final.
 
 ### Task 8 — Validação com ofertas reais
 Status: pendente.
