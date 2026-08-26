@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COPY_V5_SYSTEM_PROMPT, planCommercialCopyV5 } from "@/core/ai/copy-v5-planner";
+import { COPY_V5_SYSTEM_PROMPT, planCommercialCopyV5, type CopyV5PlanningOutcome } from "@/core/ai/copy-v5-planner";
 import type { AIProviderPort } from "@/core/ai/ports";
 import type { CopyV5Facts } from "@/core/ai/copy-v5-types";
 
@@ -50,6 +50,51 @@ describe("Copy V5 commercial planner", () => {
     }));
 
     expect(plan.benefitLine).toBeNull();
+  });
+
+  it("reporta LLM real com provider/model sem fallback", async () => {
+    let outcome: CopyV5PlanningOutcome | null = null;
+    await planCommercialCopyV5(facts, provider({
+      shortProductName: "Chaleira Elétrica",
+      commercialIntent: "saving",
+      commercialAngle: "saving",
+      hook: "☕ Chaleira elétrica com economia no preço",
+      benefitLine: null,
+      selectedAttributes: ["110V"],
+      optionalProofAngle: null,
+    }), { onOutcome: (value) => { outcome = value; } });
+
+    expect(outcome).toEqual({
+      source: "llm",
+      fallback: false,
+      reason: null,
+      provider: "groq",
+      model: "openai/gpt-oss-120b",
+    });
+  });
+
+  it("reporta fallback explícito quando não há provider", async () => {
+    let outcome: CopyV5PlanningOutcome | null = null;
+    const plan = await planCommercialCopyV5(facts, null, { onOutcome: (value) => { outcome = value; } });
+
+    expect(plan.hook).toBeTruthy();
+    expect(outcome).toEqual({
+      source: "deterministic-fallback",
+      fallback: true,
+      reason: "no_provider",
+      provider: "deterministic-fallback",
+      model: "copy-v5-fallback",
+    });
+  });
+
+  it("reporta invalid_json sem voltar para V2/V3", async () => {
+    let outcome: CopyV5PlanningOutcome | null = null;
+    const plan = await planCommercialCopyV5(facts, provider('{"hook":'), { onOutcome: (value) => { outcome = value; } });
+
+    expect(plan.hook).toBeTruthy();
+    expect(outcome?.fallback).toBe(true);
+    expect(outcome?.reason).toBe("invalid_output");
+    expect(outcome?.provider).toBe("deterministic-fallback");
   });
 
   it("prompt declara o planner como único cérebro e exige intenção + benefício", () => {
