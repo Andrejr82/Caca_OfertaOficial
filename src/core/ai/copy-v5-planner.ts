@@ -45,8 +45,8 @@ Campos de saída:
 Regras obrigatórias:
 - Não gere preço, preço anterior, desconto calculado, PIX, cupom, frete, estoque, urgência, marketplace, CTA ou links/URLs. Essas informações são renderizadas por outra camada.
 - Nunca invente urgência, escassez, especificação, benefício técnico ou prova social.
-- Vendas representam somente vendas/unidades vendidas. Nunca transforme sales/vendas em quantidade de avaliadores, clientes que avaliaram ou compradores que deram uma nota.
-- Rating representa somente nota/avaliação/estrelas. Não conclua confiança, garantia ou qualidade a partir da nota.
+- Vendas representam somente vendas/unidades vendidas. Nunca transforme sales/vendas em quantidade de avaliadores, clientes que avaliaram, compradores que deram uma nota, donos/tutores que confiam ou qualquer outro grupo de pessoas.
+- Rating representa somente nota/avaliação/estrelas. Não conclua confiança, garantia, qualidade, performance ou desempenho a partir da nota.
 - Não infira adequação, economia de energia, redução/otimização de consumo ou outro benefício que não esteja textual e explicitamente sustentado pelos fatos.
 - Nunca use adjetivos vazios sem comprovação como "melhor", "excelente", "potente", "rápido", "confortável", "econômico", "ideal para", "perfeito para" ou "vale a pena".
 - Se não houver evidência suficiente para um benefício, use benefitLine: null.
@@ -64,8 +64,8 @@ Exemplo de saída:
 }`;
 
 const COMMERCIAL_INTENTS: readonly CopyV5CommercialIntent[] = ["pain", "desire", "routine", "saving", "proof", "product"];
-const UNSUPPORTED_INFERENCE_REGEX = /\b(?:confian[cç]a(?:\s+garantida)?|garantid[oa]s?|adequad[oa]s?\s+para|ideal\s+para|perfeit[oa]s?\s+para|economiz\w*|reduz\w*\s+(?:o\s+)?consumo|otimiz\w*\s+(?:o\s+)?consumo|confort[aá]vel|potente|r[aá]pid[oa]s?|melhor)\b/iu;
-const QUANTIFIED_REVIEWER_REGEX = /(?:(?:mais\s+de\s+)?\d[\d.,]*\s+(?:clientes|compradores|pessoas|usu[aá]rios).{0,48}(?:d[aã]o|deram|avalia[cç][aã]o|nota|estrelas?)|(?:avalia[cç][aã]o|nota|estrelas?).{0,48}(?:mais\s+de\s+)?\d[\d.,]*\s+(?:clientes|compradores|pessoas|usu[aá]rios))/iu;
+const UNSUPPORTED_INFERENCE_REGEX = /\b(?:confian[cç]a(?:\s+garantida)?|confiam?|confi[aá]vel|garantid[oa]s?|performance|desempenho|adequad[oa]s?\s+para|ideal\s+para|perfeit[oa]s?\s+para|economiz\w*|reduz\w*\s+(?:o\s+)?consumo|otimiz\w*\s+(?:o\s+)?consumo|confort[aá]vel|potente|r[aá]pid[oa]s?|melhor)\b/iu;
+const QUANTIFIED_REVIEWER_REGEX = /(?:(?:mais\s+de\s+)?\d[\d.,]*\s+(?:clientes|compradores|pessoas|usu[aá]rios|tutores|donos(?:\s+de\s+[\p{L}\p{N}_-]+)?).{0,64}(?:d[aã]o|deram|avali\w*|nota|estrelas?|confiam?)|(?:d[aã]o|deram|avali\w*|nota|estrelas?|confiam?).{0,64}(?:mais\s+de\s+)?\d[\d.,]*\s+(?:clientes|compradores|pessoas|usu[aá]rios|tutores|donos(?:\s+de\s+[\p{L}\p{N}_-]+)?))/iu;
 
 function normalizeCommercialIntent(value: unknown, facts: CopyV5Facts): CopyV5CommercialIntent {
   if (typeof value === "string" && COMMERCIAL_INTENTS.includes(value as CopyV5CommercialIntent)) {
