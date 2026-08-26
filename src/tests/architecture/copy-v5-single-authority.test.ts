@@ -34,14 +34,32 @@ describe("Copy V5 single final-copy authority", () => {
     }
   });
 
-  it("não permite bypass V2 na persistência oficial", () => {
+  it("obriga a persistência oficial a obter o plano do único cérebro Copy V5", () => {
     const service = read("src/core/ai/official-ai-service.ts");
+    expect(service).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
+    expect(service).toContain("const plan = await planCommercialCopyV5(facts, provider");
+    expect(service).toContain("buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan)");
+    expect(service).toContain("COPY_V5_SINGLE_BRAIN_ENFORCED");
     expect(service).not.toContain("if (input.command.metadata?.copyV2 === true)");
-    expect(service).toContain("buildCanonicalCopyV5Content(input.content, input.offer, input.channels)");
   });
 
-  it("mantém regeneração, backfill e superfícies sociais explicitamente na V5", () => {
-    expect(read("src/core/ai/official-ai-regeneration-service.ts")).toContain("buildCanonicalCopyV5ChannelDraft");
+  it("faz a regeneração usar o mesmo planCommercialCopyV5 sem provider.generate paralelo", () => {
+    const regeneration = read("src/core/ai/official-ai-regeneration-service.ts");
+    expect(regeneration).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
+    expect(regeneration).toContain("await planCommercialCopyV5(facts, provider");
+    expect(regeneration).not.toContain("provider.generate(");
+    expect(regeneration).not.toContain("buildCopyV5PlannerPrompt");
+    expect(regeneration).toContain("buildCanonicalCopyV5ChannelDraft");
+  });
+
+  it("mantém Expressa e ciclos como clientes da mesma Official AI", () => {
+    const express = read("src/lib/publish/actions.ts");
+    const cycle = read("src/app/api/ai/generate/route.ts");
+    expect(express).toContain("generateOfficialAI(command");
+    expect(cycle).toContain("generateOfficialAI(command");
+  });
+
+  it("mantém backfill e superfícies sociais explicitamente na V5", () => {
     expect(read("scripts/backfill-opac-drafts.ts")).toContain("renderCopyV5ChannelCopy");
     expect(read("src/lib/trends/selection-social-drafts.ts")).toContain("CopyV5");
     expect(read("src/app/api/videos/jobs/route.ts")).toContain("CopyV5");
