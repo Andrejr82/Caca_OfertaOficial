@@ -83,13 +83,13 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
     ['pet', 'bebê', 'bebe', 'automotivo', 'industrial'],
     ['material', 'dimensions', 'quantity', 'capacity'], { apiCategories: [100010, 100636], amazonBrowseNodes: ['17100533011', '17100522011', '17124717011'] }),
 
-  ferramentas_editorial: scenario('ferramentas_editorial', 'Ferramentas', 9,
+  ferramentas_editorial: scenario('ferramentas_editorial', 'Ferramentas', 15,
     ['furadeira', 'parafusadeira', 'kit ferramentas', 'chave de fenda', 'alicate', 'serra', 'trena', 'maleta ferramentas', 'ferramenta elétrica', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
     ['furadeira', 'parafusadeira', 'kit ferramentas', 'ferramenta elétrica', 'chave de fenda', 'alicate', 'serra', 'trena', 'maleta ferramentas', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
     ['infantil', 'brinquedo', 'automotivo', 'cosmético', 'cosmetico'],
     ['brand', 'model', 'voltage', 'power', 'pieces'], { apiCategories: [100636], amazonBrowseNodes: ['165793011', '165796011'] }),
 
-  informatica_editorial: scenario('informatica_editorial', 'Informática', 10,
+  informatica_editorial: scenario('informatica_editorial', 'Informática', 11,
     ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd externo', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
     ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd externo', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
     ['celular', 'smartphone', 'tablet infantil', 'cabo isolado', 'suporte'],
@@ -101,7 +101,7 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
     ['notebook', 'monitor', 'cabo avulso', 'película avulsa'],
     ['brand', 'model', 'memory', 'screen', 'battery'], { apiCategories: [100013], amazonBrowseNodes: ['16243809011', '16243799011'] }),
 
-  beleza_editorial: scenario('beleza_editorial', 'Beleza', 12,
+  beleza_editorial: scenario('beleza_editorial', 'Beleza', 9,
     ['protetor solar', 'hidratante facial', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova secadora', 'aparador', 'máquina de cortar cabelo', 'modelador', 'escova alisadora', 'depilador'],
     ['protetor solar', 'hidratante', 'serum', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova secadora', 'escova alisadora', 'aparador', 'máquina de cortar cabelo', 'modelador', 'depilador'],
     ['pet', 'bebê', 'suplemento', 'medicamento', 'alimento'],
@@ -119,7 +119,7 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
     ['pet', 'bebê', 'moda social', 'automotivo'],
     ['brand', 'size', 'weight', 'material', 'volume'], { apiCategories: [100637, 100001], amazonBrowseNodes: ['17833921011', '17833929011', '17833917011'] }),
 
-  pet_editorial: scenario('pet_editorial', 'Pet', 15,
+  pet_editorial: scenario('pet_editorial', 'Pet', 17,
     ['ração cachorro', 'ração gato', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia gato', 'coleira', 'caixa transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
     ['ração', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia gato', 'coleira', 'caixa transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
     ['bebê', 'bebe', 'humano', 'automotivo'],
@@ -159,10 +159,10 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
 
 const ACTIVE_EDITORIAL_SCENARIO_IDS = Object.freeze([
   'casa_cozinha_editorial',
-  'ferramentas_editorial',
-  'informatica_editorial',
   'beleza_editorial',
+  'informatica_editorial',
   'moda_editorial',
+  'ferramentas_editorial',
   'pet_editorial',
   'eletrodomesticos_editorial',
   'cupons_aprovados_editorial',
@@ -172,8 +172,8 @@ const EDITORIAL_SCENARIOS = Object.freeze(Object.fromEntries(
   ACTIVE_EDITORIAL_SCENARIO_IDS.map((id) => [id, EDITORIAL_SCENARIO_CATALOG[id]]),
 ));
 const EDITORIAL_SCENARIO_IDS = ACTIVE_EDITORIAL_SCENARIO_IDS;
-const EXPECTED_PUBLICATION_HOURS = Object.freeze([7, 9, 10, 12, 13, 15, 19, 22]);
-const EXPECTED_DISCOVERY_HOURS = Object.freeze([6, 8, 9, 11, 12, 14, 18]);
+const EXPECTED_PUBLICATION_HOURS = Object.freeze([7, 9, 11, 13, 15, 17, 19, 22]);
+const EXPECTED_DISCOVERY_HOURS = Object.freeze([6, 8, 10, 12, 14, 16, 18]);
 
 function buildQueueByHour(scenarios) {
   const queue = {};

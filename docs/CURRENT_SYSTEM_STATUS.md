@@ -11,18 +11,18 @@ Baseado no código versionado e, quando indicado, na auditoria operacional read-
 - Next.js 16/React 19: painel, APIs, curadoria, Official AI, Publicação Expressa, vídeos e transportes sociais.
 - Supabase: autenticação, ofertas, posts, links, auditoria, classificação, jobs e Storage de imagens/vídeos.
 - Oracle: Discovery-Only, scraping auxiliar, Radar dedicado, processamento de vídeo e serviços operacionais.
-- Scheduler editorial: sete janelas canônicas em `America/Sao_Paulo` (`06h`, `08h`, `09h`, `11h`, `12h`, `14h`, `18h`) com `noOverlap` e uma única instância de scheduler.
+- Scheduler editorial: sete janelas canônicas em `America/Sao_Paulo` (`06h`, `08h`, `10h`, `12h`, `14h`, `16h`, `18h`) com `noOverlap` e uma única instância de scheduler.
 - O scraper não executa ciclo automático no startup; somente agenda as janelas, salvo execução explícita com `--run-now`.
 
 ## Matriz editorial ativa
 
-1. `06h` → `casa_cozinha_editorial`
-2. `08h` → `ferramentas_editorial`
-3. `09h` → `informatica_editorial`
-4. `11h` → `beleza_editorial`
-5. `12h` → `moda_editorial`
-6. `14h` → `pet_editorial`
-7. `18h` → `eletrodomesticos_editorial`
+1. `06h` (pub `07h`) → `casa_cozinha_editorial`
+2. `08h` (pub `09h`) → `beleza_editorial`
+3. `10h` (pub `11h`) → `informatica_editorial`
+4. `12h` (pub `13h`) → `moda_editorial`
+5. `14h` (pub `15h`) → `ferramentas_editorial`
+6. `16h` (pub `17h`) → `pet_editorial`
+7. `18h` (pub `19h`) → `eletrodomesticos_editorial`
 
 `cupons_aprovados_editorial` permanece `manual_only` às 22h. Cenários antigos como `organizacao_editorial`, `celulares_editorial`, `esporte_editorial`, `tv_audio_editorial`, `moveis_editorial` e `grandes_ofertas_editorial` não participam do cron automático.
 

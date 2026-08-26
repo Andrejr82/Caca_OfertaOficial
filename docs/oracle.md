@@ -28,7 +28,7 @@ Processos PM2 online:
 Cron canônico:
 
 ```text
-0 6,8,9,11,12,14,18 * * *
+0 6,8,10,12,14,16,18 * * *
 ```
 
 - timezone: `America/Sao_Paulo`
@@ -40,11 +40,11 @@ Cron canônico:
 Grade ativa:
 
 - 06h Casa/Cozinha/Organização
-- 08h Ferramentas
-- 09h Informática
-- 11h Beleza
+- 08h Beleza
+- 10h Informática
 - 12h Moda
-- 14h Pet
+- 14h Ferramentas
+- 16h Pet
 - 18h Eletrodomésticos
 
 ## Radar
