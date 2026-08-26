@@ -11,10 +11,10 @@ const intros = fs.readFileSync(path.join(ROOT, 'src/config/cycle-intros.ts'), 'u
 
 const ACTIVE = [
   'casa_cozinha_editorial',
-  'ferramentas_editorial',
-  'informatica_editorial',
   'beleza_editorial',
+  'informatica_editorial',
   'moda_editorial',
+  'ferramentas_editorial',
   'pet_editorial',
   'eletrodomesticos_editorial',
   'cupons_aprovados_editorial',
@@ -39,5 +39,5 @@ test('intros Telegram não anunciam ciclos desativados nem cupons manuais', () =
   assert.equal(intros.includes('cupons_aprovados_editorial'), false);
 
   const introHours = [...intros.matchAll(/^\s{2}(\d+): `/gm)].map((match) => Number(match[1]));
-  assert.deepEqual(introHours, [6, 8, 9, 11, 12, 14, 18]);
+  assert.deepEqual(introHours, [6, 8, 10, 12, 14, 16, 18]);
 });

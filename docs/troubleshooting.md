@@ -23,7 +23,7 @@
 | Draft Express não aparece no WhatsApp | confirmar `manual_source=true`, draft WhatsApp e ausência de evidência de publicação/exclusão |
 | WhatsApp indisponível | sessão Baileys e processo PM2 `whatsapp-bot` |
 | Falso positivo de Beleza/ML | conferir guardrails do contrato `beleza_editorial`; sinais `nasal`, `nariz`, `nose up`, `arroz` e `padaria` devem bloquear fora do domínio |
-| Scheduler não roda | confirmar `oracle-scraper` online, cron `0 6,8,9,11,12,14,18 * * *`, timezone `America/Sao_Paulo` e ausência de sobreposição |
+| Scheduler não roda | confirmar `oracle-scraper` online, cron `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo` e ausência de sobreposição |
 | Cupons dispara Discovery | incorreto: `cupons_aprovados_editorial` deve permanecer `manual_only` e fora do cron |
 | Radar não processa | confirmar PM2 `oracle-trends-radar`, `TRENDS_RADAR_DEDICATED_RUNTIME=true`, polling e lock local |
 | `worker_locked` persistente | confirmar que não existe outro processo usando `/tmp/caca-oferta-trends-radar.lock` antes de qualquer intervenção |

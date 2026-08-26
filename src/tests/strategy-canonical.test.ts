@@ -5,7 +5,7 @@ describe("Strategy Canonical Sync", () => {
   it("A) does not include 'games' in commercial priority text", () => {
     expect(commercialPriorityText.toLowerCase()).not.toContain("games");
     expect(commercialPriorityText.toLowerCase()).not.toContain("automotivo");
-    expect(commercialPriorityText).toContain("Eletrônicos, telefonia, informática, eletrodomésticos, casa, beleza, moda, esporte, pet e móveis.");
+    expect(commercialPriorityText).toContain("Casa/Cozinha/Organização, Beleza, Moda, Eletrodomésticos, Informática, Ferramentas e Pet.");
   });
 
   it("B & C) displays cupons as manual discovery at 22h publication", () => {
@@ -17,28 +17,31 @@ describe("Strategy Canonical Sync", () => {
     expect(cuponsItem?.focus).toBe("Apenas cupons cadastrados e aprovados manualmente");
   });
 
-  it("D) does not contain 'qualquer categoria' in Grandes Ofertas focus", () => {
-    const grandesOfertasItem = schedule.find((item) => item.marketplaces === "grandes_ofertas_editorial");
-    expect(grandesOfertasItem).toBeDefined();
-    expect(grandesOfertasItem?.focus.toLowerCase()).not.toContain("qualquer categoria");
-    expect(grandesOfertasItem?.time).toBe("21h");
-    expect(grandesOfertasItem?.discovery).toBe("20h");
+  it("D) contains only the 7 active canonical niches and cupons", () => {
+    const activeScenarios = schedule.map((item) => item.marketplaces);
+    expect(activeScenarios).toEqual([
+      "casa_cozinha_editorial",
+      "beleza_editorial",
+      "informatica_editorial",
+      "moda_editorial",
+      "ferramentas_editorial",
+      "pet_editorial",
+      "eletrodomesticos_editorial",
+      "cupons_aprovados_editorial",
+    ]);
   });
 
-  it("E & F) automatic discovery hours are strictly [06, 07, 08, 09, 10, 11, 12, 13, 14, 17, 18, 19, 20] and exclude 15h, 16h, 21h", () => {
+  it("E) automatic discovery hours are strictly [06, 08, 10, 12, 14, 16, 18]", () => {
     const autoDiscoveryHours = schedule
       .filter((item) => item.discovery !== "Manual")
       .map((item) => parseInt(item.discovery.replace("h", ""), 10));
 
-    expect(autoDiscoveryHours).toEqual([6, 7, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20]);
-    expect(autoDiscoveryHours).not.toContain(15);
-    expect(autoDiscoveryHours).not.toContain(16);
-    expect(autoDiscoveryHours).not.toContain(21);
+    expect(autoDiscoveryHours).toEqual([6, 8, 10, 12, 14, 16, 18]);
   });
 
-  it("G) publication hours are the canonical 14 scenarios [07, 08, 09, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22]", () => {
+  it("F) publication hours are the canonical 7 niches + cupons [07, 09, 11, 13, 15, 17, 19, 22]", () => {
     const publicationHours = schedule.map((item) => parseInt(item.time.replace("h", ""), 10));
-    expect(publicationHours).toEqual([7, 8, 9, 10, 11, 12, 13, 14, 15, 18, 19, 20, 21, 22]);
-    expect(schedule.length).toBe(14);
+    expect(publicationHours).toEqual([7, 9, 11, 13, 15, 17, 19, 22]);
+    expect(schedule.length).toBe(8);
   });
 });

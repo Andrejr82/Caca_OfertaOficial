@@ -13,11 +13,11 @@ const { createDiscoveryScenarioRuntimeContract } = require('../scenario-runtime-
 
 const AUTO = [
   [6, 'casa_cozinha_editorial'],
-  [8, 'ferramentas_editorial'],
-  [9, 'informatica_editorial'],
-  [11, 'beleza_editorial'],
+  [8, 'beleza_editorial'],
+  [10, 'informatica_editorial'],
   [12, 'moda_editorial'],
-  [14, 'pet_editorial'],
+  [14, 'ferramentas_editorial'],
+  [16, 'pet_editorial'],
   [18, 'eletrodomesticos_editorial'],
 ];
 
