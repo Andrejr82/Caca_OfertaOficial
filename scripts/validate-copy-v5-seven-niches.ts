@@ -143,7 +143,13 @@ async function main() {
   console.log(`ENV LLM_PROVIDER=${process.env.LLM_PROVIDER ?? "(inferred)"} LLM_FALLBACK=${process.env.LLM_FALLBACK ?? "(none)"}`);
   console.log(`KEYS GROQ=${Boolean(process.env.GROQ_API_KEY)} GROQ_2=${Boolean(process.env.GROQ_API_KEY_2)} CEREBRAS=${Boolean(process.env.CEREBRAS_API_KEY)} CEREBRAS_2=${Boolean(process.env.CEREBRAS_API_KEY_2)}\n`);
 
-  for (const sample of samples) {
+  const pacingMs = Number(process.env.COPY_V5_VALIDATION_PACING_MS ?? 4000);
+
+  for (let index = 0; index < samples.length; index += 1) {
+    const sample = samples[index];
+    if (index > 0 && pacingMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, pacingMs));
+    }
     let outcome: Record<string, unknown> = {};
     let diagnostic: ProviderDiagnostic | null = null;
     const provider = diagnosticProvider(baseProvider, (value) => {
