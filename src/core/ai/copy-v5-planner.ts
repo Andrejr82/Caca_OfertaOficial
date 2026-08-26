@@ -45,6 +45,9 @@ Campos de saída:
 Regras obrigatórias:
 - Não gere preço, preço anterior, desconto calculado, PIX, cupom, frete, estoque, urgência, marketplace, CTA ou links/URLs. Essas informações são renderizadas por outra camada.
 - Nunca invente urgência, escassez, especificação, benefício técnico ou prova social.
+- Vendas representam somente vendas/unidades vendidas. Nunca transforme sales/vendas em quantidade de avaliadores, clientes que avaliaram ou compradores que deram uma nota.
+- Rating representa somente nota/avaliação/estrelas. Não conclua confiança, garantia ou qualidade a partir da nota.
+- Não infira adequação, economia de energia, redução/otimização de consumo ou outro benefício que não esteja textual e explicitamente sustentado pelos fatos.
 - Nunca use adjetivos vazios sem comprovação como "melhor", "excelente", "potente", "rápido", "confortável", "econômico", "ideal para", "perfeito para" ou "vale a pena".
 - Se não houver evidência suficiente para um benefício, use benefitLine: null.
 - Se não houver desconto, não invente promoção.
@@ -61,6 +64,8 @@ Exemplo de saída:
 }`;
 
 const COMMERCIAL_INTENTS: readonly CopyV5CommercialIntent[] = ["pain", "desire", "routine", "saving", "proof", "product"];
+const UNSUPPORTED_INFERENCE_REGEX = /\b(?:confian[cç]a(?:\s+garantida)?|garantid[oa]s?|adequad[oa]s?\s+para|ideal\s+para|perfeit[oa]s?\s+para|economiz\w*|reduz\w*\s+(?:o\s+)?consumo|otimiz\w*\s+(?:o\s+)?consumo|confort[aá]vel|potente|r[aá]pid[oa]s?|melhor)\b/iu;
+const QUANTIFIED_REVIEWER_REGEX = /(?:(?:mais\s+de\s+)?\d[\d.,]*\s+(?:clientes|compradores|pessoas|usu[aá]rios).{0,48}(?:d[aã]o|deram|avalia[cç][aã]o|nota|estrelas?)|(?:avalia[cç][aã]o|nota|estrelas?).{0,48}(?:mais\s+de\s+)?\d[\d.,]*\s+(?:clientes|compradores|pessoas|usu[aá]rios))/iu;
 
 function normalizeCommercialIntent(value: unknown, facts: CopyV5Facts): CopyV5CommercialIntent {
   if (typeof value === "string" && COMMERCIAL_INTENTS.includes(value as CopyV5CommercialIntent)) {
@@ -69,10 +74,36 @@ function normalizeCommercialIntent(value: unknown, facts: CopyV5Facts): CopyV5Co
   return calculateDiscountPercent(facts.currentPrice, facts.originalPrice) !== null ? "saving" : "product";
 }
 
+function hasExplicitReviewCount(facts: CopyV5Facts): boolean {
+  const ev = (facts.evidence && typeof facts.evidence === "object" ? facts.evidence : {}) as Record<string, unknown>;
+  const direct = ev.reviews_count ?? ev.reviewsCount ?? ev.review_count ?? ev.reviewCount ?? ev.total_reviews ?? ev.totalReviews;
+  if (typeof direct === "number") return Number.isFinite(direct) && direct >= 0;
+  if (typeof direct === "string") return /\d/u.test(direct);
+
+  const evidenceText = persistedStrings(facts.evidence ?? {}).join(" ");
+  return /(?:reviews_count|review_count|total_reviews|avalia[cç][õo]es|reviews)\D{0,12}\d/iu.test(evidenceText);
+}
+
+function sanitizeCandidate(candidate: Partial<CopyV5Plan> | null, facts: CopyV5Facts): Partial<CopyV5Plan> | null {
+  if (!candidate) return candidate;
+  const rawHook = typeof candidate.hook === "string" ? candidate.hook.replace(/\s+/gu, " ").trim() : "";
+  const invalidReviewerClaim = rawHook.length > 0 && QUANTIFIED_REVIEWER_REGEX.test(rawHook) && !hasExplicitReviewCount(facts);
+  const unsupportedInference = rawHook.length > 0 && UNSUPPORTED_INFERENCE_REGEX.test(rawHook);
+
+  if (!invalidReviewerClaim && !unsupportedInference) return candidate;
+  return { ...candidate, hook: undefined };
+}
+
 function validateBenefitLine(value: unknown, facts: CopyV5Facts): string | null {
   if (typeof value !== "string") return null;
   const candidate = value.replace(/\s+/gu, " ").trim();
-  if (!candidate || candidate.length > 120 || PROHIBITED_WORDS_REGEX.test(candidate) || /https?:\/\//iu.test(candidate)) return null;
+  if (
+    !candidate
+    || candidate.length > 120
+    || PROHIBITED_WORDS_REGEX.test(candidate)
+    || UNSUPPORTED_INFERENCE_REGEX.test(candidate)
+    || /https?:\/\//iu.test(candidate)
+  ) return null;
 
   const factualSource = semantic([
     facts.productName,
@@ -85,16 +116,18 @@ function validateBenefitLine(value: unknown, facts: CopyV5Facts): string | null 
     .filter((token) => token.length >= 4 && !/^(para|com|mais|menos|uma|esse|essa|produto|rotina)$/u.test(token));
 
   if (meaningfulTokens.length === 0) return null;
-  const supported = meaningfulTokens.some((token) => factualSource.includes(token));
-  return supported ? candidate : null;
+  const supportedCount = meaningfulTokens.filter((token) => factualSource.includes(token)).length;
+  const minimumSupported = meaningfulTokens.length === 1 ? 1 : Math.ceil(meaningfulTokens.length * 0.5);
+  return supportedCount >= minimumSupported ? candidate : null;
 }
 
 function finalizePlan(candidate: Partial<CopyV5Plan> | null, facts: CopyV5Facts): CopyV5Plan {
-  const validated = validateCopyV5Plan(candidate, facts);
+  const safeCandidate = sanitizeCandidate(candidate, facts);
+  const validated = validateCopyV5Plan(safeCandidate, facts);
   return {
     ...validated,
-    commercialIntent: normalizeCommercialIntent(candidate?.commercialIntent, facts),
-    benefitLine: validateBenefitLine(candidate?.benefitLine, facts),
+    commercialIntent: normalizeCommercialIntent(safeCandidate?.commercialIntent, facts),
+    benefitLine: validateBenefitLine(safeCandidate?.benefitLine, facts),
   };
 }
 
