@@ -13,6 +13,7 @@ export interface CommercialPortfolioOptions {
   maxTotal?: number;
   maxPerType?: number;
   minScore?: number;
+  maxPerTypeByCommercialType?: Readonly<Record<string, number>>;
 }
 
 export interface CommercialPortfolioRankedOffer {
@@ -29,6 +30,12 @@ export interface CommercialPortfolioSelection {
   rejected: readonly (CommercialPortfolioRankedOffer & { rejectionReason: string })[];
 }
 
+const DEFAULT_EDITORIAL_TYPE_CAPS: Readonly<Record<string, number>> = Object.freeze({
+  // Em uma carteira curta de achadinhos, fragrância deve ser destaque, não
+  // dominar o ciclo por ter comissão/vendas altas.
+  perfume: 1,
+});
+
 const TYPE_PATTERNS: readonly [string, RegExp][] = [
   ["tapete-higienico", /\btapete\s+higienic/],
   ["caixa-areia", /\b(caixa|bandeja|sanitario|banheiro).*\b(areia|gato)|\bfurba\b|\bfurbox\b/],
@@ -40,8 +47,21 @@ const TYPE_PATTERNS: readonly [string, RegExp][] = [
   ["air-fryer", /\bair\s*fryer\b/], ["liquidificador", /\bliquidificador\b/], ["cafeteira", /\bcafeteira\b/],
   ["panela", /\bpanela\b/], ["aspirador", /\baspirador\b/], ["geladeira", /\b(geladeira|refrigerador)\b/],
   ["microondas", /\bmicro\s*ondas\b/], ["parafusadeira", /\bparafusadeira\b/], ["furadeira", /\bfuradeira\b/],
-  ["serra", /\bserra\b/], ["organizador", /\borganizador\b/], ["pote", /\bpotes?\b/], ["secador", /\bsecador\b/],
-  ["chapinha", /\b(chapinha|prancha)\b/], ["escova-secadora", /\bescova\b.*\b(secadora|alisadora)\b/],
+  ["serra", /\bserra\b/], ["organizador", /\borganizador\b/], ["pote", /\bpotes?\b/],
+
+  // Beleza: tipos editoriais explícitos. Antes, quase todos caíam em other:* e
+  // o portfólio podia concentrar várias fragrâncias ou itens equivalentes.
+  ["protetor-solar", /\bprotetor\s+solar\b/],
+  ["serum-skincare", /\bserum\b|\bretinol\b/],
+  ["hidratante-skincare", /\bhidratante\b|\bcreme\s+facial\b/],
+  ["tratamento-capilar", /\b(mascara|tratamento|oleo)\b.*\b(capilar|cabelo)|\bleave\s*in\b/],
+  ["shampoo-condicionador", /\b(shampoo|condicionador)\b/],
+  ["perfume", /\b(perfume|eau\s+de\s+parfum|eau\s+de\s+toilette)\b/],
+  ["maquiagem", /\b(maquiagem|base\s+facial|batom|rimel|mascara\s+de\s+cilios)\b/],
+  ["grooming-device", /\b(depilador|aparador\s+de\s+pelos|maquina\s+de\s+cortar\s+cabelo)\b/],
+  ["secador", /\bsecador\b/],
+  ["chapinha", /\b(chapinha|prancha)\b/],
+  ["escova-secadora", /\bescova\b.*\b(secadora|alisadora)\b/],
 ];
 
 const STOP_WORDS = new Set(["de", "da", "do", "das", "dos", "para", "com", "sem", "por", "em", "e", "a", "o", "as", "os", "um", "uma", "kit", "pack", "cor", "modelo", "produto", "pet", "cao", "caes", "cachorro", "gato", "gatos"]);
@@ -139,7 +159,10 @@ export function selectCommercialPortfolio(offers: readonly CommercialPortfolioOf
     if (row.score < minScore) { rejected.push({ ...row, rejectionReason: "commercial_score_below_minimum" }); continue; }
     const nearDuplicate = selected.find((existing) => existing.commercialType === row.commercialType && similarity(existing.offer.product_name ?? "", row.offer.product_name ?? "") >= 0.78);
     if (nearDuplicate) { rejected.push({ ...row, rejectionReason: "near_duplicate" }); continue; }
-    if ((typeCounts.get(row.commercialType) ?? 0) >= maxPerType) { rejected.push({ ...row, rejectionReason: "commercial_type_cap" }); continue; }
+    const explicitCap = options.maxPerTypeByCommercialType?.[row.commercialType];
+    const defaultCap = DEFAULT_EDITORIAL_TYPE_CAPS[row.commercialType];
+    const typeCap = Math.max(1, Math.floor(Number(explicitCap ?? defaultCap ?? maxPerType)));
+    if ((typeCounts.get(row.commercialType) ?? 0) >= typeCap) { rejected.push({ ...row, rejectionReason: "commercial_type_cap" }); continue; }
     if (selected.length >= maxTotal) { rejected.push({ ...row, rejectionReason: "portfolio_limit" }); continue; }
     selected.push(row); typeCounts.set(row.commercialType, (typeCounts.get(row.commercialType) ?? 0) + 1);
   }
