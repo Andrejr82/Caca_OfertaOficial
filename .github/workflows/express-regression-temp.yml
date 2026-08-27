@@ -1,0 +1,33 @@
+name: Express Regression Temp
+
+on:
+  push:
+    branches:
+      - fix/publicacao-expressa-copy-v5-contract-20260827
+
+jobs:
+  focused-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run focused Express tests
+        run: npx vitest run src/tests/core/ai/express-copy-v5-routing-regression.test.ts src/tests/core/ai/official-ai-service.test.ts src/tests/architecture/copy-v5-single-authority.test.ts
+
+  full-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run full verification
+        run: npm run verify
