@@ -14,6 +14,7 @@ import {
 } from "@/lib/trends/selection-offer-state";
 import { prepareTrendSocialDrafts } from "@/lib/trends/selection-social-drafts";
 import {
+  buildAmazonAffiliateUrl,
   buildMercadoLivreAffiliateUrl,
   resolveTrendMonetizedDestination,
 } from "@/lib/trends/monetization";
@@ -45,6 +46,16 @@ function isMercadoLivreUrl(value: string): boolean {
   try {
     const parsed = new URL(value);
     return parsed.protocol === "https:" && /(^|\.)mercadolivre\.com\.br$/i.test(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isAmazonUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase();
+    return parsed.protocol === "https:" && (host === "amazon.com.br" || host.endsWith(".amazon.com.br"));
   } catch {
     return false;
   }
@@ -200,6 +211,64 @@ async function materializeMercadoLivreOfferFromSnapshot(userId: string, product:
   return readMaterializedOffer(persistenceClient, userId, offerId);
 }
 
+async function materializeAmazonOfferFromSnapshot(userId: string, product: any, evidence: Evidence) {
+  const identity = evidence.marketplace_identity ?? {};
+  const metrics = evidence.commercial_metrics ?? {};
+  const temporal = evidence.temporal_metrics ?? {};
+  const asin = String(identity.productId ?? identity.itemId ?? "").trim().toUpperCase();
+  const marketplaceUrl = validHttps(evidence.source_url);
+  const affiliateUrl = marketplaceUrl ? buildAmazonAffiliateUrl(marketplaceUrl) : null;
+  const imageUrl = resolveTrendSnapshotImageUrl(evidence, product);
+  const price = Number(evidence.price ?? metrics.price ?? 0);
+  const oldPrice = Number(evidence.old_price ?? 0);
+
+  if (!/^[A-Z0-9]{10}$/.test(asin) || !marketplaceUrl || !affiliateUrl || !isAmazonUrl(marketplaceUrl) || !Number.isFinite(price) || price <= 0) {
+    throw new Error("Snapshot Amazon não possui ASIN/link afiliado/preço suficientes para materializar a oferta com segurança.");
+  }
+  if (!imageUrl) {
+    throw new Error("Snapshot Amazon não possui imagem oficial válida para materializar a oferta.");
+  }
+
+  const row = {
+    user_id: userId,
+    platform: "Amazon",
+    product_name: product.product_term,
+    category: product.category,
+    original_url: affiliateUrl,
+    image_url: imageUrl,
+    current_price: price,
+    old_price: Number.isFinite(oldPrice) && oldPrice > price ? oldPrice : null,
+    score: Number(product.commercial_score ?? 0) / 10,
+    status: "pending_manual_review",
+    explainability: {
+      provenance: "trend_experiment",
+      correlation_id: `trend-radar:${product.radar_run_id}:${product.id}`,
+      radar_run_id: product.radar_run_id,
+      radar_product_id: product.id,
+      strategy_version: evidence.trend_strategy_version ?? "trend-radar-seven-niches-v4",
+      commercial_score: Number(product.commercial_score ?? 0),
+      score_breakdown: product.score_breakdown ?? {},
+      automatic_publication: false,
+      marketplace_url: marketplaceUrl,
+      affiliate_url: affiliateUrl,
+      marketplace_metrics: metrics,
+    },
+    notes: `Trends IA · teste aprovado · ${product.product_term}`,
+    product_id: asin,
+    source_position: Number(temporal.current_rank ?? product.priority ?? 0) || null,
+  };
+
+  const persistenceClient = createRequiredSupabaseAdminClient();
+  const { data, error } = await persistenceClient.rpc("upsert_discovery_offers_v2", {
+    p_marketplace: "Amazon",
+    p_rows: [row],
+  });
+  if (error) throw new Error(`Falha ao materializar oferta Amazon no Trends: ${error.message}`);
+  const offerId = Array.isArray(data?.offer_ids) ? String(data.offer_ids[0] ?? "") : "";
+  if (!offerId) throw new Error("Oferta Amazon no Trends não retornou vínculo persistido.");
+  return readMaterializedOffer(persistenceClient, userId, offerId);
+}
+
 async function ensureOfferSelected(supabase: any, userId: string, offer: any, productId: string) {
   let status = String(offer.status ?? "");
   let resolution = resolveTrendOfferHandoff(status);
@@ -291,9 +360,11 @@ async function approveAndBridge(formData: FormData) {
   if (!offer) offer = await findExactOffer(supabase, user.id, String(product.marketplace ?? ""), evidence);
   if (!offer && product.marketplace === "Shopee") offer = await materializeShopeeOfferFromSnapshot(user.id, product, evidence);
   if (!offer && product.marketplace === "Mercado Livre") offer = await materializeMercadoLivreOfferFromSnapshot(user.id, product, evidence);
+  if (!offer && product.marketplace === "Amazon") offer = await materializeAmazonOfferFromSnapshot(user.id, product, evidence);
   if (!offer) throw new Error("Nenhuma oferta rastreável existente foi encontrada para esta oportunidade.");
 
-  if (String(offer.platform || "").trim().toLowerCase() === "mercado livre") {
+  const platform = String(offer.platform || "").trim().toLowerCase();
+  if (platform === "mercado livre") {
     const monetizedDestination = resolveTrendMonetizedDestination({
       platform: offer.platform,
       originalUrl: offer.original_url,
@@ -304,6 +375,49 @@ async function approveAndBridge(formData: FormData) {
         blocked: {
           code: "monetization_required" as const,
           message: "Oferta Mercado Livre sem monetização válida. Aprovação bloqueada antes da criação de links sociais.",
+        },
+        productId: product.id,
+      };
+    }
+  }
+
+  if (platform === "amazon") {
+    let monetizedDestination = resolveTrendMonetizedDestination({
+      platform: offer.platform,
+      originalUrl: offer.original_url,
+      affiliateUrl: offer.explainability?.affiliate_url,
+    });
+
+    if (!monetizedDestination) {
+      const marketplaceUrl = validHttps(evidence.source_url) ?? validHttps(offer.original_url);
+      const affiliateUrl = marketplaceUrl ? buildAmazonAffiliateUrl(marketplaceUrl) : null;
+      if (affiliateUrl) {
+        const existingExplainability = offer.explainability && typeof offer.explainability === "object" ? offer.explainability : {};
+        const nextExplainability = {
+          ...existingExplainability,
+          marketplace_url: marketplaceUrl,
+          affiliate_url: affiliateUrl,
+        };
+        const { error: affiliateUpdateError } = await supabase.from("offers").update({
+          original_url: affiliateUrl,
+          explainability: nextExplainability,
+        }).eq("id", offer.id).eq("user_id", user.id);
+        if (affiliateUpdateError) throw new Error("Falha ao preparar monetização Amazon para o teste Trends.");
+        offer.original_url = affiliateUrl;
+        offer.explainability = nextExplainability;
+        monetizedDestination = resolveTrendMonetizedDestination({
+          platform: offer.platform,
+          originalUrl: offer.original_url,
+          affiliateUrl,
+        });
+      }
+    }
+
+    if (!monetizedDestination) {
+      return {
+        blocked: {
+          code: "monetization_required" as const,
+          message: "Oferta Amazon sem AMAZON_PARTNER_TAG/link afiliado válido. Aprovação bloqueada antes da criação de links sociais.",
         },
         productId: product.id,
       };

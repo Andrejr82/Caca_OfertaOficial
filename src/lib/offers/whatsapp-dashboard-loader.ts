@@ -49,6 +49,24 @@ function isActiveWhatsappDraft(post: PostWithOffer): boolean {
     && !["posted", "rejected", "deferred"].includes(offerStatus);
 }
 
+function isTrendExperimentDraft(post: PostWithOffer): boolean {
+  const explainability = post.offers?.explainability;
+  if (!explainability || typeof explainability !== "object" || Array.isArray(explainability)) return false;
+  if (explainability.provenance === "trend_experiment") return true;
+  const trendExecution = explainability.trend_execution;
+  return Boolean(
+    trendExecution
+    && typeof trendExecution === "object"
+    && !Array.isArray(trendExecution)
+    && (trendExecution as Record<string, unknown>).origin === "trend",
+  );
+}
+
+function isChannelEligibleDraft(post: PostWithOffer): boolean {
+  const status = String(post.offers?.status || "").toLowerCase();
+  return status === "approved" || (status === "selected" && isTrendExperimentDraft(post));
+}
+
 function offerIdOf(post: PostWithOffer): string {
   return post.offers?.id || post.offer_id || "";
 }
@@ -105,8 +123,8 @@ export async function loadWhatsappDashboardDrafts({
     }
   }
 
-  // Draft de canal pendente: se outra rede já aprovou a oferta global, o draft WhatsApp
-  // continua operacionalmente válido até ser publicado, deletado, rejeitado ou deferido.
+  // Draft de canal pendente: ofertas aprovadas globalmente e ofertas Trends explicitamente
+  // selecionadas pelo usuário continuam operacionais no WhatsApp fora do ranking Top30.
   let approvedChannelDrafts: PostWithOffer[] = [];
   try {
     const { data, error } = await supabase
@@ -124,11 +142,11 @@ export async function loadWhatsappDashboardDrafts({
     approvedChannelDrafts = dedupeByOfferId(
       ((data || []) as unknown as PostWithOffer[])
         .filter((post) => isActiveWhatsappDraft(post)
-          && String(post.offers?.status || "").toLowerCase() === "approved"
+          && isChannelEligibleDraft(post)
           && !isManualExpressDraft(post as any)),
     );
   } catch (error) {
-    console.error("[WhatsApp] Falha ao carregar drafts de canal aprovados globalmente", error);
+    console.error("[WhatsApp] Falha ao carregar drafts de canal aprovados/Trends", error);
     approvedChannelDrafts = [];
   }
 
@@ -172,7 +190,7 @@ export async function loadWhatsappDashboardDrafts({
     expressDrafts = [];
   }
 
-  // Express vem primeiro. Drafts de canal já aprovados globalmente ficam visíveis sem
+  // Express vem primeiro. Drafts de canal já aprovados e Trends selecionados ficam visíveis sem
   // disputar novamente ranking com o Top30; dedupe preserva uma única oferta no painel.
   return dedupeByOfferId([...expressDrafts, ...approvedChannelDrafts, ...editorialDrafts]).slice(0, requestedLimit);
 }

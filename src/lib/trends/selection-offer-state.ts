@@ -9,7 +9,7 @@ export const TREND_REJECTED_OFFER_MESSAGE = "Esta oportunidade está vinculada a
 export const TREND_MISSING_IMAGE_MESSAGE = "Esta oportunidade não possui imagem oficial válida e não pode ser aprovada para publicação.";
 
 export function supportsTrendApprovalMarketplace(marketplace: string | null | undefined): boolean {
-  return marketplace === "Shopee" || marketplace === "Mercado Livre";
+  return marketplace === "Shopee" || marketplace === "Mercado Livre" || marketplace === "Amazon";
 }
 
 export function resolveTrendOfferHandoff(status: string): TrendOfferHandoffResolution {
