@@ -58,6 +58,30 @@ Cupons permanece `manual_only` às 22h e não participa do cron. O scraper não 
 - Mercado Livre/Beleza bloqueia sinais fora do domínio como `nasal`, `nariz`, `nose up`, `arroz` e `padaria`, preservando `modelador de cachos` e demais produtos válidos.
 - Discovery não autoriza publicação.
 
+### Arquitetura proposta no PR #177
+
+A branch `fix/quality-catalog-depth-20260827` acrescenta uma camada de qualidade e composição **ainda não implantada**:
+
+```mermaid
+flowchart LR
+  D["Primeira passada de Discovery"] --> Q["Search Quality / domínio / preço"]
+  Q --> C["Classificação e Curadoria"]
+  C --> P["Composição de portfólio"]
+  P --> A{"Cobertura e diversidade suficientes?"}
+  A -- "sim" --> F["Encerrar seleção"]
+  A -- "não" --> R["Solicitar expansão adaptativa"]
+  R -. "integração Oracle ainda pendente" .-> D
+```
+
+- O gate comum usa evidência nativa do Mercado Livre quando disponível para detectar domínio incompatível com a intenção.
+- A sanidade de preço pode remover apenas a referência anterior/desconto quando a evidência é implausível, preservando o preço atual válido.
+- A política semântica da Shopee passa a ter tratamento específico de Beleza para diferenciar produto principal de acessório/consumível auxiliar.
+- O seletor comercial reconhece famílias de Beleza e aplica limites por tipo, reduzindo concentração de itens semelhantes.
+- `adaptive-catalog-depth/v1` é uma função pura de decisão baseada em volume bruto, pool qualificado, quantidade de finalistas e diversidade. Ela possui limite de rodadas.
+- A aresta de retorno para uma nova rodada de Discovery está deliberadamente **desconectada do runtime Oracle** neste PR até validação e rollout explícitos.
+
+Portanto, o diagrama acima representa a arquitetura-alvo da branch em validação, não o estado operacional atual da VPS.
+
 ## Publicação social
 
 `posts.content` é a autoridade da copy do canal. O estado global da oferta não substitui automaticamente o estado específico de cada post.
@@ -87,4 +111,4 @@ O timer `oracle-capacity-hunter.timer` estava ativo a cada 30 minutos. O service
 
 ## Fontes de verdade
 
-`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-api.cjs`, `scripts/oracle-trends-radar-worker.cjs`, `scripts/whatsapp-engine.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
+`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-api.cjs`, `scripts/oracle-trends-radar-worker.cjs`, `scripts/whatsapp-engine.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `scripts/marketplace-search-quality.cjs`, `scripts/adaptive-discovery-policy.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
