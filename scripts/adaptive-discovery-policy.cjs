@@ -1,6 +1,7 @@
 'use strict';
 
 const ADAPTIVE_DISCOVERY_POLICY_VERSION = 'adaptive-catalog-depth/v1';
+const ADAPTIVE_DISCOVERY_ROLE = 'fallback_after_first_discovery_quality_exhausted';
 
 const MIN_EXTRACTED_BY_MARKETPLACE = Object.freeze({
   Amazon: 180,
@@ -25,11 +26,13 @@ function finiteNumber(value, fallback = 0) {
 }
 
 /**
- * Decide se a descoberta deve continuar depois da primeira passada.
+ * Fallback de profundidade para quando a descoberta inicial orientada por
+ * intenção/cobertura já foi executada e, mesmo assim, esgotou o orçamento sem
+ * formar um pool editorial forte.
  *
- * A política não aumenta a quantidade publicada. Ela aumenta somente o
- * universo pesquisado quando não há evidência suficiente para afirmar que a
- * carteira final representa bons achados do catálogo.
+ * Esta política NÃO deve ser o mecanismo principal de qualidade. O fluxo
+ * primário é definido por discovery-retrieval-quality/v1 e deve melhorar a
+ * primeira descoberta antes do ranking final.
  */
 function assessAdaptiveDiscovery(input = {}, options = {}) {
   const marketplace = String(input.marketplace || 'unknown');
@@ -63,6 +66,7 @@ function assessAdaptiveDiscovery(input = {}, options = {}) {
 
   return Object.freeze({
     contractVersion: ADAPTIVE_DISCOVERY_POLICY_VERSION,
+    role: ADAPTIVE_DISCOVERY_ROLE,
     marketplace,
     shouldExpand,
     canExpand,
@@ -88,6 +92,7 @@ function assessAdaptiveDiscovery(input = {}, options = {}) {
 
 module.exports = {
   ADAPTIVE_DISCOVERY_POLICY_VERSION,
+  ADAPTIVE_DISCOVERY_ROLE,
   MIN_EXTRACTED_BY_MARKETPLACE,
   DEFAULTS,
   assessAdaptiveDiscovery,
