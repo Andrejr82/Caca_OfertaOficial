@@ -36,12 +36,11 @@ describe('Shopee Ranking V1 - Core Tests', () => {
   });
 
   describe('2. Semantic Validator (T13) & 10 Casos Obrigatórios', () => {
-    
-    // Casos do plano de regressão (14.2)
     const celularesPolicy = getPolicyForCategory('celulares')!;
     const eletroPolicy = getPolicyForCategory('eletrodomesticos')!;
     const moveisPolicy = getPolicyForCategory('moveis')!;
     const tvPolicy = getPolicyForCategory('tv-audio')!;
+    const belezaPolicy = getPolicyForCategory('beleza')!;
 
     it('Caso 1: smartphone - capa para smartphone -> Rejeitar', () => {
       const res = evaluateSemanticConfidence('Capa Para Smartphone Galaxy', 'smartphone', celularesPolicy);
@@ -96,8 +95,6 @@ describe('Shopee Ranking V1 - Core Tests', () => {
     });
 
     it('Caso 10: controle remoto - controle remoto compatível -> Aceitar', () => {
-      // Se a intenção explícita for 'controle remoto', não é bloqueado
-      // Para simular, criar política customizada ou usar fallback
       const customPolicy = {
         categoryKey: 'acessorios-tv',
         primaryClasses: ['controle', 'remoto'],
@@ -106,6 +103,36 @@ describe('Shopee Ranking V1 - Core Tests', () => {
         nativeCategoryIds: []
       };
       const res = evaluateSemanticConfidence('Controle remoto universal', 'controle remoto', customPolicy);
+      expect(res.isValid).toBe(true);
+      expect(res.confidence).toBe(1.0);
+    });
+
+    it('Beleza: aplicador descartável de maquiagem não é produto principal', () => {
+      const res = evaluateSemanticConfidence(
+        'Aplicador Pincel Descartável Gloss e Batom Maquiagem',
+        'maquiagem',
+        belezaPolicy,
+      );
+      expect(res.isValid).toBe(false);
+      expect(res.rejectionCode).toBe('accessory_mismatch');
+    });
+
+    it('Beleza: máscara capilar continua elegível com confiança alta', () => {
+      const res = evaluateSemanticConfidence(
+        'Máscara Karseel Original - Resgate Imediato para Cabelos Danificados',
+        'mascara',
+        getPolicyForCategory('mascara'),
+      );
+      expect(res.isValid).toBe(true);
+      expect(res.confidence).toBeGreaterThanOrEqual(0.9);
+    });
+
+    it('Beleza: perfume principal continua elegível', () => {
+      const res = evaluateSemanticConfidence(
+        'Perfume Patriota Intenso 100ml - Eau De Parfum',
+        'perfume',
+        getPolicyForCategory('perfume'),
+      );
       expect(res.isValid).toBe(true);
       expect(res.confidence).toBe(1.0);
     });
@@ -122,11 +149,8 @@ describe('Shopee Ranking V1 - Core Tests', () => {
         commissionPercent: 15,
         currentPrice: 100
       };
-      
+
       const res = calculateScore(candidate, 100, true);
-      // breakdown max values: 25(semantic) + 20(sales:log10(1001)/4=0.75*20=15) + 15(discount:1) + 10(rating:1) + 10(shop:1) + 10(commission:1) + 5(price:1) + 5(fresh:1)
-      // Sales Norm: min(1, Math.log10(1001)/4) = log10(1001)=3.00043 / 4 = 0.75010
-      // 25 + (20 * 0.7501) + 15 + 10 + 10 + 10 + 5 + 5 = 95
       expect(res.score).toBeGreaterThan(90);
       expect(res.breakdown.semantic_relevance).toBe(25);
       expect(res.breakdown.rating).toBe(10);
@@ -144,15 +168,15 @@ describe('Shopee Ranking V1 - Core Tests', () => {
 
       const c1 = { ...base, itemId: '10', score: 50, currentPrice: 100 };
       const c2 = { ...base, itemId: '20', score: 50, currentPrice: 100 };
-      const c3 = { ...base, itemId: '30', score: 50, currentPrice: 90 }; // menor preço ganha!
-      const c4 = { ...base, itemId: '40', score: 51, currentPrice: 100 }; // maior score ganha de todos
+      const c3 = { ...base, itemId: '30', score: 50, currentPrice: 90 };
+      const c4 = { ...base, itemId: '40', score: 51, currentPrice: 100 };
 
       const arr = [c2, c1, c4, c3];
       arr.sort(sortCandidatesDeterministic);
 
-      expect(arr[0].itemId).toBe('40'); // score 51
-      expect(arr[1].itemId).toBe('30'); // score 50, preço 90
-      expect(arr[2].itemId).toBe('10'); // score 50, preço 100, tie breaker id (10 < 20)
+      expect(arr[0].itemId).toBe('40');
+      expect(arr[1].itemId).toBe('30');
+      expect(arr[2].itemId).toBe('10');
       expect(arr[3].itemId).toBe('20');
     });
   });
