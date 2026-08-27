@@ -9,6 +9,7 @@ function getShopeeV1Flags(env = process.env) {
     engine: isTrue(env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED),
     ranking: isTrue(env.SHOPEE_RANKING_V1_ENABLED),
     persistence: isTrue(env.SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED),
+    productCatIdsSearch: isTrue(env.SHOPEE_PRODUCTCATIDS_SEARCH_V1_ENABLED),
   });
 }
 

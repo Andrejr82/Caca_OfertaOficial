@@ -60,6 +60,7 @@ async function defaultShadowEngine(scenarioId, options = {}) {
     includeDelta: options.includeDelta ?? true,
     includeAuxiliary: options.includeAuxiliary ?? true,
     sharedSources: options.sharedSources || {},
+    env: options.env || process.env,
   });
 }
 
