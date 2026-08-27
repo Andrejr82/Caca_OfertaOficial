@@ -14,8 +14,8 @@ export async function selectCycleCommercialPortfolio(
   offerIds: readonly string[],
 ): Promise<CycleCommercialPortfolioResult> {
   const uniqueOfferIds = [...new Set(offerIds.filter(Boolean))];
-  if (uniqueOfferIds.length <= 1) {
-    return { selectedOfferIds: uniqueOfferIds, received: uniqueOfferIds.length, selected: uniqueOfferIds.length, rejected: 0, rejectionReasons: {} };
+  if (uniqueOfferIds.length === 0) {
+    return { selectedOfferIds: [], received: 0, selected: 0, rejected: 0, rejectionReasons: {} };
   }
 
   const { data, error } = await supabase
@@ -30,7 +30,8 @@ export async function selectCycleCommercialPortfolio(
 
   const maxTotal = Number(process.env.COMMERCIAL_PORTFOLIO_MAX_TOTAL || 18);
   const maxPerType = Number(process.env.COMMERCIAL_PORTFOLIO_MAX_PER_TYPE || 2);
-  const portfolio = selectCommercialPortfolio(rows, { maxTotal, maxPerType });
+  const minScore = Number(process.env.COMMERCIAL_PORTFOLIO_MIN_SCORE || 35);
+  const portfolio = selectCommercialPortfolio(rows, { maxTotal, maxPerType, minScore });
   const rejectionReasons: Record<string, number> = {};
   for (const item of portfolio.rejected) rejectionReasons[item.rejectionReason] = (rejectionReasons[item.rejectionReason] ?? 0) + 1;
 
