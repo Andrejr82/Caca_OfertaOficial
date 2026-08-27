@@ -753,15 +753,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
             }
 
             const strongOnes = eligibleOnes.filter((item) => item.evalRes.strong);
-            const weakOnes = eligibleOnes.filter((item) => !item.evalRes.strong);
-
             strongOnes.sort((a, b) => (b.candidate.deterministicScore || 0) - (a.candidate.deterministicScore || 0));
-            weakOnes.sort((a, b) => (b.candidate.deterministicScore || 0) - (a.candidate.deterministicScore || 0));
 
             if (strongOnes.length > 0) {
               candidatesForQueue = strongOnes.map((item) => item.candidate);
             } else {
-              candidatesForQueue = weakOnes.map((item) => item.candidate);
+              candidatesForQueue = [];
             }
           }
         }

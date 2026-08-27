@@ -342,3 +342,43 @@ test('11. Efficacy harness: strongCandidates usa intent compatível', () => {
   assert.equal(metrics.strongCandidates, 1);
 });
 
+test('12. Regressão Shopee Active: zero strong com weak elegíveis resulta em queueSelected=0 e persisted=0', async () => {
+  const { runDiscoveryOnlyCycle, FINAL_STATE } = require('../oracle-worker-discovery-only.cjs');
+  process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'active';
+
+  let persistedPayload = null;
+  // Candidatos elegíveis (passam pelos filtros básicos e de intenção), porém sem sinais fortes suficientes (weak)
+  const mockWeakCandidates = [
+    { itemId: '201', title: 'Modelador de Cachos Básico Simples', price: 50, ratingStar: 4.3, sales: 10, score: 50 },
+    { itemId: '202', title: 'Escova de Cabelo Básica', price: 20, ratingStar: 4.3, sales: 5, score: 40 },
+  ];
+
+  const result = await runDiscoveryOnlyCycle({
+    tenantId: 'tenant-test',
+    correlationId: 'corr-test-zero-strong',
+    requestedAt: new Date().toISOString(),
+    marketplaces: ['Shopee'],
+    discover: async () => [],
+    loadDeferred: async () => [],
+    shopeeDiscovery: async () => ({
+      engine: 'shopee_openapi_v1',
+      mode: 'official',
+      decision: 'success',
+      top: mockWeakCandidates,
+      metrics: { raw: 2, parsed: 2, approvedContract: 2, final: 2 },
+    }),
+    loadHistory: async () => [],
+    persist: async () => ({ accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] }),
+    persistShopee: async (payload) => {
+      persistedPayload = payload;
+      return { accepted: payload.candidates.length, inserted: payload.candidates.length, updated: 0, offerIds: [] };
+    },
+    scenarioResolver: () => 'beleza_editorial',
+  });
+
+  assert.equal(result.marketplaces[0].queueSelected, 0);
+  assert.equal(result.marketplaces[0].persisted, 0);
+  assert.equal(persistedPayload, null);
+  process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'off';
+});
+
