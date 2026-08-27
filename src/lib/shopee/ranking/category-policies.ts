@@ -3,7 +3,7 @@ import { CategoryPolicy } from './types';
 const BEAUTY_POLICY: CategoryPolicy = {
   categoryKey: 'beleza',
   primaryClasses: [
-    'protetor solar', 'hidratante', 'serum', 'skincare', 'mascara capilar', 'tratamento capilar',
+    'protetor solar', 'hidratante', 'serum', 'skincare', 'mascara', 'mascara capilar', 'tratamento capilar',
     'shampoo', 'condicionador', 'oleo capilar', 'perfume', 'eau de parfum', 'maquiagem', 'base',
     'batom', 'rimel', 'escova secadora', 'secador', 'chapinha', 'modelador de cachos',
     'aparador de pelos', 'maquina de cortar cabelo', 'depilador',
