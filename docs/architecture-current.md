@@ -60,27 +60,46 @@ Cupons permanece `manual_only` às 22h e não participa do cron. O scraper não 
 
 ### Arquitetura proposta no PR #177
 
-A branch `fix/quality-catalog-depth-20260827` acrescenta uma camada de qualidade e composição **ainda não implantada**:
+A branch `fix/quality-catalog-depth-20260827` foi redesenhada para melhorar **a primeira descoberta**. A arquitetura-alvo deixa de depender de uma segunda busca após a curadoria final e passa a formar um pool forte antes do ranking definitivo.
 
 ```mermaid
 flowchart LR
-  D["Primeira passada de Discovery"] --> Q["Search Quality / domínio / preço"]
-  Q --> C["Classificação e Curadoria"]
-  C --> P["Composição de portfólio"]
-  P --> A{"Cobertura e diversidade suficientes?"}
-  A -- "sim" --> F["Encerrar seleção"]
-  A -- "não" --> R["Solicitar expansão adaptativa"]
-  R -. "integração Oracle ainda pendente" .-> D
+  N["Nicho: Core / Expansion / Opportunity"] --> P["firstDiscovery plan\nfamílias + intents fortes + metas"]
+  P --> M["Estratégia por marketplace\nnative-first"]
+  M --> R["Recuperação inicial"]
+  R --> Q["Relevância / domínio / preço / qualidade"]
+  Q --> A{"Pool inicial saudável?"}
+  A -- "sim" --> C["Curadoria e composição final"]
+  A -- "não, ainda há orçamento do plano" --> R
+  A -- "não, fonte/orçamento esgotado" --> F["Fallback adaptativo opcional"]
+  F -. "integração Oracle ainda pendente" .-> R
 ```
 
-- O gate comum usa evidência nativa do Mercado Livre quando disponível para detectar domínio incompatível com a intenção.
-- A sanidade de preço pode remover apenas a referência anterior/desconto quando a evidência é implausível, preservando o preço atual válido.
-- A política semântica da Shopee passa a ter tratamento específico de Beleza para diferenciar produto principal de acessório/consumível auxiliar.
-- O seletor comercial reconhece famílias de Beleza e aplica limites por tipo, reduzindo concentração de itens semelhantes.
-- `adaptive-catalog-depth/v1` é uma função pura de decisão baseada em volume bruto, pool qualificado, quantidade de finalistas e diversidade. Ela possui limite de rodadas.
-- A aresta de retorno para uma nova rodada de Discovery está deliberadamente **desconectada do runtime Oracle** neste PR até validação e rollout explícitos.
+`discovery-retrieval-quality/v1` é a política principal da branch em validação:
 
-Portanto, o diagrama acima representa a arquitetura-alvo da branch em validação, não o estado operacional atual da VPS.
+- divide cada um dos sete nichos em famílias editoriais;
+- transforma termos ambíguos em intents de produto final antes da coleta;
+- define metas mínimas de candidatos fortes, famílias distintas, cobertura Core, precisão de recuperação e saúde das queries;
+- produz estratégia específica por marketplace sem remover os campos legados do plano de nicho;
+- considera a descoberta insuficiente mesmo com alto volume bruto quando o pool forte/diverso não foi formado.
+
+Os três ciclos reais de 27/08/2026 viraram regressões de arquitetura:
+
+- Casa 06h: a Amazon não pode ser considerada saudável quando 18 de 23 queries falham, mesmo que alguns candidatos sejam extraídos;
+- Beleza 08h: 245 itens Amazon não bastam se a carteira forte ficar concentrada; Shopee com 7 relevantes em 60 denuncia baixa precisão da recuperação inicial;
+- Informática 10h: centenas de candidatos não autorizam encerrar quando produtos de reposição/acessórios dominam e poucos achados editoriais fortes permanecem.
+
+Estratégia desejada por integração:
+
+- Amazon: Browse Node + intent forte, com saúde das queries e sinais comerciais verificáveis como evidência; termos genéricos não devem ser a única intenção.
+- Mercado Livre: `official-domain-then-catalog`, domínio nativo e Best Seller como evidências de primeira ordem; produto com domínio incompatível não deve entrar no pool principal.
+- Shopee: categoria nativa + intent forte; `avoidBroadCategoryOnly=true` evita depender de categoria ampla para depois rejeitar a maior parte do catálogo.
+
+O gate comum continua podendo rejeitar domínio incompatível e neutralizar preço anterior implausível. A composição comercial continua reduzindo duplicatas e saturação por tipo.
+
+`adaptive-catalog-depth/v1` permanece disponível apenas como `fallback_after_first_discovery_quality_exhausted`. Ele não deve ser o mecanismo principal de qualidade e a chamada de rede adicional continua deliberadamente **desconectada do runtime Oracle** neste PR.
+
+Portanto, o diagrama acima representa a arquitetura-alvo da branch em validação, não o estado operacional atual da VPS. A etapa de fazer os adapters/executores Oracle consumirem `firstDiscovery.intents`, `strategy` e `targets` exige rollout separado.
 
 ## Publicação social
 
@@ -111,4 +130,4 @@ O timer `oracle-capacity-hunter.timer` estava ativo a cada 30 minutos. O service
 
 ## Fontes de verdade
 
-`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-api.cjs`, `scripts/oracle-trends-radar-worker.cjs`, `scripts/whatsapp-engine.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `scripts/marketplace-search-quality.cjs`, `scripts/adaptive-discovery-policy.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
+`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-api.cjs`, `scripts/oracle-trends-radar-worker.cjs`, `scripts/whatsapp-engine.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `scripts/marketplace-search-quality.cjs`, `scripts/first-discovery-quality.cjs`, `scripts/adaptive-discovery-policy.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
