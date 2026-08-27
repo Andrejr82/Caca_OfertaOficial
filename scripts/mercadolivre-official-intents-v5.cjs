@@ -5,6 +5,16 @@ const { createClient } = require('@supabase/supabase-js');
 global.WebSocket = require('ws');
 const { SCENARIOS } = require('./amazon-scenario-config.cjs');
 const { coverageGate } = require('./coverage-policy.cjs');
+const { getMercadoLivreV1Flags } = require('./mercadolivre-v1-flags.cjs');
+const {
+  MERCADOLIVRE_FORBIDDEN_DOMAIN_IDS_V1,
+  getMercadoLivreCertifiedFamilies,
+  getMercadoLivreFamilyConfig,
+  shouldUseMercadoLivreFamily,
+  isMercadoLivreDomainAllowedForFamily,
+  getMercadoLivreExtractionRoute,
+  getMercadoLivreMapStats
+} = require('./mercadolivre-domain-category-map-v1.cjs');
 
 const API_ROOT = 'https://api.mercadolibre.com';
 const API_TIMEOUT_MS = 45000;
@@ -486,14 +496,376 @@ async function collectOfficialSearchFallback({
   return validItems;
 }
 
+function normalizeText(val) {
+  return String(val || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function evaluateV1ItemAgainstConfig(item, familyConfig) {
+  const domainNorm = String(item.domain_id || item.domainId || '').trim();
+  const titleNorm = ` ${normalizeText(item.title || item.name || '')} `;
+  const price = Number(item.price ?? item.current_price);
+
+  if (MERCADOLIVRE_FORBIDDEN_DOMAIN_IDS_V1.includes(domainNorm)) {
+    return { accepted: false, reason: 'FORBIDDEN_DOMAIN', forbidden: true };
+  }
+
+  if (Array.isArray(familyConfig.domainIds) && familyConfig.domainIds.length > 0) {
+    if (!familyConfig.domainIds.includes(domainNorm)) {
+      return { accepted: false, reason: 'DOMAIN_NOT_IN_WHITELIST' };
+    }
+  }
+
+  if (familyConfig.minPrice && Number.isFinite(price) && price < familyConfig.minPrice * 0.4) {
+    return { accepted: false, reason: 'MIN_PRICE_REJECTED', minPrice: true };
+  }
+
+  for (const neg of familyConfig.negativeTerms || []) {
+    const normNeg = ` ${normalizeText(neg)} `;
+    if (normNeg.trim() && titleNorm.includes(normNeg)) {
+      return { accepted: false, reason: `NEGATIVE_TERM_MATCH (${neg})` };
+    }
+  }
+
+  const hasPositive = (familyConfig.positiveTerms || []).some((pos) => {
+    const normPos = ` ${normalizeText(pos)} `;
+    return normPos.trim() && titleNorm.includes(normPos);
+  });
+
+  if (!hasPositive) {
+    if (!familyConfig.domainIds || !familyConfig.domainIds.includes(domainNorm)) {
+      return { accepted: false, reason: 'NO_POSITIVE_TERM_MATCH' };
+    }
+  }
+
+  return { accepted: true, reason: null };
+}
+
+async function runMercadoLivreOfficialIntentCoverageV1({
+  keywords = SCENARIOS.informatica_editorial.keywords,
+  accessToken,
+  fetchImpl = global.fetch,
+  maxPerIntent = 20,
+  delayMs = 500,
+  now = () => new Date().toISOString(),
+  scenarioId,
+  minConfidence
+} = {}) {
+  if (!accessToken) throw new Error('accessToken obrigatório');
+
+  const mapStats = getMercadoLivreMapStats();
+  const telemetry = {
+    enabled: true,
+    familiesAvailable: mapStats.totalFamilies,
+    familiesUsed: 0,
+    highConfidenceFamilies: mapStats.highConfidence,
+    mediumConfidenceFamilies: mapStats.mediumConfidence,
+    productsSearchFamilies: mapStats.byRoute.domain_discovery_products_search,
+    highlightsFamilies: mapStats.byRoute.domain_discovery_highlights,
+    forbiddenDomainsRejected: 0,
+    semanticAccepted: 0,
+    semanticRejected: 0,
+    minPriceRejected: 0,
+    selectedFamilies: []
+  };
+
+  const products = [];
+  const queries = [];
+  const productMetaCache = new Map();
+  const productCache = new Map();
+  const reviewCache = new Map();
+  let calls = 0;
+
+  for (const intent of keywords) {
+    if (queries.length && delayMs > 0) await sleep(delayMs);
+
+    const isEligible = scenarioId
+      ? shouldUseMercadoLivreFamily(scenarioId, intent, { minConfidence })
+      : shouldUseMercadoLivreFamily(intent, { minConfidence });
+
+    if (!isEligible) {
+      queries.push({
+        intent,
+        status: 'skipped_non_certified',
+        products: 0,
+        auto_selectable: false,
+        source_strategy: 'mercadolivre_v1_skipped_non_certified'
+      });
+      continue;
+    }
+
+    const familyConfig = scenarioId
+      ? getMercadoLivreFamilyConfig(scenarioId, intent)
+      : getMercadoLivreFamilyConfig(intent);
+
+    if (!familyConfig) {
+      queries.push({
+        intent,
+        status: 'no_certified_config',
+        products: 0,
+        auto_selectable: false,
+        source_strategy: 'mercadolivre_v1_no_config'
+      });
+      continue;
+    }
+
+    telemetry.selectedFamilies.push(familyConfig.family);
+
+    const intentRawProducts = [];
+    const domainWhitelist = familyConfig.domainIds || [];
+    const categoryWhitelist = familyConfig.categoryIds || [];
+    const bestRoute = familyConfig.bestExtractionRoute;
+
+    const routesToTry = bestRoute === 'domain_discovery_products_search'
+      ? ['products_search', 'highlights']
+      : ['highlights', 'products_search'];
+
+    for (const routeType of routesToTry) {
+      if (intentRawProducts.length >= maxPerIntent) break;
+
+      let productIds = [];
+
+      if (routeType === 'products_search') {
+        for (const domainId of domainWhitelist) {
+          if (productIds.length >= 20) break;
+          try {
+            const searchTerms = SEARCH_ALIASES[intent] || [intent];
+            for (const st of searchTerms) {
+              if (productIds.length >= 20) break;
+              const res = await apiGet(`/products/search?status=active&site_id=MLB&q=${encodeURIComponent(st)}&domain_id=${encodeURIComponent(domainId)}&limit=20`, { fetchImpl, accessToken });
+              calls += 1;
+              const ids = (res.results || []).map((e) => e.id).filter(Boolean);
+              productIds.push(...ids);
+            }
+          } catch {
+            // Segue no fluxo
+          }
+        }
+      } else if (routeType === 'highlights') {
+        for (const catId of categoryWhitelist) {
+          if (productIds.length >= 20) break;
+          try {
+            const res = await apiGet(`/highlights/MLB/category/${catId}`, { fetchImpl, accessToken });
+            calls += 1;
+            const ids = (res.content || []).filter((e) => e.type === 'PRODUCT').map((e) => e.id).filter(Boolean);
+            productIds.push(...ids);
+          } catch {
+            // Segue no fluxo
+          }
+        }
+      }
+
+      productIds = [...new Set(productIds)].slice(0, 20);
+      if (!productIds.length) continue;
+
+      for (let index = 0; index < productIds.length && intentRawProducts.length < maxPerIntent * 3; index += 1) {
+        const productId = productIds[index];
+        let productMeta = productMetaCache.get(productId);
+        if (!productMeta) {
+          try {
+            productMeta = await apiGet(`/products/${productId}`, { fetchImpl, accessToken });
+            calls += 1;
+            productMetaCache.set(productId, productMeta);
+          } catch {
+            productMeta = {};
+          }
+        }
+
+        let catalogItems = productCache.get(productId);
+        if (!catalogItems) {
+          try {
+            catalogItems = await apiGet(`/products/${productId}/items?limit=20`, { fetchImpl, accessToken });
+            calls += 1;
+            productCache.set(productId, catalogItems);
+          } catch {
+            catalogItems = { results: [] };
+          }
+        }
+
+        const itemIds = (catalogItems.results || []).map((i) => i.item_id).filter(Boolean).slice(0, 20);
+        if (!itemIds.length) continue;
+
+        let details = [];
+        try {
+          details = await apiGet(`/items?ids=${itemIds.join(',')}`, { fetchImpl, accessToken });
+          calls += 1;
+          details = Array.isArray(details) ? details.map((e) => e.body).filter(Boolean) : [];
+        } catch {
+          details = [];
+        }
+
+        const detailById = new Map(details.map((item) => [item.id, item]));
+        const catalogFallback = (catalogItems.results || []).filter((item) => itemIds.includes(item.item_id)).map((item) => ({
+          ...item,
+          id: item.item_id,
+          title: productMeta.name || null,
+          thumbnail: productMeta.pictures?.[0]?.url || null,
+          permalink: productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`,
+          domain_id: domainWhitelist[0] || null,
+          category_id: categoryWhitelist[0] || null
+        }));
+
+        const enriched = catalogFallback.map((item) => {
+          const detail = detailById.get(item.id) || {};
+          return {
+            ...item,
+            ...detail,
+            domain_id: detail.domain_id || item.domain_id || domainWhitelist[0] || null,
+            category_id: detail.category_id || item.category_id || categoryWhitelist[0] || null
+          };
+        });
+
+        for (const item of enriched) {
+          const evalRes = evaluateV1ItemAgainstConfig(item, familyConfig);
+          if (!evalRes.accepted) {
+            if (evalRes.forbidden) telemetry.forbiddenDomainsRejected += 1;
+            else if (evalRes.minPrice) telemetry.minPriceRejected += 1;
+            else telemetry.semanticRejected += 1;
+            continue;
+          }
+
+          telemetry.semanticAccepted += 1;
+
+          let reviewData = reviewCache.get(item.id);
+          if (!reviewData) {
+            try {
+              const rev = await apiGet(`/reviews/item/${item.id}`, { fetchImpl, accessToken });
+              calls += 1;
+              reviewData = {
+                rating_average: Number.isFinite(Number(rev?.rating_average)) ? Number(Number(rev.rating_average).toFixed(2)) : null,
+                review_count: Number.isFinite(Number(rev?.paging?.total)) ? Number(rev.paging.total) : null
+              };
+            } catch {
+              reviewData = { rating_average: null, review_count: null };
+            }
+            reviewCache.set(item.id, reviewData);
+          }
+          item.rating_average = reviewData.rating_average;
+          item.review_count = reviewData.review_count;
+
+          const normalized = normalizeItems([item], {
+            source: 'mercadolivre_v1_certified',
+            intent,
+            domain_id: item.domain_id || domainWhitelist[0] || null,
+            category_id: item.category_id || categoryWhitelist[0] || null,
+            product_id: productId,
+            product_name: productMeta.name || null,
+            image_url: productMeta.pictures?.[0]?.url || null,
+            product_url: productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`,
+            position: index + 1
+          });
+
+          if (normalized.length > 0) {
+            intentRawProducts.push(...normalized);
+          }
+        }
+      }
+    }
+
+    if (intentRawProducts.length < 5) {
+      const searchTerms = SEARCH_ALIASES[intent] || [intent];
+      for (const st of searchTerms) {
+        if (intentRawProducts.length >= maxPerIntent) break;
+        const callsRefLocal = { count: 0 };
+        const fallbackItems = await collectOfficialSearchFallback({
+          searchTerm: st,
+          intent,
+          fetchImpl,
+          accessToken,
+          limit: 30,
+          offset: 0,
+          callsRef: callsRefLocal,
+          reviewCache
+        });
+        calls += callsRefLocal.count;
+
+        for (const fItem of fallbackItems) {
+          const evalRes = evaluateV1ItemAgainstConfig(fItem, familyConfig);
+          if (!evalRes.accepted) {
+            if (evalRes.forbidden) telemetry.forbiddenDomainsRejected += 1;
+            else if (evalRes.minPrice) telemetry.minPriceRejected += 1;
+            else telemetry.semanticRejected += 1;
+            continue;
+          }
+          telemetry.semanticAccepted += 1;
+          intentRawProducts.push(fItem);
+        }
+      }
+    }
+
+    const canonicalProducts = deduplicateCanonicalProducts(intentRawProducts).slice(0, maxPerIntent);
+    products.push(...canonicalProducts);
+
+    const productCount = canonicalProducts.length;
+    const gate = coverageGate(productCount, { minimum: 5 });
+
+    queries.push({
+      intent,
+      status: gate.status,
+      minimum_products: gate.minimum,
+      auto_selectable: gate.auto_selectable,
+      domain_id: domainWhitelist[0] || null,
+      category_id: categoryWhitelist[0] || null,
+      products: productCount,
+      raw_products: intentRawProducts.length,
+      source_strategy: `mercadolivre_v1_${bestRoute}`
+    });
+  }
+
+  telemetry.familiesUsed = telemetry.selectedFamilies.length;
+
+  const byCanonicalKey = new Map();
+  const unique = products.filter((product) => {
+    const key = product.product_id || product.item_id;
+    if (!key || byCanonicalKey.has(key)) return false;
+    byCanonicalKey.set(key, product);
+    return true;
+  });
+
+  return {
+    generated_at: now(),
+    marketplace: 'Mercado Livre',
+    source: 'official_api_v1_certified',
+    dry_run: true,
+    keywords,
+    queries,
+    products: unique,
+    raw_products: products.length,
+    duplicates: products.length - unique.length,
+    calls,
+    mercadolivreDomainCategorySearchV1: telemetry
+  };
+}
+
 async function runMercadoLivreOfficialIntentCoverage({
   keywords = SCENARIOS.informatica_editorial.keywords,
   accessToken,
   fetchImpl = global.fetch,
   maxPerIntent = 20,
   delayMs = 500,
-  now = () => new Date().toISOString()
+  now = () => new Date().toISOString(),
+  env = process.env,
+  scenarioId,
+  minConfidence
 } = {}) {
+  const flags = getMercadoLivreV1Flags(env);
+  if (flags.domainCategorySearch) {
+    return runMercadoLivreOfficialIntentCoverageV1({
+      keywords,
+      accessToken,
+      fetchImpl,
+      maxPerIntent,
+      delayMs,
+      now,
+      scenarioId,
+      minConfidence
+    });
+  }
+
   if (!accessToken) throw new Error('accessToken obrigatório');
   const products = [];
   const queries = [];
