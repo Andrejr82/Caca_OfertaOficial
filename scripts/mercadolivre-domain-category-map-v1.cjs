@@ -400,13 +400,28 @@ function getMercadoLivreCertifiedFamilies(nicheOrScenario) {
   return Object.values(nicheEntry);
 }
 
-function shouldUseMercadoLivreFamily(family, options = {}) {
-  const normFamily = normalize(family);
+function shouldUseMercadoLivreFamily(familyOrScope, familyOrOptions = {}, maybeOptions = {}) {
+  let targetFamily = familyOrScope;
+  let targetScope = null;
+  let options = familyOrOptions;
+
+  if (typeof familyOrOptions === 'string') {
+    targetScope = familyOrScope;
+    targetFamily = familyOrOptions;
+    options = maybeOptions || {};
+  } else if (!options || typeof options !== 'object') {
+    options = {};
+  }
+
+  const normFamily = normalize(targetFamily);
   if (BLOCKED_OR_INVESTIGATE_FAMILIES_V1.some((b) => normalize(b) === normFamily)) {
     return false;
   }
 
-  const config = getMercadoLivreFamilyConfig(family);
+  const config = targetScope
+    ? getMercadoLivreFamilyConfig(targetScope, targetFamily)
+    : getMercadoLivreFamilyConfig(targetFamily);
+
   if (!config) return false;
   if (!config.safeForAutomaticSearch) return false;
   if (options.minConfidence === 'alta' && config.confidence !== 'alta') return false;

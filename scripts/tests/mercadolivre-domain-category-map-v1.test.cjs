@@ -137,3 +137,15 @@ test('9. Busca de famílias por cenário editorial', () => {
   const infoFamilies = getMercadoLivreCertifiedFamilies('informatica_editorial');
   assert.equal(infoFamilies.length, 3);
 });
+
+test('10. shouldUseMercadoLivreFamily suporta chamadas com escopo de nicho/cenário e validações avançadas', () => {
+  assert.equal(shouldUseMercadoLivreFamily('pet_editorial', 'ração cachorro'), true);
+  assert.equal(shouldUseMercadoLivreFamily('Pet', 'ração cachorro'), true);
+  assert.equal(shouldUseMercadoLivreFamily('informatica_editorial', 'notebook'), true);
+  assert.equal(shouldUseMercadoLivreFamily('Casa/Cozinha/Organização', 'air fryer'), true);
+  assert.equal(shouldUseMercadoLivreFamily('Ferramentas', 'chave'), false);
+  assert.equal(shouldUseMercadoLivreFamily('casa_cozinha_editorial', 'panela'), false);
+  assert.equal(shouldUseMercadoLivreFamily('moda_editorial', 'tênis feminino', { minConfidence: 'alta' }), false);
+  assert.equal(shouldUseMercadoLivreFamily('moda_editorial', 'tênis feminino'), true);
+});
+
