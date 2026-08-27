@@ -108,6 +108,7 @@ async function runDryRun() {
   const flagFalseIdentical = resFalse.mercadolivreDomainCategorySearchV1 === undefined && resFalse.source === 'official_api';
   const flagTrueUsedCertifiedMap = resTrue.mercadolivreDomainCategorySearchV1?.enabled === true;
   const flagTrueSelectedFamilies = resTrue.mercadolivreDomainCategorySearchV1?.selectedFamilies || [];
+  const fallbackOpenCallsAlwaysZero = resTrue.mercadolivreDomainCategorySearchV1?.fallbackOpenCalls === 0;
 
   const forbiddenDomainsFound = resTrue.products.filter((p) => p.domain_id === 'MLB-MINERAL_WATERS' || p.domain_id === 'MLB-DJ_MIXERS');
   const nonCertifiedFound = resTrue.products.filter((p) => p.intent === 'panela' || p.intent === 'teclado');
@@ -117,6 +118,7 @@ async function runDryRun() {
   console.log(`FLAG_TRUE_SELECTED_FAMILIES=${JSON.stringify(flagTrueSelectedFamilies)}`);
   console.log(`FLAG_TRUE_FORBIDDEN_DOMAINS_LEAKED=${forbiddenDomainsFound.length}`);
   console.log(`FLAG_TRUE_NON_CERTIFIED_FAMILIES_LEAKED=${nonCertifiedFound.length}`);
+  console.log(`FALLBACK_OPEN_CALLS_ALWAYS_ZERO=${fallbackOpenCallsAlwaysZero ? 'YES' : 'NO'}`);
   console.log(`DB_WRITES=0`);
 }
 

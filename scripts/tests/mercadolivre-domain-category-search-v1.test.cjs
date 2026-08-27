@@ -2,7 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { runMercadoLivreOfficialIntentCoverage } = require('../mercadolivre-official-intents-v5.cjs');
+const {
+  runMercadoLivreOfficialIntentCoverage,
+  canUseMercadoLivreV1Fallback,
+  evaluateV1ItemAgainstConfig
+} = require('../mercadolivre-official-intents-v5.cjs');
+const { getMercadoLivreFamilyConfig } = require('../mercadolivre-domain-category-map-v1.cjs');
 
 const json = (value, status = 200) => new Response(JSON.stringify(value), {
   status,
@@ -35,7 +40,18 @@ function productResponse({ id = 'MLBPRODUCT1', itemId = 'MLBITEM1', title = 'Air
   };
 }
 
-test('1. Flag false: fluxo legado preservado e idêntico sem telemetria V1 obrigatória', async () => {
+test('1. Helper puro canUseMercadoLivreV1Fallback valida contratos com precisão', () => {
+  const airFryerConfig = getMercadoLivreFamilyConfig('air fryer');
+  assert.equal(canUseMercadoLivreV1Fallback(airFryerConfig), true);
+
+  assert.equal(canUseMercadoLivreV1Fallback(null), false);
+  assert.equal(canUseMercadoLivreV1Fallback(undefined), false);
+  assert.equal(canUseMercadoLivreV1Fallback({ safeForAutomaticSearch: false, domainIds: ['MLB-AIR_FRYERS'], bestExtractionRoute: 'domain_discovery_products_search' }), false);
+  assert.equal(canUseMercadoLivreV1Fallback({ safeForAutomaticSearch: true, domainIds: [], bestExtractionRoute: 'domain_discovery_products_search' }), false);
+  assert.equal(canUseMercadoLivreV1Fallback({ safeForAutomaticSearch: true, domainIds: ['MLB-AIR_FRYERS'], bestExtractionRoute: 'failed' }), false);
+});
+
+test('2. Flag false: fluxo legado preservado e idêntico sem telemetria V1 obrigatória', async () => {
   const calls = [];
   const fixture = productResponse({ title: 'Cafeteira Tradicional', domainId: 'MLB-COFFEE_MAKERS' });
 
@@ -62,7 +78,7 @@ test('1. Flag false: fluxo legado preservado e idêntico sem telemetria V1 obrig
   assert.equal(result.products.length, 1);
 });
 
-test('2. Flag true: usa somente famílias certificadas e preenche telemetria V1', async () => {
+test('3. Flag true: usa somente famílias certificadas e preenche telemetria V1', async () => {
   const calls = [];
   const fixtureAirFryer = productResponse({
     id: 'MLBPROD_AIRFRYER',
@@ -89,6 +105,7 @@ test('2. Flag true: usa somente famílias certificadas e preenche telemetria V1'
       if (value.endsWith('/products/MLBPROD_AIRFRYER')) return json(fixtureAirFryer.productMeta);
       if (value.includes('/items?ids=')) return json(fixtureAirFryer.details);
       if (value.includes('/reviews/item/')) return json({ rating_average: 4.8, paging: { total: 50 } });
+      if (value.includes('/sites/MLB/search?')) return json({ results: [] });
       throw new Error(`URL inesperada: ${value}`);
     },
   });
@@ -100,22 +117,24 @@ test('2. Flag true: usa somente famílias certificadas e preenche telemetria V1'
   assert.deepEqual(result.mercadolivreDomainCategorySearchV1.selectedFamilies, ['air fryer']);
   assert.equal(result.products.length, 1);
   assert.equal(result.products[0].title, 'Fritadeira Elétrica Air Fryer 4L Inox');
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
 
-  // Verificar que panela foi ignorada como skipped_non_certified
   const panelaQuery = result.queries.find((q) => q.intent === 'panela');
   assert.ok(panelaQuery, 'Query de panela deve existir');
   assert.equal(panelaQuery.status, 'skipped_non_certified');
 });
 
-test('3. Flag true: rejeita estritamente domínios proibidos como MLB-MINERAL_WATERS e MLB-DJ_MIXERS', async () => {
-  const fixtureSpoofed = productResponse({
-    id: 'MLBPROD_SPOOF',
-    itemId: 'MLBITEM_SPOOF',
-    title: 'Fritadeira Fake Mineral Water',
-    price: 350.0,
-    domainId: 'MLB-MINERAL_WATERS',
-    categoryId: 'MLB456045'
-  });
+test('4. Flag true: Fallback whitelisted roda e aceita produto válido quando rotas primárias têm < 5 itens', async () => {
+  const fallbackItem = {
+    id: 'MLB_FB_AF_1',
+    title: 'Fritadeira Air Fryer Sem Óleo Digital 4.5L',
+    price: 289.9,
+    domain_id: 'MLB-AIR_FRYERS',
+    category_id: 'MLB456045',
+    thumbnail: 'https://img.example/fb_af.jpg',
+    permalink: 'https://produto.mercadolivre.com.br/MLB_FB_AF_1',
+    shipping: { free_shipping: true }
+  };
 
   const result = await runMercadoLivreOfficialIntentCoverage({
     accessToken: 'fixture-token',
@@ -125,20 +144,86 @@ test('3. Flag true: rejeita estritamente domínios proibidos como MLB-MINERAL_WA
     env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
     fetchImpl: async (url) => {
       const value = String(url);
-      if (value.includes('/products/search?')) return json({ results: [{ id: 'MLBPROD_SPOOF' }] });
-      if (value.includes('/products/MLBPROD_SPOOF/items')) return json(fixtureSpoofed.catalogItems);
-      if (value.endsWith('/products/MLBPROD_SPOOF')) return json(fixtureSpoofed.productMeta);
-      if (value.includes('/items?ids=')) return json(fixtureSpoofed.details);
-      if (value.includes('/sites/MLB/search?')) return json({ results: [] });
+      if (value.includes('/products/search?')) return json({ results: [] });
+      if (value.includes('/highlights/')) return json({ content: [] });
+      if (value.includes('/sites/MLB/search?')) {
+        return json({ results: [fallbackItem] });
+      }
+      if (value.includes('/reviews/item/')) return json({ rating_average: 4.9, paging: { total: 110 } });
       throw new Error(`URL inesperada: ${value}`);
     },
   });
 
-  assert.equal(result.products.length, 0, 'Item com MLB-MINERAL_WATERS não deve ser aceito');
-  assert.ok(result.mercadolivreDomainCategorySearchV1.forbiddenDomainsRejected >= 1);
+  assert.equal(result.products.length, 1);
+  assert.equal(result.products[0].title, 'Fritadeira Air Fryer Sem Óleo Digital 4.5L');
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackWhitelistedCalls >= 1, true);
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackWhitelistedAccepted >= 1, true);
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
+  assert.equal(result.queries[0].source_strategy, 'mercadolivre_v1_domain_discovery_products_search');
 });
 
-test('4. Flag true: rejeita acessórios e peças via negativeTerms', async () => {
+test('5. Flag true: Fallback whitelisted rejeita itens com domínio proibido (ex: MLB-MINERAL_WATERS)', async () => {
+  const fallbackSpoof = {
+    id: 'MLB_FB_SPOOF',
+    title: 'Fritadeira Fake Mineral Waters',
+    price: 299.9,
+    domain_id: 'MLB-MINERAL_WATERS',
+    category_id: 'MLB456045',
+    thumbnail: 'https://img.example/spoof.jpg',
+    permalink: 'https://produto.mercadolivre.com.br/MLB_FB_SPOOF'
+  };
+
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken: 'fixture-token',
+    keywords: ['air fryer'],
+    maxPerIntent: 20,
+    delayMs: 0,
+    env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
+    fetchImpl: async (url) => {
+      const value = String(url);
+      if (value.includes('/products/search?')) return json({ results: [] });
+      if (value.includes('/highlights/')) return json({ content: [] });
+      if (value.includes('/sites/MLB/search?')) {
+        return json({ results: [fallbackSpoof] });
+      }
+      return json({});
+    },
+  });
+
+  assert.equal(result.products.length, 0, 'Item do fallback com domínio proibido deve ser rejeitado');
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackWhitelistedRejected >= 1, true);
+  assert.equal(result.mercadolivreDomainCategorySearchV1.forbiddenDomainsRejected >= 1, true);
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
+});
+
+test('6. Flag true: Família não certificada nunca aciona fallback', async () => {
+  let fallbackCalled = false;
+
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken: 'fixture-token',
+    keywords: ['panela', 'teclado'],
+    maxPerIntent: 20,
+    delayMs: 0,
+    env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
+    fetchImpl: async (url) => {
+      const value = String(url);
+      if (value.includes('/sites/MLB/search?')) {
+        fallbackCalled = true;
+        return json({ results: [] });
+      }
+      return json({});
+    },
+  });
+
+  assert.equal(fallbackCalled, false, 'Famílias não certificadas nunca devem chamar /sites/MLB/search');
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackWhitelistedCalls, 0);
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
+  for (const q of result.queries) {
+    assert.equal(q.status, 'skipped_non_certified');
+  }
+});
+
+test('7. Flag true: rejeita acessórios e peças via negativeTerms', async () => {
   const fixtureAccessory = productResponse({
     id: 'MLBPROD_ACC',
     itemId: 'MLBITEM_ACC',
@@ -169,8 +254,7 @@ test('4. Flag true: rejeita acessórios e peças via negativeTerms', async () =>
   assert.ok(result.mercadolivreDomainCategorySearchV1.semanticRejected >= 1 || result.mercadolivreDomainCategorySearchV1.minPriceRejected >= 1);
 });
 
-test('5. Flag true: respeita minConfidence para famílias de média confiança', async () => {
-  // 'tênis feminino' tem confiança média
+test('8. Flag true: respeita minConfidence para famílias de média confiança', async () => {
   const resultHighOnly = await runMercadoLivreOfficialIntentCoverage({
     accessToken: 'fixture-token',
     keywords: ['tênis feminino'],
@@ -206,6 +290,7 @@ test('5. Flag true: respeita minConfidence para famílias de média confiança',
       if (value.endsWith('/products/MLBPROD_TENIS')) return json(fixtureTenis.productMeta);
       if (value.includes('/items?ids=')) return json(fixtureTenis.details);
       if (value.includes('/reviews/item/')) return json({ rating_average: 4.7, paging: { total: 80 } });
+      if (value.includes('/sites/MLB/search?')) return json({ results: [] });
       throw new Error(`URL inesperada: ${value}`);
     },
   });

@@ -545,6 +545,16 @@ function evaluateV1ItemAgainstConfig(item, familyConfig) {
   return { accepted: true, reason: null };
 }
 
+function canUseMercadoLivreV1Fallback(familyConfig) {
+  return Boolean(
+    familyConfig &&
+    familyConfig.safeForAutomaticSearch === true &&
+    Array.isArray(familyConfig.domainIds) &&
+    familyConfig.domainIds.length > 0 &&
+    ['domain_discovery_highlights', 'domain_discovery_products_search'].includes(familyConfig.bestExtractionRoute)
+  );
+}
+
 async function runMercadoLivreOfficialIntentCoverageV1({
   keywords = SCENARIOS.informatica_editorial.keywords,
   accessToken,
@@ -570,6 +580,10 @@ async function runMercadoLivreOfficialIntentCoverageV1({
     semanticAccepted: 0,
     semanticRejected: 0,
     minPriceRejected: 0,
+    fallbackWhitelistedCalls: 0,
+    fallbackWhitelistedAccepted: 0,
+    fallbackWhitelistedRejected: 0,
+    fallbackOpenCalls: 0,
     selectedFamilies: []
   };
 
@@ -766,11 +780,12 @@ async function runMercadoLivreOfficialIntentCoverageV1({
       }
     }
 
-    if (intentRawProducts.length < 5) {
+    if (intentRawProducts.length < 5 && canUseMercadoLivreV1Fallback(familyConfig)) {
       const searchTerms = SEARCH_ALIASES[intent] || [intent];
       for (const st of searchTerms) {
         if (intentRawProducts.length >= maxPerIntent) break;
         const callsRefLocal = { count: 0 };
+        telemetry.fallbackWhitelistedCalls += 1;
         const fallbackItems = await collectOfficialSearchFallback({
           searchTerm: st,
           intent,
@@ -786,12 +801,14 @@ async function runMercadoLivreOfficialIntentCoverageV1({
         for (const fItem of fallbackItems) {
           const evalRes = evaluateV1ItemAgainstConfig(fItem, familyConfig);
           if (!evalRes.accepted) {
+            telemetry.fallbackWhitelistedRejected += 1;
             if (evalRes.forbidden) telemetry.forbiddenDomainsRejected += 1;
             else if (evalRes.minPrice) telemetry.minPriceRejected += 1;
             else telemetry.semanticRejected += 1;
             continue;
           }
           telemetry.semanticAccepted += 1;
+          telemetry.fallbackWhitelistedAccepted += 1;
           intentRawProducts.push(fItem);
         }
       }
@@ -1126,6 +1143,9 @@ module.exports = {
   apiGet,
   normalizeItems,
   runMercadoLivreOfficialIntentCoverage,
+  runMercadoLivreOfficialIntentCoverageV1,
+  canUseMercadoLivreV1Fallback,
+  evaluateV1ItemAgainstConfig,
   collectOfficialSearchFallback,
   catalogFallbackProducts,
   MIN_PRODUCTS_PER_INTENT,
