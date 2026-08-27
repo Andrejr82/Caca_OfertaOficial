@@ -418,9 +418,13 @@ function shouldUseMercadoLivreFamily(familyOrScope, familyOrOptions = {}, maybeO
     return false;
   }
 
-  const config = targetScope
+  let config = targetScope
     ? getMercadoLivreFamilyConfig(targetScope, targetFamily)
     : getMercadoLivreFamilyConfig(targetFamily);
+
+  if (!config && targetScope) {
+    config = getMercadoLivreFamilyConfig(targetFamily);
+  }
 
   if (!config) return false;
   if (!config.safeForAutomaticSearch) return false;
