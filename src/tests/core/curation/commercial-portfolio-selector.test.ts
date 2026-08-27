@@ -42,4 +42,30 @@ describe("commercial cross-market portfolio selector", () => {
     expect(result.selected.filter((item) => item.commercialType === "tapete-higienico")).toHaveLength(2);
     expect(result.rejected.some((item) => item.commercialType === "tapete-higienico" && item.rejectionReason === "commercial_type_cap")).toBe(true);
   });
+
+  it("reconhece tipos editoriais de beleza e limita perfume a um destaque", () => {
+    const result = selectCommercialPortfolio([
+      offer({ id: "perfume-a", product_name: "Perfume Patriota Intenso 100ml Eau De Parfum", platform: "Shopee", current_price: 72.53, marketplace_metrics: { sales: 1388, rating: 4.9, commissionRate: 25 } }),
+      offer({ id: "perfume-b", product_name: "Perfume Sedutor Masculino Intense Men 100ml", platform: "Shopee", current_price: 24.99, marketplace_metrics: { sales: 2036, rating: 4.7, commissionRate: 14 } }),
+      offer({ id: "serum", product_name: "Sérum Retinol 0,3% + Vitamina E 30ml", platform: "Amazon", current_price: 64.9, marketplace_metrics: { rating: 4.7 } }),
+      offer({ id: "hair-mask", product_name: "Máscara Capilar Karseel Resgate para Cabelos Danificados", platform: "Shopee", current_price: 20.5, marketplace_metrics: { sales: 2449, rating: 4.8, commissionRate: 23 } }),
+      offer({ id: "clipper", product_name: "Máquina de Cortar Cabelo Profissional Kemei KM-1995", platform: "Amazon", current_price: 113.9, old_price: 157, marketplace_metrics: { rating: 4.5 } }),
+    ], { maxTotal: 5, maxPerType: 2, minScore: 0 });
+
+    const selectedTypes = result.selected.map((item) => item.commercialType);
+    expect(selectedTypes.filter((type) => type === "perfume")).toHaveLength(1);
+    expect(selectedTypes).toContain("serum-skincare");
+    expect(selectedTypes).toContain("tratamento-capilar");
+    expect(selectedTypes).toContain("grooming-device");
+    expect(result.rejected.some((item) => item.commercialType === "perfume" && item.rejectionReason === "commercial_type_cap")).toBe(true);
+  });
+
+  it("permite override explícito do teto por tipo quando necessário", () => {
+    const result = selectCommercialPortfolio([
+      offer({ id: "perfume-a", product_name: "Perfume A 100ml Eau De Parfum", platform: "Shopee", current_price: 79, marketplace_metrics: { sales: 3000, rating: 4.9 } }),
+      offer({ id: "perfume-b", product_name: "Perfume B 100ml Eau De Parfum", platform: "Mercado Livre", current_price: 69, marketplace_metrics: { sourcePosition: 2 } }),
+    ], { maxTotal: 2, maxPerType: 2, maxPerTypeByCommercialType: { perfume: 2 } });
+
+    expect(result.selected.filter((item) => item.commercialType === "perfume")).toHaveLength(2);
+  });
 });
