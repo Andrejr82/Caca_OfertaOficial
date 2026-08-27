@@ -37,6 +37,18 @@ Baseado no código versionado e, quando indicado, na auditoria operacional read-
 - A seleção comercial não altera os motores de busca nem impede o Supabase de registrar descoberta válida; ela decide quais ofertas seguem para geração de conteúdo social.
 - Discovery não autoriza publicação.
 
+### PR #177 — qualidade e profundidade adaptativa em validação
+
+A branch isolada `fix/quality-catalog-depth-20260827` contém mudanças ainda **não ativas em produção** e sem deploy/restart da Oracle:
+
+- Mercado Livre: reforço do gate de Beleza com evidência nativa de domínio para rejeitar perfume pet, shampoo pet, modeladores de padaria/alimentos e aparadores de livros quando incompatíveis com a intenção.
+- Preço: referências anteriores implausíveis podem ser neutralizadas sem descartar o preço atual válido, evitando desconto artificial no ranking.
+- Shopee/Beleza: política semântica específica distingue produto principal de acessórios descartáveis e itens auxiliares.
+- Portfólio de Beleza: taxonomia comercial passa a reconhecer skincare, tratamento capilar, maquiagem, fragrância e grooming; fragrância possui teto editorial específico para evitar saturação.
+- `adaptive-catalog-depth/v1`: política pura decide se uma primeira passada teve volume, pool qualificado e diversidade suficientes ou se deve solicitar expansão. A política possui limite de rodadas e **ainda não está conectada ao executor Oracle que faria a segunda busca**.
+
+Até que o PR seja validado e explicitamente liberado, o comportamento produtivo permanece o da `main`/Oracle atualmente implantada.
+
 ## Publicação
 
 - Transportes implementados: Telegram, Instagram, Facebook e WhatsApp.
