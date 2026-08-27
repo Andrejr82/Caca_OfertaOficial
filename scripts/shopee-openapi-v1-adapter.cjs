@@ -1,6 +1,7 @@
 'use strict';
 
 const { runScenarioPlan } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const { runShopeeFirstDiscoveryDeepening } = require('./shopee-first-discovery-deepening.cjs');
 const { getShopeeV1Flags } = require('./shopee-v1-flags.cjs');
 
 const APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS = Object.freeze([
@@ -123,10 +124,22 @@ async function runShopeeOpenApiV1ShadowForScenario(scenarioId, options = {}) {
   return { ...decision, result, writeAudit: { ...ZERO_WRITE_AUDIT } };
 }
 
-// Official cycles use this name. The historical shadow-named export remains
-// for isolated diagnostics and compatibility tests only.
+// Official runtime uses the richer First Discovery plan. Tests/diagnostics that
+// inject an engine keep the historical two-pass contract above.
 async function runShopeeOpenApiV1OfficialForScenario(scenarioId, options = {}) {
-  return runShopeeOpenApiV1ShadowForScenario(scenarioId, options);
+  if (typeof options.engine === 'function') {
+    return runShopeeOpenApiV1ShadowForScenario(scenarioId, options);
+  }
+  const env = options.env || process.env;
+  const decision = getShopeeOpenApiV1Decision(scenarioId, env);
+  if (!decision.enabled) return decision;
+  const engineResult = await runShopeeFirstDiscoveryDeepening(decision.scenarioId, { ...options, env });
+  return {
+    ...decision,
+    result: normalizeEngineResult(engineResult),
+    deepening: engineResult?.deepening || null,
+    writeAudit: { ...ZERO_WRITE_AUDIT },
+  };
 }
 
 function createShopeeOpenApiV1Dispatcher({ legacyRunner, shadowRunner = runShopeeOpenApiV1ShadowForScenario } = {}) {
