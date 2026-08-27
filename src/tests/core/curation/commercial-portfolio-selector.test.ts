@@ -60,6 +60,23 @@ describe("commercial cross-market portfolio selector", () => {
     expect(result.rejected.some((item) => item.commercialType === "perfume" && item.rejectionReason === "commercial_type_cap")).toBe(true);
   });
 
+  it("não transforma preço riscado implausível em bônus de desconto", () => {
+    const result = selectCommercialPortfolio([
+      offer({
+        id: "serum-bad-reference",
+        product_name: "Sérum Retinol 0,3% + Vitamina E 30ml",
+        platform: "Amazon",
+        current_price: 64.9,
+        old_price: 2163.33,
+        marketplace_metrics: { rating: 4.7, discountPercent: 96.99 },
+      }),
+    ], { maxTotal: 1, minScore: 0 });
+
+    const serum = result.selected[0];
+    expect(serum?.commercialType).toBe("serum-skincare");
+    expect(serum?.reasons).toContain("discount=0.0");
+  });
+
   it("permite override explícito do teto por tipo quando necessário", () => {
     const result = selectCommercialPortfolio([
       offer({ id: "perfume-a", product_name: "Perfume A 100ml Eau De Parfum", platform: "Shopee", current_price: 79, marketplace_metrics: { sales: 3000, rating: 4.9 } }),
