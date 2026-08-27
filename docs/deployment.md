@@ -1,7 +1,7 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
 <!-- verified-on: 2026-08-27 -->
 
 ## Pré-deploy
@@ -16,62 +16,69 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 
 ## Vercel
 
-- Executa o painel Next.js, APIs e integrações server-side.
-- Validar build, variáveis, `/api/health` e `/api/readiness`.
-- Confirmar que rotas de publicação exigem autenticação e entidades oficiais.
+A `main` contém:
 
-## Supabase
+- `f68512c56617680247f73d7cc3523f1e9de92892` — correção da Publicação Expressa após Copy V5;
+- `7f35e0d2c0ca22e118b8163a73d18a1c7d995439` — First Discovery Quality V1.
 
-- Aplicar migrations em ordem e registrar o SHA implantado.
-- Verificar tabelas, RPCs, constraints, RLS e buckets.
-- Executar validações read-only antes de liberar ingestão.
+Validar build, `/api/health` e `/api/readiness` após deploy.
 
 ## Oracle
 
-Antes de qualquer alteração:
+Estado confirmado em 27/08/2026:
 
-1. comparar o SHA da VPS com a `main`;
-2. confirmar `git status --short` limpo;
+```text
+branch=main
+HEAD=7f35e0d2c0ca22e118b8163a73d18a1c7d995439
+working-tree=clean
+FIRST_DISCOVERY_QUALITY_V1_MODE=active
+oracle-scraper=online
+crash-loop=false
+startup-errors=none
+```
+
+A ativação foi feita com um único restart do `oracle-scraper`. Nenhum outro processo precisou ser reiniciado.
+
+Antes de qualquer nova alteração:
+
+1. comparar SHA da VPS com `origin/main`;
+2. confirmar working tree limpa;
 3. validar PM2 e flags efetivas;
-4. não executar Discovery manual sem autorização explícita.
+4. preservar logs;
+5. evitar ciclos manuais concorrentes.
 
-Estado auditado em 25/08/2026:
+## Scheduler
 
-- `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online;
-- scheduler `0 6,8,10,12,14,16,18 * * *` em `America/Sao_Paulo`, `noOverlap=true`;
-- Cupons 22h `manual_only`;
+```text
+0 6,8,10,12,14,16,18 * * *
+```
+
+Timezone: `America/Sao_Paulo`; `noOverlap=true`.
+
+## Rollout First Discovery
+
+O rollout está atualmente em `active` na Oracle.
+
+Guardrails:
+
+- ineligible não persiste;
+- strong tem prioridade;
+- zero strong não faz backfill artificial;
+- readiness insuficiente não dispara adaptive discovery automaticamente.
+
+### Lacuna atual de operação
+
+A proteção de qualidade já está ativa, mas o aprofundamento automático de discovery ainda não está ligado ao executor. Em cenários de cobertura insuficiente, ML/Shopee podem terminar zerados antes de esgotar alternativas reais do marketplace.
+
+Essa condição deve ser observada como falha de cobertura/discovery, não como evidência de ausência de produtos.
+
+## Radar
+
 - `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
 - `TREND_EXECUTIVE_MODE=off`;
-- `oracle-scraper` não consome Radar no ciclo editorial;
-- VPS auditada no SHA `febe66abb28bd47c738d925befc50ad365c59371`.
-
-O processo dedicado do Radar **já está ativo**. Não use instruções antigas que tratem esse worker como futuro ou não implantado.
-
-## Radar — rollback
-
-Como o runtime dedicado está ativo, rollback não deve assumir automaticamente que o `oracle-scraper` voltará a consumir Radar apenas ao desligar a flag. Antes de qualquer rollback:
-
-1. validar no código/ambiente qual consumidor ficará autorizado;
-2. garantir autoridade única;
-3. parar/reconfigurar somente o processo relacionado;
-4. confirmar lock/processos e logs;
-5. manter `TREND_EXECUTIVE_MODE=off` salvo autorização específica.
-
-Não executar rollback de Radar apenas com base em documentação histórica.
-
-## Capacity Hunter
-
-Na auditoria, `oracle-capacity-hunter.timer` estava ativo a cada 30 minutos; o service estava `failed` por ausência de `apps/oracle-capacity-hunter/.env`. O mecanismo é passivo e não reinicia serviços automaticamente.
-
-## Liberação gradual
-
-1. Deploy com publicação bloqueada quando aplicável.
-2. Saúde, readiness e migrations.
-3. Discovery controlada e persistência observada.
-4. Geração limitada de drafts.
-5. Aprovação manual e smoke test por canal.
-6. Expansão somente com recibos e métricas saudáveis.
+- `oracle-trends-radar` dedicado;
+- `oracle-scraper` sem consumo de Radar.
 
 ## Rollback geral
 
-Reverter artefato/commit e flags primeiro. Migrations destrutivas exigem plano próprio. Preservar logs, correlation IDs e recibos para investigação.
+Para regressão relacionada à First Discovery, a contenção inicial é retornar a flag a `off` e reiniciar somente `oracle-scraper`. Rollback de código deve ser decidido separadamente após diagnóstico.
