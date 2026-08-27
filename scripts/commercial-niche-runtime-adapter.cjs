@@ -6,6 +6,7 @@ const {
   getAffinityRules,
 } = require('./commercial-niche-config.cjs');
 const { getMarketplaceNicheContract } = require('./commercial-niche-contracts.cjs');
+const { buildFirstDiscoveryPlan } = require('./first-discovery-quality.cjs');
 
 /**
  * Monta o plano/configuração de execução por marketplace com base na afinidade (1-3).
@@ -33,6 +34,15 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
     : [];
 
   const allTerms = [...new Set([...selectedCore, ...selectedExpansion, ...dynamicOpportunities])];
+  const firstDiscovery = buildFirstDiscoveryPlan(nicheId, market, {
+    affinity,
+    rules,
+    contract,
+    terms: allTerms,
+    coreTerms: selectedCore,
+    expansionTerms: selectedExpansion,
+    targets: options.firstDiscoveryTargets,
+  });
 
   return {
     nicheId,
@@ -52,6 +62,7 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
       all: allTerms,
     },
     contract,
+    firstDiscovery,
   };
 }
 

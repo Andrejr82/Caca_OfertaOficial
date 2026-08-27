@@ -1,5 +1,22 @@
 import { CategoryPolicy } from './types';
 
+const BEAUTY_POLICY: CategoryPolicy = {
+  categoryKey: 'beleza',
+  primaryClasses: [
+    'protetor solar', 'hidratante', 'serum', 'skincare', 'mascara', 'mascara capilar', 'tratamento capilar',
+    'shampoo', 'condicionador', 'oleo capilar', 'perfume', 'eau de parfum', 'maquiagem', 'base',
+    'batom', 'rimel', 'escova secadora', 'secador', 'chapinha', 'modelador de cachos',
+    'aparador de pelos', 'maquina de cortar cabelo', 'depilador',
+  ],
+  acceptedAliases: ['cosmetico', 'cuidado facial', 'cuidado capilar'],
+  blockedTerms: [
+    'descartavel', 'pincel descartavel', 'aplicador descartavel', 'frasco vazio', 'embalagem vazia',
+    'amostra gratis', 'tester', 'lamina avulsa', 'carregador avulso', 'tampa avulsa',
+    'suporte de shampoo', 'organizador de maquiagem',
+  ],
+  nativeCategoryIds: [],
+};
+
 export const INITIAL_CATEGORY_POLICIES: Record<string, CategoryPolicy> = {
   celulares: {
     categoryKey: 'celulares',
@@ -42,9 +59,18 @@ export const INITIAL_CATEGORY_POLICIES: Record<string, CategoryPolicy> = {
     acceptedAliases: [],
     blockedTerms: ['reposicao', 'peca', 'tampa avulsa', 'cabo'],
     nativeCategoryIds: [],
-  }
+  },
+  beleza: BEAUTY_POLICY,
 };
 
+const BEAUTY_POLICY_ALIASES = new Set([
+  'beleza', 'cosmetico', 'mascara', 'cabelo', 'capilar', 'maquiagem', 'perfume', 'shampoo',
+  'secador', 'chapinha', 'skincare', 'serum', 'hidratante', 'protetor solar', 'depilador',
+  'aparador de pelos', 'maquina de cortar cabelo', 'oleo capilar', 'tratamento capilar',
+]);
+
 export function getPolicyForCategory(categoryKey: string): CategoryPolicy | undefined {
-  return INITIAL_CATEGORY_POLICIES[categoryKey];
+  const key = String(categoryKey || '').trim().toLowerCase();
+  if (BEAUTY_POLICY_ALIASES.has(key)) return BEAUTY_POLICY;
+  return INITIAL_CATEGORY_POLICIES[key];
 }

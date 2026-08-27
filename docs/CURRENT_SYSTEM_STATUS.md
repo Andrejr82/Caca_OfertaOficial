@@ -1,8 +1,8 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: b2f51dbb4c198cfbd14864a6e7eff2f136834be8 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-on: 2026-08-27 -->
 
 Baseado no código versionado e, quando indicado, na auditoria operacional read-only da VPS Oracle realizada em 25/08/2026. Disponibilidade externa de Vercel, Supabase, Meta, Telegram, WhatsApp e marketplaces deve ser confirmada no ambiente correspondente.
 
@@ -36,6 +36,33 @@ Baseado no código versionado e, quando indicado, na auditoria operacional read-
 - A seleção também reduz variantes quase idênticas e excesso do mesmo tipo comercial. Os limites padrão são 18 ofertas por ciclo e no máximo 2 por tipo, ajustáveis por `COMMERCIAL_PORTFOLIO_MAX_TOTAL` e `COMMERCIAL_PORTFOLIO_MAX_PER_TYPE`.
 - A seleção comercial não altera os motores de busca nem impede o Supabase de registrar descoberta válida; ela decide quais ofertas seguem para geração de conteúdo social.
 - Discovery não autoriza publicação.
+
+### PR #177 — qualidade da primeira descoberta em validação
+
+A branch isolada `fix/quality-catalog-depth-20260827` contém mudanças ainda **não ativas em produção** e sem deploy/restart da Oracle.
+
+A prioridade do PR foi alterada após a auditoria dos ciclos reais de 27/08/2026. O objetivo principal deixou de ser "terminar o funil e buscar novamente" e passou a ser **formar um pool editorial forte durante a própria primeira descoberta**.
+
+- Controle por Feature Flag: `FIRST_DISCOVERY_QUALITY_V1_MODE=off|shadow|active` (default = `off`).
+  - `off`: preserva comportamento original sem mutação.
+  - `shadow`: calcula plano de busca por intenções, avalia candidate quality e readiness, emitindo telemetrias sem alterar o pool ou a fila.
+  - `active`: substitui queries genéricas por queries refinadas (`plan.firstDiscovery.intents[].queries`), descarta candidatos inelegíveis e prioriza candidatos fortes antes da curadoria.
+- `discovery-retrieval-quality/v1`: nova política pura de planejamento/readiness para os sete nichos, com famílias editoriais, metas mínimas de candidatos fortes, diversidade, cobertura Core e saúde da fonte.
+- O adapter de nichos passa a produzir `firstDiscovery` junto do plano existente, sem remover nem alterar os campos legados.
+- Casa: termos ambíguos recebem intenções fortes antes da coleta, por exemplo `mixer` → `mixer de cozinha` e `varal` → `varal de chão/dobrável para roupas`, evitando shakeiras, canecas mixer e varais decorativos como candidatos principais.
+- Beleza: `perfume`, `modelador`, `aparador`, `maquiagem` e `depilador` passam a ter queries editoriais mais específicas; o plano do Mercado Livre exige evidência nativa de domínio antes de tratar um candidato como compatível.
+- Informática: `teclado`, `impressora`, `mouse`, `webcam`, `monitor` e `computador` recebem queries de produto final, reduzindo a chance de peças de reposição, capas, caneta 3D e mouse pad dominarem a coleta principal.
+- Shopee: o plano marca `avoidBroadCategoryOnly=true`; categoria nativa deve ser combinada com intenção forte em vez de depender de categoria ampla e corrigir dezenas de resultados depois.
+- Amazon: o plano prioriza Browse Node + intenção e inclui saúde das queries como critério de readiness; um ciclo com grande parte das consultas em erro não deve ser considerado descoberta saudável.
+- Mercado Livre: o plano mantém `official-domain-then-catalog`, Best Seller e domínio nativo como evidência de primeira ordem.
+- Regressões dos ciclos de Casa 06h, Beleza 08h e Informática 10h foram transformadas em testes de primeira descoberta, inclusive o caso em que grande volume bruto continua insuficiente quando há poucos produtos fortes/diversos.
+- Mercado Livre: permanece o reforço do gate de Beleza com evidência nativa de domínio para rejeitar perfume pet, shampoo pet, modeladores de padaria/alimentos e aparadores de livros quando incompatíveis com a intenção.
+- Preço: referências anteriores implausíveis podem ser neutralizadas sem descartar o preço atual válido, evitando desconto artificial no ranking.
+- Shopee/Beleza: política semântica específica distingue produto principal de acessórios descartáveis e itens auxiliares.
+- Portfólio de Beleza: taxonomia comercial reconhece skincare, tratamento capilar, maquiagem, fragrância e grooming; fragrância possui teto editorial específico para evitar saturação.
+- `adaptive-catalog-depth/v1` permanece no código, mas foi reclassificado como **fallback após esgotar a qualidade da primeira descoberta**, e não como mecanismo principal. Ele continua sem conexão com o executor Oracle.
+
+A ligação do plano `firstDiscovery` aos adapters/executores de rede da Oracle é uma etapa separada de rollout e **não foi executada por este PR**. Até validação e liberação explícitas, o comportamento produtivo permanece o da `main`/Oracle atualmente implantada.
 
 ## Publicação
 

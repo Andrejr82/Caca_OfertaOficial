@@ -18,6 +18,7 @@ const {
 const { getCommercialNiche } = require('../commercial-niche-config.cjs');
 const { buildNicheMarketplacePlan } = require('../commercial-niche-runtime-adapter.cjs');
 const { getMarketplaceScenarioContract } = require('../marketplace-scenario-contracts.cjs');
+const { SCENARIO_QUERY_PLANS } = require('../shopee-openapi-shadow-engine-v1.cjs');
 
 test('1. Prova que legacy e new usam exatamente o mesmo executor Amazon e apenas a configuração muda', async () => {
   const executedCalls = [];
@@ -41,15 +42,17 @@ test('1. Prova que legacy e new usam exatamente o mesmo executor Amazon e apenas
     amazonExecutor: mockAmazonExecutor,
   });
 
-  assert.equal(executedCalls.length, 3); // 2 legados (casa_cozinha + organizacao) + 1 novo
+  assert.equal(executedCalls.length, 2); // 1 legado (casa_cozinha_editorial) + 1 novo (casa_cozinha_organizacao)
   assert.equal(executedCalls[0].scenarioId, 'casa_cozinha_editorial');
-  assert.equal(executedCalls[1].scenarioId, 'organizacao_editorial');
-  assert.equal(executedCalls[2].scenarioId, 'casa_cozinha_organizacao');
+  assert.equal(executedCalls[1].scenarioId, 'casa_cozinha_organizacao');
 
   // Amazon novo recebe termos e browse nodes combinados
   const newPlan = buildNicheMarketplacePlan('casa_cozinha_organizacao', 'Amazon');
-  assert.deepEqual(executedCalls[2].keywords, newPlan.terms.all);
-  assert.deepEqual(executedCalls[2].browseNodes, newPlan.contract.amazonBrowseNodes);
+  const expectedNewKeywords = newPlan.firstDiscovery?.intents
+    ? newPlan.firstDiscovery.intents.flatMap((i) => i.queries)
+    : newPlan.terms.all;
+  assert.deepEqual(executedCalls[1].keywords, expectedNewKeywords);
+  assert.deepEqual(executedCalls[1].browseNodes, newPlan.contract.amazonBrowseNodes);
 
   assert.ok(result.legacy.rawCount > 0);
   assert.ok(result.new.rawCount > 0);
@@ -95,31 +98,36 @@ test('2. Prova que na Shopee o harness envia variáveis da configuração legacy
 
   assert.ok(capturedRequests.length > 0);
 
-  const legacyContract = getMarketplaceScenarioContract('beleza_editorial', 'Shopee');
+  const legacyPlan = SCENARIO_QUERY_PLANS.beleza_editorial;
+  const legacyKeywords = legacyPlan?.keywords || [];
+  const legacyCategories = legacyPlan?.categoryIds || [];
   const newPlan = buildNicheMarketplacePlan('beleza', 'Shopee');
+  const expectedNewKeywords = newPlan.firstDiscovery?.intents
+    ? newPlan.firstDiscovery.intents.flatMap((i) => i.queries)
+    : newPlan.terms.all;
 
   // Separar chamadas feitas durante o bloco legacy vs bloco new
   // Legacy tem 5 keywords + 2 categorias = 7 chamadas
-  const legacyCalls = capturedRequests.slice(0, (legacyContract.keywords.length + legacyContract.apiCategories.length));
+  const legacyCalls = capturedRequests.slice(0, (legacyKeywords.length + legacyCategories.length));
   const newCalls = capturedRequests.slice(legacyCalls.length);
 
   // Provar que as variáveis enviadas na parte Legacy vieram estritamente do contrato legacy
   for (const call of legacyCalls) {
     if (call.variables.keyword) {
       assert.ok(
-        legacyContract.keywords.includes(call.variables.keyword),
+        legacyKeywords.includes(call.variables.keyword),
         `Keyword legacy ${call.variables.keyword} deve pertencer ao contrato legacy`
       );
     }
     if (call.variables.productCatId) {
       assert.ok(
-        legacyContract.apiCategories.includes(call.variables.productCatId),
+        legacyCategories.includes(call.variables.productCatId),
         `Categoria legacy ${call.variables.productCatId} deve pertencer ao contrato legacy`
       );
     }
   }
 
-  // Provar que as variáveis enviadas na parte New vieram de newPlan.terms.all e newPlan.contract.shopeeApiCategories
+  // Provar que as variáveis enviadas na parte New vieram de firstDiscovery intents e newPlan.contract.shopeeApiCategories
   const requestedNewKeywords = newCalls.map((c) => c.variables.keyword).filter(Boolean);
   const requestedNewCategories = newCalls.map((c) => c.variables.productCatId).filter(Boolean);
 
@@ -127,7 +135,7 @@ test('2. Prova que na Shopee o harness envia variáveis da configuração legacy
   assert.ok(requestedNewCategories.length > 0);
 
   for (const kw of requestedNewKeywords) {
-    assert.ok(newPlan.terms.all.includes(kw), `Keyword nova ${kw} deve pertencer a newPlan.terms.all`);
+    assert.ok(expectedNewKeywords.includes(kw), `Keyword nova ${kw} deve pertencer a expectedNewKeywords`);
   }
 
   for (const cat of requestedNewCategories) {
@@ -136,7 +144,7 @@ test('2. Prova que na Shopee o harness envia variáveis da configuração legacy
 
   // Provar que termo específico da nova configuração ('tratamento capilar') foi solicitado no novo e não no legacy
   assert.ok(requestedNewKeywords.includes('tratamento capilar'), 'Deve requisitar "tratamento capilar" na nova configuração de beleza');
-  assert.equal(legacyContract.keywords.includes('tratamento capilar'), false, 'Legacy não possui "tratamento capilar"');
+  assert.equal(legacyKeywords.includes('tratamento capilar'), false, 'Legacy não possui "tratamento capilar"');
 
   assert.equal(result.marketplace, 'Shopee');
   assert.ok(result.legacy.rawCount > 0);

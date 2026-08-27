@@ -1,8 +1,8 @@
 # Oracle Cloud — operação atual
 
 <!-- docs-status: current -->
-<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-on: 2026-08-27 -->
 
 Fonte canônica de arquitetura: [architecture-current.md](architecture-current.md).
 

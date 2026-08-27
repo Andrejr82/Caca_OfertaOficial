@@ -130,6 +130,8 @@ const {
   getControlledPersistDecision,
   buildControlledPersistIngestions,
 } = require('./shopee-openapi-v1-controlled-persist.cjs');
+const { isFirstDiscoveryQualityActive } = require('./first-discovery-flags.cjs');
+const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 
 function createQualityShadowRunner() {
   if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'shadow') return null;
@@ -147,7 +149,6 @@ function createQualityShadowRunner() {
     payload.queue || {},
     {
       runId: `shadow-${payload.correlationId}-${payload.marketplace}`,
-      generatedAt: new Date().toISOString(),
       marketplace: payload.marketplace,
     },
   );
@@ -194,7 +195,21 @@ function getActiveMarketplaceScenario(marketplace = 'Shopee') {
     ? (MARKETPLACE_SCENARIOS[CLI_SCENARIO_ID] || SHOPEE_SCENARIOS[CLI_SCENARIO_ID])
     : getCycleScenario(getSaoPauloHour(), 1);
   const scenarioId = routed?.scenarioId || routed?.id;
-  return getMarketplaceScenarioContract(scenarioId, marketplace) || routed || null;
+  const contract = getMarketplaceScenarioContract(scenarioId, marketplace) || routed || null;
+  if (isFirstDiscoveryQualityActive() && contract) {
+    const nichePlan = resolveNichePlanFromLegacyScenario(scenarioId, [marketplace])?.plans?.[marketplace];
+    if (nichePlan?.firstDiscovery?.intents?.length) {
+      const queries = nichePlan.firstDiscovery.intents.flatMap((i) => i.queries);
+      return {
+        ...contract,
+        keywords: queries,
+        terms: queries,
+        browseNodeIds: marketplace === 'Amazon' ? (nichePlan.contract?.amazonBrowseNodes || contract.browseNodeIds) : contract.browseNodeIds,
+        apiCategories: marketplace === 'Shopee' ? (nichePlan.contract?.shopeeApiCategories || contract.apiCategories) : contract.apiCategories,
+      };
+    }
+  }
+  return contract;
 }
 
 function createScenarioRuntimeResolver({ plannedScenarioId = null, discoveryHour = getSaoPauloHour(), schedulerSource = 'oracle-node-cron' } = {}) {

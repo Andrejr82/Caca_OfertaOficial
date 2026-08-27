@@ -29,8 +29,6 @@ function sanitizeBlockedTerms(blockedTerms = [], allowedTerms = [], keywords = [
   const isContradictory = (blockedTerm) => {
     const normalizedBlocked = normalize(blockedTerm).replace(/[^a-z0-9]+/g, ' ').trim();
     if (!normalizedBlocked) return true;
-    const blockedTokens = normalizedBlocked.split(/\s+/).filter(Boolean);
-    for (const bToken of blockedTokens) if (intentTokens.has(bToken)) return true;
     for (const allowedPhrase of [...allowedNorm, ...keywordsNorm]) {
       const paddedAllowed = ` ${allowedPhrase} `;
       if (paddedAllowed.includes(` ${normalizedBlocked} `) || allowedPhrase === normalizedBlocked) return true;

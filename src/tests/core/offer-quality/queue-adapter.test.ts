@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectOfferQualityQueueProducts } from "@/core/offer-quality/queue-adapter";
+import { sanitizeQueueReferencePrice, selectOfferQualityQueueProducts } from "@/core/offer-quality/queue-adapter";
 
 const product = (overrides: Record<string, unknown> = {}) => ({
   marketplace: "Mercado Livre",
@@ -57,5 +57,29 @@ describe("offer quality queue adapter", () => {
     expect(["quality_rank_limit", "lower_ranked_in_group"]).toContain(
       result.rejected.find((item) => item.sourceItemId === "MLB1000000002")?.reasons[0],
     );
+  });
+
+  it("neutralizes an implausible crossed-out price without discarding the product", () => {
+    const sanitized = sanitizeQueueReferencePrice(product({
+      marketplace: "Amazon",
+      sourceItemId: "B09WB12BKW",
+      sourceUrl: "https://www.amazon.com.br/dp/B09WB12BKW",
+      imageUrl: "https://m.media-amazon.com/image.jpg",
+      currentPrice: 64.9,
+      originalPrice: 2163.33,
+      marketplaceMetrics: { asin: "B09WB12BKW", rating: 4.7 },
+    }));
+
+    expect(sanitized.originalPrice).toBeNull();
+    expect(sanitized.marketplaceMetrics).toEqual(expect.objectContaining({
+      referencePriceRejected: true,
+      referencePriceReason: "implausible_reference_price",
+      rejectedOriginalPrice: 2163.33,
+    }));
+  });
+
+  it("keeps a plausible reference price untouched", () => {
+    const candidate = product({ currentPrice: 113.9, originalPrice: 157 });
+    expect(sanitizeQueueReferencePrice(candidate)).toBe(candidate);
   });
 });

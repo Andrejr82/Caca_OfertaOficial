@@ -36,10 +36,9 @@ const MERCADOLIVRE_NICHE_POLICY = Object.freeze({
   useBestSellerSignal: true,
 });
 
-// Termos deliberadamente sem sobreposição com o permitido genérico "modelador".
-// O sanitizador remove bloqueios conflitantes com termos permitidos, por isso a
-// exclusão usa a evidência do domínio incorreto (nasal/arroz/padaria), não o nome
-// válido da classe de beleza.
+// Bloqueios editoriais complementares do Mercado Livre.
+// Eles são deliberadamente específicos para não colidir com as classes válidas
+// (por exemplo, "modelador" e "aparador" continuam permitidos em Beleza).
 const MERCADOLIVRE_BLOCKED_BY_NICHE = Object.freeze({
   beleza: Object.freeze([
     'nasal',
@@ -48,6 +47,17 @@ const MERCADOLIVRE_BLOCKED_BY_NICHE = Object.freeze({
     'arroz',
     'padaria',
     'modelador de alimentos',
+    'modelador de donuts',
+    'donuts',
+    'aparador de livros',
+    'aparadores para livros',
+    'perfume para cachorro',
+    'perfume para caes',
+    'perfume para gato',
+    'shampoo pet',
+    'shampoo para cachorro',
+    'shampoo para caes',
+    'shampoo para gato',
   ]),
 });
 

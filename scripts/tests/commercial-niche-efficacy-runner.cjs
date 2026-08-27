@@ -22,6 +22,8 @@ const {
   SCENARIO_QUERY_PLANS,
 } = require('../shopee-openapi-shadow-engine-v1.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('../mercadolivre-official-intents-v5.cjs');
+const { evaluateFirstDiscoveryCandidate } = require('../first-discovery-candidate-quality.cjs');
+const { assessFirstDiscoveryReadiness, matchesFirstDiscoveryIntent } = require('../first-discovery-quality.cjs');
 
 const NICHE_TO_LEGACY_SCENARIOS = Object.freeze({
   casa_cozinha_organizacao: ['casa_cozinha_editorial', 'organizacao_editorial'],
@@ -129,6 +131,7 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
   let outOfNicheCount = 0;
   let accessoriesNoiseCount = 0;
   let validCount = 0;
+  let strongCandidatesCount = 0;
 
   const distinctFoundFamilies = new Set();
   const coveredCore = new Set();
@@ -159,7 +162,7 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
     if (id) seenIds.add(id);
 
     const title = p.title || p.productName || p.product_name || '';
-    const price = Number(p.price || p.priceMin || p.current_price || 0);
+    const price = Number(p.price || p.priceMin || p.current_price || p.currentPrice || 0);
 
     if (!price || price <= 0) {
       invalidPriceCount += 1;
@@ -184,6 +187,17 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
     }
 
     validCount += 1;
+
+    // Avaliação de candidato forte vinculado à intent correspondente
+    const matchingIntent = options.intents?.find((i) => matchesFirstDiscoveryIntent(i, p.title || p.productName || ''));
+    const candidateEval = evaluateFirstDiscoveryCandidate({
+      marketplace: options.marketplace || 'Generic',
+      candidate: p,
+      intent: matchingIntent,
+    });
+    if (candidateEval.strong) {
+      strongCandidatesCount += 1;
+    }
 
     // Cobertura Core e Expansion
     for (const core of coreList) {
@@ -238,6 +252,23 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
   const apiErrors = (queries || []).filter((q) => q.status === 'error' || q.error).map((q) => q.error || q.status);
   const rateLimit429Count = (queries || []).filter((q) => String(q.error || '').includes('429') || q.status === 429).length;
 
+  const queriesAttempted = Array.isArray(queries) ? queries.length : 0;
+  const queriesSucceeded = Array.isArray(queries)
+    ? queries.filter((q) => q.status === 'ok' || q.status === 200 || !q.error).length
+    : 0;
+
+  const readiness = assessFirstDiscoveryReadiness({
+    affinity: options.affinity || 2,
+    extracted: rawCount,
+    afterRelevance: validCount,
+    afterQualityGate: validCount,
+    strongCandidates: strongCandidatesCount,
+    distinctEditorialFamilies: distinctFoundFamilies.size,
+    coreFamiliesCovered: coveredCore.size,
+    queriesAttempted,
+    queriesSucceeded,
+  }, { affinity: options.affinity || 2, targets: options.targets });
+
   return {
     rawCount,
     validCount,
@@ -245,6 +276,12 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
     rejectionReasons,
     duplicateCount,
     productDiversity,
+    familyCoverage: distinctFoundFamilies.size,
+    strongCandidates: strongCandidatesCount,
+    sourceHealth: readiness.reasons.includes('source_health_degraded') ? 'degraded' : 'healthy',
+    readiness: readiness.ready ? 'ready' : 'not_ready',
+    readinessReasons: readiness.reasons,
+    readinessDetails: readiness,
     coreCoveragePercent: Number(coreCoveragePercent.toFixed(1)),
     expansionCoveragePercent: Number(expansionCoveragePercent.toFixed(1)),
     outOfNicheCount,
@@ -264,6 +301,8 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
       quality: validCount > 0 ? Number(((validCount / Math.max(1, rawCount)) * 100).toFixed(1)) : 0,
       noise: Number(noisePercent.toFixed(1)),
       diversity: productDiversity,
+      familyCoverage: distinctFoundFamilies.size,
+      strongCandidates: strongCandidatesCount,
     },
   };
 }
@@ -301,6 +340,8 @@ function compareEfficacyMetrics(legacyMetrics, newMetrics) {
     rejectedCount: evaluateMetricDelta(legacyMetrics.rejectedCount, newMetrics.rejectedCount, false),
     duplicateCount: evaluateMetricDelta(legacyMetrics.duplicateCount, newMetrics.duplicateCount, false),
     productDiversity: evaluateMetricDelta(legacyMetrics.productDiversity, newMetrics.productDiversity, true),
+    familyCoverage: evaluateMetricDelta(legacyMetrics.familyCoverage, newMetrics.familyCoverage, true),
+    strongCandidates: evaluateMetricDelta(legacyMetrics.strongCandidates, newMetrics.strongCandidates, true),
     coreCoveragePercent: evaluateMetricDelta(legacyMetrics.coreCoveragePercent, newMetrics.coreCoveragePercent, true),
     expansionCoveragePercent: evaluateMetricDelta(legacyMetrics.expansionCoveragePercent, newMetrics.expansionCoveragePercent, true),
     accessoriesNoiseCount: evaluateMetricDelta(legacyMetrics.accessoriesNoiseCount, newMetrics.accessoriesNoiseCount, false),
@@ -335,6 +376,11 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
   let newQueries = [];
   let newLatencyMs = 0;
 
+  // Extrair lista de queries do novo plano (usando intents do firstDiscovery quando disponíveis)
+  const newKeywords = newPlan.firstDiscovery?.intents
+    ? newPlan.firstDiscovery.intents.flatMap((i) => i.queries)
+    : (newPlan.terms.all || []);
+
   // 1. AMAZON: Motor = runAmazonScenarioDryRun
   if (market === 'Amazon') {
     const executor = options.amazonExecutor || runAmazonScenarioDryRun;
@@ -367,7 +413,7 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
       scenario: {
         id: newPlan.nicheId,
         scenarioId: newPlan.nicheId,
-        keywords: newPlan.terms.all || [],
+        keywords: newKeywords,
         browseNodeIds: newPlan.contract?.amazonBrowseNodes || [],
         allowedProductTerms: newPlan.contract?.guardrails?.allowedProductTerms || [],
         blockedProductTerms: newPlan.contract?.guardrails?.blockedProductTerms || [],
@@ -389,8 +435,8 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
     for (const legId of legacyScenarios) {
       const legContract = getMarketplaceScenarioContract(legId, 'Shopee');
       const legPlan = SCENARIO_QUERY_PLANS[legId];
-      const legKeywords = legContract?.keywords || legPlan?.keywords || [];
-      const legCategories = legContract?.apiCategories || legPlan?.categoryIds || [];
+      const legKeywords = legPlan?.keywords || legContract?.keywords || [];
+      const legCategories = legPlan?.categoryIds || legContract?.apiCategories || [];
 
       const res = await executor({
         keywords: legKeywords,
@@ -405,7 +451,7 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
     // Execução New Niche (Keywords e categorias do newPlan)
     const newStart = Date.now();
     const newRes = await executor({
-      keywords: newPlan.terms.all || [],
+      keywords: newKeywords,
       categoryIds: newPlan.contract?.shopeeApiCategories || [],
       request: options.shopeeRequest,
     });
@@ -440,7 +486,7 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
     const newStart = Date.now();
     const newRes = await executor({
       accessToken,
-      keywords: newPlan.terms.all || [],
+      keywords: newKeywords,
       maxPerIntent: newPlan.rules?.candidateLimit || 10,
       delayMs: options.delayMs ?? 300,
       fetchImpl: options.fetchImpl,
@@ -450,8 +496,20 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
     if (Array.isArray(newRes?.queries)) newQueries.push(...newRes.queries);
   }
 
-  const legacyMetrics = extractEfficacyMetrics(legacyProducts, legacyQueries, niche, { latencyMs: legacyLatencyMs });
-  const newMetrics = extractEfficacyMetrics(newProducts, newQueries, niche, { latencyMs: newLatencyMs });
+  const legacyMetrics = extractEfficacyMetrics(legacyProducts, legacyQueries, niche, {
+    latencyMs: legacyLatencyMs,
+    marketplace: market,
+    affinity: newPlan?.affinity,
+    targets: newPlan?.firstDiscovery?.targets,
+    intents: newPlan?.firstDiscovery?.intents,
+  });
+  const newMetrics = extractEfficacyMetrics(newProducts, newQueries, niche, {
+    latencyMs: newLatencyMs,
+    marketplace: market,
+    affinity: newPlan?.affinity,
+    targets: newPlan?.firstDiscovery?.targets,
+    intents: newPlan?.firstDiscovery?.intents,
+  });
   const comparison = compareEfficacyMetrics(legacyMetrics, newMetrics);
 
   return {

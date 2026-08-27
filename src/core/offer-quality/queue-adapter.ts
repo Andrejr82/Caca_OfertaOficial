@@ -37,6 +37,42 @@ function text(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+/**
+ * Preço riscado extremamente distante do preço atual é tratado como evidência
+ * comercial não confiável, não como motivo para descartar o produto inteiro.
+ *
+ * O limiar combina razão e economia absoluta para evitar punir liquidações
+ * normais de itens baratos. Ex.: R$ 2.163,33 -> R$ 64,90 é neutralizado;
+ * R$ 199,90 -> R$ 29,90 continua disponível para as demais validações.
+ */
+export function sanitizeQueueReferencePrice(
+  product: OfferQualityQueueProduct,
+): OfferQualityQueueProduct {
+  const current = Number(product.currentPrice);
+  const original = Number(product.originalPrice);
+  if (!Number.isFinite(current) || current <= 0 || !Number.isFinite(original) || original <= current) {
+    return product;
+  }
+
+  const ratio = original / current;
+  const savings = original - current;
+  const implausibleReference = ratio >= 8 && savings >= 300;
+  if (!implausibleReference) return product;
+
+  return {
+    ...product,
+    originalPrice: null,
+    discountEvidence: null,
+    marketplaceMetrics: {
+      ...(product.marketplaceMetrics ?? {}),
+      referencePriceRejected: true,
+      referencePriceReason: "implausible_reference_price",
+      rejectedOriginalPrice: original,
+      referencePriceRatio: Number(ratio.toFixed(2)),
+    },
+  };
+}
+
 function invalidInputReasons(product: OfferQualityQueueProduct): string[] {
   const reasons: string[] = [];
   if (!text(product.sourceItemId)) reasons.push("missing_native_identity");
@@ -76,7 +112,8 @@ export function selectOfferQualityQueueProducts(
   const validProducts: OfferQualityQueueProduct[] = [];
   const candidates: OfferQualityCandidateInput[] = [];
 
-  for (const product of products) {
+  for (const rawProduct of products) {
+    const product = sanitizeQueueReferencePrice(rawProduct);
     const sourceItemId = text(product.sourceItemId);
     const reasons = invalidInputReasons(product);
     if (!options.monetizationValid(product)) reasons.push("missing_monetization");
