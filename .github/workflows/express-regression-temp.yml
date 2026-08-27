@@ -31,3 +31,21 @@ jobs:
       - run: npm ci
       - name: Run full verification
         run: npm run verify
+
+  baseline-main:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Run same legacy focused tests on main
+        continue-on-error: true
+        run: npx vitest run src/tests/core/ai/official-ai-service.test.ts src/tests/architecture/copy-v5-single-authority.test.ts
+      - name: Run typecheck on main
+        run: npm run typecheck
