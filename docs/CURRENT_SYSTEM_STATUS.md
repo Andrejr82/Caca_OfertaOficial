@@ -43,6 +43,7 @@ Baseado no código versionado e, quando indicado, na auditoria operacional read-
 - Telegram possui publicação editorial Top 30; WhatsApp possui fila Top 30 do ciclo mais recente e rotação `next`.
 - Um draft WhatsApp ativo continua elegível para exibição mesmo quando a oferta global já foi marcada `approved` por outro canal; a autoridade é o estado do post WhatsApp, preservadas as proteções de publicado/deletado/rejeitado/deferido.
 - Publicação Expressa multicanal permanece separada do Top 30 editorial e seus drafts WhatsApp são carregados por trilha própria.
+- O PR draft #178 (`fix/publicacao-expressa-copy-v5-contract-20260827`) corrige uma regressão introduzida na neutralização de flags legados da Copy V5: somente a Publicação Expressa volta a preservar `copyV2Express`/`copyV3Express`, flags de regeneração e a chave de idempotência até o engine; a fachada Copy V5 continua sendo a autoridade da copy final. A mudança ainda não está ativa em produção enquanto não houver merge/deploy.
 - Ofertas `rejected` são bloqueadas nos fluxos sociais oficiais.
 - Instagram Feed e Reels usam disclosure de parceria paga e `Instagram Policy Guard` fail-closed antes da publicação.
 

@@ -148,9 +148,12 @@ export function buildCanonicalCopyV5Content(
 }
 
 /**
- * Os flags V2/V3 antigos ainda podem existir nos callers por compatibilidade,
- * mas não podem selecionar um cérebro ou renderer alternativo nos dois fluxos
- * produtivos que geram drafts em pending_manual_review.
+ * Os flags V2/V3 antigos ainda podem existir nos callers por compatibilidade.
+ *
+ * O ciclo automático pode neutralizar seus flags antes do engine. Já a Publicação
+ * Expressa precisa preservar os flags e a chave ai:copy-v2/ai:copy-v3 até o engine,
+ * porque eles fazem parte do contrato estrutural/idempotente validado ali. A
+ * autoridade da copy final continua sendo a fachada V5, que intercepta persistDrafts.
  */
 export function neutralizeLegacyCopyRouting(command: OfficialAICommand): OfficialAICommand {
   const isCycle = command.origin === "oracle.discovery"
@@ -159,7 +162,11 @@ export function neutralizeLegacyCopyRouting(command: OfficialAICommand): Officia
   const isExpress = command.origin === "publish.quick-publication"
     && (command.metadata?.copyV2Express === true || command.metadata?.copyV3Express === true);
 
-  if (!isCycle && !isExpress) return command;
+  // Regressão introduzida em 24e73f1a: remover copyV2Express/copyV3Express antes
+  // do engine deixava copyV2Regenerate/copyV3Regenerate sem seu metadado-pai e
+  // invalidava também as chaves ai:copy-v2/ai:copy-v3. Preserve o contrato Express.
+  if (isExpress) return command;
+  if (!isCycle) return command;
 
   const {
     copyV2: _copyV2,
