@@ -141,16 +141,14 @@ function createQualityShadowRunner() {
   } catch (error) {
     return async () => { throw new Error(`Runtime de qualidade shadow indisponível: ${error.message}`); };
   }
-  if (typeof runtime.buildOfferQualityShadowPayload !== 'function') {
-    return async () => { throw new Error('Runtime de qualidade shadow sem construtor de payload'); };
+  if (typeof runtime.evaluateDiscoveryShadow !== 'function') {
+    return async () => { throw new Error('Runtime de qualidade shadow sem avaliador'); };
   }
-  return async (payload) => runtime.buildOfferQualityShadowPayload(
-    payload.candidates,
-    payload.queue,
+  return async (payload) => runtime.evaluateDiscoveryShadow(
+    payload.candidates || [],
+    payload.queue || {},
     {
-      correlationId: payload.correlationId,
-      marketplace: payload.marketplace,
-      generatedAt: new Date().toISOString(),
+      runId: `shadow-${payload.correlationId}-${payload.marketplace}`,
       marketplace: payload.marketplace,
     },
   );

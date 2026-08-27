@@ -23,7 +23,7 @@ const {
 } = require('../shopee-openapi-shadow-engine-v1.cjs');
 const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('../mercadolivre-official-intents-v5.cjs');
 const { evaluateFirstDiscoveryCandidate } = require('../first-discovery-candidate-quality.cjs');
-const { assessFirstDiscoveryReadiness } = require('../first-discovery-quality.cjs');
+const { assessFirstDiscoveryReadiness, matchesFirstDiscoveryIntent } = require('../first-discovery-quality.cjs');
 
 const NICHE_TO_LEGACY_SCENARIOS = Object.freeze({
   casa_cozinha_organizacao: ['casa_cozinha_editorial', 'organizacao_editorial'],
@@ -162,7 +162,7 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
     if (id) seenIds.add(id);
 
     const title = p.title || p.productName || p.product_name || '';
-    const price = Number(p.price || p.priceMin || p.current_price || 0);
+    const price = Number(p.price || p.priceMin || p.current_price || p.currentPrice || 0);
 
     if (!price || price <= 0) {
       invalidPriceCount += 1;
@@ -188,10 +188,12 @@ function extractEfficacyMetrics(products = [], queries = [], nicheContract = nul
 
     validCount += 1;
 
-    // Avaliação de candidato forte
+    // Avaliação de candidato forte vinculado à intent correspondente
+    const matchingIntent = options.intents?.find((i) => matchesFirstDiscoveryIntent(i, p.title || p.productName || ''));
     const candidateEval = evaluateFirstDiscoveryCandidate({
       marketplace: options.marketplace || 'Generic',
       candidate: p,
+      intent: matchingIntent,
     });
     if (candidateEval.strong) {
       strongCandidatesCount += 1;
@@ -499,12 +501,14 @@ async function runMarketplaceNicheEfficacyComparison(nicheId, marketplace, optio
     marketplace: market,
     affinity: newPlan?.affinity,
     targets: newPlan?.firstDiscovery?.targets,
+    intents: newPlan?.firstDiscovery?.intents,
   });
   const newMetrics = extractEfficacyMetrics(newProducts, newQueries, niche, {
     latencyMs: newLatencyMs,
     marketplace: market,
     affinity: newPlan?.affinity,
     targets: newPlan?.firstDiscovery?.targets,
+    intents: newPlan?.firstDiscovery?.intents,
   });
   const comparison = compareEfficacyMetrics(legacyMetrics, newMetrics);
 
