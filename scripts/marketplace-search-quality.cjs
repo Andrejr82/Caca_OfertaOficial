@@ -12,6 +12,15 @@ function number(value) {
   return Number.isFinite(n) ? n : null;
 }
 
+function normalizeText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
 function identityFor(marketplace, product) {
   const metrics = product?.marketplaceMetrics || {};
   const m = String(marketplace || '').toLowerCase();
@@ -34,6 +43,42 @@ function equivalenceKey(marketplace, product) {
   return identityFor(marketplace, product);
 }
 
+function mercadoLivreNativeEvidence(product) {
+  const raw = product?.rawPayload || product?.raw_payload || {};
+  const metrics = product?.marketplaceMetrics || product?.marketplace_metrics || {};
+  return {
+    domainId: String(raw.domain_id || metrics.domain_id || metrics.domainId || '').toUpperCase(),
+    categoryName: normalizeText(raw.category_name || product?.category?.name || metrics.category_name || metrics.categoryName || ''),
+    intent: normalizeText(product?.intent || raw.intent || product?.intentId || product?.scenarioId || ''),
+  };
+}
+
+/**
+ * Domínio nativo é evidência mais forte que uma palavra ambígua no título.
+ * O gate evita exatamente os cruzamentos observados na auditoria de Beleza,
+ * sem bloquear produtos válidos como modelador de cachos ou aparador de pelos.
+ */
+function validateMarketplaceDomain(marketplace, product) {
+  if (String(marketplace || '').toLowerCase() !== 'mercado livre') return { valid: true };
+  const { domainId, categoryName, intent } = mercadoLivreNativeEvidence(product);
+  if (!domainId && !categoryName) return { valid: true };
+
+  if (intent.includes('perfume') && (/PET.*(?:COLOGNE|PERFUME)/i.test(domainId) || categoryName.includes('pet'))) {
+    return { valid: false, reason: 'dominio_incompativel_perfume_pet' };
+  }
+  if (intent.includes('shampoo') && (/(?:CAT_AND_DOG|PET).*SHAMPOO/i.test(domainId) || /cachorro|cao|caes|gato|pet/.test(categoryName))) {
+    return { valid: false, reason: 'dominio_incompativel_shampoo_pet' };
+  }
+  if (intent.includes('modelador') && (/BAKERY.*MOULDER/i.test(domainId) || /padaria|donut|alimento/.test(categoryName))) {
+    return { valid: false, reason: 'dominio_incompativel_modelador_alimentos' };
+  }
+  if (intent.includes('aparador') && (/BOOKEND/i.test(domainId) || /aparador.*livro|livro/.test(categoryName))) {
+    return { valid: false, reason: 'dominio_incompativel_aparador_livros' };
+  }
+
+  return { valid: true };
+}
+
 function validateOfficialPrice(product) {
   const current = number(product?.currentPrice);
   let original = number(product?.originalPrice);
@@ -44,6 +89,16 @@ function validateOfficialPrice(product) {
     // somente esse campo; a oferta continua válida pelo preço atual.
     original = null;
     warnings.push('preco_anterior_inconsistente');
+  }
+  if (original != null && original > current) {
+    const ratio = original / current;
+    const savings = original - current;
+    // Evita que referência evidentemente corrompida vire um "desconto" herói.
+    // O produto continua elegível, mas sem old price/desconto até nova evidência.
+    if (ratio >= 8 && savings >= 300) {
+      original = null;
+      warnings.push('preco_anterior_implausivel');
+    }
   }
   return {
     valid: true,
@@ -95,9 +150,15 @@ function diversifyByIntent(marketplace, products, maxPerIntent = DEFAULT_MAX_PER
 }
 
 function evaluateSearchQuality(marketplace, products, options = {}) {
+  const domainRejected = [];
   const priceRejected = [];
   const priced = [];
   for (const product of Array.isArray(products) ? products : []) {
+    const domain = validateMarketplaceDomain(marketplace, product);
+    if (!domain.valid) {
+      domainRejected.push({ sourceItemId: product?.sourceItemId, reason: domain.reason });
+      continue;
+    }
     const price = validateOfficialPrice(product);
     if (!price.valid) {
       priceRejected.push({ sourceItemId: product?.sourceItemId, reason: price.reason });
@@ -109,12 +170,13 @@ function evaluateSearchQuality(marketplace, products, options = {}) {
   const diverse = diversifyByIntent(marketplace, equivalent.products, Number(options.maxPerIntent || DEFAULT_MAX_PER_INTENT));
   return {
     accepted: diverse.products,
-    rejected: [...priceRejected, ...equivalent.rejected, ...diverse.rejected],
+    rejected: [...domainRejected, ...priceRejected, ...equivalent.rejected, ...diverse.rejected],
     metrics: {
       marketplace,
       received: Array.isArray(products) ? products.length : 0,
       accepted: diverse.products.length,
-      rejected: priceRejected.length + equivalent.rejected.length + diverse.rejected.length,
+      rejected: domainRejected.length + priceRejected.length + equivalent.rejected.length + diverse.rejected.length,
+      domainRejected: domainRejected.length,
       priceRejected: priceRejected.length,
       equivalentGroups: equivalent.products.length,
       diversityRejected: diverse.rejected.length,
@@ -128,6 +190,8 @@ module.exports = {
   MATERIAL_PRICE_DROP,
   identityFor,
   equivalenceKey,
+  mercadoLivreNativeEvidence,
+  validateMarketplaceDomain,
   validateOfficialPrice,
   isMateriallyBetter,
   selectEquivalentWinners,
