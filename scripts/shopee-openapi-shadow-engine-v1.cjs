@@ -3,6 +3,15 @@
 const crypto = require('node:crypto');
 const GRAPHQL_CONTRACTS = require('./contracts/shopee-openapi-v1/index.cjs');
 const { evaluateShopeeOracleCandidate } = require('./shopee-ranking-v1-oracle-bridge.cjs');
+const { getShopeeV1Flags } = require('./shopee-v1-flags.cjs');
+const {
+  SHOPEE_PRODUCTCATIDS_MAP_V1,
+  FAMILY_SEMANTIC_DICTIONARY,
+  SCENARIO_TO_NICHE_MAP,
+  resolveLeafCategory,
+  isProductAdherent,
+  isExplicitlyBlockedFamily,
+} = require('./shopee-productcatids-map-v1.cjs');
 
 function queryPlan(keywords, categoryIds, overrides = {}) {
   return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxPagesPerQuery: 2, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
@@ -283,17 +292,30 @@ function auxiliaryNode(source, node) {
   return { source, requiresProductResolution: true, resolved: Boolean(node.resolvedProduct), offerLink: node.offerLink || null, imageUrl: node.imageUrl || null, commissionRate: node.commissionRate ?? null, raw: node, resolvedProduct: node.resolvedProduct || null };
 }
 
-async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {} } = {}) {
+async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {}, env = process.env } = {}) {
   const plan = SCENARIO_QUERY_PLANS[scenarioId];
   if (!plan) throw new Error(`Plano Shopee ausente para ${scenarioId}`);
   if (typeof request !== 'function') throw new Error('runScenarioPlan requer request injetado');
-  const keywords = plan.keywords.slice(0, maxKeywords ?? plan.keywords.length); const categoryIds = plan.categoryIds.slice(0, maxCategories ?? plan.categoryIds.length); const productOffers = []; const calls = [];
+
+  const flags = getShopeeV1Flags(env);
+  const isCertifiedSearchEnabled = flags.productCatIdsSearch;
+  const nicheName = SCENARIO_TO_NICHE_MAP[scenarioId];
+  const nicheFamilies = nicheName ? SHOPEE_PRODUCTCATIDS_MAP_V1[nicheName] : null;
+
+  const productOffers = [];
+  const calls = [];
   const stopState = { reason: null, controllers: new Set() };
   const stopAll = (reason) => {
     stopState.reason ||= reason;
     for (const controller of stopState.controllers) controller.abort();
   };
-  const callProduct = async (variables, sourcePlan) => {
+
+  let productCatIdsTelemetry = null;
+  let extractedBeforeOracleFilters = 0;
+  let semanticAccepted = 0;
+  let semanticRejected = 0;
+
+  const callProduct = async (variables, sourcePlan, familyTerms = null) => {
     const pageSize = plan.limits.productOfferV2PerQuery;
     const maxPages = plan.limits.maxPagesPerQuery;
     const controller = new AbortController();
@@ -301,6 +323,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
     const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     const timeoutId = setTimeout(() => controller.abort(), Math.max(1, Number(sourceTimeoutMs) || 25_000));
     const seenCursors = new Set();
+    let acceptedCount = 0;
     try {
       for (let page = 1; page <= maxPages; page += 1) {
         if (stopState.reason || signal?.aborted) {
@@ -323,10 +346,27 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
           break;
         }
         const nodes = response.data?.data?.productOfferV2?.nodes || [];
+        extractedBeforeOracleFilters += nodes.length;
         const pageInfo = response.data?.data?.productOfferV2?.pageInfo;
-        const filtered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
-        const evidence = { source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: filtered.length };
-        productOffers.push(...filtered);
+        const shopTypeFiltered = nodes.filter((node) => !Array.isArray(node.shopType) || node.shopType.length === 0 || node.shopType.some((type) => plan.shopTypes.includes(Number(type))));
+        
+        let acceptedNodes = shopTypeFiltered;
+        if (familyTerms && familyTerms.length > 0) {
+          acceptedNodes = [];
+          for (const node of shopTypeFiltered) {
+            if (isProductAdherent(node.productName, familyTerms)) {
+              semanticAccepted += 1;
+              acceptedNodes.push(node);
+            } else {
+              semanticRejected += 1;
+            }
+          }
+        }
+
+        const evidence = { source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: shopTypeFiltered.length, acceptedSemantic: acceptedNodes.length };
+        productOffers.push(...acceptedNodes);
+        acceptedCount += acceptedNodes.length;
+
         if (nodes.length === 0) { calls.push({ ...evidence, stopReason: 'empty_page' }); break; }
         if (!pageInfo || pageInfo.hasNextPage !== true) { calls.push({ ...evidence, stopReason: 'has_next_page_false' }); break; }
         if (page >= maxPages) { calls.push({ ...evidence, stopReason: 'page_limit' }); break; }
@@ -342,30 +382,168 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
       clearTimeout(timeoutId);
       stopState.controllers.delete(controller);
     }
+    return acceptedCount;
   };
-  const queryTasks = [
-    ...keywords.map((keyword) => () => callProduct({ keyword }, 'productOfferV2.keyword')),
-    ...categoryIds.map((productCatId) => () => callProduct({ productCatId }, 'productOfferV2.category')),
-  ];
-  const workerCount = Math.max(1, Math.min(Number(maxConcurrentQueries) || 1, queryTasks.length));
-  let nextTask = 0;
-  await Promise.all(new Array(workerCount).fill(null).map(async () => {
-    while (nextTask < queryTasks.length) {
-      const task = queryTasks[nextTask++];
-      await task();
+
+  let queryTasks = [];
+
+  if (isCertifiedSearchEnabled && nicheFamilies) {
+    const allFamilies = Object.entries(nicheFamilies);
+    const familiesAvailable = allFamilies.length;
+    let familiesSkippedPartial = 0;
+    let familiesSkippedInvestigate = 0;
+    let familiesSkippedBlocked = 0;
+    const certifiedFamilies = [];
+
+    for (const [familyName, familyData] of allFamilies) {
+      if (isExplicitlyBlockedFamily(nicheName, familyName) || familyData.decision === 'bloquear') {
+        familiesSkippedBlocked += 1;
+        continue;
+      }
+      if (familyData.decision === 'investigar') {
+        familiesSkippedInvestigate += 1;
+        continue;
+      }
+      if (familyData.decision === 'manter') {
+        familiesSkippedPartial += 1;
+        continue;
+      }
+      if (familyData.decision === 'promover') {
+        const semanticConfig = FAMILY_SEMANTIC_DICTIONARY[familyName] || {
+          keyword: familyName,
+          terms: [familyName],
+        };
+        certifiedFamilies.push({
+          name: familyName,
+          keyword: semanticConfig.keyword,
+          terms: semanticConfig.terms,
+          targetProductCatId: resolveLeafCategory(familyData.recommendedProductCatIdPath, familyData.rootProductCatId),
+          rootProductCatId: Number(familyData.rootProductCatId),
+          recommendedProductCatIdPath: familyData.recommendedProductCatIdPath,
+        });
+      }
     }
-  }));
-  let deltaRows = sharedSources.deltaRows || []; let datafeedId = sharedSources.datafeedId || null; let shopOffers = sharedSources.shopOffers || []; let shopeeOffers = sharedSources.shopeeOffers || [];
+
+    let productCatIdQueries = 0;
+    let productCatIdFallbacks = 0;
+
+    const callCertifiedFamily = async (fam) => {
+      productCatIdQueries += 1;
+      const primaryVars = {
+        keyword: fam.keyword,
+        productCatId: fam.targetProductCatId,
+      };
+
+      const added = await callProduct(primaryVars, `productOfferV2.certified.${fam.name}`, fam.terms);
+
+      // Fallback para categoria raiz se a folha retornar 0 e forem diferentes
+      if (added === 0 && fam.targetProductCatId !== fam.rootProductCatId) {
+        productCatIdFallbacks += 1;
+        const fallbackVars = {
+          keyword: fam.keyword,
+          productCatId: fam.rootProductCatId,
+        };
+        await callProduct(fallbackVars, `productOfferV2.fallback.${fam.name}`, fam.terms);
+      }
+    };
+
+    queryTasks = certifiedFamilies.map((fam) => () => callCertifiedFamily(fam));
+
+    const workerCount = Math.max(1, Math.min(Number(maxConcurrentQueries) || 1, queryTasks.length));
+    let nextTask = 0;
+    await Promise.all(new Array(workerCount).fill(null).map(async () => {
+      while (nextTask < queryTasks.length) {
+        const task = queryTasks[nextTask++];
+        await task();
+      }
+    }));
+
+    productCatIdsTelemetry = {
+      shopeeProductCatIdsSearchEnabled: true,
+      niche: nicheName,
+      familiesAvailable,
+      familiesUsed: certifiedFamilies.length,
+      familiesSkippedPartial,
+      familiesSkippedInvestigate,
+      familiesSkippedBlocked,
+      productCatIdQueries,
+      productCatIdFallbacks,
+      semanticAccepted,
+      semanticRejected,
+      extractedBeforeOracleFilters,
+    };
+  } else {
+    const keywords = plan.keywords.slice(0, maxKeywords ?? plan.keywords.length);
+    const categoryIds = plan.categoryIds.slice(0, maxCategories ?? plan.categoryIds.length);
+    queryTasks = [
+      ...keywords.map((keyword) => () => callProduct({ keyword }, 'productOfferV2.keyword')),
+      ...categoryIds.map((productCatId) => () => callProduct({ productCatId }, 'productOfferV2.category')),
+    ];
+    const workerCount = Math.max(1, Math.min(Number(maxConcurrentQueries) || 1, queryTasks.length));
+    let nextTask = 0;
+    await Promise.all(new Array(workerCount).fill(null).map(async () => {
+      while (nextTask < queryTasks.length) {
+        const task = queryTasks[nextTask++];
+        await task();
+      }
+    }));
+  }
+
+  let deltaRows = sharedSources.deltaRows || [];
+  let datafeedId = sharedSources.datafeedId || null;
+  let shopOffers = sharedSources.shopOffers || [];
+  let shopeeOffers = sharedSources.shopeeOffers || [];
+
   if (includeDelta && !sharedSources.deltaRows) {
-    const feedResponse = await request('ListItemFeeds', GRAPHQL_CONTRACTS.listItemFeeds.query, {}); const feeds = feedResponse.data?.data?.listItemFeeds?.feeds || []; datafeedId = feeds[0]?.datafeedId || null;
-    if (datafeedId) { const dataResponse = await request('GetItemFeedData', GRAPHQL_CONTRACTS.getItemFeedData.query, { datafeedId, offset: 0, limit: plan.limits.maxFeedRows }); deltaRows = dataResponse.data?.data?.getItemFeedData?.rows || []; }
+    const feedResponse = await request('ListItemFeeds', GRAPHQL_CONTRACTS.listItemFeeds.query, {});
+    const feeds = feedResponse.data?.data?.listItemFeeds?.feeds || [];
+    datafeedId = feeds[0]?.datafeedId || null;
+    if (datafeedId) {
+      const dataResponse = await request('GetItemFeedData', GRAPHQL_CONTRACTS.getItemFeedData.query, { datafeedId, offset: 0, limit: plan.limits.maxFeedRows });
+      deltaRows = dataResponse.data?.data?.getItemFeedData?.rows || [];
+    }
   }
+
   if (includeAuxiliary && !sharedSources.shopOffers) {
-    const shopResponse = await request('ShopOfferV2', GRAPHQL_CONTRACTS.shopOfferV2.query, { page: 1, limit: plan.limits.shopOfferV2 }); const shopeeResponse = await request('ShopeeOfferV2', GRAPHQL_CONTRACTS.shopeeOfferV2.query, { page: 1, limit: plan.limits.shopeeOfferV2 });
-    shopOffers = shopResponse.data?.data?.shopOfferV2?.nodes || []; shopeeOffers = shopeeResponse.data?.data?.shopeeOfferV2?.nodes || [];
+    const shopResponse = await request('ShopOfferV2', GRAPHQL_CONTRACTS.shopOfferV2.query, { page: 1, limit: plan.limits.shopOfferV2 });
+    const shopeeResponse = await request('ShopeeOfferV2', GRAPHQL_CONTRACTS.shopeeOfferV2.query, { page: 1, limit: plan.limits.shopeeOfferV2 });
+    shopOffers = shopResponse.data?.data?.shopOfferV2?.nodes || [];
+    shopeeOffers = shopeeResponse.data?.data?.shopeeOfferV2?.nodes || [];
   }
-  const result = runShadow({ sources: { productOffers, deltaRows, datafeedId, shopOffers, shopeeOffers, maxFeedRows: plan.limits.maxFeedRows }, contracts: { [scenarioId]: SCENARIO_CONTRACTS[scenarioId] }, topLimit: Number.POSITIVE_INFINITY, applyDiversityCaps: false });
-  return { scenarioId, queryPlan: plan, queryEvidence: { calls, productOffers: productOffers.length, deltaRows: deltaRows.length, shopOffers: shopOffers.length, shopeeOffers: shopeeOffers.length }, ...result };
+
+  const result = runShadow({
+    sources: { productOffers, deltaRows, datafeedId, shopOffers, shopeeOffers, maxFeedRows: plan.limits.maxFeedRows },
+    contracts: { [scenarioId]: SCENARIO_CONTRACTS[scenarioId] },
+    topLimit: Number.POSITIVE_INFINITY,
+    applyDiversityCaps: false,
+  });
+
+  const scenarioResult = result.scenarios?.[scenarioId] || {};
+  const top = scenarioResult.top || [];
+
+  if (productCatIdsTelemetry) {
+    productCatIdsTelemetry = {
+      ...productCatIdsTelemetry,
+      afterOracleQualityGate: (scenarioResult.top?.length || 0) + (scenarioResult.rejected?.length || 0),
+      queueSelected: top.length,
+      familyDiversityCount: new Set(top.map((item) => item.familyKey)).size,
+      selectedFamilies: [...new Set(top.map((item) => item.familyKey))],
+    };
+  }
+
+  return {
+    scenarioId,
+    queryPlan: plan,
+    queryEvidence: {
+      calls,
+      productOffers: productOffers.length,
+      deltaRows: deltaRows.length,
+      shopOffers: shopOffers.length,
+      shopeeOffers: shopeeOffers.length,
+      ...(productCatIdsTelemetry ? { productCatIdsTelemetry } : {}),
+    },
+    ...result,
+  };
 }
 
 async function resolveAuxiliaryOffers({ request, shopOffers = [], shopeeOffers = [], maxPerSource = 5 } = {}) {
