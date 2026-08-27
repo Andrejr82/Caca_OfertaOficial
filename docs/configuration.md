@@ -1,13 +1,14 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 2447c01c25871c76c96242cd4dfda35d7b1a7873 -->
+<!-- verified-on: 2026-08-27 -->
 
 ## Princípios
 
 - `.env.example` é o inventário seguro; valores reais ficam em `.env.local`, Vercel, Oracle/PM2 ou secret store.
 - Flags novas entram desligadas ou fail-closed quando controlam descoberta, persistência, IA ou publicação.
+- `FIRST_DISCOVERY_QUALITY_V1_MODE` controla o novo pipeline de primeira descoberta (`off` por padrão, `shadow` para observabilidade sem alteração, `active` para intenções refinadas).
 - Arquivos de overlay Oracle aceitam apenas chaves permitidas e devem ser validados antes de reiniciar processos.
 - URLs públicas, service-role keys e credenciais de canais não podem aparecer em logs ou documentação.
 

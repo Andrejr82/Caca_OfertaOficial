@@ -114,12 +114,13 @@ const NEGATIVE_HINTS_BY_NICHE = Object.freeze({
     shampoo: Object.freeze(['cachorro', 'caes', 'gato', 'pet']),
     modelador: Object.freeze(['donut', 'donuts', 'padaria', 'alimento', 'arroz']),
     aparador: Object.freeze(['livro', 'livros', 'bookend']),
+    maquiagem: Object.freeze(['descartavel', 'aplicador descartavel', 'pincel descartavel']),
   }),
   informatica: Object.freeze({
-    teclado: Object.freeze(['teclado para notebook', 'teclado notebook', 'teclado coletor', 'teclado pda', 'reposicao', 'replacement']),
-    impressora: Object.freeze(['capa para impressora', 'caneta 3d']),
-    mouse: Object.freeze(['mouse pad']),
-    webcam: Object.freeze(['tampa webcam', 'protetor webcam', 'suporte webcam']),
+    teclado: Object.freeze(['teclado para notebook', 'teclado notebook', 'teclado coletor', 'teclado pda', 'reposicao', 'replacement', 'interno']),
+    impressora: Object.freeze(['capa para impressora', 'caneta 3d', 'caneta 3d impressora']),
+    mouse: Object.freeze(['mouse pad', 'mousepad']),
+    webcam: Object.freeze(['tampa webcam', 'protetor webcam', 'suporte webcam', 'tampa de protecao']),
   }),
 });
 

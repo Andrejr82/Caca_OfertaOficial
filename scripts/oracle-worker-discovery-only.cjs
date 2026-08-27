@@ -19,6 +19,18 @@ const {
   readDiscoveryFunnelMeta,
   deriveMarketplaceTerminalStatus,
 } = require('./discovery-funnel-contract.cjs');
+const {
+  getFirstDiscoveryQualityMode,
+  isFirstDiscoveryQualityActive,
+  isFirstDiscoveryQualityShadow,
+} = require('./first-discovery-flags.cjs');
+const { evaluateFirstDiscoveryCandidate } = require('./first-discovery-candidate-quality.cjs');
+const {
+  assessFirstDiscoveryReadiness,
+  matchesFirstDiscoveryIntent,
+  buildFirstDiscoveryPlan,
+} = require('./first-discovery-quality.cjs');
+const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 
 // --- BRIDGE COMMONJS ⇄ TYPESCRIPT (Motor Shopee V1) ---
 let oracleAdapterTs = null;
@@ -719,6 +731,30 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
       const funnel = createDiscoveryFunnel({ marketplace, scenario, correlationId, startedAt: new Date(marketplaceStartedAt).toISOString(), scenarioRuntime });
       activeFunnel = funnel;
+
+      const firstDiscoveryMode = getFirstDiscoveryQualityMode(process.env);
+      let nichePlan = null;
+      let firstDiscoveryPlan = null;
+      if (firstDiscoveryMode !== 'off') {
+        const resolvedNiche = resolveNichePlanFromLegacyScenario(scenario, [marketplace]);
+        if (resolvedNiche.mode === 'niche_mapped') {
+          nichePlan = resolvedNiche.plans[marketplace];
+          firstDiscoveryPlan = nichePlan?.firstDiscovery;
+        } else {
+          firstDiscoveryPlan = buildFirstDiscoveryPlan(scenario, marketplace);
+        }
+        await safeObserve('discovery.first_quality.plan', {
+          scenarioId: scenario,
+          nicheId: nichePlan?.nicheId || scenario,
+          marketplace,
+          mode: firstDiscoveryMode,
+          queriesPlanned: firstDiscoveryPlan?.intents?.reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 0,
+          families: firstDiscoveryPlan?.families || [],
+          targets: firstDiscoveryPlan?.targets || null,
+          strategy: firstDiscoveryPlan?.strategy || null,
+        });
+      }
+
       funnel.setFinalByCategory(discoveryMeta.finalByCategory);
       if (marketplace === 'Amazon' && discoveryMeta.amazonTelemetry) {
         funnel.setSourceTelemetry(discoveryMeta.amazonTelemetry);
@@ -816,6 +852,24 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           continue;
         }
 
+        if (firstDiscoveryMode !== 'off') {
+          const matchingIntent = firstDiscoveryPlan?.intents?.find((i) => matchesFirstDiscoveryIntent(i, preparedProduct.title));
+          const firstDiscoveryEval = evaluateFirstDiscoveryCandidate({
+            marketplace,
+            candidate: preparedProduct,
+            intent: matchingIntent,
+          });
+          preparedProduct._firstDiscoveryQuality = firstDiscoveryEval;
+
+          if (firstDiscoveryMode === 'active' && !firstDiscoveryEval.eligible) {
+            technicalRejections += 1;
+            for (const reason of firstDiscoveryEval.hardRejections || ['first_discovery_ineligible']) {
+              countRejection(reason);
+            }
+            continue;
+          }
+        }
+
         product = preparedProduct;
         let groupKey = sourceItemId;
         const mLower = String(marketplace).toLowerCase();
@@ -886,6 +940,83 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       for (const candidate of classifiedProducts.filter((item) => item.classification.status !== 'classified')) {
         countRejection(`classification_${candidate.classification.status || 'unknown'}`);
       }
+
+      if (firstDiscoveryMode !== 'off') {
+        const distinctFamilies = new Set();
+        const coveredCore = new Set();
+        let strongCount = 0;
+        const coreList = nichePlan?.contract?.coreProducts || [];
+
+        for (const p of uniqueProducts) {
+          const evalRes = p._firstDiscoveryQuality || evaluateFirstDiscoveryCandidate({
+            marketplace,
+            candidate: p,
+            intent: firstDiscoveryPlan?.intents?.find((i) => matchesFirstDiscoveryIntent(i, p.title)),
+          });
+          if (evalRes.strong) strongCount += 1;
+          const pTitle = String(p.title || '');
+          for (const core of coreList) {
+            if (pTitle.toLowerCase().includes(core.toLowerCase())) {
+              coveredCore.add(core);
+              distinctFamilies.add(core);
+            }
+          }
+          if (evalRes.intent?.family) {
+            distinctFamilies.add(evalRes.intent.family);
+          }
+        }
+
+        const queriesAttempted = Number(discoveryMeta.amazonTelemetry?.total_queries_attempted || firstDiscoveryPlan?.intents?.reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 0);
+        const queriesSucceeded = Number(discoveryMeta.amazonTelemetry?.total_queries_successful ?? (discoveryMeta.amazonTelemetry?.total_queries_attempted ? (discoveryMeta.amazonTelemetry.total_queries_attempted - (discoveryMeta.amazonTelemetry.total_queries_failed || 0)) : (discoveryMeta.extracted > 0 ? 1 : 0)));
+
+        const readiness = assessFirstDiscoveryReadiness({
+          affinity: nichePlan?.affinity || 2,
+          extracted: discoveryMeta.extracted ?? products?.length ?? 0,
+          afterRelevance: discoveryMeta.afterRelevance ?? products?.length ?? 0,
+          afterQualityGate: uniqueProducts.length,
+          strongCandidates: strongCount,
+          distinctEditorialFamilies: distinctFamilies.size,
+          coreFamiliesCovered: coveredCore.size,
+          queriesAttempted,
+          queriesSucceeded,
+        }, { affinity: nichePlan?.affinity || 2, targets: firstDiscoveryPlan?.targets });
+
+        await safeObserve('discovery.first_quality.candidate_summary', {
+          scenarioId: scenario,
+          nicheId: nichePlan?.nicheId || scenario,
+          marketplace,
+          mode: firstDiscoveryMode,
+          extracted: readiness.evidence.extracted,
+          eligibleCandidates: readiness.evidence.afterQualityGate,
+          strongCandidates: readiness.evidence.strongCandidates,
+          distinctEditorialFamilies: readiness.evidence.distinctEditorialFamilies,
+          coreFamiliesCovered: readiness.evidence.coreFamiliesCovered,
+          queriesAttempted: readiness.evidence.queriesAttempted,
+          queriesSucceeded: readiness.evidence.queriesSucceeded,
+        });
+
+        await safeObserve('discovery.first_quality.readiness', {
+          scenarioId: scenario,
+          nicheId: nichePlan?.nicheId || scenario,
+          marketplace,
+          mode: firstDiscoveryMode,
+          ready: readiness.ready,
+          reasons: readiness.reasons,
+          targets: readiness.targets,
+          evidence: readiness.evidence,
+        });
+
+        if (!readiness.ready) {
+          console.log(`[First Discovery Quality] first_discovery_not_ready marketplace=${marketplace} reasons=${readiness.reasons.join(',')}`);
+          await safeObserve('discovery.first_quality.not_ready', {
+            scenarioId: scenario,
+            nicheId: nichePlan?.nicheId || scenario,
+            marketplace,
+            reasons: readiness.reasons,
+          });
+        }
+      }
+
       let deferredForQueue = previouslyDeferred;
     const shopeeV1Enabled = marketplace === 'Shopee'
         && require('./shopee-v1-flags.cjs').getShopeeV1Flags().engine;

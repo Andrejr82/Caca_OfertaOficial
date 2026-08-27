@@ -1,8 +1,8 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: b2f51dbb4c198cfbd14864a6e7eff2f136834be8 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 2447c01c25871c76c96242cd4dfda35d7b1a7873 -->
+<!-- verified-on: 2026-08-27 -->
 
 Baseado no código versionado e, quando indicado, na auditoria operacional read-only da VPS Oracle realizada em 25/08/2026. Disponibilidade externa de Vercel, Supabase, Meta, Telegram, WhatsApp e marketplaces deve ser confirmada no ambiente correspondente.
 
@@ -43,6 +43,10 @@ A branch isolada `fix/quality-catalog-depth-20260827` contém mudanças ainda **
 
 A prioridade do PR foi alterada após a auditoria dos ciclos reais de 27/08/2026. O objetivo principal deixou de ser "terminar o funil e buscar novamente" e passou a ser **formar um pool editorial forte durante a própria primeira descoberta**.
 
+- Controle por Feature Flag: `FIRST_DISCOVERY_QUALITY_V1_MODE=off|shadow|active` (default = `off`).
+  - `off`: preserva comportamento original sem mutação.
+  - `shadow`: calcula plano de busca por intenções, avalia candidate quality e readiness, emitindo telemetrias sem alterar o pool ou a fila.
+  - `active`: substitui queries genéricas por queries refinadas (`plan.firstDiscovery.intents[].queries`), descarta candidatos inelegíveis e prioriza candidatos fortes antes da curadoria.
 - `discovery-retrieval-quality/v1`: nova política pura de planejamento/readiness para os sete nichos, com famílias editoriais, metas mínimas de candidatos fortes, diversidade, cobertura Core e saúde da fonte.
 - O adapter de nichos passa a produzir `firstDiscovery` junto do plano existente, sem remover nem alterar os campos legados.
 - Casa: termos ambíguos recebem intenções fortes antes da coleta, por exemplo `mixer` → `mixer de cozinha` e `varal` → `varal de chão/dobrável para roupas`, evitando shakeiras, canecas mixer e varais decorativos como candidatos principais.

@@ -110,17 +110,49 @@ function evaluateFirstDiscoveryCandidate({ marketplace, candidate = {}, intent =
     if (data.prime) signals.push('prime');
     if (data.sourcePosition != null && data.sourcePosition <= 10) signals.push('source_top_10');
   } else if (market === 'Mercado Livre') {
+    const rawDomain = getNested(candidate, [
+      'domain_id',
+      'domainId',
+      'marketplaceMetrics.domainId',
+      'marketplaceMetrics.domain_id',
+      'marketplace_metrics.domainId',
+      'marketplace_metrics.domain_id',
+      'rawPayload.domain_id',
+    ]);
+    const domainId = String(rawDomain || '').toUpperCase();
+    const catName = String(getNested(candidate, [
+      'category.name',
+      'category_name',
+      'marketplaceMetrics.categoryName',
+      'marketplace_metrics.categoryName',
+      'rawPayload.category_name',
+    ], '')).toLowerCase();
+
+    if (/PET.*(?:COLOGNE|PERFUME)/i.test(domainId) || (intent?.term === 'perfume' && catName.includes('pet'))) {
+      hardRejections.push('incompatible_domain');
+    } else if (/(?:CAT_AND_DOG|PET).*SHAMPOO/i.test(domainId) || (intent?.term === 'shampoo' && /cachorro|cao|caes|gato|pet/.test(catName))) {
+      hardRejections.push('incompatible_domain');
+    } else if (/BAKERY.*MOULDER/i.test(domainId) || (intent?.term === 'modelador' && /padaria|donut|alimento/.test(catName))) {
+      hardRejections.push('incompatible_domain');
+    } else if (/BOOKEND/i.test(domainId) || (intent?.term === 'aparador' && /aparador.*livro|livro/.test(catName))) {
+      hardRejections.push('incompatible_domain');
+    }
+
     if (data.bestSeller) signals.push('best_seller');
     if (data.officialStoreId != null) signals.push('official_store');
     if (discountEvidence.validDiscountPercent != null && discountEvidence.validDiscountPercent >= 10) signals.push('real_discount_10_plus');
     if (data.shippingFree) signals.push('shipping_free');
     if (data.sourcePosition != null && data.sourcePosition <= 10) signals.push('source_top_10');
   } else if (market === 'Shopee') {
-    if (data.sales != null && data.sales >= 300) signals.push('sales_300_plus');
-    if (data.rating != null && data.rating >= 4.7) signals.push('rating_4_7_plus');
-    if (discountEvidence.validDiscountPercent != null && discountEvidence.validDiscountPercent >= 10) signals.push('real_discount_10_plus');
-    if (data.shopQuality) signals.push('shop_quality');
-    if (data.sourcePosition != null && data.sourcePosition <= 10) signals.push('source_top_10');
+    const lowerTitle = data.title.toLowerCase();
+    const isDisposable = /\b(?:aplicador\s+descartavel|descartaveis|pincel\s+descartavel)\b/i.test(lowerTitle);
+    if (!isDisposable) {
+      if (data.sales != null && data.sales >= 300) signals.push('sales_300_plus');
+      if (data.rating != null && data.rating >= 4.7) signals.push('rating_4_7_plus');
+      if (discountEvidence.validDiscountPercent != null && discountEvidence.validDiscountPercent >= 10) signals.push('real_discount_10_plus');
+      if (data.shopQuality) signals.push('shop_quality');
+      if (data.sourcePosition != null && data.sourcePosition <= 10) signals.push('source_top_10');
+    }
   }
 
   const eligible = hardRejections.length === 0;
@@ -131,6 +163,11 @@ function evaluateFirstDiscoveryCandidate({ marketplace, candidate = {}, intent =
     marketplace: market,
     eligible,
     strong,
+    intent: intent ? Object.freeze({
+      term: intent.term || null,
+      tier: intent.tier || null,
+      family: intent.family || null,
+    }) : null,
     hardRejections: Object.freeze(hardRejections),
     signals: Object.freeze(signals),
     evidence: Object.freeze({
