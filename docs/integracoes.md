@@ -24,32 +24,67 @@
 - Um post `channel=whatsapp` em `draft`, sem `posted_at`, `external_id` ou exclusão, permanece válido mesmo se `offers.status=approved` por outro canal.
 - Estados publicados, deletados, rejeitados ou deferidos permanecem protegidos.
 
-## Mercado Livre — guardrails por nicho
+## PR #177 — qualidade da primeira descoberta
 
-O motor Mercado Livre não foi alterado. O contrato do nicho pode rejeitar falsos positivos. Em Beleza, sinais como `nasal`, `nariz`, `nose up`, `arroz` e `padaria` bloqueiam resultados fora do domínio sem bloquear `modelador de cachos`, chapinha ou escova secadora.
+A branch `fix/quality-catalog-depth-20260827` introduz `discovery-retrieval-quality/v1`, ainda **não ativo em produção**. O objetivo é melhorar o que cada integração procura na primeira descoberta antes de recorrer ao ranking final.
 
-### PR #177 — reforço proposto e ainda não ativo
+O plano dos sete nichos passa a transportar:
 
-Na branch `fix/quality-catalog-depth-20260827`, o gate comum também pode usar evidência nativa retornada pela integração Mercado Livre (`domain_id` e categoria) para rejeitar combinações claramente incompatíveis com a intenção, como perfume pet, shampoo pet, modelador de padaria/alimentos e aparador de livros.
+- famílias editoriais;
+- intents fortes em vez de depender apenas de keywords genéricas;
+- metas mínimas de candidatos fortes/diversidade/cobertura Core;
+- saúde das queries e precisão de recuperação como condição para considerar o pool inicial suficiente;
+- estratégia específica por marketplace.
+
+`commercial-niche-runtime-adapter.cjs` entrega esse contrato em `firstDiscovery` de forma aditiva; os campos legados permanecem disponíveis. A integração efetiva desses campos nos executores Oracle ainda é uma etapa separada de rollout.
+
+## Mercado Livre — native-first e guardrails por nicho
+
+O caminho canônico permanece `official-domain-then-catalog` e o uso de Best Seller continua desejado quando disponível.
+
+No PR #177, o plano de primeira descoberta do Mercado Livre marca `requireNativeDomainEvidence=true`. A intenção é evitar que termos ambíguos cheguem ao pool principal apenas por coincidência lexical. Em Beleza, por exemplo:
+
+- `perfume` vira busca por fragrância humana e rejeita sinais pet;
+- `modelador` vira intenção de modelador de cachos e rejeita padaria/alimentos;
+- `aparador` vira intenção de pelos/barba/cabelo e rejeita aparador de livros.
+
+O gate comum da branch também pode usar `domain_id`/categoria para rejeitar perfume pet, shampoo pet, modeladores de padaria/alimentos e aparadores de livros.
 
 Essa lógica está somente no PR draft e **não foi implantada na Oracle**.
 
-## Shopee — semântica de Beleza em validação
+## Shopee — categoria nativa + intenção forte
 
-O PR #177 acrescenta uma política semântica de Beleza ao ranking Shopee para separar produtos principais de acessórios descartáveis ou auxiliares. A mudança atua sobre candidatos já obtidos pela integração; não altera credenciais, endpoints nem o contrato de autenticação da OpenAPI.
+A auditoria de 27/08/2026 mostrou ciclos em que categorias amplas geraram baixa precisão, como Beleza com 60 extraídos e apenas 7 relevantes. O plano novo marca:
 
-## Amazon — sanidade de preço em validação
+- `mode=native-category-plus-strong-intent`;
+- `avoidBroadCategoryOnly=true`;
+- categorias nativas do nicho preservadas;
+- ranking comercial somente depois da compatibilidade semântica.
 
-O PR #177 permite neutralizar `old_price`/desconto quando a referência anterior for implausível em relação ao preço atual. O item continua elegível pelo preço atual válido; somente a evidência de desconto é removida. A integração de busca Amazon não é substituída.
+A política semântica de Beleza continua separando produtos principais de acessórios descartáveis ou auxiliares. A mudança não altera credenciais, endpoints nem autenticação da OpenAPI.
 
-## Profundidade adaptativa — fronteira de integração
+## Amazon — Browse Node + intenção + saúde da fonte
 
-`adaptive-catalog-depth/v1` decide se uma primeira passada de Discovery foi suficiente com base em volume bruto, pool qualificado, finalistas e diversidade. No estado atual do PR:
+O plano novo usa `browse-node-intent-search` e transforma termos ambíguos antes da coleta. Exemplos auditados:
 
-- a decisão e seus testes existem no código versionado da branch;
+- Casa: `mixer` → `mixer de cozinha`; `varal` → varal para roupas;
+- Beleza: `modelador` → modelador de cachos; `aparador` → aparador de pelos;
+- Informática: `teclado`, `impressora`, `mouse`, `webcam` e `monitor` passam a queries de produto final mais específicas.
+
+A readiness também considera a saúde das queries. O ciclo Casa 06h de 27/08/2026, com 18 falhas em 23 consultas Amazon, é regressão explícita e não deve ser considerado fonte saudável mesmo que alguns produtos tenham sido coletados.
+
+A sanidade de preço permanece: referência anterior implausível pode ser neutralizada sem rejeitar o preço atual válido.
+
+## Profundidade adaptativa — fallback, não estratégia principal
+
+`adaptive-catalog-depth/v1` foi reclassificado na branch como `fallback_after_first_discovery_quality_exhausted`.
+
+Ele só deve ser considerado depois que o plano de primeira descoberta tiver usado intenções fortes, cobertura nativa e o orçamento previsto e ainda assim não formar um pool suficiente. No estado atual do PR:
+
+- a decisão e os testes existem no código versionado da branch;
 - existe limite de rodadas para evitar expansão descontrolada;
-- **não existe ainda chamada adicional automática à Oracle a partir dessa decisão**;
-- qualquer ativação dessa segunda passada deve ser tratada como mudança explícita de runtime Oracle, com validação e rollout próprios.
+- **não existe chamada adicional automática à Oracle**;
+- qualquer ativação deve ser tratada como mudança explícita de runtime Oracle, com validação e rollout próprios.
 
 ## Oracle auditada em 25/08/2026
 
