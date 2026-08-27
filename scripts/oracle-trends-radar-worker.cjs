@@ -12,15 +12,46 @@ const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_LOCK_STALE_MS = 30 * 60_000;
 const DEFAULT_LOCK_PATH = path.join(os.tmpdir(), 'caca-oferta-trends-radar.lock');
 
-function tryAcquireProcessLock({ fsImpl = fs, lockPath = DEFAULT_LOCK_PATH, staleMs = DEFAULT_LOCK_STALE_MS, now = Date.now() } = {}) {
+function readLockOwner(fsImpl, lockPath) {
+  try {
+    const raw = fsImpl.readFileSync(lockPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    const pid = Number(parsed?.pid);
+    return Number.isInteger(pid) && pid > 0 ? { pid, acquiredAt: parsed?.acquiredAt || null } : null;
+  } catch {
+    return null;
+  }
+}
+
+function isProcessAlive(pid, processKill = process.kill) {
+  try {
+    processKill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ESRCH') return false;
+    // EPERM means the process exists but cannot be signalled by this user.
+    if (error?.code === 'EPERM') return true;
+    return true;
+  }
+}
+
+function tryAcquireProcessLock({ fsImpl = fs, lockPath = DEFAULT_LOCK_PATH, staleMs = DEFAULT_LOCK_STALE_MS, now = Date.now(), processKill = process.kill } = {}) {
   const writeLock = () => {
     const fd = fsImpl.openSync(lockPath, 'wx');
     fsImpl.writeFileSync(fd, JSON.stringify({ pid: process.pid, acquiredAt: new Date(now).toISOString() }));
     fsImpl.closeSync(fd);
     return true;
   };
+
   try { return writeLock(); } catch (error) { if (error?.code !== 'EEXIST') throw error; }
+
   try {
+    const owner = readLockOwner(fsImpl, lockPath);
+    if (owner && !isProcessAlive(owner.pid, processKill)) {
+      fsImpl.unlinkSync(lockPath);
+      return writeLock();
+    }
+
     const stat = fsImpl.statSync(lockPath);
     if (now - stat.mtimeMs <= staleMs) return false;
     fsImpl.unlinkSync(lockPath);
@@ -35,9 +66,9 @@ function releaseProcessLock({ fsImpl = fs, lockPath = DEFAULT_LOCK_PATH } = {}) 
   try { fsImpl.unlinkSync(lockPath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
 }
 
-async function runTrendRadarWorkerOnce({ env = process.env, processRadar = processPendingTrendRadarRuns, fsImpl = fs, lockPath = DEFAULT_LOCK_PATH, staleMs = DEFAULT_LOCK_STALE_MS } = {}) {
+async function runTrendRadarWorkerOnce({ env = process.env, processRadar = processPendingTrendRadarRuns, fsImpl = fs, lockPath = DEFAULT_LOCK_PATH, staleMs = DEFAULT_LOCK_STALE_MS, processKill = process.kill } = {}) {
   if (!isDedicatedTrendRadarRuntimeEnabled(env)) return { processed:false, reason:'dedicated_runtime_disabled', publishCalls:0, postsWrites:0, offersWrites:0 };
-  const locked = tryAcquireProcessLock({ fsImpl, lockPath, staleMs });
+  const locked = tryAcquireProcessLock({ fsImpl, lockPath, staleMs, processKill });
   if (!locked) return { processed:false, reason:'worker_locked', publishCalls:0, postsWrites:0, offersWrites:0 };
   try { return await processRadar({ env, dedicatedRuntime:true }); }
   finally { releaseProcessLock({ fsImpl, lockPath }); }
@@ -66,4 +97,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { DEFAULT_POLL_INTERVAL_MS, DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_PATH, tryAcquireProcessLock, releaseProcessLock, runTrendRadarWorkerOnce, startTrendRadarWorker };
+module.exports = { DEFAULT_POLL_INTERVAL_MS, DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_PATH, readLockOwner, isProcessAlive, tryAcquireProcessLock, releaseProcessLock, runTrendRadarWorkerOnce, startTrendRadarWorker };
