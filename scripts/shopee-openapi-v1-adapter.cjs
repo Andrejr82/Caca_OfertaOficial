@@ -63,13 +63,63 @@ async function defaultShadowEngine(scenarioId, options = {}) {
   });
 }
 
+function normalizeEngineResult(engineResult) {
+  return engineResult?.result?.scenarios ? engineResult.result : engineResult;
+}
+
+function getScenarioTopCount(result, scenarioId) {
+  const scenarioResult = result?.scenarios?.[scenarioId] || {};
+  return Array.isArray(scenarioResult.top) ? scenarioResult.top.length : 0;
+}
+
+function shouldAutoDeepenShopeeDiscovery(result, scenarioId, options = {}) {
+  if (options.disableAutoDeepening === true) return false;
+  if (options.includeDelta !== false || options.includeAuxiliary !== false) return false;
+  return getScenarioTopCount(result, scenarioId) === 0;
+}
+
+function mergeAutoDeepeningEvidence(primaryResult, deepenedResult, scenarioId) {
+  const merged = {
+    ...(deepenedResult || {}),
+    autoDeepening: {
+      enabled: true,
+      reason: 'empty_primary_official_result',
+      scenarioId,
+      primaryTopCount: getScenarioTopCount(primaryResult, scenarioId),
+      deepenedTopCount: getScenarioTopCount(deepenedResult, scenarioId),
+      sourcesEnabled: ['DELTA', 'shopOfferV2', 'shopeeOfferV2'],
+    },
+  };
+  merged.queryEvidence = {
+    ...(deepenedResult?.queryEvidence || {}),
+    primary: primaryResult?.queryEvidence || null,
+    autoDeepening: merged.autoDeepening,
+  };
+  return merged;
+}
+
 async function runShopeeOpenApiV1ShadowForScenario(scenarioId, options = {}) {
   const env = options.env || process.env;
   const decision = getShopeeOpenApiV1Decision(scenarioId, env);
   if (!decision.enabled) return decision;
   const engine = options.engine || defaultShadowEngine;
   const engineResult = await engine(decision.scenarioId, options);
-  const result = engineResult?.result?.scenarios ? engineResult.result : engineResult;
+  const result = normalizeEngineResult(engineResult);
+
+  if (shouldAutoDeepenShopeeDiscovery(result, decision.scenarioId, options)) {
+    const deepenedEngineResult = await engine(decision.scenarioId, {
+      ...options,
+      includeDelta: true,
+      includeAuxiliary: true,
+    });
+    const deepenedResult = normalizeEngineResult(deepenedEngineResult);
+    return {
+      ...decision,
+      result: mergeAutoDeepeningEvidence(result, deepenedResult, decision.scenarioId),
+      writeAudit: { ...ZERO_WRITE_AUDIT },
+    };
+  }
+
   return { ...decision, result, writeAudit: { ...ZERO_WRITE_AUDIT } };
 }
 
