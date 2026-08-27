@@ -104,9 +104,15 @@ function parseComparableAmount(title: string, type: string): { kind: CommercialP
   }
   return { kind: "each", amount: 1 };
 }
+function hasImplausibleReferencePrice(current: number, old: number): boolean {
+  return current > 0 && old > current && old / current >= 8 && old - current >= 300;
+}
 function explicitDiscountPercent(offer: CommercialPortfolioOffer): number {
   const current = number(offer.current_price), old = number(offer.old_price);
-  if (old > current && current > 0) return Math.min(80, ((old - current) / old) * 100);
+  if (old > current && current > 0) {
+    if (hasImplausibleReferencePrice(current, old)) return 0;
+    return Math.min(80, ((old - current) / old) * 100);
+  }
   const explicit = number(metrics(offer).discountPercent);
   return explicit > 0 && explicit <= 80 ? explicit : 0;
 }
