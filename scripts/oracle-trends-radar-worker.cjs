@@ -6,7 +6,7 @@ const path = require('node:path');
 const {
   isDedicatedTrendRadarRuntimeEnabled,
   processPendingTrendRadarRuns,
-} = require('./oracle-trends-radar-runner-seven-niches-v3.cjs');
+} = require('./oracle-trends-radar-runner-seven-niches-v4.cjs');
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_LOCK_STALE_MS = 30 * 60_000;
@@ -51,7 +51,7 @@ async function startTrendRadarWorker({ env = process.env, processRadar = process
   while (!signal?.aborted) {
     try {
       const result = await runTrendRadarWorkerOnce({ env, processRadar });
-      if (result.processed) console.log(`[Oracle Trends Radar Worker] runId=${result.runId || 'n/a'} produtos=${result.productsCount ?? 0}`);
+      if (result.processed) console.log(`[Oracle Trends Radar Worker] runId=${result.runId || 'n/a'} produtos=${result.productsCount ?? 0} ledger=${result.ledgerObservationsCount ?? 0}`);
     } catch (error) {
       console.error(`[Oracle Trends Radar Worker] ${error.message}`);
     }
