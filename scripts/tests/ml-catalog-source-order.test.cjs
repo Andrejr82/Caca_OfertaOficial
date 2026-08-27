@@ -160,3 +160,64 @@ test('falha em um domínio continua no próximo domínio', async () => {
   assert.equal(result.queries[0].domain_id, 'MLB-COFFEE_MAKERS');
 });
 
+test('usa /sites/MLB/search como fallback quando catálogo e highlights não atingem cobertura mínima', async () => {
+  const domain = { domain_id: 'MLB-T_SHIRTS', category_id: 'MLB31447', category_name: 'Camisetas e Regatas' };
+  const calls = [];
+
+  const fallbackResults = Array.from({ length: 12 }, (_, i) => ({
+    id: `MLB_TSHIRT_${i + 1}`,
+    title: `Camiseta Masculina Básica Algodão ${i + 1}`,
+    price: 49.9 + i,
+    original_price: 69.9 + i,
+    seller_id: 1000 + i,
+    shipping: { free_shipping: true },
+    thumbnail: `https://img.example/camiseta_${i + 1}.jpg`,
+    permalink: `https://produto.mercadolivre.com.br/MLB_TSHIRT_${i + 1}`,
+    category_id: 'MLB31447',
+    domain_id: 'MLB-T_SHIRTS',
+    sold_quantity: 500 - i * 10,
+    available_quantity: 50,
+  }));
+
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken: 'fixture-token',
+    keywords: ['camiseta masculina'],
+    maxPerIntent: 20,
+    delayMs: 0,
+    fetchImpl: async (url) => {
+      const value = String(url);
+      calls.push(value);
+      if (value.includes('/domain_discovery/search')) return json([domain]);
+      if (value.includes('/products/search?')) return json({ results: [] });
+      if (value.includes('/highlights/')) return json({ content: [] });
+      if (value.includes('/sites/MLB/search?')) {
+        return json({
+          site_id: 'MLB',
+          query: 'camiseta masculina',
+          paging: { total: fallbackResults.length, offset: 0, limit: 30 },
+          results: fallbackResults,
+        });
+      }
+      if (value.includes('/reviews/item/')) {
+        return json({ rating_average: 4.8, paging: { total: 120 } });
+      }
+      throw new Error(`URL fixture inesperada: ${value}`);
+    },
+  });
+
+  assert.ok(result.products.length >= 10, 'esperado pelo menos 10 produtos coletados');
+  const searchCall = calls.find((url) => url.includes('/sites/MLB/search?'));
+  assert.ok(searchCall, 'GET /sites/MLB/search precisa ter sido chamado');
+  assert.match(searchCall, /q=camiseta(%20|\+)masculina/i);
+  assert.equal(result.queries[0].fallback_search_used, true);
+  assert.ok(result.queries[0].fallback_search_products > 0);
+  assert.equal(result.queries[0].auto_selectable, true);
+  for (const prod of result.products) {
+    assert.ok(prod.title, 'produto deve conter title');
+    assert.ok(Number.isFinite(prod.current_price), 'produto deve conter current_price');
+    assert.ok(prod.product_url, 'produto deve conter product_url');
+    assert.ok(prod.image_url, 'produto deve conter image_url');
+  }
+});
+
+

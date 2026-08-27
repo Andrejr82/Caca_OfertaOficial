@@ -374,13 +374,15 @@ function normalizeItems(items, context = {}) {
     const rawReviewCount = item.review_count ?? item.reviews?.paging?.total ?? safeContext.review_count;
     const reviewCount = Number.isFinite(Number(rawReviewCount)) && Number(rawReviewCount) >= 0 ? Number(rawReviewCount) : null;
 
+    const sellerId = item.seller_id || item.seller?.id || null;
+
     return {
       marketplace: 'Mercado Livre',
-      source: 'mercadolivre_official_api',
+      source: context.source || 'mercadolivre_official_api',
       intent: context.intent,
-      domain_id: context.domain_id,
-      category_id: context.category_id,
-      category_name: context.category_name,
+      domain_id: item.domain_id || context.domain_id || null,
+      category_id: item.category_id || context.category_id || null,
+      category_name: item.category_name || context.category_name || null,
       item_id: item.id || item.item_id || null,
       product_id: item.catalog_product_id || context.product_id || null,
       title: item.title || context.product_name || null,
@@ -393,7 +395,7 @@ function normalizeItems(items, context = {}) {
       available_quantity: availableQuantity,
       rating: rating,
       review_count: reviewCount,
-      seller_id: item.seller_id || null,
+      seller_id: sellerId,
       official_store_id: item.official_store_id || null,
       shipping_free: item.shipping?.free_shipping === true || item.shipping_free === true,
       image_url: item.thumbnail || item.pictures?.[0]?.url || context.image_url || null,
@@ -406,6 +408,82 @@ function normalizeItems(items, context = {}) {
       seller_count: item.seller_count || 1,
     };
   });
+}
+
+async function collectOfficialSearchFallback({
+  searchTerm,
+  intent,
+  fetchImpl = global.fetch,
+  accessToken,
+  limit = 30,
+  offset = 0,
+  callsRef,
+  reviewCache,
+} = {}) {
+  if (!searchTerm || !accessToken) return [];
+  const searchUrl = `/sites/MLB/search?q=${encodeURIComponent(searchTerm)}&limit=${limit}&offset=${offset}`;
+  let response;
+  try {
+    response = await apiGet(searchUrl, { fetchImpl, accessToken });
+    if (callsRef) callsRef.count = (callsRef.count || 0) + 1;
+  } catch {
+    return [];
+  }
+
+  const rawResults = Array.isArray(response?.results) ? response.results : [];
+  if (!rawResults.length) return [];
+
+  const validItems = [];
+  let position = offset;
+
+  for (const rawItem of rawResults) {
+    position += 1;
+    const item = { ...rawItem };
+    const title = item.title || item.name || '';
+    const productGate = isProductRelevant({ title, name: title }, intent, searchTerm);
+    if (!productGate.relevant) {
+      continue;
+    }
+
+    if (item.id && reviewCache) {
+      let reviewData = reviewCache.get(item.id);
+      if (!reviewData && (item.rating_average == null || item.review_count == null)) {
+        try {
+          const rev = await apiGet(`/reviews/item/${item.id}`, { fetchImpl, accessToken });
+          if (callsRef) callsRef.count = (callsRef.count || 0) + 1;
+          reviewData = {
+            rating_average: Number.isFinite(Number(rev?.rating_average)) ? Number(Number(rev.rating_average).toFixed(2)) : null,
+            review_count: Number.isFinite(Number(rev?.paging?.total)) ? Number(rev.paging.total) : null,
+          };
+        } catch {
+          reviewData = { rating_average: null, review_count: null };
+        }
+        reviewCache.set(item.id, reviewData);
+      }
+      if (reviewData) {
+        if (item.rating_average == null && reviewData.rating_average != null) item.rating_average = reviewData.rating_average;
+        if (item.review_count == null && reviewData.review_count != null) item.review_count = reviewData.review_count;
+      }
+    }
+
+    const normalized = normalizeItems([item], {
+      source: 'mercadolivre_official_search_fallback',
+      intent,
+      domain_id: item.domain_id || null,
+      category_id: item.category_id || null,
+      category_name: item.category_name || null,
+      product_name: title,
+      image_url: item.thumbnail || item.pictures?.[0]?.url || null,
+      product_url: item.permalink || null,
+      position,
+    });
+
+    if (normalized.length > 0) {
+      validItems.push(...normalized);
+    }
+  }
+
+  return validItems;
 }
 
 async function runMercadoLivreOfficialIntentCoverage({
@@ -435,11 +513,16 @@ async function runMercadoLivreOfficialIntentCoverage({
         if (intentRawProducts.length >= maxPerIntent) break;
         let domains = categoryCache.get(searchTerm);
         if (!domains) {
-          domains = await apiGet(`/sites/MLB/domain_discovery/search?q=${encodeURIComponent(searchTerm)}`, { fetchImpl, accessToken }); calls += 1;
-          domains = (Array.isArray(domains) ? domains : []).filter((entry) => entry.category_id);
-          const preferredDomains = (PREFERRED_DOMAINS[intent] || []).map((id) => PREFERRED_DOMAIN_META[id]).filter(Boolean);
-          domains = [...preferredDomains, ...domains.filter((entry) => !preferredDomains.some((preferred) => preferred.domain_id === entry.domain_id))];
-          categoryCache.set(searchTerm, domains);
+          try {
+            domains = await apiGet(`/sites/MLB/domain_discovery/search?q=${encodeURIComponent(searchTerm)}`, { fetchImpl, accessToken }); calls += 1;
+            domains = (Array.isArray(domains) ? domains : []).filter((entry) => entry.category_id);
+            const preferredDomains = (PREFERRED_DOMAINS[intent] || []).map((id) => PREFERRED_DOMAIN_META[id]).filter(Boolean);
+            domains = [...preferredDomains, ...domains.filter((entry) => !preferredDomains.some((preferred) => preferred.domain_id === entry.domain_id))];
+            categoryCache.set(searchTerm, domains);
+          } catch (err) {
+            domains = [];
+            lastError = err;
+          }
         }
         for (const domain of rankDomains(domains, intent)) {
           if (intentRawProducts.length >= maxPerIntent) break;
@@ -549,16 +632,95 @@ async function runMercadoLivreOfficialIntentCoverage({
           } catch (error) { lastError = error; }
         }
       }
+
+      const minimumProducts = MIN_PRODUCTS_BY_INTENT[intent] || MIN_PRODUCTS_PER_INTENT;
+      const targetCount = Math.max(minimumProducts, maxPerIntent);
+      let fallbackSearchUsed = false;
+      let fallbackSearchProducts = 0;
+      const fallbackSearchTerms = [];
+      let fallbackSearchCalls = 0;
+
+      if (intentRawProducts.length < minimumProducts) {
+        const callsBefore = calls;
+        for (const searchTerm of searchTerms) {
+          if (intentRawProducts.length >= targetCount) break;
+          let termUsed = false;
+          for (const offset of [0, 30]) {
+            if (intentRawProducts.length >= targetCount) break;
+            const callsRefLocal = { count: 0 };
+            const fallbackItems = await collectOfficialSearchFallback({
+              searchTerm,
+              intent,
+              fetchImpl,
+              accessToken,
+              limit: 30,
+              offset,
+              callsRef: callsRefLocal,
+              reviewCache,
+            });
+            calls += callsRefLocal.count;
+            if (fallbackItems.length > 0) {
+              fallbackSearchUsed = true;
+              fallbackSearchProducts += fallbackItems.length;
+              intentRawProducts.push(...fallbackItems);
+              termUsed = true;
+              if (!selectedDomain && fallbackItems[0]?.domain_id) {
+                selectedDomain = {
+                  domain_id: fallbackItems[0].domain_id,
+                  category_id: fallbackItems[0].category_id,
+                  category_name: fallbackItems[0].category_name,
+                };
+              }
+            }
+            if (fallbackItems.length < 30) break;
+            if (delayMs > 0) await sleep(delayMs);
+          }
+          if (termUsed) {
+            fallbackSearchTerms.push(searchTerm);
+          }
+        }
+        fallbackSearchCalls = calls - callsBefore;
+      }
+
       const canonicalProducts = deduplicateCanonicalProducts(intentRawProducts).slice(0, maxPerIntent);
       if (!selectedDomain && !canonicalProducts.length) {
-        queries.push({ intent, status: searchTerms.length > 1 ? 'no_category' : 'error', products: 0, error: lastError?.message });
+        queries.push({
+          intent,
+          status: searchTerms.length > 1 ? 'no_category' : 'error',
+          products: 0,
+          error: lastError?.message,
+          fallback_search_used: fallbackSearchUsed,
+          fallback_search_products: fallbackSearchProducts,
+          fallback_search_terms: fallbackSearchTerms,
+          fallback_search_calls: fallbackSearchCalls,
+          source_strategy: fallbackSearchUsed
+            ? 'catalog_then_highlights_then_search_fallback'
+            : 'catalog_then_highlights',
+        });
         continue;
       }
       products.push(...canonicalProducts);
       const productCount = canonicalProducts.length;
-      const minimumProducts = MIN_PRODUCTS_BY_INTENT[intent] || MIN_PRODUCTS_PER_INTENT;
       const gate = coverageGate(productCount, { minimum: minimumProducts });
-      queries.push({ intent, status: gate.status, minimum_products: gate.minimum, auto_selectable: gate.auto_selectable, search_terms: searchTerms, domain_id: selectedDomain?.domain_id, category_id: selectedDomain?.category_id, category_name: selectedDomain?.category_name, products: productCount, raw_products: intentRawProducts.length });
+      queries.push({
+        intent,
+        status: gate.status,
+        minimum_products: gate.minimum,
+        auto_selectable: gate.auto_selectable,
+        search_terms: searchTerms,
+        domain_id: selectedDomain?.domain_id,
+        category_id: selectedDomain?.category_id,
+        category_name: selectedDomain?.category_name,
+        products: productCount,
+        raw_products: intentRawProducts.length,
+        fallback_search_used: fallbackSearchUsed,
+        fallback_search_products: fallbackSearchProducts,
+        fallback_search_terms: fallbackSearchTerms,
+        fallback_search_calls: fallbackSearchCalls,
+        source_strategy: fallbackSearchUsed
+          ? 'catalog_then_highlights_then_search_fallback'
+          : 'catalog_then_highlights',
+      });
     } catch (error) {
       queries.push({ intent, status: 'error', products: 0, error: error.message });
     }
@@ -592,7 +754,9 @@ module.exports = {
   apiGet,
   normalizeItems,
   runMercadoLivreOfficialIntentCoverage,
+  collectOfficialSearchFallback,
   catalogFallbackProducts,
   MIN_PRODUCTS_PER_INTENT,
+  MIN_PRODUCTS_BY_INTENT,
   SEARCH_ALIASES
 };
