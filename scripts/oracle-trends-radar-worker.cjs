@@ -3,10 +3,8 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {
-  isDedicatedTrendRadarRuntimeEnabled,
-  processPendingTrendRadarRuns,
-} = require('./oracle-trends-radar-runner-seven-niches-v4.cjs');
+const { isDedicatedTrendRadarRuntimeEnabled } = require('./oracle-trends-radar-runner-seven-niches.cjs');
+const { processPendingTrendRadarRuns } = require('./oracle-trends-radar-runner-seven-niches-v4.cjs');
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_LOCK_STALE_MS = 30 * 60_000;
