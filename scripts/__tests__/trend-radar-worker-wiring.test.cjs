@@ -4,21 +4,22 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 
-test('worker aponta para runner de 7 nichos',()=>{
+test('worker aponta para runner autoritativo de 7 nichos',()=>{
  const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-worker.cjs'),'utf8');
  assert.match(s,/oracle-trends-radar-runner-seven-niches\.cjs/);
 });
 
-test('runner instala recência antes do runner final',()=>{
+test('runner não delega ao runner comercial legado',()=>{
  const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-runner-seven-niches.cjs'),'utf8');
- const patch=s.indexOf('freshness.filterCandidatesWithRecency');
- const load=s.indexOf("require('./oracle-trends-radar-runner-final.cjs')");
- assert.ok(patch>=0 && load>patch);
+ assert.equal(s.includes("require('./oracle-trends-radar-runner-final.cjs')"),false);
+ assert.equal(s.includes("require('./oracle-trends-radar-runner.cjs')"),false);
 });
 
-test('runner reinstala adapters depois do runner final',()=>{
+test('runner mantém autoridade de 7 nichos e zero publicação',()=>{
  const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-runner-seven-niches.cjs'),'utf8');
- const load=s.indexOf("require('./oracle-trends-radar-runner-final.cjs')");
- const install=s.indexOf('installSevenNicheRuntime({',load);
- assert.ok(install>load);
+ assert.match(s,/createAuthoritativeRadarRunner/);
+ assert.match(s,/seven_niche_authoritative/);
+ assert.match(s,/publishCalls:0/);
+ assert.match(s,/postsWrites:0/);
+ assert.match(s,/offersWrites:0/);
 });
