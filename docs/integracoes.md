@@ -28,6 +28,29 @@
 
 O motor Mercado Livre não foi alterado. O contrato do nicho pode rejeitar falsos positivos. Em Beleza, sinais como `nasal`, `nariz`, `nose up`, `arroz` e `padaria` bloqueiam resultados fora do domínio sem bloquear `modelador de cachos`, chapinha ou escova secadora.
 
+### PR #177 — reforço proposto e ainda não ativo
+
+Na branch `fix/quality-catalog-depth-20260827`, o gate comum também pode usar evidência nativa retornada pela integração Mercado Livre (`domain_id` e categoria) para rejeitar combinações claramente incompatíveis com a intenção, como perfume pet, shampoo pet, modelador de padaria/alimentos e aparador de livros.
+
+Essa lógica está somente no PR draft e **não foi implantada na Oracle**.
+
+## Shopee — semântica de Beleza em validação
+
+O PR #177 acrescenta uma política semântica de Beleza ao ranking Shopee para separar produtos principais de acessórios descartáveis ou auxiliares. A mudança atua sobre candidatos já obtidos pela integração; não altera credenciais, endpoints nem o contrato de autenticação da OpenAPI.
+
+## Amazon — sanidade de preço em validação
+
+O PR #177 permite neutralizar `old_price`/desconto quando a referência anterior for implausível em relação ao preço atual. O item continua elegível pelo preço atual válido; somente a evidência de desconto é removida. A integração de busca Amazon não é substituída.
+
+## Profundidade adaptativa — fronteira de integração
+
+`adaptive-catalog-depth/v1` decide se uma primeira passada de Discovery foi suficiente com base em volume bruto, pool qualificado, finalistas e diversidade. No estado atual do PR:
+
+- a decisão e seus testes existem no código versionado da branch;
+- existe limite de rodadas para evitar expansão descontrolada;
+- **não existe ainda chamada adicional automática à Oracle a partir dessa decisão**;
+- qualquer ativação dessa segunda passada deve ser tratada como mudança explícita de runtime Oracle, com validação e rollout próprios.
+
 ## Oracle auditada em 25/08/2026
 
 PM2 confirmou online:
