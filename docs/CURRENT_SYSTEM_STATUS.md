@@ -1,111 +1,95 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
 <!-- verified-on: 2026-08-27 -->
 
-Baseado no código versionado e, quando indicado, na auditoria operacional read-only da VPS Oracle realizada em 25/08/2026. Disponibilidade externa de Vercel, Supabase, Meta, Telegram, WhatsApp e marketplaces deve ser confirmada no ambiente correspondente.
+Baseado no código da `main` e na auditoria operacional da Oracle realizada em 27/08/2026.
 
 ## Runtime
 
-- Next.js 16/React 19: painel, APIs, curadoria, Official AI, Publicação Expressa, vídeos e transportes sociais.
-- Supabase: autenticação, ofertas, posts, links, auditoria, classificação, jobs e Storage de imagens/vídeos.
-- Oracle: Discovery-Only, scraping auxiliar, Radar dedicado, processamento de vídeo e serviços operacionais.
-- Scheduler editorial: sete janelas canônicas em `America/Sao_Paulo` (`06h`, `08h`, `10h`, `12h`, `14h`, `16h`, `18h`) com `noOverlap` e uma única instância de scheduler.
-- O scraper não executa ciclo automático no startup; somente agenda as janelas, salvo execução explícita com `--run-now`.
+- Next.js 16/React 19: painel, APIs, Official AI, Publicação Expressa, vídeos e transportes sociais.
+- Supabase: ofertas, posts, links, auditoria, classificação, jobs e Storage.
+- Oracle: Discovery-Only, scheduler editorial, scraping auxiliar, Radar dedicado e serviços operacionais.
+- Scheduler: `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
+- O scraper não executa Discovery no startup; `--run-now` dispara execução manual explícita.
 
 ## Matriz editorial ativa
 
-1. `06h` (pub `07h`) → `casa_cozinha_editorial`
-2. `08h` (pub `09h`) → `beleza_editorial`
-3. `10h` (pub `11h`) → `informatica_editorial`
-4. `12h` (pub `13h`) → `moda_editorial`
-5. `14h` (pub `15h`) → `ferramentas_editorial`
-6. `16h` (pub `17h`) → `pet_editorial`
-7. `18h` (pub `19h`) → `eletrodomesticos_editorial`
+1. 06h → `casa_cozinha_editorial`
+2. 08h → `beleza_editorial`
+3. 10h → `informatica_editorial`
+4. 12h → `moda_editorial`
+5. 14h → `ferramentas_editorial`
+6. 16h → `pet_editorial`
+7. 18h → `eletrodomesticos_editorial`
 
-`cupons_aprovados_editorial` permanece `manual_only` às 22h. Cenários antigos como `organizacao_editorial`, `celulares_editorial`, `esporte_editorial`, `tv_audio_editorial`, `moveis_editorial` e `grandes_ofertas_editorial` não participam do cron automático.
+`cupons_aprovados_editorial` permanece `manual_only`.
 
-## Descoberta e curadoria
+## First Discovery Quality V1
 
-- Shopee, Mercado Livre e Amazon possuem caminhos de descoberta implementados.
-- Curadoria Comercial V1 produz score, riscos, intenção editorial e filas por canal.
-- O painel operacional contém coortes e filas Top 30; identidade histórica e ofertas já publicadas são protegidas contra repetição.
-- Contratos por marketplace podem aplicar guardrails específicos de domínio sem alterar o motor de busca. No Mercado Livre/Beleza, sinais fora do domínio como `nasal`, `nariz`, `nose up`, `arroz` e `padaria` bloqueiam falsos positivos preservando produtos válidos como modelador de cachos.
-- Antes da geração automática de drafts de um ciclo, a aplicação executa seleção comercial cross-marketplace sobre a coorte persistida. O ranking considera preço comparável por unidade/peso/volume, desconto comprovável, prova social, rating, comissão, posição de origem e sinais de confiança.
-- A seleção também reduz variantes quase idênticas e excesso do mesmo tipo comercial. Os limites padrão são 18 ofertas por ciclo e no máximo 2 por tipo, ajustáveis por `COMMERCIAL_PORTFOLIO_MAX_TOTAL` e `COMMERCIAL_PORTFOLIO_MAX_PER_TYPE`.
-- A seleção comercial não altera os motores de busca nem impede o Supabase de registrar descoberta válida; ela decide quais ofertas seguem para geração de conteúdo social.
-- Discovery não autoriza publicação.
+O PR #177 foi mergeado na `main` no commit `7f35e0d2c0ca22e118b8163a73d18a1c7d995439`.
 
-### PR #177 — qualidade da primeira descoberta em validação
+A flag `FIRST_DISCOVERY_QUALITY_V1_MODE` aceita `off | shadow | active`.
 
-A branch isolada `fix/quality-catalog-depth-20260827` contém mudanças ainda **não ativas em produção** e sem deploy/restart da Oracle.
+- default do código: `off`;
+- produção Oracle em 27/08/2026: `active`;
+- `active`: usa intents refinadas, descarta candidatos inelegíveis e prioriza candidatos fortes;
+- se não houver candidatos fortes, não deve ocorrer backfill artificial com fracos;
+- readiness insuficiente não dispara automaticamente uma nova descoberta.
 
-A prioridade do PR foi alterada após a auditoria dos ciclos reais de 27/08/2026. O objetivo principal deixou de ser "terminar o funil e buscar novamente" e passou a ser **formar um pool editorial forte durante a própria primeira descoberta**.
+A política `adaptive-catalog-depth/v1` permanece disponível como fallback conceitual, porém a chamada adicional de rede continua desacoplada do executor Oracle.
 
-- Controle por Feature Flag: `FIRST_DISCOVERY_QUALITY_V1_MODE=off|shadow|active` (default = `off`).
-  - `off`: preserva comportamento original sem mutação.
-  - `shadow`: calcula plano de busca por intenções, avalia candidate quality e readiness, emitindo telemetrias sem alterar o pool ou a fila.
-  - `active`: substitui queries genéricas por queries refinadas (`plan.firstDiscovery.intents[].queries`), descarta candidatos inelegíveis e prioriza candidatos fortes antes da curadoria.
-- `discovery-retrieval-quality/v1`: nova política pura de planejamento/readiness para os sete nichos, com famílias editoriais, metas mínimas de candidatos fortes, diversidade, cobertura Core e saúde da fonte.
-- O adapter de nichos passa a produzir `firstDiscovery` junto do plano existente, sem remover nem alterar os campos legados.
-- Casa: termos ambíguos recebem intenções fortes antes da coleta, por exemplo `mixer` → `mixer de cozinha` e `varal` → `varal de chão/dobrável para roupas`, evitando shakeiras, canecas mixer e varais decorativos como candidatos principais.
-- Beleza: `perfume`, `modelador`, `aparador`, `maquiagem` e `depilador` passam a ter queries editoriais mais específicas; o plano do Mercado Livre exige evidência nativa de domínio antes de tratar um candidato como compatível.
-- Informática: `teclado`, `impressora`, `mouse`, `webcam`, `monitor` e `computador` recebem queries de produto final, reduzindo a chance de peças de reposição, capas, caneta 3D e mouse pad dominarem a coleta principal.
-- Shopee: o plano marca `avoidBroadCategoryOnly=true`; categoria nativa deve ser combinada com intenção forte em vez de depender de categoria ampla e corrigir dezenas de resultados depois.
-- Amazon: o plano prioriza Browse Node + intenção e inclui saúde das queries como critério de readiness; um ciclo com grande parte das consultas em erro não deve ser considerado descoberta saudável.
-- Mercado Livre: o plano mantém `official-domain-then-catalog`, Best Seller e domínio nativo como evidência de primeira ordem.
-- Regressões dos ciclos de Casa 06h, Beleza 08h e Informática 10h foram transformadas em testes de primeira descoberta, inclusive o caso em que grande volume bruto continua insuficiente quando há poucos produtos fortes/diversos.
-- Mercado Livre: permanece o reforço do gate de Beleza com evidência nativa de domínio para rejeitar perfume pet, shampoo pet, modeladores de padaria/alimentos e aparadores de livros quando incompatíveis com a intenção.
-- Preço: referências anteriores implausíveis podem ser neutralizadas sem descartar o preço atual válido, evitando desconto artificial no ranking.
-- Shopee/Beleza: política semântica específica distingue produto principal de acessórios descartáveis e itens auxiliares.
-- Portfólio de Beleza: taxonomia comercial reconhece skincare, tratamento capilar, maquiagem, fragrância e grooming; fragrância possui teto editorial específico para evitar saturação.
-- `adaptive-catalog-depth/v1` permanece no código, mas foi reclassificado como **fallback após esgotar a qualidade da primeira descoberta**, e não como mecanismo principal. Ele continua sem conexão com o executor Oracle.
+## Limitação operacional conhecida
 
-A ligação do plano `firstDiscovery` aos adapters/executores de rede da Oracle é uma etapa separada de rollout e **não foi executada por este PR**. Até validação e liberação explícitas, o comportamento produtivo permanece o da `main`/Oracle atualmente implantada.
+A auditoria de um ciclo manual de `moda_editorial` em 27/08/2026 mostrou uma lacuna importante:
 
-## Publicação
+- Mercado Livre pode terminar vazio quando a resolução de domínio nativo não forma cobertura suficiente;
+- Shopee pode ser bloqueada antes da extração quando categorias amplas levam o runtime a `coverageInsufficient`;
+- o runtime atual não aprofunda automaticamente a busca nesses casos.
 
-- Transportes implementados: Telegram, Instagram, Facebook e WhatsApp.
-- Telegram possui publicação editorial Top 30; WhatsApp possui fila Top 30 do ciclo mais recente e rotação `next`.
-- Um draft WhatsApp ativo continua elegível para exibição mesmo quando a oferta global já foi marcada `approved` por outro canal; a autoridade é o estado do post WhatsApp, preservadas as proteções de publicado/deletado/rejeitado/deferido.
-- Publicação Expressa multicanal permanece separada do Top 30 editorial e seus drafts WhatsApp são carregados por trilha própria.
-- O PR draft #178 (`fix/publicacao-expressa-copy-v5-contract-20260827`) corrige uma regressão introduzida na neutralização de flags legados da Copy V5: somente a Publicação Expressa volta a preservar `copyV2Express`/`copyV3Express`, flags de regeneração e a chave de idempotência até o engine; a fachada Copy V5 continua sendo a autoridade da copy final. A mudança ainda não está ativa em produção enquanto não houver merge/deploy.
-- Ofertas `rejected` são bloqueadas nos fluxos sociais oficiais.
-- Instagram Feed e Reels usam disclosure de parceria paga e `Instagram Policy Guard` fail-closed antes da publicação.
+Isso é uma limitação do mecanismo de descoberta, não ausência de catálogo nos marketplaces. O comportamento desejado é: manter qualidade alta, continuar procurando enquanto houver orçamento seguro de busca e só encerrar zerado depois de esgotar de fato as alternativas do marketplace.
 
-## Oracle — estado operacional auditado em 25/08/2026
+## Qualidade comercial
 
-PM2 confirmou online:
+Um produto persistido não deve ser interpretado automaticamente como “achadinho”. A carteira forte deve combinar relevância editorial com evidências reais como desconto plausível, cupom, rating/reviews, vendas, loja oficial, frete/Prime e posição de origem conforme o marketplace.
 
-- `oracle-scraper` → `scripts/oracle-scraper.cjs`
-- `oracle-api` → `scripts/oracle-api.cjs`, porta `3002`
-- `whatsapp-bot` → `scripts/whatsapp-engine.cjs`, porta `3001`
-- `oracle-trends-radar` → `scripts/oracle-trends-radar-worker.cjs`
-- `authorized-reel-verifier`
-- `video-worker`
+Produtos sem desconto, sem prova social e sem outros sinais fortes podem ser válidos para catálogo, mas não devem ser tratados como ofertas fortes apenas porque passaram pelo funil.
 
-`shopee-feed-sync` estava parado. Após sincronização controlada concluída em 25/08/2026, o checkout da VPS ficou limpo na branch `main`, SHA `b2f51dbb4c198cfbd14864a6e7eff2f136834be8`, com `oracle-scraper` em instância única e sem crash loop.
+## Publicação Expressa
+
+O PR #178 foi mergeado no commit `f68512c56617680247f73d7cc3523f1e9de92892`, restaurando o contrato necessário da Publicação Expressa após Copy V5 sem alterar discovery, Oracle ou Supabase.
+
+## Oracle — estado operacional confirmado em 27/08/2026
+
+- branch: `main`;
+- HEAD: `7f35e0d2c0ca22e118b8163a73d18a1c7d995439`;
+- working tree: limpa;
+- `FIRST_DISCOVERY_QUALITY_V1_MODE=active`;
+- `oracle-scraper`: online;
+- ativação realizada com incremento de restart igual a 1;
+- crash loop: não;
+- erros de startup: nenhum;
+- `shopee-feed-sync`: parado;
+- demais processos principais auditados online.
+
+## Ambiente local
+
+Resultados de execução manual local só são comparáveis à Oracle quando o checkout local estiver no mesmo SHA e com as mesmas flags relevantes. Um ciclo local executado em 27/08/2026 registrou `release_id=e157df09f0d8deb53a65a8f48376c89d9cdcdef1`, portanto não deve ser usado como prova do comportamento produtivo da Oracle em `7f35e0d2...`.
 
 ## Radar
 
-- `TRENDS_RADAR_DEDICATED_RUNTIME=true` no worker dedicado.
-- `TREND_EXECUTIVE_MODE=off` permanece o estado seguro.
-- O `oracle-scraper` não consome solicitações Radar no ciclo editorial.
-- O worker dedicado usa polling de 30s e lock `/tmp/caca-oferta-trends-radar.lock`, mantendo uma única autoridade no host auditado.
+- `oracle-trends-radar` dedicado;
+- `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
+- `TREND_EXECUTIVE_MODE=off`;
+- polling de 30s e lock `/tmp/caca-oferta-trends-radar.lock`;
+- `oracle-scraper` não consome Radar no ciclo editorial.
 
-## Capacity Hunter
+## Validação
 
-- `oracle-capacity-hunter.timer`: ativo, a cada 30 minutos em `America/Sao_Paulo`.
-- `oracle-capacity-hunter.service`: falhou na auditoria por ausência de `apps/oracle-capacity-hunter/.env`.
-- O mecanismo é passivo/read-only e não reinicia serviços automaticamente.
+- `npm run verify`
+- `npm run docs:audit`
+- `/api/health`
+- `/api/readiness`
 
-## Qualidade e verificação
-
-- `npm run verify` executa lint, typecheck, testes, build e verificação de segurança.
-- `npm run docs:audit` é seletivo por domínio e exige somente a documentação relacionada ao diff, com fallback fail-closed para `CURRENT_SYSTEM_STATUS.md` em runtime não classificado.
-- Endpoints de saúde: `/api/health` e `/api/readiness`.
-
-## Limites
-
-O estado operacional acima é uma fotografia auditada de 25/08/2026. Antes de qualquer intervenção de produção, comparar o SHA atual da VPS com a `main`, confirmar PM2/flags efetivos e executar a menor validação read-only possível.
+Antes de qualquer intervenção de produção, comparar o SHA da Oracle com a `main`, confirmar working tree limpa, PM2 e flags efetivas.

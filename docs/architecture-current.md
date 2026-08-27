@@ -1,14 +1,14 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
 <!-- verified-on: 2026-08-27 -->
 
-> Fonte canônica documental do runtime versionado. A implementação, migrations e testes continuam sendo a autoridade final. Estado de produção é confirmado separadamente por auditoria operacional.
+> Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional.
 
 ## Visão geral
 
-O Caça Oferta Oficial coleta candidatos de Shopee, Mercado Livre e Amazon, persiste ofertas no Supabase, executa validações e scoring, gera drafts pela Official AI e publica manualmente por transportes oficiais.
+O Caça Oferta Oficial coleta candidatos de Shopee, Mercado Livre e Amazon, persiste ofertas no Supabase, executa validações/scoring, gera drafts pela Official AI e mantém publicação separada do Discovery.
 
 ```mermaid
 flowchart LR
@@ -20,8 +20,6 @@ flowchart LR
   P --> IG["Instagram"]
   P --> WA["WhatsApp"]
   P --> FB["Facebook"]
-  O -. "scraping técnico" .-> OA["Oracle API :3002"]
-  WA --> WE["WhatsApp Engine :3001"]
   R["Oracle Trends Radar"] --> S
 ```
 
@@ -35,99 +33,110 @@ flowchart LR
 | `whatsapp-bot` | motor Baileys na porta 3001 |
 | `oracle-trends-radar` | consumo independente do Radar |
 | Supabase | Auth, ofertas, posts, links, logs e Storage |
-| Capacity Hunter | monitoramento passivo/read-only da VPS |
 
 ## Scheduler e matriz editorial
 
-O scheduler canônico usa sete janelas em `America/Sao_Paulo` com `noOverlap`:
+O scheduler canônico usa:
+
+```text
+0 6,8,10,12,14,16,18 * * *
+```
+
+Timezone `America/Sao_Paulo`, `noOverlap=true`.
 
 - 06h → Casa/Cozinha/Organização
-- 08h → Ferramentas
-- 09h → Informática
-- 11h → Beleza
+- 08h → Beleza
+- 10h → Informática
 - 12h → Moda
-- 14h → Pet
+- 14h → Ferramentas
+- 16h → Pet
 - 18h → Eletrodomésticos
 
-Cupons permanece `manual_only` às 22h e não participa do cron. O scraper não executa Discovery automaticamente no boot sem `--run-now`.
+Cupons permanece `manual_only` às 22h.
 
-## Curadoria e contratos
+## First Discovery Quality V1 — estado atual
 
-- Os sete nichos comerciais são universos de procura, com Core, Expansion e Opportunity.
-- Guardrails por marketplace podem rejeitar falsos positivos sem alterar os motores de busca.
-- Mercado Livre/Beleza bloqueia sinais fora do domínio como `nasal`, `nariz`, `nose up`, `arroz` e `padaria`, preservando `modelador de cachos` e demais produtos válidos.
-- Discovery não autoriza publicação.
+A arquitetura do PR #177 foi mergeada na `main` e está ativa na Oracle via:
 
-### Arquitetura proposta no PR #177
-
-A branch `fix/quality-catalog-depth-20260827` foi redesenhada para melhorar **a primeira descoberta**. A arquitetura-alvo deixa de depender de uma segunda busca após a curadoria final e passa a formar um pool forte antes do ranking definitivo.
+```text
+FIRST_DISCOVERY_QUALITY_V1_MODE=active
+```
 
 ```mermaid
 flowchart LR
-  N["Nicho: Core / Expansion / Opportunity"] --> P["firstDiscovery plan\nfamílias + intents fortes + metas"]
-  P --> M["Estratégia por marketplace\nnative-first"]
+  N["Nicho: Core / Expansion / Opportunity"] --> P["First Discovery plan\nfamílias + intents + metas"]
+  P --> M["Estratégia por marketplace"]
   M --> R["Recuperação inicial"]
-  R --> Q["Relevância / domínio / preço / qualidade"]
-  Q --> A{"Pool inicial saudável?"}
-  A -- "sim" --> C["Curadoria e composição final"]
-  A -- "não, ainda há orçamento do plano" --> R
-  A -- "não, fonte/orçamento esgotado" --> F["Fallback adaptativo opcional"]
-  F -. "integração Oracle ainda pendente" .-> R
+  R --> Q["Relevância + evidência comercial"]
+  Q --> A{"Candidato forte?"}
+  A -- "sim" --> C["Fila / persistência"]
+  A -- "não" --> X["Rejeição ou pool reduzido"]
 ```
 
-`discovery-retrieval-quality/v1` é a política principal da branch em validação:
+Características atuais:
 
-- divide cada um dos sete nichos em famílias editoriais;
-- transforma termos ambíguos em intents de produto final antes da coleta;
-- define metas mínimas de candidatos fortes, famílias distintas, cobertura Core, precisão de recuperação e saúde das queries;
-- produz estratégia específica por marketplace sem remover os campos legados do plano de nicho;
-- considera a descoberta insuficiente mesmo com alto volume bruto quando o pool forte/diverso não foi formado.
+- intents refinadas antes da coleta;
+- avaliação comum de candidate quality;
+- candidatos inelegíveis são excluídos no modo ativo;
+- candidatos fortes têm prioridade absoluta;
+- ausência de strong não autoriza backfill artificial com weak;
+- comissão não define se um candidato é forte;
+- desconto implausível não conta como evidência positiva.
 
-Os três ciclos reais de 27/08/2026 viraram regressões de arquitetura:
+## Estratégia por marketplace
 
-- Casa 06h: a Amazon não pode ser considerada saudável quando 18 de 23 queries falham, mesmo que alguns candidatos sejam extraídos;
-- Beleza 08h: 245 itens Amazon não bastam se a carteira forte ficar concentrada; Shopee com 7 relevantes em 60 denuncia baixa precisão da recuperação inicial;
-- Informática 10h: centenas de candidatos não autorizam encerrar quando produtos de reposição/acessórios dominam e poucos achados editoriais fortes permanecem.
+### Amazon
 
-Estratégia desejada por integração:
+Browse Node + intent forte, saúde das queries e sinais como rating, reviews, desconto real, cupom, Prime e posição de origem.
 
-- Amazon: Browse Node + intent forte, com saúde das queries e sinais comerciais verificáveis como evidência; termos genéricos não devem ser a única intenção.
-- Mercado Livre: `official-domain-then-catalog`, domínio nativo e Best Seller como evidências de primeira ordem; produto com domínio incompatível não deve entrar no pool principal.
-- Shopee: categoria nativa + intent forte; `avoidBroadCategoryOnly=true` evita depender de categoria ampla para depois rejeitar a maior parte do catálogo.
+### Mercado Livre
 
-O gate comum continua podendo rejeitar domínio incompatível e neutralizar preço anterior implausível. A composição comercial continua reduzindo duplicatas e saturação por tipo.
+Política `official-domain-then-catalog`, uso de domínio nativo e Best Seller quando disponível. Domínios incompatíveis devem ser rejeitados.
 
-`adaptive-catalog-depth/v1` permanece disponível apenas como `fallback_after_first_discovery_quality_exhausted`. Ele não deve ser o mecanismo principal de qualidade e a chamada de rede adicional continua deliberadamente **desconectada do runtime Oracle** neste PR.
+### Shopee
 
-Portanto, o diagrama acima representa a arquitetura-alvo da branch em validação, não o estado operacional atual da VPS. A etapa de fazer os adapters/executores Oracle consumirem `firstDiscovery.intents`, `strategy` e `targets` exige rollout separado.
+Categoria nativa + intent forte, com `avoidBroadCategoryOnly=true`. Sinais incluem vendas, rating, desconto real, qualidade da loja e posição.
+
+## Lacuna arquitetural conhecida
+
+O `adaptive-catalog-depth/v1` continua desacoplado do executor de rede.
+
+Consequência: quando a primeira cobertura é insuficiente, o runtime pode encerrar o marketplace sem candidatos em vez de aprofundar automaticamente páginas/intents/domínios/categorias.
+
+A auditoria de um ciclo manual de Moda em 27/08/2026 evidenciou:
+
+- Mercado Livre com zero extraídos após cobertura nativa insuficiente;
+- Shopee bloqueada antes da extração por `coverageInsufficient`/categoria ampla.
+
+O comportamento operacional desejado é manter os guardrails de qualidade e continuar buscando enquanto houver orçamento seguro de discovery, encerrando zerado somente após esgotamento real das alternativas.
+
+## Oracle produtiva
+
+Auditoria de 27/08/2026:
+
+- branch `main`;
+- HEAD `7f35e0d2c0ca22e118b8163a73d18a1c7d995439`;
+- working tree limpa;
+- `FIRST_DISCOVERY_QUALITY_V1_MODE=active`;
+- `oracle-scraper` online, sem crash loop e sem erro de startup após ativação.
+
+## Ambiente local
+
+Execução manual local só deve ser comparada à produção quando checkout e flags coincidirem com a Oracle. O ciclo local auditado em 27/08/2026 registrou release `e157df09f0d8deb53a65a8f48376c89d9cdcdef1`, portanto não representa exatamente o runtime produtivo atual.
 
 ## Publicação social
 
-`posts.content` é a autoridade da copy do canal. O estado global da oferta não substitui automaticamente o estado específico de cada post.
-
-No WhatsApp:
-
-- Top30 editorial e Publicação Expressa são trilhas separadas;
-- Express usa `manual_source=true`;
-- draft WhatsApp ativo permanece pendente mesmo se `offers.status=approved` por outro canal;
-- posts publicados, deletados, rejeitados ou deferidos permanecem protegidos.
-
-Instagram executa Safety + Policy Guard antes da Graph API. Facebook mantém o link afiliado no primeiro comentário conforme o transporte atual.
+Discovery não autoriza publicação. `posts.content` continua sendo a autoridade da copy do canal, e os transportes sociais permanecem separados da etapa de descoberta.
 
 ## Radar independente
 
-A auditoria Oracle de 25/08/2026 confirmou `oracle-trends-radar` online, `TRENDS_RADAR_DEDICATED_RUNTIME=true` e `TREND_EXECUTIVE_MODE=off`. O `oracle-scraper` não consome Radar no ciclo editorial. O worker dedicado usa polling de 30s e lock local `/tmp/caca-oferta-trends-radar.lock`.
-
-## Estado operacional Oracle auditado
-
-Na auditoria read-only de 25/08/2026 estavam online no PM2: `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker`. `shopee-feed-sync` estava parado.
-
-O checkout auditado da VPS estava em `main`, SHA `febe66abb28bd47c738d925befc50ad365c59371`, working tree limpo. Como a `main` pode avançar após a auditoria, o SHA da VPS deve ser comparado antes de qualquer operação.
-
-## Capacity Hunter
-
-O timer `oracle-capacity-hunter.timer` estava ativo a cada 30 minutos. O service estava em `failed` por ausência de `apps/oracle-capacity-hunter/.env`. O Capacity Hunter é passivo e não reinicia serviços automaticamente.
+- `oracle-trends-radar` online;
+- `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
+- `TREND_EXECUTIVE_MODE=off`;
+- polling 30s;
+- lock `/tmp/caca-oferta-trends-radar.lock`;
+- `oracle-scraper` não consome Radar.
 
 ## Fontes de verdade
 
-`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-api.cjs`, `scripts/oracle-trends-radar-worker.cjs`, `scripts/whatsapp-engine.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `scripts/marketplace-search-quality.cjs`, `scripts/first-discovery-quality.cjs`, `scripts/adaptive-discovery-policy.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
+`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `scripts/first-discovery-quality.cjs`, `scripts/first-discovery-candidate-quality.cjs`, `scripts/adaptive-discovery-policy.cjs`, `supabase/**`, `.env.example`, `vercel.json`.

@@ -1,12 +1,12 @@
 # Runbook de scripts da Oracle
 
 <!-- docs-status: current -->
-<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
 <!-- verified-on: 2026-08-27 -->
 
 Guia operacional da VPS Oracle. Não coloque tokens, chaves ou valores de `.env` neste arquivo.
 
-## 1. Acesso e estado
+## 1. Estado esperado
 
 Projeto remoto:
 
@@ -14,10 +14,14 @@ Projeto remoto:
 /home/ubuntu/Caca_OfertaOficial
 ```
 
-Projeto local auditado:
+Estado produtivo confirmado em 27/08/2026:
 
 ```text
-C:\Projetos_GitHub\Projeto_Oficial\Caca_OfertaOficial
+branch=main
+HEAD=7f35e0d2c0ca22e118b8163a73d18a1c7d995439
+FIRST_DISCOVERY_QUALITY_V1_MODE=active
+oracle-scraper=online
+working-tree=clean
 ```
 
 Antes de qualquer ação:
@@ -31,9 +35,9 @@ pm2 status
 pm2 jlist
 ```
 
-## 2. Processos PM2 auditados
+## 2. Processos PM2
 
-Esperados no baseline de 25/08/2026:
+Esperados:
 
 - `oracle-scraper`
 - `oracle-api`
@@ -42,7 +46,7 @@ Esperados no baseline de 25/08/2026:
 - `authorized-reel-verifier`
 - `video-worker`
 
-`shopee-feed-sync` estava parado.
+`shopee-feed-sync` está parado no estado auditado.
 
 Logs read-only:
 
@@ -55,7 +59,7 @@ pm2 logs oracle-trends-radar --raw --lines 100 --nostream
 
 ## 3. Scheduler e cenários válidos
 
-Cron esperado:
+Cron:
 
 ```text
 0 6,8,10,12,14,16,18 * * *
@@ -63,7 +67,7 @@ Cron esperado:
 
 Timezone: `America/Sao_Paulo`. `noOverlap=true`.
 
-Cenários automáticos válidos:
+Cenários automáticos:
 
 ```text
 casa_cozinha_editorial
@@ -77,73 +81,75 @@ eletrodomesticos_editorial
 
 `cupons_aprovados_editorial` é `manual_only`.
 
-Não usar em comandos novos:
+## 4. First Discovery Quality V1
+
+Produção Oracle:
 
 ```text
-organizacao_editorial
-celulares_editorial
-esporte_editorial
-tv_audio_editorial
-moveis_editorial
-grandes_ofertas_editorial
-eletros_cozinha
-enxoval_casamento
+FIRST_DISCOVERY_QUALITY_V1_MODE=active
 ```
 
-Exemplo de diagnóstico dry-run somente quando autorizado:
+O default do código continua `off`; o ambiente produtivo sobrescreve para `active`.
+
+No modo ativo:
+
+- intents refinadas são consumidas;
+- candidatos inelegíveis não persistem;
+- strong tem prioridade;
+- zero strong não deve gerar backfill artificial com weak;
+- `readiness=false` não dispara adaptive discovery automaticamente.
+
+### Limitação operacional atual
+
+Resultado zero em ML/Shopee não deve ser interpretado como catálogo vazio. A auditoria de Moda em 27/08/2026 mostrou:
+
+- ML pode terminar vazio quando a resolução de domínios não forma cobertura suficiente;
+- Shopee pode bloquear a extração quando categorias amplas causam `coverageInsufficient`;
+- ainda não existe aprofundamento automático de rede conectado ao adaptive fallback.
+
+## 5. Execução manual
+
+Na Oracle, somente quando explicitamente autorizado e sem outro ciclo em execução:
 
 ```bash
 cd /home/ubuntu/Caca_OfertaOficial
-node scripts/oracle-scraper.cjs --mercadolivre-official-intents-dry-run --scenario beleza_editorial
+node scripts/oracle-scraper.cjs --run-now --scenario moda_editorial
 ```
 
-Não executar variantes `record`, execução sem flag ou `--run-now` como teste exploratório.
+Em PowerShell local, dentro do repositório:
 
-## 4. Radar dedicado
-
-Baseline auditado:
-
-- PM2 `oracle-trends-radar` online
-- `TRENDS_RADAR_DEDICATED_RUNTIME=true`
-- `TREND_EXECUTIVE_MODE=off`
-- polling 30s
-- lock `/tmp/caca-oferta-trends-radar.lock`
-- `oracle-scraper` não consome Radar no ciclo editorial
-
-Não iniciar segundo worker e não remover lock sem confirmar ausência de processo concorrente.
-
-## 5. WhatsApp e Oracle API
-
-- `whatsapp-bot` → `scripts/whatsapp-engine.cjs`, porta 3001
-- `oracle-api` → `scripts/oracle-api.cjs`, porta 3002
-
-Restart, limpeza de sessão, QR e qualquer ação que possa afetar produção exigem autorização operacional específica.
-
-## 6. Capacity Hunter
-
-```bash
-systemctl status oracle-capacity-hunter.service
-systemctl status oracle-capacity-hunter.timer
+```powershell
+node .\scripts\oracle-scraper.cjs --run-now --scenario moda_editorial
 ```
 
-Baseline de 25/08/2026:
+A execução local só é comparável à produção se `git rev-parse HEAD` e as flags relevantes forem equivalentes à Oracle.
 
-- timer ativo a cada 30 minutos
-- service falhou por ausência de `apps/oracle-capacity-hunter/.env`
-- monitoramento passivo/read-only, sem restart automático
+## 6. Radar dedicado
 
-## 7. Checklist antes/depois de intervenção
+- PM2 `oracle-trends-radar` online;
+- `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
+- `TREND_EXECUTIVE_MODE=off`;
+- polling 30s;
+- lock `/tmp/caca-oferta-trends-radar.lock`;
+- `oracle-scraper` não consome Radar no ciclo editorial.
 
-1. SHA da VPS comparado com `main`.
-2. Working tree limpo.
-3. Quantidade correta de processos PM2.
+## 7. WhatsApp e Oracle API
+
+- `whatsapp-bot` → porta 3001;
+- `oracle-api` → porta 3002.
+
+## 8. Checklist antes/depois de intervenção
+
+1. SHA da VPS comparado com `origin/main`.
+2. Working tree limpa.
+3. PM2 saudável.
 4. Cron/timezone confirmados.
-5. Nenhum cenário legado ativado.
-6. Cupons permanece manual.
+5. Flag First Discovery confirmada.
+6. Nenhum cenário legado ativado.
 7. Radar com autoridade única.
-8. Nenhum Discovery manual ou write no Supabase durante diagnóstico read-only.
+8. Sem write manual no Supabase durante diagnóstico read-only.
 9. Preservar logs antes de restart/rollback.
 
-## 8. Rollback
+## 9. Rollback
 
-Não seguir instruções antigas que presumam Radar acoplado ao scraper. Antes de rollback do Radar, confirmar qual consumidor ficará autorizado e garantir exatamente uma autoridade de execução.
+Se uma mudança de First Discovery causar crash ou erro estrutural de startup, a primeira contenção é retornar somente a flag a `off` e reiniciar somente `oracle-scraper`; rollback de código exige análise separada.

@@ -1,51 +1,74 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
+<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
 <!-- verified-on: 2026-08-27 -->
 
 ## Princípios
 
 - `.env.example` é o inventário seguro; valores reais ficam em `.env.local`, Vercel, Oracle/PM2 ou secret store.
-- Flags novas entram desligadas ou fail-closed quando controlam descoberta, persistência, IA ou publicação.
-- `FIRST_DISCOVERY_QUALITY_V1_MODE` controla o novo pipeline de primeira descoberta (`off` por padrão, `shadow` para observabilidade sem alteração, `active` para intenções refinadas).
-- Arquivos de overlay Oracle aceitam apenas chaves permitidas e devem ser validados antes de reiniciar processos.
-- URLs públicas, service-role keys e credenciais de canais não podem aparecer em logs ou documentação.
+- Flags novas entram desligadas/fail-closed quando controlam discovery, persistência, IA ou publicação.
+- O default do código não substitui o estado operacional do ambiente; documentação de produção deve registrar ambos.
 
-## Grupos de configuração
+## First Discovery Quality V1
 
-| Grupo | Uso |
-|---|---|
-| Supabase | URL, chaves pública/server-side, tabelas, RPCs e Storage |
-| Aplicação | URLs pública/interna, autenticação e ambiente Next.js |
-| Official AI | provider, modelo, limites e chaves Groq/Cerebras |
-| Oracle | URL remota, chave da API, scheduler, limites e overlay |
-| Marketplaces | credenciais, fontes, paginação e flags de admissão |
-| Publicação | Telegram, Meta/Instagram/Facebook e WhatsApp |
-| Vídeo | worker, TTS, FFmpeg, Storage, heartbeat e limites |
+`FIRST_DISCOVERY_QUALITY_V1_MODE` aceita:
+
+- `off`: comportamento legado;
+- `shadow`: calcula plano, candidate quality e readiness sem alterar fila/persistência;
+- `active`: aplica intents refinadas, gate de elegibilidade e prioridade absoluta para candidatos fortes.
+
+Estado atual:
+
+```text
+code_default=off
+oracle_production=active
+```
+
+No modo `active`, zero candidatos fortes não deve gerar backfill artificial com candidatos weak. `readiness=false` não dispara automaticamente uma nova busca; o adaptive fallback continua desacoplado do executor.
+
+## Marketplaces
+
+Cada marketplace possui estratégia própria por nicho:
+
+- Amazon: Browse Node + intenção forte;
+- Mercado Livre: `official-domain-then-catalog`, Best Seller quando disponível;
+- Shopee: categoria nativa + intenção forte, evitando categoria ampla isolada.
+
+### Limitação conhecida
+
+A política de qualidade está ativa, mas o mecanismo de aprofundamento automático ainda não está conectado. Quando a primeira cobertura falha, ML/Shopee podem encerrar sem candidatos em vez de expandir automaticamente a busca. Isso deve ser tratado como lacuna operacional de discovery.
 
 ## Scheduler Oracle
 
-O scheduler canônico usa `0 6,8,10,12,14,16,18 * * *` em `America/Sao_Paulo`, com `noOverlap: true`. O scraper agenda os ciclos no startup, mas não executa Discovery imediatamente sem `--run-now`. Cupons às 22h permanece `manual_only` e fora do cron.
+```text
+0 6,8,10,12,14,16,18 * * *
+```
 
-## Instagram e Meta
+Timezone: `America/Sao_Paulo`. `noOverlap=true`.
 
-- `INSTAGRAM_ACCESS_TOKEN` e a conta Business/Professional precisam estar válidos no ambiente de execução.
-- Feed e Reels usam o transporte oficial e marcam conteúdo afiliado como parceria paga.
-- O `Instagram Policy Guard` é uma barreira fail-closed da rota oficial de publicação.
-- Se o contexto da oferta/post não puder ser carregado para análise, a publicação é bloqueada em vez de seguir para a Graph API.
+Grade:
+
+- 06h Casa/Cozinha/Organização
+- 08h Beleza
+- 10h Informática
+- 12h Moda
+- 14h Ferramentas
+- 16h Pet
+- 18h Eletrodomésticos
+
+Cupons 22h permanece `manual_only`.
 
 ## Shopee OpenAPI V1
 
-O runtime possui controles separados para fonte, persistência, geração de drafts e publicação. A ativação deve ocorrer por janela controlada, com overlay validado, logs observados e publicação bloqueada até aprovação explícita.
+A fonte Shopee possui controles próprios de fonte, persistência e fila. O modo First Discovery ativo também deve ser aplicado ao ramo especial OpenAPI antes da persistência.
 
 ## Trend Executive e Radar dedicado
 
-`TREND_EXECUTIVE_MODE` aceita `off | shadow | active`. Na auditoria operacional de 25/08/2026, o ambiente Oracle estava com `TREND_EXECUTIVE_MODE=off`.
-
-O Radar dedicado está ativo na Oracle com `TRENDS_RADAR_DEDICATED_RUNTIME=true` no processo PM2 `oracle-trends-radar`. O `oracle-scraper` não consome solicitações Radar no ciclo editorial. O worker dedicado usa polling de 30s e lock local `/tmp/caca-oferta-trends-radar.lock` para serialização no host auditado.
-
-`TRENDS_RADAR_DEDICATED_RUNTIME=false` não deve mais ser documentado como estado produtivo atual. Qualquer mudança dessa flag exige confirmar que apenas uma autoridade de consumo permanece ativa.
+- `TREND_EXECUTIVE_MODE=off`;
+- `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
+- `oracle-trends-radar` é a autoridade dedicada;
+- `oracle-scraper` não consome Radar no ciclo editorial.
 
 ## Validação
 
@@ -57,4 +80,4 @@ npm run security:check
 npm run docs:audit
 ```
 
-Depois do deploy, valide `/api/health`, `/api/readiness`, logs Oracle/PM2 e um smoke test read-only das integrações necessárias.
+Depois de deploy/alteração operacional, validar `/api/health`, `/api/readiness`, PM2, flags efetivas e logs.
