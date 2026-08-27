@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const {
   ADAPTIVE_DISCOVERY_POLICY_VERSION,
+  ADAPTIVE_DISCOVERY_ROLE,
   assessAdaptiveDiscovery,
 } = require('../adaptive-discovery-policy.cjs');
 
@@ -20,6 +21,8 @@ test('Amazon expande por carteira fraca e pouca diversidade mesmo com amostra br
   });
 
   assert.equal(decision.contractVersion, ADAPTIVE_DISCOVERY_POLICY_VERSION);
+  assert.equal(decision.role, ADAPTIVE_DISCOVERY_ROLE);
+  assert.equal(decision.role, 'fallback_after_first_discovery_quality_exhausted');
   assert.equal(decision.shouldExpand, true);
   assert.equal(decision.reasons.includes('catalog_sample_too_small'), false);
   assert.equal(decision.reasons.includes('portfolio_below_target'), true);
