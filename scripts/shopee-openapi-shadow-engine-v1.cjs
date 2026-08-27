@@ -385,6 +385,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
     return acceptedCount;
   };
 
+  let certifiedFamilies = [];
   let queryTasks = [];
 
   if (isCertifiedSearchEnabled && nicheFamilies) {
@@ -393,7 +394,6 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
     let familiesSkippedPartial = 0;
     let familiesSkippedInvestigate = 0;
     let familiesSkippedBlocked = 0;
-    const certifiedFamilies = [];
 
     for (const [familyName, familyData] of allFamilies) {
       if (isExplicitlyBlockedFamily(nicheName, familyName) || familyData.decision === 'bloquear') {
@@ -468,9 +468,6 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
       familiesSkippedBlocked,
       productCatIdQueries,
       productCatIdFallbacks,
-      semanticAccepted,
-      semanticRejected,
-      extractedBeforeOracleFilters,
     };
   } else {
     const keywords = plan.keywords.slice(0, maxKeywords ?? plan.keywords.length);
@@ -500,15 +497,61 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
     datafeedId = feeds[0]?.datafeedId || null;
     if (datafeedId) {
       const dataResponse = await request('GetItemFeedData', GRAPHQL_CONTRACTS.getItemFeedData.query, { datafeedId, offset: 0, limit: plan.limits.maxFeedRows });
-      deltaRows = dataResponse.data?.data?.getItemFeedData?.rows || [];
+      const rawDelta = dataResponse.data?.data?.getItemFeedData?.rows || [];
+      if (isCertifiedSearchEnabled && certifiedFamilies.length > 0) {
+        extractedBeforeOracleFilters += rawDelta.length;
+        deltaRows = rawDelta.filter((row) => {
+          let cols = row.columns;
+          if (typeof cols === 'string') {
+            try { cols = JSON.parse(cols); } catch {}
+          }
+          const title = cols?.productName || cols?.title || cols?.product_name || '';
+          const fam = certifiedFamilies.find((f) => isProductAdherent(title, f.terms));
+          if (fam) {
+            semanticAccepted += 1;
+            return true;
+          }
+          semanticRejected += 1;
+          return false;
+        });
+      } else {
+        deltaRows = rawDelta;
+      }
     }
   }
 
   if (includeAuxiliary && !sharedSources.shopOffers) {
     const shopResponse = await request('ShopOfferV2', GRAPHQL_CONTRACTS.shopOfferV2.query, { page: 1, limit: plan.limits.shopOfferV2 });
     const shopeeResponse = await request('ShopeeOfferV2', GRAPHQL_CONTRACTS.shopeeOfferV2.query, { page: 1, limit: plan.limits.shopeeOfferV2 });
-    shopOffers = shopResponse.data?.data?.shopOfferV2?.nodes || [];
-    shopeeOffers = shopeeResponse.data?.data?.shopeeOfferV2?.nodes || [];
+    const rawShop = shopResponse.data?.data?.shopOfferV2?.nodes || [];
+    const rawShopee = shopeeResponse.data?.data?.shopeeOfferV2?.nodes || [];
+    
+    if (isCertifiedSearchEnabled && certifiedFamilies.length > 0) {
+      extractedBeforeOracleFilters += (rawShop.length + rawShopee.length);
+      shopOffers = rawShop.filter((node) => {
+        const title = node.productName || node.title || node.name || '';
+        const fam = title ? certifiedFamilies.find((f) => isProductAdherent(title, f.terms)) : null;
+        if (fam) {
+          semanticAccepted += 1;
+          return true;
+        }
+        semanticRejected += 1;
+        return false;
+      });
+      shopeeOffers = rawShopee.filter((node) => {
+        const title = node.productName || node.title || node.name || '';
+        const fam = title ? certifiedFamilies.find((f) => isProductAdherent(title, f.terms)) : null;
+        if (fam) {
+          semanticAccepted += 1;
+          return true;
+        }
+        semanticRejected += 1;
+        return false;
+      });
+    } else {
+      shopOffers = rawShop;
+      shopeeOffers = rawShopee;
+    }
   }
 
   const result = runShadow({
@@ -522,12 +565,23 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
   const top = scenarioResult.top || [];
 
   if (productCatIdsTelemetry) {
+    const selectedCertifiedFamilies = new Set();
+    for (const item of top) {
+      const fam = certifiedFamilies.find((f) => isProductAdherent(item.productName, f.terms));
+      if (fam) {
+        selectedCertifiedFamilies.add(fam.name);
+      }
+    }
+
     productCatIdsTelemetry = {
       ...productCatIdsTelemetry,
+      semanticAccepted,
+      semanticRejected,
+      extractedBeforeOracleFilters,
       afterOracleQualityGate: (scenarioResult.top?.length || 0) + (scenarioResult.rejected?.length || 0),
       queueSelected: top.length,
-      familyDiversityCount: new Set(top.map((item) => item.familyKey)).size,
-      selectedFamilies: [...new Set(top.map((item) => item.familyKey))],
+      familyDiversityCount: selectedCertifiedFamilies.size,
+      selectedFamilies: [...selectedCertifiedFamilies],
     };
   }
 

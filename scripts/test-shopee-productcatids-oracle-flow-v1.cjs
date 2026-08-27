@@ -75,14 +75,14 @@ async function main() {
     console.log(`--------------------------------------------------`);
 
     // 1. Execução Baseline (SHOPEE_PRODUCTCATIDS_SEARCH_V1_ENABLED = false)
-    console.log(`[1/2] Executando Baseline (flag desligada)...`);
+    console.log(`[1/2] Executando Baseline (flag desligada, includeDelta=true, includeAuxiliary=true)...`);
     const baselineEnv = { ...baseEnv, SHOPEE_PRODUCTCATIDS_SEARCH_V1_ENABLED: 'false' };
     const baselineStart = Date.now();
     const baselineRes = await runShopeeOpenApiV1OfficialForScenario(scenarioId, {
       env: baselineEnv,
       request,
-      includeDelta: false,
-      includeAuxiliary: false,
+      includeDelta: true,
+      includeAuxiliary: true,
     });
     const baselineDuration = Date.now() - baselineStart;
 
@@ -97,14 +97,14 @@ async function main() {
     await new Promise((r) => setTimeout(r, 1000));
 
     // 2. Execução Certified (SHOPEE_PRODUCTCATIDS_SEARCH_V1_ENABLED = true)
-    console.log(`[2/2] Executando Certified ProductCatIds (flag ligada)...`);
+    console.log(`[2/2] Executando Certified ProductCatIds (flag ligada, includeDelta=true, includeAuxiliary=true)...`);
     const certifiedEnv = { ...baseEnv, SHOPEE_PRODUCTCATIDS_SEARCH_V1_ENABLED: 'true' };
     const certifiedStart = Date.now();
     const certifiedRes = await runShopeeOpenApiV1OfficialForScenario(scenarioId, {
       env: certifiedEnv,
       request,
-      includeDelta: false,
-      includeAuxiliary: false,
+      includeDelta: true,
+      includeAuxiliary: true,
     });
     const certifiedDuration = Date.now() - certifiedStart;
 
