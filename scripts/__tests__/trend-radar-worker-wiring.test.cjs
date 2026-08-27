@@ -4,18 +4,20 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 
-test('worker aponta para runner autoritativo de 7 nichos',()=>{
+test('worker aponta para runner V3 autoritativo de 7 nichos',()=>{
  const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-worker.cjs'),'utf8');
- assert.match(s,/oracle-trends-radar-runner-seven-niches\.cjs/);
+ assert.match(s,/oracle-trends-radar-runner-seven-niches-v3\.cjs/);
 });
 
-test('runner não delega ao runner comercial legado',()=>{
- const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-runner-seven-niches.cjs'),'utf8');
- assert.equal(s.includes("require('./oracle-trends-radar-runner-final.cjs')"),false);
- assert.equal(s.includes("require('./oracle-trends-radar-runner.cjs')"),false);
+test('wrapper V3 injeta contrato product-specific no runner autoritativo',()=>{
+ const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-runner-seven-niches-v3.cjs'),'utf8');
+ assert.match(s,/trend-radar-seven-niches-v3\.cjs/);
+ assert.match(s,/createAuthoritativeRadarRunner/);
+ assert.equal(s.includes("oracle-trends-radar-runner-final.cjs"),false);
+ assert.equal(s.includes("oracle-trends-radar-runner.cjs"),false);
 });
 
-test('runner mantém autoridade de 7 nichos e zero publicação',()=>{
+test('runner base mantém autoridade e zero publicação',()=>{
  const s=fs.readFileSync(path.join(__dirname,'..','oracle-trends-radar-runner-seven-niches.cjs'),'utf8');
  assert.match(s,/createAuthoritativeRadarRunner/);
  assert.match(s,/seven_niche_authoritative/);
