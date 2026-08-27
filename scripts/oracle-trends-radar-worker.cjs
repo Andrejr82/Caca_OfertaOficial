@@ -6,31 +6,20 @@ const path = require('node:path');
 const {
   isDedicatedTrendRadarRuntimeEnabled,
   processPendingTrendRadarRuns,
-} = require('./oracle-trends-radar-runner-final.cjs');
+} = require('./oracle-trends-radar-runner-seven-niches.cjs');
 
 const DEFAULT_POLL_INTERVAL_MS = 30_000;
 const DEFAULT_LOCK_STALE_MS = 30 * 60_000;
 const DEFAULT_LOCK_PATH = path.join(os.tmpdir(), 'caca-oferta-trends-radar.lock');
 
-function tryAcquireProcessLock({
-  fsImpl = fs,
-  lockPath = DEFAULT_LOCK_PATH,
-  staleMs = DEFAULT_LOCK_STALE_MS,
-  now = Date.now(),
-} = {}) {
+function tryAcquireProcessLock({ fsImpl = fs, lockPath = DEFAULT_LOCK_PATH, staleMs = DEFAULT_LOCK_STALE_MS, now = Date.now() } = {}) {
   const writeLock = () => {
     const fd = fsImpl.openSync(lockPath, 'wx');
     fsImpl.writeFileSync(fd, JSON.stringify({ pid: process.pid, acquiredAt: new Date(now).toISOString() }));
     fsImpl.closeSync(fd);
     return true;
   };
-
-  try {
-    return writeLock();
-  } catch (error) {
-    if (error?.code !== 'EEXIST') throw error;
-  }
-
+  try { return writeLock(); } catch (error) { if (error?.code !== 'EEXIST') throw error; }
   try {
     const stat = fsImpl.statSync(lockPath);
     if (now - stat.mtimeMs <= staleMs) return false;
@@ -43,74 +32,29 @@ function tryAcquireProcessLock({
 }
 
 function releaseProcessLock({ fsImpl = fs, lockPath = DEFAULT_LOCK_PATH } = {}) {
-  try {
-    fsImpl.unlinkSync(lockPath);
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-  }
+  try { fsImpl.unlinkSync(lockPath); } catch (error) { if (error?.code !== 'ENOENT') throw error; }
 }
 
-async function runTrendRadarWorkerOnce({
-  env = process.env,
-  processRadar = processPendingTrendRadarRuns,
-  fsImpl = fs,
-  lockPath = DEFAULT_LOCK_PATH,
-  staleMs = DEFAULT_LOCK_STALE_MS,
-} = {}) {
-  if (!isDedicatedTrendRadarRuntimeEnabled(env)) {
-    return {
-      processed: false,
-      reason: 'dedicated_runtime_disabled',
-      publishCalls: 0,
-      postsWrites: 0,
-      offersWrites: 0,
-    };
-  }
-
+async function runTrendRadarWorkerOnce({ env = process.env, processRadar = processPendingTrendRadarRuns, fsImpl = fs, lockPath = DEFAULT_LOCK_PATH, staleMs = DEFAULT_LOCK_STALE_MS } = {}) {
+  if (!isDedicatedTrendRadarRuntimeEnabled(env)) return { processed:false, reason:'dedicated_runtime_disabled', publishCalls:0, postsWrites:0, offersWrites:0 };
   const locked = tryAcquireProcessLock({ fsImpl, lockPath, staleMs });
-  if (!locked) {
-    return {
-      processed: false,
-      reason: 'worker_locked',
-      publishCalls: 0,
-      postsWrites: 0,
-      offersWrites: 0,
-    };
-  }
-
-  try {
-    return await processRadar({ env, dedicatedRuntime: true });
-  } finally {
-    releaseProcessLock({ fsImpl, lockPath });
-  }
+  if (!locked) return { processed:false, reason:'worker_locked', publishCalls:0, postsWrites:0, offersWrites:0 };
+  try { return await processRadar({ env, dedicatedRuntime:true }); }
+  finally { releaseProcessLock({ fsImpl, lockPath }); }
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function startTrendRadarWorker({
-  env = process.env,
-  processRadar = processPendingTrendRadarRuns,
-  intervalMs = DEFAULT_POLL_INTERVAL_MS,
-  sleepFn = sleep,
-  signal = null,
-} = {}) {
-  if (!isDedicatedTrendRadarRuntimeEnabled(env)) {
-    throw new Error('TRENDS_RADAR_DEDICATED_RUNTIME precisa estar habilitado para iniciar o worker dedicado.');
-  }
-
+async function startTrendRadarWorker({ env = process.env, processRadar = processPendingTrendRadarRuns, intervalMs = DEFAULT_POLL_INTERVAL_MS, sleepFn = sleep, signal = null } = {}) {
+  if (!isDedicatedTrendRadarRuntimeEnabled(env)) throw new Error('TRENDS_RADAR_DEDICATED_RUNTIME precisa estar habilitado para iniciar o worker dedicado.');
   console.log(`[Oracle Trends Radar Worker] iniciado poll=${intervalMs}ms`);
   while (!signal?.aborted) {
     try {
       const result = await runTrendRadarWorkerOnce({ env, processRadar });
-      if (result.processed) {
-        console.log(`[Oracle Trends Radar Worker] runId=${result.runId || 'n/a'} produtos=${result.productsCount ?? 0}`);
-      }
+      if (result.processed) console.log(`[Oracle Trends Radar Worker] runId=${result.runId || 'n/a'} produtos=${result.productsCount ?? 0}`);
     } catch (error) {
       console.error(`[Oracle Trends Radar Worker] ${error.message}`);
     }
-
     if (!signal?.aborted) await sleepFn(intervalMs);
   }
 }
@@ -122,12 +66,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = {
-  DEFAULT_POLL_INTERVAL_MS,
-  DEFAULT_LOCK_STALE_MS,
-  DEFAULT_LOCK_PATH,
-  tryAcquireProcessLock,
-  releaseProcessLock,
-  runTrendRadarWorkerOnce,
-  startTrendRadarWorker,
-};
+module.exports = { DEFAULT_POLL_INTERVAL_MS, DEFAULT_LOCK_STALE_MS, DEFAULT_LOCK_PATH, tryAcquireProcessLock, releaseProcessLock, runTrendRadarWorkerOnce, startTrendRadarWorker };

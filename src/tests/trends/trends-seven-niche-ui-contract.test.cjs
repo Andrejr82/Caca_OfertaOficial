@@ -1,0 +1,14 @@
+'use strict';
+const test=require('node:test'); const assert=require('node:assert/strict'); const fs=require('node:fs'); const path=require('node:path');
+const root=path.resolve(__dirname,'../..');
+const query=fs.readFileSync(path.join(root,'lib/trends/radar-queries.ts'),'utf8');
+const page=fs.readFileSync(path.join(root,'app/(dashboard)/trends/page.tsx'),'utf8');
+const desk=fs.readFileSync(path.join(root,'components/trends/trends-daily-selection-desk.tsx'),'utf8');
+test('query seleciona trend_score',()=>assert.match(query,/commercial_score,trend_score,confidence/));
+test('query filtra trending_flag=false quando contrato novo existe',()=>assert.match(query,/\.filter\(\(item\) => item\.trending\)/));
+test('UI separa Trend Score de Commercial Score',()=>{assert.match(desk,/Trend \{score\(item\.trendScore\)\}/);assert.match(desk,/Commercial \{score\(item\.commercialScore\)\}/)});
+test('UI organiza os 7 nichos canônicos',()=>{for(const name of ['Casa, Cozinha e Organização','Beleza e Cuidados Pessoais','Moda e Calçados','Eletrodomésticos','Informática','Ferramentas','Pet']) assert.ok(desk.includes(name));});
+test('UI mostra vazio factual por nicho',()=>assert.match(desk,/Nenhuma tendência com evidência suficiente hoje/));
+test('aprovação mostra sucesso quando oferta já está selecionada',()=>assert.match(desk,/Tendência aprovada e oferta selecionada/));
+test('monetization_required tem feedback explícito',()=>assert.match(page,/approvalError==="monetization_required"/));
+test('Solicitar Radar continua isolado no header',()=>assert.match(page,/DailyRadarRefreshButton/));
