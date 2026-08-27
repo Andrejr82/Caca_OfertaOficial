@@ -40,7 +40,6 @@ test('3. Categorias Shopee correspondem exatamente às aprovadas para todos os 7
   assert.deepEqual(SHOPEE_CATEGORIES_BY_NICHE.ferramentas, [100636]);
   assert.deepEqual(SHOPEE_CATEGORIES_BY_NICHE.pet, [100631]);
 
-  // Prova que 100017 e 100532 não estão em moda
   assert.equal(SHOPEE_CATEGORIES_BY_NICHE.moda.includes(100017), false);
   assert.equal(SHOPEE_CATEGORIES_BY_NICHE.moda.includes(100532), false);
 });
@@ -58,13 +57,27 @@ test('4. Mercado Livre preserva política oficial e não cria nova matriz de bus
   });
 });
 
-test('5. Beleza no Mercado Livre bloqueia modeladores fora do domínio sem quebrar modelador de cachos', () => {
-  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('nasal'));
-  assert.ok(MERCADOLIVRE_BLOCKED_BY_NICHE.beleza.includes('arroz'));
+test('5. Beleza no Mercado Livre bloqueia falsos positivos lexicais auditados sem quebrar produtos válidos', () => {
+  const blocked = MERCADOLIVRE_BLOCKED_BY_NICHE.beleza;
+  for (const term of ['nasal', 'arroz', 'modelador de donuts', 'aparador de livros', 'perfume para cachorro', 'shampoo pet']) {
+    assert.ok(blocked.includes(term), `bloqueio ausente: ${term}`);
+  }
 
   const contract = getMarketplaceScenarioContract('beleza_editorial', 'Mercado Livre');
-  assert.equal(matchesMarketplaceContract(contract, 'Afinador Modelador Nasal Acessories Nose Up Plástico Lilás Tamanho 5'), false);
-  assert.equal(matchesMarketplaceContract(contract, 'Formaster Aro Modelador de Arroz Inox 8cm x 5cm Conjunto 5 Peças'), false);
-  assert.equal(matchesMarketplaceContract(contract, 'Modelador de Cachos Profissional Bivolt'), true);
-  assert.equal(matchesMarketplaceContract(contract, 'Chapinha de Cabelo Portátil Mini Chapinha'), true);
+  const invalidTitles = [
+    'Afinador Modelador Nasal Acessories Nose Up Plástico Lilás Tamanho 5',
+    'Formaster Aro Modelador de Arroz Inox 8cm x 5cm Conjunto 5 Peças',
+    'Modelador Decor Util de Donuts com Pinça, 8cm, Rosa',
+    'Aparador De Livros Árvore Preto',
+    'Perfume Para Cachorro Gato Higiene Frescor Prolongado 500ml',
+    'Shampoo Pet Neutro Premium 500ml',
+  ];
+  for (const title of invalidTitles) assert.equal(matchesMarketplaceContract(contract, title), false, title);
+
+  for (const title of [
+    'Modelador de Cachos Profissional Bivolt',
+    'Chapinha de Cabelo Portátil Mini Chapinha',
+    'Escova Secadora Profissional 1200W',
+    'Aparador de Pelos Recarregável USB',
+  ]) assert.equal(matchesMarketplaceContract(contract, title), true, title);
 });
