@@ -57,7 +57,7 @@ describe("Oracle Trends Radar fresh rotation", () => {
     expect(getMarketplaceIdentityKey(approvedOffer)).toBe(getMarketplaceIdentityKey(liveCandidate));
   });
 
-  it("paginates all existing offers beyond the Supabase default row limit without filtering status", async () => {
+  it("paginates all commercially active existing offers beyond the Supabase default row limit", async () => {
     const rows = Array.from({ length: 1005 }, (_, index) => ({
       platform: "Shopee",
       shopee_item_id: String(index + 1),
@@ -92,7 +92,7 @@ describe("Oracle Trends Radar fresh rotation", () => {
 
     const keys = await fetchExistingOfferIdentityKeys(client, "tenant-1");
 
-    expect(statusFilterCalled).toBe(false);
+    expect(statusFilterCalled).toBe(true);
     expect(keys.size).toBe(1005);
     expect(keys.has("shopee:native:1005")).toBe(true);
     expect(ranges).toEqual([

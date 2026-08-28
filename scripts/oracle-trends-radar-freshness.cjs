@@ -332,6 +332,7 @@ async function fetchExistingOfferIdentityKeys(client, tenantId = null) {
       .select('platform, shopee_item_id, item_id, product_id, status');
 
     if (tenantId && typeof query.eq === 'function') query = query.eq('user_id', tenantId);
+    if (typeof query.in === 'function') query = query.in('status', BLOCKING_OFFER_STATUSES);
 
     const { data: offers, error } = await query.range(from, from + pageSize - 1);
     if (error || !Array.isArray(offers)) return identityKeys;
