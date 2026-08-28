@@ -50,6 +50,14 @@
     {"type":"notebook","pattern":"notebook|laptop"},
     {"type":"tablet","pattern":"tablet"},
     {"type":"monitor","pattern":"monitor"},
+    {"type":"ssd","pattern":"\\bssd\\b|solid\\s*state|\\bnvme\\b"},
+    {"type":"printer","pattern":"impressora|printer|multifuncional|ecotank"},
+    {"type":"router","pattern":"roteador|router|wi[-\\s]*fi\\s*6|sistema\\s*mesh"},
+    {"type":"webcam","pattern":"webcam|c[aâ]mera.*(?:pc|computador|home\\s*office)"},
+    {"type":"mini_pc","pattern":"mini\\s*pc|mini\\s*computador|\\bnuc\\b"},
+    {"type":"ups","pattern":"nobreak|no[-\\s]*break|\\bups\\b"},
+    {"type":"scanner","pattern":"\\bscanner\\b"},
+    {"type":"external_hdd","pattern":"hd\\s*externo|disco\\s*r[ií]gido\\s*externo|external\\s*hard\\s*drive"},
     {"type":"keyboard","pattern":"teclado"},
     {"type":"mouse","pattern":"mouse"},
     {"type":"headphones","pattern":"fone|headphone|headset|earbuds"},
@@ -118,7 +126,14 @@
     "MLB224270":"baby_bottle",
     "MLB86698":"maternity_bag",
     "MLB420379":"baby_towel",
-    "MLB270883":"baby_sling"
+    "MLB270883":"baby_sling",
+    "MLB99245":"monitor",
+    "MLB1676":"printer",
+    "MLB269606":"mini_pc",
+    "MLB270504":"ups",
+    "MLB1714":"mouse",
+    "MLB1660":"scanner",
+    "MLB73364":"webcam"
   },
   "domains": {
     "MLB-BABY_BOTTLES":"baby_bottle",
@@ -137,6 +152,14 @@
     "MLB-TELEVISIONS":"television",
     "MLB-HEADPHONES":"headphones",
     "MLB-RUNNING_SHOES":"running_shoe",
-    "MLB-PERFUMES":"perfume"
+    "MLB-PERFUMES":"perfume",
+    "MLB-ROUTERS_AND_WIRELESS_SYSTEMS":"router",
+    "MLB-WEBCAMS":"webcam",
+    "MLB-COMPUTER_MONITORS":"monitor",
+    "MLB-PRINTERS":"printer",
+    "MLB-MINI_PCS":"mini_pc",
+    "MLB-STABILIZERS_AND_UPS":"ups",
+    "MLB-COMPUTER_MICE":"mouse",
+    "MLB-SCANNERS":"scanner"
   }
 }
