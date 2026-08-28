@@ -4,9 +4,10 @@ const GENERIC_TITLE = /^(?:gen[eê]rico|generic|produto\s+gen[eê]rico|generic\s
 const CODE_ONLY = /^(?:[a-z]{2,6}[-_ ]?)?\d{6,14}$/iu;
 
 // Acessórios, consumíveis e peças não devem competir com o produto principal.
-// A regra prioriza títulos cujo objeto vendido é claramente um acessório, sem
-// bloquear um produto principal apenas porque ele inclui um cabo/suporte no kit.
-const ACCESSORY_LEAD_TITLE = /^(?:(?:kit|pacote)\s+(?:com\s+)?\d*\s*)?(?:\d+\s*(?:pe[cç]as?|pcs?)\s+)?(?:acess[oó]rio|adaptador|cabos?|case|capa|carregador|fonte(?:\s+de\s+energia)?|pel[ií]cula|protetor|refil|reparo|suporte(?:\s+de\s+parede|\s+articulado|\s+magn[eé]tico)?|base\s+para|enrolador(?:a|es)?\s+de\s+cabos?|organizador(?:a)?\s+de\s+cabos?|kit\s+(?:de\s+)?limpeza)\b/iu;
+// A regra é orientada ao objeto vendido e a alvos de tecnologia, evitando
+// bloquear produtos principais homônimos de outros nichos (ex.: protetor solar,
+// fonte pet ou capa de chuva).
+const ACCESSORY_LEAD_TITLE = /^(?:(?:kit|pacote)\s+(?:com\s+)?\d*\s*)?(?:\d+\s*(?:pe[cç]as?|pcs?)\s+)?(?:acess[oó]rio\s+(?:para|de)|adaptador\s+(?:para|de)|cabos?\b|carregador\b|fonte\s+(?:de\s+energia|de\s+alimenta[cç][aã]o|para)\b|capa\s+(?:para|compat[ií]vel)|case\s+(?:para|compat[ií]vel)|pel[ií]cula\s+para|protetor\s+para|refil\s+para|reparo\b|suporte(?:\s+de\s+parede|\s+articulado|\s+magn[eé]tico)?\s+(?:para|de)\b|base\s+para\b|enrolador(?:a|es)?\s+de\s+cabos?\b|organizador(?:a)?\s+de\s+cabos?\b|kit\s+(?:de\s+)?limpeza\b)/iu;
 const ACCESSORY_TARGET_TITLE = /\b(?:adaptador|cabos?|carregador|fonte|suporte(?:\s+de\s+parede|\s+articulado|\s+magn[eé]tico)?|base|capa|case|pel[ií]cula|protetor|refil|tampa|bateria)\b.{0,55}\b(?:para|compat[ií]vel\s+com|de)\b.{0,80}\b(?:notebook|laptop|monitor|ssd|hd|roteador|router|modem|switch|mouse|teclado|webcam|impressora|scanner|celular|smartphone|tablet)\b/iu;
 const CLEANING_ACCESSORY_TITLE = /\b(?:kit|escova|coletor)\b.{0,45}\b(?:limpeza|limpador|poeira)\b.{0,80}\b(?:teclado|notebook|laptop|eletr[oô]nico|fone|tela|celular|mouse)\b/iu;
 const CABLE_OR_MOUNT_FOR_STORAGE = /\b(?:cabo|adaptador|conversor|gabinete|case|suporte|montagem)\b.{0,70}\b(?:ssd|nvme|hd\s+externo|disco\s+r[ií]gido)\b|\b(?:ssd|nvme|hd\s+externo)\b.{0,70}\b(?:cabo|adaptador|conversor|gabinete|case|suporte|montagem)\b/iu;
