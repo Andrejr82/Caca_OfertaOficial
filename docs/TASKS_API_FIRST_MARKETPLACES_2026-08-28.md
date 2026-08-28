@@ -253,7 +253,7 @@ Executar explicitamente e registrar saída.
 
 No mínimo:
 
-- [ ] `product-title-quality`;
+- [x] `product-title-quality`;
 - [x] classificação;
 - [x] Amazon curation;
 - [x] Mercado Livre domain/category search;
@@ -261,7 +261,7 @@ No mínimo:
 - [x] commercial niche runtime/coverage;
 - [x] Shopee semântica/controlled persist aplicável;
 - [x] golden set;
-- [ ] testes de diversidade se alterada;
+- [x] testes de diversidade se alterada;
 - [ ] `npm run verify` se compatível com o estado do repositório;
 - [x] `npm run docs:audit` se aplicável.
 
