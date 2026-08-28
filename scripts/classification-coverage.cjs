@@ -45,6 +45,10 @@ function ids(product) {
   };
 }
 
+function candidateIntent(product) {
+  return product?.intent || product?.intentId || product?.rawPayload?.intent || product?.persistenceMetadata?.scenarioId || null;
+}
+
 function classifyByRules(value, source, confidence) {
   const matches = rules.filter(({ pattern }) => pattern.test(value));
   if (!matches.length) return null;
@@ -74,12 +78,23 @@ function classifyCandidate(product, marketplace) {
   const normalizedMarketplace = text(marketplace || product?.marketplace).toLowerCase();
 
   if (normalizedMarketplace === 'mercado livre') {
-    const canonical = classifyMercadoLivreProduct({ title: product?.title, domainId, categoryId });
+    const canonical = classifyMercadoLivreProduct({
+      title: product?.title,
+      domainId,
+      categoryId,
+      intent: candidateIntent(product),
+    });
     if (canonical.status === 'classified') {
       return {
         ...canonical,
-        confidence: canonical.source.startsWith('mercadolivre-certified:') || canonical.source.startsWith('domain:') ? 1 : canonical.source.startsWith('category:') ? 0.95 : 0.8,
-        evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null },
+        confidence: canonical.source.startsWith('mercadolivre-certified:') || canonical.source.startsWith('domain:')
+          ? 1
+          : canonical.source.startsWith('category:')
+            ? 0.95
+            : canonical.source.startsWith('editorial-intent:') || canonical.source.startsWith('editorial-family:')
+              ? 0.9
+              : 0.8,
+        evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null, intent: candidateIntent(product) },
       };
     }
   }
@@ -89,9 +104,6 @@ function classifyCandidate(product, marketplace) {
   const categoryType = categoryId ? catalog.categories[String(categoryId)] : null;
   if (categoryType) return markConflict({ productType: categoryType, status: 'classified', source: `category:${categoryId}`, confidence: 0.95, evidence: { categoryId } }, product);
 
-  // Evidência específica do próprio produto deve vencer browse nodes amplos.
-  // Isso impede um notebook/monitor/mouse de herdar um tipo genérico incorreto
-  // apenas porque a busca Amazon usou um nó abrangente de Informática.
   const byAttributes = classifyByRules(attributeText(product), 'attributes', 0.9);
   if (byAttributes) return byAttributes;
   const byTitle = classifyByRules(text(product?.title), 'title', 0.9);
