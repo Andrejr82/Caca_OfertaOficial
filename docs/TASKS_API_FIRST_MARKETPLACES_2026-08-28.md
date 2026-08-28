@@ -300,14 +300,15 @@ Critério obrigatório: explicar 100% dos candidatos da amostra.
 
 Checklist:
 
+- [x] nenhuma credencial adicionada ao Git;
+- [x] nenhuma alteração manual de Supabase;
+- [x] documentação atualizada se o runtime mudou;
+- [x] validações de integridade (`git diff --check`, ESLint direcionado e `docs:audit`) passaram;
 - [ ] nenhuma arquitetura paralela criada;
-- [ ] nenhuma credencial adicionada ao Git;
-- [ ] nenhuma alteração manual de Supabase;
 - [ ] nenhuma mudança de publicação/social não relacionada;
 - [ ] nenhuma mudança de scheduler não relacionada;
 - [ ] nenhuma flag nova sem necessidade comprovada;
-- [ ] documentação atualizada se o runtime mudou;
-- [ ] diff limitado às causas comprovadas.
+- [ ] diff limitado às causas comprovadas;
 
 ## TASK 13 — ORACLE: alinhamento controlado
 
