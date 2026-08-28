@@ -170,6 +170,15 @@ function amazonQueryMatchesProduct(product) {
   if (query === 'tv led') {
     return /\b(?:smart\s*tv|televisao|tv\s+(?:led|4k|uhd|qled|oled|mini\s*led))\b/.test(title);
   }
+  if (query === 'scanner') {
+    // "scanner" na Amazon também retorna detector de parede/RF. Para a família
+    // de informática exigimos semântica inequívoca de digitalização de dados.
+    if (/\b(?:detector|localizador|parede|viga|metal|rf|anti[- ]?espiao|sinal|sweeper|stud finder)\b/.test(title)) return false;
+    return /\bscanner\b/.test(title) && /\b(?:documento|documentos|codigo de barras|barcode|qr|mesa|flatbed|digitaliza|digitalizacao|impressora|multifuncional)\b/.test(title);
+  }
+  if (query === 'switch de rede') {
+    return /\b(?:switch de rede|switch ethernet|ethernet switch|switch gigabit|gigabit switch|switch gerenciavel|network switch)\b/.test(title);
+  }
   if (query === 'halter') {
     if (/\b(?:top|cropped|blusa|vestido|biquini|modelo\s+halter)\b/.test(title)) return false;
     return /\b(?:halter|dumbbell|peso|musculacao|academia)\b/.test(title);
