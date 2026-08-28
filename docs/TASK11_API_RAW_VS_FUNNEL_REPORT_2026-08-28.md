@@ -48,6 +48,14 @@ produto: foram classificados como lacuna de contrato/propagação de intenção.
 Isso prova que a intenção canônica precisa ser propagada do cenário para o
 curador antes da seleção. Nenhuma seleção foi promovida artificialmente.
 
+A lacuna foi corrigida no adaptador da fila: quando a oferta já possui uma
+`commercialIntent` válida no registro ou em
+`explainability.commercialCuration`, ela é encaminhada ao ranking junto com o
+`sourceScenarioId`. Valores desconhecidos continuam sujeitos ao classificador
+existente. A correção foi validada nos testes direcionados de fila para
+Shopee, Mercado Livre e Amazon; não houve gravação, publicação ou alteração de
+dados externos.
+
 ## Resultado
 
 - [x] total bruto por marketplace;
@@ -56,6 +64,7 @@ curador antes da seleção. Nenhuma seleção foi promovida artificialmente.
 - [x] exemplos de falso positivo eliminado;
 - [x] exemplos de produto preservado;
 - [x] 100% da amostra com decisão explícita;
-- [ ] ranking completo após propagação da intenção canônica;
+- [x] propagação da intenção canônica persistida validada no adaptador da fila;
+- [ ] ranking completo da amostra com critérios de elegibilidade reconciliados;
 - [ ] seleção/fila real executada por marketplace;
 - [ ] TASK 11 concluída.

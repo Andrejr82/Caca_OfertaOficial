@@ -20,6 +20,20 @@ export type CommercialQueueCandidate = Offer & {
 const PROTECTED_OPERATIONAL_STATUSES = new Set(["posted", "approved", "selected", "rejected", "deferred", "deleted"]);
 const DISCOVERY_CORRELATION_PREFIXES = ["shopee-openapi-v1:"] as const;
 
+function canonicalCommercialIntent(offer: Partial<Offer>): string | null {
+  const explainability = offer.explainability && typeof offer.explainability === "object"
+    ? offer.explainability as Record<string, unknown>
+    : null;
+  const persisted = explainability?.commercialCuration && typeof explainability.commercialCuration === "object"
+    ? explainability.commercialCuration as Record<string, unknown>
+    : null;
+  const candidates = [
+    (offer as Partial<Offer> & { commercialIntent?: unknown }).commercialIntent,
+    persisted?.commercialIntent,
+  ];
+  return candidates.find((value): value is string => typeof value === "string" && curation.COMMERCIAL_INTENTS.includes(value)) || null;
+}
+
 export function normalizeDiscoveryCorrelationId(value: string | null | undefined): string | null {
   const trimmed = typeof value === "string" ? value.trim() : "";
   if (!trimmed) return null;
@@ -115,6 +129,13 @@ export function filterOperationalPanelOffers(offers: Offer[], now = new Date(), 
 
 function normalizeOffer(offer: Offer) {
   const metrics = offer.marketplace_metrics || {};
+  const commercialIntent = canonicalCommercialIntent(offer);
+  const explainability = offer.explainability && typeof offer.explainability === "object"
+    ? offer.explainability as Record<string, unknown>
+    : null;
+  const persistedCuration = explainability?.commercialCuration && typeof explainability.commercialCuration === "object"
+    ? explainability.commercialCuration as Record<string, unknown>
+    : null;
   return {
     ...offer,
     marketplace: offer.platform,
@@ -131,7 +152,8 @@ function normalizeOffer(offer: Offer) {
     categoryName: offer.category_name,
     shippingFree: offer.shipping_free === true,
     marketplaceMetrics: metrics,
-    sourceScenarioId: null,
+    commercialIntent,
+    sourceScenarioId: persistedCuration?.sourceScenarioId || null,
   };
 }
 

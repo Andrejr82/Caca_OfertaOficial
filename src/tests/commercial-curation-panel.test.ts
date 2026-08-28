@@ -51,4 +51,29 @@ describe("Commercial Curation panel queue", () => {
     expect(queue).toHaveLength(1);
     expect(queue[0].id).toBe("new");
   });
+
+  it("propagates the persisted canonical intent into ranking and metadata", () => {
+    const queue = buildCommercialQueue([offer({
+      product_name: "Produto sem termo classificável",
+      explainability: {
+        commercialCuration: {
+          commercialIntent: "tech_de_bolso",
+          sourceScenarioId: "tech_catalogo_v1",
+        },
+      },
+    })] as any);
+
+    expect(queue[0]).toMatchObject({
+      commercialIntent: "tech_de_bolso",
+      commercialMetadata: { commercialIntent: "tech_de_bolso", sourceScenarioId: "tech_catalogo_v1" },
+    });
+  });
+
+  it("ignores an invalid persisted intent and keeps the classifier fallback", () => {
+    const queue = buildCommercialQueue([offer({
+      explainability: { commercialCuration: { commercialIntent: "intent_invalida" } },
+    })] as any);
+
+    expect(queue[0].commercialIntent).toBe("casa_organizada_antes_depois");
+  });
 });
