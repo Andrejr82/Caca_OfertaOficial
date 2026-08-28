@@ -7,6 +7,23 @@ const {
 } = require('./commercial-niche-config.cjs');
 const { getMarketplaceNicheContract } = require('./commercial-niche-contracts.cjs');
 const { buildFirstDiscoveryPlan } = require('./first-discovery-quality.cjs');
+const { getMercadoLivreCertifiedFamilies } = require('./mercadolivre-domain-category-map-v1.cjs');
+
+function normalizeNicheKey(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
+function getMercadoLivreCertifiedTermsForNiche(nicheId) {
+  const target = normalizeNicheKey(nicheId);
+  return getMercadoLivreCertifiedFamilies()
+    .filter((family) => normalizeNicheKey(family.niche) === target)
+    .map((family) => family.family);
+}
 
 /**
  * Monta o plano/configuração de execução por marketplace com base na afinidade (1-3).
@@ -33,8 +50,15 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
     ? options.opportunityCandidates.map((c) => (typeof c === 'string' ? c : c.title || c.query)).filter(Boolean)
     : [];
 
-  const allTerms = [...new Set([...selectedCore, ...selectedExpansion, ...dynamicOpportunities])];
-  const firstDiscovery = buildFirstDiscoveryPlan(nicheId, market, {
+  const certifiedMercadoLivreTerms = market === 'Mercado Livre'
+    ? getMercadoLivreCertifiedTermsForNiche(nicheId)
+    : [];
+
+  const allTerms = certifiedMercadoLivreTerms.length > 0
+    ? [...new Set(certifiedMercadoLivreTerms)]
+    : [...new Set([...selectedCore, ...selectedExpansion, ...dynamicOpportunities])];
+
+  const baseFirstDiscovery = buildFirstDiscoveryPlan(nicheId, market, {
     affinity,
     rules,
     contract,
@@ -43,6 +67,21 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
     expansionTerms: selectedExpansion,
     targets: options.firstDiscoveryTargets,
   });
+
+  // O Mercado Livre V1 precisa receber exatamente os nomes das famílias
+  // certificadas. Overrides editoriais mais amplos são úteis nos outros
+  // marketplaces, mas faziam o V1 pular famílias já validadas pelo mapa.
+  const firstDiscovery = market === 'Mercado Livre' && certifiedMercadoLivreTerms.length > 0 && baseFirstDiscovery
+    ? Object.freeze({
+      ...baseFirstDiscovery,
+      families: Object.freeze([...certifiedMercadoLivreTerms]),
+      intents: Object.freeze(baseFirstDiscovery.intents.map((intent) => Object.freeze({
+        ...intent,
+        family: intent.term,
+        queries: Object.freeze([intent.term]),
+      }))),
+    })
+    : baseFirstDiscovery;
 
   return {
     nicheId,
