@@ -310,6 +310,14 @@ Checklist:
 - [ ] nenhuma flag nova sem necessidade comprovada;
 - [ ] diff limitado às causas comprovadas;
 
+Checkpoint da revisão: o diff contra `origin/main` contém 104 arquivos (12 de
+documentação, 26 de runtime, 62 de testes, 3 de configuração e 1 auxiliar).
+Os testes, documentação, contratos API-first, gates de tendência, Auto-Reel e
+runner multiplataforma foram rastreados por commits locais e validados. Como o
+conjunto também contém mudanças históricas de copy/UI/social, o escopo final
+do merge permanece pendente de separação ou aceitação explícita; nenhuma
+limpeza destrutiva foi feita.
+
 ## TASK 13 — ORACLE: alinhamento controlado
 
 **Só executar com autorização explícita do usuário.**
