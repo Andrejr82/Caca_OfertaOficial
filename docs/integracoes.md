@@ -1,14 +1,14 @@
 # Integrações atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 97390baec2d4bc6979ef5f47824cd3a6a4413f60 -->
-<!-- verified-on: 2026-08-27 -->
+<!-- verified-against: 940a5b99c4e92d024197f8a8a88e3e33cc20cf1e -->
+<!-- verified-on: 2026-08-28 -->
 
 | Integração | Capacidade/estado atual |
 |---|---|
 | Supabase | Auth, dados, RPCs, auditoria, Storage e snapshots de Trends |
 | Shopee | OpenAPI V1, extração/ingestão, Express e evidência de Trends |
-| Mercado Livre | OAuth, descoberta, monetização, Trends e guardrails por nicho |
+| Mercado Livre | OAuth, descoberta certified-first + exploração editorial estrita, monetização, Trends e guardrails por nicho |
 | Amazon | descoberta com contrato próprio |
 | Telegram | publicação editorial Top 30 |
 | Instagram | Feed/Reels, disclosure de parceria paga, Safety e Policy Guard |
@@ -24,86 +24,53 @@
 - Um post `channel=whatsapp` em `draft`, sem `posted_at`, `external_id` ou exclusão, permanece válido mesmo se `offers.status=approved` por outro canal.
 - Estados publicados, deletados, rejeitados ou deferidos permanecem protegidos.
 
-## PR #177 — qualidade da primeira descoberta
+## Qualidade da primeira descoberta
 
-A branch `fix/quality-catalog-depth-20260827` introduz `discovery-retrieval-quality/v1`, ainda **não ativo em produção**. O objetivo é melhorar o que cada integração procura na primeira descoberta antes de recorrer ao ranking final.
+O contrato `discovery-retrieval-quality/v1` transporta famílias editoriais, intents, metas de cobertura e estratégia específica de cada marketplace.
 
-O plano dos sete nichos passa a transportar:
+`commercial-niche-runtime-adapter.cjs` resolve os sete nichos e preserva Core/Expansion/Opportunity como catálogo editorial. A integração de cada marketplace decide como buscar esse catálogo sem misturar as regras nativas das fontes.
 
-- famílias editoriais;
-- intents fortes em vez de depender apenas de keywords genéricas;
-- metas mínimas de candidatos fortes/diversidade/cobertura Core;
-- saúde das queries e precisão de recuperação como condição para considerar o pool inicial suficiente;
-- estratégia específica por marketplace.
+## Mercado Livre — certified-first + exploração editorial estrita
 
-`commercial-niche-runtime-adapter.cjs` entrega esse contrato em `firstDiscovery` de forma aditiva; os campos legados permanecem disponíveis. A integração efetiva desses campos nos executores Oracle ainda é uma etapa separada de rollout.
+O caminho principal continua usando as famílias certificadas de `mercadolivre-domain-category-map-v1.cjs`, com domínio/categoria nativos, termos positivos/negativos e bloqueio dos domínios proibidos.
 
-## Mercado Livre — native-first e guardrails por nicho
+A partir do PR #186, o plano do Mercado Livre deixa de ser `certified-only`:
 
-O caminho canônico permanece `official-domain-then-catalog` e o uso de Best Seller continua desejado quando disponível.
+- famílias certificadas continuam primeiro na ordem de busca;
+- o restante das famílias Core/Expansion já existentes no nicho também entra no ciclo;
+- famílias sem mapa certificado usam somente a busca oficial `/sites/MLB/search` em modo exploratório estrito;
+- a exploração rejeita acessórios/peças, termos bloqueados do nicho, domínio proibido, família incompatível e produto sem classificação reconhecida;
+- o fallback pode avançar por offsets `0`, `30` e `60` antes de encerrar a família;
+- famílias certificadas também aprofundam o fallback oficial quando o pool primário é insuficiente;
+- o pool de descoberta V1 é maior que o limite editorial final, deixando margem para novidade, deduplicação, classificação e quality gate posteriores.
 
-No PR #177, o plano de primeira descoberta do Mercado Livre marca `requireNativeDomainEvidence=true`. A intenção é evitar que termos ambíguos cheguem ao pool principal apenas por coincidência lexical. Em Beleza, por exemplo:
-
-- `perfume` vira busca por fragrância humana e rejeita sinais pet;
-- `modelador` vira intenção de modelador de cachos e rejeita padaria/alimentos;
-- `aparador` vira intenção de pelos/barba/cabelo e rejeita aparador de livros.
-
-O gate comum da branch também pode usar `domain_id`/categoria para rejeitar perfume pet, shampoo pet, modeladores de padaria/alimentos e aparadores de livros.
-
-Essa lógica está somente no PR draft e **não foi implantada na Oracle**.
+Isso não transforma famílias exploratórias em famílias estaticamente certificadas. O mapa das 30 famílias continua sendo a camada de maior confiança; a exploração estrita apenas impede que o marketplace seja artificialmente reduzido a essas 30 famílias.
 
 ## Shopee — categoria nativa + intenção forte
 
-A auditoria de 27/08/2026 mostrou ciclos em que categorias amplas geraram baixa precisão, como Beleza com 60 extraídos e apenas 7 relevantes. O plano novo marca:
+Shopee preserva ProductCatIds/OpenAPI V1 e as fontes oficiais já validadas. O controlled persist também aplica o gate de título/produto principal para impedir acessórios, peças ou manutenção de competir com produtos principais.
 
-- `mode=native-category-plus-strong-intent`;
-- `avoidBroadCategoryOnly=true`;
-- categorias nativas do nicho preservadas;
-- ranking comercial somente depois da compatibilidade semântica.
+A política não altera credenciais, endpoints nem autenticação da OpenAPI.
 
-A política semântica de Beleza continua separando produtos principais de acessórios descartáveis ou auxiliares. A mudança não altera credenciais, endpoints nem autenticação da OpenAPI.
+## Amazon — Browse Node + evidência específica do produto
 
-## Amazon — Browse Node + intenção + saúde da fonte
+Amazon mantém Browse Node + intenção forte. A classificação passa a preferir evidências específicas do título/atributos antes de aceitar um Browse Node amplo, reduzindo a promoção de acessórios de uma categoria genérica.
 
-O plano novo usa `browse-node-intent-search` e transforma termos ambíguos antes da coleta. Exemplos auditados:
+O ranking comercial também deixa de premiar preço baixo isoladamente: valor comprovado, desconto, confiança, prova social e logística têm precedência maior.
 
-- Casa: `mixer` → `mixer de cozinha`; `varal` → varal para roupas;
-- Beleza: `modelador` → modelador de cachos; `aparador` → aparador de pelos;
-- Informática: `teclado`, `impressora`, `mouse`, `webcam` e `monitor` passam a queries de produto final mais específicas.
+## Profundidade e qualidade
 
-A readiness também considera a saúde das queries. O ciclo Casa 06h de 27/08/2026, com 18 falhas em 23 consultas Amazon, é regressão explícita e não deve ser considerado fonte saudável mesmo que alguns produtos tenham sido coletados.
+O objetivo operacional é não preencher a fila com produto fraco e também não encerrar a descoberta cedo quando ainda existe orçamento seguro de busca.
 
-A sanidade de preço permanece: referência anterior implausível pode ser neutralizada sem rejeitar o preço atual válido.
+Para Mercado Livre, a profundidade está integrada ao fluxo oficial V1: certified-first, fallback oficial estrito e paginação controlada. Para os demais marketplaces permanecem seus mecanismos próprios de descoberta e profundidade.
 
-## Profundidade adaptativa — fallback, não estratégia principal
+## Oracle
 
-`adaptive-catalog-depth/v1` foi reclassificado na branch como `fallback_after_first_discovery_quality_exhausted`.
-
-Ele só deve ser considerado depois que o plano de primeira descoberta tiver usado intenções fortes, cobertura nativa e o orçamento previsto e ainda assim não formar um pool suficiente. No estado atual do PR:
-
-- a decisão e os testes existem no código versionado da branch;
-- existe limite de rodadas para evitar expansão descontrolada;
-- **não existe chamada adicional automática à Oracle**;
-- qualquer ativação deve ser tratada como mudança explícita de runtime Oracle, com validação e rollout próprios.
-
-## Oracle auditada em 25/08/2026
-
-PM2 confirmou online:
-
-- `oracle-scraper`
-- `oracle-api`
-- `whatsapp-bot`
-- `oracle-trends-radar`
-- `authorized-reel-verifier`
-- `video-worker`
-
-`shopee-feed-sync` estava parado.
-
-`oracle-api` opera na porta `3002`; `whatsapp-bot` na porta `3001`. O Radar dedicado estava ativo com `TREND_EXECUTIVE_MODE=off`, polling de 30s e lock local `/tmp/caca-oferta-trends-radar.lock`.
+O código deste PR altera capacidade versionada, mas não muda a Oracle automaticamente. Alinhamento da VPS, restart e validação operacional são etapas separadas e só devem ocorrer após merge/autorização explícita.
 
 ## Fronteiras
 
 - Discovery não autoriza publicação.
 - Copy publicada vem de `posts.content`.
 - Código versionado representa capacidade; estado externo exige verificação no provedor.
-- O SHA da VPS auditado foi `febe66abb28bd47c738d925befc50ad365c59371`; compare com a `main` antes de qualquer operação.
+- Oracle, Supabase e credenciais não são alterados por este PR.
