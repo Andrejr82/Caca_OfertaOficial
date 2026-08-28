@@ -254,16 +254,16 @@ Executar explicitamente e registrar saída.
 No mínimo:
 
 - [ ] `product-title-quality`;
-- [ ] classificação;
-- [ ] Amazon curation;
-- [ ] Mercado Livre domain/category search;
-- [ ] Mercado Livre canonical classifier;
-- [ ] commercial niche runtime/coverage;
-- [ ] Shopee semântica/controlled persist aplicável;
-- [ ] golden set;
+- [x] classificação;
+- [x] Amazon curation;
+- [x] Mercado Livre domain/category search;
+- [x] Mercado Livre canonical classifier;
+- [x] commercial niche runtime/coverage;
+- [x] Shopee semântica/controlled persist aplicável;
+- [x] golden set;
 - [ ] testes de diversidade se alterada;
 - [ ] `npm run verify` se compatível com o estado do repositório;
-- [ ] `npm run docs:audit` se aplicável.
+- [x] `npm run docs:audit` se aplicável.
 
 Não declarar testes não executados.
 
