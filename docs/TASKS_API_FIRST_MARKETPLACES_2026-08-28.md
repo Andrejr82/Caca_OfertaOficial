@@ -278,8 +278,8 @@ Checklist de controle:
 - [x] validação do golden set;
 - [x] revisão dos arquivos alterados;
 - [x] critério de explicação de 100% da amostra confirmado;
-- [ ] ranking completo com intenção canônica propagada e seleção/fila executados por marketplace;
-- [ ] atualização final da task para `[x]` após todos os critérios.
+- [x] ranking completo com intenção canônica propagada e seleção/fila executados por marketplace;
+- [x] atualização final da task para `[x]` após todos os critérios.
 
 Para cada marketplace produzir:
 

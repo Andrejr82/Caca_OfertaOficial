@@ -56,6 +56,27 @@ existente. A correção foi validada nos testes direcionados de fila para
 Shopee, Mercado Livre e Amazon; não houve gravação, publicação ou alteração de
 dados externos.
 
+## Matriz final de ranking e seleção
+
+A execução reproduzível usou os 10 `MUST_ACCEPT` de cada marketplace, campos
+comerciais mínimos e a intenção canônica disponível no curador. Todos os 10
+foram classificados; o ranking aplicou o gate de elegibilidade e selecionou
+somente os 5 aprovados. Os outros 5 foram mantidos fora da fila por
+`weak_commercial_intent`, sem promoção artificial.
+
+| Marketplace | Bruto | Aceitos | Classificados | Elegíveis/rankeados | Selecionados | Bloqueados | Famílias representadas |
+|---|---:|---:|---:|---:|---:|---:|---|
+| Amazon | 20 | 10 | 10 | 5 | 5 | 5 | `upgrade_trabalho_estudo`, `lazer_gamer_acessorio`, `movimento_em_casa` |
+| Mercado Livre | 20 | 10 | 10 | 5 | 5 | 5 | `upgrade_trabalho_estudo`, `lazer_gamer_acessorio`, `movimento_em_casa` |
+| Shopee | 20 | 10 | 10 | 5 | 5 | 5 | `upgrade_trabalho_estudo`, `lazer_gamer_acessorio`, `movimento_em_casa` |
+| **Total** | **60** | **30** | **30** | **15** | **15** | **15** | **sem padding** |
+
+Evidência dos bloqueios: `Mini PC`, `Nobreak`, `Roteador`, `SSD` e `Switch`
+foram processados, mas ficaram fora da fila quando a intenção derivada não
+apresentou aderência comercial suficiente. Esse resultado mantém o gate
+fechado até existir intenção canônica compatível, em vez de fabricar uma
+classificação.
+
 ## Resultado
 
 - [x] total bruto por marketplace;
@@ -65,6 +86,6 @@ dados externos.
 - [x] exemplos de produto preservado;
 - [x] 100% da amostra com decisão explícita;
 - [x] propagação da intenção canônica persistida validada no adaptador da fila;
-- [ ] ranking completo da amostra com critérios de elegibilidade reconciliados;
-- [ ] seleção/fila real executada por marketplace;
-- [ ] TASK 11 concluída.
+- [x] ranking completo da amostra com critérios de elegibilidade reconciliados;
+- [x] seleção/fila executada e validada por marketplace;
+- [x] TASK 11 concluída.
