@@ -502,7 +502,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
     productsSearchFamilies: mapStats.byRoute.domain_discovery_products_search, highlightsFamilies: mapStats.byRoute.domain_discovery_highlights,
     forbiddenDomainsRejected: 0, semanticAccepted: 0, semanticRejected: 0, minPriceRejected: 0,
     fallbackWhitelistedCalls: 0, fallbackWhitelistedAccepted: 0, fallbackWhitelistedRejected: 0,
-    fallbackOpenCalls: 0, sourceErrors: 0, exploratoryFamiliesUsed: 0, exploratoryAccepted: 0, exploratoryRejected: 0,
+    fallbackOpenCalls: 0, dynamicDiscoveryCalls: 0, dynamicDomainsUsed: 0, sourceErrors: 0, exploratoryFamiliesUsed: 0, exploratoryAccepted: 0, exploratoryRejected: 0,
     discoveryPoolLimit, selectedFamilies: [], exploratoryFamilies: [], familyQueries: []
   };
   const products = [], queries = [];
@@ -521,7 +521,93 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
       let sourceErrors = 0;
       telemetry.exploratoryFamilies.push(intent);
       telemetry.exploratoryFamiliesUsed += 1;
+
+      // Famílias ainda não presentes no mapa certificado também devem usar as
+      // rotas oficiais de catálogo. A rota aberta /sites/MLB/search é somente
+      // uma compatibilidade de fixtures quando a descoberta dinâmica não
+      // retorna domínio algum; nunca é usada depois de uma descoberta válida.
+      const discoveredDomains = new Map();
       for (const searchTerm of searchTerms) {
+        try {
+          const domains = await apiGet(`/sites/MLB/domain_discovery/search?q=${encodeURIComponent(searchTerm)}`, { fetchImpl, accessToken });
+          calls += 1;
+          telemetry.dynamicDiscoveryCalls += 1;
+          for (const domain of (Array.isArray(domains) ? domains : [])) {
+            const domainId = String(domain?.domain_id || '').trim();
+            const categoryId = String(domain?.category_id || '').trim();
+            if (!domainId || !categoryId || MERCADOLIVRE_FORBIDDEN_DOMAIN_IDS_V1.includes(domainId)) continue;
+            discoveredDomains.set(`${domainId}:${categoryId}`, { ...domain, domain_id: domainId, category_id: categoryId });
+          }
+        } catch {
+          sourceErrors += 1;
+          telemetry.sourceErrors += 1;
+        }
+      }
+      telemetry.dynamicDomainsUsed += discoveredDomains.size;
+      const dynamicProducts = [];
+      for (const domain of [...discoveredDomains.values()].slice(0, 6)) {
+        let productIds = [];
+        try {
+          for (const searchTerm of searchTerms) {
+            const response = await apiGet(`/products/search?status=active&site_id=MLB&q=${encodeURIComponent(searchTerm)}&domain_id=${encodeURIComponent(domain.domain_id)}&limit=20`, { fetchImpl, accessToken });
+            calls += 1;
+            productIds.push(...(response.results || []).map((entry) => entry.id).filter(Boolean));
+          }
+        } catch {
+          sourceErrors += 1;
+          telemetry.sourceErrors += 1;
+        }
+        productIds = [...new Set(productIds)].slice(0, 20);
+        for (const productId of productIds) {
+          let productMeta = productMetaCache.get(productId);
+          if (!productMeta) {
+            try { productMeta = await apiGet(`/products/${productId}`, { fetchImpl, accessToken }); calls += 1; productMetaCache.set(productId, productMeta); }
+            catch { sourceErrors += 1; telemetry.sourceErrors += 1; continue; }
+          }
+          let catalogItems = productCache.get(productId);
+          if (!catalogItems) {
+            try { catalogItems = await apiGet(`/products/${productId}/items?limit=20`, { fetchImpl, accessToken }); calls += 1; productCache.set(productId, catalogItems); }
+            catch { sourceErrors += 1; telemetry.sourceErrors += 1; continue; }
+          }
+          const itemIds = (catalogItems.results || []).map((entry) => entry.item_id).filter(Boolean).slice(0, 20);
+          if (!itemIds.length) continue;
+          let details = [];
+          try {
+            const response = await apiGet(`/items?ids=${itemIds.join(',')}`, { fetchImpl, accessToken });
+            calls += 1;
+            details = Array.isArray(response) ? response.map((entry) => entry.body).filter(Boolean) : [];
+          } catch { sourceErrors += 1; telemetry.sourceErrors += 1; continue; }
+          const detailById = new Map(details.map((item) => [item.id, item]));
+          for (const item of (catalogItems.results || []).filter((entry) => itemIds.includes(entry.item_id))) {
+            dynamicProducts.push({
+              ...item, id: item.item_id, title: productMeta.name || null,
+              thumbnail: productMeta.pictures?.[0]?.url || null,
+              permalink: productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`,
+              domain_id: domain.domain_id, category_id: domain.category_id,
+              ...(detailById.get(item.item_id) || {})
+            });
+            if (dynamicProducts.length >= discoveryPoolLimit) break;
+          }
+          if (dynamicProducts.length >= discoveryPoolLimit) break;
+        }
+        if (dynamicProducts.length >= discoveryPoolLimit) break;
+      }
+      for (const item of dynamicProducts) {
+        const evaluation = evaluateStrictExploratoryItem(item, intent, scenarioId);
+        if (!evaluation.accepted) {
+          telemetry.exploratoryRejected += 1;
+          if (evaluation.forbidden) telemetry.forbiddenDomainsRejected += 1;
+          else telemetry.semanticRejected += 1;
+          continue;
+        }
+        telemetry.exploratoryAccepted += 1;
+        telemetry.semanticAccepted += 1;
+        exploratoryRaw.push({ ...item, source: 'mercadolivre_v1_dynamic_domain_discovery' });
+        if (exploratoryRaw.length >= discoveryPoolLimit) break;
+      }
+
+      for (const searchTerm of searchTerms) {
+        if (discoveredDomains.size > 0) break;
         for (const offset of STRICT_FALLBACK_OFFSETS) {
           if (exploratoryRaw.length >= discoveryPoolLimit) break;
           const callsRefLocal = { count: 0, errors: 0 };
@@ -555,7 +641,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
         intent, status: canonicalProducts.length ? gate.status : 'strict_exploratory_empty', minimum_products: gate.minimum,
         auto_selectable: gate.auto_selectable, products: canonicalProducts.length, raw_products: exploratoryRaw.length,
         search_terms: searchTerms, offsets_attempted: offsetsAttempted, source_errors: sourceErrors,
-        source_strategy: 'mercadolivre_v1_strict_exploratory'
+        source_strategy: discoveredDomains.size > 0 ? 'mercadolivre_v1_dynamic_domain_discovery' : 'mercadolivre_v1_strict_exploratory'
       };
       queries.push(queryRow);
       telemetry.familyQueries.push(queryRow);

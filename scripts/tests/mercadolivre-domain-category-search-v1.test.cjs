@@ -129,6 +129,36 @@ test('4. Família editorial não certificada usa fallback oficial estrito e acei
   assert.equal(result.queries[0].source_strategy, 'mercadolivre_v1_strict_exploratory');
 });
 
+test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legada', async () => {
+  const fixture = productResponse({
+    id: 'MLBPROD_CAFETEIRA', itemId: 'MLBITEM_CAFETEIRA',
+    title: 'Cafeteira Elétrica 15 Xícaras Inox', price: 219.9,
+    domainId: 'MLB-COFFEE_MAKERS', categoryId: 'MLB1576'
+  });
+  const calls = [];
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken: 'fixture-token', keywords: ['cafeteira'], scenarioId: 'casa_cozinha_editorial', maxPerIntent: 20, delayMs: 0,
+    env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
+    fetchImpl: async (url) => {
+      const value = String(url); calls.push(value);
+      if (value.includes('/domain_discovery/search')) return json([{ domain_id: 'MLB-COFFEE_MAKERS', category_id: 'MLB1576', category_name: 'Cafeteiras' }]);
+      if (value.includes('/products/search?') && value.includes('domain_id=MLB-COFFEE_MAKERS')) return json({ results: [{ id: 'MLBPROD_CAFETEIRA' }] });
+      if (value.endsWith('/products/MLBPROD_CAFETEIRA')) return json(fixture.productMeta);
+      if (value.includes('/products/MLBPROD_CAFETEIRA/items')) return json(fixture.catalogItems);
+      if (value.includes('/items?ids=')) return json(fixture.details);
+      if (value.includes('/highlights/')) return json({ content: [] });
+      throw new Error(`URL inesperada: ${value}`);
+    },
+  });
+  assert.equal(result.products.length, 1);
+  assert.equal(result.products[0].title, 'Cafeteira Elétrica 15 Xícaras Inox');
+  assert.equal(result.mercadolivreDomainCategorySearchV1.exploratoryFamiliesUsed, 1);
+  assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
+  assert.ok(calls.some((url) => url.includes('/domain_discovery/search')));
+  assert.ok(calls.some((url) => url.includes('domain_id=MLB-COFFEE_MAKERS')));
+  assert.equal(calls.some((url) => url.includes('/sites/MLB/search?')), false);
+});
+
 test('5. Fallback exploratório rejeita acessório mesmo quando a busca é da família correta', async () => {
   const support = mlSearchItem({ id: 'MLB_SUPPORT_1', title: 'Suporte para Monitor Articulado de Mesa' });
   const direct = evaluateStrictExploratoryItem(support, 'monitor', 'informatica_editorial');
