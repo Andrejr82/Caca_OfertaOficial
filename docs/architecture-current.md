@@ -1,10 +1,10 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 76cb164c2d76b99e23a6d9422d38469c3bb27583 -->
+<!-- verified-against: b4b6da282bbcecb74d93898a6d00c170ce103d24 -->
 <!-- verified-on: 2026-08-28 -->
 
-> Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional. O PR #186 permanece isolado até merge/alinhamento Oracle.
+> Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional. O PR #187 permanece isolado até merge/alinhamento Oracle.
 
 ## Visão geral
 
@@ -48,13 +48,9 @@ O scheduler canônico usa `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Pa
 
 Cupons permanece `manual_only` às 22h.
 
-## First Discovery Quality V1
+## Funil de qualidade
 
-`FIRST_DISCOVERY_QUALITY_V1_MODE=active` na Oracle auditada. O plano trabalha com Core/Expansion/Opportunity, intents fortes, diversidade e evidência comercial antes do ranking final. Ausência de strong não autoriza backfill artificial com weak.
-
-## Funil de qualidade — revisão PR #186
-
-A ordem de decisão passa a ser explicitamente:
+A ordem de decisão permanece:
 
 1. identidade/URL/preço válidos;
 2. produto principal, rejeitando peça/reposição/manutenção clara;
@@ -64,41 +60,42 @@ A ordem de decisão passa a ser explicitamente:
 6. ranking comercial;
 7. fila/persistência.
 
-O objetivo é impedir que preço baixo compense classe de produto errada.
+O PR #187 endurece essa ordem sem criar motor paralelo.
 
 ### Amazon
 
-- Browse Node continua evidência de recuperação, não identidade absoluta de produto.
-- Título/atributos específicos precedem browse node amplo na classificação.
-- Offer Quality V2 deixa de bonificar automaticamente itens `<= R$120`; valor comprovado, desconto, confiança, prova social e logística dominam o score.
+- Browse Node permanece evidência auxiliar, não identidade absoluta.
+- A classificação prioriza a primeira evidência específica do produto no título, evitando que menções secundárias dominem a classe.
+- Resultados ambíguos de `scanner` e `switch de rede` passam por semântica específica.
+- O score legado tem influência reduzida; desconto real, confiança, prova social, loja oficial e logística ganham prioridade.
 
 ### Mercado Livre
 
-- Mantém `official-domain-then-catalog` e o mapa V1 certificado.
-- O classificador consome `domain_id`/`category_id` das próprias famílias certificadas antes do catálogo genérico.
-- Itens já validados semanticamente pelo mapa não devem cair em `review_required` apenas por ausência no catálogo de classificação legado.
-- Famílias não certificadas continuam fora da busca automática até certificação explícita.
+- Mantém certified-first, mapa V1 e exploração editorial estrita via endpoint oficial.
+- O classificador consome evidências de domínio/categoria e catálogo editorial antes de enviar itens válidos para revisão manual.
+- A paginação oficial usa a quantidade bruta retornada pela API para decidir continuidade; o número de sobreviventes semânticos não encerra prematuramente a família.
+- Profundidade controlada: offsets `0`, `30`, `60` e `90`, preservando os mesmos guardrails de domínio, família e produto principal.
+- Aliases editoriais ampliam cobertura de famílias sem alterar autenticação nem endpoint.
 
 ### Shopee
 
-- Mantém ProductCatIds/OpenAPI V1 e o controlled persist existente.
-- O controlled persist reutiliza o gate compartilhado de título/produto principal, além de rating, vendas e integridade de preço.
-- Peças/manutenção não devem sobreviver apenas por terem bom rating ou volume de vendas.
+- Mantém ProductCatIds/OpenAPI V1 e controlled persist existente.
+- O gate compartilhado de produto principal bloqueia peças, acessórios e consumíveis antes da persistência quando a intenção não é explicitamente acessória.
 
 ## Profundidade de discovery
 
-`adaptive-catalog-depth/v1` continua desacoplado do executor de rede. A qualidade final não deve ser compensada por preenchimento artificial; aprofundamento só deve ocorrer enquanto houver orçamento seguro de busca do marketplace.
+O sistema não deve preencher volume artificialmente com produto fraco. O aprofundamento acontece somente enquanto houver orçamento seguro no mecanismo já existente de cada marketplace.
 
 ## Oracle produtiva
 
-Último alinhamento confirmado antes do PR #186:
+Último alinhamento confirmado antes do PR #187:
 
 - branch `main`;
-- HEAD/runtime `940a5b99c4e92d024197f8a8a88e3e33cc20cf1e`;
+- HEAD/runtime `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`;
 - working tree limpa;
 - `oracle-scraper` online.
 
-O PR #186 não está na Oracle enquanto não for mergeado e alinhado explicitamente.
+O PR #187 não está na Oracle enquanto não for mergeado e alinhado explicitamente.
 
 ## Publicação social
 
@@ -115,4 +112,4 @@ Discovery não autoriza publicação. `posts.content` continua sendo a autoridad
 
 ## Fontes de verdade
 
-`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs`, `scripts/product-title-quality.cjs`, `scripts/classification-coverage.cjs`, `scripts/mercadolivre-domain-category-map-v1.cjs`, `scripts/shopee-openapi-v1-controlled-persist.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
+`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs`, `scripts/product-title-quality.cjs`, `scripts/curation-policy.cjs`, `scripts/classification-coverage.cjs`, `scripts/mercadolivre-official-intents-v5.cjs`, `scripts/mercadolivre-domain-category-map-v1.cjs`, `scripts/shopee-openapi-v1-controlled-persist.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
