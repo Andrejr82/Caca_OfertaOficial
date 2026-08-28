@@ -38,9 +38,15 @@ Evidências executadas:
 
 ## Limite desta evidência
 
-O golden set valida a decisão do funil e a cobertura de falsos positivos, mas não
-mede uma execução real de ranking/fila por marketplace. Portanto, `ranked` e
-`selecionados` permanecem pendentes e não são inferidos a partir de `MUST_ACCEPT`.
+O golden set valida a decisão do funil e a cobertura de falsos positivos, mas o
+curador genérico exige `commercialIntent` canônico para ranqueamento. Em uma
+execução controlada usando somente os campos disponíveis no golden set, o
+resultado foi `raw=20`, `contractAccepted=10`, `ranked=5` e `selected=5` por
+marketplace. Os cinco casos restantes não foram tratados como rejeição do
+produto: foram classificados como lacuna de contrato/propagação de intenção.
+
+Isso prova que a intenção canônica precisa ser propagada do cenário para o
+curador antes da seleção. Nenhuma seleção foi promovida artificialmente.
 
 ## Resultado
 
@@ -50,6 +56,6 @@ mede uma execução real de ranking/fila por marketplace. Portanto, `ranked` e
 - [x] exemplos de falso positivo eliminado;
 - [x] exemplos de produto preservado;
 - [x] 100% da amostra com decisão explícita;
-- [ ] ranking real executado por marketplace;
+- [ ] ranking completo após propagação da intenção canônica;
 - [ ] seleção/fila real executada por marketplace;
 - [ ] TASK 11 concluída.
