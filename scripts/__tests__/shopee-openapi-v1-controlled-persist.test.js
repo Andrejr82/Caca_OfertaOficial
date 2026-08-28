@@ -67,7 +67,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
 
   it('respects an operational new-insert limit different from five', () => {
     const top = Array.from({ length: 12 }, (_, index) => ({
-      itemId: String(9150 + index), shopId: String(9250 + index), productName: `Novo ${index}`,
+      itemId: String(9150 + index), shopId: String(9250 + index), productName: `Organizador de cozinha novo modelo ${index}`,
       offerLink: `https://s.shopee.com.br/limit-${index}`, imageUrl: `https://cf.shopee.com.br/limit-${index}.jpg`,
       price: 20 + index, productCatIds: ['100010'], score: 100 - index,
     }));
@@ -82,7 +82,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
 
   it('keeps ranking payload and deterministic identity unchanged for new offers', () => {
     const product = {
-      itemId: '9200', shopId: '9300', productName: 'Novo',
+      itemId: '9200', shopId: '9300', productName: 'Organizador de cozinha modelo novo',
       offerLink: 'https://s.shopee.com.br/novo', imageUrl: 'https://cf.shopee.com.br/novo.jpg',
       price: 49.9, priceMin: 49.9, priceMax: 59.9, productCatIds: ['100010'],
       score: 82, rankingV1: { score: 82, reasons: ['vendas'] },
@@ -98,7 +98,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
 
   it('preserves original ranking position after bounded existing updates', () => {
     const top = Array.from({ length: 7 }, (_, index) => ({
-      itemId: String(9400 + index), shopId: String(9500 + index), productName: `Produto ${index}`,
+      itemId: String(9400 + index), shopId: String(9500 + index), productName: `Organizador de cozinha modelo ${index}`,
       offerLink: `https://s.shopee.com.br/rank-${index}`, imageUrl: `https://cf.shopee.com.br/rank-${index}.jpg`,
       price: 20 + index, productCatIds: ['100010'], score: 80,
     }));
@@ -164,7 +164,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     const top = Array.from({ length: 67 }, (_, index) => ({
       itemId: String(1000 + index),
       shopId: String(2000 + index),
-      productName: `Produto ${index}`,
+      productName: `Organizador de cozinha modelo ${index}`,
       offerLink: `https://s.shopee.com.br/item-${index}`,
       imageUrl: `https://down-br.img.susercontent.com/file-${index}.jpg`,
       price: 99.9,

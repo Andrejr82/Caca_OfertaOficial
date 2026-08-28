@@ -75,13 +75,15 @@ export function officialStoreFromEvidence(facts: CopyV5Facts): string | null {
 }
 
 function appendTrustBlocks(blocks: string[], plan: CopyV5Plan, facts: CopyV5Facts) {
+  const trustBlocks: string[] = [];
   const coupon = couponFromEvidence(facts);
-  if (coupon) blocks.push(coupon);
+  if (coupon) trustBlocks.push(coupon);
   const shipping = shippingFromEvidence(facts);
-  if (shipping) blocks.push(shipping);
+  if (shipping) trustBlocks.push(shipping);
   const store = officialStoreFromEvidence(facts);
-  if (store) blocks.push(store);
-  if (plan.optionalProofAngle) blocks.push(plan.optionalProofAngle);
+  if (store) trustBlocks.push(store);
+  if (plan.optionalProofAngle) trustBlocks.push(plan.optionalProofAngle);
+  blocks.push(...trustBlocks.slice(0, 2));
 }
 
 function appendPlanNarrative(blocks: string[], plan: CopyV5Plan) {

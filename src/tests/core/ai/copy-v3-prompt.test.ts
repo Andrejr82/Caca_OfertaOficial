@@ -409,7 +409,7 @@ describe("Official AI Copy V3", () => {
 
     expect(copy).toContain("Tênis Casual Masculino");
     expect(copy).toContain("R$ 89,90");
-    expect(copy).toContain("Corre pra conferir.");
+    expect(copy).toContain("👉 Veja a oferta 👇");
     expect(copy).not.toMatch(/preço conferido|em destaque|Se você procura|Acesse a publicação/iu);
   });
 
@@ -438,6 +438,6 @@ describe("Official AI Copy V3", () => {
 
     expect(contract.cta).toBe("Confira os detalhes no link.");
     expect(contract).not.toHaveProperty("shortSpeech");
-    expect(buildCopyV3ChannelCopy(facts, "whatsapp")).toContain(contract.cta);
+    expect(buildCopyV3ChannelCopy(facts, "whatsapp")).toContain("👉 Veja a oferta 👇");
   });
 });

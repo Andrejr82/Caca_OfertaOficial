@@ -58,7 +58,7 @@ export async function POST() {
       if (alreadyClassified.has(signal.id)) continue;
       classifications.push(await classifyTrendSignal(signal, provider));
     }
-    await persistTrendSignalClassifications(client, user.id, classifications);
+    await persistTrendSignalClassifications(client as any, user.id, classifications as any);
     return NextResponse.json({
       ok: true,
       strategyVersion: TREND_COMMERCIAL_STRATEGY_VERSION,

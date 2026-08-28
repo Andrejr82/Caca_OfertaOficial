@@ -24,6 +24,7 @@ describe("Radar snapshot query mapping", () => {
         evidence_status: "verified",
         source_count: 2,
         commercial_score: "80.50",
+        trend_score: null,
         confidence: "90",
         direct_evidence: [{ source_url: "https://www.mercadolivre.com.br/item" }],
         score_breakdown: { evidenceQuality: 30, recency: 5 },
@@ -47,6 +48,7 @@ describe("Radar snapshot query mapping", () => {
         evidence_status: "partial",
         source_count: 1,
         commercial_score: 70,
+        trend_score: null,
         confidence: 60,
         direct_evidence: [
           { source_url: "https://shopee.com.br/list/fone" },

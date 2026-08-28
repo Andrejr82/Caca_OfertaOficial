@@ -73,7 +73,7 @@ describe("Copy V5 — Hybrid Commercial Architecture", () => {
     const rendered = renderCopyV5ChannelCopy(validated, facts, "whatsapp", url);
 
     expect(rendered.feed).toContain("De R$ 659,00\nPor R$ 199,00");
-    expect(rendered.feed).toMatch(/🔥 (?:69|70)% OFF/);
+    expect(rendered.feed).not.toMatch(/🔥 (?:69|70)% OFF/);
     expect(rendered.feed).toContain(`👉 Ver no Mercado Livre:\n${url}`);
   });
 

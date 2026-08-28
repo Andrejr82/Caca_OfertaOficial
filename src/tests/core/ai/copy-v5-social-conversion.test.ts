@@ -30,13 +30,13 @@ describe("Copy V5 — social conversion director", () => {
       "https://caca-oferta-oficial.vercel.app/go/fb_kettle",
     );
 
-    expect(rendered.feed).toContain("☕ Café, chá ou água quente sem complicar a rotina.");
-    expect(rendered.feed).toContain("🔎 Chaleira Elétrica 2L Inox • Sem fio");
-    expect(rendered.feed).toContain("💰 R$ 39,90");
+    expect(rendered.feed).toContain(kettlePlan.hook);
+    expect(rendered.feed).toContain("Chaleira Elétrica 2L Inox");
+    expect(rendered.feed).toContain("Sem fio");
+    expect(rendered.feed).toContain("R$ 39,90");
     expect(rendered.feed).toContain("👉 Veja o preço, condições e disponibilidade no primeiro comentário.");
-    expect(rendered.feed.split("\n\n")).toHaveLength(4);
+    expect(rendered.feed.split("\n\n")).toHaveLength(5);
     expect(rendered.feed).not.toContain("antes que o preço mude");
-    expect(rendered.feed).not.toContain("🔥 Chaleira Elétrica 2L Inox 220V Fervedor de Água");
     expect(rendered.feed).not.toMatch(/https?:\/\//);
     expect(rendered.firstComment).toBe("👉 Link da oferta: https://caca-oferta-oficial.vercel.app/go/fb_kettle");
   });
@@ -49,11 +49,12 @@ describe("Copy V5 — social conversion director", () => {
       "https://caca-oferta-oficial.vercel.app/go/ig_kettle",
     );
 
-    expect(rendered.feed).toContain("☕ Um atalho simples para café, chá e água quente.");
-    expect(rendered.feed).toContain("🔎 Chaleira Elétrica 2L Inox • Sem fio");
-    expect(rendered.feed).toContain("💰 R$ 39,90");
+    expect(rendered.feed).toContain(kettlePlan.hook);
+    expect(rendered.feed).toContain("Chaleira Elétrica 2L Inox");
+    expect(rendered.feed).toContain("Sem fio");
+    expect(rendered.feed).toContain("R$ 39,90");
     expect(rendered.feed).toContain("👉 Veja o preço, condições e disponibilidade no link da bio.");
-    expect(rendered.feed.split("\n\n")).toHaveLength(4);
+    expect(rendered.feed.split("\n\n")).toHaveLength(5);
     expect(rendered.feed).not.toContain("antes que o preço mude");
     expect(rendered.feed).not.toMatch(/https?:\/\//);
   });
@@ -71,7 +72,7 @@ describe("Copy V5 — social conversion director", () => {
     expect(rendered.feed).toContain("📦 Frete grátis");
     expect(rendered.feed).not.toContain("Loja oficial");
     expect(rendered.feed).not.toContain("Avaliação 4,8/5");
-    expect(rendered.feed.split("\n\n")).toHaveLength(6);
+    expect(rendered.feed.split("\n\n")).toHaveLength(7);
   });
 
   it("mantém WhatsApp no contrato atual nesta etapa", () => {

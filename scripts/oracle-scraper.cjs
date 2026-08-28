@@ -1527,9 +1527,13 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       controller.abort();
       rejectStageTimeout(Object.assign(new Error(`Timeout Shopee OpenAPI de ${timeoutMs}ms excedido`), { code: 'SHOPEE_OPENAPI_STAGE_TIMEOUT' }));
     }, timeoutMs);
-    const boundedRequest = (operationName, query, variables = {}, options = {}) => request
-      ? request(operationName, query, variables, { signal: options.signal || controller.signal, timeoutMs: SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries: SHOPEE_OPENAPI_MAX_RETRIES })
-      : callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }), { signal: options.signal || controller.signal });
+    const boundedRequest = (operationName, query, variables = {}, options = {}) => {
+      const requestSignal = options.signal || controller.signal;
+      if (requestSignal.aborted) return Promise.resolve({ status: 499, data: { errors: [{ message: 'aborted' }] } });
+      return request
+        ? request(operationName, query, variables, { signal: requestSignal, timeoutMs: SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS, maxRetries: SHOPEE_OPENAPI_MAX_RETRIES })
+        : callShopeeAffiliateApi(JSON.stringify({ operationName, query, variables }), { signal: requestSignal });
+    };
     try {
       const response = await Promise.race([runShopeeOpenApiV1OfficialForScenario(scenarioId, {
         env,

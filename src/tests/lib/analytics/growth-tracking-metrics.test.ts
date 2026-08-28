@@ -7,6 +7,7 @@ import {
   summarizeClickEvents,
   summarizeSales,
 } from "@/lib/analytics/metrics";
+import type { ClickEventMetric, SaleMetric } from "@/lib/analytics/metrics";
 
 describe("growth and tracking click metrics", () => {
   it("counts the same 349 click_events for Growth and Tracking", () => {

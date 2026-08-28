@@ -33,7 +33,7 @@ export function semanticDomainLabel(domain: SemanticDomain | null): string | nul
     home: "Casa",
     tools: "Ferramentas",
     fashion: "Moda",
-  }[domain ?? ""] ?? null;
+  }[domain as SemanticDomain] ?? null;
 }
 
 export function semanticContextLine(domain: SemanticDomain | null): string | null {
@@ -45,5 +45,5 @@ export function semanticContextLine(domain: SemanticDomain | null): string | nul
     tools: "🛠️ Para reparos e projetos",
     pet: "🐾 Para a rotina do pet",
     fashion: "👕 Para compor o dia a dia",
-  }[domain ?? ""] ?? null;
+  }[domain as SemanticDomain] ?? null;
 }

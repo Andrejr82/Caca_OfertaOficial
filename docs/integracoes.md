@@ -1,7 +1,7 @@
 # Integrações atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: b4b6da282bbcecb74d93898a6d00c170ce103d24 -->
+<!-- verified-against: cffd8dd3e783538e78a28a0450475fe140414a78 -->
 <!-- verified-on: 2026-08-28 -->
 
 | Integração | Capacidade/estado atual |

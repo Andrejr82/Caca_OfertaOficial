@@ -28,6 +28,44 @@ const {
   deduplicateCatalogAndSemantic,
   applyFamilyDiversityCap,
 } = require('./radar-semantic-dedup-v2.cjs');
+const { ML_OPPORTUNITY_STRATEGY_VERSION } = require('./mercadolivre-opportunity-v1.cjs');
+const { buildShopeePeerScoringPool } = require('./shopee-achadinho-v12.cjs');
+
+function buildMercadoLivreRadarProductsV1({ radarRunId, selectedRows = [] } = {}) {
+  return selectedRows.map((row, index) => {
+    const candidate = row.candidate || {};
+    return {
+      radar_run_id: radarRunId,
+      priority: index + 1,
+      product_term: candidate.productName || '',
+      normalized_product_term: String(candidate.productName || '').toLowerCase(),
+      category: candidate.category || null,
+      marketplace: 'Mercado Livre',
+      evidence_status: 'verified',
+      source_count: 1,
+      commercial_score: row.finalScore,
+      trend_score: null,
+      confidence: row.dataConfidenceScore,
+      direct_evidence: [{
+        strategy_version: ML_OPPORTUNITY_STRATEGY_VERSION,
+        sold_quantity: row.sales ?? null,
+        commercial_metrics: { commissionRate: candidate.commissionPercent ?? 0 },
+      }],
+      score_breakdown: {}, determining_reasons: [], is_focus: index < 3,
+      opportunity_id: null, recommended_channel: null, recommended_format: null,
+      selection_decision: 'TESTAR', selection_decided_at: null, selected_offer_id: null,
+      match_status: 'pending',
+      execution_context: {},
+    };
+  });
+}
+
+function combineMarketplaceProductsByScore(shopeeProducts = [], mlProducts = [], maxProducts = 20) {
+  return [...shopeeProducts, ...mlProducts]
+    .sort((a, b) => Number(b.commercial_score || 0) - Number(a.commercial_score || 0) || String(a.product_term || '').localeCompare(String(b.product_term || '')))
+    .slice(0, maxProducts)
+    .map((row, index) => ({ ...row, priority: index + 1, is_focus: index === 0, direct_evidence: [{ ...(row.direct_evidence?.[0] || {}), rank_position: index + 1 }] }));
+}
 const {
   classifyTicket,
   calculateCommercialOpportunityScoreV4,
@@ -571,4 +609,7 @@ module.exports = {
   createRadarAdminClient,
   persistSnapshotImages,
   processPendingTrendRadarRuns,
+  buildMercadoLivreRadarProductsV1,
+  combineMarketplaceProductsByScore,
+  buildShopeePeerScoringPool,
 };

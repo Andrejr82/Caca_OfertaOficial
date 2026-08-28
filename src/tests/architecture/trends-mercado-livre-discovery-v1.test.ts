@@ -26,9 +26,10 @@ describe("Mercado Livre Radar Discovery V1", () => {
     const coverageRunner = vi.fn(async () => ({ products: [{ item_id: "MLB-1", product_id: "MLB-P1", product_name: "Mouse sem fio", category_name: "Mouses", current_price: 49.9, old_price: 69.9, discount_percent: 28.61, intent: "mouse sem fio", domain_id: "MLB-COMPUTER_MICE", category_id: "MLB1714", image_url: "https://http2.mlstatic.com/mouse.jpg", product_url: "https://www.mercadolivre.com.br/p/MLB-P1", source_position: 1 }] }));
     const result = await collectMercadoLivreRadarDiscoveryV1({ accessToken: "token", coverageRunner });
     expect(coverageRunner).toHaveBeenCalledTimes(1);
-    expect(coverageRunner.mock.calls[0][0].keywords).toEqual(ML_RADAR_DISCOVERY_INTENTS);
-    expect(coverageRunner.mock.calls[0][0].maxPerIntent).toBe(4);
-    expect(coverageRunner.mock.calls[0][0].delayMs).toBeLessThanOrEqual(200);
+    const call = (coverageRunner.mock.calls as any[][])[0][0] as any;
+    expect(call.keywords).toEqual(ML_RADAR_DISCOVERY_INTENTS);
+    expect(call.maxPerIntent).toBe(4);
+    expect(call.delayMs).toBeLessThanOrEqual(200);
     expect(result[0]).toMatchObject({ itemId: "MLB-1", productId: "MLB-P1", sourceIntent: "mouse sem fio", macroGroup: "informatica", domainId: "MLB-COMPUTER_MICE", categoryId: "MLB1714", currentPrice: 49.9, oldPrice: 69.9, commissionPercent: 0 });
   });
 

@@ -46,6 +46,8 @@ export interface CopyV3Facts {
   originalPrice: number | null;
   evidence?: Record<string, unknown>;
   freeShipping?: boolean | null;
+  sellerName?: string | null;
+  marketplaceMetrics?: Record<string, unknown> | null;
 }
 
 export type CopyV2Facts = CopyV3Facts;
@@ -83,9 +85,9 @@ function persistedStrings(value: unknown): string[] {
 function objectiveAttribute(facts: CopyV2Facts) {
   const sources = [facts.productName, ...persistedStrings(facts.evidence ?? {})];
   for (const source of sources) {
-    for (const candidate of ATTRIBUTE_PATTERNS) {
+      for (const candidate of ATTRIBUTE_PATTERNS) {
       const match = source.match(candidate.pattern)?.[0];
-      if (match) return { text: match.replace(/\s+/gu, " ").trim(), emoji: candidate.emoji, hook: candidate.hook };
+      if (match) return { text: match.replace(/\s+/gu, " ").trim(), emoji: candidate.emoji, hook: "hook" in candidate ? candidate.hook : undefined };
     }
   }
   return null;
@@ -462,8 +464,6 @@ function conversionOffer(facts: CopyV3Facts) {
 function conversionHook(facts: CopyV3Facts, product: string, fields?: CopyV3Fields) {
   const candidate = fields?.hook ? sanitizeOfficialAIHook(fields.hook.replace(/\s+/gu, " ")) : "";
   if (candidate && candidate.length <= 90 && !COPY_V3_FORBIDDEN.test(candidate) && !WEAK_CONVERSION_OPENING.test(candidate) && !/(?:incrível|potente|alta performance|premium|perfeito|ideal|durável|resistente)/iu.test(candidate)) return candidate;
-  const discount = discountPercentage(facts.currentPrice, facts.originalPrice);
-  if (discount !== null) return `🔥 ${product} com ${discount}% OFF.`;
   const attribute = objectiveAttribute(facts);
   if (attribute) return `${attribute.emoji} ${attribute.hook ?? `${product} com ${attribute.text}`}.`;
   const benefit = v3DerivedBenefit(facts);

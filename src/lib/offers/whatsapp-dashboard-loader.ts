@@ -111,7 +111,7 @@ export async function loadWhatsappDashboardDrafts({
       if (error) throw error;
 
       editorialDrafts = mergePanelDrafts(
-        (data || []) as unknown as PostWithOffer[],
+        (data || []).map((post) => ({ ...(post as PostWithOffer), offer_id: (post as PostWithOffer).offer_id || (post as PostWithOffer).offers?.id || "" })) as any,
         selectedOfferIds,
         todayStart,
         undefined,

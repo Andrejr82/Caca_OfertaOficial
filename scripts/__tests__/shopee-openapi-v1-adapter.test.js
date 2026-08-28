@@ -20,8 +20,8 @@ describe('Shopee OpenAPI V1 adapter', () => {
     expect(isShopeeOpenApiV1Enabled({ SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'yes' })).toBe(false);
   });
 
-  it('habilita exatamente os 13 cenários aprovados como fonte oficial', () => {
-    expect(APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS).toHaveLength(13);
+  it('habilita exatamente os 12 cenários aprovados como fonte oficial', () => {
+    expect(APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS).toHaveLength(12);
     expect(APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS).not.toContain('grandes_ofertas_editorial');
     for (const scenarioId of APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS) {
       expect(isShopeeOpenApiV1Scenario(scenarioId)).toBe(true);

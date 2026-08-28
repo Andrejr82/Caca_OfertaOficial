@@ -27,7 +27,7 @@ export interface BridgeDraftRow {
 export interface BridgeCandidate {
   offerId: string;
   title: string;
-  marketplace: string;
+  marketplace: Offer["platform"];
   price: number;
   score: number;
   channel: BridgeChannel;
@@ -137,10 +137,10 @@ class SupabaseBridgeRepository implements BridgeRepository {
   async listDrafts(channel: BridgeChannel) { const { data, error } = await this.client.from("posts").select("offer_id,channel,id,status").eq("channel", channel).eq("status", "draft"); if (error) throw new Error(error.message); return (data ?? []) as Array<{ offer_id: string; channel: BridgeChannel; id: string; status: string }>; }
   async listPublished(channel: BridgeChannel) { const { data, error } = await this.client.from("posts").select("offer_id,channel,id,status").eq("channel", channel).eq("status", "published"); if (error) throw new Error(error.message); return (data ?? []) as Array<{ offer_id: string; channel: BridgeChannel; id: string; status: string }>; }
   async insertDraft(input: { userId: string; offerId: string; channel: BridgeChannel; affiliateLinkId: string; content: string }) { const { data, error } = await this.client.from("posts").insert({ user_id: input.userId, offer_id: input.offerId, channel: input.channel, affiliate_link_id: input.affiliateLinkId, content: input.content, status: "draft" }).select("id,status,channel").single(); if (error || !data) throw new Error(error?.message || "draft insert failed"); return data; }
-  async listPanelDrafts(channel: BridgeChannel) { const { data, error } = await this.client.from("posts").select("id,offer_id,channel,status,content,affiliate_link_id,external_id,posted_at,offers(id,product_name,platform,image_url,current_price),affiliate_links(tracked_url)").eq("channel", channel).eq("status", "draft"); if (error) throw new Error(error.message); return (data ?? []) as BridgeDraftRow[]; }
+  async listPanelDrafts(channel: BridgeChannel) { const { data, error } = await this.client.from("posts").select("id,offer_id,channel,status,content,affiliate_link_id,external_id,posted_at,offers(id,product_name,platform,image_url,current_price),affiliate_links(tracked_url)").eq("channel", channel).eq("status", "draft"); if (error) throw new Error(error.message); return (data ?? []).map((row) => ({ ...row, offers: Array.isArray(row.offers) ? row.offers[0] ?? null : row.offers, affiliate_links: Array.isArray(row.affiliate_links) ? row.affiliate_links[0] ?? null : row.affiliate_links })) as BridgeDraftRow[]; }
 }
 
-function createRepository() { config({ path: ".env.local", quiet: true }); const url = process.env.NEXT_PUBLIC_SUPABASE_URL; const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios"); return new SupabaseBridgeRepository(createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false }, realtime: { transport: WebSocket } })); }
+function createRepository() { config({ path: ".env.local", quiet: true }); const url = process.env.NEXT_PUBLIC_SUPABASE_URL; const key = process.env.SUPABASE_SERVICE_ROLE_KEY; if (!url || !key) throw new Error("NEXT_PUBLIC_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY são obrigatórios"); return new SupabaseBridgeRepository(createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } })); }
 
 async function main() {
   const args = new Set(process.argv.slice(2)); const dryRun = args.has("--dry-run"); const execute = args.has("--execute");

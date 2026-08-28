@@ -30,6 +30,16 @@
 | Capacity Hunter falha | verificar `oracle-capacity-hunter.service`; na auditoria de 25/08/2026 falhou por ausência de `apps/oracle-capacity-hunter/.env` |
 | Documentation Audit falha | ler os domínios detectados e atualizar somente os documentos obrigatórios daquele diff |
 
+## Marketplace API-first
+
+| Sintoma | Diagnóstico e ação segura |
+|---|---|
+| Mercado Livre retorna `403 forbidden` em `/sites/MLB/search` | Renovar OAuth apenas quando necessário e validar `/users/me`; se o token estiver válido, tratar como restrição da rota legada e usar o fluxo oficial de domínio/categoria/produtos. Não abrir fallback anônimo. |
+| Shopee informa desconto, mas não há preço anterior oficial | Manter o percentual apenas como dado reportado pela marketplace; não promovê-lo a desconto verificado nem usá-lo para fabricar `oldPrice`. |
+| Candidato desaparece antes do snapshot | Consultar a matriz do funil e o motivo de rejeição. Sem preço, identidade ou sinal comercial elegível, a exclusão é fail-closed e deve ser registrada, não contornada com dados inventados. |
+| `security:check` alerta oferta aprovada sem post de canal | O script é uma auditoria read-only de integridade. Registrar a oferta e o canal ausente; não alterar Supabase automaticamente nem criar/publicar post para silenciar o alerta. |
+| Golden set falha | Parar a validação do marketplace afetado, identificar se a regressão está em classificação, acessório, novidade, ranking ou persistência e corrigir a causa antes de prosseguir. |
+
 ## Oracle — baseline auditada em 25/08/2026
 
 Esperado no host auditado:

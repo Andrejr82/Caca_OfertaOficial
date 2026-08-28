@@ -21,7 +21,7 @@ const SCENARIO_CONTRACTS = Object.freeze({
   casa_cozinha_editorial: scenario(['casa','cozinha'], ['liquidificador','panela','cafeteira','air fryer','organizador','utensilio','jantar','cama','toalha','faqueiro'], ['pet','automotivo','celular','beleza'], ['kit generico'], [100010,100636]),
   organizacao_editorial: scenario(['organiz','casa','cozinha'], ['organizador','caixa','cesto','cabide','sapateira','lixeira','mop','varal'], ['pet','bebe','automotivo','industrial'], ['suporte'], [100010,100636]),
   ferramentas_editorial: scenario(['ferrament','oficina'], ['furadeira','parafusadeira','chave','alicate','serra','trena','maleta'], ['infantil','brinquedo','automotivo','cosmetico'], ['kit sem ferramenta'], [100636]),
-  informatica_editorial: scenario(['informatic','computador','notebook','teclado','mouse','monitor','webcam','ssd','roteador','pc'], ['notebook','computador','teclado','mouse','monitor','webcam','ssd','roteador','impressora'], ['saude','pressao','arterial','smartwatch','pet','automotivo','capa'], ['smartwatch','monitor de saude'], [100644,100013], { negativeClasses: ['generic_accessory','weak_accessory','compatibility_only'] }),
+  informatica_editorial: scenario(['informatic','computador','notebook','teclado','mouse','monitor','webcam','ssd','roteador','pc'], ['notebook','computador','mini pc','teclado','mouse','monitor','webcam','ssd','roteador','impressora'], ['saude','pressao','arterial','smartwatch','pet','automotivo','capa'], ['smartwatch','monitor de saude'], [100644,100013], { negativeClasses: ['generic_accessory','weak_accessory','compatibility_only'] }),
   celulares_editorial: scenario(['celular','smartphone','iphone','galaxy','redmi','mobile'], ['smartphone','celular','iphone','galaxy','redmi'], ['notebook','monitor','cabo avulso','pelicula avulsa'], [], [100013]),
   beleza_editorial: scenario(['beleza','cabelo','capilar','maquiagem','perfume','skincare','hidratante','shampoo','secador','chapinha','serum'], ['cosmetico','mascara','cabelo','capilar','maquiagem','perfume','shampoo','secador','chapinha'], ['varal','centrifuga de salada','suporte de shampoo','cozinha','banheiro','lixeira','panela','liquidificador','pet','automotivo','monitor de pressao'], ['promessa terapeutica'], [100630,100001]),
   moda_editorial: scenario(['moda','roupa','vestuario','camiseta','camisa','calca','bermuda','tenis','sapato','bolsa','mochila','relogio','oculos'], ['roupa','camiseta','camisa','calca','bermuda','tenis','sapato','bolsa','mochila','relogio','oculos'], ['bebe','infantil','pet'], ['tamanho ausente'], [100009,100011,100012,100534], { negativeClasses: ['weak_accessory','generic_accessory'] }),
@@ -219,6 +219,37 @@ function familyKey(product) {
   return tokens.slice(0, 6).join(' ');
 }
 
+function buildShopeeDimensionTelemetry(calls = []) {
+  const byFamily = {};
+  const byQuery = {};
+  const add = (target, key, call) => {
+    if (!key) return;
+    const returned = Math.max(0, Number(call.returned) || 0);
+    const afterParse = Math.max(0, Number(call.acceptedShopType ?? returned) || 0);
+    const afterRelevance = Math.max(0, Number(call.acceptedSemantic ?? afterParse) || 0);
+    const entry = target[key] || {
+      attempted: 0, extracted: 0, afterParse: 0, afterRelevance: 0,
+      rejected: 0, errors: 0, pages: 0,
+    };
+    entry.attempted += 1;
+    entry.pages += 1;
+    entry.extracted += returned;
+    entry.afterParse += afterParse;
+    entry.afterRelevance += afterRelevance;
+    entry.rejected += Math.max(0, returned - afterRelevance);
+    if (call.stopReason && call.stopReason !== 'has_next_page_false' && call.stopReason !== 'page_limit') entry.errors += 1;
+    target[key] = entry;
+  };
+  for (const call of Array.isArray(calls) ? calls : []) {
+    const requested = call.requested || {};
+    const queryKey = String(requested.keyword || (requested.productCatId != null ? `category:${requested.productCatId}` : call.source || 'unknown')).trim();
+    const familyKeyFromCall = String(call.family || '').trim();
+    add(byQuery, queryKey, call);
+    if (familyKeyFromCall) add(byFamily, familyKeyFromCall, call);
+  }
+  return { byFamily, byQuery };
+}
+
 function dedupe(products) {
   const seen = new Map(); const duplicates = [];
   for (const product of products) {
@@ -235,8 +266,11 @@ function dedupe(products) {
 function resolveCanonicalIntent(product, scenarioId, contract) {
   const title = text(product.productName);
   const scenarioKey = String(scenarioId || '').replace(/_editorial$/u, '').replace(/_/g, '-');
-  const matchingClass = (contract.requiredProductClass || []).find((term) => title.includes(text(term)));
-  return matchingClass || scenarioKey;
+  const matchingClass = (contract.requiredProductClass || [])
+    .map((term) => ({ term, position: title.indexOf(text(term)) }))
+    .filter((match) => match.position >= 0)
+    .sort((left, right) => left.position - right.position || text(right.term).length - text(left.term).length)[0];
+  return matchingClass?.term || scenarioKey;
 }
 
 function evaluateCanonicalRanking(product, scenarioId, contract) {
@@ -315,19 +349,22 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
   let semanticAccepted = 0;
   let semanticRejected = 0;
 
-  const callProduct = async (variables, sourcePlan, familyTerms = null) => {
+  const callProduct = async (variables, sourcePlan, familyTerms = null, familyName = null) => {
     const pageSize = plan.limits.productOfferV2PerQuery;
     const maxPages = plan.limits.maxPagesPerQuery;
     const controller = new AbortController();
     stopState.controllers.add(controller);
     const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
-    const timeoutId = setTimeout(() => controller.abort(), Math.max(1, Number(sourceTimeoutMs) || 25_000));
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+      stopAll('timeout');
+    }, Math.max(1, Number(sourceTimeoutMs) || 25_000));
     const seenCursors = new Set();
     let acceptedCount = 0;
     try {
       for (let page = 1; page <= maxPages; page += 1) {
         if (stopState.reason || signal?.aborted) {
-          calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: stopState.reason || 'aborted' });
+          calls.push({ source: sourcePlan, family: familyName, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: stopState.reason || 'aborted' });
           break;
         }
         let response;
@@ -342,7 +379,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
         const rateLimited = apiErrors.some((item) => /10030|rate limit/i.test(String(item?.message || '')));
         if (Number(response?.status || 0) >= 400 || apiErrors.length > 0) {
           if (rateLimited) stopAll('rate_limit');
-          calls.push({ source: sourcePlan, page, status: response?.status || 0, requested: variables, returned: 0, acceptedShopType: 0, stopReason: rateLimited ? 'rate_limit' : 'source_error', error: errorMessage });
+          calls.push({ source: sourcePlan, family: familyName, page, status: response?.status || 0, requested: variables, returned: 0, acceptedShopType: 0, stopReason: rateLimited ? 'rate_limit' : 'source_error', error: errorMessage });
           break;
         }
         const nodes = response.data?.data?.productOfferV2?.nodes || [];
@@ -363,7 +400,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
           }
         }
 
-        const evidence = { source: sourcePlan, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: shopTypeFiltered.length, acceptedSemantic: acceptedNodes.length };
+        const evidence = { source: sourcePlan, family: familyName, page, status: response.status, requested: variables, returned: nodes.length, acceptedShopType: shopTypeFiltered.length, acceptedSemantic: acceptedNodes.length };
         productOffers.push(...acceptedNodes);
         acceptedCount += acceptedNodes.length;
 
@@ -434,7 +471,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
         productCatId: fam.targetProductCatId,
       };
 
-      const added = await callProduct(primaryVars, `productOfferV2.certified.${fam.name}`, fam.terms);
+      const added = await callProduct(primaryVars, `productOfferV2.certified.${fam.name}`, fam.terms, fam.name);
 
       // Fallback para categoria raiz se a folha retornar 0 e forem diferentes
       if (added === 0 && fam.targetProductCatId !== fam.rootProductCatId) {
@@ -443,7 +480,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
           keyword: fam.keyword,
           productCatId: fam.rootProductCatId,
         };
-        await callProduct(fallbackVars, `productOfferV2.fallback.${fam.name}`, fam.terms);
+        await callProduct(fallbackVars, `productOfferV2.fallback.${fam.name}`, fam.terms, fam.name);
       }
     };
 
@@ -585,6 +622,14 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
     };
   }
 
+  const dimensionTelemetry = buildShopeeDimensionTelemetry(calls);
+  for (const item of top) {
+    const matchingFamily = certifiedFamilies.find((fam) => isProductAdherent(item.productName, fam.terms));
+    if (matchingFamily && dimensionTelemetry.byFamily[matchingFamily.name]) {
+      dimensionTelemetry.byFamily[matchingFamily.name].queueSelected = Number(dimensionTelemetry.byFamily[matchingFamily.name].queueSelected || 0) + 1;
+    }
+  }
+
   return {
     scenarioId,
     queryPlan: plan,
@@ -595,6 +640,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
       shopOffers: shopOffers.length,
       shopeeOffers: shopeeOffers.length,
       ...(productCatIdsTelemetry ? { productCatIdsTelemetry } : {}),
+      dimensionTelemetry,
     },
     ...result,
   };
@@ -726,4 +772,4 @@ if (require.main === module) {
   runCli().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => { console.error(`[Shopee Shadow V1] ${error.message}`); process.exitCode = 1; });
 }
 
-module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, buildFixtureSources, collectLiveSources, runCli };
+module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, resolveCanonicalIntent, buildShopeeDimensionTelemetry, buildFixtureSources, collectLiveSources, runCli };

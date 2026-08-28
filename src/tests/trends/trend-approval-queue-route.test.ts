@@ -29,7 +29,9 @@ describe("Trend approval queue route contract", () => {
     const page = fs.readFileSync(pagePath, "utf8");
     const queue = fs.readFileSync(queuePath, "utf8");
     expect(page).toContain("listLatestTrendRadarSnapshot()");
-    expect(page).toContain("<TrendsCommercialSelectionDesk snapshot={latestSnapshot} approvalFeedback={approvalFeedback} />");
+    expect(page).toContain("<TrendsDailySelectionDesk");
+    expect(page).toContain("snapshot={latestSnapshot}");
+    expect(page).toContain("approvalFeedback={approvalFeedback}");
     expect(queue).toContain("Pronto para aprovar");
     expect(queue).toContain("approveTrendShopeeOfferAction");
     expect(queue).toContain("rejectTrendShopeeOfferAction");

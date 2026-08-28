@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const fileName = requestedName.replace(/\.[a-z0-9]+$/i, "") + image.extension;
     const form = new FormData();
     form.append("metadata", new Blob([JSON.stringify({ name: fileName, parents: [process.env.GOOGLE_DRIVE_FOLDER_ID || DEFAULT_FOLDER_ID] })], { type: "application/json" }));
-    form.append("file", new Blob([image.buffer], { type: image.contentType }), fileName);
+    form.append("file", new Blob([new Uint8Array(image.buffer).slice().buffer], { type: image.contentType }), fileName);
     const upload = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink,mimeType,size", { method: "POST", headers: { Authorization: `Bearer ${await getAccessToken()}` }, body: form, cache: "no-store" });
     const data = await upload.json() as { id?: string; name?: string; webViewLink?: string; error?: { message?: string } };
     if (!upload.ok || !data.id) return NextResponse.json({ ok: false, message: data.error?.message || "Google Drive recusou o upload." }, { status: 502 });

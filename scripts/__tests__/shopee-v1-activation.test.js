@@ -11,13 +11,13 @@ describe('Shopee V1 activation gates (T53)', () => {
       SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true',
       SHOPEE_RANKING_V1_ENABLED: 'false',
       SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true',
-    })).toEqual({ engine: true, ranking: false, persistence: true });
+    })).toEqual({ engine: true, ranking: false, persistence: true, productCatIdsSearch: false });
 
     expect(getShopeeV1Flags({
       SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'false',
       SHOPEE_RANKING_V1_ENABLED: 'true',
       SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'false',
-    })).toEqual({ engine: false, ranking: true, persistence: false });
+    })).toEqual({ engine: false, ranking: true, persistence: false, productCatIdsSearch: false });
   });
 
   test('does not interpret rollout percentages or hashing as activation', () => {
@@ -25,6 +25,7 @@ describe('Shopee V1 activation gates (T53)', () => {
       engine: false,
       ranking: false,
       persistence: false,
+      productCatIdsSearch: false,
     });
   });
 

@@ -3,6 +3,28 @@ import type { CopyV5Facts } from "@/core/ai/copy-v5-types";
 import type { OfficialAIChannel } from "@/core/ai/types";
 import type { AffiliateLink, Offer } from "@/types/domain";
 
+/** Validates the marketplace origin and the presence of a generated affiliate URL. */
+export function validateLinkMarketplace(offer: Offer, link: Pick<AffiliateLink, "tracked_url">): void {
+  const evidence = (offer.explainability ?? {}) as Record<string, unknown>;
+  const discovery = evidence.discovery_evidence;
+  const discoveryEvidence = discovery && typeof discovery === "object" && !Array.isArray(discovery)
+    ? discovery as Record<string, unknown>
+    : {};
+  const affiliateUrl = typeof evidence.affiliate_url === "string"
+    ? evidence.affiliate_url
+    : typeof discoveryEvidence.affiliate_url === "string" ? discoveryEvidence.affiliate_url : "";
+  const trackedUrl = link.tracked_url?.trim() || "";
+  if (!affiliateUrl || !/^https:\/\//iu.test(affiliateUrl) || !/^https:\/\/[^/]+\/go\//iu.test(trackedUrl)) {
+    throw new Error("Link incompatível com o marketplace");
+  }
+  let host: string;
+  try { host = new URL(affiliateUrl).hostname.toLowerCase(); } catch { throw new Error("Link incompatível com o marketplace"); }
+  const allowed = offer.platform === "Amazon" ? host.includes("amazon")
+    : offer.platform === "Mercado Livre" ? host.includes("mercadolivre")
+      : offer.platform === "Shopee" ? (host.includes("shopee") || host === "shope.ee") : true;
+  if (!allowed) throw new Error("Link incompatível com o marketplace");
+}
+
 export type OfferSignals = {
   hasRealDiscount: boolean;
   discountPercent?: number;

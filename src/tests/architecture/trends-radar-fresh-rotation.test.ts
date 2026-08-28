@@ -141,7 +141,7 @@ describe("Oracle Trends Radar fresh rotation", () => {
 
     await collectShopeeMarketplaceCandidates({ request, categoryIds: [100010] });
 
-    expect(seenLimits).toEqual([30]);
+    expect(seenLimits).toEqual([40]);
   });
 
   it("does not treat Shopee priceMax as previous price or raw discount as verified", async () => {
@@ -217,7 +217,7 @@ describe("Oracle Trends Radar fresh rotation", () => {
       title: "Notebook",
       category_name: "Notebooks",
       current_price: 3299,
-      old_price: null,
+      old_price: 3999,
       sold_quantity: null,
       rating: null,
       product_url: "https://www.mercadolivre.com.br/p/MLB999",

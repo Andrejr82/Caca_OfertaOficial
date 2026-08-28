@@ -149,6 +149,41 @@ function normalizeQueueSelectionTelemetry(value = {}) {
   };
 }
 
+function buildDiscoveryLossMatrix({ counters = {}, rejectionReasons = {} } = {}) {
+  const stages = ['extracted', 'afterParse', 'afterRelevance', 'afterIdentityDedup', 'afterQualityGate', 'afterNovelty', 'afterClassification', 'queueSelected', 'rpcSent'];
+  const transitions = [];
+  let stageLosses = 0;
+  for (let index = 0; index < stages.length - 1; index += 1) {
+    const from = stages[index];
+    const to = stages[index + 1];
+    if (!(from in counters) || !(to in counters)) continue;
+    const input = Math.max(0, Number(counters[from]) || 0);
+    const output = Math.max(0, Number(counters[to]) || 0);
+    const dropped = input - output;
+    transitions.push({ from, to, input, output, dropped, balanced: dropped >= 0 });
+    stageLosses += dropped;
+  }
+  const preRpcRejections = Object.entries(rejectionReasons)
+    .filter(([reason]) => !/^rpc_/i.test(reason))
+    .reduce((total, [, count]) => total + Math.max(0, Number(count) || 0), 0);
+  const hasRpc = 'rpcSent' in counters;
+  const rpcInput = hasRpc ? Math.max(0, Number(counters.rpcSent) || 0) : null;
+  const rpcAccounted = hasRpc
+    ? ['inserted', 'updated', 'ignored', 'failed'].reduce((total, stage) => total + Math.max(0, Number(counters[stage]) || 0), 0)
+    : null;
+  const terminal = hasRpc ? { input: rpcInput, accounted: rpcAccounted, balanced: rpcInput === rpcAccounted } : null;
+  const terminalGap = terminal ? Math.abs(terminal.input - terminal.accounted) : 0;
+  const unaccounted = Math.abs(stageLosses - preRpcRejections) + terminalGap;
+  return {
+    closed: unaccounted === 0 && transitions.every((transition) => transition.balanced) && (!terminal || terminal.balanced),
+    transitions,
+    terminal,
+    stage_losses: stageLosses,
+    rejection_losses: preRpcRejections,
+    unaccounted,
+  };
+}
+
 function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationId = null, startedAt = null, finalByCategory = null, scenarioRuntime = null } = {}) {
   const counters = emptyCounters();
   const rejectionReasons = {};
@@ -160,6 +195,7 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
   let runtime = scenarioRuntime && typeof scenarioRuntime === 'object' ? { ...scenarioRuntime } : null;
   let sourceTelemetry = null;
   let stageTelemetry = null;
+  let dimensionTelemetry = null;
 
   return {
     contractVersion: DISCOVERY_FUNNEL_CONTRACT_VERSION,
@@ -217,6 +253,15 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
       stageTelemetry = value && typeof value === 'object' ? { ...value } : null;
       return this;
     },
+    setDimensionTelemetry(value) {
+      dimensionTelemetry = value && typeof value === 'object'
+        ? {
+          byFamily: value.byFamily && typeof value.byFamily === 'object' ? { ...value.byFamily } : {},
+          byQuery: value.byQuery && typeof value.byQuery === 'object' ? { ...value.byQuery } : {},
+        }
+        : null;
+      return this;
+    },
     setFinalByCategory(value) {
       categorySummary = normalizeFinalByCategory(value);
       return this;
@@ -256,6 +301,10 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
         counters: Object.freeze({ ...counters }),
         rejectionReasons: Object.freeze({ ...rejectionReasons }),
         stageTelemetry: stageTelemetry ? Object.freeze({ ...stageTelemetry }) : null,
+        dimensionTelemetry: dimensionTelemetry ? Object.freeze({
+          byFamily: Object.freeze({ ...dimensionTelemetry.byFamily }),
+          byQuery: Object.freeze({ ...dimensionTelemetry.byQuery }),
+        }) : null,
         finalByCategory: Object.freeze({ ...categorySummary }),
         queueSelection: Object.freeze({
           ...queueSelection,
@@ -263,6 +312,7 @@ function createDiscoveryFunnel({ marketplace, scenario = 'unknown', correlationI
           changedRejections: Object.freeze(queueSelection.changedRejections.map((item) => Object.freeze({ ...item }))),
           items: Object.freeze(queueSelection.items.map((item) => Object.freeze({ ...item }))),
         }),
+        lossMatrix: Object.freeze(buildDiscoveryLossMatrix({ counters, rejectionReasons })),
       });
     },
   };
@@ -281,5 +331,6 @@ module.exports = {
   normalizeRpcOutcome,
   normalizeFinalByCategory,
   normalizeQueueSelectionTelemetry,
+  buildDiscoveryLossMatrix,
   readDiscoveryFunnelMeta,
 };

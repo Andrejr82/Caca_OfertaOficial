@@ -76,8 +76,8 @@ describe("Shopee Achadinho Quality Gate V1.2", () => {
     const runnerPath = resolve(__dirname, "../../../scripts/oracle-trends-radar-runner.cjs");
     const source = readFileSync(runnerPath, "utf8");
 
-    expect(source).toContain("achadinhoV12.collectShopeeMarketplaceCandidates");
-    expect(source).toContain("achadinhoV12.buildShopeeRadarProductsV12");
+    expect(source).toContain("engine.collectShopeeMarketplaceCandidates");
+    expect(source).toContain("engine.buildTrendRadarProductsFromCandidates");
     expect(source).not.toContain("return engine.processPendingTrendRadarRuns(options)");
     expect(source).not.toContain("return engine.processPendingTrendRadarRuns({ ...options, client })");
   });

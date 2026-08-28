@@ -97,7 +97,8 @@ test('collectShopeeMarketplaceCandidates uses broad official category discovery 
   assert.equal(candidate.sales, 2400);
   assert.equal(candidate.ratingStar, 4.85);
   assert.equal(candidate.currentPrice, 129.9);
-  assert.equal(candidate.priceDiscountRate, 18.5);
+  assert.equal(candidate.priceDiscountRate, 0);
+  assert.equal(candidate.marketplaceReportedDiscountPercent, 18.5);
   assert.equal(candidate.commissionRate, 7);
   assert.equal(candidate.sellerCommissionRate, 3);
   assert.deepEqual(candidate.shopType, [1, 4]);

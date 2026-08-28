@@ -690,6 +690,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         }
         const metrics = discovery?.metrics || {};
         const top = Array.isArray(discovery?.top) ? discovery.top : [];
+        if (discovery?.queryEvidence?.dimensionTelemetry) {
+          funnel.setDimensionTelemetry(discovery.queryEvidence.dimensionTelemetry);
+        }
         funnel.count('extracted', metrics.raw ?? discovery?.extracted ?? top.length);
         funnel.count('afterParse', metrics.parsed ?? top.length);
         funnel.count('afterRelevance', metrics.approvedContract ?? top.length);
@@ -727,7 +730,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           },
           novelty: { input: top.length, evaluated: top.length > 0, accepted: 0, rejected: 0 },
         };
-        const freshness = filterFreshCandidates('Shopee', v1Candidates, history);
+        const freshness = filterFreshCandidates('Shopee', v1Candidates, history, { now: requestedAt });
 
         let candidatesForQueue = freshness.accepted;
         const shopeeEvaluations = [];
@@ -904,6 +907,19 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       funnel.setFinalByCategory(discoveryMeta.finalByCategory);
       if (marketplace === 'Amazon' && discoveryMeta.amazonTelemetry) {
         funnel.setSourceTelemetry(discoveryMeta.amazonTelemetry);
+        const byQuery = {};
+        for (const query of discoveryMeta.amazonTelemetry.queries || []) {
+          const key = String(query.keyword || query.browse_node_id || 'unknown');
+          byQuery[key] = {
+            attempted: 1,
+            extracted: Number(query.collected || 0),
+            afterParse: Number(query.parser_count || 0),
+            afterQualityGate: Number(query.valid || 0),
+            rejected: Number(query.discarded || 0),
+            status: query.status || null,
+          };
+        }
+        funnel.setDimensionTelemetry({ byFamily: { ...byQuery }, byQuery });
         const failedQueries = Number(discoveryMeta.amazonTelemetry.total_queries_failed || 0);
         if (failedQueries > 0) funnel.count('failed', failedQueries);
       }

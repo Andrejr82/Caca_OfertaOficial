@@ -413,6 +413,7 @@ function scoreShopeeAchadinhoCandidate(candidate, pool = []) {
 
 function selectShopeeAchadinhosV12(candidates = [], { maxProducts = 20 } = {}) {
   const scored = candidates
+    .filter((candidate) => candidate?.peerReferenceOnly !== true)
     .map((candidate) => scoreShopeeAchadinhoCandidate(candidate, candidates))
     .filter((row) => row.passesGate)
     .sort((a, b) => b.finalScore - a.finalScore || b.demand - a.demand || (Number(b.candidate.sales) || 0) - (Number(a.candidate.sales) || 0));
@@ -453,6 +454,13 @@ function selectShopeeAchadinhosV12(candidates = [], { maxProducts = 20 } = {}) {
   }
 
   return selected;
+}
+
+function buildShopeePeerScoringPool(selectableCandidates = [], excludedPeers = []) {
+  return [
+    ...selectableCandidates,
+    ...excludedPeers.map((candidate) => ({ ...candidate, peerReferenceOnly: true })),
+  ];
 }
 
 function classifyDecision(score) {
@@ -564,5 +572,6 @@ module.exports = {
   buildPeerContext,
   scoreShopeeAchadinhoCandidate,
   selectShopeeAchadinhosV12,
+  buildShopeePeerScoringPool,
   buildShopeeRadarProductsV12,
 };

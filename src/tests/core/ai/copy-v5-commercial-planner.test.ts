@@ -92,9 +92,10 @@ describe("Copy V5 commercial planner", () => {
     const plan = await planCommercialCopyV5(facts, provider('{"hook":'), { onOutcome: (value) => { outcome = value; } });
 
     expect(plan.hook).toBeTruthy();
-    expect(outcome?.fallback).toBe(true);
-    expect(outcome?.reason).toBe("invalid_output");
-    expect(outcome?.provider).toBe("deterministic-fallback");
+    const recorded = outcome as unknown as CopyV5PlanningOutcome;
+    expect(recorded.fallback).toBe(true);
+    expect(recorded.reason).toBe("invalid_output");
+    expect(recorded.provider).toBe("deterministic-fallback");
   });
 
   it("prompt declara o planner como único cérebro e exige intenção + benefício", () => {

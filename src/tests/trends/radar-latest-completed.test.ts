@@ -7,7 +7,8 @@ describe("trend radar latest snapshot query", () => {
     const source = readFileSync(join(process.cwd(), "src/lib/trends/radar-queries.ts"), "utf8");
     const runQuery = source.match(/from\("trend_radar_runs"\)[\s\S]*?limit\(1\)/)?.[0] ?? "";
 
-    expect(runQuery).toContain('.eq("status", "completed")');
-    expect(runQuery.indexOf('.eq("status", "completed")')).toBeLessThan(runQuery.indexOf('.order("generated_at"'));
+    const normalizedQuery = runQuery.replace(/\s+/g, "");
+    expect(normalizedQuery).toContain('.eq("status","completed")');
+    expect(normalizedQuery.indexOf('.eq("status","completed")')).toBeLessThan(normalizedQuery.indexOf('.order("generated_at"'));
   });
 });

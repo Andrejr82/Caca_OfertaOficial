@@ -261,8 +261,10 @@ async function collectShopeeMarketplaceCandidates({
             category: 'Marketplace Deals',
             currentPrice: price,
             oldPrice,
-            priceDiscountRate: parseNumber(node.priceDiscountRate, discount),
-            discountPercent: discount || parseNumber(node.priceDiscountRate, 0),
+            // O percentual informado pela API não substitui preço anterior oficial;
+            // em faixas priceMin/priceMax ele permanece apenas como evidência reportada.
+            priceDiscountRate: discount,
+            discountPercent: discount,
             marketplaceReportedDiscountPercent,
             priceRangeAmbiguous: priceIntegrity.rangeAmbiguous,
             priceAuthority: priceIntegrity.priceAuthority,

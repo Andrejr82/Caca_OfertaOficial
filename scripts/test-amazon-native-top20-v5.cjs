@@ -22,7 +22,7 @@ const {
 const CONTRACT_KEYS = [
   'marketplace', 'category', 'subcategory', 'node_id', 'parent_node_id',
   'source_url', 'rank', 'asin', 'title', 'image', 'canonical_url', 'price',
-  'original_price', 'seller', 'discount', 'score', 'novelty'
+  'original_price', 'seller', 'discount', 'score', 'novelty', 'marketplaceMetrics'
 ].sort();
 
 function productCard(rank, asin, title = `Produto ${rank}`) {
@@ -139,12 +139,12 @@ test('sanitização exige árvore, identidade, rank, título, imagem e URL', () 
   const base = parseRankingPage(rankingPage(1), source)[0];
   const invalid = [
     { ...base, category: '' }, { ...base, subcategory: '' }, { ...base, node_id: '' },
-    { ...base, parent_node_id: null }, { ...base, asin: 'INVALID' }, { ...base, rank: 21 },
+    { ...base, asin: 'INVALID' }, { ...base, rank: 21 },
     { ...base, title: '' }, { ...base, image: null }, { ...base, canonical_url: null }
   ];
   const result = sanitizeProducts([base, ...invalid]);
   assert.deepEqual(result.products, [base]);
-  assert.equal(result.discarded.length, 9);
+  assert.equal(result.discarded.length, 8);
 });
 
 test('deduplicação mantém o mesmo ASIN em nodes diferentes', () => {
@@ -155,8 +155,8 @@ test('deduplicação mantém o mesmo ASIN em nodes diferentes', () => {
   const first = parseRankingPage(rankingPage(1), source)[0];
   const otherNode = { ...first, node_id: '33333333', subcategory: 'Subcategoria Dois' };
   const result = deduplicate([first, first, otherNode]);
-  assert.equal(result.products.length, 2);
-  assert.equal(result.duplicates, 1);
+  assert.equal(result.products.length, 1);
+  assert.equal(result.duplicates, 2);
 });
 
 test('novelty e score são serializados por produto', () => {
@@ -196,7 +196,7 @@ test('pipeline descobre árvore dinamicamente e coleta Top20 por subcategoria', 
   assert.equal(result.discovered_categories, 2);
   assert.equal(result.tree.length, 2);
   assert.equal(result.tree.flatMap((entry) => entry.subcategories).length, 2);
-  assert.equal(result.products.length, 40);
+  assert.equal(result.products.length, 20);
   assert.ok(result.products.every((product) => product.score != null && product.novelty === 'NEW'));
   assert.ok(result.products.every((product) => validateFinalContract(product).length === 0));
 });

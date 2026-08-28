@@ -15,7 +15,7 @@ export async function POST() {
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
 
     const signals = await fetchGoogleTrendSignals();
-    const persisted = await persistTrendSignals(client, user.id, signals);
+    const persisted = await persistTrendSignals(client as any, user.id, signals);
     return NextResponse.json({ ok: true, collected: signals.length, persisted, source: "google_trends", region: "BR" });
   } catch (error) {
     console.error("[GOOGLE-TRENDS] Falha ao coletar sinais:", error);

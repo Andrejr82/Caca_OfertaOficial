@@ -1,4 +1,3 @@
-// @ts-expect-error sharp exports its runtime types in a path TypeScript does not resolve in this project setup.
 import sharp from "sharp";
 
 type OfferForPreview = {
@@ -284,7 +283,7 @@ async function generateOfferPreview(
   const left = Math.round((config.width - (metadata.width || config.productBoxWidth)) / 2);
   const top = Math.round((config.height - (metadata.height || config.productBoxHeight)) / 2);
 
-  const composites: sharp.OverlayOptions[] = [{ input: productLayer, left, top }];
+  const composites: Array<{ input: Buffer; left: number; top: number }> = [{ input: productLayer, left, top }];
 
   if (variant === "whatsapp" && source === "remote") {
     composites.push({ input: buildWhatsAppOverlay(offer), left: 0, top: 0 });

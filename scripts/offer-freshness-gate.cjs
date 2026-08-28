@@ -42,7 +42,8 @@ function isMateriallyBetter(product, previous) {
 
 function filterFreshCandidates(marketplace, products, history, options = {}) {
   const cooldownDays = Number(options.cooldownDays ?? DEFAULT_COOLDOWN_DAYS[marketplace] ?? 7);
-  const cutoff = Date.now() - cooldownDays * 24 * 60 * 60 * 1000;
+  const referenceTime = options.now ? new Date(options.now).getTime() : Date.now();
+  const cutoff = referenceTime - cooldownDays * 24 * 60 * 60 * 1000;
   const byIdentity = new Map();
   const byTitle = new Map();
   for (const row of Array.isArray(history) ? history : []) {

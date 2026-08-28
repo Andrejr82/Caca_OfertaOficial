@@ -98,6 +98,18 @@ npm run docs:audit
 npm run verify
 ```
 
+### Validação API-first de marketplaces
+
+O discovery oficial usa as rotas autorizadas de catálogo/categoria do Mercado Livre e a OpenAPI oficial da Shopee. O endpoint legado de busca aberta do Mercado Livre (`/sites/{site_id}/search`) pode retornar `403` mesmo com OAuth válido; isso é uma restrição de rota, não motivo para relaxar autenticação ou criar fallback aberto.
+
+Antes de qualquer alteração no runtime, execute os gates específicos e o golden set compartilhado:
+
+```bash
+node --test scripts/tests/amazon-curation.test.cjs scripts/tests/amazon-diagnostic.test.cjs scripts/tests/marketplace-api-first-golden-set.test.cjs scripts/tests/mercadolivre-domain-category-search-v1.test.cjs scripts/tests/shopee-commercial-persist-quality.test.cjs scripts/tests/shopee-openapi-v1-contract.test.cjs scripts/tests/discovery-funnel-accounting.test.cjs
+```
+
+O golden set contém 20 casos por marketplace. Candidatos sem sinal comercial suficiente devem permanecer fora da seleção; dados ausentes continuam `null` e não são fabricados.
+
 ## Serviços e scripts principais
 
 - `scripts/oracle-worker-discovery-only.cjs`: worker oficial de descoberta.

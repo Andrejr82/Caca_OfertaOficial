@@ -7,7 +7,7 @@
     "whatsapp": "concurrently \"node scripts/whatsapp-engine.cjs\" \"npx ngrok http --domain=reasonably-droughtier-kyla.ngrok-free.dev 3001\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/__tests__/*.test.cjs",
     "build": "next build",
     "controlled:draft-bridge:dry-run": "tsx scripts/controlled-legacy-draft-bridge.ts --dry-run",
     "controlled:draft-bridge:execute": "tsx scripts/controlled-legacy-draft-bridge.ts --execute",

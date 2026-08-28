@@ -7,9 +7,14 @@ const { sendFacebookPost, sendFacebookComment } = require('../facebook-auto-publ
 describe('legacy publisher fail-closed guard', () => {
   it('blocks Telegram before any external call', async () => {
     const previous = process.env.NO_PUBLISH;
+    const previousTelegramOptIn = process.env.TELEGRAM_AUTO_PUBLISH;
     process.env.NO_PUBLISH = '1';
+    delete process.env.TELEGRAM_AUTO_PUBLISH;
     try { await expect(sendTelegramPhoto('copy', 'https://image.test/x.jpg')).rejects.toThrow(/NO_PUBLISH=1/); }
-    finally { if (previous === undefined) delete process.env.NO_PUBLISH; else process.env.NO_PUBLISH = previous; }
+    finally {
+      if (previous === undefined) delete process.env.NO_PUBLISH; else process.env.NO_PUBLISH = previous;
+      if (previousTelegramOptIn === undefined) delete process.env.TELEGRAM_AUTO_PUBLISH; else process.env.TELEGRAM_AUTO_PUBLISH = previousTelegramOptIn;
+    }
   });
 
   it('blocks Facebook post and comment before any external call', async () => {

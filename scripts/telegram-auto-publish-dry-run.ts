@@ -13,7 +13,6 @@ const { createTelegramPublisher } = require("./telegram-auto-publisher.cjs") as 
 const now = new Date();
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
   auth: { autoRefreshToken: false, persistSession: false },
-  realtime: { transport: ws },
 });
 
 function nowBrt(value: Date) {

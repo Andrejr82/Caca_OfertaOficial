@@ -43,8 +43,8 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     }
   });
 
-  it('expõe os 14 contratos editoriais com todos os campos declarativos', () => {
-    expect(Object.keys(SCENARIO_CONTRACTS)).toHaveLength(14);
+  it('expõe os 13 contratos editoriais com todos os campos declarativos', () => {
+    expect(Object.keys(SCENARIO_CONTRACTS)).toHaveLength(13);
     for (const contract of Object.values(SCENARIO_CONTRACTS)) {
       expect(contract).toEqual(expect.objectContaining({
         positiveDomain: expect.any(Array), requiredProductClass: expect.any(Array), negativeDomain: expect.any(Array),

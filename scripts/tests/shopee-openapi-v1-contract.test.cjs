@@ -35,7 +35,7 @@ test('OpenAPI candidate flow returns a zero-write audited decision', async () =>
   });
 });
 
-test('OpenAPI official discovery deepens with feed and auxiliary sources before returning empty top', async () => {
+test('OpenAPI official discovery mantém feed e fontes auxiliares ativas', async () => {
   const calls = [];
   const result = await runShopeeOpenApiV1OfficialForScenario('moda_editorial', {
     env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true' },
@@ -47,18 +47,14 @@ test('OpenAPI official discovery deepens with feed and auxiliary sources before 
         includeDelta: options.includeDelta,
         includeAuxiliary: options.includeAuxiliary,
       });
-      if (calls.length === 1) return { scenarios: { moda_editorial: { top: [] } }, queryEvidence: { calls: [{ source: 'productOfferV2.keyword' }] } };
       return { scenarios: { moda_editorial: { top: [{ itemId: '123', productName: 'Tênis casual adulto' }] } }, queryEvidence: { calls: [{ source: 'getItemFeedData' }] } };
     },
   });
 
-  assert.equal(calls.length, 2);
-  assert.deepEqual(calls[0], { scenarioId: 'moda_editorial', includeDelta: false, includeAuxiliary: false });
-  assert.deepEqual(calls[1], { scenarioId: 'moda_editorial', includeDelta: true, includeAuxiliary: true });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(calls[0], { scenarioId: 'moda_editorial', includeDelta: true, includeAuxiliary: true });
   assert.equal(result.result.scenarios.moda_editorial.top.length, 1);
-  assert.equal(result.result.autoDeepening.enabled, true);
-  assert.equal(result.result.autoDeepening.reason, 'empty_primary_official_result');
-  assert.deepEqual(result.result.autoDeepening.sourcesEnabled, ['DELTA', 'shopOfferV2', 'shopeeOfferV2']);
+  assert.equal(result.result.autoDeepening, undefined);
   assert.deepEqual(result.writeAudit, {
     supabaseWrites: 0, offersWrites: 0, postsWrites: 0,
     affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0,
