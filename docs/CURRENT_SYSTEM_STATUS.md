@@ -1,7 +1,7 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: cffd8dd3e783538e78a28a0450475fe140414a78 -->
+<!-- verified-against: d6452c28551c63873278bc2fd93b091b020d8c0d -->
 <!-- verified-on: 2026-08-28 -->
 
 Baseado na `main` em `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`, no ciclo controlado de `informatica_editorial` de 28/08/2026 e na revisão do PR #187. O PR #187 permanece isolado até merge e alinhamento explícito da Oracle.
@@ -9,6 +9,7 @@ Baseado na `main` em `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`, no ciclo contro
 ## Runtime
 
 - Next.js 16/React 19: painel, APIs, Official AI, Publicação Expressa, vídeos e transportes sociais.
+- Auto-Reel: o painel consulta jobs ativos por polling, evita requisições simultâneas e exibe falhas estruturadas sem avançar automaticamente para publicação.
 - Supabase: ofertas, posts, links, auditoria, classificação, jobs e Storage.
 - Oracle: Discovery-Only, scheduler editorial, scraping auxiliar, Radar dedicado e serviços operacionais.
 - Scheduler: `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
