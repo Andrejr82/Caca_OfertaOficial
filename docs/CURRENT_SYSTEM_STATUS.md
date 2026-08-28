@@ -1,10 +1,10 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
-<!-- verified-on: 2026-08-27 -->
+<!-- verified-against: 76cb164c2d76b99e23a6d9422d38469c3bb27583 -->
+<!-- verified-on: 2026-08-28 -->
 
-Baseado no código da `main` e na auditoria operacional da Oracle realizada em 27/08/2026.
+Baseado no código da `main`, na auditoria operacional da Oracle e na revisão do PR #186 em 28/08/2026. O PR #186 permanece isolado e não representa produção até merge e alinhamento explícito da Oracle.
 
 ## Runtime
 
@@ -33,49 +33,53 @@ O PR #177 foi mergeado na `main` no commit `7f35e0d2c0ca22e118b8163a73d18a1c7d99
 A flag `FIRST_DISCOVERY_QUALITY_V1_MODE` aceita `off | shadow | active`.
 
 - default do código: `off`;
-- produção Oracle em 27/08/2026: `active`;
+- produção Oracle auditada: `active`;
 - `active`: usa intents refinadas, descarta candidatos inelegíveis e prioriza candidatos fortes;
 - se não houver candidatos fortes, não deve ocorrer backfill artificial com fracos;
 - readiness insuficiente não dispara automaticamente uma nova descoberta.
 
 A política `adaptive-catalog-depth/v1` permanece disponível como fallback conceitual, porém a chamada adicional de rede continua desacoplada do executor Oracle.
 
+## Qualidade do funil — PR #186
+
+A auditoria do ciclo de `informatica_editorial` de 28/08/2026 mostrou três falhas distintas: acessórios sobrevivendo em Amazon/Shopee, classificação ML descartando famílias válidas e ranking V2 favorecendo preço baixo sem qualidade comercial equivalente.
+
+O PR #186 corrige esses pontos nos componentes existentes:
+
+- `product-title-quality`: bloqueia títulos claramente de peça, reposição, cabo/carregador dedicado e manutenção de impressora 3D antes do ranking;
+- Shopee OpenAPI V1: reutiliza esse gate imediatamente antes do controlled persist;
+- Mercado Livre: classificação consome domínio/categoria do mapa certificado antes do catálogo genérico;
+- Amazon: evidência do título/atributos precede browse nodes amplos na classificação;
+- Offer Quality V2: preço baixo deixa de receber bônus automático; desconto verificado, confiança, prova social, logística e economia real ganham prioridade;
+- runtime compilado e fonte TypeScript do Offer Quality permanecem alinhados.
+
+Nenhuma dessas mudanças altera agenda, credenciais, Supabase ou publicação. O PR permanece não implantado até merge e alinhamento Oracle.
+
 ## Limitação operacional conhecida
 
-A auditoria de um ciclo manual de `moda_editorial` em 27/08/2026 mostrou uma lacuna importante:
+O Mercado Livre continua deliberadamente restrito às famílias certificadas no mapa V1. Isso protege precisão, mas significa que famílias ainda em investigação não entram automaticamente na busca produtiva até certificação específica.
 
-- Mercado Livre pode terminar vazio quando a resolução de domínio nativo não forma cobertura suficiente;
-- Shopee pode ser bloqueada antes da extração quando categorias amplas levam o runtime a `coverageInsufficient`;
-- o runtime atual não aprofunda automaticamente a busca nesses casos.
-
-Isso é uma limitação do mecanismo de descoberta, não ausência de catálogo nos marketplaces. O comportamento desejado é: manter qualidade alta, continuar procurando enquanto houver orçamento seguro de busca e só encerrar zerado depois de esgotar de fato as alternativas do marketplace.
+A profundidade automática também depende do orçamento seguro já existente de cada marketplace; o sistema não deve preencher volume artificialmente com produtos fracos.
 
 ## Qualidade comercial
 
 Um produto persistido não deve ser interpretado automaticamente como “achadinho”. A carteira forte deve combinar relevância editorial com evidências reais como desconto plausível, cupom, rating/reviews, vendas, loja oficial, frete/Prime e posição de origem conforme o marketplace.
 
-Produtos sem desconto, sem prova social e sem outros sinais fortes podem ser válidos para catálogo, mas não devem ser tratados como ofertas fortes apenas porque passaram pelo funil.
+Produtos sem desconto, sem prova social e sem outros sinais fortes podem ser válidos para catálogo, mas não devem superar ofertas comprovadamente melhores apenas por serem baratos.
 
 ## Publicação Expressa
 
 O PR #178 foi mergeado no commit `f68512c56617680247f73d7cc3523f1e9de92892`, restaurando o contrato necessário da Publicação Expressa após Copy V5 sem alterar discovery, Oracle ou Supabase.
 
-## Oracle — estado operacional confirmado em 27/08/2026
+## Oracle — estado operacional confirmado em 28/08/2026
 
 - branch: `main`;
-- HEAD: `7f35e0d2c0ca22e118b8163a73d18a1c7d995439`;
-- working tree: limpa;
-- `FIRST_DISCOVERY_QUALITY_V1_MODE=active`;
+- HEAD/runtime antes do PR #186: `940a5b99c4e92d024197f8a8a88e3e33cc20cf1e`;
+- working tree: limpa na última checagem;
 - `oracle-scraper`: online;
-- ativação realizada com incremento de restart igual a 1;
-- crash loop: não;
-- erros de startup: nenhum;
-- `shopee-feed-sync`: parado;
-- demais processos principais auditados online.
+- alinhamento com a `main`: confirmado antes da abertura do PR #186.
 
-## Ambiente local
-
-Resultados de execução manual local só são comparáveis à Oracle quando o checkout local estiver no mesmo SHA e com as mesmas flags relevantes. Um ciclo local executado em 27/08/2026 registrou `release_id=e157df09f0d8deb53a65a8f48376c89d9cdcdef1`, portanto não deve ser usado como prova do comportamento produtivo da Oracle em `7f35e0d2...`.
+O PR #186 não deve ser considerado carregado pela Oracle enquanto não houver merge e novo alinhamento explícito.
 
 ## Radar
 
@@ -89,6 +93,7 @@ Resultados de execução manual local só são comparáveis à Oracle quando o c
 
 - `npm run verify`
 - `npm run docs:audit`
+- testes de regressão de qualidade de marketplace
 - `/api/health`
 - `/api/readiness`
 
