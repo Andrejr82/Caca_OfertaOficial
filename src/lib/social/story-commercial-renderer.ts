@@ -142,7 +142,7 @@ export function buildStoryCommercialFrameModel(
   };
 }
 
-function imageBlock(model: StoryCommercialFrameModel, height: number = 960) {
+function imageBlock(model: StoryCommercialFrameModel, height: number = 760) {
   return React.createElement(
     "div",
     {
@@ -150,12 +150,15 @@ function imageBlock(model: StoryCommercialFrameModel, height: number = 960) {
         display: "flex",
         width: "100%",
         height,
-        borderRadius: 54,
+        borderRadius: 48,
         overflow: "hidden",
-        background: "#fff",
+        background: "#ffffff",
         alignItems: "center",
         justifyContent: "center",
-        boxShadow: "0 30px 80px rgba(20,20,20,0.14)",
+        padding: "32px",
+        border: "2px solid rgba(226, 232, 240, 0.9)",
+        boxShadow: "0 24px 60px rgba(15, 23, 42, 0.08)",
+        position: "relative",
       },
     },
     React.createElement("img", {
@@ -168,16 +171,14 @@ function imageBlock(model: StoryCommercialFrameModel, height: number = 960) {
 
 export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
   const accent = model.variant === "discount"
-    ? "#ff5a36"
+    ? "#ff4726"
     : model.variant === "proof"
       ? "#2563eb"
-      : "#111827";
+      : "#0f172a";
 
   const hasExtraDetails = Boolean(model.originalPrice || model.support || model.variant === "discount");
-  const imageHeight = hasExtraDetails ? 940 : 1030;
-  const sectionGap = hasExtraDetails ? 18 : 24;
-  const infoGap = hasExtraDetails ? 10 : 14;
-  const rootPadding = hasExtraDetails ? "58px 56px 62px" : "58px 56px 60px";
+  const imageHeight = hasExtraDetails ? 760 : 820;
+  const rootPadding = "64px 48px 72px";
 
   return React.createElement(
     "div",
@@ -189,15 +190,15 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
         flexDirection: "column",
         justifyContent: "space-between",
         padding: rootPadding,
-        background: "linear-gradient(180deg,#fffaf0 0%,#fff 55%,#f8fafc 100%)",
-        color: "#111827",
+        background: "linear-gradient(180deg, #fffcf5 0%, #ffffff 35%, #f8fafc 100%)",
+        color: "#0f172a",
         fontFamily: "Arial, sans-serif",
         overflow: "hidden",
       },
     },
     React.createElement(
       "div",
-      { style: { display: "flex", flexDirection: "column", gap: sectionGap, width: "100%" } },
+      { style: { display: "flex", flexDirection: "column", gap: 16, width: "100%" } },
       React.createElement(
         "div",
         { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%" } },
@@ -206,39 +207,208 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
           { style: { display: "flex", alignItems: "center", gap: 16 } },
           React.createElement(
             "div",
-            { style: { display: "flex", width: 64, height: 64, borderRadius: 16, overflow: "hidden", background: "#0f172a", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(0,0,0,0.08)", flexShrink: 0 } },
-            React.createElement("img", { src: model.logoSrc, alt: model.brandName, style: { width: "100%", height: "100%", objectFit: "cover" } }),
+            {
+              style: {
+                display: "flex",
+                width: 64,
+                height: 64,
+                borderRadius: 18,
+                overflow: "hidden",
+                background: "#0f172a",
+                alignItems: "center",
+                justifyContent: "center",
+                boxShadow: "0 6px 16px rgba(15, 23, 42, 0.12)",
+                flexShrink: 0,
+              },
+            },
+            React.createElement("img", {
+              src: model.logoSrc,
+              alt: model.brandName,
+              style: { width: "100%", height: "100%", objectFit: "cover" },
+            }),
           ),
-          React.createElement("div", { style: { display: "flex", fontSize: 26, fontWeight: 800, color: "#0f172a", letterSpacing: -0.4 } }, model.brandName),
+          React.createElement(
+            "div",
+            { style: { display: "flex", fontSize: 28, fontWeight: 900, color: "#0f172a", letterSpacing: -0.5 } },
+            model.brandName,
+          ),
         ),
-        React.createElement("div", { style: { display: "flex", alignItems: "center", padding: "8px 20px", background: "rgba(15, 23, 42, 0.05)", borderRadius: 999, fontSize: 20, fontWeight: 700, color: "#64748b" } }, model.marketplace),
+        React.createElement(
+          "div",
+          {
+            style: {
+              display: "flex",
+              alignItems: "center",
+              padding: "10px 24px",
+              background: "rgba(15, 23, 42, 0.05)",
+              borderRadius: 999,
+              fontSize: 22,
+              fontWeight: 800,
+              color: "#475569",
+              border: "1.5px solid rgba(15, 23, 42, 0.08)",
+            },
+          },
+          model.marketplace,
+        ),
       ),
       React.createElement(
         "div",
-        { style: { display: "flex", alignSelf: "flex-start", borderRadius: 999, padding: "14px 24px", background: accent, color: "#fff", fontSize: 26, fontWeight: 900, letterSpacing: 1.1 } },
+        {
+          style: {
+            display: "flex",
+            alignSelf: "flex-start",
+            borderRadius: 999,
+            padding: "12px 26px",
+            background: accent,
+            color: "#ffffff",
+            fontSize: 24,
+            fontWeight: 900,
+            letterSpacing: 1.2,
+            boxShadow: model.variant === "discount" ? "0 8px 22px rgba(255, 71, 38, 0.32)" : undefined,
+          },
+        },
         model.eyebrow,
       ),
-      imageBlock(model, imageHeight),
-      React.createElement(
-        "div",
-        { style: { display: "flex", flexDirection: "column", gap: infoGap } },
-        React.createElement("div", { style: { fontSize: 44, lineHeight: 1.04, fontWeight: 900, letterSpacing: -1.3 } }, model.title),
-        React.createElement("div", { style: { fontSize: model.variant === "price" ? 76 : 88, fontWeight: 1000, color: accent, letterSpacing: -3 } }, model.hero),
-        model.originalPrice
-          ? React.createElement("div", { style: { fontSize: 30, opacity: 0.5, textDecoration: "line-through" } }, `De ${model.originalPrice}`)
-          : null,
-        model.variant !== "price"
-          ? React.createElement("div", { style: { fontSize: 58, fontWeight: 1000, letterSpacing: -2.2 } }, `Por ${model.price}`)
-          : null,
-        model.support
-          ? React.createElement("div", { style: { fontSize: 31, fontWeight: 800, color: "#166534" } }, model.support)
-          : null,
-      ),
     ),
+    imageBlock(model, imageHeight),
     React.createElement(
       "div",
-      { style: { display: "flex", width: "100%", alignItems: "center", justifyContent: "center", borderRadius: 999, padding: "24px 32px", background: "#111827", color: "#fff", fontSize: 32, fontWeight: 950, letterSpacing: 0.6 } },
-      model.cta,
+      { style: { display: "flex", flexDirection: "column", gap: 18, width: "100%" } },
+      React.createElement(
+        "div",
+        {
+          style: {
+            display: "flex",
+            flexDirection: "column",
+            gap: 16,
+            background: "#ffffff",
+            borderRadius: 40,
+            padding: "32px 36px",
+            border: "2px solid rgba(226, 232, 240, 0.95)",
+            boxShadow: "0 18px 45px rgba(15, 23, 42, 0.06)",
+          },
+        },
+        React.createElement(
+          "div",
+          {
+            style: {
+              display: "flex",
+              fontSize: 38,
+              lineHeight: 1.18,
+              fontWeight: 900,
+              color: "#0f172a",
+              letterSpacing: -0.9,
+            },
+          },
+          model.title,
+        ),
+        React.createElement(
+          "div",
+          { style: { display: "flex", flexDirection: "column", gap: 10 } },
+          model.variant === "discount"
+            ? React.createElement(
+              "div",
+              { style: { display: "flex", alignItems: "center", gap: 16 } },
+              React.createElement(
+                "div",
+                {
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    padding: "8px 20px",
+                    background: accent,
+                    color: "#ffffff",
+                    borderRadius: 16,
+                    fontSize: 34,
+                    fontWeight: 950,
+                    letterSpacing: -0.5,
+                  },
+                },
+                model.hero,
+              ),
+              model.originalPrice
+                ? React.createElement(
+                  "div",
+                  { style: { display: "flex", fontSize: 30, color: "#94a3b8", textDecoration: "line-through", fontWeight: 700 } },
+                  `De ${model.originalPrice}`,
+                )
+                : null,
+            )
+            : model.variant === "proof" || model.variant === "reinforcement"
+              ? React.createElement(
+                "div",
+                { style: { display: "flex", alignItems: "center", gap: 14 } },
+                React.createElement(
+                  "div",
+                  {
+                    style: {
+                      display: "flex",
+                      alignItems: "center",
+                      padding: "8px 18px",
+                      background: accent,
+                      color: "#ffffff",
+                      borderRadius: 14,
+                      fontSize: 28,
+                      fontWeight: 950,
+                    },
+                  },
+                  model.hero,
+                ),
+              )
+              : null,
+          model.variant !== "price"
+            ? React.createElement(
+              "div",
+              { style: { display: "flex", fontSize: 68, fontWeight: 1000, color: "#0f172a", letterSpacing: -2.4 } },
+              `Por ${model.price}`,
+            )
+            : React.createElement(
+              "div",
+              { style: { display: "flex", fontSize: 78, fontWeight: 1000, color: accent, letterSpacing: -3.0 } },
+              model.hero,
+            ),
+          model.support
+            ? React.createElement(
+              "div",
+              {
+                style: {
+                  display: "flex",
+                  alignSelf: "flex-start",
+                  alignItems: "center",
+                  padding: "8px 18px",
+                  background: "#ecfdf5",
+                  color: "#059669",
+                  border: "1.5px solid #a7f3d0",
+                  borderRadius: 14,
+                  fontSize: 26,
+                  fontWeight: 800,
+                },
+              },
+              model.support,
+            )
+            : null,
+        ),
+      ),
+      React.createElement(
+        "div",
+        {
+          style: {
+            display: "flex",
+            width: "100%",
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 999,
+            padding: "28px 36px",
+            background: "#0f172a",
+            color: "#ffffff",
+            fontSize: 34,
+            fontWeight: 950,
+            letterSpacing: 1.0,
+            boxShadow: "0 18px 40px rgba(15, 23, 42, 0.25)",
+          },
+        },
+        model.cta,
+      ),
     ),
   );
 }

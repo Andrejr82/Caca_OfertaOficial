@@ -232,4 +232,42 @@ describe("Branding oficial das artes de Stories (Instagram e Facebook)", () => {
     const richRendered = renderStoryCommercialFrame(richFrame!);
     expect(React.isValidElement(richRendered)).toBe(true);
   });
+
+  it("garante proporção de vitrine premium com imagem contida e altura máxima reduzida", () => {
+    const plan = buildStoryCommercialPlan({
+      productName: "Cafeteira Nespresso Essenza Mini",
+      marketplace: "Amazon",
+      category: "Cozinha",
+      currentPrice: 389,
+      originalPrice: 499,
+      freeShipping: true,
+      evidence: {},
+    });
+    const frame = buildStoryCommercialFrameModel(
+      plan,
+      { marketplace: "Amazon", imageUrl: "https://images.example.com/nespresso.jpg" },
+      1,
+    );
+    const rendered = renderStoryCommercialFrame(frame!);
+    const rootProps = rendered.props as unknown as { children: React.ReactNode[] };
+    const rootChildren = React.Children.toArray(rootProps.children);
+    const topSection = rootChildren[0] as unknown as React.ReactElement<{ children: React.ReactNode[] }>;
+    const topChildren = React.Children.toArray(topSection.props.children);
+
+    // imageBlock é o segundo bloco filho da raiz
+    const imageContainer = rootChildren[1] as unknown as React.ReactElement<{ style: React.CSSProperties; children: React.ReactElement<{ style: React.CSSProperties }> }>;
+    expect(imageContainer).toBeDefined();
+    expect(Number(imageContainer.props.style.height)).toBeLessThanOrEqual(860);
+    expect(Number(imageContainer.props.style.height)).toBeGreaterThanOrEqual(720);
+
+    const img = imageContainer.props.children;
+    expect(img.props.style.objectFit).toBe("contain");
+
+    // Bloco comercial e CTA integrados no terceiro bloco (rodapé)
+    const bottomSection = rootChildren[2] as unknown as React.ReactElement<{ children: React.ReactNode[] }>;
+    const bottomChildren = React.Children.toArray(bottomSection.props.children);
+    const ctaButton = bottomChildren[1] as unknown as React.ReactElement<{ children: string }>;
+    expect(ctaButton.props.children).toBe("OFERTA NO LINK DA BIO");
+  });
 });
+
