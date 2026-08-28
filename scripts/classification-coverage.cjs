@@ -50,15 +50,29 @@ function candidateIntent(product) {
 }
 
 function classifyByRules(value, source, confidence) {
-  const matches = rules.filter(({ pattern }) => pattern.test(value));
+  const matches = rules.map(({ type, pattern }) => {
+    const match = pattern.exec(value);
+    return match ? { type, index: match.index, matched: match[0] } : null;
+  }).filter(Boolean);
   if (!matches.length) return null;
+
+  // O objeto principal normalmente aparece antes no título. Antes, a ordem do
+  // catálogo vencia e "Webcam ... para Notebook" virava notebook, enquanto
+  // "Mini PC ... SSD" virava SSD. Empates favorecem a evidência mais específica.
+  matches.sort((left, right) => left.index - right.index || right.matched.length - left.matched.length || left.type.localeCompare(right.type));
+  const primary = matches[0];
   const types = [...new Set(matches.map(({ type }) => type))];
   return {
-    productType: types[0],
+    productType: primary.type,
     status: 'classified',
     source,
     confidence,
-    evidence: { matchedTypes: types, value: value.slice(0, 240) },
+    evidence: {
+      matchedTypes: types,
+      primaryMatch: primary.matched,
+      primaryIndex: primary.index,
+      value: value.slice(0, 240),
+    },
   };
 }
 
