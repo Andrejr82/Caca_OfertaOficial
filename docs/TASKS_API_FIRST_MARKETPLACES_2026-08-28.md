@@ -271,6 +271,16 @@ Não declarar testes não executados.
 
 Objetivo: provar o efeito antes da Oracle.
 
+Checklist de controle:
+
+- [x] identificação da task e relatório versionado;
+- [x] implementação/execução da comparação determinística;
+- [x] validação do golden set;
+- [x] revisão dos arquivos alterados;
+- [x] critério de explicação de 100% da amostra confirmado;
+- [ ] ranking e seleção/fila executados por marketplace;
+- [ ] atualização final da task para `[x]` após todos os critérios.
+
 Para cada marketplace produzir:
 
 - total bruto;
