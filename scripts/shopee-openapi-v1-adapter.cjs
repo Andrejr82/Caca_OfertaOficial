@@ -124,10 +124,16 @@ async function runShopeeOpenApiV1ShadowForScenario(scenarioId, options = {}) {
   return { ...decision, result, writeAudit: { ...ZERO_WRITE_AUDIT } };
 }
 
-// Official cycles use this name. The historical shadow-named export remains
-// for isolated diagnostics and compatibility tests only.
+// Official cycles always use the fully validated ProductCatIds V1 source set:
+// productOfferV2 + DELTA + shopOfferV2 + shopeeOfferV2, all behind the existing
+// certified-family semantic gate. This prevents callers from accidentally
+// disabling the auxiliary/deepening sources in production.
 async function runShopeeOpenApiV1OfficialForScenario(scenarioId, options = {}) {
-  return runShopeeOpenApiV1ShadowForScenario(scenarioId, options);
+  return runShopeeOpenApiV1ShadowForScenario(scenarioId, {
+    ...options,
+    includeDelta: true,
+    includeAuxiliary: true,
+  });
 }
 
 function createShopeeOpenApiV1Dispatcher({ legacyRunner, shadowRunner = runShopeeOpenApiV1ShadowForScenario } = {}) {
