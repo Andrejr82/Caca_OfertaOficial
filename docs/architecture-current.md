@@ -1,7 +1,7 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: cffd8dd3e783538e78a28a0450475fe140414a78 -->
+<!-- verified-against: 2df6efe022b0876cd3fc2e1580c0113a147a1bee -->
 <!-- verified-on: 2026-08-28 -->
 
 > Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional. O PR #187 permanece isolado até merge/alinhamento Oracle.
