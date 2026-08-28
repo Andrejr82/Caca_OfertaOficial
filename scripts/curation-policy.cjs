@@ -15,9 +15,9 @@ const PRICE_TIERS = Object.freeze({
   HIGH: 'high',
 });
 
-const MAIN_PRODUCT_TERMS = /\b(air\s*fryer|cafeteira|batedeira|liquidificador|mixer|sanduicheira|chaleira|panela|processador|forno|televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|celular|smartphone|notebook|tablet|monitor|console|climatizador|aspirador|t[eê]nis|camiseta|cal[cç]a|moletom|legging|whey|creatina|fralda|mamadeira|carrinho|cama\s*pet|ra[cç][aã])\b/i;
-const ACCESSORY_ONLY_TERMS = /\b(acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente))\b/i;
-const ACCESSORY_LEAD_TERMS = /^(?:acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente)|cesto)\b/i;
+const MAIN_PRODUCT_TERMS = /\b(air\s*fryer|cafeteira|batedeira|liquidificador|mixer|sanduicheira|chaleira|panela|processador|forno|televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|celular|smartphone|notebook|laptop|tablet|monitor|ssd|nvme|impressora|multifuncional|roteador|router|mini\s*pc|computador|desktop|teclado|mouse|webcam|hd\s*externo|scanner|nobreak|switch\s*de\s*rede|console|climatizador|aspirador|t[eê]nis|camiseta|cal[cç]a|moletom|legging|whey|creatina|fralda|mamadeira|carrinho|cama\s*pet|ra[cç][aã])\b/i;
+const ACCESSORY_ONLY_TERMS = /\b(acess[oó]rio|adaptador|cabo|case|capa|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor|espuma|papel\s*(?:manteiga|antiaderente)|filamento)\b/i;
+const ACCESSORY_LEAD_TERMS = /^(?:acess[oó]rio|adaptador|cabo|case|capa\s+para|cart[aã]o\s*de\s*mem[oó]ria|controle|filtro|forro|kit\s*limpeza|pel[ií]cula|pe[cç]a|refil|reparo|suporte|tampa|chave|pastilha|protetor\s+para|espuma|papel\s*(?:manteiga|antiaderente)|cesto|filamento)\b/i;
 const HIGH_VALUE_TERMS = /\b(televis[aã]o|smart\s*tv|geladeira|refrigerador|m[aá]quina\s*de\s*lavar|lava\s*e\s*seca|lava[-\s]*lou[cç]as|cooktop|forno|micro[-\s]*ondas|ar[-\s]*condicionado|fog[aã]o|sof[aá]|guarda[-\s]*roupa|cama|colch[aã]o|mesa|escrivaninha|cadeira|rack|painel|c[oô]moda|notebook|tablet|monitor|console|celular|smartphone|aspirador\s*rob[oô])\b/i;
 const AMAZON_GENERIC_PROMO_QUERIES = new Set(['oferta', 'desconto', 'promocao', 'mais vendido', 'frete gratis']);
 
@@ -170,6 +170,15 @@ function amazonQueryMatchesProduct(product) {
   if (query === 'tv led') {
     return /\b(?:smart\s*tv|televisao|tv\s+(?:led|4k|uhd|qled|oled|mini\s*led))\b/.test(title);
   }
+  if (query === 'scanner') {
+    // "scanner" na Amazon também retorna detector de parede/RF. Para a família
+    // de informática exigimos semântica inequívoca de digitalização de dados.
+    if (/\b(?:detector|localizador|parede|viga|metal|rf|anti[- ]?espiao|sinal|sweeper|stud finder)\b/.test(title)) return false;
+    return /\bscanner\b/.test(title) && /\b(?:documento|documentos|codigo de barras|barcode|qr|mesa|flatbed|digitaliza|digitalizacao|impressora|multifuncional)\b/.test(title);
+  }
+  if (query === 'switch de rede') {
+    return /\b(?:switch de rede|switch ethernet|ethernet switch|switch gigabit|gigabit switch|switch gerenciavel|network switch)\b/.test(title);
+  }
   if (query === 'halter') {
     if (/\b(?:top|cropped|blusa|vestido|biquini|modelo\s+halter)\b/.test(title)) return false;
     return /\b(?:halter|dumbbell|peso|musculacao|academia)\b/.test(title);
@@ -238,10 +247,12 @@ function qualityGate(product) {
 
   const normalizedTitle = normalizeText(title);
   const explicitSearchIntent = normalizeText(product?.searchIntent || product?.intent || '');
-  const explicitIntentMatchesTitle = explicitSearchIntent.length >= 4 && normalizedTitle.includes(explicitSearchIntent);
   const explicitAccessoryMatch = explicitAccessoryIntentMatchesTitle(explicitSearchIntent, normalizedTitle);
-  const accessoryAllowedByScenario = product?.allowAccessory === true || explicitIntentMatchesTitle || explicitAccessoryMatch;
-  if (!accessoryAllowedByScenario && ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
+  // `allowAccessory` não pode liberar um cenário inteiro. Só uma intenção
+  // explicitamente acessória pode autorizar esse tipo de item — e os guardrails
+  // estruturais de título continuam tendo a palavra final.
+  const accessoryAllowedByIntent = explicitAccessoryMatch;
+  if (!accessoryAllowedByIntent && ACCESSORY_ONLY_TERMS.test(title) && (!MAIN_PRODUCT_TERMS.test(title) || ACCESSORY_LEAD_TERMS.test(title))) reasons.push('ACESSORIO_OU_CONSUMIVEL');
 
   if (marketplace === 'shopee') {
     const rating = Number(signals.rating || 0);
@@ -284,8 +295,8 @@ function qualityGate(product) {
 
   return {
     eligible: reasons.length === 0,
-    reasons,
-    warnings,
+    reasons: [...new Set(reasons.filter(Boolean))],
+    warnings: [...new Set(warnings.filter(Boolean))],
     tier,
     family: classifyProductFamily(product),
     discountPercent: Number(discount.toFixed(2)),
@@ -299,22 +310,24 @@ function qualityScore(product, gate = qualityGate(product)) {
   const tier = gate.tier || classifyPriceTier(product?.currentPrice);
   const discount = gate.discountPercent;
   const savings = gate.absoluteSavings;
-  const base = Math.max(0, Math.min(10, Number(product?.deterministicScore || 0))) * 4;
+  // O score legado de coleta contém forte influência de preço. Ele continua
+  // como sinal, mas não pode dominar aderência, confiança e vantagem comercial.
+  const base = Math.max(0, Math.min(10, Number(product?.deterministicScore || 0))) * 2;
   const rating = Number(signals.rating || 0);
   const socialProofCount = Math.max(Number(signals.sales || 0), Number(signals.reviewCount || 0));
-  const officialStore = signals.officialStoreId ? 8 : 0;
-  const shipping = signals.shippingFree ? 5 : 0;
+  const officialStore = signals.officialStoreId ? 10 : 0;
+  const shipping = signals.shippingFree ? 6 : 0;
   const discountScore = tier === PRICE_TIERS.HIGH
-    ? Math.min(20, discount * 0.5)
+    ? Math.min(24, discount * 0.6)
     : tier === PRICE_TIERS.MEDIUM
-      ? Math.min(22, discount * 0.6)
+      ? Math.min(24, discount * 0.7)
       : Math.min(18, discount * 0.35);
   const savingsScore = tier === PRICE_TIERS.HIGH
     ? (savings >= 1000 ? 30 : savings >= 500 ? 24 : savings >= 250 ? 18 : savings >= 100 ? 12 : 0)
     : tier === PRICE_TIERS.MEDIUM
       ? Math.min(15, savings / 100)
       : Math.min(8, discount * 0.2);
-  const trustScore = Math.min(15, (rating >= 4.7 ? 10 : rating >= 4.5 ? 6 : 0) + (socialProofCount >= 1000 ? 5 : socialProofCount >= 100 ? 2 : 0));
+  const trustScore = Math.min(20, (rating >= 4.7 ? 12 : rating >= 4.5 ? 8 : rating >= 4.0 ? 3 : 0) + (socialProofCount >= 5000 ? 8 : socialProofCount >= 1000 ? 6 : socialProofCount >= 100 ? 3 : 0));
 
   let penalty = 0;
   if ((gate.warnings || []).includes('DADOS_COMERCIAIS_INDISPONIVEIS')) {

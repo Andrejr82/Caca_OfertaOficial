@@ -24,7 +24,9 @@ const API_TIMEOUT_MS = 45000;
 const REPORT_PATH = 'reports/mercadolivre-official-intents-v5-dry-run.json';
 const DEFAULT_TENANT_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 const MIN_PRODUCTS_PER_INTENT = 10;
-const STRICT_FALLBACK_OFFSETS = Object.freeze([0, 30, 60]);
+// Quatro páginas oficiais por termo: a política adaptativa existente permite
+// profundidade até 4 páginas. O V1 usa esse teto sem criar outra estratégia.
+const STRICT_FALLBACK_OFFSETS = Object.freeze([0, 30, 60, 90]);
 const MIN_PRODUCTS_BY_INTENT = {
   projetor: 5,
   'tomada inteligente': 5,
@@ -51,8 +53,23 @@ const SEARCH_ALIASES = {
   'home theater': ['home theater', 'home cinema', 'sistema de som 5.1'],
   'câmera digital': ['câmera digital', 'camera fotografica'],
   Alexa: ['Alexa', 'Echo Dot', 'smart speaker'],
-  teclado: ['teclado', 'teclado gamer'],
-  mouse: ['mouse', 'mouse gamer'],
+  // Informática: a família continua sendo o identificador canônico; os aliases
+  // apenas aprofundam a mesma intenção no endpoint oficial.
+  notebook: ['notebook', 'notebook gamer', 'laptop'],
+  monitor: ['monitor', 'monitor gamer', 'monitor full hd'],
+  ssd: ['ssd', 'ssd nvme', 'ssd sata'],
+  impressora: ['impressora', 'impressora multifuncional', 'impressora ecotank'],
+  roteador: ['roteador', 'roteador wi-fi 6', 'roteador mesh'],
+  'mini pc': ['mini pc', 'mini computador', 'computador mini pc'],
+  computador: ['computador', 'computador desktop', 'computador completo'],
+  desktop: ['desktop', 'pc desktop', 'computador desktop'],
+  teclado: ['teclado', 'teclado mecânico', 'teclado gamer'],
+  mouse: ['mouse', 'mouse sem fio', 'mouse gamer'],
+  webcam: ['webcam', 'webcam full hd 1080p', 'webcam 4k'],
+  'hd externo': ['hd externo', 'disco rígido externo', 'hard drive externo'],
+  scanner: ['scanner', 'scanner de documentos', 'scanner código de barras'],
+  nobreak: ['nobreak', 'no break', 'ups computador'],
+  'switch de rede': ['switch de rede', 'switch ethernet', 'switch gigabit'],
   'mamadeira anti cólica': ['mamadeira anti cólica', 'mamadeira anticólica', 'mamadeira bebê'],
   'ninho redutor de berço': ['ninho redutor de berço', 'ninho bebê', 'redutor de berço'],
   'extrator de leite': ['extrator de leite', 'bomba tira leite', 'bomba de leite materno'],
@@ -341,11 +358,22 @@ async function collectOfficialSearchFallback({ searchTerm, intent, fetchImpl = g
   try {
     response = await apiGet(`/sites/MLB/search?q=${encodeURIComponent(searchTerm)}&limit=${limit}&offset=${offset}`, { fetchImpl, accessToken });
     if (callsRef) callsRef.count = (callsRef.count || 0) + 1;
-  } catch {
+  } catch (error) {
+    if (callsRef) {
+      callsRef.errors = (callsRef.errors || 0) + 1;
+      callsRef.lastError = error?.message || String(error);
+    }
     return [];
   }
   const rawResults = Array.isArray(response?.results) ? response.results : [];
-  if (!rawResults.length) return [];
+  if (!rawResults.length) {
+    const empty = [];
+    Object.defineProperties(empty, {
+      rawPageCount: { value: 0 },
+      pageExhausted: { value: true },
+    });
+    return empty;
+  }
   const validItems = [];
   let position = offset;
   for (const rawItem of rawResults) {
@@ -379,6 +407,13 @@ async function collectOfficialSearchFallback({ searchTerm, intent, fetchImpl = g
       product_name: title, image_url: item.thumbnail || item.pictures?.[0]?.url || null, product_url: item.permalink || null, position,
     }));
   }
+  // O tamanho de `validItems` já sofreu filtro semântico e NÃO pode indicar
+  // fim da paginação. Guardamos o tamanho bruto para decidir se existe próxima
+  // página e evitar o bug que encerrava a busca cedo demais.
+  Object.defineProperties(validItems, {
+    rawPageCount: { value: rawResults.length },
+    pageExhausted: { value: rawResults.length < limit },
+  });
   return validItems;
 }
 
@@ -452,7 +487,7 @@ function evaluateStrictExploratoryItem(item, intent, scenarioId) {
     if (normalizedBlocked.trim() && normalizedTitle.includes(normalizedBlocked)) return { accepted: false, reason: `NICHE_BLOCKED_TERM (${blocked})` };
   }
   if (!titleMatchesIntent(title, intent)) return { accepted: false, reason: 'STRICT_INTENT_MISMATCH' };
-  const classification = classifyMercadoLivreProduct({ title, domainId, categoryId });
+  const classification = classifyMercadoLivreProduct({ title, domainId, categoryId, intent });
   if (classification.status !== 'classified' || classification.productType === 'unknown') return { accepted: false, reason: 'CLASSIFICATION_NOT_CONFIRMED' };
   return { accepted: true, reason: null, classification };
 }
@@ -460,15 +495,15 @@ function evaluateStrictExploratoryItem(item, intent, scenarioId) {
 async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.informatica_editorial.keywords, accessToken, fetchImpl = global.fetch, maxPerIntent = 20, delayMs = 500, now = () => new Date().toISOString(), scenarioId, minConfidence } = {}) {
   if (!accessToken) throw new Error('accessToken obrigatório');
   const mapStats = getMercadoLivreMapStats();
-  const discoveryPoolLimit = Math.max(maxPerIntent, Math.min(60, maxPerIntent * 2));
+  const discoveryPoolLimit = Math.max(maxPerIntent, Math.min(80, maxPerIntent * 3));
   const telemetry = {
-    enabled: true, familiesAvailable: mapStats.totalFamilies, familiesUsed: 0,
+    enabled: true, scenarioId: scenarioId || null, familiesAvailable: mapStats.totalFamilies, familiesUsed: 0,
     highConfidenceFamilies: mapStats.highConfidence, mediumConfidenceFamilies: mapStats.mediumConfidence,
     productsSearchFamilies: mapStats.byRoute.domain_discovery_products_search, highlightsFamilies: mapStats.byRoute.domain_discovery_highlights,
     forbiddenDomainsRejected: 0, semanticAccepted: 0, semanticRejected: 0, minPriceRejected: 0,
     fallbackWhitelistedCalls: 0, fallbackWhitelistedAccepted: 0, fallbackWhitelistedRejected: 0,
-    fallbackOpenCalls: 0, exploratoryFamiliesUsed: 0, exploratoryAccepted: 0, exploratoryRejected: 0,
-    discoveryPoolLimit, selectedFamilies: [], exploratoryFamilies: []
+    fallbackOpenCalls: 0, sourceErrors: 0, exploratoryFamiliesUsed: 0, exploratoryAccepted: 0, exploratoryRejected: 0,
+    discoveryPoolLimit, selectedFamilies: [], exploratoryFamilies: [], familyQueries: []
   };
   const products = [], queries = [];
   const productMetaCache = new Map(), productCache = new Map(), reviewCache = new Map();
@@ -482,15 +517,20 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
     if (!isEligible || !familyConfig) {
       const exploratoryRaw = [];
       const searchTerms = SEARCH_ALIASES[intent] || [intent];
+      const offsetsAttempted = [];
+      let sourceErrors = 0;
       telemetry.exploratoryFamilies.push(intent);
       telemetry.exploratoryFamiliesUsed += 1;
       for (const searchTerm of searchTerms) {
         for (const offset of STRICT_FALLBACK_OFFSETS) {
           if (exploratoryRaw.length >= discoveryPoolLimit) break;
-          const callsRefLocal = { count: 0 };
+          const callsRefLocal = { count: 0, errors: 0 };
           telemetry.fallbackOpenCalls += 1;
+          offsetsAttempted.push({ searchTerm, offset });
           const fallbackItems = await collectOfficialSearchFallback({ searchTerm, intent, fetchImpl, accessToken, limit: 30, offset, callsRef: callsRefLocal, reviewCache: null });
           calls += callsRefLocal.count;
+          sourceErrors += callsRefLocal.errors || 0;
+          telemetry.sourceErrors += callsRefLocal.errors || 0;
           for (const item of fallbackItems) {
             const evaluation = evaluateStrictExploratoryItem(item, intent, scenarioId);
             if (!evaluation.accepted) {
@@ -504,18 +544,21 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
             exploratoryRaw.push({ ...item, source: 'mercadolivre_v1_strict_exploratory' });
             if (exploratoryRaw.length >= discoveryPoolLimit) break;
           }
-          if (fallbackItems.length < 30) break;
+          if (fallbackItems.pageExhausted === true) break;
         }
         if (exploratoryRaw.length >= discoveryPoolLimit) break;
       }
       const canonicalProducts = deduplicateCanonicalProducts(exploratoryRaw).slice(0, discoveryPoolLimit);
       products.push(...canonicalProducts);
       const gate = coverageGate(canonicalProducts.length, { minimum: 5 });
-      queries.push({
+      const queryRow = {
         intent, status: canonicalProducts.length ? gate.status : 'strict_exploratory_empty', minimum_products: gate.minimum,
         auto_selectable: gate.auto_selectable, products: canonicalProducts.length, raw_products: exploratoryRaw.length,
+        search_terms: searchTerms, offsets_attempted: offsetsAttempted, source_errors: sourceErrors,
         source_strategy: 'mercadolivre_v1_strict_exploratory'
-      });
+      };
+      queries.push(queryRow);
+      telemetry.familyQueries.push(queryRow);
       continue;
     }
 
@@ -525,6 +568,8 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
     const categoryWhitelist = familyConfig.categoryIds || [];
     const bestRoute = familyConfig.bestExtractionRoute;
     const routesToTry = bestRoute === 'domain_discovery_products_search' ? ['products_search', 'highlights'] : ['highlights', 'products_search'];
+    const offsetsAttempted = [];
+    let sourceErrors = 0;
 
     for (const routeType of routesToTry) {
       if (intentRawProducts.length >= discoveryPoolLimit) break;
@@ -539,7 +584,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
               calls += 1;
               productIds.push(...(res.results || []).map((e) => e.id).filter(Boolean));
             }
-          } catch {}
+          } catch { sourceErrors += 1; telemetry.sourceErrors += 1; }
         }
       } else {
         for (const catId of categoryWhitelist) {
@@ -548,7 +593,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
             const res = await apiGet(`/highlights/MLB/category/${catId}`, { fetchImpl, accessToken });
             calls += 1;
             productIds.push(...(res.content || []).filter((e) => e.type === 'PRODUCT').map((e) => e.id).filter(Boolean));
-          } catch {}
+          } catch { sourceErrors += 1; telemetry.sourceErrors += 1; }
         }
       }
       productIds = [...new Set(productIds)].slice(0, 20);
@@ -556,16 +601,16 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
         const productId = productIds[index];
         let productMeta = productMetaCache.get(productId);
         if (!productMeta) {
-          try { productMeta = await apiGet(`/products/${productId}`, { fetchImpl, accessToken }); calls += 1; productMetaCache.set(productId, productMeta); } catch { productMeta = {}; }
+          try { productMeta = await apiGet(`/products/${productId}`, { fetchImpl, accessToken }); calls += 1; productMetaCache.set(productId, productMeta); } catch { productMeta = {}; sourceErrors += 1; telemetry.sourceErrors += 1; }
         }
         let catalogItems = productCache.get(productId);
         if (!catalogItems) {
-          try { catalogItems = await apiGet(`/products/${productId}/items?limit=20`, { fetchImpl, accessToken }); calls += 1; productCache.set(productId, catalogItems); } catch { catalogItems = { results: [] }; }
+          try { catalogItems = await apiGet(`/products/${productId}/items?limit=20`, { fetchImpl, accessToken }); calls += 1; productCache.set(productId, catalogItems); } catch { catalogItems = { results: [] }; sourceErrors += 1; telemetry.sourceErrors += 1; }
         }
         const itemIds = (catalogItems.results || []).map((i) => i.item_id).filter(Boolean).slice(0, 20);
         if (!itemIds.length) continue;
         let details = [];
-        try { details = await apiGet(`/items?ids=${itemIds.join(',')}`, { fetchImpl, accessToken }); calls += 1; details = Array.isArray(details) ? details.map((e) => e.body).filter(Boolean) : []; } catch { details = []; }
+        try { details = await apiGet(`/items?ids=${itemIds.join(',')}`, { fetchImpl, accessToken }); calls += 1; details = Array.isArray(details) ? details.map((e) => e.body).filter(Boolean) : []; } catch { details = []; sourceErrors += 1; telemetry.sourceErrors += 1; }
         const detailById = new Map(details.map((item) => [item.id, item]));
         const enriched = (catalogItems.results || []).filter((item) => itemIds.includes(item.item_id)).map((item) => ({
           ...item, id: item.item_id, title: productMeta.name || null, thumbnail: productMeta.pictures?.[0]?.url || null,
@@ -597,10 +642,13 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
       for (const st of SEARCH_ALIASES[intent] || [intent]) {
         for (const offset of STRICT_FALLBACK_OFFSETS) {
           if (intentRawProducts.length >= discoveryPoolLimit) break;
-          const callsRefLocal = { count: 0 };
+          const callsRefLocal = { count: 0, errors: 0 };
           telemetry.fallbackWhitelistedCalls += 1;
+          offsetsAttempted.push({ searchTerm: st, offset });
           const fallbackItems = await collectOfficialSearchFallback({ searchTerm: st, intent, fetchImpl, accessToken, limit: 30, offset, callsRef: callsRefLocal, reviewCache });
           calls += callsRefLocal.count;
+          sourceErrors += callsRefLocal.errors || 0;
+          telemetry.sourceErrors += callsRefLocal.errors || 0;
           for (const fItem of fallbackItems) {
             const evalRes = evaluateV1ItemAgainstConfig(fItem, familyConfig);
             if (!evalRes.accepted) {
@@ -615,7 +663,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
             intentRawProducts.push(fItem);
             if (intentRawProducts.length >= discoveryPoolLimit) break;
           }
-          if (fallbackItems.length < 30) break;
+          if (fallbackItems.pageExhausted === true) break;
         }
         if (intentRawProducts.length >= discoveryPoolLimit) break;
       }
@@ -624,12 +672,15 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
     const canonicalProducts = deduplicateCanonicalProducts(intentRawProducts).slice(0, discoveryPoolLimit);
     products.push(...canonicalProducts);
     const gate = coverageGate(canonicalProducts.length, { minimum: 5 });
-    queries.push({
+    const queryRow = {
       intent, status: gate.status, minimum_products: gate.minimum, auto_selectable: gate.auto_selectable,
       domain_id: domainWhitelist[0] || null, category_id: categoryWhitelist[0] || null,
       products: canonicalProducts.length, raw_products: intentRawProducts.length,
+      search_terms: SEARCH_ALIASES[intent] || [intent], offsets_attempted: offsetsAttempted, source_errors: sourceErrors,
       source_strategy: `mercadolivre_v1_${bestRoute}_deep`
-    });
+    };
+    queries.push(queryRow);
+    telemetry.familyQueries.push(queryRow);
   }
 
   telemetry.familiesUsed = telemetry.selectedFamilies.length + telemetry.exploratoryFamiliesUsed;
@@ -723,7 +774,7 @@ async function runMercadoLivreOfficialIntentCoverage({ keywords = SCENARIOS.info
         for (const searchTerm of searchTerms) {
           if (intentRawProducts.length >= targetCount) break;
           let termUsed = false;
-          for (const offset of [0, 30]) {
+          for (const offset of STRICT_FALLBACK_OFFSETS) {
             if (intentRawProducts.length >= targetCount) break;
             const callsRefLocal = { count: 0 };
             const fallbackItems = await collectOfficialSearchFallback({ searchTerm, intent, fetchImpl, accessToken, limit: 30, offset, callsRef: callsRefLocal, reviewCache });
@@ -732,7 +783,7 @@ async function runMercadoLivreOfficialIntentCoverage({ keywords = SCENARIOS.info
               fallbackSearchUsed = true; fallbackSearchProducts += fallbackItems.length; intentRawProducts.push(...fallbackItems); termUsed = true;
               if (!selectedDomain && fallbackItems[0]?.domain_id) selectedDomain = { domain_id: fallbackItems[0].domain_id, category_id: fallbackItems[0].category_id, category_name: fallbackItems[0].category_name };
             }
-            if (fallbackItems.length < 30) break;
+            if (fallbackItems.pageExhausted === true) break;
             if (delayMs > 0) await sleep(delayMs);
           }
           if (termUsed) fallbackSearchTerms.push(searchTerm);
@@ -782,5 +833,6 @@ module.exports = {
   catalogFallbackProducts,
   MIN_PRODUCTS_PER_INTENT,
   MIN_PRODUCTS_BY_INTENT,
-  SEARCH_ALIASES
+  SEARCH_ALIASES,
+  STRICT_FALLBACK_OFFSETS
 };

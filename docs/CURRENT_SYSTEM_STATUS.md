@@ -1,10 +1,10 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 76cb164c2d76b99e23a6d9422d38469c3bb27583 -->
+<!-- verified-against: b4b6da282bbcecb74d93898a6d00c170ce103d24 -->
 <!-- verified-on: 2026-08-28 -->
 
-Baseado no código da `main`, na auditoria operacional da Oracle e na revisão do PR #186 em 28/08/2026. O PR #186 permanece isolado e não representa produção até merge e alinhamento explícito da Oracle.
+Baseado na `main` em `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`, no ciclo controlado de `informatica_editorial` de 28/08/2026 e na revisão do PR #187. O PR #187 permanece isolado até merge e alinhamento explícito da Oracle.
 
 ## Runtime
 
@@ -28,58 +28,44 @@ Baseado no código da `main`, na auditoria operacional da Oracle e na revisão d
 
 ## First Discovery Quality V1
 
-O PR #177 foi mergeado na `main` no commit `7f35e0d2c0ca22e118b8163a73d18a1c7d995439`.
+`FIRST_DISCOVERY_QUALITY_V1_MODE=active` na Oracle auditada. O fluxo trabalha com Core/Expansion/Opportunity e não deve preencher volume artificialmente com candidatos fracos.
 
-A flag `FIRST_DISCOVERY_QUALITY_V1_MODE` aceita `off | shadow | active`.
+A política `adaptive-catalog-depth/v1` permanece disponível como contrato de profundidade; cada marketplace preserva seus próprios mecanismos seguros de busca.
 
-- default do código: `off`;
-- produção Oracle auditada: `active`;
-- `active`: usa intents refinadas, descarta candidatos inelegíveis e prioriza candidatos fortes;
-- se não houver candidatos fortes, não deve ocorrer backfill artificial com fracos;
-- readiness insuficiente não dispara automaticamente uma nova descoberta.
+## Qualidade do funil — PR #187
 
-A política `adaptive-catalog-depth/v1` permanece disponível como fallback conceitual, porém a chamada adicional de rede continua desacoplada do executor Oracle.
+O ciclo controlado de Informática comprovou: ML classificou 5/5 sem `review_required`, mas ficou concentrado em roteadores; Amazon ainda promoveu acessórios; Shopee ainda apresentou repetição e vazamento semântico.
 
-## Qualidade do funil — PR #186
+O PR #187 corrige os gargalos nos componentes existentes:
 
-A auditoria do ciclo de `informatica_editorial` de 28/08/2026 mostrou três falhas distintas: acessórios sobrevivendo em Amazon/Shopee, classificação ML descartando famílias válidas e ranking V2 favorecendo preço baixo sem qualidade comercial equivalente.
+- `product-title-quality`: bloqueio mais forte de acessórios/consumíveis antes do ranking;
+- `curation-policy`: `allowAccessory` deixa de liberar um cenário inteiro; somente intenção explicitamente acessória pode autorizar o item;
+- classificação: o produto principal do título precede menções secundárias, evitando casos como webcam→notebook e mini-PC→SSD;
+- Amazon: filtros específicos para resultados ambíguos de `scanner` e `switch de rede`;
+- ranking legado: menor influência de `deterministicScore`, com maior peso para confiança, desconto real, prova social, loja oficial e frete;
+- Mercado Livre: paginação oficial usa o tamanho bruto da página para decidir continuidade e pode avançar por offsets `0/30/60/90`; aliases editoriais ampliam a busca mantendo os guardrails existentes.
 
-O PR #186 corrige esses pontos nos componentes existentes:
+Nenhuma dessas mudanças altera agenda, credenciais, Supabase ou publicação.
 
-- `product-title-quality`: bloqueia títulos claramente de peça, reposição, cabo/carregador dedicado e manutenção de impressora 3D antes do ranking;
-- Shopee OpenAPI V1: reutiliza esse gate imediatamente antes do controlled persist;
-- Mercado Livre: classificação consome domínio/categoria do mapa certificado antes do catálogo genérico;
-- Amazon: evidência do título/atributos precede browse nodes amplos na classificação;
-- Offer Quality V2: preço baixo deixa de receber bônus automático; desconto verificado, confiança, prova social, logística e economia real ganham prioridade;
-- runtime compilado e fonte TypeScript do Offer Quality permanecem alinhados.
+## Mercado Livre
 
-Nenhuma dessas mudanças altera agenda, credenciais, Supabase ou publicação. O PR permanece não implantado até merge e alinhamento Oracle.
+A `main` já usa certified-first e catálogo editorial ampliado. O PR #187 corrige o encerramento prematuro da paginação: uma página cheia não pode ser tratada como “fim” apenas porque poucos itens sobreviveram ao filtro semântico.
 
-## Limitação operacional conhecida
-
-O Mercado Livre continua deliberadamente restrito às famílias certificadas no mapa V1. Isso protege precisão, mas significa que famílias ainda em investigação não entram automaticamente na busca produtiva até certificação específica.
-
-A profundidade automática também depende do orçamento seguro já existente de cada marketplace; o sistema não deve preencher volume artificialmente com produtos fracos.
+O mapa certificado continua sendo a camada de maior confiança; famílias editoriais adicionais usam busca oficial estrita, sem se tornarem automaticamente certificadas.
 
 ## Qualidade comercial
 
-Um produto persistido não deve ser interpretado automaticamente como “achadinho”. A carteira forte deve combinar relevância editorial com evidências reais como desconto plausível, cupom, rating/reviews, vendas, loja oficial, frete/Prime e posição de origem conforme o marketplace.
+Produto persistido não é automaticamente “achadinho”. A carteira deve combinar aderência editorial, produto principal, desconto plausível, rating/reviews, vendas, loja oficial, logística e economia real conforme o marketplace.
 
-Produtos sem desconto, sem prova social e sem outros sinais fortes podem ser válidos para catálogo, mas não devem superar ofertas comprovadamente melhores apenas por serem baratos.
-
-## Publicação Expressa
-
-O PR #178 foi mergeado no commit `f68512c56617680247f73d7cc3523f1e9de92892`, restaurando o contrato necessário da Publicação Expressa após Copy V5 sem alterar discovery, Oracle ou Supabase.
-
-## Oracle — estado operacional confirmado em 28/08/2026
+## Oracle — estado operacional confirmado antes do PR #187
 
 - branch: `main`;
-- HEAD/runtime antes do PR #186: `940a5b99c4e92d024197f8a8a88e3e33cc20cf1e`;
+- HEAD/runtime: `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`;
 - working tree: limpa na última checagem;
 - `oracle-scraper`: online;
-- alinhamento com a `main`: confirmado antes da abertura do PR #186.
+- alinhamento com a `main`: confirmado.
 
-O PR #186 não deve ser considerado carregado pela Oracle enquanto não houver merge e novo alinhamento explícito.
+O PR #187 não deve ser considerado carregado pela Oracle enquanto não houver merge e novo alinhamento explícito.
 
 ## Radar
 
@@ -93,7 +79,7 @@ O PR #186 não deve ser considerado carregado pela Oracle enquanto não houver m
 
 - `npm run verify`
 - `npm run docs:audit`
-- testes de regressão de qualidade de marketplace
+- testes de regressão de qualidade/classificação
 - `/api/health`
 - `/api/readiness`
 
