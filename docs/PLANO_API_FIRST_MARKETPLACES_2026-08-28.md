@@ -1,7 +1,7 @@
 # Plano mestre — API-first para busca, filtros e qualidade dos marketplaces
 
-Data: 28/08/2026  
-Branch de trabalho: `docs/api-first-marketplace-validation-plan`  
+Data: 28/08/2026
+Branch de trabalho: `docs/api-first-marketplace-validation-plan`
 Base inicial: `main@1bf08df46b7aafd897af2e88ed327b1a15937f2d`
 
 ## 1. Objetivo

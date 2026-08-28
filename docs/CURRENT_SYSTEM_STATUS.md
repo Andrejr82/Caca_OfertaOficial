@@ -1,7 +1,7 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: d6452c28551c63873278bc2fd93b091b020d8c0d -->
+<!-- verified-against: c49ce554 -->
 <!-- verified-on: 2026-08-28 -->
 
 Baseado na `main` em `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`, no ciclo controlado de `informatica_editorial` de 28/08/2026 e na revisão do PR #187. O PR #187 permanece isolado até merge e alinhamento explícito da Oracle.
