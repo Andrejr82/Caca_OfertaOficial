@@ -545,7 +545,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
       }
       telemetry.dynamicDomainsUsed += discoveredDomains.size;
       const dynamicProducts = [];
-      for (const domain of [...discoveredDomains.values()].slice(0, 6)) {
+      for (const domain of [...discoveredDomains.values()].slice(0, 3)) {
         let productIds = [];
         try {
           for (const searchTerm of searchTerms) {
@@ -557,7 +557,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
           sourceErrors += 1;
           telemetry.sourceErrors += 1;
         }
-        productIds = [...new Set(productIds)].slice(0, 20);
+        productIds = [...new Set(productIds)].slice(0, 5);
         for (const productId of productIds) {
           let productMeta = productMetaCache.get(productId);
           if (!productMeta) {

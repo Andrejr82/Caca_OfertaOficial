@@ -141,7 +141,7 @@ test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legad
     env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
     fetchImpl: async (url) => {
       const value = String(url); calls.push(value);
-      if (value.includes('/domain_discovery/search')) return json([{ domain_id: 'MLB-COFFEE_MAKERS', category_id: 'MLB1576', category_name: 'Cafeteiras' }]);
+      if (value.includes('/domain_discovery/search')) return json(Array.from({ length: 10 }, (_, index) => ({ domain_id: `MLB-COFFEE_MAKERS_${index}`, category_id: `MLB1576${index}`, category_name: 'Cafeteiras' })));
       if (value.includes('/products/search?') && value.includes('domain_id=MLB-COFFEE_MAKERS')) return json({ results: [{ id: 'MLBPROD_CAFETEIRA' }] });
       if (value.endsWith('/products/MLBPROD_CAFETEIRA')) return json(fixture.productMeta);
       if (value.includes('/products/MLBPROD_CAFETEIRA/items')) return json(fixture.catalogItems);
@@ -155,7 +155,8 @@ test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legad
   assert.equal(result.mercadolivreDomainCategorySearchV1.exploratoryFamiliesUsed, 1);
   assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
   assert.ok(calls.some((url) => url.includes('/domain_discovery/search')));
-  assert.ok(calls.some((url) => url.includes('domain_id=MLB-COFFEE_MAKERS')));
+  const catalogDomains = new Set(calls.filter((url) => url.includes('/products/search?')).map((url) => new URL(url).searchParams.get('domain_id')));
+  assert.ok(catalogDomains.size <= 3, 'exploração dinâmica deve limitar domínios por intenção');
   assert.equal(calls.some((url) => url.includes('/sites/MLB/search?')), false);
 });
 
