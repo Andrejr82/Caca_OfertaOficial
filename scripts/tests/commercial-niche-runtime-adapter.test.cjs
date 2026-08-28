@@ -9,20 +9,18 @@ const {
 } = require('../commercial-niche-runtime-adapter.cjs');
 
 test('1. Constrói plano de nicho com termos Core e Expansion ajustados pela afinidade para beleza', () => {
-  // Beleza no Mercado Livre (Afinidade 2 -> 100% Core + 50% Expansion)
   const planML = buildNicheMarketplacePlan('beleza', 'Mercado Livre');
   assert.equal(planML.nicheId, 'beleza');
   assert.equal(planML.affinity, 2);
   assert.equal(planML.rules.candidateLimit, 7);
   assert.equal(planML.rules.maxPagesPerTerm, 1);
   assert.equal(planML.terms.core.length, 9);
-  assert.equal(planML.terms.expansion.length, 3); // 50% de 6
+  assert.equal(planML.terms.expansion.length, 3);
   assert.equal(planML.firstDiscovery.contractVersion, 'discovery-retrieval-quality/v1');
   assert.equal(planML.firstDiscovery.strategy.mode, 'official-domain-then-catalog');
   assert.equal(planML.firstDiscovery.strategy.requireNativeDomainEvidence, true);
   assert.ok(planML.firstDiscovery.targets.minStrongCandidates >= 12);
 
-  // Beleza na Shopee (Afinidade 3 -> 100% Core + 100% Expansion)
   const planShopee = buildNicheMarketplacePlan('beleza', 'Shopee');
   assert.equal(planShopee.nicheId, 'beleza');
   assert.equal(planShopee.affinity, 3);
@@ -59,14 +57,26 @@ test('3. Cenários legados fora dos 7 nichos retornam modo legacy_only', () => {
   assert.equal(outside.reason, 'legacy_scenario_outside_final_7_niches');
 });
 
-test('4. Informática gera queries fortes em vez de depender do termo genérico', () => {
+test('4. Mercado Livre usa famílias certificadas primeiro sem excluir o restante do catálogo editorial', () => {
   const plan = buildNicheMarketplacePlan('informatica', 'Mercado Livre');
-  const teclado = plan.firstDiscovery.intents.find((intent) => intent.term === 'teclado');
-  const impressora = plan.firstDiscovery.intents.find((intent) => intent.term === 'impressora');
+  const terms = plan.terms.all;
 
-  assert.deepEqual(teclado.queries, ['teclado mecanico', 'teclado sem fio', 'teclado gamer']);
-  assert.deepEqual(impressora.queries, ['impressora multifuncional', 'impressora ecotank']);
-  assert.equal(plan.firstDiscovery.families.includes('computadores'), true);
-  assert.equal(plan.firstDiscovery.families.includes('armazenamento'), true);
-  assert.equal(plan.firstDiscovery.families.includes('perifericos'), true);
+  assert.deepEqual(terms.slice(0, 3), ['notebook', 'roteador', 'webcam']);
+  for (const expected of ['monitor', 'ssd', 'impressora', 'mini pc', 'computador', 'desktop', 'teclado', 'mouse', 'hd externo', 'scanner', 'nobreak', 'switch de rede']) {
+    assert.equal(terms.includes(expected), true, `família editorial ausente: ${expected}`);
+  }
+
+  const monitor = plan.firstDiscovery.intents.find((intent) => intent.term === 'monitor');
+  const notebook = plan.firstDiscovery.intents.find((intent) => intent.term === 'notebook');
+  assert.deepEqual(monitor.queries, ['monitor']);
+  assert.deepEqual(notebook.queries, ['notebook']);
+  assert.equal(plan.firstDiscovery.families.length, terms.length);
+  assert.deepEqual(plan.firstDiscovery.families, terms);
+});
+
+test('5. Mudança de profundidade do Mercado Livre não altera o plano da Shopee/Amazon', () => {
+  const amazon = buildNicheMarketplacePlan('informatica', 'Amazon');
+  const shopee = buildNicheMarketplacePlan('informatica', 'Shopee');
+  assert.notDeepEqual(amazon.firstDiscovery.intents.find((intent) => intent.term === 'teclado')?.queries, ['teclado']);
+  assert.notDeepEqual(shopee.firstDiscovery.intents.find((intent) => intent.term === 'teclado')?.queries, ['teclado']);
 });

@@ -1,20 +1,20 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 7f35e0d2c0ca22e118b8163a73d18a1c7d995439 -->
-<!-- verified-on: 2026-08-27 -->
+<!-- verified-against: 76cb164c2d76b99e23a6d9422d38469c3bb27583 -->
+<!-- verified-on: 2026-08-28 -->
 
-> Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional.
+> Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional. O PR #186 permanece isolado até merge/alinhamento Oracle.
 
 ## Visão geral
 
-O Caça Oferta Oficial coleta candidatos de Shopee, Mercado Livre e Amazon, persiste ofertas no Supabase, executa validações/scoring, gera drafts pela Official AI e mantém publicação separada do Discovery.
+O Caça Oferta Oficial coleta candidatos de Shopee, Mercado Livre e Amazon, aplica contratos editoriais, filtros de qualidade/classificação, persiste ofertas no Supabase, gera drafts pela Official AI e mantém publicação separada do Discovery.
 
 ```mermaid
 flowchart LR
   M["Shopee / Mercado Livre / Amazon"] --> O["Oracle Scraper\nDiscovery-Only"]
-  O --> S[("Supabase")]
-  O --> V["Next.js / Vercel\nOfficial AI"]
+  O --> Q["Relevância / Produto principal / Classificação / Ranking"]
+  Q --> S[("Supabase")]
   S --> P["Painel administrativo"]
   P --> TG["Telegram"]
   P --> IG["Instagram"]
@@ -29,20 +29,14 @@ flowchart LR
 |---|---|
 | Next.js/Vercel | UI, autenticação, APIs, IA e publicação |
 | `oracle-scraper` | scheduler e Discovery dos marketplaces |
-| `oracle-api` | gateway técnico autenticado na porta 3002 |
-| `whatsapp-bot` | motor Baileys na porta 3001 |
-| `oracle-trends-radar` | consumo independente do Radar |
+| `oracle-worker-discovery-only` | funil comum de identidade, qualidade, classificação e fila |
+| Offer Quality V2 | ranking/admissão comercial Amazon/ML quando ativo |
+| Shopee OpenAPI V1 | descoberta/ranking nativo e controlled persist |
 | Supabase | Auth, ofertas, posts, links, logs e Storage |
 
 ## Scheduler e matriz editorial
 
-O scheduler canônico usa:
-
-```text
-0 6,8,10,12,14,16,18 * * *
-```
-
-Timezone `America/Sao_Paulo`, `noOverlap=true`.
+O scheduler canônico usa `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
 
 - 06h → Casa/Cozinha/Organização
 - 08h → Beleza
@@ -54,75 +48,57 @@ Timezone `America/Sao_Paulo`, `noOverlap=true`.
 
 Cupons permanece `manual_only` às 22h.
 
-## First Discovery Quality V1 — estado atual
+## First Discovery Quality V1
 
-A arquitetura do PR #177 foi mergeada na `main` e está ativa na Oracle via:
+`FIRST_DISCOVERY_QUALITY_V1_MODE=active` na Oracle auditada. O plano trabalha com Core/Expansion/Opportunity, intents fortes, diversidade e evidência comercial antes do ranking final. Ausência de strong não autoriza backfill artificial com weak.
 
-```text
-FIRST_DISCOVERY_QUALITY_V1_MODE=active
-```
+## Funil de qualidade — revisão PR #186
 
-```mermaid
-flowchart LR
-  N["Nicho: Core / Expansion / Opportunity"] --> P["First Discovery plan\nfamílias + intents + metas"]
-  P --> M["Estratégia por marketplace"]
-  M --> R["Recuperação inicial"]
-  R --> Q["Relevância + evidência comercial"]
-  Q --> A{"Candidato forte?"}
-  A -- "sim" --> C["Fila / persistência"]
-  A -- "não" --> X["Rejeição ou pool reduzido"]
-```
+A ordem de decisão passa a ser explicitamente:
 
-Características atuais:
+1. identidade/URL/preço válidos;
+2. produto principal, rejeitando peça/reposição/manutenção clara;
+3. aderência ao contrato/intenção;
+4. deduplicação;
+5. classificação específica do produto;
+6. ranking comercial;
+7. fila/persistência.
 
-- intents refinadas antes da coleta;
-- avaliação comum de candidate quality;
-- candidatos inelegíveis são excluídos no modo ativo;
-- candidatos fortes têm prioridade absoluta;
-- ausência de strong não autoriza backfill artificial com weak;
-- comissão não define se um candidato é forte;
-- desconto implausível não conta como evidência positiva.
-
-## Estratégia por marketplace
+O objetivo é impedir que preço baixo compense classe de produto errada.
 
 ### Amazon
 
-Browse Node + intent forte, saúde das queries e sinais como rating, reviews, desconto real, cupom, Prime e posição de origem.
+- Browse Node continua evidência de recuperação, não identidade absoluta de produto.
+- Título/atributos específicos precedem browse node amplo na classificação.
+- Offer Quality V2 deixa de bonificar automaticamente itens `<= R$120`; valor comprovado, desconto, confiança, prova social e logística dominam o score.
 
 ### Mercado Livre
 
-Política `official-domain-then-catalog`, uso de domínio nativo e Best Seller quando disponível. Domínios incompatíveis devem ser rejeitados.
+- Mantém `official-domain-then-catalog` e o mapa V1 certificado.
+- O classificador consome `domain_id`/`category_id` das próprias famílias certificadas antes do catálogo genérico.
+- Itens já validados semanticamente pelo mapa não devem cair em `review_required` apenas por ausência no catálogo de classificação legado.
+- Famílias não certificadas continuam fora da busca automática até certificação explícita.
 
 ### Shopee
 
-Categoria nativa + intent forte, com `avoidBroadCategoryOnly=true`. Sinais incluem vendas, rating, desconto real, qualidade da loja e posição.
+- Mantém ProductCatIds/OpenAPI V1 e o controlled persist existente.
+- O controlled persist reutiliza o gate compartilhado de título/produto principal, além de rating, vendas e integridade de preço.
+- Peças/manutenção não devem sobreviver apenas por terem bom rating ou volume de vendas.
 
-## Lacuna arquitetural conhecida
+## Profundidade de discovery
 
-O `adaptive-catalog-depth/v1` continua desacoplado do executor de rede.
-
-Consequência: quando a primeira cobertura é insuficiente, o runtime pode encerrar o marketplace sem candidatos em vez de aprofundar automaticamente páginas/intents/domínios/categorias.
-
-A auditoria de um ciclo manual de Moda em 27/08/2026 evidenciou:
-
-- Mercado Livre com zero extraídos após cobertura nativa insuficiente;
-- Shopee bloqueada antes da extração por `coverageInsufficient`/categoria ampla.
-
-O comportamento operacional desejado é manter os guardrails de qualidade e continuar buscando enquanto houver orçamento seguro de discovery, encerrando zerado somente após esgotamento real das alternativas.
+`adaptive-catalog-depth/v1` continua desacoplado do executor de rede. A qualidade final não deve ser compensada por preenchimento artificial; aprofundamento só deve ocorrer enquanto houver orçamento seguro de busca do marketplace.
 
 ## Oracle produtiva
 
-Auditoria de 27/08/2026:
+Último alinhamento confirmado antes do PR #186:
 
 - branch `main`;
-- HEAD `7f35e0d2c0ca22e118b8163a73d18a1c7d995439`;
+- HEAD/runtime `940a5b99c4e92d024197f8a8a88e3e33cc20cf1e`;
 - working tree limpa;
-- `FIRST_DISCOVERY_QUALITY_V1_MODE=active`;
-- `oracle-scraper` online, sem crash loop e sem erro de startup após ativação.
+- `oracle-scraper` online.
 
-## Ambiente local
-
-Execução manual local só deve ser comparada à produção quando checkout e flags coincidirem com a Oracle. O ciclo local auditado em 27/08/2026 registrou release `e157df09f0d8deb53a65a8f48376c89d9cdcdef1`, portanto não representa exatamente o runtime produtivo atual.
+O PR #186 não está na Oracle enquanto não for mergeado e alinhado explicitamente.
 
 ## Publicação social
 
@@ -130,7 +106,7 @@ Discovery não autoriza publicação. `posts.content` continua sendo a autoridad
 
 ## Radar independente
 
-- `oracle-trends-radar` online;
+- `oracle-trends-radar` dedicado;
 - `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
 - `TREND_EXECUTIVE_MODE=off`;
 - polling 30s;
@@ -139,4 +115,4 @@ Discovery não autoriza publicação. `posts.content` continua sendo a autoridad
 
 ## Fontes de verdade
 
-`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `scripts/first-discovery-quality.cjs`, `scripts/first-discovery-candidate-quality.cjs`, `scripts/adaptive-discovery-policy.cjs`, `supabase/**`, `.env.example`, `vercel.json`.
+`src/app/**`, `src/core/**`, `src/lib/**`, `scripts/oracle-scraper.cjs`, `scripts/oracle-worker-discovery-only.cjs`, `scripts/product-title-quality.cjs`, `scripts/classification-coverage.cjs`, `scripts/mercadolivre-domain-category-map-v1.cjs`, `scripts/shopee-openapi-v1-controlled-persist.cjs`, `scripts/commercial-niche-*.cjs`, `scripts/marketplace-scenario-contracts.cjs`, `supabase/**`, `.env.example`, `vercel.json`.

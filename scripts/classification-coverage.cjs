@@ -45,6 +45,10 @@ function ids(product) {
   };
 }
 
+function candidateIntent(product) {
+  return product?.intent || product?.intentId || product?.rawPayload?.intent || product?.persistenceMetadata?.scenarioId || null;
+}
+
 function classifyByRules(value, source, confidence) {
   const matches = rules.filter(({ pattern }) => pattern.test(value));
   if (!matches.length) return null;
@@ -74,21 +78,24 @@ function classifyCandidate(product, marketplace) {
   const normalizedMarketplace = text(marketplace || product?.marketplace).toLowerCase();
 
   if (normalizedMarketplace === 'mercado livre') {
-    const canonical = classifyMercadoLivreProduct({ title: product?.title, domainId, categoryId });
+    const canonical = classifyMercadoLivreProduct({
+      title: product?.title,
+      domainId,
+      categoryId,
+      intent: candidateIntent(product),
+    });
     if (canonical.status === 'classified') {
       return {
         ...canonical,
-        confidence: canonical.source.startsWith('domain:') ? 1 : canonical.source.startsWith('category:') ? 0.95 : 0.8,
-        evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null },
+        confidence: canonical.source.startsWith('mercadolivre-certified:') || canonical.source.startsWith('domain:')
+          ? 1
+          : canonical.source.startsWith('category:')
+            ? 0.95
+            : canonical.source.startsWith('editorial-intent:') || canonical.source.startsWith('editorial-family:')
+              ? 0.9
+              : 0.8,
+        evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null, intent: candidateIntent(product) },
       };
-    }
-  }
-
-  if (normalizedMarketplace === 'amazon') {
-    const browseNodeId = String(product?.category?.browseNodeId || product?.marketplaceMetrics?.browseNodeId || product?.rawPayload?.node_id || '');
-    const browseType = AMAZON_BROWSE_TYPES[browseNodeId];
-    if (browseType) {
-      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 1, evidence: { browseNodeId } };
     }
   }
 
@@ -99,8 +106,16 @@ function classifyCandidate(product, marketplace) {
 
   const byAttributes = classifyByRules(attributeText(product), 'attributes', 0.9);
   if (byAttributes) return byAttributes;
-  const byTitle = classifyByRules(text(product?.title), 'title', 0.8);
+  const byTitle = classifyByRules(text(product?.title), 'title', 0.9);
   if (byTitle) return byTitle;
+
+  if (normalizedMarketplace === 'amazon') {
+    const browseNodeId = String(product?.category?.browseNodeId || product?.marketplaceMetrics?.browseNodeId || product?.rawPayload?.node_id || '');
+    const browseType = AMAZON_BROWSE_TYPES[browseNodeId];
+    if (browseType) {
+      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 0.75, evidence: { browseNodeId } };
+    }
+  }
 
   const categoryName = categoryLabel(product?.category?.name || product?.category_name);
   if (categoryName) return { productType: categoryName, status: 'classified', source: 'category:label', confidence: 0.7, evidence: { categoryName } };

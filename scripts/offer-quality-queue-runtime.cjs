@@ -120,10 +120,10 @@ function getGroupKey(candidate) {
 
 // src/core/offer-quality/scoring.ts
 var WEIGHTS = Object.freeze({
-  price: 25,
-  discount: 20,
-  trust: 15,
-  socialProof: 15,
+  price: 10,
+  discount: 25,
+  trust: 20,
+  socialProof: 20,
   logistics: 10,
   desire: 15
 });
@@ -172,16 +172,20 @@ function scoreCandidate(candidate, context = {}) {
       reasons: ["hard_blocker"]
     };
   }
-  const price = clamp(WEIGHTS.price * (candidate.currentPrice <= 120 ? 1 : candidate.currentPrice <= 700 ? 0.7 : 0.4));
-  const discountPoints = discount.confidence === "verified" ? clamp(discount.percent / 80 * WEIGHTS.discount) : 0;
+  const savingsTarget = Math.max(50, candidate.currentPrice * 0.25);
+  const savingsSignal = discount.confidence === "verified" ? Math.min(1, discount.savings / savingsTarget) : 0;
+  const price = clamp(WEIGHTS.price * (discount.confidence === "verified" ? 0.4 + 0.6 * savingsSignal : 0.25));
+  const discountPoints = discount.confidence === "verified" ? clamp(discount.percent / 60 * WEIGHTS.discount) : 0;
   const rating = metricNumber(candidate, "rating", "sellerRating");
   const sales = metricNumber(candidate, "sales", "reviewCount", "sellerSales");
-  const trust = clamp((rating >= 4.7 ? 1 : rating >= 4.5 ? 0.65 : rating >= 4 ? 0.35 : 0) * WEIGHTS.trust);
+  const officialStore = Boolean(candidate.marketplaceMetrics.officialStoreId || candidate.marketplaceMetrics.official_store_id);
+  const bestSeller = Boolean(candidate.marketplaceMetrics.bestSeller || candidate.marketplaceMetrics.isBestSeller || candidate.marketplaceMetrics.best_seller);
+  const trustBase = rating >= 4.7 ? 0.8 : rating >= 4.5 ? 0.6 : rating >= 4 ? 0.3 : 0;
+  const trust = clamp(Math.min(1, trustBase + (officialStore ? 0.2 : 0)) * WEIGHTS.trust);
   const socialProof = clamp(Math.min(1, Math.log10(sales + 1) / 4) * WEIGHTS.socialProof);
   const logistics = candidate.marketplaceMetrics.shippingFree || candidate.marketplaceMetrics.hasFreeShipping ? WEIGHTS.logistics : WEIGHTS.logistics * 0.25;
-  const desire = clamp(
-    (discount.confidence === "verified" ? 0.5 : 0.2) * WEIGHTS.desire + (rating >= 4.7 ? 0.5 : 0) + (candidate.currentPrice <= 120 ? 2 : 0)
-  );
+  const desireBase = (discount.confidence === "verified" ? 0.45 : 0.1) + (rating >= 4.7 ? 0.25 : rating >= 4.5 ? 0.15 : 0) + (sales >= 1e3 ? 0.15 : sales >= 100 ? 0.08 : 0) + (bestSeller ? 0.15 : 0);
+  const desire = clamp(Math.min(1, desireBase) * WEIGHTS.desire);
   const total = Number(clamp(price + discountPoints + trust + socialProof + logistics + desire).toFixed(2));
   return {
     total,
@@ -195,6 +199,7 @@ function scoreCandidate(candidate, context = {}) {
     blockers: [],
     reasons: [
       `discount_confidence=${discount.confidence}`,
+      `savings=${discount.savings.toFixed(2)}`,
       `price=${candidate.currentPrice.toFixed(2)}`
     ]
   };
@@ -208,7 +213,7 @@ function compareCandidates(a, b) {
   if (aDiscount.confidence !== bDiscount.confidence) {
     return aDiscount.confidence === "verified" ? -1 : 1;
   }
-  if (a.currentPrice !== b.currentPrice) return a.currentPrice - b.currentPrice;
+  if (aDiscount.savings !== bDiscount.savings) return bDiscount.savings - aDiscount.savings;
   return a.nativeIdentity.localeCompare(b.nativeIdentity);
 }
 
@@ -272,10 +277,7 @@ function evaluateCandidates(rawCandidates, options) {
     const ranked = [...candidates].sort((a, b) => {
       const aMonetization = validateMonetization(a) === "complete";
       const bMonetization = validateMonetization(b) === "complete";
-      const result = compareCandidates(
-        a,
-        b
-      );
+      const result = compareCandidates(a, b);
       if (aMonetization !== bMonetization) return aMonetization ? -1 : 1;
       return result;
     });
@@ -395,9 +397,7 @@ function selectOfferQualityQueueProducts(products, options) {
     const scoreDiff = (b.score?.total ?? 0) - (a.score?.total ?? 0);
     return scoreDiff || a.candidate.sourceItemId.localeCompare(b.candidate.sourceItemId);
   });
-  const limit = options.maxAccepted == null
-    ? winnerDecisions.length
-    : Math.max(0, Math.floor(Number(options.maxAccepted)));
+  const limit = options.maxAccepted == null ? winnerDecisions.length : Math.max(0, Math.floor(Number(options.maxAccepted)));
   const winnerIds = new Set(winnerDecisions.slice(0, limit).map((decision) => decision.winnerSourceItemId));
   const allWinnerIds = new Set(winnerDecisions.map((decision) => decision.winnerSourceItemId));
   const decisionById = new Map(report.decisions.map((decision) => [decision.candidate.sourceItemId, decision]));
@@ -406,9 +406,7 @@ function selectOfferQualityQueueProducts(products, options) {
     const sourceItemId = text(product.sourceItemId);
     if (winnerIds.has(sourceItemId)) continue;
     const decision = decisionById.get(sourceItemId);
-    const reasons = allWinnerIds.has(sourceItemId)
-      ? ["quality_rank_limit"]
-      : (decision?.reasons?.length ? decision.reasons : ["not_selected_by_offer_quality_v2"]);
+    const reasons = allWinnerIds.has(sourceItemId) ? ["quality_rank_limit"] : decision?.reasons?.length ? decision.reasons : ["not_selected_by_offer_quality_v2"];
     rejected.push({
       product,
       sourceItemId,

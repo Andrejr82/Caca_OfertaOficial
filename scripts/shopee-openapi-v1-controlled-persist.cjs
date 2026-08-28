@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { normalizePriceIntegrity } = require('./shopee-openapi-shadow-engine-v1.cjs');
 const { getShopeeV1Flags, isShopeeV1Shadow } = require('./shopee-v1-flags.cjs');
+const { validateProductTitle } = require('./product-title-quality.cjs');
 
 const CONTROLLED_PERSIST_SCENARIOS = new Set([
   'casa_cozinha_editorial', 'organizacao_editorial', 'ferramentas_editorial', 'informatica_editorial',
@@ -39,6 +40,11 @@ function controlledCandidateQuality(product) {
   const min = Number(product?.priceMin ?? 0);
   const max = Number(product?.priceMax ?? 0);
   const reasons = [];
+  const title = String(product?.productName || product?.title || '').trim();
+  if (title) {
+    const titleQuality = validateProductTitle(title);
+    if (!titleQuality.valid) reasons.push(titleQuality.reason === 'ACCESSORY_ONLY_PRODUCT' ? 'accessory_only_product' : 'invalid_product_title');
+  }
   if (rating > 0 && rating < 4.7) reasons.push('rating_below_4_7');
   if (sales > 0 && sales < 100) reasons.push('sales_below_100');
   if (product?.safeForPublication === false) reasons.push('unsafe_price_for_publication');

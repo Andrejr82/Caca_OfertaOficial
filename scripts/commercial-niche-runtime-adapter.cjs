@@ -50,13 +50,17 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
     ? options.opportunityCandidates.map((c) => (typeof c === 'string' ? c : c.title || c.query)).filter(Boolean)
     : [];
 
+  const editorialTerms = [...new Set([...selectedCore, ...selectedExpansion, ...dynamicOpportunities])];
   const certifiedMercadoLivreTerms = market === 'Mercado Livre'
     ? getMercadoLivreCertifiedTermsForNiche(nicheId)
     : [];
 
-  const allTerms = certifiedMercadoLivreTerms.length > 0
-    ? [...new Set(certifiedMercadoLivreTerms)]
-    : [...new Set([...selectedCore, ...selectedExpansion, ...dynamicOpportunities])];
+  // Mercado Livre usa certified-first, não certified-only. As famílias já
+  // certificadas continuam na frente da busca, mas o restante do catálogo
+  // editorial Core/Expansion também recebe chance no fallback oficial estrito.
+  const allTerms = market === 'Mercado Livre'
+    ? [...new Set([...certifiedMercadoLivreTerms, ...editorialTerms])]
+    : editorialTerms;
 
   const baseFirstDiscovery = buildFirstDiscoveryPlan(nicheId, market, {
     affinity,
@@ -68,13 +72,13 @@ function buildNicheMarketplacePlan(nicheId, marketplace, options = {}) {
     targets: options.firstDiscoveryTargets,
   });
 
-  // O Mercado Livre V1 precisa receber exatamente os nomes das famílias
-  // certificadas. Overrides editoriais mais amplos são úteis nos outros
-  // marketplaces, mas faziam o V1 pular famílias já validadas pelo mapa.
-  const firstDiscovery = market === 'Mercado Livre' && certifiedMercadoLivreTerms.length > 0 && baseFirstDiscovery
+  // No ML cada família chega ao executor com o seu nome canônico. Isso evita
+  // que overrides editoriais convertam a família em uma query que o mapa não
+  // reconhece e permite ao executor distinguir certified vs exploratory.
+  const firstDiscovery = market === 'Mercado Livre' && baseFirstDiscovery
     ? Object.freeze({
       ...baseFirstDiscovery,
-      families: Object.freeze([...certifiedMercadoLivreTerms]),
+      families: Object.freeze([...allTerms]),
       intents: Object.freeze(baseFirstDiscovery.intents.map((intent) => Object.freeze({
         ...intent,
         family: intent.term,
