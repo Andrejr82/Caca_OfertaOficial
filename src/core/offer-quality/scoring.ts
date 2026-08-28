@@ -10,10 +10,10 @@ export interface ScoringContext {
 }
 
 const WEIGHTS = Object.freeze({
-  price: 25,
-  discount: 20,
-  trust: 15,
-  socialProof: 15,
+  price: 10,
+  discount: 25,
+  trust: 20,
+  socialProof: 20,
   logistics: 10,
   desire: 15,
 });
@@ -72,22 +72,32 @@ export function scoreCandidate(
     };
   }
 
-  const price = clamp(WEIGHTS.price * (candidate.currentPrice <= 120 ? 1 : candidate.currentPrice <= 700 ? 0.7 : 0.4));
+  // Preço baixo, sozinho, não representa qualidade. O componente de preço
+  // passa a medir valor/economia comprovada, removendo o bônus automático
+  // que fazia acessórios baratos superarem produtos principais.
+  const savingsTarget = Math.max(50, candidate.currentPrice * 0.25);
+  const savingsSignal = discount.confidence === "verified"
+    ? Math.min(1, discount.savings / savingsTarget)
+    : 0;
+  const price = clamp(WEIGHTS.price * (discount.confidence === "verified" ? 0.4 + (0.6 * savingsSignal) : 0.25));
   const discountPoints = discount.confidence === "verified"
-    ? clamp((discount.percent / 80) * WEIGHTS.discount)
+    ? clamp((discount.percent / 60) * WEIGHTS.discount)
     : 0;
   const rating = metricNumber(candidate, "rating", "sellerRating");
   const sales = metricNumber(candidate, "sales", "reviewCount", "sellerSales");
-  const trust = clamp((rating >= 4.7 ? 1 : rating >= 4.5 ? 0.65 : rating >= 4 ? 0.35 : 0) * WEIGHTS.trust);
+  const officialStore = Boolean(candidate.marketplaceMetrics.officialStoreId || candidate.marketplaceMetrics.official_store_id);
+  const bestSeller = Boolean(candidate.marketplaceMetrics.bestSeller || candidate.marketplaceMetrics.isBestSeller || candidate.marketplaceMetrics.best_seller);
+  const trustBase = rating >= 4.7 ? 0.8 : rating >= 4.5 ? 0.6 : rating >= 4 ? 0.3 : 0;
+  const trust = clamp(Math.min(1, trustBase + (officialStore ? 0.2 : 0)) * WEIGHTS.trust);
   const socialProof = clamp(Math.min(1, Math.log10(sales + 1) / 4) * WEIGHTS.socialProof);
   const logistics = candidate.marketplaceMetrics.shippingFree || candidate.marketplaceMetrics.hasFreeShipping
     ? WEIGHTS.logistics
     : WEIGHTS.logistics * 0.25;
-  const desire = clamp(
-    (discount.confidence === "verified" ? 0.5 : 0.2) * WEIGHTS.desire
-      + (rating >= 4.7 ? 0.5 : 0)
-      + (candidate.currentPrice <= 120 ? 2 : 0),
-  );
+  const desireBase = (discount.confidence === "verified" ? 0.45 : 0.10)
+    + (rating >= 4.7 ? 0.25 : rating >= 4.5 ? 0.15 : 0)
+    + (sales >= 1000 ? 0.15 : sales >= 100 ? 0.08 : 0)
+    + (bestSeller ? 0.15 : 0);
+  const desire = clamp(Math.min(1, desireBase) * WEIGHTS.desire);
 
   const total = Number(clamp(price + discountPoints + trust + socialProof + logistics + desire).toFixed(2));
   return {
@@ -102,6 +112,7 @@ export function scoreCandidate(
     blockers: [],
     reasons: [
       `discount_confidence=${discount.confidence}`,
+      `savings=${discount.savings.toFixed(2)}`,
       `price=${candidate.currentPrice.toFixed(2)}`,
     ],
   };
@@ -119,7 +130,7 @@ export function compareCandidates(
   if (aDiscount.confidence !== bDiscount.confidence) {
     return aDiscount.confidence === "verified" ? -1 : 1;
   }
-  if (a.currentPrice !== b.currentPrice) return a.currentPrice - b.currentPrice;
+  if (aDiscount.savings !== bDiscount.savings) return bDiscount.savings - aDiscount.savings;
   return a.nativeIdentity.localeCompare(b.nativeIdentity);
 }
 
