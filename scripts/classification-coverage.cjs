@@ -78,17 +78,9 @@ function classifyCandidate(product, marketplace) {
     if (canonical.status === 'classified') {
       return {
         ...canonical,
-        confidence: canonical.source.startsWith('domain:') ? 1 : canonical.source.startsWith('category:') ? 0.95 : 0.8,
+        confidence: canonical.source.startsWith('mercadolivre-certified:') || canonical.source.startsWith('domain:') ? 1 : canonical.source.startsWith('category:') ? 0.95 : 0.8,
         evidence: { source: canonical.source, domainId: domainId || null, categoryId: categoryId || null },
       };
-    }
-  }
-
-  if (normalizedMarketplace === 'amazon') {
-    const browseNodeId = String(product?.category?.browseNodeId || product?.marketplaceMetrics?.browseNodeId || product?.rawPayload?.node_id || '');
-    const browseType = AMAZON_BROWSE_TYPES[browseNodeId];
-    if (browseType) {
-      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 1, evidence: { browseNodeId } };
     }
   }
 
@@ -97,10 +89,21 @@ function classifyCandidate(product, marketplace) {
   const categoryType = categoryId ? catalog.categories[String(categoryId)] : null;
   if (categoryType) return markConflict({ productType: categoryType, status: 'classified', source: `category:${categoryId}`, confidence: 0.95, evidence: { categoryId } }, product);
 
+  // Evidência específica do próprio produto deve vencer browse nodes amplos.
+  // Isso impede um notebook/monitor/mouse de herdar um tipo genérico incorreto
+  // apenas porque a busca Amazon usou um nó abrangente de Informática.
   const byAttributes = classifyByRules(attributeText(product), 'attributes', 0.9);
   if (byAttributes) return byAttributes;
-  const byTitle = classifyByRules(text(product?.title), 'title', 0.8);
+  const byTitle = classifyByRules(text(product?.title), 'title', 0.9);
   if (byTitle) return byTitle;
+
+  if (normalizedMarketplace === 'amazon') {
+    const browseNodeId = String(product?.category?.browseNodeId || product?.marketplaceMetrics?.browseNodeId || product?.rawPayload?.node_id || '');
+    const browseType = AMAZON_BROWSE_TYPES[browseNodeId];
+    if (browseType) {
+      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 0.75, evidence: { browseNodeId } };
+    }
+  }
 
   const categoryName = categoryLabel(product?.category?.name || product?.category_name);
   if (categoryName) return { productType: categoryName, status: 'classified', source: 'category:label', confidence: 0.7, evidence: { categoryName } };
