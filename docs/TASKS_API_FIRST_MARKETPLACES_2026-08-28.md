@@ -262,7 +262,7 @@ No mínimo:
 - [x] Shopee semântica/controlled persist aplicável;
 - [x] golden set;
 - [x] testes de diversidade se alterada;
-- [ ] `npm run verify` se compatível com o estado do repositório;
+- [ ] `npm run verify` completo no branch final; validações API-first seletivas permanecem obrigatórias antes do merge;
 - [x] `npm run docs:audit` se aplicável.
 
 Não declarar testes não executados.
@@ -310,8 +310,9 @@ Checklist:
 - [ ] nenhuma flag nova sem necessidade comprovada;
 - [ ] diff limitado às causas comprovadas;
 
-Checkpoint da revisão: o diff contra `origin/main` contém 104 arquivos (12 de
-documentação, 26 de runtime, 62 de testes, 3 de configuração e 1 auxiliar).
+Checkpoint da revisão no branch final: o diff contra `origin/main` contém 67
+arquivos. O branch original permanece preservado com os 104 arquivos para
+referência e backup.
 Os testes, documentação, contratos API-first, gates de tendência, Auto-Reel e
 runner multiplataforma foram rastreados por commits locais e validados. Como o
 conjunto também contém mudanças históricas de copy/UI/social, o escopo final
