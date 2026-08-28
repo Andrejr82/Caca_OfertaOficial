@@ -580,11 +580,14 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
           const detailById = new Map(details.map((item) => [item.id, item]));
           for (const item of (catalogItems.results || []).filter((entry) => itemIds.includes(entry.item_id))) {
             dynamicProducts.push({
-              ...item, id: item.item_id, title: productMeta.name || null,
-              thumbnail: productMeta.pictures?.[0]?.url || null,
-              permalink: productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`,
+              ...item,
+              ...(detailById.get(item.item_id) || {}),
+              id: item.item_id,
+              catalog_product_id: productId,
+              title: productMeta.name || item.title || null,
+              thumbnail: productMeta.pictures?.[0]?.url || item.thumbnail || null,
+              permalink: detailById.get(item.item_id)?.permalink || productMeta.permalink || `https://www.mercadolivre.com.br/p/${productId}`,
               domain_id: domain.domain_id, category_id: domain.category_id,
-              ...(detailById.get(item.item_id) || {})
             });
             if (dynamicProducts.length >= discoveryPoolLimit) break;
           }
@@ -602,7 +605,12 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
         }
         telemetry.exploratoryAccepted += 1;
         telemetry.semanticAccepted += 1;
-        exploratoryRaw.push({ ...item, source: 'mercadolivre_v1_dynamic_domain_discovery' });
+        exploratoryRaw.push(...normalizeItems([item], {
+          source: 'mercadolivre_v1_dynamic_domain_discovery', intent,
+          domain_id: item.domain_id, category_id: item.category_id,
+          product_id: item.catalog_product_id, product_name: item.title,
+          image_url: item.thumbnail, product_url: item.permalink,
+        }));
         if (exploratoryRaw.length >= discoveryPoolLimit) break;
       }
 

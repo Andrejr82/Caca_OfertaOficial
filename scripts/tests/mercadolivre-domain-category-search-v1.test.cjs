@@ -145,13 +145,14 @@ test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legad
       if (value.includes('/products/search?') && value.includes('domain_id=MLB-COFFEE_MAKERS')) return json({ results: [{ id: 'MLBPROD_CAFETEIRA' }] });
       if (value.endsWith('/products/MLBPROD_CAFETEIRA')) return json(fixture.productMeta);
       if (value.includes('/products/MLBPROD_CAFETEIRA/items')) return json(fixture.catalogItems);
-      if (value.includes('/items?ids=')) return json(fixture.details);
+      if (value.includes('/items?ids=')) return json([{ body: { id: 'MLBITEM_CAFETEIRA', price: 219.9, domain_id: 'MLB-COFFEE_MAKERS', category_id: 'MLB1576' } }]);
       if (value.includes('/highlights/')) return json({ content: [] });
       throw new Error(`URL inesperada: ${value}`);
     },
   });
   assert.equal(result.products.length, 1);
   assert.equal(result.products[0].title, 'Cafeteira Elétrica 15 Xícaras Inox');
+  assert.match(result.products[0].product_url, /^https:\/\//);
   assert.equal(result.mercadolivreDomainCategorySearchV1.exploratoryFamiliesUsed, 1);
   assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
   assert.ok(calls.some((url) => url.includes('/domain_discovery/search')));
