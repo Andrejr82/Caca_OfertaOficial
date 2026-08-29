@@ -32,6 +32,12 @@ test('snapshot remains capped while ledger can keep the full canonical observati
 
 test('ledger row stores stable marketplace identity and current source metrics',()=>{const item={marketplace:'Shopee',itemId:'44001553177',shopId:'99',productName:'Tapete Higiênico Pet',sales:6801,observedAt:now(),nicheId:'pet',nicheLabel:'Pet',matchedTerm:'tapete higienico',trendScore:50,commercialScore:60,productSpecificStrong:true,scope:null,reasons:['x']};const row=hist.buildObservationRow(item,{id:'run',user_id:'user'},core);assert.equal(row.identity_key,'Shopee:44001553177');assert.equal(row.sales,6801);assert.equal(row.trend_strategy_version,'trend-radar-seven-niches-v4');});
 
+test('canonical identity removes repeated marketplace prefixes for Amazon and Mercado Livre',()=>{
+  assert.equal(core.resolveIdentity({marketplace:'Amazon',identityKey:'Amazon:Amazon:B077Q4NBGT'}),'Amazon:B077Q4NBGT');
+  assert.equal(core.resolveIdentity({marketplace:'Amazon',identityKey:'Amazon:B077Q4NBGT'}),'Amazon:B077Q4NBGT');
+  assert.equal(core.resolveIdentity({marketplace:'Mercado Livre',identityKey:'Mercado Livre:Mercado Livre:MLB5074854807'}),'Mercado Livre:MLB5074854807');
+});
+
 
 test('history loader preserves multiple observations per SKU instead of only latest click',async()=>{
   const rows=[
