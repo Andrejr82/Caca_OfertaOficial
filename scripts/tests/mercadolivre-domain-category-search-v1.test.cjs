@@ -165,6 +165,31 @@ test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legad
   assert.equal(calls.some((url) => url.includes('/sites/MLB/search?')), false);
 });
 
+test('6. Descoberta dinâmica usa highlights quando products search não retorna itens', async () => {
+  const fixture = productResponse({
+    id: 'MLBPROD_VESTIDO', itemId: 'MLBITEM_VESTIDO',
+    title: 'Vestido Midi Feminino Casual', price: 149.9,
+    domainId: 'MLB-DRESSES', categoryId: 'MLB1234'
+  });
+  const result = await runMercadoLivreOfficialIntentCoverage({
+    accessToken: 'fixture-token', keywords: ['vestido'], scenarioId: 'moda_editorial', maxPerIntent: 20, delayMs: 0,
+    env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
+    fetchImpl: async (url) => {
+      const value = String(url);
+      if (value.includes('/domain_discovery/search')) return json([{ domain_id: 'MLB-DRESSES', category_id: 'MLB1234', category_name: 'Vestidos' }]);
+      if (value.includes('/products/search?')) return json({ results: [] });
+      if (value.includes('/highlights/MLB/category/MLB1234')) return json({ content: [{ type: 'PRODUCT', id: 'MLBPROD_VESTIDO' }] });
+      if (value.endsWith('/products/MLBPROD_VESTIDO')) return json(fixture.productMeta);
+      if (value.includes('/products/MLBPROD_VESTIDO/items')) return json(fixture.catalogItems);
+      if (value.includes('/items?ids=')) return json(fixture.details);
+      throw new Error(`URL inesperada: ${value}`);
+    },
+  });
+  assert.equal(result.products.length, 1);
+  assert.equal(result.products[0].title, 'Vestido Midi Feminino Casual');
+  assert.equal(result.products[0].product_url.startsWith('https://'), true);
+});
+
 test('5. Fallback exploratório rejeita acessório mesmo quando a busca é da família correta', async () => {
   const support = mlSearchItem({ id: 'MLB_SUPPORT_1', title: 'Suporte para Monitor Articulado de Mesa' });
   const direct = evaluateStrictExploratoryItem(support, 'monitor', 'informatica_editorial');
