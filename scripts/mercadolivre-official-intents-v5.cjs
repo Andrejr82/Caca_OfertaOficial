@@ -111,7 +111,7 @@ const SEARCH_ALIASES = {
   'bermuda masculina': ['bermuda masculina', 'bermuda homem', 'bermuda casual masculina'],
   'moletom masculino': ['moletom masculino', 'moletom homem', 'blusa moletom masculina'],
   'relógio masculino': ['relógio masculino', 'relogio homem', 'relógio de pulso masculino'],
-  'óculos de sol': ['óculos de sol', 'oculos masculino', 'óculos feminino'],
+  'óculos de sol': ['óculos de sol', 'óculos sol', 'oculos masculino', 'óculos feminino'],
   'mouse gamer rgb': ['mouse gamer rgb', 'mouse gamer', 'mouse para jogos'],
   'suporte notebook alumínio': ['suporte notebook alumínio', 'suporte notebook', 'base notebook'],
   'mouse sem fio': ['mouse sem fio', 'mouse wireless', 'mouse bluetooth'],

@@ -270,6 +270,13 @@ test('10. Intenção masculina rejeita produto específico para gestante', () =>
   assert.equal(result.reason, 'INTENT_GENDER_MISMATCH');
 });
 
+test('11. Óculos Sol da API é reconhecido como óculos de sol', () => {
+  const result = evaluateStrictExploratoryItem({
+    title: 'Óculos Sol Mormaii Grand Tour', price: 129.9, domain_id: 'MLB-SUNGLASSES', category_id: 'MLB8378'
+  }, 'óculos de sol', 'moda_editorial');
+  assert.equal(result.accepted, true);
+});
+
 test('9. minConfidence alta não usa a rota certificada média', async () => {
   const result = await runMercadoLivreOfficialIntentCoverage({
     accessToken: 'fixture-token', keywords: ['tênis feminino'], scenarioId: 'moda_editorial', maxPerIntent: 20, delayMs: 0,
