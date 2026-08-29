@@ -560,7 +560,8 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
           sourceErrors += 1;
           telemetry.sourceErrors += 1;
         }
-        if (productIds.length < 5) {
+        const uniqueProductIds = new Set(productIds.filter(Boolean));
+        if (uniqueProductIds.size < 10) {
           try {
             const response = await apiGet(`/highlights/MLB/category/${encodeURIComponent(domain.category_id)}`, { fetchImpl, accessToken });
             calls += 1;
@@ -570,7 +571,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
             telemetry.sourceErrors += 1;
           }
         }
-        productIds = [...new Set(productIds)].slice(0, 5);
+        productIds = [...new Set(productIds)].slice(0, 10);
         for (const productId of productIds) {
           let productMeta = productMetaCache.get(productId);
           if (!productMeta) {
