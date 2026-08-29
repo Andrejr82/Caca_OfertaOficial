@@ -22,7 +22,7 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // A Official AI determina internamente o fluxo consultando o estado real da oferta.
 // Nenhum parâmetro externo seleciona o modo. A máquina de estados é a autoridade.
 // ---------------------------------------------------------------------------
-type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "copy_v2_express" | "approval";
+type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "copy_v2_express" | "auto_approval" | "approval";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
 async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
@@ -191,8 +191,8 @@ function resolveMode(
     if ((copyV2 || copyV3Express) && expressValidated) {
       return { ok: true, mode: "copy_v2_express" };
     }
-    if (copyV2 && commandIsAuto) {
-      return { ok: true, mode: "copy_v2_auto" };
+    if (commandIsAuto) {
+      return { ok: true, mode: "auto_approval" };
     }
     if (copyV2) {
       return { ok: false, code: "SELECTION_REQUIRED", message: "Copy V2 só pode ser gerada após a seleção manual da oferta", offerState: "pending_manual_review" };
@@ -530,7 +530,8 @@ export async function generateOfficialAI(
     offer,
     command.tenantId,
     command.metadata?.copyV2 === true,
-    command.metadata?.copyV2Auto === true && command.actor.type === "service",
+    (command.metadata?.copyV2Auto === true && command.actor.type === "service")
+      || (command.origin === "oracle.discovery" && command.actor.type === "service"),
     (command.metadata?.copyV2Express === true || command.metadata?.copyV3Express === true) && command.origin === "publish.quick-publication",
     command.metadata?.copyV3Express === true && command.origin === "publish.quick-publication"
   );
@@ -548,7 +549,7 @@ export async function generateOfficialAI(
     return rejectAndRecord(
       command, dependencies, fingerprint,
       offerError.code, offerError.message, "preconditions",
-      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" ? "pending_manual_review" : "selected"
+      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" || mode === "auto_approval" ? "pending_manual_review" : "selected"
     );
   }
 
@@ -743,7 +744,7 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "DRAFT_PERSISTENCE_FAILURE", error instanceof Error ? error.message : "Draft persistence failed",
       "drafts",
-      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" ? "pending_manual_review" : "selected",
+      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" || mode === "auto_approval" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length
     );
   }
@@ -794,14 +795,21 @@ export async function generateOfficialAI(
     return result;
   }
 
-  // Modo 2 — Approval (comportamento anterior inalterado).
+  // Modo 2 — Auto-approval (curadoria do ciclo) ou Approval (seleção humana).
   let approval;
   try {
-    approval = await dependencies.approval.approveSelected({ command, offer: offer!, drafts });
+    if (mode === "auto_approval") {
+      if (!dependencies.approval.approvePending) {
+        return rejectAndRecord(command, dependencies, fingerprint, "AUTO_APPROVAL_UNAVAILABLE", "Automatic approval dependency is unavailable", "approval", "pending_manual_review", inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true);
+      }
+      approval = await dependencies.approval.approvePending({ command, offer: offer!, drafts });
+    } else {
+      approval = await dependencies.approval.approveSelected({ command, offer: offer!, drafts });
+    }
   } catch (error) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
-      "APPROVAL_FAILURE", error instanceof Error ? error.message : "Approval failed", "approval", "selected",
+      "APPROVAL_FAILURE", error instanceof Error ? error.message : "Approval failed", "approval", mode === "auto_approval" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true
     );
   }
@@ -809,7 +817,7 @@ export async function generateOfficialAI(
   if (approval.status === "rejected") {
     return rejectAndRecord(
       command, dependencies, fingerprint,
-      approval.code, approval.message, "approval", "selected",
+      approval.code, approval.message, "approval", mode === "auto_approval" ? "pending_manual_review" : "selected",
       inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true
     );
   }

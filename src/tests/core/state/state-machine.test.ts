@@ -11,6 +11,7 @@ import {
 describe("official state machine", () => {
   const validTransitions: ReadonlyArray<[EntityType, State, State]> = [
     ["offer", "pending_manual_review", "selected"],
+    ["offer", "pending_manual_review", "approved"],
     ["offer", "selected", "approved"],
     ["offer", "approved", "posted"],
     ["offer", "pending_manual_review", "rejected"],
@@ -24,7 +25,6 @@ describe("official state machine", () => {
   });
 
   const invalidTransitions: ReadonlyArray<[EntityType, State, State]> = [
-    ["offer", "pending_manual_review", "approved"],
     ["offer", "selected", "posted"],
     ["offer", "posted", "rejected"],
     ["offer", "rejected", "selected"],

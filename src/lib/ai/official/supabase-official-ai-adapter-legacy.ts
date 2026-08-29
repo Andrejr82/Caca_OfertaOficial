@@ -547,6 +547,27 @@ export class SupabaseOfficialAIRegenerationAdapter implements OfficialAIRegenera
 export class OfficialAIApprovalAdapter implements OfficialAIApprovalPort {
   constructor(private readonly stateDependencies: StateServiceDependencies) {}
 
+  async approvePending(input: Parameters<NonNullable<OfficialAIApprovalPort["approvePending"]>>[0]) {
+    const stateResult = await transitionOfficialOfferState({
+      commandId: `${input.command.commandId}:auto-approve`,
+      idempotencyKey: `${input.command.idempotencyKey}:auto-approve`,
+      correlationId: input.command.correlationId,
+      causationId: input.command.commandId,
+      tenantId: input.command.tenantId,
+      actor: { type: "service", id: "official-ai-service", service: "official-ai-service" },
+      requestedAt: input.command.requestedAt,
+      entityId: input.offer.id,
+      fromState: "pending_manual_review",
+      toState: "approved",
+      origin: "official-ai-service.auto-approval",
+      reason: { code: "DISCOVERY_GATES_PASSED" },
+      evidenceRefs: input.drafts.map((draft) => `post:${draft.postId}:draft`)
+    }, this.stateDependencies);
+    return stateResult.status === "applied"
+      ? { status: "applied" as const, auditId: stateResult.auditId, newState: "approved" as const }
+      : { status: "rejected" as const, code: stateResult.code, message: stateResult.message };
+  }
+
   async approveSelected(input: Parameters<OfficialAIApprovalPort["approveSelected"]>[0]) {
     const stateResult = await transitionOfficialOfferState({
       commandId: `${input.command.commandId}:approve`,

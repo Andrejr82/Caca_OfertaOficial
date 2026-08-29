@@ -9,7 +9,7 @@
  * ✓ reexecução sem duplicidade (idempotência)
  * ✓ vínculo offer/post (offer_id presente nos drafts)
  * ✓ painel exibindo imediatamente os drafts (draft_count > 0)
- * ✓ offer continua pending_manual_review após geração
+ * ✓ ofertas de ciclo curadas são promovidas para approved após geração integral
  * ✓ IA não promove approved no modo draft_generation
  * ✓ publicação continua exigindo aprovação humana
  */
@@ -150,6 +150,32 @@ function createDependencies(
 
 describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review)", () => {
 
+  it("promove automaticamente uma oferta curada pelo worker e mantém os drafts disponíveis para os canais", async () => {
+    const approvePending = vi.fn().mockResolvedValue({
+      status: "applied",
+      auditId: "state-audit-auto-1",
+      newState: "approved"
+    });
+    const dependencies = createDependencies({
+      approval: {
+        approveSelected: vi.fn(),
+        approvePending
+      }
+    });
+
+    const result = await generateOfficialAI({
+      ...command,
+      actor: { type: "service", id: "oracle-worker", service: "oracle-worker" },
+      origin: "oracle.discovery",
+      metadata: { copyV2: true, copyV2Auto: true }
+    }, dependencies);
+
+    expect(result.status).toBe("approved");
+    expect(result.offerState).toBe("approved");
+    expect(approvePending).toHaveBeenCalledTimes(1);
+    expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
+  });
+
   it("✓ gera drafts automaticamente para oferta em pending_manual_review", async () => {
     const dependencies = createDependencies();
 
@@ -245,7 +271,7 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
     // A Official Publication só consome "approved" — que não foi produzido
   });
 
-  it("✓ política determinística mantém pending_manual_review sem chamar provider", async () => {
+  it("✓ fallback determinístico mantém pending_manual_review quando o provider falha", async () => {
     const generate = vi.fn().mockRejectedValue(new Error("provider down"));
     const dependencies = createDependencies({
       providers: {
@@ -262,9 +288,9 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
     expect(result.status).toBe("drafted");
     if (result.status === "drafted") {
       expect(result.offerState).toBe("pending_manual_review");
-      expect(result.providerEvidence?.provider).toBe("deterministic-engine");
+      expect(result.providerEvidence?.provider).toBe("deterministic-planner");
     }
-    expect(generate).not.toHaveBeenCalled();
+    expect(generate).toHaveBeenCalledTimes(1);
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
@@ -313,7 +339,7 @@ describe("generateOfficialAI — Copy V2 (selected → drafts sem aprovação)",
     expect(dependencies.providers.resolve).not.toHaveBeenCalled();
   });
 
-  it("permite Copy V2 automatizada somente com evidência de curadoria e actor service", async () => {
+  it("promove Copy V2 automatizada somente com evidência de curadoria e actor service", async () => {
     const autoCommand: OfficialAICommand = {
       ...command,
       commandId: "command-copy-v2-auto",
@@ -321,10 +347,12 @@ describe("generateOfficialAI — Copy V2 (selected → drafts sem aprovação)",
       metadata: { copyV2: true, copyV2Auto: true },
       actor: { type: "service", id: "curation-worker", service: "curation-worker" }
     };
-    const dependencies = createDependencies({}, pendingOffer);
+    const approvePending = vi.fn().mockResolvedValue({ status: "applied", auditId: "auto-approval-1", newState: "approved" });
+    const dependencies = createDependencies({ approval: { approveSelected: vi.fn(), approvePending } }, pendingOffer);
     const result = await generateOfficialAI(autoCommand, dependencies);
-    expect(result.status).toBe("drafted");
-    expect(result.offerState).toBe("pending_manual_review");
+    expect(result.status).toBe("approved");
+    expect(result.offerState).toBe("approved");
+    expect(approvePending).toHaveBeenCalledTimes(1);
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
 });

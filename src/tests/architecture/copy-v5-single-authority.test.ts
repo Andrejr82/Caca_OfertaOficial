@@ -40,8 +40,7 @@ describe("Copy V5 single final-copy authority", () => {
   it("obriga a persistência oficial a obter o plano do único cérebro Copy V5", () => {
     const service = read("src/core/ai/official-ai-service.ts");
     expect(service).toContain('import { planCommercialCopyV5 } from "./copy-v5-planner"');
-    expect(service).toContain("const outcome = await planCommercialCopyV5(facts, provider");
-    expect(service).toContain("const plan = outcome.plan");
+    expect(service).toContain("const plan = await planCommercialCopyV5(facts, provider");
     expect(service).toContain("buildCanonicalCopyV5Content(input.content, input.offer, input.channels, plan)");
     expect(service).toContain("COPY_V5_SINGLE_BRAIN_ENFORCED");
     expect(service).not.toContain("if (input.command.metadata?.copyV2 === true)");

@@ -101,6 +101,11 @@ export type OfficialAIApprovalResult =
   | { status: "rejected"; code: string; message: string };
 
 export interface OfficialAIApprovalPort {
+  approvePending?(input: {
+    command: OfficialAICommand;
+    offer: OfficialAIOffer;
+    drafts: readonly OfficialDraftPost[];
+  }): Promise<OfficialAIApprovalResult>;
   approveSelected(input: {
     command: OfficialAICommand;
     offer: OfficialAIOffer;

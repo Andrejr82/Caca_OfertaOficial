@@ -27,7 +27,8 @@ interface GenerateAIRequest {
 
 const DEFAULT_REQUESTED_AT = "2000-01-01T00:00:00.000Z";
 
-function resolveOfficialAIChannels(): readonly OfficialAIChannel[] {
+function resolveOfficialAIChannels(allOfficialChannels = false): readonly OfficialAIChannel[] {
+  if (allOfficialChannels) return ["telegram", "instagram", "whatsapp", "facebook"];
   return hasFacebookEnv()
     ? ["telegram", "instagram", "whatsapp", "facebook"]
     : ["telegram", "instagram", "whatsapp"];
@@ -116,7 +117,7 @@ export async function POST(request: Request) {
         contractVersion: "pmav5.ai/v1", commandId: page.idempotencyKey, idempotencyKey: page.idempotencyKey,
         correlationId, causationId: `oracle:${correlationId}`, offerId: `CYCLE_PAGE_${page.pageNumber}`,
         tenantId: userId, providerPreference: body.providerPreference,
-        channels: resolveOfficialAIChannels(), requestedAt: body.requestedAt || new Date().toISOString(),
+        channels: resolveOfficialAIChannels(true), requestedAt: body.requestedAt || new Date().toISOString(),
         actor: { type: "service", id: "oracle-worker", service: "oracle-worker" }, origin: "oracle.discovery",
         reason: { code: "GENERATE_OFFICIAL_CONTENT" },
         metadata: { copyV2: true, copyV2Auto: true },

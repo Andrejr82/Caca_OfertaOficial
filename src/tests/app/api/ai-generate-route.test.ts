@@ -134,6 +134,7 @@ describe("POST /api/ai/generate", () => {
     });
     expect(generateOfficialAI).toHaveBeenCalledWith(expect.objectContaining({
       idempotencyKey: "ai:cycle:cycle-120:page:1:v1",
+      channels: ["telegram", "instagram", "whatsapp", "facebook"],
       batch: expect.objectContaining({ offerIds: offerIds.slice(0, 50), pageNumber: 1, totalPages: 3 })
     }), { dependency: true });
     expect(advanceCycleCheckpoint).toHaveBeenCalledTimes(1);
