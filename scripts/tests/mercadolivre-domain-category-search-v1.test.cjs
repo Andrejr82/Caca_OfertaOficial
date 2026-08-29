@@ -7,6 +7,7 @@ const {
   canUseMercadoLivreV1Fallback,
   evaluateV1ItemAgainstConfig,
   evaluateStrictExploratoryItem,
+  SEARCH_ALIASES,
 } = require('../mercadolivre-official-intents-v5.cjs');
 const { getMercadoLivreFamilyConfig } = require('../mercadolivre-domain-category-map-v1.cjs');
 
@@ -127,6 +128,10 @@ test('4. Família editorial não certificada usa fallback oficial estrito e acei
   assert.ok(result.mercadolivreDomainCategorySearchV1.exploratoryAccepted >= 1);
   assert.ok(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls >= 1);
   assert.equal(result.queries[0].source_strategy, 'mercadolivre_v1_strict_exploratory');
+});
+
+test('aliases de bolsa cobrem consultas específicas do domínio oficial', () => {
+  assert.deepEqual(SEARCH_ALIASES.bolsa, ['bolsa', 'bolsa feminina', 'bolsa transversal', 'bolsa casual']);
 });
 
 test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legada', async () => {

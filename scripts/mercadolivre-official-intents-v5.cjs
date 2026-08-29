@@ -99,6 +99,7 @@ const SEARCH_ALIASES = {
   'camiseta masculina': ['camiseta masculina', 'camiseta homem', 'camiseta básica masculina'],
   'bermuda masculina': ['bermuda masculina', 'bermuda homem', 'bermuda casual masculina', 'bermuda'],
   'moletom masculino': ['moletom masculino', 'moletom homem', 'blusa moletom masculina', 'moletom'],
+  bolsa: ['bolsa', 'bolsa feminina', 'bolsa transversal', 'bolsa casual'],
   'mouse gamer rgb': ['mouse gamer rgb', 'mouse gamer', 'mouse para jogos'],
   'suporte notebook alumínio': ['suporte notebook alumínio', 'suporte notebook', 'base notebook'],
   'mouse sem fio': ['mouse sem fio', 'mouse wireless', 'mouse bluetooth'],
@@ -129,6 +130,7 @@ const PREFERRED_DOMAINS = {
   'moletom masculino': ['MLB-SWEATSHIRTS_AND_HOODIES'],
   'camiseta masculina': ['MLB-T_SHIRTS'],
   'bermuda masculina': ['MLB-SHORTS'],
+  bolsa: ['MLB-HANDBAGS'],
   'roupa de academia fitness': ['MLB-SPORTSWEAR_SETS'],
   'legging fitness': ['MLB-LEGGINGS'],
   'camiseta dry fit': ['MLB-SPORT_T_SHIRTS']
