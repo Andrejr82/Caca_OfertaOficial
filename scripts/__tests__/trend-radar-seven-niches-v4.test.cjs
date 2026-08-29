@@ -1,7 +1,7 @@
 'use strict';
 const test=require('node:test');const assert=require('node:assert/strict');
 const core=require('../trend-radar-seven-niches-v4.cjs');const hist=require('../trend-radar-observation-history-v1.cjs');
-const nowMs=Date.parse('2026-08-27T02:19:19.683Z');const now=()=>new Date(nowMs).toISOString();const ago=h=>new Date(nowMs-h*3600000).toISOString();
+const nowMs=Date.now();const now=()=>new Date(nowMs).toISOString();const ago=h=>new Date(nowMs-h*3600000).toISOString();
 const niches={
  casa_cozinha_organizacao:{name:'Casa',guardrails:{allowedProductTerms:['air fryer','organizador'],blockedProductTerms:[]}},
  beleza:{name:'Beleza',guardrails:{allowedProductTerms:['serum','condicionador'],blockedProductTerms:[]}},
@@ -24,7 +24,7 @@ test('fallback sales momentum can verify only when independently corroborated cr
 
 test('Amazon rank rise over useful window verifies; static best seller does not',()=>{const base={marketplace:'Amazon',productName:'Ar condicionado Split',rank:6,rankSource:'Amazon Best Sellers',rankAuthoritative:true,bestSeller:true,amazonBestSeller:true,observedAt:now(),nicheId:'eletrodomesticos',matchedTerm:'ar condicionado',primaryFamilyMatch:true};const moved=core.calculateTrendEvidence(base,[{rank:18,rankAuthoritative:true,observedAt:ago(24)}]);assert.equal(moved.strongRankRise,true);assert.equal(moved.trending,true);const staticOne=core.calculateTrendEvidence(base,[]);assert.equal(staticOne.trending,false);});
 
-test('ML global term alone stays partial; same SKU best seller plus native trend verifies',()=>{const base={marketplace:'Mercado Livre',productName:'Geladeira EOS 230L',observedAt:now(),nicheId:'eletrodomesticos',matchedTerm:'geladeira',primaryFamilyMatch:true,nativeTrend:true,marketplaceTrendEvidence:{source:'mercadolivre_global_trends',keyword:'geladeira'}};assert.equal(core.calculateTrendEvidence(base,[]).trending,false);const corroborated=core.calculateTrendEvidence({...base,bestSeller:true,rank:4,rankSource:'Mercado Livre Highlights',rankAuthoritative:true},[]);assert.equal(corroborated.nativeProductCorroborated,true);assert.equal(corroborated.trending,true);});
+test('ML global term stays partial without history, even with native product corroboration',()=>{const base={marketplace:'Mercado Livre',productName:'Geladeira EOS 230L',observedAt:now(),nicheId:'eletrodomesticos',matchedTerm:'geladeira',primaryFamilyMatch:true,nativeTrend:true,marketplaceTrendEvidence:{source:'mercadolivre_global_trends',keyword:'geladeira'}};assert.equal(core.calculateTrendEvidence(base,[]).trending,false);const corroborated=core.calculateTrendEvidence({...base,bestSeller:true,rank:4,rankSource:'Mercado Livre Highlights',rankAuthoritative:true},[]);assert.equal(corroborated.nativeProductCorroborated,true);assert.equal(corroborated.historyAvailable,false);assert.equal(corroborated.trending,false);});
 
 test('accessory false families remain rejected',()=>{assert.equal(core.classifyCanonicalNiche({productName:'Mochila para Notebook 15 polegadas'},niches),null);assert.equal(core.classifyCanonicalNiche({productName:'Organizador para Geladeira com Bandeja'},niches).nicheId,'casa_cozinha_organizacao');assert.equal(core.classifyCanonicalNiche({productName:'Adaptador para Furadeira 90 graus'},niches),null);});
 

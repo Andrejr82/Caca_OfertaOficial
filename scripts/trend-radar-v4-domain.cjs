@@ -24,4 +24,19 @@ function isAuthoritativeRank(candidate={}){if(candidate.rankAuthoritative===true
 function nativeTrendScope(candidate={}){const source=normalize(candidate.marketplaceTrendEvidence?.source||candidate.nativeTrendSource||'');if(source.includes('category'))return'category';if(source.includes('global')||source==='mercadolivre trends')return'global';if(candidate.nativeTrend===true||candidate.marketplaceTrendEvidence)return'native';return null;}
 function nativeMatchQuality(candidate={}){const keyword=normalize(candidate.marketplaceTrendEvidence?.keyword||candidate.nativeTrendKeyword||''),title=normalize(candidate.productName||candidate.title||'');if(!keyword||!phraseIn(title,keyword))return 0;return keyword.split(' ').length>=2?10:7;}
 function isBestSeller(candidate={}){return candidate.bestSeller===true||candidate.amazonBestSeller===true||candidate.marketplaceDemandEvidence?.type==='BEST_SELLER';}
-module.exports={HEAD_BLOCKERS,DOMAIN_CONFLICT_PATTERNS,FAMILY_ACCESSORY_PATTERNS,normalize,phraseIn,num,hasDomainConflict,classifyCanonicalNiche,isPrimaryProductFamilyMatch,resolveIdentity,isAuthoritativeRank,nativeTrendScope,nativeMatchQuality,isBestSeller};
+function candidateImageUrl(candidate={}){const metrics=candidate.marketplaceMetrics&&typeof candidate.marketplaceMetrics==='object'?candidate.marketplaceMetrics:{};return String(candidate.imageUrl||candidate.image_url||metrics.imageUrl||metrics.image_url||'').trim();}
+function candidatePermalink(candidate={}){const metrics=candidate.marketplaceMetrics&&typeof candidate.marketplaceMetrics==='object'?candidate.marketplaceMetrics:{};return String(candidate.permalink||candidate.sourceUrl||candidate.productLink||metrics.affiliateUrl||metrics.productLink||'').trim();}
+function hasNativeIdentity(candidate={}){const metrics=candidate.marketplaceMetrics&&typeof candidate.marketplaceMetrics==='object'?candidate.marketplaceMetrics:{};return Boolean(String(candidate.itemId||candidate.productId||candidate.asin||candidate.shopeeItemId||metrics.itemId||metrics.item_id||metrics.productId||metrics.product_id||'').trim());}
+function validateCommercialContract(candidate={}){
+  const metrics=candidate.marketplaceMetrics&&typeof candidate.marketplaceMetrics==='object'?candidate.marketplaceMetrics:{};
+  const reasons=[];
+  if(!hasNativeIdentity(candidate)) reasons.push('native_identity_required');
+  if(!(Number(candidate.currentPrice??candidate.price)>0)) reasons.push('current_price_required');
+  if(!/^https:\/\//iu.test(candidateImageUrl(candidate))) reasons.push('image_https_required');
+  if(!/^https:\/\//iu.test(candidatePermalink(candidate))) reasons.push('permalink_https_required');
+  const available=candidate.available??candidate.inStock??metrics.available??metrics.inStock;
+  const stock=candidate.stock??candidate.stockQuantity??metrics.stock??metrics.stockQuantity;
+  if(available===false||String(available).toLowerCase()==='false'||(stock!==null&&stock!==undefined&&stock!==''&&Number(stock)<=0)) reasons.push('stock_unavailable');
+  return {valid:reasons.length===0,reasons,imageUrl:candidateImageUrl(candidate),permalink:candidatePermalink(candidate)};
+}
+module.exports={HEAD_BLOCKERS,DOMAIN_CONFLICT_PATTERNS,FAMILY_ACCESSORY_PATTERNS,normalize,phraseIn,num,hasDomainConflict,classifyCanonicalNiche,isPrimaryProductFamilyMatch,resolveIdentity,isAuthoritativeRank,nativeTrendScope,nativeMatchQuality,isBestSeller,candidateImageUrl,candidatePermalink,hasNativeIdentity,validateCommercialContract};
