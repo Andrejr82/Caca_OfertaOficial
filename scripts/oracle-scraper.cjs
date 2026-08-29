@@ -1013,6 +1013,27 @@ async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
       }, scenario?.scenarioId || scenario?.id));
 
     const scenarioRelevant = normalized.filter((product) => matchesScenarioProduct(scenario, product.title));
+    const countsByIntent = new Map();
+    for (const query of result.queries || []) {
+      countsByIntent.set(query.intent, {
+        intent: query.intent,
+        extracted: Number(query.raw_products || 0),
+        unique: Number(query.products || 0),
+        novel: 0,
+        scenario_relevant: 0,
+        source_errors: Number(query.source_errors || 0),
+        status: query.status || null,
+      });
+    }
+    for (const product of normalized) {
+      const row = countsByIntent.get(product.intent);
+      if (row) row.novel += 1;
+    }
+    for (const product of scenarioRelevant) {
+      const row = countsByIntent.get(product.intent);
+      if (row) row.scenario_relevant += 1;
+    }
+    if (stageLogger) stageLogger.info('ML_intent_matrix', intentStageStartedAt, JSON.stringify([...countsByIntent.values()]));
     const filteredNovel = await filterNovelNormalizedProducts(store, scenarioRelevant, stageLogger);
     if (filteredNovel.length > 0) return filteredNovel;
 
