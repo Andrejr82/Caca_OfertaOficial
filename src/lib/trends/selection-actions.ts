@@ -339,10 +339,13 @@ async function approveAndBridge(formData: FormData) {
 
   const { data: product, error: productError } = await supabase
     .from("trend_radar_products")
-    .select("id,radar_run_id,priority,product_term,category,marketplace,commercial_score,score_breakdown,direct_evidence,selected_offer_id")
+    .select("id,radar_run_id,priority,product_term,category,marketplace,evidence_status,commercial_score,score_breakdown,direct_evidence,selected_offer_id")
     .eq("id", productId)
     .single();
   if (productError || !product) throw new Error("Produto do Radar não encontrado.");
+  if (String(product.evidence_status || "").toLowerCase() !== "verified") {
+    throw new Error("Somente tendências verificadas podem ser aprovadas para teste.");
+  }
 
   const { data: run, error: runError } = await supabase
     .from("trend_radar_runs")

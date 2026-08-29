@@ -45,8 +45,9 @@ function emptyMetrics(start:string|null):TrendExperimentMetricsView { const end=
 export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): TrendRadarSnapshotView {
   const mapped = products.map((row) => {
     const evidence=directEvidence(row.direct_evidence); const commercial=object(evidence.commercial_metrics); const temporal=object(evidence.temporal_metrics);
-    const hasTrendContract = Object.prototype.hasOwnProperty.call(evidence,"trending_flag") || row.trend_score !== null;
-    const trending = hasTrendContract ? evidence.trending_flag === true : true;
+    const evidenceStatus = String(row.evidence_status || "").toLowerCase();
+    const hasTrendContract = Object.prototype.hasOwnProperty.call(evidence,"trending_flag");
+    const trending = evidenceStatus === "verified" && (hasTrendContract ? evidence.trending_flag === true : true);
     return {
       id:row.id, priority:row.priority, productTerm:row.product_term, normalizedProductTerm:row.normalized_product_term,
       category:row.category, marketplace:row.marketplace, evidenceStatus:row.evidence_status, sourceCount:row.source_count,
@@ -64,7 +65,7 @@ export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): 
       recommendedChannel:row.recommended_channel, recommendedFormat:row.recommended_format, selectionDecision:row.selection_decision, selectionDecidedAt:row.selection_decided_at,
       selectedOfferId:row.selected_offer_id, executionContext:object(row.execution_context), experimentMetrics:emptyMetrics(row.selection_decided_at),
     };
-  }).filter((item) => item.trending).sort((a,b) => (b.trendScore??0)-(a.trendScore??0) || a.priority-b.priority);
+  }).filter((item) => item.trending && item.evidenceStatus === "verified").sort((a,b) => (b.trendScore??0)-(a.trendScore??0) || a.priority-b.priority);
   mapped.forEach((item,index)=>{ item.priority=index+1; });
   return { id:run.id, radarDate:run.radar_date, windowStart:run.window_start, windowEnd:run.window_end, strategyVersion:run.strategy_version, status:run.status, generatedAt:run.generated_at, sourceHealth:object(run.source_health), executiveSummary:object(run.executive_summary), products:mapped };
 }

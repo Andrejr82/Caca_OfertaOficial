@@ -70,10 +70,23 @@ describe("Radar snapshot query mapping", () => {
 
     expect(view.status).toBe("completed");
     expect(view.sourceHealth).toEqual({ healthy: 3 });
-    expect(view.products.map((item) => item.priority)).toEqual([1, 2]);
-    expect(view.products[0].directEvidenceSourceUrls).toEqual(["https://shopee.com.br/list/fone"]);
-    expect(view.products[1].commercialScore).toBe(80.5);
-    expect(view.products[1].confidence).toBe(90);
-    expect(view.products[1].scoreBreakdown).toEqual({ evidenceQuality: 30, recency: 5 });
+    expect(view.products.map((item) => item.priority)).toEqual([1]);
+    expect(view.products[0].directEvidenceSourceUrls).toEqual(["https://www.mercadolivre.com.br/item"]);
+    expect(view.products[0].commercialScore).toBe(80.5);
+    expect(view.products[0].confidence).toBe(90);
+    expect(view.products[0].scoreBreakdown).toEqual({ evidenceQuality: 30, recency: 5 });
+  });
+
+  it("não expõe partial mesmo quando o payload antigo sinaliza trending_flag", () => {
+    const view = mapTrendRadarSnapshotView({
+      id: "run-2", radar_date: "2026-08-10", window_start: "2026-08-04T00:00:00.000Z", window_end: "2026-08-11T00:00:00.000Z",
+      strategy_version: "trend-radar-seven-niches-v4", status: "completed", generated_at: "2026-08-10T22:30:00.000Z", source_health: {}, executive_summary: {},
+    }, [{
+      id: "partial-1", priority: 1, product_term: "Produto sem histórico", normalized_product_term: "produto sem historico", category: "Informática", marketplace: "Amazon",
+      evidence_status: "partial", source_count: 1, commercial_score: 60, trend_score: 70, confidence: 40,
+      direct_evidence: [{ trending_flag: true, source_url: "https://www.amazon.com.br/dp/B123456789" }], score_breakdown: {}, determining_reasons: ["historico_insuficiente_para_verified"],
+      is_focus: false, opportunity_id: null, recommended_channel: null, recommended_format: null, selection_decision: null, selection_decided_at: null, selected_offer_id: null, execution_context: {},
+    }]);
+    expect(view.products).toEqual([]);
   });
 });

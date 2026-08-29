@@ -12,7 +12,7 @@ import {
 } from "@/lib/trends/shopee-approval-queue";
 
 function radar(id: string, priority: number, term: string): TrendRadarApprovalProduct {
-  return { id, priority, product_term: term, category: "Eletrônicos", evidence_status: "partial", commercial_score: 40, confidence: 60 };
+  return { id, priority, product_term: term, category: "Eletrônicos", evidence_status: "verified", commercial_score: 40, confidence: 60 };
 }
 
 function candidate(id: string, title: string, scoreSeed = 0): TrendOfferCandidate {
@@ -87,6 +87,17 @@ describe("Shopee approval queue", () => {
     const valid = candidate("333", "Samsung Galaxy A55 5G Smartphone");
     const ranked = rankTrendShopeeCandidates(input, [invalidIdentity, wrongProduct, nonAffiliate, valid]);
     expect(ranked.map((item) => item.itemId)).toEqual(["333"]);
+  });
+
+  it("não pesquisa nem materializa tendência partial sem histórico suficiente", async () => {
+    const calls: string[] = [];
+    const result = await discoverTrendShopeeApprovalCandidates([
+      { ...radar("partial", 1, "carregador portatil"), evidence_status: "partial" },
+    ], { search: async (query) => { calls.push(query); return []; } });
+
+    expect(calls).toEqual([]);
+    expect(result.searchedIntents).toBe(0);
+    expect(result.rejectedRadarProducts).toEqual([{ radarProductId: "partial", productTerm: "carregador portatil", reason: "evidence_ineligible" }]);
   });
 
   it("não confunde acessórios ou wearables Samsung com celulares Samsung", () => {

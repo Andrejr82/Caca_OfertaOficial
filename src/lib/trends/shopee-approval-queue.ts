@@ -224,7 +224,7 @@ export async function discoverTrendShopeeApprovalCandidates(
   const eligible = [...radarProducts]
     .sort((a, b) => Number(a.priority || 999) - Number(b.priority || 999))
     .filter((product) => {
-      if (!["verified", "partial"].includes(String(product.evidence_status || "").toLowerCase())) {
+      if (String(product.evidence_status || "").toLowerCase() !== "verified") {
         rejectedRadarProducts.push({ radarProductId: product.id, productTerm: product.product_term, reason: "evidence_ineligible" });
         return false;
       }

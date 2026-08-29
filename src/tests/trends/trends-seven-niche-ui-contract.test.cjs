@@ -5,7 +5,7 @@ const query=fs.readFileSync(path.join(root,'lib/trends/radar-queries.ts'),'utf8'
 const page=fs.readFileSync(path.join(root,'app/(dashboard)/trends/page.tsx'),'utf8');
 const desk=fs.readFileSync(path.join(root,'components/trends/trends-daily-selection-desk.tsx'),'utf8');
 test('query seleciona trend_score',()=>assert.match(query,/commercial_score,trend_score,confidence/));
-test('query filtra trending_flag=false quando contrato novo existe',()=>assert.match(query,/\.filter\(\(item\) => item\.trending\)/));
+test('query expõe somente verified com trending_flag verdadeiro',()=>{assert.match(query,/item\.trending && item\.evidenceStatus === "verified"/);assert.match(query,/evidenceStatus === "verified"/);});
 test('UI separa Trend Score de Commercial Score',()=>{assert.match(desk,/Trend \{score\(item\.trendScore\)\}/);assert.match(desk,/Commercial \{score\(item\.commercialScore\)\}/)});
 test('UI organiza os 7 nichos canônicos',()=>{for(const name of ['Casa, Cozinha e Organização','Beleza e Cuidados Pessoais','Moda e Calçados','Eletrodomésticos','Informática','Ferramentas','Pet']) assert.ok(desk.includes(name));});
 test('UI mostra vazio factual por nicho',()=>assert.match(desk,/Nenhuma tendência com evidência suficiente hoje/));
