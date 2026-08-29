@@ -66,8 +66,8 @@ test('3. Core e Expansion contêm exatamente os produtos aprovados', () => {
   // Moda
   const moda = getCommercialNiche('moda');
   assert.deepEqual(moda.coreProducts, [
-    'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'camiseta feminina',
-    'vestido feminino', 'calça jeans masculina', 'calça jeans feminina', 'jaqueta masculina', 'bolsa feminina',
+    'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina',
+    'sandália feminina', 'bota feminina', 'calça jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal',
     'mochila escolar', 'sapato masculino', 'bermuda masculina',
   ]);
   assert.deepEqual(moda.expansionProducts, [

@@ -173,12 +173,12 @@ test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legad
 test('6. Descoberta dinâmica usa highlights quando products search não retorna itens', async () => {
   const fixture = productResponse({
     id: 'MLBPROD_VESTIDO', itemId: 'MLBITEM_VESTIDO',
-    title: 'Vestido Feminino Casual', price: 149.9,
+    title: 'Sandália Feminina Casual', price: 149.9,
     domainId: 'MLB-DRESSES', categoryId: 'MLB1234'
   });
   const calls = [];
   const result = await runMercadoLivreOfficialIntentCoverage({
-    accessToken: 'fixture-token', keywords: ['vestido feminino'], scenarioId: 'moda_editorial', maxPerIntent: 20, delayMs: 0,
+    accessToken: 'fixture-token', keywords: ['sandália feminina'], scenarioId: 'moda_editorial', maxPerIntent: 20, delayMs: 0,
     env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
     fetchImpl: async (url) => {
       const value = String(url);
@@ -193,11 +193,11 @@ test('6. Descoberta dinâmica usa highlights quando products search não retorna
     },
   });
   assert.equal(result.products.length, 1);
-  assert.equal(result.products[0].title, 'Vestido Feminino Casual');
+  assert.equal(result.products[0].title, 'Sandália Feminina Casual');
   assert.equal(result.products[0].product_url.startsWith('https://'), true);
   assert.ok(calls.some((url) => url.includes('/highlights/MLB/category/MLB1234')));
-  assert.deepEqual(result.mercadolivreDomainCategorySearchV1.exploratorySamples['vestido feminino'], [{
-    title: 'Vestido Feminino Casual', domain_id: 'MLB-DRESSES', category_id: 'MLB1234'
+  assert.deepEqual(result.mercadolivreDomainCategorySearchV1.exploratorySamples['sandália feminina'], [{
+    title: 'Sandália Feminina Casual', domain_id: 'MLB-DRESSES', category_id: 'MLB1234'
   }]);
 });
 

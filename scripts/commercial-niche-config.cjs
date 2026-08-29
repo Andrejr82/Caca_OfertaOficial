@@ -80,8 +80,8 @@ const COMMERCIAL_NICHES = Object.freeze({
     name: 'Moda e Calçados',
     role: 'grande_volume',
     coreProducts: Object.freeze([
-      'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'camiseta feminina',
-      'vestido feminino', 'calça jeans masculina', 'calça jeans feminina', 'jaqueta masculina', 'bolsa feminina',
+      'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'sandália feminina',
+      'bota feminina', 'calça jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal',
       'mochila escolar', 'sapato masculino', 'bermuda masculina',
     ]),
     expansionProducts: Object.freeze([
@@ -91,9 +91,9 @@ const COMMERCIAL_NICHES = Object.freeze({
     marketplaceAffinity: Object.freeze({ Amazon: 2, 'Mercado Livre': 3, Shopee: 3 }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'tenis masculino', 'tenis feminino', 'tenis casual', 'camiseta masculina', 'camiseta feminina',
-        'vestido feminino', 'calca jeans masculina', 'calca jeans feminina', 'jaqueta masculina',
-        'bolsa feminina', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino',
+        'tenis masculino', 'tenis feminino', 'tenis casual', 'camiseta masculina', 'sandalia feminina',
+        'bota feminina', 'calca jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal',
+        'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino',
         'relogio masculino', 'oculos de sol', 'oculos sol',
       ]),
       blockedProductTerms: Object.freeze([

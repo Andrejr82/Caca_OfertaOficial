@@ -106,8 +106,8 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
     ['brand', 'volume', 'function', 'skin_type', 'fragrance'], { apiCategories: [100630, 100001], amazonBrowseNodes: ['16754345011', '16754346011', '16754347011'] }),
 
   moda_editorial: scenario('moda_editorial', 'Moda', 13,
-    ['tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'camiseta feminina', 'vestido feminino', 'calça jeans masculina', 'calça jeans feminina', 'jaqueta masculina', 'bolsa feminina', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino', 'relógio masculino', 'óculos de sol'],
-    ['tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'camiseta feminina', 'vestido feminino', 'calça jeans masculina', 'calça jeans feminina', 'jaqueta masculina', 'bolsa feminina', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino', 'relógio masculino', 'óculos de sol'],
+    ['tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'sandália feminina', 'bota feminina', 'calça jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino', 'relógio masculino', 'óculos de sol'],
+    ['tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'sandália feminina', 'bota feminina', 'calça jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino', 'relógio masculino', 'óculos de sol'],
     ['bebê', 'bebe', 'infantil', 'fitness específico', 'pet'],
     ['brand', 'size', 'color', 'material', 'gender'], { apiCategories: [100009, 100011, 100012, 100534], amazonBrowseNodes: ['17681970011', '17681966011', '23577004011'] }),
 
