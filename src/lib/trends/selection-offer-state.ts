@@ -12,6 +12,16 @@ export function supportsTrendApprovalMarketplace(marketplace: string | null | un
   return marketplace === "Shopee" || marketplace === "Mercado Livre" || marketplace === "Amazon";
 }
 
+/**
+ * A tendência só pode aparecer na fila de aprovação quando a oferta exata
+ * puder ser entregue ao fluxo oficial de seleção. Estados já publicados,
+ * expirados ou desconhecidos ficam fora da fila.
+ */
+export function isTrendOfferApprovalEligible(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return resolveTrendOfferHandoff(status.trim().toLowerCase()) !== "reject";
+}
+
 export function resolveTrendOfferHandoff(status: string): TrendOfferHandoffResolution {
   if (status === "selected" || status === "approved") return "reuse";
   if (status === "pending_manual_review") return "select";

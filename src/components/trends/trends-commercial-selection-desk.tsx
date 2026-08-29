@@ -48,7 +48,7 @@ export function TrendsCommercialSelectionDesk({
           const sourceUrl = item.directEvidenceSourceUrls[0] ?? null;
           const totalCommission = (item.commissionPercent ?? 0) + (item.sellerCommissionPercent ?? 0);
           const handedOff = Boolean(item.selectedOfferId && item.selectionDecision === "APROVAR_TESTE");
-          const canApprove = supportsTrendApprovalMarketplace(item.marketplace);
+          const canApprove = item.offerAvailable === true && supportsTrendApprovalMarketplace(item.marketplace);
           const metrics = item.experimentMetrics;
           const feedback = approvalFeedback?.productId === item.id ? approvalFeedback.message : null;
           return (

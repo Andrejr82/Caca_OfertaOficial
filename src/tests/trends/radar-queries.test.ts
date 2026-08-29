@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapTrendRadarSnapshotView } from "@/lib/trends/radar-queries";
+import { filterTrendProductsWithEligibleOffers, mapTrendRadarSnapshotView } from "@/lib/trends/radar-queries";
 
 describe("Radar snapshot query mapping", () => {
   it("normaliza números, JSON e ordena produtos por prioridade", () => {
@@ -88,5 +88,19 @@ describe("Radar snapshot query mapping", () => {
       is_focus: false, opportunity_id: null, recommended_channel: null, recommended_format: null, selection_decision: null, selection_decided_at: null, selected_offer_id: null, execution_context: {},
     }]);
     expect(view.products).toEqual([]);
+  });
+
+  it("remove da fila a tendência cujo offer state está bloqueado", () => {
+    const products = [
+      { id: "posted", offerStatus: "posted" },
+      { id: "selected", offerStatus: "selected" },
+    ] as any;
+
+    const visible = filterTrendProductsWithEligibleOffers(products, new Map([
+      ["posted", "posted"],
+      ["selected", "selected"],
+    ]));
+
+    expect(visible.map((item) => item.id)).toEqual(["selected"]);
   });
 });

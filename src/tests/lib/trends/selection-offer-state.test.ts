@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  isTrendOfferApprovalEligible,
   resolveTrendOfferHandoff,
   resolveTrendOfferHandoffBlock,
 } from "@/lib/trends/selection-offer-state";
@@ -22,5 +23,15 @@ describe("Trends offer handoff state", () => {
       code: "offer_unavailable",
       message: "Esta oportunidade está vinculada a uma oferta em estado posted e não pode ser aprovada automaticamente.",
     });
+  });
+
+  it("não considera oferta posted elegível para aparecer na fila do Radar", () => {
+    expect(isTrendOfferApprovalEligible("posted")).toBe(false);
+    expect(isTrendOfferApprovalEligible(" POSTED ")).toBe(false);
+    expect(isTrendOfferApprovalEligible(null)).toBe(false);
+    expect(isTrendOfferApprovalEligible("pending_manual_review")).toBe(true);
+    expect(isTrendOfferApprovalEligible("selected")).toBe(true);
+    expect(isTrendOfferApprovalEligible("approved")).toBe(true);
+    expect(isTrendOfferApprovalEligible("rejected")).toBe(true);
   });
 });

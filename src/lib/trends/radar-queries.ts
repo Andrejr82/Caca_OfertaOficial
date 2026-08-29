@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { isTrendOfferApprovalEligible } from "@/lib/trends/selection-offer-state";
 
 export interface TrendExperimentMetricsView {
   clicks: number; orders: number; commissionValue: number; grossValue: number; conversionRate: number;
@@ -17,6 +18,7 @@ export interface TrendRadarSnapshotProductView {
   sales: number | null; salesVelocity: number | null; velocityStatus: string | null;
   scoreDecision: string | null; scoreStrategyVersion: string | null; recommendedChannel: string | null; recommendedFormat: string | null;
   selectionDecision: string | null; selectionDecidedAt: string | null; selectedOfferId: string | null;
+  offerStatus?: string | null; offerAvailable?: boolean;
   executionContext: Record<string, unknown>; experimentMetrics: TrendExperimentMetricsView;
 }
 
@@ -39,6 +41,8 @@ function numericObject(value: unknown): Record<string, number> { return Object.f
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((x):x is string => typeof x === "string" && Boolean(x.trim())) : []; }
 function finiteNumber(value: unknown): number | null { if (value===null||value===undefined||value==="") return null; const n=Number(value); return Number.isFinite(n)?n:null; }
 function directEvidence(value: unknown): Record<string, unknown> { if (!Array.isArray(value)) return {}; const first=value.find((x)=>x&&typeof x==="object"&&!Array.isArray(x)); return first ? first as Record<string,unknown> : {}; }
+function marketplaceIdentity(value: unknown): Record<string, unknown> { return object(directEvidence(value).marketplace_identity); }
+function identityValue(value: unknown): string | null { return typeof value === "string" && value.trim() ? value.trim() : value == null ? null : String(value); }
 function directEvidenceSourceUrls(value: unknown): string[] { if (!Array.isArray(value)) return []; return [...new Set(value.flatMap((x)=>{ if(!x||typeof x!=="object"||Array.isArray(x)) return []; const raw=(x as Record<string,unknown>).source_url; return typeof raw==="string"&&raw.trim()?[raw.trim()]:[]; }))]; }
 function emptyMetrics(start:string|null):TrendExperimentMetricsView { const end=start?new Date(new Date(start).getTime()+7*86400000).toISOString():null; return {clicks:0,orders:0,commissionValue:0,grossValue:0,conversionRate:0,windowStart:start,windowEnd:end}; }
 
@@ -63,11 +67,39 @@ export function mapTrendRadarSnapshotView(run: RunRow, products: ProductRow[]): 
       salesVelocity:finiteNumber(temporal.sales_velocity), velocityStatus:typeof temporal.velocity_status==="string"?temporal.velocity_status:null,
       scoreDecision:typeof evidence.decision==="string"?evidence.decision:null, scoreStrategyVersion:typeof evidence.strategy_version==="string"?evidence.strategy_version:null,
       recommendedChannel:row.recommended_channel, recommendedFormat:row.recommended_format, selectionDecision:row.selection_decision, selectionDecidedAt:row.selection_decided_at,
-      selectedOfferId:row.selected_offer_id, executionContext:object(row.execution_context), experimentMetrics:emptyMetrics(row.selection_decided_at),
+      selectedOfferId:row.selected_offer_id, offerStatus:null, offerAvailable:false, executionContext:object(row.execution_context), experimentMetrics:emptyMetrics(row.selection_decided_at),
     };
   }).filter((item) => item.trending && item.evidenceStatus === "verified").sort((a,b) => (b.trendScore??0)-(a.trendScore??0) || a.priority-b.priority);
   mapped.forEach((item,index)=>{ item.priority=index+1; });
   return { id:run.id, radarDate:run.radar_date, windowStart:run.window_start, windowEnd:run.window_end, strategyVersion:run.strategy_version, status:run.status, generatedAt:run.generated_at, sourceHealth:object(run.source_health), executiveSummary:object(run.executive_summary), products:mapped };
+}
+
+type OfferStateRow = { id: string; status: string | null };
+
+async function findExactRadarOffer(supabase: any, product: TrendRadarSnapshotProductView, rawRow: ProductRow): Promise<OfferStateRow | null> {
+  if (!product.marketplace) return null;
+  if (product.selectedOfferId) {
+    const { data } = await supabase.from("offers").select("id,status").eq("id", product.selectedOfferId).maybeSingle();
+    if (data) return { id: String(data.id), status: data.status == null ? null : String(data.status) };
+  }
+  const identity = marketplaceIdentity(rawRow.direct_evidence);
+  const stableIds = product.marketplace === "Shopee"
+    ? [identityValue(identity.itemId), identityValue(identity.productId)].filter(Boolean)
+    : [identityValue(identity.itemId), identityValue(identity.productId)].filter(Boolean);
+  if (!stableIds.length) return null;
+  const clauses = product.marketplace === "Shopee"
+    ? stableIds.flatMap((value) => [`shopee_item_id.eq.${value}`, `item_id.eq.${value}`, `product_id.eq.${value}`])
+    : stableIds.flatMap((value) => [`item_id.eq.${value}`, `product_id.eq.${value}`]);
+  const { data } = await supabase.from("offers").select("id,status").eq("platform", product.marketplace).or(clauses.join(",")).order("updated_at", { ascending: false }).limit(1);
+  const offer = data?.[0];
+  return offer ? { id: String(offer.id), status: offer.status == null ? null : String(offer.status) } : null;
+}
+
+export function filterTrendProductsWithEligibleOffers(
+  products: TrendRadarSnapshotProductView[],
+  offerStatusByProductId: ReadonlyMap<string, string | null>,
+): TrendRadarSnapshotProductView[] {
+  return products.filter((product) => isTrendOfferApprovalEligible(offerStatusByProductId.get(product.id)));
 }
 
 export async function listLatestTrendRadarSnapshot(): Promise<TrendRadarSnapshotView | null> {
@@ -78,7 +110,13 @@ export async function listLatestTrendRadarSnapshot(): Promise<TrendRadarSnapshot
     .select("id,priority,product_term,normalized_product_term,category,marketplace,evidence_status,source_count,commercial_score,trend_score,confidence,direct_evidence,score_breakdown,determining_reasons,is_focus,opportunity_id,recommended_channel,recommended_format,selection_decision,selection_decided_at,selected_offer_id,execution_context")
     .eq("radar_run_id",run.id).order("priority",{ascending:true});
   if(productError) return null;
-  const snapshot=mapTrendRadarSnapshotView(run,(products??[]) as ProductRow[]);
+  const rawProducts=(products??[]) as ProductRow[];
+  const snapshot=mapTrendRadarSnapshotView(run,rawProducts);
+  const rawById=new Map(rawProducts.map((row)=>[row.id,row]));
+  const offerStates=await Promise.all(snapshot.products.map(async (product)=>({ productId:product.id, offer:await findExactRadarOffer(supabase,product,rawById.get(product.id)!) })));
+  const offerStatusByProductId=new Map<string,string|null>();
+  for(const state of offerStates){ const status=state.offer?.status??null; offerStatusByProductId.set(state.productId,status); const product=snapshot.products.find((item)=>item.id===state.productId); if(product){ product.offerStatus=status; product.offerAvailable=isTrendOfferApprovalEligible(status); } }
+  snapshot.products=filterTrendProductsWithEligibleOffers(snapshot.products,offerStatusByProductId);
   const tracked=snapshot.products.filter((item)=>item.selectedOfferId&&item.selectionDecidedAt); const offerIds=[...new Set(tracked.map((x)=>x.selectedOfferId!).filter(Boolean))];
   if(!offerIds.length) return snapshot;
   const {data:links}=await supabase.from("affiliate_links").select("id,offer_id").in("offer_id",offerIds); const linkRows=links??[]; const linkIds=linkRows.map((r:any)=>String(r.id));
