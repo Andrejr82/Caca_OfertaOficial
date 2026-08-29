@@ -503,7 +503,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
     forbiddenDomainsRejected: 0, semanticAccepted: 0, semanticRejected: 0, minPriceRejected: 0,
     fallbackWhitelistedCalls: 0, fallbackWhitelistedAccepted: 0, fallbackWhitelistedRejected: 0,
     fallbackOpenCalls: 0, dynamicDiscoveryCalls: 0, dynamicDomainsUsed: 0, sourceErrors: 0, exploratoryFamiliesUsed: 0, exploratoryAccepted: 0, exploratoryRejected: 0,
-    discoveryPoolLimit, selectedFamilies: [], exploratoryFamilies: [], familyQueries: []
+    discoveryPoolLimit, selectedFamilies: [], exploratoryFamilies: [], familyQueries: [], exploratorySamples: Object.create(null)
   };
   const products = [], queries = [];
   const productMetaCache = new Map(), productCache = new Map(), reviewCache = new Map();
@@ -616,6 +616,15 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
         }
         telemetry.exploratoryAccepted += 1;
         telemetry.semanticAccepted += 1;
+        const samples = telemetry.exploratorySamples[intent] || [];
+        if (samples.length < 3) {
+          samples.push({
+            title: String(item.title || item.name || '').slice(0, 120),
+            domain_id: item.domain_id || null,
+            category_id: item.category_id || null,
+          });
+          telemetry.exploratorySamples[intent] = samples;
+        }
         exploratoryRaw.push(...normalizeItems([item], {
           source: 'mercadolivre_v1_dynamic_domain_discovery', intent,
           domain_id: item.domain_id, category_id: item.category_id,

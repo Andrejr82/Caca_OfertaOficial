@@ -997,6 +997,11 @@ async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
 
     if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
 
+    const exploratorySamples = result.mercadolivreDomainCategorySearchV1?.exploratorySamples;
+    if (stageLogger && exploratorySamples && Object.keys(exploratorySamples).length > 0) {
+      stageLogger.info('ML_exploratory_samples', intentStageStartedAt, JSON.stringify(exploratorySamples));
+    }
+
     const normalized = result.products
       .filter((product) => ![product.item_id, product.product_id, product.product_url]
         .filter(Boolean)

@@ -191,6 +191,9 @@ test('6. Descoberta dinâmica usa highlights quando products search não retorna
   assert.equal(result.products[0].title, 'Vestido Midi Feminino Casual');
   assert.equal(result.products[0].product_url.startsWith('https://'), true);
   assert.ok(calls.some((url) => url.includes('/highlights/MLB/category/MLB1234')));
+  assert.deepEqual(result.mercadolivreDomainCategorySearchV1.exploratorySamples.vestido, [{
+    title: 'Vestido Midi Feminino Casual', domain_id: 'MLB-DRESSES', category_id: 'MLB1234'
+  }]);
 });
 
 test('5. Fallback exploratório rejeita acessório mesmo quando a busca é da família correta', async () => {
