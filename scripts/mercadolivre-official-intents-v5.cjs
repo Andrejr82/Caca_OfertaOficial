@@ -558,7 +558,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
           sourceErrors += 1;
           telemetry.sourceErrors += 1;
         }
-        if (productIds.length === 0) {
+        if (productIds.length < 5) {
           try {
             const response = await apiGet(`/highlights/MLB/category/${encodeURIComponent(domain.category_id)}`, { fetchImpl, accessToken });
             calls += 1;

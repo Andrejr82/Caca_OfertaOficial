@@ -171,13 +171,15 @@ test('6. Descoberta dinâmica usa highlights quando products search não retorna
     title: 'Vestido Midi Feminino Casual', price: 149.9,
     domainId: 'MLB-DRESSES', categoryId: 'MLB1234'
   });
+  const calls = [];
   const result = await runMercadoLivreOfficialIntentCoverage({
     accessToken: 'fixture-token', keywords: ['vestido'], scenarioId: 'moda_editorial', maxPerIntent: 20, delayMs: 0,
     env: { MERCADOLIVRE_DOMAIN_CATEGORY_SEARCH_V1_ENABLED: 'true' },
     fetchImpl: async (url) => {
       const value = String(url);
+      calls.push(value);
       if (value.includes('/domain_discovery/search')) return json([{ domain_id: 'MLB-DRESSES', category_id: 'MLB1234', category_name: 'Vestidos' }]);
-      if (value.includes('/products/search?')) return json({ results: [] });
+      if (value.includes('/products/search?')) return json({ results: [{ id: 'MLBPROD_IRRELEVANT' }] });
       if (value.includes('/highlights/MLB/category/MLB1234')) return json({ content: [{ type: 'PRODUCT', id: 'MLBPROD_VESTIDO' }] });
       if (value.endsWith('/products/MLBPROD_VESTIDO')) return json(fixture.productMeta);
       if (value.includes('/products/MLBPROD_VESTIDO/items')) return json(fixture.catalogItems);
@@ -188,6 +190,7 @@ test('6. Descoberta dinâmica usa highlights quando products search não retorna
   assert.equal(result.products.length, 1);
   assert.equal(result.products[0].title, 'Vestido Midi Feminino Casual');
   assert.equal(result.products[0].product_url.startsWith('https://'), true);
+  assert.ok(calls.some((url) => url.includes('/highlights/MLB/category/MLB1234')));
 });
 
 test('5. Fallback exploratório rejeita acessório mesmo quando a busca é da família correta', async () => {
