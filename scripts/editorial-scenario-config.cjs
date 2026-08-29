@@ -57,7 +57,7 @@ function scenario(id, name, queueHour, keywords, allowedProductTerms, blockedPro
     priority: options.priority || 'medium',
     discoveryMode: options.discoveryMode || 'api_search',
     keywordSelection: 'all',
-    maxPagesPerKeyword: 1,
+    maxPagesPerKeyword: 3,
     apiCategories: options.apiCategories || [],
     amazonBrowseNodes: options.amazonBrowseNodes || [],
     aliases: options.aliases || [],

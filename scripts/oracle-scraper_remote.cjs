@@ -2,7 +2,8 @@
  * Oracle Worker Discovery-Only V5.
  *
  * O processo executável descobre ofertas nos três marketplaces oficiais,
- * materializa Candidate/Ingestion V1 e encerra em pending_manual_review.
+ * materializa Candidate/Ingestion V1, gera drafts sociais e promove somente
+ * ofertas aprovadas pelos gates do ciclo para o fluxo oficial de canais.
  */
 
 'use strict';
@@ -114,8 +115,8 @@ function buildAffiliateLinkRows(offer, appUrl) {
 const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
 const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour, matchesScenarioProduct } = require('./shopee-scenario-config.cjs');
 const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
-const { runAmazonNativeTop20, runAmazonScenarioDryRun } = require('./amazon-native-top20-v5.cjs');
-const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage } = require('./mercadolivre-official-intents-v5.cjs');
+const { runAmazonNativeTop20, runAmazonScenarioDryRun, DEFAULT_CATEGORY_LIMIT, DEFAULT_SUBCATEGORY_LIMIT } = require('./amazon-native-top20-v5.cjs');
+const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage, DEFAULT_MAX_PER_INTENT } = require('./mercadolivre-official-intents-v5.cjs');
 const { classifyCandidate } = require('./classification-coverage.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
@@ -837,7 +838,7 @@ async function scrapeStore(store, stageLogger = null) {
     const result = await runMercadoLivreOfficialIntentCoverage({
       accessToken,
       keywords: scenario?.keywords,
-      maxPerIntent: 20,
+      maxPerIntent: DEFAULT_MAX_PER_INTENT,
       delayMs: 500,
     });
 
@@ -873,8 +874,8 @@ async function scrapeStore(store, stageLogger = null) {
       : await runAmazonNativeTop20({
         fetchImpl: global.fetch,
         knownAsins,
-        maxCategories: 10,
-        maxSubcategoriesPerCategory: 5,
+        maxCategories: DEFAULT_CATEGORY_LIMIT,
+        maxSubcategoriesPerCategory: DEFAULT_SUBCATEGORY_LIMIT,
       });
       
     if (stageLogger) stageLogger.end('Amazon_Top20_extraction', amazonStageStartedAt, result.products.length);
@@ -1242,7 +1243,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
       const discovered = await runMercadoLivreOfficialIntentCoverage({
         accessToken: mlToken,
         keywords: marketplaceScenario.keywords,
-        maxPerIntent: Math.max(10, Math.min(20, perMarketplace * 2)),
+        maxPerIntent: Math.max(DEFAULT_MAX_PER_INTENT, perMarketplace * 2),
         delayMs: 300,
       });
       const normalized = discovered.products.map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
@@ -1326,7 +1327,7 @@ async function runMercadoLivreOfficialDryRun() {
   const result = await runMercadoLivreOfficialIntentCoverage({
     accessToken,
     keywords: scenario.keywords,
-    maxPerIntent: 20,
+    maxPerIntent: DEFAULT_MAX_PER_INTENT,
     delayMs: 500,
   });
   console.log(`[Mercado Livre Official V5 Dry-Run] cenário=${CLI_SCENARIO_ID || 'ciclo-atual'} intenções=${result.keywords.length} produtos=${result.products.length} duplicatas=${result.duplicates} chamadas=${result.calls}`);
@@ -1391,7 +1392,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
       }
       // Buscar acima do limite de publicação cria margem para duplicatas,
       // filtros de qualidade e caps da fila (10 por marketplace/categoria).
-      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: 20, delayMs: 300 });
+      const result = await runMercadoLivreOfficialIntentCoverage({ accessToken: mlToken, keywords: scenario.keywords, maxPerIntent: DEFAULT_MAX_PER_INTENT, delayMs: 300 });
       const contract = getMarketplaceScenarioContract(scenarioId, marketplace);
       return result.products
         .filter((product) => matchesMarketplaceContract(contract, product.title))

@@ -5,8 +5,9 @@ const cheerio = require('cheerio');
 
 const BEST_SELLERS_ROOT = 'https://www.amazon.com.br/gp/bestsellers';
 const REPORT_PATH = 'reports/amazon-native-top20-v5-dry-run.json';
-const DEFAULT_CATEGORY_LIMIT = 2;
-const DEFAULT_SUBCATEGORY_LIMIT = 1;
+const DEFAULT_CATEGORY_LIMIT = 10;
+const DEFAULT_SUBCATEGORY_LIMIT = 3;
+const DEFAULT_MAX_PER_KEYWORD = 50;
 const SEARCH_ROOT = 'https://www.amazon.com.br/s';
 const PRODUCT_KEYS = [
   'marketplace',
@@ -264,7 +265,7 @@ const sleep = (milliseconds) => new Promise((resolve) => setTimeout(resolve, mil
 async function runAmazonScenarioDryRun({
   scenario,
   fetchImpl = global.fetch,
-  maxPerKeyword = 20,
+  maxPerKeyword = DEFAULT_MAX_PER_KEYWORD,
   minDelayMs = 2000,
   retryDelayMs = 10000,
   maxRetries = 1,
@@ -682,6 +683,9 @@ if (require.main === module) {
 
 module.exports = {
   BEST_SELLERS_ROOT,
+  DEFAULT_CATEGORY_LIMIT,
+  DEFAULT_SUBCATEGORY_LIMIT,
+  DEFAULT_MAX_PER_KEYWORD,
   PRODUCT_KEYS,
   applyNovelty,
   calculateDeterministicScore,

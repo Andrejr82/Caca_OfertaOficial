@@ -22,6 +22,10 @@ const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classi
 const API_ROOT = 'https://api.mercadolibre.com';
 const API_TIMEOUT_MS = 45000;
 const REPORT_PATH = 'reports/mercadolivre-official-intents-v5-dry-run.json';
+const DEFAULT_MAX_PER_INTENT = 30;
+const MAX_DOMAINS_PER_INTENT = 5;
+const MAX_PRODUCTS_PER_DOMAIN = 20;
+const MAX_DISCOVERY_POOL = 120;
 const DEFAULT_TENANT_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 const MIN_PRODUCTS_PER_INTENT = 10;
 // Quatro páginas oficiais por termo: a política adaptativa existente permite
@@ -514,10 +518,10 @@ function evaluateStrictExploratoryItem(item, intent, scenarioId) {
   return { accepted: true, reason: null, classification };
 }
 
-async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.informatica_editorial.keywords, accessToken, fetchImpl = global.fetch, maxPerIntent = 20, delayMs = 500, now = () => new Date().toISOString(), scenarioId, minConfidence } = {}) {
+async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.informatica_editorial.keywords, accessToken, fetchImpl = global.fetch, maxPerIntent = DEFAULT_MAX_PER_INTENT, delayMs = 500, now = () => new Date().toISOString(), scenarioId, minConfidence } = {}) {
   if (!accessToken) throw new Error('accessToken obrigatório');
   const mapStats = getMercadoLivreMapStats();
-  const discoveryPoolLimit = Math.max(maxPerIntent, Math.min(80, maxPerIntent * 3));
+  const discoveryPoolLimit = Math.max(maxPerIntent, Math.min(MAX_DISCOVERY_POOL, maxPerIntent * 3));
   const telemetry = {
     enabled: true, scenarioId: scenarioId || null, familiesAvailable: mapStats.totalFamilies, familiesUsed: 0,
     highConfidenceFamilies: mapStats.highConfidence, mediumConfidenceFamilies: mapStats.mediumConfidence,
@@ -568,7 +572,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
       }
       telemetry.dynamicDomainsUsed += discoveredDomains.size;
       const dynamicProducts = [];
-      for (const domain of rankDomains([...discoveredDomains.values()], intent).slice(0, 3)) {
+      for (const domain of rankDomains([...discoveredDomains.values()], intent).slice(0, MAX_DOMAINS_PER_INTENT)) {
         let productIds = [];
         try {
           for (const searchTerm of searchTerms) {
@@ -591,7 +595,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
             telemetry.sourceErrors += 1;
           }
         }
-        productIds = [...new Set(productIds)].slice(0, 10);
+        productIds = [...new Set(productIds)].slice(0, MAX_PRODUCTS_PER_DOMAIN);
         for (const productId of productIds) {
           let productMeta = productMetaCache.get(productId);
           if (!productMeta) {
@@ -835,7 +839,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
   };
 }
 
-async function runMercadoLivreOfficialIntentCoverage({ keywords = SCENARIOS.informatica_editorial.keywords, accessToken, fetchImpl = global.fetch, maxPerIntent = 20, delayMs = 500, now = () => new Date().toISOString(), env = process.env, scenarioId, minConfidence } = {}) {
+async function runMercadoLivreOfficialIntentCoverage({ keywords = SCENARIOS.informatica_editorial.keywords, accessToken, fetchImpl = global.fetch, maxPerIntent = DEFAULT_MAX_PER_INTENT, delayMs = 500, now = () => new Date().toISOString(), env = process.env, scenarioId, minConfidence } = {}) {
   const flags = getMercadoLivreV1Flags(env);
   if (flags.domainCategorySearch) return runMercadoLivreOfficialIntentCoverageV1({ keywords, accessToken, fetchImpl, maxPerIntent, delayMs, now, scenarioId, minConfidence });
   if (!accessToken) throw new Error('accessToken obrigatório');
@@ -970,6 +974,10 @@ module.exports = {
   catalogFallbackProducts,
   MIN_PRODUCTS_PER_INTENT,
   MIN_PRODUCTS_BY_INTENT,
+  DEFAULT_MAX_PER_INTENT,
+  MAX_DOMAINS_PER_INTENT,
+  MAX_PRODUCTS_PER_DOMAIN,
+  MAX_DISCOVERY_POOL,
   SEARCH_ALIASES,
   STRICT_FALLBACK_OFFSETS
 };

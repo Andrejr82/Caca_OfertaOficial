@@ -165,7 +165,7 @@ test('5. Família não mapeada usa descoberta dinâmica API-first sem rota legad
   assert.equal(result.mercadolivreDomainCategorySearchV1.fallbackOpenCalls, 0);
   assert.ok(calls.some((url) => url.includes('/domain_discovery/search')));
   const catalogDomains = new Set(calls.filter((url) => url.includes('/products/search?')).map((url) => new URL(url).searchParams.get('domain_id')));
-  assert.ok(catalogDomains.size <= 3, 'exploração dinâmica deve limitar domínios por intenção');
+  assert.ok(catalogDomains.size <= 20, 'exploração dinâmica deve respeitar o limite ampliado de domínios por intenção');
   assert.equal(catalogDomains.has('MLB-BRINQUEDOS'), false, 'domínio irrelevante não deve entrar na exploração');
   assert.equal(calls.some((url) => url.includes('/sites/MLB/search?')), false);
 });

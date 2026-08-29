@@ -20,7 +20,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
 
   function topCandidates(count = 35) {
     return Array.from({ length: count }, (_, index) => ({
-      itemId: String(500 + index), shopId: String(600 + index), productName: `Casa ${index}`,
+      itemId: String(500 + index), shopId: String(600 + index), productName: `Organizador Casa ${index}`,
       productLink: `https://shopee.com.br/product/${600 + index}/${500 + index}`,
       offerLink: `https://s.shopee.com.br/canary-${index}`, imageUrl: `https://cf.shopee.com.br/canary-${index}.jpg`,
       price: 20 + index, originalPrice: 40 + index, score: 80, productCatIds: ['100010'],
