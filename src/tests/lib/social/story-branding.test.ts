@@ -269,5 +269,36 @@ describe("Branding oficial das artes de Stories (Instagram e Facebook)", () => {
     const ctaButton = bottomChildren[1] as unknown as React.ReactElement<{ children: string }>;
     expect(ctaButton.props.children).toBe("OFERTA NO LINK DA BIO");
   });
+
+  it("não envia estilos indefinidos ao ImageResponse em ofertas sem desconto", () => {
+    const plan = buildStoryCommercialPlan({
+      productName: "Moedor Elétrico de Sal",
+      marketplace: "Shopee",
+      category: "Casa",
+      currentPrice: 49.9,
+      originalPrice: null,
+      freeShipping: false,
+      evidence: {},
+    });
+    const frame = buildStoryCommercialFrameModel(
+      plan,
+      { marketplace: "Shopee", imageUrl: "data:image/jpeg;base64,valid" },
+      1,
+    );
+    const rendered = renderStoryCommercialFrame(frame!);
+    const styles: Array<Record<string, unknown>> = [];
+
+    function collectStyles(node: React.ReactNode) {
+      React.Children.forEach(node, (child) => {
+        if (!React.isValidElement(child)) return;
+        const props = child.props as { style?: Record<string, unknown>; children?: React.ReactNode };
+        if (props.style) styles.push(props.style);
+        collectStyles(props.children);
+      });
+    }
+
+    collectStyles(rendered);
+    expect(styles.some((style) => Object.values(style).some((value) => value === undefined))).toBe(false);
+  });
 });
 

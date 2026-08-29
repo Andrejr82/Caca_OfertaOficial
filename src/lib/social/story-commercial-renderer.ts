@@ -264,7 +264,7 @@ export function renderStoryCommercialFrame(model: StoryCommercialFrameModel) {
             fontSize: 24,
             fontWeight: 900,
             letterSpacing: 1.2,
-            boxShadow: model.variant === "discount" ? "0 8px 22px rgba(255, 71, 38, 0.32)" : undefined,
+            ...(model.variant === "discount" ? { boxShadow: "0 8px 22px rgba(255, 71, 38, 0.32)" } : {}),
           },
         },
         model.eyebrow,
