@@ -5,12 +5,6 @@ const { createHash } = require('node:crypto');
 const path = require('node:path');
 const fs = require('node:fs');
 const os = require('node:os');
-const {
-  parseOverlay,
-  buildRemoteOverlayPlan,
-  buildScraperRestartCommand,
-  buildOracleApiRestartCommand,
-} = require('./oracle-runtime-overlay.cjs');
 require('dotenv').config({ path: '.env.local' });
 
 /**
@@ -37,7 +31,6 @@ const SSH_KEY_PATH = process.env.ORACLE_SSH_KEY_PATH
   ? path.resolve(process.env.ORACLE_SSH_KEY_PATH)
   : (fs.existsSync(DEFAULT_KEY_PATH) ? DEFAULT_KEY_PATH : null);
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
-const RUNTIME_OVERLAY_FILE = 'config/oracle-runtime-overlay.env';
 const DEPLOY_FILES = [
   'scripts/shopee-feed-sync.cjs',
   'scripts/oracle-scraper.cjs',
@@ -56,6 +49,8 @@ const DEPLOY_FILES = [
   'scripts/shopee-openapi-v1-discovery-shadow.cjs',
   'scripts/shopee-trends-miner.cjs',
   'scripts/mercadolivre-official-intents-v5.cjs',
+  'scripts/mercadolivre-domain-category-map-v1.cjs',
+  'scripts/mercadolivre-v1-flags.cjs',
   'scripts/publication-queue.cjs',
   'scripts/mercadolivre-canonical-classifier.cjs',
   'scripts/marketplace-classification-catalog.json',
@@ -158,14 +153,8 @@ function buildReleaseManifest({ commit, files }) {
 const stamp = `${Date.now()}-${process.pid}`;
 const remoteStage = `/tmp/caca-oferta-deploy-${stamp}`;
 const remoteBackup = `${PROJECT_DIR}/.rollout-backups/oracle-runtime-${stamp}`;
-const localOverlayPath = path.resolve(__dirname, '..', RUNTIME_OVERLAY_FILE);
-const overlayTransferPath = path.join(os.tmpdir(), `oracle-runtime-overlay-${stamp}.env`);
 
 try {
-  if (!fs.existsSync(localOverlayPath)) throw new Error(`Overlay versionado não encontrado: ${RUNTIME_OVERLAY_FILE}`);
-  const overlayText = fs.readFileSync(localOverlayPath, 'utf8').replace(/\r\n/g, '\n');
-  parseOverlay(overlayText);
-  fs.writeFileSync(overlayTransferPath, overlayText, 'utf8');
   console.log(`Conectando à Oracle ${TARGET}...`);
   const deployDirs = DEPLOY_DIRS.map((relativeDir) => `'${remoteStage}/${relativeDir}' '${remoteBackup}/${relativeDir}' '${PROJECT_DIR}/${relativeDir}'`).join(' ');
   ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteStage}/config' '${remoteBackup}/scripts' ${deployDirs}`);
@@ -185,8 +174,6 @@ try {
     console.log(`Enviando ${relativeFile}...`);
     scp(localFile, `${remoteStage}/${relativeFile}`);
   }
-  scp(overlayTransferPath, `${remoteStage}/${RUNTIME_OVERLAY_FILE}`);
-
   // ─── Passo 3: validar staged e instalar arquivos ──────────────────────────
   const installFiles = DEPLOY_FILES.map((relativeFile) => {
     const remotePath = `${PROJECT_DIR}/${relativeFile}`;
@@ -194,11 +181,6 @@ try {
     return `test -s '${stagedPath}' && install -m 0644 '${stagedPath}' '${remotePath}'`;
   }).join('; ');
   ssh(`set -eu; ${installFiles}`);
-
-  // ─── Passo 3b: aplicar somente flags não sensíveis allowlisted ───────────
-  const overlayFlags = parseOverlay(overlayText);
-  ssh(buildRemoteOverlayPlan({ PROJECT_DIR, projectDir: PROJECT_DIR, remoteStage, remoteBackup, overlay: overlayFlags }));
-  console.log(`Overlay versionado aplicado com backup em ${remoteBackup}.`);
 
   // ─── Passo 4: gerar manifesto de release local ────────────────────────────
   const commit = getLocalCommit();
@@ -217,28 +199,21 @@ try {
   scp(localManifestPath, `${PROJECT_DIR}/.runtime-release.json`);
   console.log('Manifesto .runtime-release.json enviado ao servidor.');
 
-  // ─── Passo 6: validar hash remoto de todos os arquivos implantados ────────
-  for (const relativeFile of DEPLOY_FILES) {
-    const localHash = fileHashes[relativeFile];
-    ssh(`set -eu; sha256sum '${PROJECT_DIR}/${relativeFile}' | awk '{print $1}' | grep -qx '${localHash}'`);
-  }
+  // ─── Passo 6: validar hash remoto em uma única conexão ────────────────────
+  ssh(`set -eu; node -e 'const fs=require("fs"),crypto=require("crypto"),manifest=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); for (const [file, expected] of Object.entries(manifest.files)) { const actual=crypto.createHash("sha256").update(fs.readFileSync("${PROJECT_DIR}/"+file)).digest("hex"); if (actual !== expected) throw new Error("Hash divergente: "+file); }' '${PROJECT_DIR}/.runtime-release.json'`);
   console.log(`Hashes validados: ${DEPLOY_FILES.length} arquivos.`);
 
-  // ─── Passo 7: restart somente do scraper, carregando o overlay ──────────
-  ssh(buildScraperRestartCommand(PM2_SCRAPER_NAME, overlayFlags));
-  // oracle-api owns the legacy Telegram/Facebook queue; it must load the same
-  // fail-closed overlay or it can publish with a stale process environment.
-  ssh(buildOracleApiRestartCommand(PM2_API_NAME, overlayFlags));
+  // ─── Passo 7: restart dos serviços preservando o .env.local produtivo ────
+  ssh(`set -eu; pm2 restart '${PM2_SCRAPER_NAME}' --update-env; pm2 describe '${PM2_SCRAPER_NAME}' >/dev/null`);
+  ssh(`set -eu; pm2 restart '${PM2_API_NAME}' --update-env; pm2 describe '${PM2_API_NAME}' >/dev/null`);
 
   // ─── Passo 8: limpeza do stage temporário ────────────────────────────────
   ssh(`rm -rf '${remoteStage}'`);
   fs.unlinkSync(localManifestPath);
-  fs.unlinkSync(overlayTransferPath);
 
   console.log(`Deploy do Oracle Worker concluído. release=${commit}`);
 } catch (error) {
   try { ssh(`rm -rf '${remoteStage}'`); } catch { /* limpeza best-effort */ }
-  try { fs.unlinkSync(overlayTransferPath); } catch { /* limpeza best-effort */ }
   console.error(`Falha no deploy Oracle: ${error.message}`);
   process.exitCode = 1;
 }
