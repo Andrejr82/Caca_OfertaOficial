@@ -94,7 +94,7 @@ const COMMERCIAL_NICHES = Object.freeze({
         'tenis masculino', 'tenis feminino', 'tenis casual', 'camiseta masculina', 'camiseta feminina',
         'vestido feminino', 'calca jeans masculina', 'calca jeans feminina', 'jaqueta masculina',
         'bolsa feminina', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino',
-        'relogio masculino', 'oculos de sol',
+        'relogio masculino', 'oculos de sol', 'oculos sol',
       ]),
       blockedProductTerms: Object.freeze([
         'palmilha avulsa', 'cadarco avulso', 'botao avulso', 'etiqueta avulsa',
