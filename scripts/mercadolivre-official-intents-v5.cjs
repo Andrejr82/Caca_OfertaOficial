@@ -536,6 +536,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
             const domainId = String(domain?.domain_id || '').trim();
             const categoryId = String(domain?.category_id || '').trim();
             if (!domainId || !categoryId || MERCADOLIVRE_FORBIDDEN_DOMAIN_IDS_V1.includes(domainId)) continue;
+            if (!isDomainRelevant(domain, intent, searchTerm).relevant) continue;
             discoveredDomains.set(`${domainId}:${categoryId}`, { ...domain, domain_id: domainId, category_id: categoryId });
           }
         } catch {
@@ -545,7 +546,7 @@ async function runMercadoLivreOfficialIntentCoverageV1({ keywords = SCENARIOS.in
       }
       telemetry.dynamicDomainsUsed += discoveredDomains.size;
       const dynamicProducts = [];
-      for (const domain of [...discoveredDomains.values()].slice(0, 3)) {
+      for (const domain of rankDomains([...discoveredDomains.values()], intent).slice(0, 3)) {
         let productIds = [];
         try {
           for (const searchTerm of searchTerms) {
