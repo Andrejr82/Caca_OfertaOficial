@@ -262,6 +262,14 @@ test('8. Família certificada mantém whitelist e rejeita acessórios/peças', (
   assert.equal(evaluateV1ItemAgainstConfig({ title: 'Air Fryer Fake', price: 299, domain_id: 'MLB-MINERAL_WATERS' }, config).accepted, false);
 });
 
+test('10. Intenção masculina rejeita produto específico para gestante', () => {
+  const result = evaluateStrictExploratoryItem({
+    title: 'Bermuda Modeladora Para Gestante', price: 89.9, domain_id: 'MLB-SHORTS', category_id: 'MLB420318'
+  }, 'bermuda masculina', 'moda_editorial');
+  assert.equal(result.accepted, false);
+  assert.equal(result.reason, 'INTENT_GENDER_MISMATCH');
+});
+
 test('9. minConfidence alta não usa a rota certificada média', async () => {
   const result = await runMercadoLivreOfficialIntentCoverage({
     accessToken: 'fixture-token', keywords: ['tênis feminino'], scenarioId: 'moda_editorial', maxPerIntent: 20, delayMs: 0,

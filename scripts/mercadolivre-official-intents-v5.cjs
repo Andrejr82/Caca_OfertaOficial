@@ -500,6 +500,9 @@ function evaluateStrictExploratoryItem(item, intent, scenarioId) {
     const normalizedBlocked = ` ${normalizeText(blocked)} `;
     if (normalizedBlocked.trim() && normalizedTitle.includes(normalizedBlocked)) return { accepted: false, reason: `NICHE_BLOCKED_TERM (${blocked})` };
   }
+  if (/masculina|masculino/.test(normalizeText(intent)) && /gestante|gestantes|maternidade|grávida|gravida/.test(normalizedTitle)) {
+    return { accepted: false, reason: 'INTENT_GENDER_MISMATCH' };
+  }
   if (!titleMatchesIntent(title, intent)) return { accepted: false, reason: 'STRICT_INTENT_MISMATCH' };
   const classification = classifyMercadoLivreProduct({ title, domainId, categoryId, intent });
   if (classification.status !== 'classified' || classification.productType === 'unknown') return { accepted: false, reason: 'CLASSIFICATION_NOT_CONFIRMED' };
