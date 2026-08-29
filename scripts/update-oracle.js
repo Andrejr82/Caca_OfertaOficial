@@ -32,6 +32,23 @@ const SSH_KEY_PATH = process.env.ORACLE_SSH_KEY_PATH
   : (fs.existsSync(DEFAULT_KEY_PATH) ? DEFAULT_KEY_PATH : null);
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
 const DEPLOY_FILES = [
+  // Radar de tendências v4: worker, runner e contrato temporal/seleção.
+  'scripts/oracle-trends-radar-worker.cjs',
+  'scripts/oracle-trends-radar-runner-seven-niches.cjs',
+  'scripts/oracle-trends-radar-runner-seven-niches-v4.cjs',
+  'scripts/oracle-trends-radar-v4-collectors.cjs',
+  'scripts/oracle-trends-radar-engine.cjs',
+  'scripts/oracle-trends-radar-seven-niches-runtime.cjs',
+  'scripts/trend-radar-seven-niches-v4.cjs',
+  'scripts/trend-radar-v4-config.cjs',
+  'scripts/trend-radar-v4-domain.cjs',
+  'scripts/trend-radar-v4-temporal.cjs',
+  'scripts/trend-radar-v4-selection.cjs',
+  'scripts/trend-radar-v4-persistence.cjs',
+  'scripts/trend-radar-observation-history-v1.cjs',
+  'scripts/commercial-niche-contracts.cjs',
+  'scripts/commercial-niche-config.cjs',
+  'src/core/trends/commercial-opportunity-score-v4.cjs',
   'scripts/shopee-feed-sync.cjs',
   'scripts/oracle-scraper.cjs',
   'scripts/oracle-scraper_remote.cjs',
