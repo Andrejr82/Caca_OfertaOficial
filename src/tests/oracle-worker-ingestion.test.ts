@@ -114,7 +114,7 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
     let mockPersist;
 
     beforeEach(() => {
-      mockPersist = vi.fn().mockResolvedValue({ accepted: 1, state: 'pending_manual_review', offerIds: ['offer-1'] });
+      mockPersist = vi.fn().mockResolvedValue({ accepted: 1, state: 'approved', offerIds: ['offer-1'] });
       mockDiscover = vi.fn();
     });
 
@@ -185,7 +185,7 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       const persistArg = mockPersist.mock.calls[0][0];
       expect(persistArg).toHaveLength(1);
       expect(persistArg[0].candidate.sourceItemId).toBe('MLB123');
-      expect(res.finalState).toBe('pending_manual_review');
+      expect(res.finalState).toBe('approved');
     });
 
     it('does not call persist if all candidates are invalid', async () => {

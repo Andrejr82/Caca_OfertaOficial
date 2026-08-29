@@ -947,7 +947,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       score: candidate.deterministicScore,
       status: targetStatus,
       explainability,
-      notes: '[Oracle Discovery-Only V5] ' + marketplace + (isDeferred ? '; deferred' : '; aguardando revisão manual.'),
+      notes: '[Oracle Discovery-Only V5] ' + marketplace + (isDeferred ? '; deferred' : '; aprovado após gates.'),
     };
     if (marketplace === 'Shopee') {
       Object.assign(row, {

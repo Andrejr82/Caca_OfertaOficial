@@ -176,6 +176,46 @@ describe("generateOfficialAI — Modo 1: Draft Generation (pending_manual_review
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
 
+  it("processa oferta já aprovada sem solicitar uma segunda aprovação", async () => {
+    const approvedOffer: OfficialAIOffer = {
+      ...pendingOffer,
+      id: "offer-approved",
+      state: "approved",
+      version: 1
+    };
+    const approvePending = vi.fn();
+    const approveSelected = vi.fn();
+    const dependencies = createDependencies({
+      offers: { updateShortName: vi.fn(), findById: vi.fn().mockResolvedValue(approvedOffer) },
+      approval: { approvePending, approveSelected }
+    });
+
+    const result = await generateOfficialAI({
+      ...command,
+      commandId: "command-approved-cycle",
+      offerId: "offer-approved",
+      idempotencyKey: "ai:draft:offer-approved:v2",
+      actor: { type: "service", id: "oracle-worker", service: "oracle-worker" },
+      origin: "oracle.discovery",
+      metadata: { copyV2: true, copyV2Auto: true }
+    }, dependencies);
+
+    expect(result.status).toBe("approved");
+    expect(result.offerState).toBe("approved");
+    if (result.status === "approved") {
+      expect(result.drafts).toHaveLength(3);
+    }
+    expect(approvePending).not.toHaveBeenCalled();
+    expect(approveSelected).not.toHaveBeenCalled();
+    expect(dependencies.audit.register).toHaveBeenCalledWith(
+      expect.objectContaining({
+        result: "approved",
+        transitionRequested: false,
+        transitionCompleted: false
+      })
+    );
+  });
+
   it("✓ gera drafts automaticamente para oferta em pending_manual_review", async () => {
     const dependencies = createDependencies();
 

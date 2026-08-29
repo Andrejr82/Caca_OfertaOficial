@@ -95,7 +95,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     }]);
     const persist = vi.fn(async (ingestion: unknown) => ({
       accepted: 1,
-      state: "pending_manual_review",
+      state: "approved",
       ingestion,
     }));
 
@@ -111,7 +111,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     expect(discover.mock.calls.map(([marketplace]) => marketplace)).toEqual(MARKETPLACES);
     expect(persist.mock.calls.length).toBeGreaterThanOrEqual(3);
     expect(result.marketplaces).toHaveLength(3);
-    expect(result.finalState).toBe("pending_manual_review");
+    expect(result.finalState).toBe("approved");
 
     for (const [ingestionsRaw] of persist.mock.calls) {
       const ingestions = ingestionsRaw as any[];
@@ -147,14 +147,14 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         discoveredAt: "2026-07-13T12:00:00.000Z",
       }],
       persist: async () => ({ accepted: 0, state: "selected" }),
-    })).rejects.toThrow("pending_manual_review");
+    })).rejects.toThrow("approved");
   });
 
   it("isola Candidate inválido e continua os marketplaces seguintes", async () => {
     const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
     const persist = vi.fn(async (ingestions: unknown[]) => ({
       accepted: ingestions.length,
-      state: "pending_manual_review",
+      state: "approved",
     }));
     const valid = {
       sourceItemId: "item-1",
@@ -217,7 +217,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         : [],
       persist: async (ingestions: unknown[]) => {
         persisted.push(ingestions);
-        return { accepted: ingestions.length, state: "pending_manual_review" };
+        return { accepted: ingestions.length, state: "approved" };
       },
     });
     expect(persisted[0]).toHaveLength(1);
@@ -322,7 +322,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     expect(execution.stdout).toContain("imported");
   }, 25_000);
 
-  it("notifica oficialmente trabalho pendente (notifyWorkPending) quando ofertas são persistidas em pending_manual_review", async () => {
+  it("notifica oficialmente o conteúdo do ciclo quando ofertas são persistidas como approved", async () => {
     const { runDiscoveryOnlyCycle, FINAL_STATE } = require("../../scripts/oracle-worker-discovery-only.cjs");
     const notifyWorkPending = vi.fn().mockResolvedValue({ ok: true });
     const valid = {
@@ -347,7 +347,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         accepted: ingestions.length,
         persisted: ingestions.length,
         offerIds: ingestions.length ? ["offer-cycle-1", "offer-cycle-1"] : [],
-        state: "pending_manual_review"
+        state: "approved"
       }),
       notifyWorkPending,
     });
@@ -375,7 +375,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         requestedAt: new Date().toISOString(),
         marketplaces: ["Amazon"],
         discover: async () => [createValidAmazonCandidate()],
-        persist: async () => ({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-1"] }),
+        persist: async () => ({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-1"] }),
         qualityShadow,
         qualityAdmission,
       });
@@ -390,7 +390,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
   it("executa shadow mode somente como observação e preserva a persistência V1", async () => {
     const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
     const qualityShadow = vi.fn().mockResolvedValue(undefined);
-    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-1"] });
+    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-1"] });
     const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
     process.env.OFFER_QUALITY_PIPELINE_V2 = "shadow";
 
@@ -407,7 +407,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       expect(qualityShadow).toHaveBeenCalledTimes(1);
       expect(qualityShadow).toHaveBeenCalledWith(expect.objectContaining({ marketplace: "Amazon" }));
       expect(persist).toHaveBeenCalledTimes(1);
-      expect(result.finalState).toBe("pending_manual_review");
+      expect(result.finalState).toBe("approved");
     } finally {
       if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
       else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
@@ -421,7 +421,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     const first = createValidAmazonCandidate();
     const second = { ...createValidAmazonCandidate(), sourceItemId: "B000000002", marketplaceMetrics: { sourcePosition: 2, asin: "B000000002" } };
     const qualityAdmission = vi.fn().mockImplementation((products: unknown[]) => ({ accepted: [products[0]], rejected: [] }));
-    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "pending_manual_review", offerIds: ["offer-active-1"] });
+    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-active-1"] });
 
     try {
       await runDiscoveryOnlyCycle({
@@ -454,7 +454,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         requestedAt: new Date().toISOString(),
         marketplaces: ["Amazon"],
         discover: async () => [createValidAmazonCandidate()],
-        persist: async () => ({ accepted: 1, state: "pending_manual_review", offerIds: ["must-not-persist"] }),
+        persist: async () => ({ accepted: 1, state: "approved", offerIds: ["must-not-persist"] }),
       })).rejects.toThrow("Admissão Offer Quality V2 indisponível");
     } finally {
       if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
@@ -470,7 +470,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       correlationId: "cycle-without-ids",
       requestedAt: "2026-07-15T12:00:00.000Z",
       discover: async () => [],
-      persist: async () => ({ accepted: 0, offerIds: [], state: "pending_manual_review" }),
+      persist: async () => ({ accepted: 0, offerIds: [], state: "approved" }),
       notifyWorkPending
     });
     expect(notifyWorkPending).not.toHaveBeenCalled();

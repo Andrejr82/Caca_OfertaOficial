@@ -178,14 +178,14 @@ export interface OfficialAIProviderEvidence {
 
 /**
  * Resultado do Modo 1 — Draft Generation (ADR-014).
- * A oferta permanece em pending_manual_review.
- * Nenhuma transição de estado ocorreu.
+ * O resultado também pode representar o processamento de conteúdo de uma oferta
+ * que já foi aprovada pelo Discovery.
  */
 export interface OfficialAIDraftedResult {
   status: "drafted";
   commandId: string;
   offerId: string;
-  offerState: "pending_manual_review" | "selected";
+  offerState: "pending_manual_review" | "selected" | "approved";
   content?: OfficialAIContent;
   drafts?: readonly OfficialDraftPost[];
   providerEvidence?: OfficialAIProviderEvidence;
@@ -218,7 +218,7 @@ export interface OfficialAIRejectedResult {
   message: string;
   commandId: string;
   offerId: string;
-  offerState: "pending_manual_review" | "selected" | "unknown";
+  offerState: "pending_manual_review" | "selected" | "approved" | "unknown";
   failureStage: string;
   rejectedAt: string;
   replay?: boolean;

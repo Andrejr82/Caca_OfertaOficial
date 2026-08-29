@@ -22,7 +22,8 @@ import { validateCandidateOffer, validateOfficialAICommand } from "./validation"
 // A Official AI determina internamente o fluxo consultando o estado real da oferta.
 // Nenhum parâmetro externo seleciona o modo. A máquina de estados é a autoridade.
 // ---------------------------------------------------------------------------
-type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "copy_v2_express" | "auto_approval" | "approval";
+type InternalMode = "draft_generation" | "copy_v2" | "copy_v2_auto" | "copy_v2_express" | "auto_approval" | "approval" | "cycle_content_generation";
+type ReportedOfferState = "pending_manual_review" | "selected" | "approved" | "unknown";
 export const OFFICIAL_AI_PAGE_CONCURRENCY = 5;
 
 async function emitTelemetry(dependencies: OfficialAIServiceDependencies, event: Parameters<NonNullable<OfficialAIServiceDependencies["telemetry"]>["emit"]>[0]) {
@@ -100,7 +101,7 @@ function rejected(
   code: string,
   message: string,
   failureStage: string,
-  offerState: "pending_manual_review" | "selected" | "unknown" = "unknown"
+  offerState: ReportedOfferState = "unknown"
 ): OfficialAIRejectedResult {
   return {
     status: "rejected",
@@ -139,7 +140,7 @@ async function rejectAndRecord(
   code: string,
   message: string,
   stage: string,
-  offerState: "pending_manual_review" | "selected" | "unknown" = "unknown",
+  offerState: ReportedOfferState = "unknown",
   provider: string | null = null,
   model: string | null = null,
   latencyMs: number | null = null,
@@ -175,13 +176,20 @@ function resolveMode(
   copyV3Express = false
 ):
   | { ok: true; mode: InternalMode }
-  | { ok: false; code: string; message: string; offerState: "pending_manual_review" | "selected" | "unknown" } {
+  | { ok: false; code: string; message: string; offerState: ReportedOfferState } {
 
   if (!offer) {
     return { ok: false, code: "ENTITY_NOT_FOUND", message: "Offer was not found", offerState: "unknown" };
   }
   if (offer.tenantId !== tenantId) {
     return { ok: false, code: "TENANT_MISMATCH", message: "Offer tenant does not match command", offerState: "unknown" };
+  }
+
+  // O Discovery já encerrou os gates e persistiu a oferta como approved.
+  // Nesse caminho a Official AI apenas gera conteúdo; não solicita nem executa
+  // uma segunda transição de estado.
+  if (offer.state === "approved" && commandIsAuto) {
+    return { ok: true, mode: "cycle_content_generation" };
   }
 
   // A máquina de estados é a única autoridade para determinar o modo.
@@ -203,7 +211,7 @@ function resolveMode(
     return { ok: true, mode: copyV2 ? "copy_v2" : "approval" };
   }
 
-  // approved, posted, rejected, deleted — estados que a Official AI não processa.
+  // posted, rejected, deleted — estados que a Official AI não processa.
   return {
     ok: false,
     code: "INVALID_OFFER_STATE",
@@ -284,6 +292,7 @@ export async function generateOfficialAI(
   // 2.5. Página determinística do ciclo atual. A IA não seleciona nem busca ofertas:
   // processa exclusivamente os IDs fornecidos pelo Discovery, em página limitada a 50.
   if (command.batch?.operation === "PROCESS_OFFERS") {
+    const isCycleBatch = command.origin === "oracle.discovery" && command.actor.type === "service";
     const metrics = {
       pageNumber: command.batch.pageNumber,
       totalPages: command.batch.totalPages,
@@ -335,7 +344,7 @@ export async function generateOfficialAI(
 
       const result: OfficialAIDraftedResult = {
         status: "drafted", commandId: command.commandId, offerId: command.offerId,
-        offerState: "pending_manual_review", drafts: draftsCreated,
+        offerState: isCycleBatch ? "approved" : "pending_manual_review", drafts: draftsCreated,
         completedAt: dependencies.clock.now(), batchCompleted: metrics.batchCompleted,
         batch: { ...metrics, observability: dependencies.telemetry?.snapshot?.(command.correlationId) }
       };
@@ -352,7 +361,7 @@ export async function generateOfficialAI(
       return rejectAndRecord(
         command, dependencies, fingerprint, "CYCLE_PAGE_FAILED",
         error instanceof Error ? error.message : String(error), "cycle_page",
-        "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length,
+        isCycleBatch ? "approved" : "pending_manual_review", null, null, null, metrics.draftedOffers * command.channels.length,
         metrics.draftsPersisted
       );
     }
@@ -542,6 +551,11 @@ export async function generateOfficialAI(
     );
   }
   const { mode } = modeResult;
+  const modeOfferState: ReportedOfferState = mode === "cycle_content_generation"
+    ? "approved"
+    : mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" || mode === "auto_approval"
+      ? "pending_manual_review"
+      : "selected";
 
   // 5. Validação de detalhes da oferta (versão, contrato candidato).
   const offerError = validateOfferDetails(offer!, mode);
@@ -549,7 +563,7 @@ export async function generateOfficialAI(
     return rejectAndRecord(
       command, dependencies, fingerprint,
       offerError.code, offerError.message, "preconditions",
-      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" || mode === "auto_approval" ? "pending_manual_review" : "selected"
+      modeOfferState
     );
   }
 
@@ -698,7 +712,7 @@ export async function generateOfficialAI(
       "MISSING_CHANNEL_AFFILIATE_LINK",
       `Offer does not have affiliate_links for channel(s): ${missingChannels.join(", ")}`,
       "draft_generation",
-      (offer!.state === "approved" || !offer!.state ? "unknown" : offer!.state) as "pending_manual_review" | "selected" | "unknown"
+      (offer!.state === "approved" || !offer!.state ? "unknown" : offer!.state) as ReportedOfferState
     );
   }
 
@@ -744,7 +758,7 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "DRAFT_PERSISTENCE_FAILURE", error instanceof Error ? error.message : "Draft persistence failed",
       "drafts",
-      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" || mode === "auto_approval" ? "pending_manual_review" : "selected",
+      modeOfferState,
       inference.provider, inference.model, inference.latencyMs, command.channels.length
     );
   }
@@ -759,16 +773,17 @@ export async function generateOfficialAI(
       command, dependencies, fingerprint,
       "INCOMPLETE_DRAFT_SET", "All requested draft posts must be persisted",
       "drafts",
-      mode === "draft_generation" || mode === "copy_v2_auto" || mode === "copy_v2_express" ? "pending_manual_review" : "selected",
+      modeOfferState,
       inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length
     );
   }
 
   // ---------------------------------------------------------------------------
   // 10. Bifurcação pelo modo (ADR-014).
-  //     Modo 1 — Draft Generation: nenhuma transição de estado, offer permanece pending_manual_review.
+  //     Modo 1 — Draft Generation: nenhuma transição de estado.
   //     Modo Express Copy V2: mesmo estado pendente, apenas renderer diferente.
   //     Modo 2 — Approval: transição selected → approved (comportamento anterior inalterado).
+  //     Modo ciclo — oferta já approved; apenas conteúdo é persistido.
   // ---------------------------------------------------------------------------
 
   if (mode === "draft_generation" || mode === "copy_v2" || mode === "copy_v2_auto" || mode === "copy_v2_express") {
@@ -796,11 +811,15 @@ export async function generateOfficialAI(
   }
 
   // Modo 2 — Auto-approval (curadoria do ciclo) ou Approval (seleção humana).
-  let approval;
+  let approval:
+    | { status: "applied"; auditId?: string; newState: "approved" }
+    | { status: "rejected"; code: string; message: string };
   try {
-    if (mode === "auto_approval") {
+    if (mode === "cycle_content_generation") {
+      approval = { status: "applied", newState: "approved" };
+    } else if (mode === "auto_approval") {
       if (!dependencies.approval.approvePending) {
-        return rejectAndRecord(command, dependencies, fingerprint, "AUTO_APPROVAL_UNAVAILABLE", "Automatic approval dependency is unavailable", "approval", "pending_manual_review", inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true);
+        return rejectAndRecord(command, dependencies, fingerprint, "AUTO_APPROVAL_UNAVAILABLE", "Automatic approval dependency is unavailable", "approval", modeOfferState, inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true);
       }
       approval = await dependencies.approval.approvePending({ command, offer: offer!, drafts });
     } else {
@@ -809,16 +828,16 @@ export async function generateOfficialAI(
   } catch (error) {
     return rejectAndRecord(
       command, dependencies, fingerprint,
-      "APPROVAL_FAILURE", error instanceof Error ? error.message : "Approval failed", "approval", mode === "auto_approval" ? "pending_manual_review" : "selected",
-      inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true
+      "APPROVAL_FAILURE", error instanceof Error ? error.message : "Approval failed", "approval", modeOfferState,
+      inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, mode !== "cycle_content_generation"
     );
   }
 
   if (approval.status === "rejected") {
     return rejectAndRecord(
       command, dependencies, fingerprint,
-      approval.code, approval.message, "approval", mode === "auto_approval" ? "pending_manual_review" : "selected",
-      inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, true
+      approval.code, approval.message, "approval", modeOfferState,
+      inference.provider, inference.model, inference.latencyMs, command.channels.length, drafts.length, mode !== "cycle_content_generation"
     );
   }
 
@@ -833,7 +852,9 @@ export async function generateOfficialAI(
   await dependencies.audit.register({
     ...auditBase(command, dependencies), provider: inference.provider, model: inference.model,
     latencyMs: inference.latencyMs, result: "approved", replay: false, failureStage: null, errorCode: null,
-    postsPrepared: command.channels.length, postsPersisted: drafts.length, transitionRequested: true, transitionCompleted: true
+    postsPrepared: command.channels.length, postsPersisted: drafts.length,
+    transitionRequested: mode !== "cycle_content_generation",
+    transitionCompleted: mode !== "cycle_content_generation"
   });
   await dependencies.idempotency.complete(command.idempotencyKey, fingerprint, result);
   return result;

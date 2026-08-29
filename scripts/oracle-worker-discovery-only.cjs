@@ -70,7 +70,7 @@ function safeEvaluateShopeeOracleCandidate(candidate) {
 
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
-const FINAL_STATE = 'pending_manual_review';
+const FINAL_STATE = 'approved';
 
 function validateCanonicalUrl(url) {
   const str = String(url || '').trim();
