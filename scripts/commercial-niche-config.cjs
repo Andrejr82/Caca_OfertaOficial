@@ -80,20 +80,21 @@ const COMMERCIAL_NICHES = Object.freeze({
     name: 'Moda e Calçados',
     role: 'grande_volume',
     coreProducts: Object.freeze([
-      'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'vestido',
-      'calça jeans', 'jaqueta', 'bolsa', 'mochila',
+      'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'camiseta feminina',
+      'vestido feminino', 'calça jeans masculina', 'calça jeans feminina', 'jaqueta masculina', 'bolsa feminina',
+      'mochila escolar', 'sapato masculino', 'bermuda masculina',
     ]),
     expansionProducts: Object.freeze([
-      'camisa', 'bermuda', 'moletom', 'calça social', 'relógio', 'óculos',
+      'moletom masculino', 'relógio masculino', 'óculos de sol',
     ]),
     opportunityProducts: Object.freeze([]),
-    marketplaceAffinity: Object.freeze({ Amazon: 2, 'Mercado Livre': 2, Shopee: 3 }),
+    marketplaceAffinity: Object.freeze({ Amazon: 2, 'Mercado Livre': 3, Shopee: 3 }),
     guardrails: Object.freeze({
       allowedProductTerms: Object.freeze([
-        'tenis masculino', 'tenis feminino', 'tenis casual', 'tenis corrida',
-        'camiseta masculina', 'camiseta feminina', 'vestido', 'calca jeans',
-        'jaqueta', 'bolsa', 'bolsa feminina', 'bolsa transversal', 'mochila', 'mochila escolar',
-        'camisa', 'bermuda', 'moletom', 'calca social', 'relogio', 'oculos', 'oculos de sol',
+        'tenis masculino', 'tenis feminino', 'tenis casual', 'camiseta masculina', 'camiseta feminina',
+        'vestido feminino', 'calca jeans masculina', 'calca jeans feminina', 'jaqueta masculina',
+        'bolsa feminina', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino',
+        'relogio masculino', 'oculos de sol',
       ]),
       blockedProductTerms: Object.freeze([
         'palmilha avulsa', 'cadarco avulso', 'botao avulso', 'etiqueta avulsa',

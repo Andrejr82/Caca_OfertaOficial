@@ -66,11 +66,12 @@ test('3. Core e Expansion contêm exatamente os produtos aprovados', () => {
   // Moda
   const moda = getCommercialNiche('moda');
   assert.deepEqual(moda.coreProducts, [
-    'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'vestido',
-    'calça jeans', 'jaqueta', 'bolsa', 'mochila',
+    'tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'camiseta feminina',
+    'vestido feminino', 'calça jeans masculina', 'calça jeans feminina', 'jaqueta masculina', 'bolsa feminina',
+    'mochila escolar', 'sapato masculino', 'bermuda masculina',
   ]);
   assert.deepEqual(moda.expansionProducts, [
-    'camisa', 'bermuda', 'moletom', 'calça social', 'relógio', 'óculos',
+    'moletom masculino', 'relógio masculino', 'óculos de sol',
   ]);
 
   // Eletrodomésticos
@@ -120,7 +121,7 @@ test('4. opportunityProducts continua array vazio e dinâmico para todos os nich
 test('5. Afinidades por marketplace correspondem exatamente à matriz aprovada', () => {
   assert.deepEqual(getCommercialNiche('casa_cozinha_organizacao').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 3 });
   assert.deepEqual(getCommercialNiche('beleza').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 2, Shopee: 3 });
-  assert.deepEqual(getCommercialNiche('moda').marketplaceAffinity, { Amazon: 2, 'Mercado Livre': 2, Shopee: 3 });
+  assert.deepEqual(getCommercialNiche('moda').marketplaceAffinity, { Amazon: 2, 'Mercado Livre': 3, Shopee: 3 });
   assert.deepEqual(getCommercialNiche('eletrodomesticos').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 2 });
   assert.deepEqual(getCommercialNiche('informatica').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 2 });
   assert.deepEqual(getCommercialNiche('ferramentas').marketplaceAffinity, { Amazon: 3, 'Mercado Livre': 3, Shopee: 3 });
