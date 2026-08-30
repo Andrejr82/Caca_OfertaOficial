@@ -59,7 +59,7 @@ describe('Shopee OpenAPI V1 resilience', () => {
     expect(result).toMatchObject({ engine: 'shopee_openapi_v1', decision: 'timeout' });
     expect(Date.now() - startedAt).toBeLessThan(500);
     await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(requests).toBe(3);
+    expect(requests).toBe(1);
     expect(requestsAfterAbort).toBe(0);
     expect(requestSignal).toBeInstanceOf(AbortSignal);
     expect(requestSignal.aborted).toBe(true);
@@ -70,7 +70,7 @@ describe('Shopee OpenAPI V1 resilience', () => {
       env: BASE_ENV,
       request: async () => ({ status: 503, data: { errors: [{ message: 'unavailable' }] } }),
     });
-    const result = await discovery({ scenario: 'tv_audio_editorial' });
+    const result = await discovery({ scenario: 'casa_cozinha_editorial' });
     expect(result).toMatchObject({ engine: 'shopee_openapi_v1', decision: 'failed', topCount: 0 });
   });
 

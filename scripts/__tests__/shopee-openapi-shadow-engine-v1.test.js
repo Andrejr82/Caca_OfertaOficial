@@ -12,6 +12,8 @@ const {
   evaluateIntent,
   normalizeProductOffer,
   normalizeFeedColumns,
+  classifyCuratedFeedCandidate,
+  selectCuratedFamilyRepresentatives,
   processDeltaRows,
   runShadow,
   runScenarioPlan,
@@ -31,6 +33,120 @@ function product(overrides = {}) {
 }
 
 describe('Shopee OpenAPI Shadow Engine V1', () => {
+  it('declara feeds FULL e DELTA para a descoberta híbrida', () => {
+    expect(GRAPHQL_CONTRACTS.listItemFeeds.queries.FULL).toContain('feedMode: FULL');
+    expect(GRAPHQL_CONTRACTS.listItemFeeds.queries.DELTA).toContain('feedMode: DELTA');
+    expect(GRAPHQL_CONTRACTS.listItemFeeds.query).toBe(GRAPHQL_CONTRACTS.listItemFeeds.queries.DELTA);
+  });
+
+  it('classifica título, descrição e atributos e bloqueia acessórios antes do enriquecimento', () => {
+    const family = { name: 'air fryer', terms: ['air fryer', 'fritadeira'], targetProductCatId: 100198 };
+    const accepted = classifyCuratedFeedCandidate({
+      productName: 'Fritadeira elétrica 5 litros', description: 'Air fryer completa',
+      attributesText: 'potência 1500W', productCatIds: ['100010', '100041', '100198'],
+    }, [family]);
+    const blocked = classifyCuratedFeedCandidate({
+      productName: 'Forma de silicone', description: 'Acessório para air fryer',
+      attributesText: 'silicone', productCatIds: ['100010', '100041', '100198'],
+    }, [family]);
+    expect(accepted).toMatchObject({ accepted: true, family: 'air fryer' });
+    expect(blocked).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Descalcificante limpa cafeteira', productCatIds: ['100194'] }, [{ name: 'cafeteira', terms: ['cafeteira'], targetProductCatId: 100194 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Kit 4 tampinhas espalhador fogão', productCatIds: ['100197'] }, [{ name: 'fogão', terms: ['fogao'], targetProductCatId: 100197 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Kit base com discos lixa para lixadeira', productCatIds: ['101191'] }, [{ name: 'lixadeira', terms: ['lixadeira'], targetProductCatId: 101191 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+  });
+
+  it('seleciona um representante por família e no máximo três famílias', () => {
+    const selected = selectCuratedFamilyRepresentatives([
+      product({ itemId: '1', curatedFamily: 'air fryer', sales: 1000 }),
+      product({ itemId: '2', curatedFamily: 'air fryer', sales: 900 }),
+      product({ itemId: '3', curatedFamily: 'cafeteira', sales: 800 }),
+      product({ itemId: '4', curatedFamily: 'liquidificador', sales: 700 }),
+      product({ itemId: '5', curatedFamily: 'panela', sales: 600 }),
+    ], 3);
+    expect(selected.map((item) => item.itemId)).toEqual(['1', '3', '4']);
+  });
+
+  it('usa FULL e DELTA, enriquece por itemId e não aciona fallback com três famílias válidas', async () => {
+    const fullRows = [
+      { columns: JSON.stringify({ itemid: '101', title: 'Air Fryer 5L completa', description: 'Fritadeira elétrica 1500W', product_link: 'https://shopee.com.br/product/201/101', global_catid1: '100010', global_catid2: '100041', global_catid3: '100198' }) },
+      { columns: JSON.stringify({ itemid: '102', title: 'Cafeteira elétrica programável', description: 'Máquina de café completa', product_link: 'https://shopee.com.br/product/202/102', global_catid1: '100010', global_catid2: '100041', global_catid3: '100194' }) },
+      { columns: JSON.stringify({ itemid: '103', title: 'Liquidificador elétrico 550W', description: 'Liquidificador completo', product_link: 'https://shopee.com.br/product/203/103', global_catid1: '100010', global_catid2: '100041', global_catid3: '100193' }) },
+      { columns: JSON.stringify({ itemid: '104', title: 'Forma de silicone para Air Fryer', description: 'Acessório', product_link: 'https://shopee.com.br/product/204/104', global_catid1: '100010', global_catid2: '100041', global_catid3: '100198' }) },
+    ];
+    const exact = {
+      101: product({ itemId: '101', shopId: '201', productName: 'Air Fryer 5L completa', productLink: 'https://shopee.com.br/product/201/101', offerLink: 'https://s.shopee.com.br/101', productCatIds: [100010, 100041, 100198], sales: 3000 }),
+      102: product({ itemId: '102', shopId: '202', productName: 'Cafeteira elétrica programável', productLink: 'https://shopee.com.br/product/202/102', offerLink: 'https://s.shopee.com.br/102', productCatIds: [100010, 100041, 100194], sales: 2000 }),
+      103: product({ itemId: '103', shopId: '203', productName: 'Liquidificador elétrico 550W', productLink: 'https://shopee.com.br/product/203/103', offerLink: 'https://s.shopee.com.br/103', productCatIds: [100010, 100041, 100193], sales: 1000 }),
+    };
+    const calls = [];
+    const request = async (operation, query, variables = {}) => {
+      calls.push({ operation, query, variables });
+      if (operation === 'ListItemFeedsFull') return { status: 200, data: { data: { listItemFeeds: { feeds: [{ datafeedId: 'full-1', datafeedName: 'FULL', totalCount: 4 }] } } } };
+      if (operation === 'ListItemFeedsDelta') return { status: 200, data: { data: { listItemFeeds: { feeds: [{ datafeedId: 'delta-1', datafeedName: 'DELTA', totalCount: 1 }] } } } };
+      if (operation === 'GetItemFeedData') return { status: 200, data: { data: { getItemFeedData: { rows: variables.datafeedId === 'full-1' ? fullRows : [] } } } };
+      if (operation === 'ShopeePromotionOfferByItem') {
+        const itemId = query.match(/itemId:\s*(\d+)/)?.[1];
+        return { status: 200, data: { data: { productOfferV2: { nodes: exact[itemId] ? [exact[itemId]] : [] } } } };
+      }
+      throw new Error(`unexpected operation ${operation}`);
+    };
+    const result = await runScenarioPlan('eletrodomesticos_editorial', { request, curatedMode: true, env: {} });
+    expect(result.mode).toBe('curated-v2');
+    expect(result.queryEvidence.fallbackTriggered).toBe(false);
+    expect(result.scenarios.eletrodomesticos_editorial.top.map((item) => item.curatedFamily)).toEqual(['air fryer', 'cafeteira', 'liquidificador']);
+    expect(result.scenarios.eletrodomesticos_editorial.top).toHaveLength(3);
+    expect(calls.some((call) => call.operation === 'ListItemFeedsFull')).toBe(true);
+    expect(calls.some((call) => call.operation === 'ListItemFeedsDelta')).toBe(true);
+    expect(calls.filter((call) => call.operation === 'ShopeePromotionOfferByItem')).toHaveLength(3);
+    expect(calls.some((call) => call.operation === 'ShopeePromotionOffers')).toBe(false);
+  });
+
+  it('aciona busca por categoria folha somente quando FULL e DELTA não cobrem três famílias', async () => {
+    let sequence = 300;
+    const request = async (operation, query, variables = {}) => {
+      if (operation === 'ListItemFeedsFull' || operation === 'ListItemFeedsDelta') {
+        return { status: 200, data: { data: { listItemFeeds: { feeds: [] } } } };
+      }
+      if (operation === 'ShopeePromotionOffers') {
+        sequence += 1;
+        const titleByKeyword = {
+          faqueiro: 'Faqueiro inox 24 peças',
+          'jogo de cama': 'Jogo de cama casal 4 peças',
+          toalha: 'Jogo de toalha de banho 4 peças',
+          lixeira: 'Lixeira automática 12 litros com sensor',
+          mop: 'Mop giratório completo com balde',
+        };
+        const title = titleByKeyword[variables.keyword];
+        const nodes = title ? [product({
+          itemId: String(sequence), shopId: String(sequence + 100), productName: title,
+          productLink: `https://shopee.com.br/product/${sequence + 100}/${sequence}`,
+          offerLink: `https://s.shopee.com.br/${sequence}`, productCatIds: [100010, 100636, variables.productCatId],
+          sales: 1000 - sequence,
+        })] : [];
+        return { status: 200, data: { data: { productOfferV2: { nodes } } } };
+      }
+      throw new Error(`unexpected operation ${operation}`);
+    };
+    const result = await runScenarioPlan('casa_cozinha_editorial', { request, curatedMode: true, env: {} });
+    expect(result.queryEvidence.fallbackTriggered).toBe(true);
+    expect(result.scenarios.casa_cozinha_editorial.top.length).toBeGreaterThan(0);
+    expect(new Set(result.scenarios.casa_cozinha_editorial.top.map((item) => item.curatedFamily)).size).toBe(result.scenarios.casa_cozinha_editorial.top.length);
+    expect(result.queryEvidence.calls.filter((call) => call.source === 'productOfferV2.curatedFallback').length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('mantém Informática fora do modo curado Shopee', async () => {
+    let calls = 0;
+    const result = await runScenarioPlan('informatica_editorial', {
+      curatedMode: true,
+      env: {},
+      request: async () => { calls += 1; return { status: 200, data: { data: {} } }; },
+    });
+    expect(result.queryEvidence.unsupportedScenario).toBe(true);
+    expect(result.scenarios.informatica_editorial.top).toEqual([]);
+    expect(calls).toBe(0);
+  });
+
   it('define plano de consulta coerente e limitado para cada cenário', () => {
     expect(Object.keys(SCENARIO_QUERY_PLANS)).toEqual(Object.keys(SCENARIO_CONTRACTS));
     for (const plan of Object.values(SCENARIO_QUERY_PLANS)) {

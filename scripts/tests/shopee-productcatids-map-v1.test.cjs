@@ -14,8 +14,8 @@ const tests = [
     for (const [, families] of Object.entries(SHOPEE_PRODUCTCATIDS_MAP_V1)) {
       count += Object.keys(families).length;
     }
-    assert.equal(count, 69, `Esperado 69 famílias no mapa, encontrado ${count}`);
-    console.log(`[PASS] total de 69 famílias no mapa completo (${count}/69)`);
+    assert.equal(count, 76, `Esperado 76 famílias no mapa, encontrado ${count}`);
+    console.log(`[PASS] total de 76 famílias no mapa completo (${count}/76)`);
   },
 
   function testCamaPetBloqueado() {
@@ -36,7 +36,6 @@ const tests = [
       { niche: 'Moda', family: 'sapato masculino' },
       { niche: 'Eletrodomésticos', family: 'refrigerador' },
       { niche: 'Eletrodomésticos', family: 'lava e seca' },
-      { niche: 'Ferramentas', family: 'kit ferramentas' },
       { niche: 'Pet', family: 'shampoo pet' },
     ];
 
@@ -47,14 +46,28 @@ const tests = [
       const isUsed = shouldUseShopeeFamily(niche, family);
       assert.equal(isUsed, false, `${niche} > ${family} não deve ser utilizado automaticamente`);
     }
-    console.log('[PASS] famílias investigar não retornam como promovidas (6/6 verificadas)');
+    console.log(`[PASS] famílias investigar não retornam como promovidas (${investigatingFamilies.length}/${investigatingFamilies.length} verificadas)`);
+  },
+
+  function testPetCommercialSemPasseioAvulso() {
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Pet['ração cachorro'].decision, 'promover');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Pet['ração gato'].decision, 'promover');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Pet.coleira.decision, 'bloquear');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Pet['guia cachorro'].decision, 'bloquear');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Ferramentas['kit ferramentas'].decision, 'promover');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Ferramentas.alicate.decision, 'bloquear');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Ferramentas.chave.decision, 'bloquear');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Ferramentas.trena.decision, 'bloquear');
+    assert.equal(SHOPEE_PRODUCTCATIDS_MAP_V1.Ferramentas['maleta de ferramentas'].decision, 'bloquear');
+    console.log('[PASS] Pet promove alimento e bloqueia acessórios de passeio; Ferramentas promove kits');
   },
 
   function testAirFryerCategoryPath() {
     const path = getShopeeFamilyCategoryPath('Casa/Cozinha/Organização', 'air fryer');
     assert.deepEqual(path, ['100010', '100041', '100198']);
-    assert.equal(shouldUseShopeeFamily('Casa/Cozinha/Organização', 'air fryer'), true);
-    console.log('[PASS] air fryer retorna ["100010", "100041", "100198"]');
+    assert.equal(shouldUseShopeeFamily('Casa/Cozinha/Organização', 'air fryer'), false);
+    assert.equal(shouldUseShopeeFamily('Eletrodomésticos', 'air fryer'), true);
+    console.log('[PASS] air fryer pertence somente ao nicho Eletrodomésticos');
   },
 
   function testFogaoCooktopCategoryPath() {
@@ -85,6 +98,7 @@ const tests = [
       'trena',
       'maleta de ferramentas',
       'kit ferramentas',
+      'lixadeira',
     ];
 
     for (const tool of toolFamilies) {

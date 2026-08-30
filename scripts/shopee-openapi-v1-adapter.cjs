@@ -61,6 +61,7 @@ async function defaultShadowEngine(scenarioId, options = {}) {
     includeAuxiliary: options.includeAuxiliary ?? true,
     sharedSources: options.sharedSources || {},
     env: options.env || process.env,
+    curatedMode: options.curatedMode === true,
   });
 }
 
@@ -124,15 +125,15 @@ async function runShopeeOpenApiV1ShadowForScenario(scenarioId, options = {}) {
   return { ...decision, result, writeAudit: { ...ZERO_WRITE_AUDIT } };
 }
 
-// Official cycles always use the fully validated ProductCatIds V1 source set:
-// productOfferV2 + DELTA + shopOfferV2 + shopeeOfferV2, all behind the existing
-// certified-family semantic gate. This prevents callers from accidentally
-// disabling the auxiliary/deepening sources in production.
+// Official cycles always use the curated hybrid source set. FULL establishes the
+// catalog baseline, DELTA supplies freshness, productOfferV2 enriches exact item
+// identities, and leaf-category fallback runs only when coverage is insufficient.
 async function runShopeeOpenApiV1OfficialForScenario(scenarioId, options = {}) {
   return runShopeeOpenApiV1ShadowForScenario(scenarioId, {
     ...options,
     includeDelta: true,
     includeAuxiliary: true,
+    curatedMode: true,
   });
 }
 

@@ -31,7 +31,7 @@ const SSH_KEY_PATH = process.env.ORACLE_SSH_KEY_PATH
   ? path.resolve(process.env.ORACLE_SSH_KEY_PATH)
   : (fs.existsSync(DEFAULT_KEY_PATH) ? DEFAULT_KEY_PATH : null);
 const TARGET = `${SERVER_USER}@${SERVER_IP}`;
-const DEPLOY_FILES = [
+const FULL_DEPLOY_FILES = [
   // Radar de tendências v4: worker, runner e contrato temporal/seleção.
   'scripts/oracle-trends-radar-worker.cjs',
   'scripts/oracle-trends-radar-runner-seven-niches.cjs',
@@ -59,8 +59,11 @@ const DEPLOY_FILES = [
   'scripts/shopee-scenario-config.cjs',
   'scripts/shopee-native-discovery-v5.cjs',
   'scripts/shopee-openapi-shadow-engine-v1.cjs',
+  'scripts/shopee-productcatids-map-v1.cjs',
   'scripts/shopee-ranking-v1-oracle-bridge.cjs',
   'scripts/shopee-openapi-v1-adapter.cjs',
+  'scripts/contracts/shopee-openapi-v1/listItemFeeds.cjs',
+  'scripts/contracts/shopee-openapi-v1/productOfferV2.cjs',
   'scripts/shopee-v1-flags.cjs',
   'scripts/shopee-openapi-v1-controlled-persist.cjs',
   'scripts/shopee-openapi-v1-discovery-shadow.cjs',
@@ -95,6 +98,19 @@ const DEPLOY_FILES = [
   'src/lib/shopee/ranking/oracle-adapter.ts',
   'src/core/trends/commercial-opportunity-score-v3.cjs',
 ];
+const DEPLOY_PROFILES = Object.freeze({
+  'shopee-curated-v2': Object.freeze([
+    'scripts/shopee-openapi-shadow-engine-v1.cjs',
+    'scripts/shopee-productcatids-map-v1.cjs',
+    'scripts/shopee-openapi-v1-adapter.cjs',
+    'scripts/contracts/shopee-openapi-v1/listItemFeeds.cjs',
+    'scripts/contracts/shopee-openapi-v1/productOfferV2.cjs',
+  ]),
+  full: Object.freeze(FULL_DEPLOY_FILES),
+});
+const DEPLOY_PROFILE = String(process.env.ORACLE_DEPLOY_PROFILE || 'shopee-curated-v2').trim();
+const DEPLOY_FILES = DEPLOY_PROFILES[DEPLOY_PROFILE];
+if (!DEPLOY_FILES) throw new Error(`ORACLE_DEPLOY_PROFILE inválido: ${DEPLOY_PROFILE}`);
 const DEPLOY_DIRS = [...new Set(DEPLOY_FILES.map((relativeFile) => relativeFile.split('/').slice(0, -1).join('/')).filter(Boolean))];
 
 if (!SERVER_IP || !SERVER_USER || !PROJECT_DIR || !SSH_KEY_PATH) throw new Error('ORACLE_SERVER_IP, ORACLE_SERVER_USER, ORACLE_PROJECT_DIR e ORACLE_SSH_KEY_PATH são obrigatórios.');
@@ -172,7 +188,7 @@ const remoteStage = `/tmp/caca-oferta-deploy-${stamp}`;
 const remoteBackup = `${PROJECT_DIR}/.rollout-backups/oracle-runtime-${stamp}`;
 
 try {
-  console.log(`Conectando à Oracle ${TARGET}...`);
+  console.log(`Conectando à Oracle ${TARGET} com perfil ${DEPLOY_PROFILE} (${DEPLOY_FILES.length} arquivos)...`);
   const deployDirs = DEPLOY_DIRS.map((relativeDir) => `'${remoteStage}/${relativeDir}' '${remoteBackup}/${relativeDir}' '${PROJECT_DIR}/${relativeDir}'`).join(' ');
   ssh(`set -eu; test -d '${PROJECT_DIR}'; mkdir -p '${remoteStage}/scripts' '${remoteStage}/config' '${remoteBackup}/scripts' ${deployDirs}`);
 

@@ -11,6 +11,7 @@ const {
   resolveLeafCategory,
   isProductAdherent,
   isExplicitlyBlockedFamily,
+  getCertifiedFamiliesForScenario,
 } = require('./shopee-productcatids-map-v1.cjs');
 
 function queryPlan(keywords, categoryIds, overrides = {}) {
@@ -20,7 +21,7 @@ function queryPlan(keywords, categoryIds, overrides = {}) {
 const SCENARIO_CONTRACTS = Object.freeze({
   casa_cozinha_editorial: scenario(['casa','cozinha'], ['liquidificador','panela','cafeteira','air fryer','organizador','utensilio','jantar','cama','toalha','faqueiro'], ['pet','automotivo','celular','beleza'], ['kit generico'], [100010,100636]),
   organizacao_editorial: scenario(['organiz','casa','cozinha'], ['organizador','caixa','cesto','cabide','sapateira','lixeira','mop','varal'], ['pet','bebe','automotivo','industrial'], ['suporte'], [100010,100636]),
-  ferramentas_editorial: scenario(['ferrament','oficina'], ['furadeira','parafusadeira','chave','alicate','serra','trena','maleta'], ['infantil','brinquedo','automotivo','cosmetico'], ['kit sem ferramenta'], [100636]),
+  ferramentas_editorial: scenario(['ferrament','oficina'], ['furadeira','parafusadeira','lixadeira','esmerilhadeira','serra','kit ferramentas','jogo de ferramentas'], ['infantil','brinquedo','automotivo','cosmetico','unha'], ['kit sem ferramenta'], [100636]),
   informatica_editorial: scenario(['informatic','computador','notebook','teclado','mouse','monitor','webcam','ssd','roteador','pc'], ['notebook','computador','mini pc','teclado','mouse','monitor','webcam','ssd','roteador','impressora'], ['saude','pressao','arterial','smartwatch','pet','automotivo','capa'], ['smartwatch','monitor de saude'], [100644,100013], { negativeClasses: ['generic_accessory','weak_accessory','compatibility_only'] }),
   celulares_editorial: scenario(['celular','smartphone','iphone','galaxy','redmi','mobile'], ['smartphone','celular','iphone','galaxy','redmi'], ['notebook','monitor','cabo avulso','pelicula avulsa'], [], [100013]),
   beleza_editorial: scenario(['beleza','cabelo','capilar','maquiagem','perfume','skincare','hidratante','shampoo','secador','chapinha','serum'], ['cosmetico','mascara','cabelo','capilar','maquiagem','perfume','shampoo','secador','chapinha'], ['varal','centrifuga de salada','suporte de shampoo','cozinha','banheiro','lixeira','panela','liquidificador','pet','automotivo','monitor de pressao'], ['promessa terapeutica'], [100630,100001]),
@@ -28,7 +29,7 @@ const SCENARIO_CONTRACTS = Object.freeze({
   esporte_editorial: scenario(['esporte','fitness','treino','academia','yoga','corrida'], ['tenis','legging','whey','creatina','tapete','halter','corda','faixa','luva'], ['pet','bebe','moda social','automotivo'], ['suplemento medicamentoso'], [100637,100001]),
   pet_editorial: scenario(['pet','cachorro','gato','animal'], ['racao','tapete higienico','cama pet','brinquedo pet','areia','coleira','transporte pet','shampoo pet'], ['bebe','humano','automotivo'], ['medicamento veterinario'], [100631]),
   tv_audio_editorial: scenario(['tv','audio','smart tv','soundbar','caixa de som','speaker','fone','headphone','earbuds','home theater','projetor','microfone','receiver','amplificador'], ['smart tv','televisao','tv','soundbar','caixa de som','speaker','home theater','fone bluetooth','fone','headphone','earbuds','projetor','microfone','receiver','amplificador'], ['pet','bebe'], ['acessorio sem aparelho'], [100535,100578,100013,100644], { negativeClasses: ['generic_accessory','compatibility_only','weak_accessory','computer_peripheral_in_tv_audio'] }),
-  eletrodomesticos_editorial: scenario(['eletrodomestico','geladeira','refrigerador','freezer','fogao','cooktop','lavadora','ar condicionado'], ['geladeira','refrigerador','freezer','fogao','cooktop','micro ondas','maquina de lavar','lava e seca','lava loucas','ar condicionado'], ['pet','bebe'], ['grande porte fora do frete'], [100010], { negativeClasses: ['spare_part','replacement_part','generic_accessory'] }),
+  eletrodomesticos_editorial: scenario(['eletrodomestico','geladeira','refrigerador','freezer','fogao','cooktop','lavadora','ar condicionado','air fryer','liquidificador','cafeteira','aspirador','ferro de passar','ventilador'], ['geladeira','refrigerador','freezer','fogao','cooktop','micro ondas','maquina de lavar','lava e seca','lava loucas','ar condicionado','air fryer','liquidificador','cafeteira','aspirador','ferro de passar','ventilador'], ['pet','bebe'], ['grande porte fora do frete'], [100010], { negativeClasses: ['spare_part','replacement_part','generic_accessory'] }),
   moveis_editorial: scenario(['moveis','casa','quarto','sala','mesa','cadeira','armario','sofa'], ['sofa','guarda roupa','cama','colchao','mesa','escrivaninha','cadeira','rack','comoda'], ['pet','bebe','peca avulsa','capa isolada'], ['dimensoes ausentes'], [100636]),
   grandes_ofertas_editorial: scenario(['smartphone','notebook','tablet','smart tv','soundbar','air fryer','liquidificador','cafeteira','aspirador','geladeira','fogao','cooktop','maquina de lavar','furadeira','parafusadeira','cadeira de escritorio','sofa','armario'], ['smartphone','celular','notebook','tablet','smart tv','soundbar','air fryer','liquidificador','cafeteira','aspirador','geladeira','fogao','cooktop','maquina de lavar','furadeira','parafusadeira','cadeira de escritorio','sofa','armario'], ['usado','recondicionado','servico','cupom sem aprovacao'], [], [100013,100010,100644,100636], { negativeClasses: ['spare_part','replacement_part','generic_accessory','weak_accessory','compatibility_only','small_school_item'], minDiscount: 20, minSales: 50, minRating: 4.7, minCommission: 5, maxFamilyPerScenario: 30, maxShopPerScenario: 8 }),
 });
@@ -202,6 +203,8 @@ function normalizeProductOffer(node = {}, context = {}) {
     safeForPublication: priceIntegrity.safeForPublication, ratingStar: number(node.ratingStar ?? node.rating), sales: number(node.sales),
     commissionRate: node.commissionRate, shopeeCommissionRate: node.shopeeCommissionRate, sellerCommissionRate: node.sellerCommissionRate, ...commission,
     shopType: Array.isArray(node.shopType) ? node.shopType.map(Number) : [], productCatIds: Array.isArray(node.productCatIds) ? node.productCatIds.map(String) : (context.productCatId ? [String(context.productCatId)] : []), updateType: context.updateType || node.updateType || null,
+    curatedFamily: node.curatedFamily || context.curatedFamily || null,
+    feedMode: node.feedMode || context.feedMode || null,
   };
   const technicalReasons = [];
   if (!/^\d+$/.test(normalized.itemId)) technicalReasons.push('itemId_required');
@@ -214,6 +217,7 @@ function normalizeProductOffer(node = {}, context = {}) {
 }
 
 function familyKey(product) {
+  if (String(product?.curatedFamily || '').trim()) return String(product.curatedFamily).trim();
   const stop = new Set(['para','com','sem','de','da','do','das','dos','e','kit','novo','oferta','original','unissex','feminina','masculina','preta','preto','rosa','azul','branca','branco','verde','grande','pequena']);
   const tokens = text(product.productName).split(' ').filter((token) => token.length > 2 && !stop.has(token));
   return tokens.slice(0, 6).join(' ');
@@ -318,18 +322,279 @@ function normalizeFeedColumns(columns = {}) {
     priceMax: columns.priceMax ?? columns.price,
     ratingStar: columns.ratingStar ?? columns.item_rating,
     priceDiscountRate: columns.priceDiscountRate ?? columns.discount_percentage,
-    productCatIds: columns.productCatIds ?? [columns.global_catid1, columns.global_catid2].filter(Boolean),
+    productCatIds: columns.productCatIds ?? [columns.global_catid1, columns.global_catid2, columns.global_catid3, columns.global_catid4, columns.global_catid5].filter(Boolean),
+    description: columns.description ?? columns.product_description ?? '',
+    attributesText: typeof columns.global_item_attributes === 'string'
+      ? columns.global_item_attributes
+      : JSON.stringify(columns.global_item_attributes || columns.attributes || ''),
+    categoryText: [columns.global_category1, columns.global_category2, columns.global_category3, columns.global_category4, columns.global_category5, columns.category_name]
+      .filter(Boolean).join(' '),
   };
+}
+
+const CURATED_ACCESSORY_PATTERNS = Object.freeze([
+  'acessorio para', 'compativel com', 'peca de reposicao', 'reposicao para', 'refil para',
+  'capa para', 'case para', 'suporte para', 'forma de silicone', 'formas de silicone',
+  'protetor para', 'bico para', 'lamina para', 'disco para', 'correia para',
+  'carregador para', 'cabo para', 'adaptador para', 'caneta lixadeira', 'lixa de unha',
+  'mini aspirador', 'coleira', 'guia cachorro', 'peitoral pet', 'solda', 'broca avulsa',
+  'kit de brocas', 'jogo de brocas', 'bit para', 'soquete avulso', 'maleta vazia',
+  'cesto para fritadeira', 'papel para air fryer', 'grelha para', 'resistencia para',
+  'copo para liquidificador', 'jarra para liquidificador', 'filtro para cafeteira',
+  'descalcificante', 'limpa cafeteira', 'limpeza cafeteira', 'cesto em silicone',
+  'tampinha', 'espalhador fogao', 'boca chama', 'queimador para fogao',
+  'kit base', 'disco lixa', 'discos lixa', 'adaptador esmerilhadeira',
+  'adaptador lixadeira', 'motosserra adaptador', 'suporte m14', 'capsula de cafe',
+  'cafe em capsula', 'escova de ventilador', 'helice avulsa', 'motor ventilador',
+]);
+
+const CURATED_SHOPEE_SCENARIOS = new Set([
+  'casa_cozinha_editorial', 'organizacao_editorial', 'beleza_editorial', 'moda_editorial',
+  'ferramentas_editorial', 'pet_editorial', 'eletrodomesticos_editorial',
+]);
+
+const CURATED_FAMILY_PRIORITY = Object.freeze({
+  casa_cozinha_editorial: ['faqueiro', 'jogo de cama', 'toalha', 'lixeira', 'mop'],
+  organizacao_editorial: ['lixeira', 'mop', 'faqueiro', 'jogo de cama', 'toalha'],
+  beleza_editorial: ['secador', 'chapinha', 'escova secadora', 'perfume', 'shampoo', 'máscara capilar'],
+  moda_editorial: ['tênis casual', 'camiseta masculina', 'camisa polo masculina', 'calça jeans masculina', 'bermuda masculina', 'bolsa feminina'],
+  ferramentas_editorial: ['lixadeira', 'furadeira', 'parafusadeira', 'serra', 'kit ferramentas'],
+  pet_editorial: ['ração gato', 'ração cachorro', 'brinquedo pet', 'tapete higiênico', 'bebedouro pet', 'caixa transporte pet'],
+  eletrodomesticos_editorial: ['air fryer', 'liquidificador', 'cafeteira', 'aspirador', 'ferro de passar', 'ventilador'],
+});
+
+function prioritizeCuratedFamilies(scenarioId, families = []) {
+  const order = new Map((CURATED_FAMILY_PRIORITY[scenarioId] || []).map((family, index) => [family, index]));
+  return [...families].sort((left, right) => (order.get(left.name) ?? 999) - (order.get(right.name) ?? 999));
+}
+
+function passesCuratedObservedQuality(node = {}) {
+  const normalized = normalizeProductOffer(node);
+  return normalized.accepted
+    && number(node.sales) >= 100
+    && number(node.ratingStar ?? node.rating) >= 4.7
+    && normalizeCommission(node).commissionPercent >= 3;
+}
+
+function classifyCuratedFeedCandidate(product = {}, families = []) {
+  const searchable = [product.productName, product.description, product.attributesText, product.categoryText].filter(Boolean).join(' ');
+  const normalizedSearchable = text(searchable);
+  if (CURATED_ACCESSORY_PATTERNS.some((term) => hasTerm(normalizedSearchable, term))) {
+    return { accepted: false, reason: 'accessory_or_component', family: null };
+  }
+  for (const family of families) {
+    if (!isProductAdherent(searchable, family.terms)) continue;
+    const categories = (product.productCatIds || []).map(String);
+    if (!categories.includes(String(family.targetProductCatId))) continue;
+    return { accepted: true, reason: 'family_and_leaf_category_match', family: family.name };
+  }
+  return { accepted: false, reason: 'family_or_leaf_category_mismatch', family: null };
+}
+
+function selectCuratedFamilyRepresentatives(products = [], limit = 3) {
+  const selected = [];
+  const seenFamilies = new Set();
+  const ordered = [...products].sort((left, right) =>
+    number(right.score) - number(left.score)
+    || number(right.sales) - number(left.sales)
+    || String(left.itemId || '').localeCompare(String(right.itemId || '')));
+  for (const product of ordered) {
+    const family = String(product.curatedFamily || familyKey(product)).trim();
+    if (!family || seenFamilies.has(family)) continue;
+    seenFamilies.add(family);
+    selected.push(product);
+    if (selected.length >= Math.max(0, Number(limit) || 0)) break;
+  }
+  return selected;
 }
 
 function auxiliaryNode(source, node) {
   return { source, requiresProductResolution: true, resolved: Boolean(node.resolvedProduct), offerLink: node.offerLink || null, imageUrl: node.imageUrl || null, commissionRate: node.commissionRate ?? null, raw: node, resolvedProduct: node.resolvedProduct || null };
 }
 
-async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {}, env = process.env } = {}) {
+async function mapConcurrent(items, concurrency, mapper) {
+  const output = new Array(items.length);
+  let cursor = 0;
+  const workers = new Array(Math.max(1, Math.min(Number(concurrency) || 1, items.length || 1))).fill(null).map(async () => {
+    while (cursor < items.length) {
+      const index = cursor++;
+      output[index] = await mapper(items[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return output;
+}
+
+function distributedFeedOffsets(totalCount, pageSize, points = 3) {
+  const total = Math.max(0, Number(totalCount) || 0);
+  const limit = Math.max(1, Number(pageSize) || 1);
+  const last = Math.max(0, total - limit);
+  if (last === 0 || points <= 1) return [0];
+  return [...new Set(new Array(points).fill(null).map((_, index) => Math.round((last * index) / (points - 1))))];
+}
+
+function roundRobinFamilyCandidates(candidates, perFamily = 2, totalLimit = 18) {
+  const buckets = new Map();
+  for (const candidate of candidates) {
+    const family = String(candidate.curatedFamily || '').trim();
+    if (!family) continue;
+    const bucket = buckets.get(family) || [];
+    if (!bucket.some((item) => String(item.itemId) === String(candidate.itemId))) bucket.push(candidate);
+    buckets.set(family, bucket);
+  }
+  const selected = [];
+  for (let round = 0; round < perFamily && selected.length < totalLimit; round += 1) {
+    for (const bucket of buckets.values()) {
+      if (bucket[round]) selected.push(bucket[round]);
+      if (selected.length >= totalLimit) break;
+    }
+  }
+  return selected;
+}
+
+async function runCuratedScenarioPlan(scenarioId, { request, signal, sourceTimeoutMs = 25_000, env = process.env } = {}) {
+  const families = CURATED_SHOPEE_SCENARIOS.has(scenarioId) ? getCertifiedFamiliesForScenario(scenarioId) : [];
+  const baseContract = SCENARIO_CONTRACTS[scenarioId];
+  const contract = baseContract ? { ...baseContract, minSales: Math.max(100, baseContract.minSales), minRating: Math.max(4.7, baseContract.minRating) } : null;
+  const calls = [];
+  const feedMetrics = { FULL: { feeds: 0, rows: 0, classified: 0 }, DELTA: { feeds: 0, rows: 0, classified: 0, tombstones: 0 } };
+  if (!contract || families.length === 0) {
+    const empty = runShadow({ sources: { productOffers: [] }, contracts: { [scenarioId]: contract || scenario([], [], [], [], []) }, topLimit: 3 });
+    return { scenarioId, mode: 'curated-v2', queryEvidence: { calls, feedMetrics, unsupportedScenario: true }, ...empty };
+  }
+
+  const pageSize = Math.max(20, Math.min(200, Number(env.SHOPEE_CURATED_FEED_PAGE_SIZE || 100)));
+  const fullPoints = Math.max(1, Math.min(5, Number(env.SHOPEE_CURATED_FULL_SAMPLE_POINTS || 3)));
+  const feedCandidates = [];
+  let deltaSummary = { activeItems: [], tombstones: [], errors: [], metrics: {} };
+
+  for (const mode of ['FULL', 'DELTA']) {
+    if (signal?.aborted) break;
+    const operation = `ListItemFeeds${mode === 'FULL' ? 'Full' : 'Delta'}`;
+    let listResponse;
+    try {
+      listResponse = await request(operation, GRAPHQL_CONTRACTS.listItemFeeds.queries[mode], {}, { signal });
+    } catch (error) {
+      calls.push({ source: `listItemFeeds.${mode}`, status: 0, stopReason: 'source_error', error: error?.message || String(error) });
+      continue;
+    }
+    const feeds = listResponse?.data?.data?.listItemFeeds?.feeds || [];
+    feedMetrics[mode].feeds = feeds.length;
+    calls.push({ source: `listItemFeeds.${mode}`, status: listResponse?.status || 0, returned: feeds.length, stopReason: feeds.length ? 'complete' : 'empty_feed_list' });
+    for (const feed of feeds) {
+      const offsets = mode === 'FULL' ? distributedFeedOffsets(feed.totalCount, pageSize, fullPoints) : [0];
+      for (const offset of offsets) {
+        if (signal?.aborted) break;
+        let dataResponse;
+        try {
+          dataResponse = await request('GetItemFeedData', GRAPHQL_CONTRACTS.getItemFeedData.query, { datafeedId: feed.datafeedId, offset, limit: pageSize }, { signal, timeoutMs: sourceTimeoutMs });
+        } catch (error) {
+          calls.push({ source: `getItemFeedData.${mode}`, feed: feed.datafeedName, offset, returned: 0, stopReason: 'source_error', error: error?.message || String(error) });
+          continue;
+        }
+        const rows = dataResponse?.data?.data?.getItemFeedData?.rows || [];
+        feedMetrics[mode].rows += rows.length;
+        calls.push({ source: `getItemFeedData.${mode}`, feed: feed.datafeedName, offset, status: dataResponse?.status || 0, returned: rows.length, stopReason: rows.length ? 'complete' : 'empty_page' });
+        if (mode === 'DELTA') {
+          const processed = processDeltaRows(rows, { datafeedId: feed.datafeedId, maxRows: pageSize });
+          deltaSummary = {
+            activeItems: [...deltaSummary.activeItems, ...processed.activeItems],
+            tombstones: [...deltaSummary.tombstones, ...processed.tombstones],
+            errors: [...deltaSummary.errors, ...processed.errors],
+            metrics: processed.metrics,
+          };
+          feedMetrics.DELTA.tombstones += processed.tombstones.length;
+          for (const item of processed.activeItems) {
+            const classification = classifyCuratedFeedCandidate(item, families);
+            if (!classification.accepted) continue;
+            feedMetrics.DELTA.classified += 1;
+            feedCandidates.push({ ...item, curatedFamily: classification.family, feedMode: 'DELTA' });
+          }
+        } else {
+          for (const row of rows) {
+            let columns = row?.columns;
+            if (typeof columns === 'string') { try { columns = JSON.parse(columns); } catch { continue; } }
+            const item = normalizeFeedColumns(columns || {});
+            const classification = classifyCuratedFeedCandidate(item, families);
+            if (!classification.accepted || !item.itemId) continue;
+            feedMetrics.FULL.classified += 1;
+            feedCandidates.push({ ...item, curatedFamily: classification.family, feedMode: 'FULL' });
+          }
+        }
+      }
+    }
+  }
+
+  const enrichmentInput = roundRobinFamilyCandidates(feedCandidates, 2, 18);
+  const enrichedResults = await mapConcurrent(enrichmentInput, 3, async (candidate) => {
+    if (signal?.aborted) return null;
+    const itemId = String(candidate.itemId || '').trim();
+    if (!/^\d+$/.test(itemId)) return null;
+    const query = GRAPHQL_CONTRACTS.productOfferV2.itemQueryTemplate.replace('ITEM_ID', itemId);
+    try {
+      const response = await request('ShopeePromotionOfferByItem', query, {}, { signal, timeoutMs: sourceTimeoutMs });
+      const node = response?.data?.data?.productOfferV2?.nodes?.[0] || null;
+      calls.push({ source: 'productOfferV2.itemId', family: candidate.curatedFamily, itemId, status: response?.status || 0, returned: node ? 1 : 0, stopReason: node ? 'exact_match' : 'not_found' });
+      if (!node || String(node.itemId) !== itemId) return null;
+      const classified = classifyCuratedFeedCandidate({ ...node, description: candidate.description, attributesText: candidate.attributesText, categoryText: candidate.categoryText }, families.filter((family) => family.name === candidate.curatedFamily));
+      return classified.accepted ? { ...node, curatedFamily: candidate.curatedFamily, feedMode: candidate.feedMode } : null;
+    } catch (error) {
+      calls.push({ source: 'productOfferV2.itemId', family: candidate.curatedFamily, itemId, returned: 0, stopReason: 'source_error', error: error?.message || String(error) });
+      return null;
+    }
+  });
+  const enriched = enrichedResults.filter(Boolean);
+
+  const qualityResult = (products) => runShadow({ sources: { productOffers: products }, contracts: { [scenarioId]: contract }, topLimit: Number.POSITIVE_INFINITY, applyDiversityCaps: false });
+  const initiallyQualified = selectCuratedFamilyRepresentatives(qualityResult(enriched).scenarios[scenarioId].top, 3);
+  const fallbackProducts = [];
+  if (initiallyQualified.length < 3) {
+    const covered = new Set(initiallyQualified.map((item) => item.curatedFamily));
+    const missing = prioritizeCuratedFamilies(scenarioId, families.filter((family) => !covered.has(family.name))).slice(0, 6);
+    const fallbackResults = await mapConcurrent(missing, 3, async (family) => {
+      const variables = { keyword: family.keyword, productCatId: family.targetProductCatId, page: 1, limit: 20, sortType: 2, isAMSOffer: true };
+      try {
+        const response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, variables, { signal, timeoutMs: sourceTimeoutMs });
+        const nodes = response?.data?.data?.productOfferV2?.nodes || [];
+        const accepted = nodes
+          .filter((node) => classifyCuratedFeedCandidate(node, [family]).accepted && passesCuratedObservedQuality(node))
+          .sort((left, right) => number(right.sales) - number(left.sales))
+          .slice(0, 5)
+          .map((node) => ({ ...node, curatedFamily: family.name, feedMode: 'CATEGORY_FALLBACK' }));
+        calls.push({ source: 'productOfferV2.curatedFallback', family: family.name, requested: variables, status: response?.status || 0, returned: nodes.length, acceptedSemantic: accepted.length, stopReason: accepted.length ? 'complete' : 'no_adherent_product' });
+        return accepted;
+      } catch (error) {
+        calls.push({ source: 'productOfferV2.curatedFallback', family: family.name, requested: variables, returned: 0, stopReason: 'source_error', error: error?.message || String(error) });
+        return [];
+      }
+    });
+    fallbackProducts.push(...fallbackResults.flat());
+  }
+
+  const result = qualityResult([...enriched, ...fallbackProducts]);
+  const scenarioResult = result.scenarios[scenarioId];
+  const selected = selectCuratedFamilyRepresentatives(scenarioResult.top, 3);
+  scenarioResult.top = selected;
+  scenarioResult.metrics = { ...scenarioResult.metrics, final: selected.length, families: new Set(selected.map((item) => item.curatedFamily)).size };
+  return {
+    scenarioId,
+    mode: 'curated-v2',
+    queryPlan: { sources: ['FULL', 'DELTA', 'productOfferV2.itemId', 'productOfferV2.curatedFallback'], maxProducts: 3, onePerFamily: true },
+    queryEvidence: {
+      calls, feedMetrics, feedCandidates: feedCandidates.length, enrichmentAttempted: enrichmentInput.length,
+      enriched: enriched.length, fallbackTriggered: initiallyQualified.length < 3, fallbackProducts: fallbackProducts.length,
+      selectedFamilies: selected.map((item) => item.curatedFamily),
+    },
+    ...result,
+    feed: { ...deltaSummary, metrics: { ...deltaSummary.metrics, tombstones: deltaSummary.tombstones.length } },
+  };
+}
+
+async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCategories, maxConcurrentQueries = 3, sourceTimeoutMs = 25_000, includeDelta = true, includeAuxiliary = true, sharedSources = {}, env = process.env, curatedMode = false } = {}) {
   const plan = SCENARIO_QUERY_PLANS[scenarioId];
   if (!plan) throw new Error(`Plano Shopee ausente para ${scenarioId}`);
   if (typeof request !== 'function') throw new Error('runScenarioPlan requer request injetado');
+  if (curatedMode) return runCuratedScenarioPlan(scenarioId, { request, signal, sourceTimeoutMs, env });
 
   const flags = getShopeeV1Flags(env);
   const isCertifiedSearchEnabled = flags.productCatIdsSearch;
@@ -357,7 +622,6 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
     const requestSignal = signal ? AbortSignal.any([signal, controller.signal]) : controller.signal;
     const timeoutId = setTimeout(() => {
       controller.abort();
-      stopAll('timeout');
     }, Math.max(1, Number(sourceTimeoutMs) || 25_000));
     const seenCursors = new Set();
     let acceptedCount = 0;
@@ -772,4 +1036,4 @@ if (require.main === module) {
   runCli().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => { console.error(`[Shopee Shadow V1] ${error.message}`); process.exitCode = 1; });
 }
 
-module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, processDeltaRows, runShadow, runScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, resolveCanonicalIntent, buildShopeeDimensionTelemetry, buildFixtureSources, collectLiveSources, runCli };
+module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, classifyCuratedFeedCandidate, selectCuratedFamilyRepresentatives, processDeltaRows, runShadow, runScenarioPlan, runCuratedScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, resolveCanonicalIntent, buildShopeeDimensionTelemetry, buildFixtureSources, collectLiveSources, runCli };

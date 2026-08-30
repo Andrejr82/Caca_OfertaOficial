@@ -46,13 +46,14 @@ test('OpenAPI official discovery mantém feed e fontes auxiliares ativas', async
         scenarioId,
         includeDelta: options.includeDelta,
         includeAuxiliary: options.includeAuxiliary,
+        curatedMode: options.curatedMode,
       });
       return { scenarios: { moda_editorial: { top: [{ itemId: '123', productName: 'Tênis casual adulto' }] } }, queryEvidence: { calls: [{ source: 'getItemFeedData' }] } };
     },
   });
 
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], { scenarioId: 'moda_editorial', includeDelta: true, includeAuxiliary: true });
+  assert.deepEqual(calls[0], { scenarioId: 'moda_editorial', includeDelta: true, includeAuxiliary: true, curatedMode: true });
   assert.equal(result.result.scenarios.moda_editorial.top.length, 1);
   assert.equal(result.result.autoDeepening, undefined);
   assert.deepEqual(result.writeAudit, {
