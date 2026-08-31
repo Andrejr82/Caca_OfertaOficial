@@ -100,6 +100,10 @@ const FULL_DEPLOY_FILES = [
 ];
 const DEPLOY_PROFILES = Object.freeze({
   'shopee-curated-v2': Object.freeze([
+    'scripts/oracle-scraper.cjs',
+    'scripts/oracle-worker-discovery-only.cjs',
+    'scripts/offer-freshness-gate.cjs',
+    'scripts/shopee-curated-family-selection.cjs',
     'scripts/shopee-openapi-shadow-engine-v1.cjs',
     'scripts/shopee-productcatids-map-v1.cjs',
     'scripts/shopee-openapi-v1-adapter.cjs',

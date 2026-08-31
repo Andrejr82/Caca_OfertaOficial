@@ -54,6 +54,10 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(classifyCuratedFeedCandidate({ productName: 'Descalcificante limpa cafeteira', productCatIds: ['100194'] }, [{ name: 'cafeteira', terms: ['cafeteira'], targetProductCatId: 100194 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
     expect(classifyCuratedFeedCandidate({ productName: 'Kit 4 tampinhas espalhador fogão', productCatIds: ['100197'] }, [{ name: 'fogão', terms: ['fogao'], targetProductCatId: 100197 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
     expect(classifyCuratedFeedCandidate({ productName: 'Kit base com discos lixa para lixadeira', productCatIds: ['101191'] }, [{ name: 'lixadeira', terms: ['lixadeira'], targetProductCatId: 101191 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Jogo 15 brocas diamantadas serra copo para furar vidro', productCatIds: ['101191'] }, [{ name: 'serra', terms: ['serra'], targetProductCatId: 101191 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Kit bits ponteira dupla magnética para parafusadeira', productCatIds: ['101191'] }, [{ name: 'parafusadeira', terms: ['parafusadeira'], targetProductCatId: 101191 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Pente auxiliar de prancha e chapinha', productCatIds: ['100630'] }, [{ name: 'chapinha', terms: ['chapinha'], targetProductCatId: 100630 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
+    expect(classifyCuratedFeedCandidate({ productName: 'Arraste do motor e copo para liquidificador', productCatIds: ['100193'] }, [{ name: 'liquidificador', terms: ['liquidificador'], targetProductCatId: 100193 }])).toMatchObject({ accepted: false, reason: 'accessory_or_component' });
   });
 
   it('seleciona um representante por família e no máximo três famílias', () => {
@@ -73,11 +77,13 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
       { columns: JSON.stringify({ itemid: '102', title: 'Cafeteira elétrica programável', description: 'Máquina de café completa', product_link: 'https://shopee.com.br/product/202/102', global_catid1: '100010', global_catid2: '100041', global_catid3: '100194' }) },
       { columns: JSON.stringify({ itemid: '103', title: 'Liquidificador elétrico 550W', description: 'Liquidificador completo', product_link: 'https://shopee.com.br/product/203/103', global_catid1: '100010', global_catid2: '100041', global_catid3: '100193' }) },
       { columns: JSON.stringify({ itemid: '104', title: 'Forma de silicone para Air Fryer', description: 'Acessório', product_link: 'https://shopee.com.br/product/204/104', global_catid1: '100010', global_catid2: '100041', global_catid3: '100198' }) },
+      { columns: JSON.stringify({ itemid: '105', title: 'Air Fryer 4L digital completa', description: 'Fritadeira elétrica 1400W', product_link: 'https://shopee.com.br/product/205/105', global_catid1: '100010', global_catid2: '100041', global_catid3: '100198' }) },
     ];
     const exact = {
       101: product({ itemId: '101', shopId: '201', productName: 'Air Fryer 5L completa', productLink: 'https://shopee.com.br/product/201/101', offerLink: 'https://s.shopee.com.br/101', productCatIds: [100010, 100041, 100198], sales: 3000 }),
       102: product({ itemId: '102', shopId: '202', productName: 'Cafeteira elétrica programável', productLink: 'https://shopee.com.br/product/202/102', offerLink: 'https://s.shopee.com.br/102', productCatIds: [100010, 100041, 100194], sales: 2000 }),
       103: product({ itemId: '103', shopId: '203', productName: 'Liquidificador elétrico 550W', productLink: 'https://shopee.com.br/product/203/103', offerLink: 'https://s.shopee.com.br/103', productCatIds: [100010, 100041, 100193], sales: 1000 }),
+      105: product({ itemId: '105', shopId: '205', productName: 'Air Fryer 4L digital completa', productLink: 'https://shopee.com.br/product/205/105', offerLink: 'https://s.shopee.com.br/105', productCatIds: [100010, 100041, 100198], sales: 2500 }),
     };
     const calls = [];
     const request = async (operation, query, variables = {}) => {
@@ -96,9 +102,10 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     expect(result.queryEvidence.fallbackTriggered).toBe(false);
     expect(result.scenarios.eletrodomesticos_editorial.top.map((item) => item.curatedFamily)).toEqual(['air fryer', 'cafeteira', 'liquidificador']);
     expect(result.scenarios.eletrodomesticos_editorial.top).toHaveLength(3);
+    expect(result.scenarios.eletrodomesticos_editorial.candidatePool.map((item) => item.itemId)).toEqual(['101', '105', '102', '103']);
     expect(calls.some((call) => call.operation === 'ListItemFeedsFull')).toBe(true);
     expect(calls.some((call) => call.operation === 'ListItemFeedsDelta')).toBe(true);
-    expect(calls.filter((call) => call.operation === 'ShopeePromotionOfferByItem')).toHaveLength(3);
+    expect(calls.filter((call) => call.operation === 'ShopeePromotionOfferByItem')).toHaveLength(4);
     expect(calls.some((call) => call.operation === 'ShopeePromotionOffers')).toBe(false);
   });
 

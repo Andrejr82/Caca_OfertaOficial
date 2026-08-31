@@ -93,4 +93,58 @@ describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {
     });
     expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['101']);
   });
+
+  it('filtra histórico antes do Top e preenche cinco famílias com candidatos novos', async () => {
+    let candidates = null;
+    const candidatePool = [
+      { ...top[0], itemId: '100', shopId: '200', curatedFamily: 'organizador', score: 99 },
+      { ...top[1], itemId: '101', shopId: '201', curatedFamily: 'organizador', score: 98 },
+      { ...top[2], itemId: '102', shopId: '202', curatedFamily: 'faqueiro', score: 97 },
+      { ...top[3], itemId: '103', shopId: '203', curatedFamily: 'mop', score: 96 },
+      { ...top[4], itemId: '104', shopId: '204', curatedFamily: 'lixeira', score: 95 },
+      { ...top[5], itemId: '105', shopId: '205', curatedFamily: 'jogo de cama', score: 94 },
+    ];
+    await runDiscoveryOnlyCycle({
+      tenantId: 'tenant-test', correlationId: 'correlation-backfill', requestedAt: '2026-08-31T12:00:00.000Z', marketplaces: ['Shopee'],
+      discover: async () => { throw new Error('legacy discover must not run'); },
+      shopeeDiscovery: async () => ({
+        decision: 'official', top: candidatePool.slice(0, 3), candidatePool,
+        metrics: { raw: 20, parsed: 20, approvedContract: 10, scoreable: 6, final: 3 },
+      }),
+      persistShopee: async (payload) => { candidates = payload.candidates; return { accepted: candidates.length, inserted: candidates.length, offerIds: [] }; },
+      persist: async () => ({ accepted: 0 }),
+      loadHistory: async () => [{
+        shopee_item_id: '100', shopee_shop_id: '200', product_name: 'Organizador 0', status: 'approved',
+        current_price: 10, old_price: 20, created_at: '2026-06-01T00:00:00.000Z',
+        posts: [{ status: 'published', channel: 'telegram' }],
+      }],
+      scenarioResolver: () => 'organizacao_editorial',
+    });
+
+    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['101', '102', '103', '104', '105']);
+    expect(new Set(candidates.map((candidate) => candidate.curatedFamily)).size).toBe(5);
+  });
+
+  it('reaproveita approved sem publicação e mantém rejected bloqueado', async () => {
+    let candidates = null;
+    const candidatePool = [
+      { ...top[0], itemId: '100', shopId: '200', curatedFamily: 'organizador', score: 99 },
+      { ...top[1], itemId: '101', shopId: '201', curatedFamily: 'faqueiro', score: 98 },
+      { ...top[2], itemId: '102', shopId: '202', curatedFamily: 'mop', score: 97 },
+    ];
+    await runDiscoveryOnlyCycle({
+      tenantId: 'tenant-test', correlationId: 'correlation-unpublished', requestedAt: '2026-08-31T12:00:00.000Z', marketplaces: ['Shopee'],
+      discover: async () => { throw new Error('legacy discover must not run'); },
+      shopeeDiscovery: async () => ({ decision: 'official', top: candidatePool, candidatePool, metrics: { raw: 3, parsed: 3, approvedContract: 3, scoreable: 3, final: 3 } }),
+      persistShopee: async (payload) => { candidates = payload.candidates; return { accepted: candidates.length, offerIds: [] }; },
+      persist: async () => ({ accepted: 0 }),
+      loadHistory: async () => [
+        { shopee_item_id: '100', shopee_shop_id: '200', product_name: 'Organizador 0', status: 'approved', created_at: '2026-08-30T00:00:00.000Z', posts: [] },
+        { shopee_item_id: '101', shopee_shop_id: '201', product_name: 'Organizador 1', status: 'rejected', created_at: '2026-08-30T00:00:00.000Z', posts: [] },
+      ],
+      scenarioResolver: () => 'organizacao_editorial',
+    });
+
+    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['100', '102']);
+  });
 });

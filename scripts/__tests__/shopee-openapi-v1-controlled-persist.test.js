@@ -1,9 +1,12 @@
+process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
+
 const {
   CONTROLLED_PERSIST_SCENARIOS,
   getControlledPersistDecision,
   buildControlledPersistIngestions,
   selectControlledPersistCandidates,
 } = require('../shopee-openapi-v1-controlled-persist.cjs');
+const { createShopeeOpenApiV1OfficialPersistRunner } = require('../oracle-scraper.cjs');
 
 const CONTROLLED_TEST_LIMIT = 5;
 
@@ -233,5 +236,32 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
     expect(ingestion.candidate.currentPrice).toBe(17.05);
     expect(ingestion.candidate.originalPrice).toBeNull();
     expect(ingestion.candidate.persistenceMetadata.payload_v1.originalPrice).toBeNull();
+  });
+
+  it('contabiliza somente ofertas confirmadas como approved', async () => {
+    const products = ['7001', '7002'].map((itemId, index) => ({
+      itemId, shopId: String(8001 + index), productName: `Organizador completo ${index}`,
+      offerLink: `https://s.shopee.com.br/${itemId}`, imageUrl: `https://cf.shopee.com.br/${itemId}.jpg`,
+      price: 49.9, productCatIds: ['100010'], sales: 500, ratingStar: 4.9, commissionPercent: 8, score: 80,
+    }));
+    const runner = createShopeeOpenApiV1OfficialPersistRunner({
+      env: baseEnv,
+      lookupExistingItemIds: async () => [],
+      persistRunner: async () => ({ accepted: 2, inserted: 1, updated: 1, ignored: 0, failed: 0, offerIds: ['offer-approved', 'offer-rejected'] }),
+      lookupPersistedOfferStatuses: async () => ([
+        { id: 'offer-approved', status: 'approved' },
+        { id: 'offer-rejected', status: 'rejected' },
+      ]),
+    });
+
+    const result = await runner({
+      discovery: { top: products }, scenario: 'casa_cozinha_editorial', tenantId: 'tenant-test',
+      correlationId: 'corr-visible', requestedAt: '2026-08-31T12:00:00.000Z', limit: 5,
+    });
+
+    expect(result.accepted).toBe(1);
+    expect(result.visibleApproved).toBe(1);
+    expect(result.ignoredNonApproved).toBe(1);
+    expect(result.offerIds).toEqual(['offer-approved']);
   });
 });

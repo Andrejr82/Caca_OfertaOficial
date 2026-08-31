@@ -183,6 +183,14 @@ const SHOPEE_APP_SECRET = process.env.SHOPEE_APP_SECRET || '';
 const SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS = 15_000;
 const SHOPEE_OPENAPI_MAX_RETRIES = 1;
 const SHOPEE_OPENAPI_STAGE_TIMEOUT_MS = 90_000;
+const ACTIVE_SHOPEE_NICHE_SCENARIOS = Object.freeze([
+  'casa_cozinha_editorial',
+  'beleza_editorial',
+  'moda_editorial',
+  'ferramentas_editorial',
+  'pet_editorial',
+  'eletrodomesticos_editorial',
+]);
 
 function selectOracleReleaseId({ gitHead = '', env = process.env, releaseData = {} } = {}) {
   return String(gitHead || '').trim()
@@ -520,7 +528,7 @@ async function loadActiveDiscoveryHistory(marketplace) {
     const { data, error } = await withTimeout(
       supabase
         .from('offers')
-        .select('item_id, product_id, shopee_item_id, shopee_shop_id, original_url, product_name, category, status, created_at, updated_at, current_price, old_price')
+        .select('id, item_id, product_id, shopee_item_id, shopee_shop_id, original_url, product_name, category, status, created_at, updated_at, current_price, old_price')
         .eq('user_id', ADMIN_USER_ID)
         .eq('platform', marketplace)
         .range(from, from + pageSize - 1),
@@ -531,10 +539,31 @@ async function loadActiveDiscoveryHistory(marketplace) {
     rows.push(...(data || []));
     if (!data || data.length < pageSize) break;
   }
-  // Every existing identity is excluded from automatic discovery, including
-  // previously rejected offers. Re-selecting rejected rows was inflating the
-  // persisted counter without creating new panel items.
-  return rows;
+  if (marketplace !== 'Shopee' || rows.length === 0) return rows;
+
+  const publishedOfferIds = new Set();
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await withTimeout(
+      supabase
+        .from('posts')
+        .select('offer_id, status, posted_at, external_id')
+        .eq('user_id', ADMIN_USER_ID)
+        .or('status.in.(published,posted),posted_at.not.is.null,external_id.not.is.null')
+        .range(from, from + pageSize - 1),
+      Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000),
+      'loadShopeePublicationEvidence',
+    );
+    if (error) throw new Error('Publication evidence Shopee: ' + error.message);
+    for (const post of data || []) if (post.offer_id) publishedOfferIds.add(String(post.offer_id));
+    if (!data || data.length < pageSize) break;
+  }
+
+  // Keep the offer payload compact: the gate only needs a boolean proving that
+  // at least one social post was actually published.
+  return rows.map((row) => ({
+    ...row,
+    publication_evidence: publishedOfferIds.has(String(row.id)),
+  }));
 }
 
 async function loadRecentDiscoveryHistory(marketplace) {
@@ -558,6 +587,21 @@ async function loadRecentDiscoveryHistory(marketplace) {
     if (!data || data.length < 1000) break;
   }
   return rows;
+}
+
+function resolveShopeeScenarioForCycle(scenarioId, date = new Date()) {
+  if (scenarioId !== 'informatica_editorial') return scenarioId;
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).formatToParts(date).filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  const dayNumber = Math.floor(Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / 86_400_000);
+  return ACTIVE_SHOPEE_NICHE_SCENARIOS[dayNumber % ACTIVE_SHOPEE_NICHE_SCENARIOS.length];
+}
+
+async function loadDiscoveryHistory(marketplace) {
+  return marketplace === 'Shopee'
+    ? loadActiveDiscoveryHistory(marketplace)
+    : loadRecentDiscoveryHistory(marketplace);
 }
 
 async function runAmazonScenarioDiscovery(scenario, options = {}) {
@@ -1525,7 +1569,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
       return filterNovelNormalizedProducts(marketplace, normalized);
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadRecentDiscoveryHistory,
+    loadHistory: loadDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1581,6 +1625,7 @@ function createShopeeOpenApiV1OfficialDiscovery({ env = process.env, request } =
       return {
         engine: 'shopee_openapi_v1', mode: 'official', scenarioId, decision,
         top: Array.isArray(scenarioResult.top) ? scenarioResult.top : [], topCount: Number(scenarioResult.top?.length || 0),
+        candidatePool: Array.isArray(scenarioResult.candidatePool) ? scenarioResult.candidatePool : (scenarioResult.top || []),
         rejectedCount: Number(scenarioResult.rejected?.length || 0), metrics,
         rejectionReasons, queryEvidence: response.result?.queryEvidence || {},
         ...(sourceErrors.length > 0 ? { error: `Shopee OpenAPI returned ${sourceErrors.length} source error(s)` } : {}),
@@ -1607,7 +1652,13 @@ function mergeShopeeOpenApiV1RejectionReasons({ metrics = {}, scenarioResult = {
   return { ...(metrics.rejections || {}), ...(scenarioResult.rejectionReasons || {}) };
 }
 
-function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger = null, env = process.env, lookupExistingItemIds } = {}) {
+function createShopeeOpenApiV1OfficialPersistRunner({
+  persistRunner,
+  stageLogger = null,
+  env = process.env,
+  lookupExistingItemIds,
+  lookupPersistedOfferStatuses,
+} = {}) {
   return async ({ discovery, scenario, tenantId, correlationId, requestedAt, limit }) => {
     const decision = getControlledPersistDecision(scenario, env, { maxCandidates: limit });
     if (!decision.enabled) return { accepted: 0, inserted: 0, updated: 0, failed: 0, state: FINAL_STATE, offerIds: [] };
@@ -1642,7 +1693,42 @@ function createShopeeOpenApiV1OfficialPersistRunner({ persistRunner, stageLogger
         engine: 'shopee_openapi_v1', mode: 'controlled-persist', scenarioId: decision.scenarioId,
       });
     if (Number(persisted?.failed || 0) > 0) throw new Error(`Controlled persist RPC failed for ${persisted.failed} candidate(s)`);
-    return persisted;
+    const offerIds = [...new Set((persisted?.offerIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+    const shouldVerifyVisibility = typeof lookupPersistedOfferStatuses === 'function' || typeof persistRunner !== 'function';
+    if (!shouldVerifyVisibility || offerIds.length === 0) return persisted;
+
+    let statusRows;
+    if (typeof lookupPersistedOfferStatuses === 'function') {
+      statusRows = await lookupPersistedOfferStatuses({
+        tenantId: tenantId || ADMIN_USER_ID,
+        marketplace: 'Shopee',
+        offerIds,
+      });
+    } else {
+      const { data, error } = await getSupabase()
+        .from('offers')
+        .select('id,status')
+        .eq('user_id', tenantId || ADMIN_USER_ID)
+        .eq('platform', 'Shopee')
+        .in('id', offerIds);
+      if (error) throw new Error(`Confirmação de visibilidade Shopee falhou: ${error.message}`);
+      statusRows = data || [];
+    }
+    const statusById = new Map((statusRows || []).map((row) => [String(row.id), String(row.status || '').toLowerCase()]));
+    const missingIds = offerIds.filter((id) => !statusById.has(id));
+    if (missingIds.length > 0) {
+      throw new Error(`Confirmação de visibilidade Shopee incompleta para ${missingIds.length} oferta(s)`);
+    }
+    const approvedOfferIds = offerIds.filter((id) => statusById.get(id) === 'approved');
+    const ignoredNonApproved = offerIds.length - approvedOfferIds.length;
+    return {
+      ...persisted,
+      accepted: approvedOfferIds.length,
+      visibleApproved: approvedOfferIds.length,
+      ignoredNonApproved,
+      ignored: Number(persisted?.ignored || 0) + ignoredNonApproved,
+      offerIds: approvedOfferIds,
+    };
   };
 }
 
@@ -1683,7 +1769,7 @@ async function runScrapingCycleCore() {
     shopeeDiscovery: shopeeOfficialDiscovery,
     persistShopee: createShopeeOpenApiV1OfficialPersistRunner({ stageLogger }),
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadRecentDiscoveryHistory,
+    loadHistory: loadDiscoveryHistory,
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1691,7 +1777,11 @@ async function runScrapingCycleCore() {
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
-    scenarioResolver: (marketplace) => getActiveMarketplaceScenario(marketplace)?.scenarioId || getActiveMarketplaceScenario(marketplace)?.id || 'unknown',
+    scenarioResolver: (marketplace) => {
+      const activeScenario = getActiveMarketplaceScenario(marketplace);
+      const scenarioId = activeScenario?.scenarioId || activeScenario?.id || 'unknown';
+      return marketplace === 'Shopee' ? resolveShopeeScenarioForCycle(scenarioId) : scenarioId;
+    },
     scenarioRuntimeResolver: createScenarioRuntimeResolver({ plannedScenarioId, discoveryHour }),
     observe: async (event) => {
       if (event?.eventType === 'discovery.quality.shadow.completed' || event?.eventType === 'discovery.quality.shadow.failed') {
@@ -1842,7 +1932,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
         .map((product) => normalizeMercadoLivreCandidate({ ...product, discovered_at: requestedAt }));
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
-    loadHistory: loadRecentDiscoveryHistory,
+    loadHistory: loadDiscoveryHistory,
     persist: persistDiscoveryIngestionV1,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     qualityShadow: createQualityShadowRunner(),
@@ -1938,6 +2028,9 @@ module.exports = {
   buildAffiliateLinkRows,
   createQualityAdmissionRunner,
   createShopeeOpenApiV1OfficialDiscovery,
+  createShopeeOpenApiV1OfficialPersistRunner,
+  resolveShopeeScenarioForCycle,
+  loadActiveDiscoveryHistory,
   mergeShopeeOpenApiV1RejectionReasons,
   callShopeeAffiliateApi,
   SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS,

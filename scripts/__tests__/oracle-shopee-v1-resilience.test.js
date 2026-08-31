@@ -4,6 +4,7 @@ process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
 
 const {
   createShopeeOpenApiV1OfficialDiscovery,
+  resolveShopeeScenarioForCycle,
   callShopeeAffiliateApi,
   SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS,
   SHOPEE_OPENAPI_MAX_RETRIES,
@@ -20,6 +21,18 @@ const BASE_ENV = {
 };
 
 describe('Shopee OpenAPI V1 resilience', () => {
+  it('redistribui somente o slot de Informática entre nichos Shopee ativos', () => {
+    const date = new Date('2026-08-31T13:00:00.000Z');
+    const rerouted = resolveShopeeScenarioForCycle('informatica_editorial', date);
+    expect([
+      'casa_cozinha_editorial', 'beleza_editorial', 'moda_editorial',
+      'ferramentas_editorial', 'pet_editorial', 'eletrodomesticos_editorial',
+    ]).toContain(rerouted);
+    expect(rerouted).not.toBe('informatica_editorial');
+    expect(resolveShopeeScenarioForCycle('pet_editorial', date)).toBe('pet_editorial');
+    expect(resolveShopeeScenarioForCycle('informatica_editorial', date)).toBe(rerouted);
+  });
+
   it('configura limites operacionais curtos', () => {
     expect(SHOPEE_OPENAPI_REQUEST_TIMEOUT_MS).toBe(15_000);
     expect(SHOPEE_OPENAPI_MAX_RETRIES).toBe(1);

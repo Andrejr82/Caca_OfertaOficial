@@ -6,6 +6,7 @@ const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
 const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
+const { selectCuratedFamilyRepresentatives } = require('./shopee-curated-family-selection.cjs');
 const { evaluateSearchQuality } = require('./marketplace-search-quality.cjs');
 const { classifyCandidate, buildClassificationCoverage } = require('./classification-coverage.cjs');
 const {
@@ -690,6 +691,9 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         }
         const metrics = discovery?.metrics || {};
         const top = Array.isArray(discovery?.top) ? discovery.top : [];
+        const candidatePool = Array.isArray(discovery?.candidatePool) && discovery.candidatePool.length > 0
+          ? discovery.candidatePool
+          : top;
         if (discovery?.queryEvidence?.dimensionTelemetry) {
           funnel.setDimensionTelemetry(discovery.queryEvidence.dimensionTelemetry);
         }
@@ -712,7 +716,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           await safeObserve('discovery.marketplace.completed', { marketplace, finalState: FINAL_STATE, funnelStatus: funnel.snapshot().status, durationMs: Date.now() - marketplaceStartedAt, metadata: summary });
           continue;
         }
-        const v1Candidates = top.map((product, index) => ({
+        const v1Candidates = candidatePool.map((product, index) => ({
           ...product, sourceItemId: String(product.itemId || '').trim(), title: product.productName || product.title,
           sourceUrl: product.offerLink || product.productLink, imageUrl: product.imageUrl,
           currentPrice: product.currentPrice ?? product.price ?? product.priceMin,
@@ -730,7 +734,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           },
           novelty: { input: top.length, evaluated: top.length > 0, accepted: 0, rejected: 0 },
         };
-        const freshness = filterFreshCandidates('Shopee', v1Candidates, history, { now: requestedAt });
+        const freshness = filterFreshCandidates('Shopee', v1Candidates, history, {
+          now: requestedAt,
+          permanentStatuses: ['rejected'],
+          reusableStatuses: ['approved', 'selected', 'pending_manual_review'],
+          blockPublished: true,
+        });
 
         let candidatesForQueue = freshness.accepted;
         const shopeeEvaluations = [];
@@ -764,6 +773,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
               candidatesForQueue = [];
             }
           }
+        }
+
+        if (candidatesForQueue.some((candidate) => String(candidate.curatedFamily || '').trim())) {
+          candidatesForQueue = selectCuratedFamilyRepresentatives(candidatesForQueue, 5);
         }
 
         if (firstDiscoveryMode !== 'off') {
@@ -851,7 +864,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         funnel.recordQueueSelection({ groupKeyVersion: 'shopee-openapi-v1', candidatesReceived: candidatesForQueue.length, candidatesSelected: candidatesForQueue.length });
         let persistedAll = { accepted: 0, inserted: 0, updated: 0, ignored: 0, offerIds: [] };
         if (candidatesForQueue.length > 0 && typeof persistShopee === 'function') {
-          persistedAll = await persistShopee({ discovery: { ...discovery, top: top.filter((product) => candidatesForQueue.some((candidate) => candidate.sourceItemId === String(product.itemId || ''))) }, candidates: candidatesForQueue, marketplace, scenario, tenantId, correlationId, requestedAt, limit: queue.limits.maxPerMarketplace });
+          persistedAll = await persistShopee({ discovery: { ...discovery, top: candidatePool.filter((product) => candidatesForQueue.some((candidate) => candidate.sourceItemId === String(product.itemId || ''))) }, candidates: candidatesForQueue, marketplace, scenario, tenantId, correlationId, requestedAt, limit: queue.limits.maxPerMarketplace });
           funnel.count('rpcSent', Math.max(0, candidatesForQueue.length - Number(persistedAll?.rpcSent || 0))).mergeRpc(persistedAll || {});
           for (const offerId of persistedAll?.offerIds || []) if (typeof offerId === 'string' && offerId) materializedOfferIds.add(offerId);
         }

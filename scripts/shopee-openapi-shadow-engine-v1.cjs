@@ -1,6 +1,10 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const {
+  orderCuratedProducts,
+  selectCuratedFamilyRepresentatives: selectCuratedFamilyRepresentativesBase,
+} = require('./shopee-curated-family-selection.cjs');
 const GRAPHQL_CONTRACTS = require('./contracts/shopee-openapi-v1/index.cjs');
 const { evaluateShopeeOracleCandidate } = require('./shopee-ranking-v1-oracle-bridge.cjs');
 const { getShopeeV1Flags } = require('./shopee-v1-flags.cjs');
@@ -254,15 +258,15 @@ function buildShopeeDimensionTelemetry(calls = []) {
   return { byFamily, byQuery };
 }
 
-function dedupe(products) {
+function dedupe(products, { includeFamily = true } = {}) {
   const seen = new Map(); const duplicates = [];
   for (const product of products) {
     const key = `item:${product.itemId}`;
     const urlKey = product.productLink || product.offerLink ? `url:${text(product.productLink || product.offerLink)}` : null;
     const family = `family:${familyKey(product)}`;
-    const duplicateOf = [key, urlKey, family].filter(Boolean).find((candidate) => seen.has(candidate));
+    const duplicateOf = [key, urlKey, includeFamily ? family : null].filter(Boolean).find((candidate) => seen.has(candidate));
     if (duplicateOf) { duplicates.push({ itemId: product.itemId, duplicateOf, familyKey: family.slice(7) }); continue; }
-    [key, urlKey, family].filter(Boolean).forEach((candidate) => seen.set(candidate, product.itemId));
+    [key, urlKey, includeFamily ? family : null].filter(Boolean).forEach((candidate) => seen.set(candidate, product.itemId));
   }
   return { unique: products.filter((product) => !duplicates.some((duplicate) => duplicate.itemId === product.itemId)), duplicates };
 }
@@ -339,12 +343,14 @@ const CURATED_ACCESSORY_PATTERNS = Object.freeze([
   'carregador para', 'cabo para', 'adaptador para', 'caneta lixadeira', 'lixa de unha',
   'mini aspirador', 'coleira', 'guia cachorro', 'peitoral pet', 'solda', 'broca avulsa',
   'kit de brocas', 'jogo de brocas', 'bit para', 'soquete avulso', 'maleta vazia',
+  'brocas diamantadas', 'serra copo', 'bits ponteira', 'ponteira dupla',
   'cesto para fritadeira', 'papel para air fryer', 'grelha para', 'resistencia para',
   'copo para liquidificador', 'jarra para liquidificador', 'filtro para cafeteira',
   'descalcificante', 'limpa cafeteira', 'limpeza cafeteira', 'cesto em silicone',
   'tampinha', 'espalhador fogao', 'boca chama', 'queimador para fogao',
   'kit base', 'disco lixa', 'discos lixa', 'adaptador esmerilhadeira',
   'adaptador lixadeira', 'motosserra adaptador', 'suporte m14', 'capsula de cafe',
+  'pente auxiliar', 'arraste do motor',
   'cafe em capsula', 'escova de ventilador', 'helice avulsa', 'motor ventilador',
 ]);
 
@@ -392,20 +398,7 @@ function classifyCuratedFeedCandidate(product = {}, families = []) {
 }
 
 function selectCuratedFamilyRepresentatives(products = [], limit = 3) {
-  const selected = [];
-  const seenFamilies = new Set();
-  const ordered = [...products].sort((left, right) =>
-    number(right.score) - number(left.score)
-    || number(right.sales) - number(left.sales)
-    || String(left.itemId || '').localeCompare(String(right.itemId || '')));
-  for (const product of ordered) {
-    const family = String(product.curatedFamily || familyKey(product)).trim();
-    if (!family || seenFamilies.has(family)) continue;
-    seenFamilies.add(family);
-    selected.push(product);
-    if (selected.length >= Math.max(0, Number(limit) || 0)) break;
-  }
-  return selected;
+  return selectCuratedFamilyRepresentativesBase(products, limit, familyKey);
 }
 
 function auxiliaryNode(source, node) {
@@ -545,7 +538,7 @@ async function runCuratedScenarioPlan(scenarioId, { request, signal, sourceTimeo
   });
   const enriched = enrichedResults.filter(Boolean);
 
-  const qualityResult = (products) => runShadow({ sources: { productOffers: products }, contracts: { [scenarioId]: contract }, topLimit: Number.POSITIVE_INFINITY, applyDiversityCaps: false });
+  const qualityResult = (products) => runShadow({ sources: { productOffers: products }, contracts: { [scenarioId]: contract }, topLimit: Number.POSITIVE_INFINITY, applyDiversityCaps: false, dedupeFamilies: false });
   const initiallyQualified = selectCuratedFamilyRepresentatives(qualityResult(enriched).scenarios[scenarioId].top, 3);
   const fallbackProducts = [];
   if (initiallyQualified.length < 3) {
@@ -573,7 +566,15 @@ async function runCuratedScenarioPlan(scenarioId, { request, signal, sourceTimeo
 
   const result = qualityResult([...enriched, ...fallbackProducts]);
   const scenarioResult = result.scenarios[scenarioId];
-  const selected = selectCuratedFamilyRepresentatives(scenarioResult.top, 3);
+  const seenCandidateIds = new Set();
+  const candidatePool = orderCuratedProducts(scenarioResult.top).filter((product) => {
+    const identity = String(product.itemId || '').trim();
+    if (!identity || seenCandidateIds.has(identity)) return false;
+    seenCandidateIds.add(identity);
+    return true;
+  });
+  const selected = selectCuratedFamilyRepresentatives(candidatePool, 3);
+  scenarioResult.candidatePool = candidatePool;
   scenarioResult.top = selected;
   scenarioResult.metrics = { ...scenarioResult.metrics, final: selected.length, families: new Set(selected.map((item) => item.curatedFamily)).size };
   return {
@@ -936,7 +937,7 @@ async function collectScenarioCoverage({ request, maxKeywords = 5, maxCategories
   return { mode: 'live-scenario-coverage', flags: { DRY_RUN: '1', NO_DB_WRITE: '1', NO_POSTS: '1', NO_PUBLISH: '1' }, queryEvidence: { feedListStatus: feedListResponse.status, feedDataStatus, shopStatus: shopResponse.status, shopeeStatus: shopeeResponse.status, feed: feeds[0] || null, deltaRows: deltaRows.length, auxiliaryResolution }, scenarios, writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, publishCalls: 0, oracleCalls: 0 } };
 }
 
-function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20, applyDiversityCaps = true } = {}) {
+function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20, applyDiversityCaps = true, dedupeFamilies = true } = {}) {
   const delta = processDeltaRows(sources.deltaRows || [], { datafeedId: sources.datafeedId, maxRows: sources.maxFeedRows ?? 100 });
   const rawProducts = [...(sources.productOffers || []), ...delta.activeItems];
   const auxiliary = { shopOfferV2: (sources.shopOffers || []).map((node) => auxiliaryNode('shopOfferV2', node)), shopeeOfferV2: (sources.shopeeOffers || []).map((node) => auxiliaryNode('shopeeOfferV2', node)) };
@@ -949,7 +950,7 @@ function runShadow({ sources = {}, contracts = SCENARIO_CONTRACTS, topLimit = 20
     const rejectedIntent = intentResults.filter((product) => !product.intent.eligible);
     const technicalEligible = eligible.filter((product) => product.technicalAccepted);
     const technicalRejected = intentResults.filter((product) => !product.technicalAccepted);
-    const deduped = dedupe(technicalEligible);
+    const deduped = dedupe(technicalEligible, { includeFamily: dedupeFamilies });
     const scoreable = deduped.unique.map((product) => {
       const rankingV1 = evaluateCanonicalRanking(product, scenarioId, contract);
       return { ...product, familyKey: familyKey(product), rankingV1, score: rankingV1.score };

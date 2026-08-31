@@ -40,17 +40,30 @@ function isMateriallyBetter(product, previous) {
   return false;
 }
 
+function hasPublicationEvidence(row = {}) {
+  if (row.published === true || row.publication_evidence === true || row.posted_at || row.external_id) return true;
+  const offerStatus = String(row.status || '').trim().toLowerCase();
+  if (offerStatus === 'posted' || offerStatus === 'published') return true;
+  const posts = Array.isArray(row.posts) ? row.posts : (row.posts ? [row.posts] : []);
+  return posts.some((post) => {
+    const status = String(post?.status || '').trim().toLowerCase();
+    return status === 'published' || status === 'posted' || Boolean(post?.posted_at || post?.external_id);
+  });
+}
+
 function filterFreshCandidates(marketplace, products, history, options = {}) {
   const cooldownDays = Number(options.cooldownDays ?? DEFAULT_COOLDOWN_DAYS[marketplace] ?? 7);
+  const permanentStatuses = new Set((options.permanentStatuses || []).map((status) => String(status).trim().toLowerCase()).filter(Boolean));
+  const reusableStatuses = new Set((options.reusableStatuses || []).map((status) => String(status).trim().toLowerCase()).filter(Boolean));
   const referenceTime = options.now ? new Date(options.now).getTime() : Date.now();
   const cutoff = referenceTime - cooldownDays * 24 * 60 * 60 * 1000;
   const byIdentity = new Map();
   const byTitle = new Map();
+  const permanentByIdentity = new Map();
+  const permanentByTitle = new Map();
   for (const row of Array.isArray(history) ? history : []) {
     const created = new Date(row.created_at || row.createdAt || row.updated_at || 0).getTime();
-    if (!Number.isFinite(created) || created < cutoff) continue;
     const title = normalizeTitle(row.product_name || row.title);
-    if (title) byTitle.set(title, row);
     const identity = identityFor(marketplace, {
       sourceItemId: row.item_id || row.product_id || row.shopee_item_id,
       marketplaceMetrics: {
@@ -63,6 +76,15 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
         asin: row.product_id,
       },
     });
+    const status = String(row.status || '').trim().toLowerCase();
+    const permanent = permanentStatuses.has(status) || (options.blockPublished === true && hasPublicationEvidence(row));
+    if (permanent) {
+      if (identity) permanentByIdentity.set(identity, row);
+      if (title) permanentByTitle.set(title, row);
+    }
+    if (permanent || reusableStatuses.has(status)) continue;
+    if (!Number.isFinite(created) || created < cutoff) continue;
+    if (title) byTitle.set(title, row);
     if (identity) byIdentity.set(identity, row);
   }
   const accepted = [];
@@ -70,6 +92,11 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
   for (const product of Array.isArray(products) ? products : []) {
     const identity = identityFor(marketplace, product);
     const title = normalizeTitle(product.title);
+    const permanent = (identity && permanentByIdentity.get(identity)) || (title && permanentByTitle.get(title));
+    if (permanent) {
+      rejected.push({ sourceItemId: product.sourceItemId, reason: 'historical_identity' });
+      continue;
+    }
     const previous = (identity && byIdentity.get(identity)) || (title && byTitle.get(title));
     if (previous && !isMateriallyBetter(product, previous)) {
       rejected.push({ sourceItemId: product.sourceItemId, reason: 'cooldown_repeticao_historica' });
@@ -80,4 +107,4 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
   return { accepted, rejected, cooldownDays };
 }
 
-module.exports = { DEFAULT_COOLDOWN_DAYS, normalizeTitle, identityFor, isMateriallyBetter, filterFreshCandidates };
+module.exports = { DEFAULT_COOLDOWN_DAYS, normalizeTitle, identityFor, isMateriallyBetter, hasPublicationEvidence, filterFreshCandidates };
