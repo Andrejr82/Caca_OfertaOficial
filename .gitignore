@@ -49,6 +49,7 @@ skills-lock.json
 tmp/
 .tmp/
 .tmp-*/
+.worktrees/
 tmp_homologation_output.txt
 
 # Local operational history
