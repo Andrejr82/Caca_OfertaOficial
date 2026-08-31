@@ -1111,7 +1111,7 @@ async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
     attachDiscoveryFunnelMeta(normalized, {
       sourceStatus: result.sourceStatus,
       extracted: result.raw_products,
-      afterParse: result.queryTelemetry.reduce((total, query) => total + Number(query.parser_count || 0), 0),
+      afterParse: (result.queryTelemetry || []).reduce((total, query) => total + Number(query.parser_count || 0), 0),
       amazonTelemetry: result.telemetry,
     });
     return filterNovelNormalizedProducts(store, normalized, stageLogger);
@@ -1554,7 +1554,7 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
         attachDiscoveryFunnelMeta(normalized, {
           sourceStatus: discovered.sourceStatus,
           extracted: discovered.raw_products,
-          afterParse: discovered.queryTelemetry.reduce((total, query) => total + Number(query.parser_count || 0), 0),
+          afterParse: (discovered.queryTelemetry || []).reduce((total, query) => total + Number(query.parser_count || 0), 0),
           amazonTelemetry: discovered.telemetry,
         });
         return filterNovelNormalizedProducts(marketplace, normalized);
@@ -1918,7 +1918,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
         attachDiscoveryFunnelMeta(normalized, {
           sourceStatus: result.sourceStatus,
           extracted: result.raw_products,
-          afterParse: result.queryTelemetry.reduce((total, query) => total + Number(query.parser_count || 0), 0),
+          afterParse: (result.queryTelemetry || []).reduce((total, query) => total + Number(query.parser_count || 0), 0),
           amazonTelemetry: result.telemetry,
         });
         return normalized;

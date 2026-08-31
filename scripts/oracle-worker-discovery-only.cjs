@@ -676,7 +676,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
             nicheId: nichePlan?.nicheId || scenario,
             marketplace,
             mode: firstDiscoveryMode,
-            queriesPlanned: firstDiscoveryPlan?.intents?.reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 0,
+            queriesPlanned: (firstDiscoveryPlan?.intents || []).reduce((acc, i) => acc + (i.queries?.length || 1), 0),
             families: firstDiscoveryPlan?.families || [],
             targets: firstDiscoveryPlan?.targets || null,
             strategy: firstDiscoveryPlan?.strategy || null,
@@ -804,7 +804,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
             }
           }
 
-          const queriesAttempted = firstDiscoveryPlan?.intents?.reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 1;
+          const queriesAttempted = (firstDiscoveryPlan?.intents || []).reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 1;
           const queriesSucceeded = freshness.accepted.length > 0 ? queriesAttempted : (discovery?.decision === 'success' ? 1 : 0);
 
           const readiness = assessFirstDiscoveryReadiness({
@@ -910,7 +910,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           nicheId: nichePlan?.nicheId || scenario,
           marketplace,
           mode: firstDiscoveryMode,
-          queriesPlanned: firstDiscoveryPlan?.intents?.reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 0,
+          queriesPlanned: (firstDiscoveryPlan?.intents || []).reduce((acc, i) => acc + (i.queries?.length || 1), 0),
           families: firstDiscoveryPlan?.families || [],
           targets: firstDiscoveryPlan?.targets || null,
           strategy: firstDiscoveryPlan?.strategy || null,
@@ -1141,7 +1141,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           }
         }
 
-        const queriesAttempted = Number(discoveryMeta.amazonTelemetry?.total_queries_attempted || firstDiscoveryPlan?.intents?.reduce((acc, i) => acc + (i.queries?.length || 1), 0) || 0);
+        const queriesAttempted = Number(discoveryMeta.amazonTelemetry?.total_queries_attempted || (firstDiscoveryPlan?.intents || []).reduce((acc, i) => acc + (i.queries?.length || 1), 0));
         const queriesSucceeded = Number(discoveryMeta.amazonTelemetry?.total_queries_successful ?? (discoveryMeta.amazonTelemetry?.total_queries_attempted ? (discoveryMeta.amazonTelemetry.total_queries_attempted - (discoveryMeta.amazonTelemetry.total_queries_failed || 0)) : (discoveryMeta.extracted > 0 ? 1 : 0)));
 
         const readiness = assessFirstDiscoveryReadiness({
