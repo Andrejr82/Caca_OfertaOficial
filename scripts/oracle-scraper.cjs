@@ -996,7 +996,7 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
     }
     
     if (itemError) throw new Error(`Discovery V2 items failed: ${itemError.message}`);
-  const itemByExternal = new Map((items || []).map((item) => [String(item.external_id), item.id]));
+    const itemByExternal = new Map((items || []).map((item) => [String(item.external_id), item.id]));
     for (const product of products) {
       const discoveryItemId = itemByExternal.get(String(product.sourceItemId));
       if (!discoveryItemId) continue;
@@ -1007,10 +1007,44 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
       const titleQuality = validateProductTitle(product.title);
       const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
       const classificationStatus = !titleQuality.valid || classification.status !== 'classified' ? 'review_required' : 'classified';
-      const classificationReasons = !titleQuality.valid ? [titleQuality.reason] : (classification.status !== 'classified' ? ['unclassified_scenario_mismatch'] : []);
-      const updateClassificationPromise = supabase.from('discovery_items').update({ classification_status: classificationStatus, group_key: groupKey, group_kind: groupKind, classification_reasons: classificationReasons, intelligence }).eq('id', discoveryItemId);
-      const { error: classificationError } = await withTimeout(updateClassificationPromise, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_updateItem_${discoveryItemId}`);
-      if (classificationError) throw new Error(`Discovery V2 classification update failed: ${classificationError.message}`);
+
+      const p1 = supabase.from('offer_classifications').upsert({
+        user_id: tenantId,
+        discovery_item_id: discoveryItemId,
+        classifier_version: `oracle-worker-v4-${String(marketplace).toLowerCase().replace(/\s+/g, '-')}`,
+        classification_status: classificationStatus,
+        product_type: productType,
+        product_role: 'main_product',
+        attributes: {
+          marketplace_intelligence: intelligence,
+          classification: classification.evidence || {},
+          quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason }
+        },
+        rule_trace: [
+          `correlation:${correlationId}`,
+          `requested_at:${requestedAt}`,
+          `classifier:${classification.source}`,
+          ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])
+        ]
+      }, { onConflict: 'discovery_item_id' });
+      await withTimeout(p1, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertClassification`);
+
+      const p2 = supabase.from('product_groups').upsert({
+        user_id: tenantId,
+        group_kind: groupKind,
+        group_key: groupKey,
+        product_type: productType,
+        attributes: { marketplace }
+      }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
+      const { data: group } = await withTimeout(p2, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertGroup`);
+
+      if (group?.id) {
+        const p3 = supabase.from('product_group_members').upsert({
+          product_group_id: group.id,
+          discovery_item_id: discoveryItemId
+        }, { onConflict: 'product_group_id,discovery_item_id' });
+        await withTimeout(p3, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertMember`);
+      }
     }
     if (stageLogger) stageLogger.end('persistDiscoveryV2Metadata', stageStartedAt, products.length);
     return { runId: run.id, itemsCount: items.length };
