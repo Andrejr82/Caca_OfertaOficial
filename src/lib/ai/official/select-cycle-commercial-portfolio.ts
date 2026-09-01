@@ -26,12 +26,19 @@ export async function selectCycleCommercialPortfolio(
 
   if (error) throw new Error(`Falha ao carregar coorte comercial: ${error.message}`);
   const rows = (Array.isArray(data) ? data : []) as CommercialPortfolioOffer[];
-  if (rows.length === 0) throw new Error("Coorte comercial vazia após persistência.");
+  const approvedRows = rows.filter((row) => String(row.status || "").toLowerCase() === "approved");
+  if (approvedRows.length === 0) throw new Error("Coorte aprovada vazia após persistência.");
 
-  const maxTotal = Number(process.env.COMMERCIAL_PORTFOLIO_MAX_TOTAL || 18);
-  const maxPerType = Number(process.env.COMMERCIAL_PORTFOLIO_MAX_PER_TYPE || 2);
-  const minScore = Number(process.env.COMMERCIAL_PORTFOLIO_MIN_SCORE || 35);
-  const portfolio = selectCommercialPortfolio(rows, { maxTotal, maxPerType, minScore });
+  // Discovery has already admitted these offers as approved. Keep the
+  // commercial score as a deterministic ordering signal, but do not apply
+  // editorial score, diversity or type-cap gates a second time in the normal
+  // cycle. The only remaining cap is the technical preparation cap of 30.
+  const portfolio = selectCommercialPortfolio(approvedRows, {
+    maxTotal: 30,
+    maxPerType: 30,
+    minScore: 0,
+    enforceCommercialFilters: false,
+  });
   const rejectionReasons: Record<string, number> = {};
   for (const item of portfolio.rejected) rejectionReasons[item.rejectionReason] = (rejectionReasons[item.rejectionReason] ?? 0) + 1;
 

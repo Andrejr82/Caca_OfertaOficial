@@ -2,6 +2,14 @@
 
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
 const { runOracleScraperShopeeShadowLocal, persistDiscoveryIngestionV1 } = require('../oracle-scraper.cjs');
+const { normalizeRpcOutcome } = require('../discovery-funnel-contract.cjs');
+
+it('não contabiliza como falha as mesmas linhas já inseridas pelo RPC', () => {
+  const outcome = normalizeRpcOutcome({ attempted: 8, inserted: 8, updated: 0, failed: 8, state: 'approved' });
+  expect(outcome.failed).toBe(0);
+  expect(outcome.partialSuccess).toBe(false);
+  expect(outcome.rpcState).toBe('approved');
+});
 
 describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
   it('bloqueia o persist genérico antes de qualquer chamada quando write flags estão ativas', async () => {
@@ -24,6 +32,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       productLink: `https://shopee.com.br/product/${600 + index}/${500 + index}`,
       offerLink: `https://s.shopee.com.br/canary-${index}`, imageUrl: `https://cf.shopee.com.br/canary-${index}.jpg`,
       price: 20 + index, originalPrice: 40 + index, score: 80, productCatIds: ['100010'],
+      marketplaceMetrics: { rating: 4.8, sales: 500, discount: 50 },
     }));
   }
 
@@ -35,7 +44,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       legacyRunner: async () => { legacyCalls += 1; return { categories: [] }; },
       runScenario: async () => ({
         enabled: true, mode: 'shadow',
-        result: { scenarios: { casa_cozinha_editorial: { top: [{ score: 80 }], metrics: { final: 1, intentRejected: 2, families: 1, shops: 1, imageLink100: true } } } },
+        result: { scenarios: { casa_cozinha_editorial: { top: topCandidates(1), metrics: { final: 1, intentRejected: 2, families: 1, shops: 1, imageLink100: true } } } },
         writeAudit: { supabaseWrites: 0, offersWrites: 0, postsWrites: 0, affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0 },
       }),
       persistRunner: async () => { persistCalls += 1; throw new Error('persistência proibida'); },

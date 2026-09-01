@@ -47,9 +47,19 @@ describe("A) WhatsApp dashboard draft loader user_id enforcement", () => {
     expect(mockClient.from).not.toHaveBeenCalled();
   });
 
-  it("fails closed and does not query database when selectedOfferIds is empty (e.g. preparation failure or exhausted batch)", async () => {
+  it("keeps querying approved channel drafts when the editorial selection is empty", async () => {
+    const mockQuery: any = {
+      select: vi.fn(() => mockQuery),
+      eq: vi.fn(() => mockQuery),
+      gte: vi.fn(() => mockQuery),
+      contains: vi.fn(() => mockQuery),
+      in: vi.fn(() => mockQuery),
+      order: vi.fn(() => mockQuery),
+      limit: vi.fn(() => mockQuery),
+      then: (resolve: (value: unknown) => unknown) => resolve({ data: [], error: null }),
+    };
     const mockClient = {
-      from: vi.fn(),
+      from: vi.fn(() => mockQuery),
     };
 
     const drafts = await loadWhatsappDashboardDrafts({
@@ -59,7 +69,8 @@ describe("A) WhatsApp dashboard draft loader user_id enforcement", () => {
     });
 
     expect(drafts).toEqual([]);
-    expect(mockClient.from).not.toHaveBeenCalled();
+    expect(mockClient.from).toHaveBeenCalledWith("posts");
+    expect(mockClient.from).toHaveBeenCalledWith("offers");
   });
 
   it("filters explicitly by user_id when loading drafts", async () => {

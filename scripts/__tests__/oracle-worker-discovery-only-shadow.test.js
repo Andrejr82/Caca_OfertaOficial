@@ -6,6 +6,7 @@ const top = Array.from({ length: 31 }, (_, index) => ({
   itemId: String(100 + index), shopId: String(200 + index), productName: `Organizador ${index}`,
   price: 10 + index, originalPrice: 20 + index, offerLink: `https://s.shopee.com.br/${index}`,
   imageUrl: `https://img.example/${index}.jpg`, productCatIds: ['100010'], score: 80,
+  marketplaceMetrics: { rating: 4.8, sales: 500, discount: 50 },
 }));
 
 describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {

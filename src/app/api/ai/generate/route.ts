@@ -7,8 +7,6 @@ import { createOfficialAICyclePages } from "@/core/ai/official-ai-cycle";
 import { advanceCycleCheckpoint, loadCycleCheckpoint } from "@/lib/ai/official/official-ai-cycle-checkpoint";
 import { selectCycleCommercialPortfolio } from "@/lib/ai/official/select-cycle-commercial-portfolio";
 import { hasFacebookEnv } from "@/lib/env";
-import { publishOfficialPost } from "@/core/publication";
-import { createOfficialPublicationServiceDependencies } from "@/lib/publication/official/create-official-publication-service";
 
 interface GenerateAIRequest {
   command?: "PROCESS_OFFERS";
@@ -83,22 +81,28 @@ export async function POST(request: Request) {
         return NextResponse.json({ ok: false, code: "INVALID_REQUEST", message: "correlationId e offerIds são obrigatórios." }, { status: 400 });
       }
 
+      // Discovery already performed the technical validity, security, stock,
+      // URL and real-identity checks before materializing approved offers.
+      // The selector below is intentionally rank-only for this command: it
+      // must not become a second approval gate for WhatsApp preparation.
       let offerIds = receivedOfferIds;
       let portfolio: Record<string, unknown> = {
         received: receivedOfferIds.length,
         selected: receivedOfferIds.length,
         rejected: 0,
         rejectionReasons: {},
-        mode: "fallback_passthrough",
+        mode: "approved_passthrough",
       };
       try {
-        const commercialPortfolio = await selectCycleCommercialPortfolio(supabase, userId, receivedOfferIds);
-        if (commercialPortfolio.selectedOfferIds.length > 0) {
-          offerIds = [...commercialPortfolio.selectedOfferIds];
-          portfolio = { ...commercialPortfolio, mode: "cross_market_v1" };
+        const rankedCohort = await selectCycleCommercialPortfolio(supabase, userId, receivedOfferIds);
+        if (rankedCohort.selectedOfferIds.length > 0) {
+          offerIds = [...rankedCohort.selectedOfferIds];
+          portfolio = { ...rankedCohort, mode: "approved_passthrough" };
         }
       } catch (portfolioError) {
-        console.warn("[Official AI] Commercial portfolio selector fallback:", portfolioError instanceof Error ? portfolioError.message : portfolioError);
+        // Preserve the worker's approved cohort if the optional ordering
+        // lookup is unavailable; never turn a selector failure into loss.
+        console.warn("[Official AI] Commercial ordering fallback:", portfolioError instanceof Error ? portfolioError.message : portfolioError);
       }
 
       const pages = createOfficialAICyclePages(correlationId, offerIds);
@@ -143,28 +147,6 @@ export async function POST(request: Request) {
         } catch { /* telemetry cannot alter the completed cycle */ }
       }
 
-      if ('drafts' in result && result.drafts) {
-        const approvedDrafts = result.drafts.filter(d => (d as any).offerStatus === "approved");
-        if (approvedDrafts.length > 0) {
-          const pubDependencies = createOfficialPublicationServiceDependencies(supabase, userId);
-          await Promise.allSettled(approvedDrafts.map(draft => publishOfficialPost({
-            contractVersion: "pmav5.publication/v1",
-            commandId: `pub:${draft.postId}`,
-            idempotencyKey: `pub:${draft.postId}`,
-            correlationId, causationId: command.causationId,
-            postId: draft.postId, channel: draft.channel,
-            tenantId: userId, requestedAt: new Date().toISOString(),
-            actor: command.actor, origin: command.origin,
-            reason: { code: "PUBLISH_OFFICIAL_CONTENT" },
-            offerId: (draft as any).offerId || command.offerId,
-            payloadReference: `post:${draft.postId}:v0`,
-            expectedOfferState: "approved",
-            expectedOfferVersion: 2,
-            expectedPostState: "draft",
-            expectedPostVersion: 0
-          }, pubDependencies)));
-        }
-      }
       return NextResponse.json({
         ok: result.status !== "rejected", status: advanced.status, correlationId,
         offerIdsReceived: receivedOfferIds.length, offerIdsSelected: offerIds.length, portfolio,
@@ -212,26 +194,6 @@ export async function POST(request: Request) {
 
     const ok = result.status === "approved" || result.status === "drafted";
     
-    if (result.status === "approved" && 'drafts' in result && result.drafts) {
-      const pubDependencies = createOfficialPublicationServiceDependencies(supabase, userId);
-      await Promise.allSettled(result.drafts.map(draft => publishOfficialPost({
-        contractVersion: "pmav5.publication/v1",
-        commandId: `pub:${draft.postId}`,
-        idempotencyKey: `pub:${draft.postId}`,
-        correlationId: command.correlationId, causationId: command.causationId,
-        offerId: command.offerId,
-        postId: draft.postId, channel: draft.channel,
-        tenantId: userId, requestedAt: new Date().toISOString(),
-        actor: command.actor, origin: command.origin,
-        reason: { code: "PUBLISH_OFFICIAL_CONTENT" },
-        payloadReference: `post:${draft.postId}:v0`,
-        expectedOfferState: "approved",
-        expectedOfferVersion: 2,
-        expectedPostState: "draft",
-        expectedPostVersion: 0
-      }, pubDependencies)));
-    }
-
     return NextResponse.json(
       { ok, ...result },
       { status: ok ? 200 : 409 }

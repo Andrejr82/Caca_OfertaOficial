@@ -559,6 +559,7 @@ function assertCandidateInput(product) {
 function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
   assertCandidateInput(product);
   const identity = `${tenantId}:${marketplace}:${product.sourceItemId}`;
+  const marketplaceMetrics = product.marketplace_metrics || product.marketplaceMetrics || {};
   return Object.freeze({
     contractVersion: 'pmav5.candidate/v1',
     candidateId: stableId('candidate', identity),
@@ -573,18 +574,18 @@ function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
     currentPrice: Number(product.currentPrice),
     originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     category: Object.freeze({ ...product.category }),
-    marketplaceMetrics: Object.freeze({ ...(product.marketplaceMetrics || {}) }),
+    marketplaceMetrics: Object.freeze({ ...marketplaceMetrics }),
     deterministicScore: Number(product.deterministicScore),
     strategyVersion: product.strategyVersion || null,
     scoreBreakdown: product.scoreBreakdown ? Object.freeze({ ...product.scoreBreakdown }) : null,
     determiningReasons: product.determiningReasons ? Object.freeze([...product.determiningReasons]) : null,
     discoveryEvidence: Object.freeze({
-      position: product.marketplaceMetrics?.sourcePosition ?? product.marketplaceMetrics?.position ?? null,
+      position: marketplaceMetrics.sourcePosition ?? marketplaceMetrics.position ?? null,
       category: product.category.name,
       provider: product.category.source,
-      browseNodeId: product.category.browseNodeId ?? product.marketplaceMetrics?.browseNodeId ?? null,
-      parentBrowseNodeId: product.category.parentBrowseNodeId ?? product.marketplaceMetrics?.parentNodeId ?? null,
-      evidenceUrl: product.category.evidenceUrl ?? product.marketplaceMetrics?.browseNodeEvidenceUrl ?? null,
+      browseNodeId: product.category.browseNodeId ?? marketplaceMetrics.browseNodeId ?? null,
+      parentBrowseNodeId: product.category.parentBrowseNodeId ?? marketplaceMetrics.parentNodeId ?? null,
+      evidenceUrl: product.category.evidenceUrl ?? marketplaceMetrics.browseNodeEvidenceUrl ?? null,
       discoveredAt: product.discoveredAt,
     }),
     discoveredAt: product.discoveredAt,
@@ -723,7 +724,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           originalPrice: product.originalPrice ?? product.priceMax,
           discoveredAt: requestedAt, correlationId, intent: scenario,
           category: { id: String(product.productCatIds?.[0] || 'unknown'), name: scenario, source: 'Shopee OpenAPI V1' },
-          marketplaceMetrics: { ...(product.marketplaceMetrics || {}), itemId: product.itemId, shopId: product.shopId, shopee_item_id: product.itemId, shopee_shop_id: product.shopId, sourcePosition: index + 1, productCatId: String(product.productCatIds?.[0] || 'unknown') },
+          marketplace_metrics: { ...(product.marketplace_metrics || product.marketplaceMetrics || {}), itemId: product.itemId, shopId: product.shopId, shopee_item_id: product.itemId, shopee_shop_id: product.shopId, sourcePosition: index + 1, productCatId: String(product.productCatIds?.[0] || 'unknown') },
           deterministicScore: Math.max(0, Math.min(10, Number(product.score || 0) / 10)),
         }));
         const history = typeof loadHistory === 'function' ? await loadHistory(marketplace) : [];

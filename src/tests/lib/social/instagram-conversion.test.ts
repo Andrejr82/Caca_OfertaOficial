@@ -23,7 +23,7 @@ describe("Instagram V5 conversion plan", () => {
       expect.objectContaining({ startSecond: 10, endSecond: 13, purpose: "action" }),
     ]);
     expect(plan.reelBeats[2].text).toContain("De R$ 269,00\nPor R$ 88,00");
-    expect(plan.reelBeats[2].text).not.toMatch(/De\s+R\$[^\n]+\s+por\s+R\$/iu);
+    expect(plan.reelBeats[2].text).not.toMatch(/De[ \t]+R\$[^\n]+[ \t]+por[ \t]+R\$/iu);
     expect(plan.reelBeats[3].text).toBe("Confira a oferta no link do perfil.");
     expect(plan.reelBeats.map((beat) => beat.text).join(" ")).not.toMatch(/https?:\/\//u);
   });

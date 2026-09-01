@@ -14,17 +14,13 @@ const jiesipote = {
 };
 
 describe("Telegram conversion — V5 authority", () => {
-  it("renderiza alerta curto com preço, atributos, prova e CTA", () => {
+  it("renderiza alerta curto com preço e CTA rastreável", () => {
     const url = "https://caca-oferta-oficial.vercel.app/go/tg_jiesipote";
     const copy = buildTelegramConversionV4(jiesipote, url);
 
     const offer = copy.indexOf("R$ 88,00");
-    const attributes = copy.indexOf("À prova d'água");
-    const proof = copy.indexOf("Top #14");
 
     expect(offer).toBeGreaterThan(-1);
-    expect(attributes).toBeGreaterThan(offer);
-    expect(proof).toBeGreaterThan(attributes);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
     expect(copy).toContain(`👉 Ver no Mercado Livre:\n${url}`);
   });

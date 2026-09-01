@@ -168,8 +168,8 @@ describe("panel draft selection", () => {
     expect(mergePanelDrafts(protectedDrafts, new Set(), new Date("2026-08-08T03:00:00.000Z"))).toEqual([]);
   });
 
-  it("exibe os 6 drafts approved da coorte WhatsApp", () => {
-    const drafts = Array.from({ length: 6 }, (_, index) => post(index, {
+  it("exibe os 16 drafts approved da coorte normal sem aplicar seleção comercial no painel", () => {
+    const drafts = Array.from({ length: 16 }, (_, index) => post(index, {
       status: "approved",
       explainability: { correlation_id: "cycle-whatsapp" },
     }));
@@ -180,7 +180,7 @@ describe("panel draft selection", () => {
       new Date("2026-08-08T03:00:00.000Z"),
       new Set(drafts.map((item) => item.offer_id)),
       true,
-    )).toHaveLength(6);
+    )).toHaveLength(16);
   });
 
   it("exibe Shopee 24594406921 redescoberta no ciclo atual", () => {

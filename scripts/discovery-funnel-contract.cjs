@@ -109,10 +109,21 @@ function deriveMarketplaceTerminalStatus({ counters = {}, sourceStatus, fatal = 
 }
 
 function normalizeRpcOutcome(result = {}) {
-  const failed = Math.max(0, Number(result.failed || 0));
+  const inserted = Math.max(0, Number(result.inserted || 0));
+  const updated = Math.max(0, Number(result.updated || 0));
+  const attempted = Math.max(0, Number(result.attempted || result.rpcSent || 0));
+  const reportedFailed = Math.max(0, Number(result.failed || 0));
+  // Some RPC responses report the attempted row count as both `inserted`
+  // and `failed`. Once the successful outcomes account for every attempted
+  // row, there is no remaining failure to report.
+  const remainingCapacity = attempted > 0 ? Math.max(0, attempted - inserted - updated) : reportedFailed;
+  const failed = attempted > 0 ? Math.min(reportedFailed, remainingCapacity) : reportedFailed;
   const state = failed > 0 ? 'partial_success' : String(result.state || 'success');
   return {
     ...result,
+    attempted,
+    inserted,
+    updated,
     failed,
     rpcState: state,
     partialSuccess: failed > 0,

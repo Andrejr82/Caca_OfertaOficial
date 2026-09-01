@@ -1339,6 +1339,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       updated: data.updated,
       ignored: data.ignored,
       failed: data.failed,
+      attempted: rows.length,
       offerIds: resolvedOfferIds,
       state: FINAL_STATE,
     });
@@ -1796,12 +1797,6 @@ async function runScrapingCycleCore() {
       console.log(`[Oracle Discovery-Only V5] ${summary.marketplace}: ${summary.discovered} descobertos, ${summary.persisted} persistidos (${summary.inserted} novos, ${summary.updated} atualizados)`);
       console.log(`[Oracle Funnel V5] ${JSON.stringify({ marketplace: summary.marketplace, funnel: summary.funnel, classificationCoverage: summary.classificationCoverage })}`);
     }
-  }
-  try {
-    const { processPendingTrendRadarRuns } = require('./oracle-trends-radar-runner.cjs');
-    await processPendingTrendRadarRuns({ stageLogger });
-  } catch (trendsError) {
-    console.error(`[Oracle Trends Radar] ${trendsError.message}`);
   }
   console.log('[Oracle Discovery-Only V5] ciclo=' + result.correlationId + ' duração=' + durationSeconds + 's estado=' + result.finalState);
   return result;

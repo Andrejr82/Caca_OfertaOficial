@@ -79,10 +79,43 @@ describe("commercial cross-market portfolio selector", () => {
 
   it("permite override explícito do teto por tipo quando necessário", () => {
     const result = selectCommercialPortfolio([
-      offer({ id: "perfume-a", product_name: "Perfume A 100ml Eau De Parfum", platform: "Shopee", current_price: 79, marketplace_metrics: { sales: 3000, rating: 4.9 } }),
-      offer({ id: "perfume-b", product_name: "Perfume B 100ml Eau De Parfum", platform: "Mercado Livre", current_price: 69, marketplace_metrics: { sourcePosition: 2 } }),
+      offer({ id: "perfume-a", product_name: "Perfume Floral 100ml Eau De Parfum", platform: "Shopee", current_price: 79, marketplace_metrics: { sales: 3000, rating: 4.9 } }),
+      offer({ id: "perfume-b", product_name: "Perfume Amadeirado 50ml Eau De Toilette", platform: "Mercado Livre", current_price: 69, marketplace_metrics: { sourcePosition: 2 } }),
     ], { maxTotal: 2, maxPerType: 2, maxPerTypeByCommercialType: { perfume: 2 } });
 
     expect(result.selected.filter((item) => item.commercialType === "perfume")).toHaveLength(2);
+  });
+
+  it("ordena a coorte aprovada sem aplicar gates comerciais redundantes", () => {
+    const offers = Array.from({ length: 16 }, (_, index) => offer({
+      id: `approved-${index}`,
+      product_name: `Oferta aprovada ${index}`,
+      platform: index % 2 === 0 ? "Amazon" : "Mercado Livre",
+      current_price: 50 + index,
+    }));
+    const result = selectCommercialPortfolio(offers, {
+      maxTotal: 30,
+      maxPerType: 1,
+      minScore: 35,
+      enforceCommercialFilters: false,
+    });
+
+    expect(result.selected).toHaveLength(16);
+    expect(result.rejected).toHaveLength(0);
+    expect(result.rejected.some((item) => item.rejectionReason === "commercial_score_below_minimum")).toBe(false);
+  });
+
+  it("mantém o teto técnico de preparação sem aplicar limite comercial", () => {
+    const offers = Array.from({ length: 31 }, (_, index) => offer({
+      id: `approved-limit-${index}`,
+      product_name: `Oferta aprovada limite ${index}`,
+      platform: "Amazon",
+      current_price: 50 + index,
+    }));
+    const result = selectCommercialPortfolio(offers, { maxTotal: 30, enforceCommercialFilters: false });
+
+    expect(result.selected).toHaveLength(30);
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.rejectionReason).toBe("preparation_limit");
   });
 });

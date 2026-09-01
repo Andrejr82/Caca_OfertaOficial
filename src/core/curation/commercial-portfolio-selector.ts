@@ -14,6 +14,8 @@ export interface CommercialPortfolioOptions {
   maxPerType?: number;
   minScore?: number;
   maxPerTypeByCommercialType?: Readonly<Record<string, number>>;
+  /** Keep the existing commercial score only for ordering, without applying editorial gates. */
+  enforceCommercialFilters?: boolean;
 }
 
 export interface CommercialPortfolioRankedOffer {
@@ -158,10 +160,19 @@ export function selectCommercialPortfolio(offers: readonly CommercialPortfolioOf
   const maxTotal = Math.max(1, Math.floor(options.maxTotal ?? 18));
   const maxPerType = Math.max(1, Math.floor(options.maxPerType ?? 2));
   const minScore = Math.max(0, Number(options.minScore ?? 0));
+  const enforceCommercialFilters = options.enforceCommercialFilters !== false;
   const ranked = scoreRows(offers), selected: CommercialPortfolioRankedOffer[] = [];
   const rejected: Array<CommercialPortfolioRankedOffer & { rejectionReason: string }> = [];
   const typeCounts = new Map<string, number>();
   for (const row of ranked) {
+    if (!enforceCommercialFilters) {
+      if (selected.length >= maxTotal) {
+        rejected.push({ ...row, rejectionReason: "preparation_limit" });
+        continue;
+      }
+      selected.push(row);
+      continue;
+    }
     if (row.score < minScore) { rejected.push({ ...row, rejectionReason: "commercial_score_below_minimum" }); continue; }
     const nearDuplicate = selected.find((existing) => existing.commercialType === row.commercialType && similarity(existing.offer.product_name ?? "", row.offer.product_name ?? "") >= 0.78);
     if (nearDuplicate) { rejected.push({ ...row, rejectionReason: "near_duplicate" }); continue; }
