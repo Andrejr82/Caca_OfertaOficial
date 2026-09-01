@@ -98,10 +98,6 @@ function evaluateFirstDiscoveryCandidate({ marketplace, candidate = {}, intent =
   if (data.currentPrice == null || data.currentPrice <= 0) hardRejections.push('invalid_current_price');
   if (intent && !matchesFirstDiscoveryIntent(intent, data.title)) hardRejections.push('intent_mismatch');
 
-  if ((market === 'Amazon' || market === 'Shopee') && data.rating != null && data.rating < 4.3) {
-    hardRejections.push('rating_too_low');
-  }
-
   if (market === 'Amazon') {
     if (data.rating != null && data.rating >= 4.5) signals.push('rating_4_5_plus');
     if (data.reviewCount != null && data.reviewCount >= 30) signals.push('review_count_30_plus');

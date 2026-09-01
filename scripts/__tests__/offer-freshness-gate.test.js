@@ -7,7 +7,7 @@ describe('offer freshness gate', () => {
     expect(normalizeTitle('Ação Árvore')).toBe('acao arvore');
   });
 
-  it('bloqueia título Shopee histórico acentuado sem melhoria material', () => {
+  it('preserva título Shopee histórico acentuado como revalidado', () => {
     const result = filterFreshCandidates('Shopee', [{
       sourceItemId: '100', title: 'Ação Árvore', currentPrice: 10, originalPrice: 20,
       marketplaceMetrics: { itemId: '100', shopId: '200' },
@@ -15,8 +15,10 @@ describe('offer freshness gate', () => {
       item_id: '100', shopee_item_id: '100', shopee_shop_id: '200', product_name: 'Acao Arvore',
       current_price: 10, old_price: 20, created_at: new Date().toISOString(),
     }]);
-    expect(result.accepted).toHaveLength(0);
-    expect(result.rejected[0].reason).toBe('cooldown_repeticao_historica');
+    expect(result.accepted).toHaveLength(1);
+    expect(result.accepted[0].isKnown).toBe(true);
+    expect(result.accepted[0].isRevalidated).toBe(true);
+    expect(result.rejected).toHaveLength(0);
   });
 
   it.each(['approved', 'selected', 'pending_manual_review'])('reaproveita identidade Shopee %s sem publicação', (status) => {
@@ -42,7 +44,7 @@ describe('offer freshness gate', () => {
     { status: 'posted', posts: [] },
     { status: 'approved', posts: [{ status: 'published', channel: 'telegram' }] },
     { status: 'pending_manual_review', posts: [{ status: 'draft', posted_at: '2026-08-01T10:00:00.000Z' }] },
-  ])('bloqueia identidade Shopee rejeitada ou publicada: $status', (historyRow) => {
+  ])('revalida identidade Shopee encontrada na descoberta: $status', (historyRow) => {
     const result = filterFreshCandidates('Shopee', [{
       sourceItemId: '100', title: 'Produto novo', currentPrice: 70, originalPrice: 100,
       marketplaceMetrics: { itemId: '100', shopId: '200' },
@@ -57,7 +59,8 @@ describe('offer freshness gate', () => {
       blockPublished: true,
     });
 
-    expect(result.accepted).toEqual([]);
-    expect(result.rejected).toEqual([{ sourceItemId: '100', reason: 'historical_identity' }]);
+    expect(result.accepted).toHaveLength(1);
+    expect(result.accepted[0].isKnown).toBe(true);
+    expect(result.rejected).toEqual([]);
   });
 });

@@ -435,18 +435,27 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     eligibleForFamily.push({ ...product, _gate: entry.gate });
   }
 
-  // Se ACTIVE e existem candidatos fortes, priorizar fortes e não fazer backfill artificial com fracos
-  const hasStrongCandidates = isFirstDiscoveryQualityActive() && eligibleForFamily.some((p) => p._firstDiscoveryQuality?.strong);
-  const candidatesForFamilySelection = hasStrongCandidates
-    ? eligibleForFamily.filter((p) => p._firstDiscoveryQuality?.strong)
-    : eligibleForFamily;
-
-  // Aplica dedup por família: seleciona melhor variante, demais ficam como familyDeferred
+  // Aplica dedup por família: seleciona melhor variante (já ordenado com strong e novelty primeiro), demais ficam como familyDeferred
   const activeFamilyMap = options.activeFamilyMap instanceof Map ? options.activeFamilyMap : new Map();
-  const familyResult = selectBestVariants(candidatesForFamilySelection, activeFamilyMap);
+  const familyResult = selectBestVariants(eligibleForFamily, activeFamilyMap);
 
-  // Produtos sem família detectada passam direto para o loop de seleção normal
-  const postFamilySelected = [...familyResult.selected, ...familyResult.ungrouped];
+  // Produtos sem família detectada passam direto para o loop de seleção normal, mantendo a ordenação por strong, novidade e score
+  const postFamilySelected = [...familyResult.selected, ...familyResult.ungrouped].sort((a, b) => {
+    if (isFirstDiscoveryQualityActive()) {
+      const aStrong = a._firstDiscoveryQuality?.strong ? 1 : 0;
+      const bStrong = b._firstDiscoveryQuality?.strong ? 1 : 0;
+      if (bStrong !== aStrong) return bStrong - aStrong;
+    }
+    const aNovel = a.isNovel !== false ? 1 : 0;
+    const bNovel = b.isNovel !== false ? 1 : 0;
+    if (bNovel !== aNovel) return bNovel - aNovel;
+    const scoreDiff = queueScore(b) - queueScore(a);
+    if (scoreDiff !== 0) return scoreDiff;
+    const aAge = a.deferredAt ? new Date(a.deferredAt).getTime() : nowMs;
+    const bAge = b.deferredAt ? new Date(b.deferredAt).getTime() : nowMs;
+    if (aAge !== bAge) return aAge - bAge;
+    return String(a.sourceItemId).localeCompare(String(b.sourceItemId));
+  });
 
   // Variantes preteridas por família → deferred com motivo específico
   for (const fp of familyResult.familyDeferred) {
@@ -768,16 +777,16 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
             const strongOnes = eligibleOnes.filter((item) => item.evalRes.strong);
             strongOnes.sort((a, b) => (b.candidate.deterministicScore || 0) - (a.candidate.deterministicScore || 0));
 
-            if (strongOnes.length > 0) {
-              candidatesForQueue = strongOnes.map((item) => item.candidate);
-            } else {
-              candidatesForQueue = [];
-            }
+            const otherEligible = eligibleOnes.filter((item) => !item.evalRes.strong);
+            otherEligible.sort((a, b) => (b.candidate.deterministicScore || 0) - (a.candidate.deterministicScore || 0));
+
+            candidatesForQueue = [...strongOnes, ...otherEligible].map((item) => item.candidate);
           }
         }
 
+        const maxQueueForShopee = Number(copyQueueOptions?.maxPerMarketplace || 10);
         if (candidatesForQueue.some((candidate) => String(candidate.curatedFamily || '').trim())) {
-          candidatesForQueue = selectCuratedFamilyRepresentatives(candidatesForQueue, 5);
+          candidatesForQueue = selectCuratedFamilyRepresentatives(candidatesForQueue, maxQueueForShopee);
         }
 
         if (firstDiscoveryMode !== 'off') {

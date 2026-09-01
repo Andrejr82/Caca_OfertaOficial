@@ -255,10 +255,10 @@ test('8. ACTIVE Shopee: ineligible não persiste e strong tem prioridade real', 
     scenarioResolver: () => 'beleza_editorial',
   });
 
-  // Em active, com 1 candidato strong presente, apenas o strong é selecionado (sem backfill de fracos)
-  assert.equal(persistedPayload.candidates.length, 1);
-  assert.equal(persistedPayload.candidates[0].sourceItemId, '101');
-  assert.equal(result.marketplaces[0].queueSelected, 1);
+  // Em active, strong tem prioridade e encabeça a fila, sem descarte prematuro de produtos válidos
+  assert.equal(persistedPayload.candidates[0].sourceItemId, '101', 'Strong candidate deve ser o primeiro da fila');
+  assert.ok(persistedPayload.candidates.length >= 1, 'Deve selecionar candidatos elegíveis');
+  assert.equal(result.marketplaces[0].queueSelected, persistedPayload.candidates.length);
 });
 
 test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak em selectCopyQueue', () => {
@@ -282,7 +282,7 @@ test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak em selectCopyQu
     sourceUrl: 'https://mercadolivre.com.br/p/MLB-STRONG',
     imageUrl: 'https://http2.mlstatic.com/img-strong.jpg',
     currentPrice: 100,
-    originalPrice: 115,
+    originalPrice: 130,
     rating: 4.8,
     deterministicScore: 2.0,
     _firstDiscoveryQuality: { eligible: true, strong: true },
@@ -294,11 +294,26 @@ test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak em selectCopyQu
   const queueOff = selectCopyQueue([weakHighQueueScore, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
   assert.equal(queueOff.selected[0].sourceItemId, 'MLB-WEAK');
 
-  // Teste no modo ACTIVE: strong tem prioridade absoluta e fracos não fazem backfill artificial
+  // Teste no modo ACTIVE: strong tem prioridade e encabeça a fila (MLB-STRONG selecionado sobre MLB-WEAK)
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'active';
   const queueActive = selectCopyQueue([weakHighQueueScore, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
-  assert.equal(queueActive.selected.length, 1);
-  assert.equal(queueActive.selected[0].sourceItemId, 'MLB-STRONG');
+  assert.equal(queueActive.selected[0].sourceItemId, 'MLB-STRONG', 'Strong deve ser o primeiro selecionado no modo active');
+
+  // Teste no modo ACTIVE com produtos de grupos distintos: ambos selecionados, com strong em primeiro
+  const distinctGroupCandidate = {
+    sourceItemId: 'MLB-DISTINCT',
+    title: 'Secador de Cabelo Profissional Turbo 2200W',
+    sourceUrl: 'https://mercadolivre.com.br/p/MLB-DISTINCT',
+    imageUrl: 'https://http2.mlstatic.com/img-secador.jpg',
+    currentPrice: 150,
+    originalPrice: 200,
+    deterministicScore: 5.0,
+    _firstDiscoveryQuality: { eligible: true, strong: false },
+    category: { name: 'secadores_editorial' },
+  };
+  const queueDistinct = selectCopyQueue([distinctGroupCandidate, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
+  assert.equal(queueDistinct.selected[0].sourceItemId, 'MLB-STRONG', 'Strong vem antes do candidato de outro grupo');
+  assert.equal(queueDistinct.selected.length, 2, 'Grupos distintos são ambos selecionados');
 
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'off';
 });
@@ -342,7 +357,7 @@ test('11. Efficacy harness: strongCandidates usa intent compatível', () => {
   assert.equal(metrics.strongCandidates, 1);
 });
 
-test('12. Regressão Shopee Active: zero strong com weak elegíveis resulta em queueSelected=0 e persisted=0', async () => {
+test('12. Preservação Shopee Active: zero strong com weak elegíveis preserva produtos válidos na fila', async () => {
   const { runDiscoveryOnlyCycle, FINAL_STATE } = require('../oracle-worker-discovery-only.cjs');
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'active';
 
@@ -371,14 +386,14 @@ test('12. Regressão Shopee Active: zero strong com weak elegíveis resulta em q
     persist: async () => ({ accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] }),
     persistShopee: async (payload) => {
       persistedPayload = payload;
-      return { accepted: payload.candidates.length, inserted: payload.candidates.length, updated: 0, offerIds: [] };
+      return { accepted: payload.candidates.length, inserted: payload.candidates.length, updated: 0, offerIds: ['off-201', 'off-202'] };
     },
     scenarioResolver: () => 'beleza_editorial',
   });
 
-  assert.equal(result.marketplaces[0].queueSelected, 0);
-  assert.equal(result.marketplaces[0].persisted, 0);
-  assert.equal(persistedPayload, null);
+  assert.equal(result.marketplaces[0].queueSelected, 2, 'Deve manter os 2 produtos elegíveis');
+  assert.equal(result.marketplaces[0].persisted, 2, 'Deve persistir os 2 produtos elegíveis');
+  assert.equal(persistedPayload.candidates.length, 2);
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'off';
 });
 

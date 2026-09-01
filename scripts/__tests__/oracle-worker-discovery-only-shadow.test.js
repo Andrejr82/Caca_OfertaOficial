@@ -82,7 +82,7 @@ describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {
     });
   });
 
-  it('keeps recent Shopee identities out before controlled persistence', async () => {
+  it('keeps Shopee identities and includes revalidated candidates in persistence', async () => {
     let candidates = null;
     await runDiscoveryOnlyCycle({
       tenantId: 'tenant-test', correlationId: 'correlation-history', requestedAt: '2026-08-08T00:00:00.000Z', marketplaces: ['Shopee'],
@@ -92,10 +92,10 @@ describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {
       loadHistory: async () => [{ item_id: '100', shopee_item_id: '100', shopee_shop_id: '200', product_name: 'Organizador 0', current_price: 10, old_price: 20, created_at: '2026-08-07T00:00:00.000Z' }],
       scenarioResolver: () => 'organizacao_editorial',
     });
-    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['101']);
+    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['100', '101']);
   });
 
-  it('filtra histórico antes do Top e preenche cinco famílias com candidatos novos', async () => {
+  it('inclui histórico revalidado e preenche famílias com candidatos elegíveis', async () => {
     let candidates = null;
     const candidatePool = [
       { ...top[0], itemId: '100', shopId: '200', curatedFamily: 'organizador', score: 99 },
@@ -122,11 +122,11 @@ describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {
       scenarioResolver: () => 'organizacao_editorial',
     });
 
-    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['101', '102', '103', '104', '105']);
+    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['100', '102', '103', '104', '105']);
     expect(new Set(candidates.map((candidate) => candidate.curatedFamily)).size).toBe(5);
   });
 
-  it('reaproveita approved sem publicação e mantém rejected bloqueado', async () => {
+  it('revalida produtos conhecidos e seleciona candidatos elegíveis', async () => {
     let candidates = null;
     const candidatePool = [
       { ...top[0], itemId: '100', shopId: '200', curatedFamily: 'organizador', score: 99 },
@@ -146,6 +146,6 @@ describe('Discovery-only Shopee OpenAPI V1 canonical connection', () => {
       scenarioResolver: () => 'organizacao_editorial',
     });
 
-    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['100', '102']);
+    expect(candidates.map((candidate) => candidate.sourceItemId)).toEqual(['100', '101', '102']);
   });
 });

@@ -81,11 +81,10 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
     if (permanent) {
       if (identity) permanentByIdentity.set(identity, row);
       if (title) permanentByTitle.set(title, row);
+    } else {
+      if (identity) byIdentity.set(identity, row);
+      if (title) byTitle.set(title, row);
     }
-    if (permanent || reusableStatuses.has(status)) continue;
-    if (!Number.isFinite(created) || created < cutoff) continue;
-    if (title) byTitle.set(title, row);
-    if (identity) byIdentity.set(identity, row);
   }
   const accepted = [];
   const rejected = [];
@@ -93,18 +92,27 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
     const identity = identityFor(marketplace, product);
     const title = normalizeTitle(product.title);
     const permanent = (identity && permanentByIdentity.get(identity)) || (title && permanentByTitle.get(title));
-    if (permanent) {
-      rejected.push({ sourceItemId: product.sourceItemId, reason: 'historical_identity' });
-      continue;
-    }
     const previous = (identity && byIdentity.get(identity)) || (title && byTitle.get(title));
-    if (previous && !isMateriallyBetter(product, previous)) {
-      rejected.push({ sourceItemId: product.sourceItemId, reason: 'cooldown_repeticao_historica' });
-      continue;
+    if (permanent || previous) {
+      accepted.push({
+        ...product,
+        isKnown: true,
+        isRevalidated: true,
+        isNovel: false,
+        historicalRow: permanent || previous,
+        freshnessReason: permanent ? 'historical_identity' : 'cooldown_repeticao_historica',
+      });
+    } else {
+      accepted.push({
+        ...product,
+        isKnown: false,
+        isNovel: true,
+        freshnessReason: 'novel_candidate',
+      });
     }
-    accepted.push(product);
   }
   return { accepted, rejected, cooldownDays };
 }
 
 module.exports = { DEFAULT_COOLDOWN_DAYS, normalizeTitle, identityFor, isMateriallyBetter, hasPublicationEvidence, filterFreshCandidates };
+

@@ -148,7 +148,10 @@ function findFamily(nicheId, term) {
   const normalizedTerm = normalizeText(term);
   const families = FAMILY_TERMS_BY_NICHE[nicheId] || {};
   for (const [family, terms] of Object.entries(families)) {
-    if (terms.some((candidate) => normalizeText(candidate) === normalizedTerm)) return family;
+    if (terms.some((candidate) => {
+      const normCand = normalizeText(candidate);
+      return normCand === normalizedTerm || normalizedTerm.includes(normCand) || normCand.includes(normalizedTerm);
+    })) return family;
   }
   return 'opportunity';
 }

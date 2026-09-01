@@ -927,19 +927,28 @@ async function filterNovelNormalizedProducts(marketplace, products, stageLogger)
       row.original_url,
     ].filter(Boolean).map(String)));
     
-    const filtered = products.filter((product) => {
+    const annotated = products.map((product) => {
       const hasKnownIdentity = [product.sourceItemId, product.sourceUrl]
         .filter(Boolean).some((key) => known.has(String(key)));
-      if (hasKnownIdentity) return false;
-      if (marketplace !== 'Mercado Livre') return true;
-      return !history.some((row) => isEquivalentMercadoLivreProduct(product, row));
+      const isEquivalent = marketplace === 'Mercado Livre' && history.some((row) => isEquivalentMercadoLivreProduct(product, row));
+      const isKnown = Boolean(hasKnownIdentity || isEquivalent);
+      return {
+        ...product,
+        isKnown,
+        isNovel: !isKnown,
+        isRevalidated: isKnown,
+      };
     });
 
-    if (stageLogger) stageLogger.end('filterNovelNormalizedProducts', stageStartedAt, filtered.length);
-    return attachDiscoveryFunnelMeta(filtered, {
+    const novelCount = annotated.filter((p) => p.isNovel).length;
+    const knownCount = annotated.length - novelCount;
+
+    if (stageLogger) stageLogger.end('filterNovelNormalizedProducts', stageStartedAt, annotated.length);
+    return attachDiscoveryFunnelMeta(annotated, {
       ...sourceMeta,
-      afterNovelty: filtered.length,
-      knownIdentityRejected: products.length - filtered.length,
+      afterNovelty: annotated.length,
+      knownIdentityCount: knownCount,
+      novelCandidateCount: novelCount,
     });
   } catch (err) {
     if (stageLogger) stageLogger.error('filterNovelNormalizedProducts', stageStartedAt, err.message);
@@ -998,19 +1007,13 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
       const titleQuality = validateProductTitle(product.title);
       const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
       const classificationStatus = !titleQuality.valid || classification.status !== 'classified' ? 'review_required' : 'classified';
-      
-      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: `oracle-worker-v4-${String(marketplace).toLowerCase().replace(/\s+/g, '-')}`, classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, classification: classification.evidence || {}, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, `classifier:${classification.source}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
-      await withTimeout(p1, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertClassification`);
-      
-      const p2 = supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();
-      const { data: group } = await withTimeout(p2, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertGroup`);
-      
-      if (group?.id) {
-        const p3 = supabase.from('product_group_members').upsert({ product_group_id: group.id, discovery_item_id: discoveryItemId }, { onConflict: 'product_group_id,discovery_item_id' });
-        await withTimeout(p3, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertMember`);
-      }
+      const classificationReasons = !titleQuality.valid ? [titleQuality.reason] : (classification.status !== 'classified' ? ['unclassified_scenario_mismatch'] : []);
+      const updateClassificationPromise = supabase.from('discovery_items').update({ classification_status: classificationStatus, group_key: groupKey, group_kind: groupKind, classification_reasons: classificationReasons, intelligence }).eq('id', discoveryItemId);
+      const { error: classificationError } = await withTimeout(updateClassificationPromise, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_updateItem_${discoveryItemId}`);
+      if (classificationError) throw new Error(`Discovery V2 classification update failed: ${classificationError.message}`);
     }
     if (stageLogger) stageLogger.end('persistDiscoveryV2Metadata', stageStartedAt, products.length);
+    return { runId: run.id, itemsCount: items.length };
   } catch (err) {
     if (stageLogger) stageLogger.error('persistDiscoveryV2Metadata', stageStartedAt, err.message);
     throw err;
@@ -1019,28 +1022,22 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
 
 async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
   const discoveredAt = new Date().toISOString();
-  if (store === 'Shopee') {
-    // Defensive fallback only: the official cycle bypasses scrapeStore for
-    // Shopee and invokes the OpenAPI V1 authority directly. V5 stays disabled.
-    return [];
-  }
   if (store === 'Mercado Livre') {
-    const accessToken = await refreshMercadoLivreAccessToken({ persist: true });
+    const mlToken = await refreshMercadoLivreAccessToken({ persist: true });
     const scenario = getActiveMarketplaceScenario('Mercado Livre');
-    const history = await loadActiveDiscoveryHistory(store);
-    const known = new Set(history.flatMap((row) => [row.item_id, row.product_id, row.original_url].filter(Boolean).map(String)));
-
+    const keywords = scenario?.keywords || ['furadeira', 'parafusadeira', 'lavadora de alta pressao'];
+    
     let intentStageStartedAt;
-    if (stageLogger) intentStageStartedAt = stageLogger.start('ML_official_intents', scenario?.keywords?.length || 0);
-
+    if (stageLogger) intentStageStartedAt = stageLogger.start('ML_Official_Intent_Coverage', keywords.length);
+    
     const result = await runMercadoLivreOfficialIntentCoverage({
-      accessToken,
-      keywords: scenario?.keywords,
+      accessToken: mlToken,
+      keywords,
       maxPerIntent: DEFAULT_MAX_PER_INTENT,
-      delayMs: 500,
+      delayMs: 300,
     });
-
-    if (stageLogger) stageLogger.end('ML_official_intents', intentStageStartedAt, result.products.length);
+    
+    if (stageLogger) stageLogger.end('ML_Official_Intent_Coverage', intentStageStartedAt, result.products.length);
 
     const exploratorySamples = result.mercadolivreDomainCategorySearchV1?.exploratorySamples;
     if (stageLogger && exploratorySamples && Object.keys(exploratorySamples).length > 0) {
@@ -1048,9 +1045,6 @@ async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
     }
 
     const normalized = result.products
-      .filter((product) => ![product.item_id, product.product_id, product.product_url]
-        .filter(Boolean)
-        .some((key) => known.has(String(key))))
       .map((product) => normalizeMercadoLivreCandidate({
       ...product,
       discovered_at: result.generated_at,
@@ -1082,12 +1076,10 @@ async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
     const filteredNovel = await filterNovelNormalizedProducts(store, scenarioRelevant, stageLogger);
     if (filteredNovel.length > 0) return filteredNovel;
 
-    if (stageLogger) stageLogger.info('ML_scenario_empty', intentStageStartedAt, 'Nenhum candidato novo aderente ao cenário; fallback amplo bloqueado');
+    if (stageLogger) stageLogger.info('ML_scenario_empty', intentStageStartedAt, 'Nenhum candidato aderente ao cenário');
     return [];
   }
   if (store === 'Amazon') {
-    const history = await loadActiveDiscoveryHistory(store);
-    const knownAsins = new Set(history.flatMap((row) => [row.product_id, row.item_id].filter(Boolean).map(String)));
     const scenario = getActiveMarketplaceScenario('Amazon');
     
     let amazonStageStartedAt;
@@ -1097,7 +1089,7 @@ async function scrapeStore(store, stageLogger = null, runtimeContext = {}) {
       ? await runAmazonScenarioDiscovery(scenario, { minDelayMs: 1200, retryDelayMs: 4000, maxRetries: 1, ...runtimeContext })
       : await runAmazonNativeTop20({
         fetchImpl: global.fetch,
-        knownAsins,
+        knownAsins: new Set(),
         maxCategories: DEFAULT_CATEGORY_LIMIT,
         maxSubcategoriesPerCategory: DEFAULT_SUBCATEGORY_LIMIT,
       });
@@ -2033,5 +2025,6 @@ module.exports = {
   SHOPEE_OPENAPI_STAGE_TIMEOUT_MS,
   mercadoLivreIdentityKey,
   isEquivalentMercadoLivreProduct,
+  filterNovelNormalizedProducts,
   processPendingTrendRadarRuns: require('./oracle-trends-radar-runner.cjs').processPendingTrendRadarRuns,
 };

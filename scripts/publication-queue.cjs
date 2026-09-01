@@ -46,6 +46,8 @@ function queueMarketplace(item) {
   return String(item?.marketplace || '').toLowerCase();
 }
 
+const { isFirstDiscoveryQualityActive } = require('./first-discovery-flags.cjs');
+
 function interleavePublicationQueue(items) {
   const remaining = [...items];
   const ordered = [];
@@ -54,7 +56,17 @@ function interleavePublicationQueue(items) {
   while (remaining.length) {
     const candidates = remaining
       .map((item, index) => ({ item, index }))
-      .sort((a, b) => Number(b.item.curationScore || 0) - Number(a.item.curationScore || 0));
+      .sort((a, b) => {
+        if (isFirstDiscoveryQualityActive()) {
+          const aStrong = a.item._firstDiscoveryQuality?.strong ? 1 : 0;
+          const bStrong = b.item._firstDiscoveryQuality?.strong ? 1 : 0;
+          if (bStrong !== aStrong) return bStrong - aStrong;
+        }
+        const aNovel = a.item.isNovel !== false ? 1 : 0;
+        const bNovel = b.item.isNovel !== false ? 1 : 0;
+        if (bNovel !== aNovel) return bNovel - aNovel;
+        return Number(b.item.curationScore || 0) - Number(a.item.curationScore || 0);
+      });
     const preferred = candidates.find(({ item }) => queueFamily(item) !== previousFamily && queueMarketplace(item) !== previousMarketplace)
       || candidates.find(({ item }) => queueFamily(item) !== previousFamily)
       || candidates[0];

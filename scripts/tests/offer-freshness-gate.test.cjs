@@ -19,8 +19,10 @@ const recent = [{
 }];
 
 const blocked = filterFreshCandidates('Mercado Livre', [base], recent);
-assert.equal(blocked.accepted.length, 0);
-assert.equal(blocked.rejected[0].reason, 'cooldown_repeticao_historica');
+assert.equal(blocked.accepted.length, 1);
+assert.equal(blocked.accepted[0].isKnown, true);
+assert.equal(blocked.accepted[0].isRevalidated, true);
+assert.equal(blocked.rejected.length, 0);
 
 const improved = filterFreshCandidates('Mercado Livre', [{ ...base, currentPrice: 89 }], recent);
 assert.equal(improved.accepted.length, 1);

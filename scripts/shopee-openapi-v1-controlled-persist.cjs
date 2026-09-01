@@ -35,42 +35,46 @@ function getControlledPersistDecision(scenarioId, env = process.env, { maxCandid
 function stableId(prefix, value) { return `${prefix}-${crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 32)}`; }
 
 function controlledCandidateQuality(product) {
-  const rating = Number(product?.ratingStar ?? product?.rating ?? 0);
-  const sales = Number(product?.sales ?? 0);
   const min = Number(product?.priceMin ?? 0);
   const max = Number(product?.priceMax ?? 0);
   const reasons = [];
+  const warnings = [];
+  const rating = Number(product?.ratingStar ?? product?.rating ?? 0);
+  const sales = Number(product?.sales ?? 0);
+  if (rating > 0 && rating < 4.7) warnings.push('rating_below_4_7');
+  if (sales > 0 && sales < 100) warnings.push('sales_below_100');
+
   const title = String(product?.productName || product?.title || '').trim();
   if (title) {
     const titleQuality = validateProductTitle(title);
     if (!titleQuality.valid) reasons.push(titleQuality.reason === 'ACCESSORY_ONLY_PRODUCT' ? 'accessory_only_product' : 'invalid_product_title');
   }
-  if (rating > 0 && rating < 4.7) reasons.push('rating_below_4_7');
-  if (sales > 0 && sales < 100) reasons.push('sales_below_100');
   if (product?.safeForPublication === false) reasons.push('unsafe_price_for_publication');
   if (product?.priceRangeAmbiguous === true && min > 0 && max > min && max / min >= 2.5) reasons.push('extreme_price_range');
-  return { eligible: reasons.length === 0, reasons };
+  return { eligible: reasons.length === 0, reasons, warnings };
 }
 
-function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCandidates, maxExistingCandidates = CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES } = {}) {
-  const newLimit = Number(maxNewCandidates);
-  if (!Number.isInteger(newLimit) || newLimit < 1) return [];
+function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCandidates, maxCandidates, maxExistingCandidates = CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES } = {}) {
+  const totalLimit = Number(maxCandidates ?? maxNewCandidates ?? 10);
+  if (!Number.isInteger(totalLimit) || totalLimit < 1) return [];
   const existing = new Set((Array.isArray(existingItemIds) ? existingItemIds : []).map((itemId) => String(itemId).trim()).filter(Boolean));
   const selected = [];
   let newCount = 0, existingCount = 0;
+  const newLimit = maxCandidates != null ? totalLimit : Number(maxNewCandidates || totalLimit);
+
   for (const product of Array.isArray(top) ? top : []) {
     if (!controlledCandidateQuality(product).eligible) continue;
     const itemId = String(product?.itemId || '').trim();
     const isExisting = existing.has(itemId);
     if (isExisting) {
-      if (existingCount >= maxExistingCandidates) continue;
+      if (existingCount >= maxExistingCandidates && maxCandidates == null) continue;
       existingCount += 1;
     } else {
-      if (newCount >= newLimit) continue;
+      if (newCount >= newLimit && maxCandidates == null) continue;
       newCount += 1;
     }
     selected.push(product);
-    if (newCount >= newLimit && existingCount >= maxExistingCandidates) break;
+    if (selected.length >= totalLimit) break;
   }
   return selected;
 }
