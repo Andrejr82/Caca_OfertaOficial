@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
 import { Check, CheckCircle2, CloudUpload, Copy, Download, FileVideo, RefreshCw, ScissorsLineDashed, ShieldCheck, Trash2 } from "lucide-react";
-import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
+import { buildGeminiVideoPrompt, buildViralVideoPrompt, selectViralFormat, VIRAL_FORMATS } from "@/lib/videos/gemini-prompt";
+import type { ViralFormat } from "@/lib/videos/gemini-prompt";
 import { getVideoOfferDisplayName } from "@/lib/videos/offer-display-name";
 
 type Offer = { id: string; product_name: string; image_url: string | null; current_price: number; old_price: number | null; platform: string; category?: string | null; shipping_free?: boolean | null; coupon?: string | null; original_url?: string; short_name?: string | null };
@@ -116,6 +117,8 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
   const [selectedOfferId, setSelectedOfferId] = useState(offers[0]?.id ?? "");
   const selectedOffer = useMemo(() => offers.find((offer) => offer.id === selectedOfferId), [offers, selectedOfferId]);
   const [prompt, setPrompt] = useState(() => selectedOffer ? buildGeminiVideoPrompt(selectedOffer) : "");
+  const [promptMode, setPromptMode] = useState<"usabilidade" | "viral">("viral");
+  const [viralFormat, setViralFormat] = useState<ViralFormat | "auto">("auto");
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [driveIntegration, setDriveIntegration] = useState<DriveIntegration | null>(null);
   const [jobs, setJobs] = useState(initialJobs);
@@ -124,7 +127,15 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
   const [copied, setCopied] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
-  useEffect(() => { if (selectedOffer) setPrompt(buildGeminiVideoPrompt(selectedOffer)); }, [selectedOffer]);
+  useEffect(() => {
+    if (!selectedOffer) return;
+    if (promptMode === "viral") {
+      const fmt = viralFormat === "auto" ? selectViralFormat(selectedOffer.product_name, selectedOffer.category) : viralFormat;
+      setPrompt(buildViralVideoPrompt(selectedOffer, fmt));
+    } else {
+      setPrompt(buildGeminiVideoPrompt(selectedOffer));
+    }
+  }, [selectedOffer, promptMode, viralFormat]);
   useEffect(() => { void loadDrive(); }, []);
 
   async function copyPrompt() {
@@ -220,7 +231,62 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
         <select value={selectedOfferId} onChange={(event) => setSelectedOfferId(event.target.value)} className="w-full rounded-xl border border-white/10 bg-[#0b111d] px-3 py-3 text-sm text-white"><option value="">Selecione uma oferta</option>{offers.map((offer) => <option key={offer.id} value={offer.id}>{getVideoOfferDisplayName(offer)} — R$ {Number(offer.current_price).toFixed(2).replace(".", ",")}</option>)}</select>
         {selectedOffer && <div className="mt-4 rounded-xl border border-white/[0.06] bg-black/20 p-3"><div className="flex items-center gap-3"><img src={selectedOffer.image_url ? `/api/images/proxy?url=${encodeURIComponent(selectedOffer.image_url)}` : undefined} alt="" className="h-20 w-20 rounded-lg object-contain" /><div><p className="text-sm font-semibold text-white">{selectedOffer.product_name}</p><p className="text-xs text-emerald-300">{selectedOffer.platform} · R$ {Number(selectedOffer.current_price).toFixed(2).replace(".", ",")}</p></div></div><div className="mt-3 flex flex-wrap gap-2"><button onClick={downloadImage} disabled={!selectedOffer.image_url || busy} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-40"><Download size={14} /> Baixar imagem</button><button onClick={saveImageToDrive} disabled={!selectedOffer.image_url || busy || driveIntegration?.configured === false} className="inline-flex items-center gap-2 rounded-lg border border-sky-400/40 bg-sky-500/10 px-3 py-2 text-xs font-bold text-sky-200 hover:bg-sky-500/20 disabled:opacity-40"><CloudUpload size={14} /> Salvar no Drive</button></div></div>}
       </div>
-      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.04] p-5"><div className="flex items-center justify-between"><div><h2 className="font-bold text-white">Prompt estruturado para Gemini</h2><p className="mt-1 text-xs text-white/45">Inclui ação do produto, continuidade, fala segura e requisitos de Reel.</p></div><button onClick={copyPrompt} disabled={!prompt} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950">{copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copiado" : "Copiar prompt"}</button></div><textarea readOnly value={prompt} className="mt-4 h-80 w-full resize-none rounded-xl border border-white/10 bg-[#07101a] px-3 py-3 text-xs leading-5 text-white/80" /></div>
+      <div className="rounded-2xl border border-emerald-400/20 bg-emerald-500/[0.04] p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-white">Prompt para Gemini / Flow</h2>
+            <p className="mt-1 text-xs text-white/45">Escolha o modo e o formato viral antes de copiar.</p>
+          </div>
+          <button onClick={copyPrompt} disabled={!prompt} className="inline-flex items-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-xs font-bold text-slate-950">
+            {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? "Copiado" : "Copiar prompt"}
+          </button>
+        </div>
+
+        {/* Seletor de modo */}
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={() => setPromptMode("viral")}
+            className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+              promptMode === "viral"
+                ? "bg-violet-500 text-white"
+                : "bg-white/10 text-white/50 hover:bg-white/15"
+            }`}
+          >
+            🎬 Viral (DNA de retenção)
+          </button>
+          <button
+            onClick={() => setPromptMode("usabilidade")}
+            className={`rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+              promptMode === "usabilidade"
+                ? "bg-amber-500 text-slate-950"
+                : "bg-white/10 text-white/50 hover:bg-white/15"
+            }`}
+          >
+            🎥 Usabilidade (anterior)
+          </button>
+        </div>
+
+        {/* Seletor de formato viral */}
+        {promptMode === "viral" && (
+          <div className="mt-3">
+            <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wider text-violet-300/70">Formato viral</label>
+            <select
+              value={viralFormat}
+              onChange={(e) => setViralFormat(e.target.value as ViralFormat | "auto")}
+              className="w-full rounded-xl border border-violet-400/20 bg-[#0b0d1a] px-3 py-2 text-xs text-white"
+            >
+              <option value="auto">🤖 Automático (detectar pelo produto)</option>
+              {(Object.values(VIRAL_FORMATS) as import("@/lib/videos/gemini-prompt").ViralFormatConfig[]).map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.label} — {f.tagline}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <textarea readOnly value={prompt} className="mt-4 h-80 w-full resize-none rounded-xl border border-white/10 bg-[#07101a] px-3 py-3 text-xs leading-5 text-white/80" />
+      </div>
     </section>
     <section className="rounded-2xl border border-sky-400/20 bg-sky-500/[0.04] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-white">Importar vídeo do Google Drive</h2><p className="mt-1 text-xs text-white/45">Somente MP4 vertical 9:16, 3–90s e até 100 MB. O arquivo é copiado para o armazenamento do sistema.</p></div><button onClick={loadDrive} disabled={busy || driveIntegration?.configured === false} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><RefreshCw size={14} className={busy ? "animate-spin" : ""} /> Atualizar pasta</button></div><div className="mt-4 grid gap-3 md:grid-cols-2">{driveIntegration?.configured === false ? <p className="text-sm text-amber-300/80">Google Drive indisponível até configurar as credenciais de produção.</p> : files.length === 0 ? <p className="text-sm text-white/35">Nenhum vídeo encontrado na pasta configurada.</p> : files.map((file) => <div key={file.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3"><div className="flex min-w-0 items-center gap-3"><FileVideo className="shrink-0 text-sky-300" size={20} /><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{file.name}</p><p className="text-xs text-white/40">{formatBytes(file.size)} · {file.videoMediaMetadata?.width ?? "?"}×{file.videoMediaMetadata?.height ?? "?"} · {formatDuration(file.videoMediaMetadata?.durationMillis)}</p></div></div><button onClick={() => importVideo(file)} disabled={busy || !selectedOfferId} className="shrink-0 rounded-lg bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Importar</button></div>)}</div></section>
     {message && <p className={`rounded-xl border px-4 py-3 text-sm ${message.error ? "border-red-400/20 bg-red-400/10 text-red-200" : "border-emerald-400/20 bg-emerald-400/10 text-emerald-200"}`}>{message.text}</p>}

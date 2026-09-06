@@ -13,6 +13,8 @@ export type GeminiPromptOffer = {
 import { classifyGeminiUsabilityCategory } from "@/lib/videos/gemini-usability-prompt";
 import { getSalesVideoDirection } from "@/lib/videos/sales-video-creative-director";
 export { classifyGeminiUsabilityCategory } from "@/lib/videos/gemini-usability-prompt";
+export { buildViralVideoPrompt, selectViralFormat, VIRAL_FORMATS } from "@/lib/videos/viral-format-engine";
+export type { ViralFormat, ViralFormatConfig } from "@/lib/videos/viral-format-engine";
 
 const CATEGORY_LABELS = {
   moda: "Moda e vestuário",
