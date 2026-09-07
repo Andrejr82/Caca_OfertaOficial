@@ -161,13 +161,13 @@ function normalizeQueueSelectionTelemetry(value = {}) {
 }
 
 function buildDiscoveryLossMatrix({ counters = {}, rejectionReasons = {} } = {}) {
-  const stages = ['extracted', 'afterParse', 'afterRelevance', 'afterIdentityDedup', 'afterQualityGate', 'afterNovelty', 'afterClassification', 'queueSelected', 'rpcSent'];
+  const allStages = ['extracted', 'afterParse', 'afterRelevance', 'afterIdentityDedup', 'afterQualityGate', 'afterNovelty', 'afterClassification', 'queueSelected', 'rpcSent'];
+  const presentStages = allStages.filter((stage) => stage in counters && Number.isFinite(Number(counters[stage])));
   const transitions = [];
   let stageLosses = 0;
-  for (let index = 0; index < stages.length - 1; index += 1) {
-    const from = stages[index];
-    const to = stages[index + 1];
-    if (!(from in counters) || !(to in counters)) continue;
+  for (let index = 0; index < presentStages.length - 1; index += 1) {
+    const from = presentStages[index];
+    const to = presentStages[index + 1];
     const input = Math.max(0, Number(counters[from]) || 0);
     const output = Math.max(0, Number(counters[to]) || 0);
     const dropped = input - output;
