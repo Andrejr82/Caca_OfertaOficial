@@ -51,20 +51,16 @@ function hasPublicationEvidence(row = {}) {
   });
 }
 
-function filterFreshCandidates(marketplace, products, history, options = {}) {
+function evaluateCandidateFreshness(marketplace, product, history, options = {}) {
   const cooldownDays = Number(options.cooldownDays ?? DEFAULT_COOLDOWN_DAYS[marketplace] ?? 7);
-  const permanentStatuses = new Set((options.permanentStatuses || []).map((status) => String(status).trim().toLowerCase()).filter(Boolean));
-  const reusableStatuses = new Set((options.reusableStatuses || []).map((status) => String(status).trim().toLowerCase()).filter(Boolean));
   const referenceTime = options.now ? new Date(options.now).getTime() : Date.now();
   const cutoff = referenceTime - cooldownDays * 24 * 60 * 60 * 1000;
-  const byIdentity = new Map();
-  const byTitle = new Map();
-  const permanentByIdentity = new Map();
-  const permanentByTitle = new Map();
+  const targetIdentity = identityFor(marketplace, product);
+  const targetTitle = normalizeTitle(product.title);
+
+  let previous = null;
   for (const row of Array.isArray(history) ? history : []) {
-    const created = new Date(row.created_at || row.createdAt || row.updated_at || 0).getTime();
-    const title = normalizeTitle(row.product_name || row.title);
-    const identity = identityFor(marketplace, {
+    const rowIdentity = identityFor(marketplace, {
       sourceItemId: row.item_id || row.product_id || row.shopee_item_id,
       marketplaceMetrics: {
         item_id: row.item_id,
@@ -76,43 +72,98 @@ function filterFreshCandidates(marketplace, products, history, options = {}) {
         asin: row.product_id,
       },
     });
-    const status = String(row.status || '').trim().toLowerCase();
-    const permanent = permanentStatuses.has(status) || (options.blockPublished === true && hasPublicationEvidence(row));
-    if (permanent) {
-      if (identity) permanentByIdentity.set(identity, row);
-      if (title) permanentByTitle.set(title, row);
-    } else {
-      if (identity) byIdentity.set(identity, row);
-      if (title) byTitle.set(title, row);
+    const rowTitle = normalizeTitle(row.product_name || row.title);
+    if ((targetIdentity && rowIdentity && rowIdentity === targetIdentity) || (targetTitle && rowTitle && rowTitle === targetTitle)) {
+      previous = row;
+      break;
     }
   }
+
+  if (!previous) {
+    return {
+      state: 'new',
+      eligible: true,
+      reason: 'novel_candidate',
+      previousRow: null,
+    };
+  }
+
+  const isPublished = hasPublicationEvidence(previous);
+  if (!isPublished) {
+    return {
+      state: 'known_unpublished',
+      eligible: true,
+      reason: 'known_unpublished_revalidated',
+      previousRow: previous,
+    };
+  }
+
+  if (isMateriallyBetter(product, previous)) {
+    return {
+      state: 'material_change',
+      eligible: true,
+      reason: 'material_price_drop',
+      previousRow: previous,
+    };
+  }
+
+  const rowCreated = new Date(previous.created_at || previous.createdAt || previous.updated_at || previous.posted_at || 0).getTime();
+  const insideCooldown = rowCreated > cutoff;
+
+  if (insideCooldown) {
+    return {
+      state: 'published_cooldown',
+      eligible: false,
+      reason: 'published_in_cooldown',
+      previousRow: previous,
+    };
+  }
+
+  return {
+    state: 'new',
+    eligible: true,
+    reason: 'cooldown_expired_eligible',
+    previousRow: previous,
+  };
+}
+
+function filterFreshCandidates(marketplace, products, history, options = {}) {
+  const cooldownDays = Number(options.cooldownDays ?? DEFAULT_COOLDOWN_DAYS[marketplace] ?? 7);
   const accepted = [];
   const rejected = [];
+
   for (const product of Array.isArray(products) ? products : []) {
-    const identity = identityFor(marketplace, product);
-    const title = normalizeTitle(product.title);
-    const permanent = (identity && permanentByIdentity.get(identity)) || (title && permanentByTitle.get(title));
-    const previous = (identity && byIdentity.get(identity)) || (title && byTitle.get(title));
-    if (permanent || previous) {
+    const freshness = evaluateCandidateFreshness(marketplace, product, history, options);
+
+    if (freshness.eligible) {
       accepted.push({
         ...product,
-        isKnown: true,
-        isRevalidated: true,
-        isNovel: false,
-        historicalRow: permanent || previous,
-        freshnessReason: permanent ? 'historical_identity' : 'cooldown_repeticao_historica',
+        isKnown: freshness.state !== 'new',
+        isRevalidated: freshness.state === 'known_unpublished' || freshness.state === 'material_change',
+        isNovel: freshness.state === 'new',
+        freshness,
+        historicalRow: freshness.previousRow,
+        freshnessReason: freshness.reason,
       });
     } else {
-      accepted.push({
+      rejected.push({
         ...product,
-        isKnown: false,
-        isNovel: true,
-        freshnessReason: 'novel_candidate',
+        freshness,
+        historicalRow: freshness.previousRow,
+        reason: freshness.reason,
       });
     }
   }
   return { accepted, rejected, cooldownDays };
 }
 
-module.exports = { DEFAULT_COOLDOWN_DAYS, normalizeTitle, identityFor, isMateriallyBetter, hasPublicationEvidence, filterFreshCandidates };
+module.exports = {
+  DEFAULT_COOLDOWN_DAYS,
+  normalizeTitle,
+  identityFor,
+  isMateriallyBetter,
+  hasPublicationEvidence,
+  evaluateCandidateFreshness,
+  filterFreshCandidates,
+};
 
