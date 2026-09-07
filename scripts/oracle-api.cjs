@@ -476,6 +476,155 @@ app.post('/api/trim-video', async (req, res) => {
   }
 });
 
+// ─── DUB NEURAL (PREVIEW & VIDEO DUBBING) ──────────────────────────────────
+app.post('/api/dub-neural', async (req, res) => {
+  const { token, action, script, videoUrl, storagePath, voice, rate } = req.body || {};
+
+  if (!isAuthorized(token)) return res.status(401).json({ error: 'Unauthorized.' });
+  if (!script || !script.trim()) {
+    return res.status(400).json({ error: 'script obrigatório.' });
+  }
+
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const crypto = require('crypto');
+  const { execFile } = require('child_process');
+  const { promisify } = require('util');
+  const execFileAsync = promisify(execFile);
+
+  const tmpId = crypto.randomUUID();
+  const tempAudioPath = path.join(os.tmpdir(), `tts_${tmpId}.mp3`);
+  const tempTxtPath = path.join(os.tmpdir(), `tts_${tmpId}.txt`);
+  const tempVideoInput = path.join(os.tmpdir(), `in_${tmpId}.mp4`);
+  const tempVideoOutput = path.join(os.tmpdir(), `out_${tmpId}.mp4`);
+
+  const edgeTtsBin = fs.existsSync('/home/ubuntu/.local/bin/edge-tts')
+    ? '/home/ubuntu/.local/bin/edge-tts'
+    : 'edge-tts';
+
+  try {
+    fs.writeFileSync(tempTxtPath, script.trim(), 'utf8');
+    const selectedVoice = voice || 'pt-BR-FranciscaNeural';
+    const selectedRate = rate || '+25%';
+
+    await execFileAsync(edgeTtsBin, [
+      '-f', tempTxtPath,
+      '--voice', selectedVoice,
+      '--rate', selectedRate,
+      '--write-media', tempAudioPath
+    ]);
+
+    if (!fs.existsSync(tempAudioPath)) {
+      throw new Error('Falha ao gerar arquivo de áudio com edge-tts');
+    }
+
+    // Ação 1: Prévia do áudio (retorna MP3 binário)
+    if (action === 'preview_audio') {
+      const audioBuffer = fs.readFileSync(tempAudioPath);
+      res.setHeader('Content-Type', 'audio/mpeg');
+      res.setHeader('Content-Length', audioBuffer.byteLength);
+      return res.send(audioBuffer);
+    }
+
+    // Ação 2: Dublar vídeo
+    if (action === 'dub_video') {
+      if (!videoUrl) {
+        return res.status(400).json({ error: 'videoUrl obrigatório para dublar vídeo.' });
+      }
+
+      // Baixa o vídeo original
+      const axios = require('axios');
+      const resp = await axios.get(videoUrl, { responseType: 'arraybuffer', timeout: 60000 });
+      fs.writeFileSync(tempVideoInput, Buffer.from(resp.data));
+
+      // Verifica se o vídeo tem áudio via ffprobe
+      let hasAudio = false;
+      try {
+        const { stdout } = await execFileAsync('ffprobe', [
+          '-v', 'error',
+          '-select_streams', 'a',
+          '-show_entries', 'stream=codec_type',
+          '-of', 'csv=p=0',
+          tempVideoInput
+        ]);
+        hasAudio = stdout.trim().toLowerCase().includes('audio');
+      } catch (probeErr) {
+        hasAudio = false;
+      }
+
+      const delay = 250;
+      const ambientVol = 0.2;
+      const filter = hasAudio
+        ? `[0:a]volume=${ambientVol}[bg];[1:a]adelay=${delay}|${delay},volume=1.0[voice];[bg][voice]amix=inputs=2:duration=first:dropout_transition=1,loudnorm=I=-14:TP=-1.5:LRA=7[aout]`
+        : `[1:a]adelay=${delay}|${delay},loudnorm=I=-14:TP=-1.5:LRA=7[aout]`;
+
+      const ffmpegArgs = [
+        '-y',
+        '-i', tempVideoInput,
+        '-i', tempAudioPath,
+        '-filter_complex', filter,
+        '-map', '0:v',
+        '-map', '[aout]',
+        '-c:v', 'copy',
+        '-c:a', 'aac',
+        '-b:a', '192k',
+        '-shortest',
+        tempVideoOutput
+      ];
+
+      try {
+        await execFileAsync('ffmpeg', ffmpegArgs);
+      } catch (mixErr) {
+        if (hasAudio) {
+          const fallbackFilter = `[1:a]adelay=${delay}|${delay},loudnorm=I=-14:TP=-1.5:LRA=7[aout]`;
+          await execFileAsync('ffmpeg', [
+            '-y',
+            '-i', tempVideoInput,
+            '-i', tempAudioPath,
+            '-filter_complex', fallbackFilter,
+            '-map', '0:v',
+            '-map', '[aout]',
+            '-c:v', 'copy',
+            '-c:a', 'aac',
+            '-b:a', '192k',
+            '-shortest',
+            tempVideoOutput
+          ]);
+        } else {
+          throw mixErr;
+        }
+      }
+
+      // Upload para o Supabase Storage
+      const dubbedBytes = fs.readFileSync(tempVideoOutput);
+      const targetStoragePath = storagePath || `dubbed/${tmpId}.mp4`;
+
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('videos')
+        .upload(targetStoragePath, dubbedBytes, { contentType: 'video/mp4', upsert: true });
+
+      if (uploadError) throw new Error(`Upload falhou no Supabase: ${uploadError.message}`);
+
+      const { data: publicData } = supabaseAdmin.storage.from('videos').getPublicUrl(targetStoragePath);
+      const newUrl = `${publicData.publicUrl}?t=${Date.now()}`;
+
+      console.log(`[DubNeural] Vídeo dublado com sucesso: ${targetStoragePath}`);
+      return res.json({ success: true, video_url: newUrl });
+    }
+
+    return res.status(400).json({ error: 'Ação não suportada.' });
+  } catch (err) {
+    console.error(`[DubNeural] Erro: ${err.message}`);
+    return res.status(500).json({ error: err.message });
+  } finally {
+    try { if (fs.existsSync(tempAudioPath)) fs.unlinkSync(tempAudioPath); } catch {}
+    try { if (fs.existsSync(tempTxtPath)) fs.unlinkSync(tempTxtPath); } catch {}
+    try { if (fs.existsSync(tempVideoInput)) fs.unlinkSync(tempVideoInput); } catch {}
+    try { if (fs.existsSync(tempVideoOutput)) fs.unlinkSync(tempVideoOutput); } catch {}
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`🚀 Micro-API Oracle rodando firme e forte na porta ${PORT}`);
 

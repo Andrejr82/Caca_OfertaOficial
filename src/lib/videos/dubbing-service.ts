@@ -25,6 +25,14 @@ const ORACLE_EDGE_TTS_BIN = "/home/ubuntu/.local/bin/edge-tts";
 const WINGET_FFMPEG = "C:\\Users\\André\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffmpeg.exe";
 const WINGET_FFPROBE = "C:\\Users\\André\\AppData\\Local\\Microsoft\\WinGet\\Packages\\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\\ffmpeg-8.1.2-full_build\\bin\\ffprobe.exe";
 
+export function isLocalEdgeTtsAvailable(): boolean {
+  if (process.env.VERCEL) return false;
+  if (process.env.EDGE_TTS_BIN && fs.existsSync(process.env.EDGE_TTS_BIN)) return true;
+  if (process.platform === "win32" && fs.existsSync(WINDOWS_EDGE_TTS_BIN)) return true;
+  if (process.platform === "linux" && fs.existsSync(ORACLE_EDGE_TTS_BIN)) return true;
+  return false;
+}
+
 export function getEdgeTtsBinaryPath(): string {
   if (process.env.EDGE_TTS_BIN) return process.env.EDGE_TTS_BIN;
   if (process.platform === "win32" && fs.existsSync(WINDOWS_EDGE_TTS_BIN)) {
