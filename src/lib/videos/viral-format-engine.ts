@@ -355,3 +355,26 @@ PRIORIDADE DA GERAÇÃO
 4. Payoff satisfatório e silencioso
 5. Qualidade cinematográfica`;
 }
+
+export {
+  buildViralVoiceoverScript,
+  estimateVoiceoverDurationSeconds,
+  cleanProductNameForVoiceover,
+  normalizeTextForTTS,
+} from "@/lib/videos/viral-voiceover";
+export type { VoiceoverScriptResult } from "@/lib/videos/viral-voiceover";
+
+import { buildViralVoiceoverScript, type VoiceoverScriptResult } from "@/lib/videos/viral-voiceover";
+
+export type ViralVideoPackage = {
+  format: ViralFormat;
+  visualPrompt: string;
+  voiceover: VoiceoverScriptResult;
+};
+
+export function buildViralVideoPackage(offer: ViralPromptOffer, formatOverride?: ViralFormat): ViralVideoPackage {
+  const format = formatOverride ?? selectViralFormat(offer.product_name, offer.category);
+  const visualPrompt = buildViralVideoPrompt(offer, format);
+  const voiceover = buildViralVoiceoverScript(offer, format);
+  return { format, visualPrompt, voiceover };
+}

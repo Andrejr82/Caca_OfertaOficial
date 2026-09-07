@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next dev",
+    "dev": "cross-env NODE_OPTIONS=--max-old-space-size=4096 next dev --webpack",
     "whatsapp": "concurrently \"node scripts/whatsapp-engine.cjs\" \"npx ngrok http --domain=reasonably-droughtier-kyla.ngrok-free.dev 3001\"",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

@@ -15,6 +15,14 @@ import { getSalesVideoDirection } from "@/lib/videos/sales-video-creative-direct
 export { classifyGeminiUsabilityCategory } from "@/lib/videos/gemini-usability-prompt";
 export { buildViralVideoPrompt, selectViralFormat, VIRAL_FORMATS } from "@/lib/videos/viral-format-engine";
 export type { ViralFormat, ViralFormatConfig } from "@/lib/videos/viral-format-engine";
+export {
+  buildViralVoiceoverScript,
+  cleanProductNameForVoiceover,
+  shortenProductTitleForSpeech,
+  normalizeTextForTTS,
+  estimateVoiceoverDurationSeconds,
+} from "@/lib/videos/viral-voiceover";
+export type { VoiceoverScriptResult } from "@/lib/videos/viral-voiceover";
 
 const CATEGORY_LABELS = {
   moda: "Moda e vestuário",

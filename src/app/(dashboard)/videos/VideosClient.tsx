@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Slider from "rc-slider";
 import "rc-slider/assets/index.css";
-import { Check, CheckCircle2, CloudUpload, Copy, Download, FileVideo, RefreshCw, ScissorsLineDashed, ShieldCheck, Trash2 } from "lucide-react";
-import { buildGeminiVideoPrompt, buildViralVideoPrompt, selectViralFormat, VIRAL_FORMATS } from "@/lib/videos/gemini-prompt";
+import { Check, CheckCircle2, CloudUpload, Copy, Download, FileVideo, Mic, RefreshCw, ScissorsLineDashed, ShieldCheck, Trash2, Volume2 } from "lucide-react";
+import { buildGeminiVideoPrompt, buildViralVideoPrompt, selectViralFormat, VIRAL_FORMATS, buildViralVoiceoverScript } from "@/lib/videos/gemini-prompt";
 import type { ViralFormat } from "@/lib/videos/gemini-prompt";
 import { getVideoOfferDisplayName } from "@/lib/videos/offer-display-name";
 
@@ -65,6 +65,7 @@ function TrimControls({ job, onTrimmed }: { job: Job; onTrimmed: (newUrl: string
       </div>
 
       <video
+        key={job.video_url}
         ref={videoRef}
         controls
         playsInline
@@ -127,19 +128,147 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
   const [copied, setCopied] = useState(false);
   const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
 
+  // Estados e controle de Locução Neural
+  const [voiceoverText, setVoiceoverText] = useState("");
+  const [voiceoverCopied, setVoiceoverCopied] = useState(false);
+  const [audioLoading, setAudioLoading] = useState(false);
+  const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+  const [dubbingJobId, setDubbingJobId] = useState<string | null>(null);
+  const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+
+  const effectiveViralFormat: ViralFormat = useMemo(() => {
+    if (!selectedOffer) return "problema_solucao";
+    return viralFormat === "auto" ? selectViralFormat(selectedOffer.product_name, selectedOffer.category) : viralFormat;
+  }, [selectedOffer, viralFormat]);
+
+  const generatedVoiceover = useMemo(() => {
+    if (!selectedOffer) return null;
+    return buildViralVoiceoverScript(selectedOffer, effectiveViralFormat);
+  }, [selectedOffer, effectiveViralFormat]);
+
+  useEffect(() => {
+    if (generatedVoiceover) {
+      setVoiceoverText(generatedVoiceover.text);
+    }
+  }, [generatedVoiceover]);
+
   useEffect(() => {
     if (!selectedOffer) return;
     if (promptMode === "viral") {
-      const fmt = viralFormat === "auto" ? selectViralFormat(selectedOffer.product_name, selectedOffer.category) : viralFormat;
-      setPrompt(buildViralVideoPrompt(selectedOffer, fmt));
+      setPrompt(buildViralVideoPrompt(selectedOffer, effectiveViralFormat));
     } else {
       setPrompt(buildGeminiVideoPrompt(selectedOffer));
     }
-  }, [selectedOffer, promptMode, viralFormat]);
+  }, [selectedOffer, promptMode, effectiveViralFormat]);
   useEffect(() => { void loadDrive(); }, []);
 
   async function copyPrompt() {
     await navigator.clipboard.writeText(prompt); setCopied(true); window.setTimeout(() => setCopied(false), 1800);
+  }
+
+  async function copyVoiceover() {
+    if (!voiceoverText) return;
+    await navigator.clipboard.writeText(voiceoverText);
+    setVoiceoverCopied(true);
+    window.setTimeout(() => setVoiceoverCopied(false), 1800);
+  }
+
+  async function playVoiceoverPreview() {
+    if (!voiceoverText.trim()) return;
+    if (isPlayingAudio && audioPlayerRef.current) {
+      audioPlayerRef.current.pause();
+      audioPlayerRef.current.currentTime = 0;
+      setIsPlayingAudio(false);
+      return;
+    }
+
+    setAudioLoading(true);
+    try {
+      const response = await fetch("/api/videos/dub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "preview_audio", script: voiceoverText }),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        setMessage({ text: err.error ?? "Falha ao gerar prévia do áudio.", error: true });
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      if (audioPlayerRef.current) {
+        audioPlayerRef.current.pause();
+      }
+      const audio = new Audio(url);
+      audioPlayerRef.current = audio;
+      audio.onended = () => setIsPlayingAudio(false);
+      audio.onerror = () => setIsPlayingAudio(false);
+      setIsPlayingAudio(true);
+      await audio.play();
+    } catch (e) {
+      console.error(e);
+      setMessage({ text: "Não foi possível reproduzir o áudio neural.", error: true });
+    } finally {
+      setAudioLoading(false);
+    }
+  }
+
+  async function handleDubVideo(job: Job) {
+    // Determina o roteiro correto para o produto deste job:
+    let scriptToUse = voiceoverText.trim();
+    if (job.offers && job.offers.id !== selectedOfferId) {
+      const fmt = selectViralFormat(job.offers.product_name, job.offers.category);
+      const autoScript = buildViralVoiceoverScript(job.offers, fmt);
+      scriptToUse = autoScript.text;
+    } else if (!scriptToUse && job.offers) {
+      const fmt = selectViralFormat(job.offers.product_name, job.offers.category);
+      const autoScript = buildViralVoiceoverScript(job.offers, fmt);
+      scriptToUse = autoScript.text;
+    }
+
+    if (!scriptToUse) {
+      setMessage({ text: "O roteiro de locução está vazio.", error: true });
+      return;
+    }
+
+    setDubbingJobId(job.id);
+    setMessage({ text: "🎙️ Gerando locução neural e mixando com o vídeo (Edge-TTS + FFmpeg)..." });
+    try {
+      const response = await fetch("/api/videos/dub", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "dub_video",
+          jobId: job.id,
+          script: scriptToUse,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        setMessage({ text: data.error ?? "Falha ao dublar o vídeo.", error: true });
+        return;
+      }
+      setJobs((current) =>
+        current.map((j) =>
+          j.id === job.id
+            ? {
+                ...j,
+                video_url: data.videoUrl,
+                metadata: {
+                  ...(typeof j.metadata === "object" ? j.metadata : {}),
+                  dubbed: true,
+                  voiceoverScript: scriptToUse,
+                },
+              }
+            : j
+        )
+      );
+      setMessage({ text: "🎉 Vídeo dublado com sucesso! Áudio e locução neural com CTA de Bio perfeitamente mixados." });
+    } catch {
+      setMessage({ text: "Erro ao processar a dublagem do vídeo.", error: true });
+    } finally {
+      setDubbingJobId(null);
+    }
   }
 
   function downloadImage() {
@@ -285,7 +414,67 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
           </div>
         )}
 
-        <textarea readOnly value={prompt} className="mt-4 h-80 w-full resize-none rounded-xl border border-white/10 bg-[#07101a] px-3 py-3 text-xs leading-5 text-white/80" />
+        <textarea readOnly value={prompt} className="mt-4 h-64 w-full resize-none rounded-xl border border-white/10 bg-[#07101a] px-3 py-3 text-xs leading-5 text-white/80" />
+
+        {/* Card de Locução Viral Neural */}
+        <div className="mt-5 rounded-xl border border-violet-400/25 bg-violet-950/20 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <Mic className="text-violet-400" size={16} />
+              <h3 className="text-xs font-bold text-violet-200">
+                Locução Viral Neural (pt-BR Francisca)
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={playVoiceoverPreview}
+                disabled={audioLoading || !voiceoverText.trim()}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-violet-500/20 px-2.5 py-1.5 text-xs font-bold text-violet-200 hover:bg-violet-500/30 disabled:opacity-40"
+              >
+                {audioLoading ? (
+                  <RefreshCw size={13} className="animate-spin" />
+                ) : (
+                  <Volume2 size={13} />
+                )}
+                {audioLoading ? "Gerando áudio…" : isPlayingAudio ? "Pausar áudio" : "Ouvir prévia"}
+              </button>
+              <button
+                onClick={copyVoiceover}
+                disabled={!voiceoverText}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-2.5 py-1.5 text-xs font-bold text-white hover:bg-white/15 disabled:opacity-40"
+              >
+                {voiceoverCopied ? <Check size={13} /> : <Copy size={13} />}
+                {voiceoverCopied ? "Copiado" : "Copiar locução"}
+              </button>
+            </div>
+          </div>
+
+          <div className="mt-2 flex flex-wrap gap-2 text-[10px]">
+            <span className="rounded-md bg-violet-400/10 px-2 py-0.5 font-bold text-violet-300">
+              ⏱️ ~{generatedVoiceover?.estimatedDurationSec ?? 9}s
+            </span>
+            <span className="rounded-md bg-emerald-400/10 px-2 py-0.5 font-bold text-emerald-300">
+              🎯 CTA: Acesse o link na bio!
+            </span>
+            {generatedVoiceover?.niche && (
+              <span className="rounded-md bg-white/5 px-2 py-0.5 text-white/60">
+                🏷️ Nicho: {generatedVoiceover.niche}
+              </span>
+            )}
+          </div>
+
+          <p className="mt-2 text-[11px] text-white/50">
+            Roteiro de retenção para dublagem do vídeo (Dor → Alívio → Oferta → CTA na Bio). Você pode editar:
+          </p>
+
+          <textarea
+            value={voiceoverText}
+            onChange={(e) => setVoiceoverText(e.target.value)}
+            rows={3}
+            className="mt-2 w-full resize-none rounded-lg border border-violet-400/20 bg-[#0c0d1e] px-3 py-2 text-xs leading-5 text-violet-100 placeholder-white/30 focus:border-violet-400/50 focus:outline-none"
+            placeholder="Roteiro de locução gerado automaticamente..."
+          />
+        </div>
       </div>
     </section>
     <section className="rounded-2xl border border-sky-400/20 bg-sky-500/[0.04] p-5"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold text-white">Importar vídeo do Google Drive</h2><p className="mt-1 text-xs text-white/45">Somente MP4 vertical 9:16, 3–90s e até 100 MB. O arquivo é copiado para o armazenamento do sistema.</p></div><button onClick={loadDrive} disabled={busy || driveIntegration?.configured === false} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white disabled:opacity-40"><RefreshCw size={14} className={busy ? "animate-spin" : ""} /> Atualizar pasta</button></div><div className="mt-4 grid gap-3 md:grid-cols-2">{driveIntegration?.configured === false ? <p className="text-sm text-amber-300/80">Google Drive indisponível até configurar as credenciais de produção.</p> : files.length === 0 ? <p className="text-sm text-white/35">Nenhum vídeo encontrado na pasta configurada.</p> : files.map((file) => <div key={file.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.07] bg-black/20 p-3"><div className="flex min-w-0 items-center gap-3"><FileVideo className="shrink-0 text-sky-300" size={20} /><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{file.name}</p><p className="text-xs text-white/40">{formatBytes(file.size)} · {file.videoMediaMetadata?.width ?? "?"}×{file.videoMediaMetadata?.height ?? "?"} · {formatDuration(file.videoMediaMetadata?.durationMillis)}</p></div></div><button onClick={() => importVideo(file)} disabled={busy || !selectedOfferId} className="shrink-0 rounded-lg bg-sky-400 px-3 py-2 text-xs font-bold text-slate-950 disabled:opacity-40">Importar</button></div>)}</div></section>
@@ -295,6 +484,59 @@ export function VideosClient({ offers, initialJobs, cutoff }: { offers: Offer[];
       {/* Régua de recorte — aparece para status ready ou approved */}
       {(job.status === "ready" || job.status === "approved") && (
         <TrimControls job={job} onTrimmed={(newUrl) => handleVideoTrimmed(job.id, newUrl)} />
+      )}
+
+      {/* Bloco de Dublagem Neural com 1 Clique */}
+      {(job.status === "ready" || job.status === "approved") && job.video_url && (
+        <div className="mt-4 rounded-xl border border-violet-500/20 bg-violet-950/15 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <Mic className="mt-0.5 text-violet-400 shrink-0" size={18} />
+              <div>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-xs font-bold text-violet-200">
+                    {job.metadata?.dubbed ? "Vídeo com Dublagem Neural Aplicada" : "Dublagem Neural de Alta Retenção"}
+                  </h4>
+                  {job.metadata?.dubbed ? (
+                    <span className="rounded-full bg-emerald-400/15 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                      Áudio ativo (Link na Bio)
+                    </span>
+                  ) : (
+                    <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-white/50">
+                      Sem locução
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-[11px] leading-4 text-white/50">
+                  {job.metadata?.dubbed
+                    ? `Locução FranciscaNeural mixada com ducking e broadcast loudnorm (-1.5 dB peak).`
+                    : "Mixa a voz neural Francisca com áudio ambiente (20%), delay de impacto (250ms) e CTA 'Acesse o link na bio!'."}
+                </p>
+                {job.metadata?.voiceoverScript && (
+                  <p className="mt-2 text-[11px] italic text-violet-300/80 bg-black/20 p-2 rounded-lg border border-white/5">
+                    &quot;{job.metadata.voiceoverScript}&quot;
+                  </p>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={() => handleDubVideo(job)}
+              disabled={dubbingJobId === job.id}
+              className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-violet-600 px-4 py-2.5 text-xs font-bold text-white hover:bg-violet-500 disabled:opacity-40"
+            >
+              {dubbingJobId === job.id ? (
+                <RefreshCw size={14} className="animate-spin" />
+              ) : (
+                <Mic size={14} />
+              )}
+              {dubbingJobId === job.id
+                ? "Dublando e mixando…"
+                : job.metadata?.dubbed
+                ? "Redublar vídeo"
+                : "Dublar vídeo com 1 clique"}
+            </button>
+          </div>
+        </div>
       )}
 
       {job.metadata?.channelCopies && <div className="mt-4 grid gap-3 md:grid-cols-2">{Object.entries(job.metadata.channelCopies).map(([channel, copy]) => <div key={channel} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-white/35">Copy {channel}</p><p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-white/70">{String(copy)}</p></div>)}</div>}
