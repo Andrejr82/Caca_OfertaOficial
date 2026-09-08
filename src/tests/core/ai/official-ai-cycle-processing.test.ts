@@ -22,7 +22,7 @@ const content: OfficialAIContent = {
 function offer(id: string, tenantId = "tenant-1", valid = true): OfficialAIOffer {
   return {
     id, tenantId, state: "pending_manual_review", version: 0, marketplace: "Shopee",
-    productName: `Produto ${id}`, originalUrl: `https://example.com/${id}`,
+    productName: `Produto Valido Oficial ${id}`, originalUrl: `https://example.com/${id}`,
     imageUrl: `https://example.com/${id}.jpg`, currentPrice: 10, originalPrice: 20,
     category: "Categoria", createdAt: "2026-07-15T12:00:00.000Z",
     explainability: valid ? {
@@ -71,7 +71,10 @@ function dependencies(rows: OfficialAIOffer[]): OfficialAIServiceDependencies {
     content: { persistDrafts: vi.fn(async ({ offer: row, channels }) => channels.map((channel: "telegram" | "instagram" | "whatsapp") => ({
       postId: `post-${row.id}-${channel}`, affiliateLinkId: `link-${row.id}-${channel}`, channel, state: "draft" as const
     }))) },
-    approval: { approveSelected: vi.fn() },
+    approval: {
+      approveSelected: vi.fn(),
+      approvePending: vi.fn(async () => ({ status: "applied" as const, auditId: "audit-1", newState: "approved" as const }))
+    },
     idempotency: {
       begin: vi.fn(async () => ({ status: "started" as const })),
       complete: vi.fn(async () => undefined)

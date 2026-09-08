@@ -163,25 +163,18 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string,
   // Mantido em paridade com o payload assinado da descoberta nativa na Oracle.
   // A Open API é sensível ao contrato GraphQL, principalmente em produtos que
   // chegam por link curto e não possuem metadados HTML públicos.
-  const queryKeyword = "query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds shopType } pageInfo { page limit hasNextPage } } }";
-  const queryItemId = `{ productOfferV2(itemId: ${itemId}, page: 1, limit: 20) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds shopType } } }`;
+  const query = "query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds shopType } pageInfo { page limit hasNextPage } } }";
 
   const normalizedKeyword = keyword.trim().replace(/\s+/g, " ").slice(0, 100);
   const strategies = [
-    { type: 'itemId', payload: JSON.stringify({ query: queryItemId }) },
-    { type: 'keyword', keyword: `https://shopee.com.br/product/${shopId}/${itemId}` },
-    { type: 'keyword', keyword: itemId },
-    ...(normalizedKeyword ? [{ type: 'keyword', keyword: normalizedKeyword }] : []),
+    `https://shopee.com.br/product/${shopId}/${itemId}`,
+    itemId,
+    ...(normalizedKeyword ? [normalizedKeyword] : []),
   ];
 
-  for (const strategy of strategies) {
-    let requestBody;
-    if (strategy.type === 'itemId') {
-      requestBody = strategy.payload;
-    } else {
-      const variables = { keyword: strategy.keyword, productCatId: null, page: 1, limit: 20, sortType: 2, isAMSOffer: true };
-      requestBody = JSON.stringify({ operationName: "ShopeePromotionOffers", query: queryKeyword, variables });
-    }
+  for (const queryKeyword of strategies) {
+    const variables = { keyword: queryKeyword, productCatId: null, page: 1, limit: 20, sortType: 2, isAMSOffer: true };
+    const requestBody = JSON.stringify({ operationName: "ShopeePromotionOffers", query, variables });
 
     const timestamp = Math.floor(Date.now() / 1000);
     const signature = createHash("sha256")
@@ -202,7 +195,8 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string,
       const data = await response.json();
       const nodes = data?.data?.productOfferV2?.nodes;
       if (Array.isArray(nodes) && nodes.length > 0) {
-        const product = nodes.find((node: any) => !node.itemId || String(node.itemId) === String(itemId)) || nodes[0];
+        const product = nodes.find((node: any) => String(node.itemId) === String(itemId));
+        if (!product) continue;
         const price = parseMarketplacePrice(product.priceMin);
         const imageUrl = typeof product.imageUrl === "string" && product.imageUrl.startsWith("//")
           ? `https:${product.imageUrl}`

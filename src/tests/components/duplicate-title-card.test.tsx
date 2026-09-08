@@ -1,9 +1,13 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { TelegramPostApprovalCard } from "@/components/telegram/telegram-actions";
 import { InstagramPostApprovalCard } from "@/components/instagram/instagram-actions";
 import { WhatsappPostApprovalCard } from "@/components/whatsapp/whatsapp-actions";
 import { FacebookPostApprovalCard } from "@/components/facebook/facebook-actions";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+}));
 
 describe("Approval Cards - Duplicate Title Prevention (T8)", () => {
   const buildPost = (productName: string, captionContent: string, hasCoupon: boolean = false) => ({

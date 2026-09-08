@@ -1,20 +1,20 @@
 # Integrações atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 2df6efe022b0876cd3fc2e1580c0113a147b1fee -->
-<!-- verified-on: 2026-08-28 -->
+<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
+<!-- verified-on: 2026-09-07 -->
 
 | Integração | Capacidade/estado atual |
 |---|---|
 | Supabase | Auth, dados, RPCs, auditoria, Storage e snapshots de Trends |
-| Shopee | OpenAPI V1, extração/ingestão, Express e evidência de Trends |
-| Mercado Livre | OAuth, descoberta certified-first + exploração editorial estrita, monetização, Trends e guardrails por nicho |
-| Amazon | descoberta com contrato próprio |
+| Shopee | OpenAPI V1, extração/ingestão, Express, normalização V2 e evidência de Trends |
+| Mercado Livre | OAuth, descoberta certified-first + exploração editorial estrita, normalização V2, monetização, Trends e guardrails por nicho |
+| Amazon | descoberta com contrato próprio e normalização V2 |
 | Telegram | publicação editorial Top 30 |
 | Instagram | Feed/Reels, disclosure de parceria paga, Safety e Policy Guard |
 | Facebook | imagem/vídeo, comentários e link afiliado no primeiro comentário |
 | WhatsApp | Baileys, publicação, Top30 editorial, trilha Express e drafts pendentes por canal |
-| Oracle | Discovery, API técnica, Radar dedicado, vídeo e serviços auxiliares |
+| Oracle | Discovery-Only com motor V2 (`CandidateDecisionV2`), API técnica, Radar dedicado, vídeo e serviços auxiliares |
 | Radar Oracle dedicado | ativo com `TRENDS_RADAR_DEDICATED_RUNTIME=true` |
 
 ## Qualidade da primeira descoberta

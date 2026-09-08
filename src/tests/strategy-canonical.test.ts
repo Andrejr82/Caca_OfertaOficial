@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { schedule, commercialPriorityText } from "@/app/(dashboard)/strategy/page";
+import { schedule, commercialPriorityText } from "@/lib/strategy/constants";
 
 describe("Strategy Canonical Sync", () => {
   it("A) does not include 'games' in commercial priority text", () => {

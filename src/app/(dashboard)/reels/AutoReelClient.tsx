@@ -30,6 +30,7 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
   const [job, setJob] = useState<Job | null>(initialJobs[0] ?? null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const activeOperation = useRef<string | null>(null);
   const selectedOffer = offers.find((offer) => offer.id === offerId) ?? null;
 
   const applyJob = useCallback((nextJob: Job) => {
@@ -39,21 +40,36 @@ export function AutoReelClient({ offers, initialJobs = [], pollingMs = 3000 }: {
 
   useEffect(() => {
     if (!job || isAutoReelTerminal(job.status)) return;
+    if (["planning", "generating_visual", "scenes_ready"].includes(job.stage)) {
+      const operation = `${job.id}:${job.stage}`;
+      if (activeOperation.current === operation) return;
+      activeOperation.current = operation;
+      const endpoint = job.stage === "scenes_ready" ? "/api/reels/complete" : "/api/reels/scenes";
+      void fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ jobId: job.id }) })
+        .then(async (response) => {
+          const payload = await readApiPayload<{ job?: Job; error?: string }>(response);
+          if (payload.job) applyJob(payload.job);
+          if (!response.ok || !payload.job) throw new Error(payload.error ?? "Não foi possível avançar o Reel.");
+          setError(null);
+        })
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "Não foi possível avançar o Reel."))
+        .finally(() => { activeOperation.current = null; });
+      return;
+    }
     const timer = window.setInterval(async () => {
       try {
         const response = await fetch(`/api/reels/generate?jobId=${encodeURIComponent(job.id)}`);
         if (!response.ok) return;
         const payload = await readApiPayload<{ job?: Job }>(response);
         if (payload.job) {
-          setJob(payload.job);
-          setJobs((current) => current.map((item) => item.id === payload.job?.id ? payload.job as Job : item));
+          applyJob(payload.job);
         }
       } catch {
         // A próxima janela de polling tenta novamente sem quebrar a tela.
       }
     }, pollingMs);
     return () => window.clearInterval(timer);
-  }, [job, pollingMs]);
+  }, [job, pollingMs, applyJob]);
 
   async function generate() {
     if (!offerId || busy) return;

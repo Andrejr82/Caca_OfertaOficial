@@ -1,6 +1,6 @@
 'use strict';
 
-const { PRICE_TIERS } = require('./curation-policy.cjs');
+const PRICE_TIERS = Object.freeze({ LOW: 'low', MEDIUM: 'medium', HIGH: 'high' });
 
 const PUBLICATION_WINDOW = Object.freeze({
   startHour: 7,

@@ -1,10 +1,10 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 2df6efe022b0876cd3fc2e1580c0113a147b1fee -->
-<!-- verified-on: 2026-08-28 -->
+<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
+<!-- verified-on: 2026-09-07 -->
 
-> Fonte canônica documental do runtime versionado. Estado de produção é confirmado separadamente por auditoria operacional. O PR #187 permanece isolado até merge/alinhamento Oracle.
+> Fonte canônica documental do runtime versionado. Motor de seleção V2 multimarketplace unificado com 5 pilares, deduplicação de identidade e rastreabilidade total.
 
 ## Visão geral
 

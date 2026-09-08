@@ -15,6 +15,7 @@ describe("fetchShopeeOfficialProduct", () => {
         data: {
           productOfferV2: {
             nodes: [{
+              itemId: "23598338864",
               productName: "Produto Shopee",
               imageUrl: "https://down-br.img.susercontent.com/file/product.jpg",
               priceMin: "59.90",
@@ -89,6 +90,26 @@ describe("fetchShopeeOfficialProduct", () => {
     });
     expect(payload.query).toContain("shopId");
     expect(payload.query).toContain("productLink");
+  });
+
+  it("não aceita outro produto quando a API não retorna o itemId solicitado", async () => {
+    vi.stubEnv("SHOPEE_APP_ID", "app-test");
+    vi.stubEnv("SHOPEE_APP_SECRET", "secret-test");
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(() => new Response(JSON.stringify({
+      data: {
+        productOfferV2: {
+          nodes: [{
+            itemId: "outro-item",
+            productName: "Produto diferente",
+            imageUrl: "https://down-br.img.susercontent.com/file/outro.jpg",
+            priceMin: "9.90",
+            offerLink: "https://s.shopee.com.br/outro",
+          }],
+        },
+      },
+    }), { status: 200 })));
+
+    await expect(fetchShopeeOfficialProduct("855489892", "23598338864")).resolves.toBeNull();
   });
 
   it("usa a leitura técnica da Oracle quando a Shopee não indexa o SKU na API afiliada", async () => {

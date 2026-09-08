@@ -1,17 +1,18 @@
 # Troubleshooting atual
 
 <!-- docs-status: current -->
-<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
+<!-- verified-on: 2026-09-07 -->
 
 ## Sequência de diagnóstico
 
 1. Registrar horário, ambiente, SHA, correlation ID e entidade afetada.
 2. Verificar `/api/health` e `/api/readiness`.
-3. Inspecionar Vercel, PM2/systemd e logs estruturados sem expor segredos.
-4. Confirmar migrations, RLS, Storage e estado da oferta/post no Supabase.
-5. Validar flags e overlay efetivos; não confiar apenas em `.env.example`.
-6. Reproduzir com o menor smoke test read-only possível.
+3. Inspecionar motor de seleção V2: `CandidateDecisionV2`, 5 pilares, freshness lifecycle e deduplicação (`identityGroupKey`).
+4. Inspecionar Vercel, PM2/systemd e logs estruturados sem expor segredos.
+5. Confirmar migrations, RLS, Storage e estado da oferta/post no Supabase.
+6. Validar flags e overlay efetivos; não confiar apenas em `.env.example`.
+7. Reproduzir com o menor smoke test read-only possível.
 
 ## Sintomas frequentes
 

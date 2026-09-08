@@ -29,17 +29,31 @@ async function checkIntegrity() {
   let totalWhatsapp = 0;
   let offersWithMissingPosts = 0;
 
-  for (const offer of offers) {
-    const { data: posts, error: errPosts } = await supabase
+  const offerIds = offers.map(o => o.id);
+  const postsByOffer = new Map();
+  const chunkSize = 100;
+  for (let i = 0; i < offerIds.length; i += chunkSize) {
+    const chunk = offerIds.slice(i, i + chunkSize);
+    const { data: chunkPosts, error: errPosts } = await supabase
       .from('posts')
-      .select('channel, status')
-      .eq('offer_id', offer.id);
+      .select('offer_id, channel, status')
+      .in('offer_id', chunk);
 
     if (errPosts) {
-      console.error(`Erro ao buscar posts da oferta ${offer.id}:`, errPosts.message);
+      console.error(`Erro ao buscar posts para chunk:`, errPosts.message);
       continue;
     }
 
+    for (const post of (chunkPosts || [])) {
+      if (!postsByOffer.has(post.offer_id)) {
+        postsByOffer.set(post.offer_id, []);
+      }
+      postsByOffer.get(post.offer_id).push(post);
+    }
+  }
+
+  for (const offer of offers) {
+    const posts = postsByOffer.get(offer.id) || [];
     const hasTelegram = posts.some(p => p.channel === 'telegram');
     const hasInstagram = posts.some(p => p.channel === 'instagram');
     const hasWhatsapp = posts.some(p => p.channel === 'whatsapp');
@@ -50,7 +64,6 @@ async function checkIntegrity() {
 
     if (!hasTelegram || !hasInstagram || !hasWhatsapp) {
       offersWithMissingPosts++;
-      console.log(`- Alerta: Oferta "${offer.product_name.substring(0, 30)}..." está faltando posts (TG: ${hasTelegram}, IG: ${hasInstagram}, WPP: ${hasWhatsapp})`);
     }
   }
 

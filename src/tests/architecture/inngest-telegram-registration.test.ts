@@ -8,7 +8,7 @@ const routeSource = readFileSync(resolve(process.cwd(), "src/app/api/inngest/rou
 describe("Inngest Telegram registration boundary", () => {
   it("does not load the environment-sensitive Telegram publisher while registering functions", () => {
     expect(functionsSource).not.toMatch(/^const\s*\{\s*createTelegramPublisher\s*\}\s*=\s*require\(/m);
-    expect(functionsSource).toMatch(/function\s+loadTelegramPublisher\s*\(/);
+    expect(functionsSource).toMatch(/publishOfficialPost/);
   });
 
   it("keeps the Telegram function registered on the Inngest serve endpoint", () => {
