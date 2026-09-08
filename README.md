@@ -1,10 +1,10 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
+<!-- verified-on: 2026-09-07 -->
 
-Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase.
+Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase, com motor de seleção multimarketplace V2 unificado (Amazon, Mercado Livre, Shopee).
 
 O runtime operacional atual está descrito em [docs/CURRENT_SYSTEM_STATUS.md](docs/CURRENT_SYSTEM_STATUS.md). A hierarquia documental está em [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md). Os documentos PMAV5 são registros históricos e contratuais; não substituem a verificação do código e do manifesto de release.
 

@@ -125,7 +125,7 @@ describe("State Service", () => {
     const { adapter, dependencies } = createHarness();
 
     const result = await transitionOfferState(
-      offerCommand({ toState: "approved" }),
+      offerCommand({ toState: "posted" }),
       dependencies
     );
 

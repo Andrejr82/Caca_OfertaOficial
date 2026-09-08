@@ -10,14 +10,40 @@ test('Sprint 9 — Ausência de Caminhos Legados de Seleção e Ranking Paralelo
   const oracleWorkerPath = path.join(root, 'scripts/oracle-worker-discovery-only.cjs');
   const oracleContent = fs.readFileSync(oracleWorkerPath, 'utf8');
 
-  // 1. Verifica ausência de flags de ranking fantasma/shadow no Oracle Worker
+  // 1. Verifica ausência de flags de ranking fantasma/shadow e de curation-policy no Oracle Worker
   assert.equal(
-    /RANKING_SHADOW_MODE\s*=\s*true/i.test(oracleContent),
+    /require\(['"].*curation-policy\.cjs['"]\)/i.test(oracleContent),
     false,
-    'Não deve existir RANKING_SHADOW_MODE ativo no worker.'
+    'Não deve existir importação de curation-policy.cjs no Oracle Worker.'
   );
 
-  // 2. Verifica que RankingEngine não é importado em nenhum arquivo de runtime sob src/app ou scripts produtivos
+  assert.equal(
+    /process\.env\.OFFER_QUALITY_PIPELINE_V2/i.test(oracleContent),
+    false,
+    'Não deve existir checagem de flag OFFER_QUALITY_PIPELINE_V2 no Oracle Worker.'
+  );
+
+  assert.equal(
+    /qualityAdmission\(/i.test(oracleContent),
+    false,
+    'Não deve existir chamada de qualityAdmission no Oracle Worker.'
+  );
+
+  // 2. Verifica que select-cycle-commercial-portfolio.ts não importa commercial-portfolio-selector legado
+  const portfolioCycleFile = path.join(root, 'src/lib/ai/official/select-cycle-commercial-portfolio.ts');
+  const portfolioCycleContent = fs.readFileSync(portfolioCycleFile, 'utf8');
+  assert.equal(
+    /from\s+['"]@\/core\/curation\/commercial-portfolio-selector['"]/i.test(portfolioCycleContent),
+    false,
+    'select-cycle-commercial-portfolio.ts não deve importar o commercial-portfolio-selector legado.'
+  );
+  assert.equal(
+    /selectCommercialPortfolioV2/i.test(portfolioCycleContent),
+    true,
+    'select-cycle-commercial-portfolio.ts deve utilizar selectCommercialPortfolioV2.'
+  );
+
+  // 3. Verifica que RankingEngine não é importado em nenhum arquivo de runtime sob src/app ou scripts produtivos
   const appDir = path.join(root, 'src/app');
   function scanDir(dir, pattern) {
     if (!fs.existsSync(dir)) return [];

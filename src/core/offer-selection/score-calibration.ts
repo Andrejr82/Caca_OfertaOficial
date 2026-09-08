@@ -63,3 +63,13 @@ export function calibrateCandidateScore(
     version: "candidate-decision/v2",
   });
 }
+
+export function computeCalibratedScoreV2(
+  candidate: CandidateDecisionV2,
+): CandidateDecisionV2 {
+  const score = calibrateCandidateScore(candidate);
+  return Object.freeze({
+    ...candidate,
+    score,
+  });
+}

@@ -1,8 +1,13 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const {
+  normalizeCandidateToV2,
+  computeCalibratedScoreV2,
+  computeIdentityGroups,
+  selectCommercialPortfolioV2,
+} = require('./offer-selection-runtime.cjs');
 const { validateProductTitle } = require('./product-title-quality.cjs');
-const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
 const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
@@ -32,43 +37,6 @@ const {
   buildFirstDiscoveryPlan,
 } = require('./first-discovery-quality.cjs');
 const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
-
-// --- BRIDGE COMMONJS ⇄ TYPESCRIPT (Motor Shopee V1) ---
-let oracleAdapterTs = null;
-let oracleAdapterLoadAttempted = false;
-
-function getOracleAdapter() {
-  if (oracleAdapterLoadAttempted) return oracleAdapterTs;
-  oracleAdapterLoadAttempted = true;
-  try {
-    require('tsx/cjs');
-    oracleAdapterTs = require('../src/lib/shopee/ranking/oracle-adapter.ts');
-    console.log('[ORACLE-WORKER] Bridge TypeScript (Motor Shopee V1) carregada com sucesso.');
-  } catch (error) {
-    console.warn('[ORACLE-WORKER] Falha ao carregar bridge TypeScript do Motor Shopee V1:', error.message);
-  }
-  return oracleAdapterTs;
-}
-
-/**
- * Preparação da chamada ao Motor Shopee V1.
- * O fallback ou bloqueio ocorre internamente via adapter.
- */
-function safeEvaluateShopeeOracleCandidate(candidate) {
-  const adapter = getOracleAdapter();
-  if (!adapter || typeof adapter.evaluateShopeeOracleCandidate !== 'function') {
-    return null;
-  }
-  try {
-    return adapter.evaluateShopeeOracleCandidate(candidate);
-  } catch (error) {
-    console.warn('[ORACLE-WORKER] Erro na execução do Motor Shopee V1:', error.message);
-    return null;
-  }
-}
-// ------------------------------------------------------
-
-
 
 const MARKETPLACES = Object.freeze(['Shopee', 'Mercado Livre', 'Amazon']);
 const FINAL_STATE = 'approved';
@@ -141,8 +109,11 @@ function queueCategory(product) {
 }
 
 function queueScore(product) {
-  if (product._v1Score !== undefined) return product._v1Score;
-  return scoreCandidate(product);
+  if (!product) return 0;
+  if (product.deterministicScore !== undefined && Number.isFinite(Number(product.deterministicScore))) return Number(product.deterministicScore);
+  if (product._decisionV2?.score?.total !== undefined) return Number(product._decisionV2.score.total);
+  if (product.curationScore !== undefined && Number.isFinite(Number(product.curationScore))) return Number(product.curationScore);
+  return 0;
 }
 
 const SHOPEE_GROUP_KEY_VERSION = 'shopee-family-v1';
@@ -368,37 +339,40 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     }
   }
 
-  // --shopee-ranking-v1-shadow: flag oficial do Shadow Mode do Motor Shopee V1.
-  // NÃO usar --shopee-v4-dry-run (flag legada aposentada em oracle-scraper.cjs).
-  const isShadowMode = process.argv.includes('--shopee-ranking-v1-shadow');
-
   const ranked = Array.from(allCandidates.values())
     .map((product) => {
       const candidate = product.marketplace ? product : { ...product, marketplace: limits.marketplace };
-      let finalGate = qualityGate(candidate);
+      const v2Candidate = normalizeCandidateToV2(candidate);
+      const titleQuality = validateProductTitle(candidate.title);
+      const urlValid = !candidate.sourceUrl || validateCanonicalUrl(candidate.sourceUrl);
 
-      if (String(candidate.marketplace || '').toLowerCase() === 'shopee') {
-        const v1Result = safeEvaluateShopeeOracleCandidate(candidate);
-        if (v1Result) {
-          candidate.strategyVersion = v1Result.strategyVersion;
-          candidate.scoreBreakdown = v1Result.scoreBreakdown || { finalScore: v1Result.score };
-          candidate.determiningReasons = v1Result.reasons || [];
-          
-          const v1Gate = {
-            eligible: v1Result.eligible,
-            reasons: v1Result.reasons || [],
-            warnings: []
-          };
+      let eligible = true;
+      const reasons = [];
 
-          if (isShadowMode) {
-            candidate._v1ShadowGate = v1Gate;
-            candidate._v1Score = v1Result.score;
-          } else {
-            finalGate = v1Gate;
-            candidate._v1Score = v1Result.score;
-          }
-        }
+      if (!titleQuality.valid) {
+        eligible = false;
+        reasons.push(titleQuality.reason || 'INVALID_PRODUCT_TITLE');
       }
+      if (!urlValid) {
+        eligible = false;
+        reasons.push('INVALID_CANONICAL_URL');
+      }
+
+      const evaluatedV2 = computeCalibratedScoreV2({
+        ...v2Candidate,
+        decision: eligible ? 'selected' : 'rejected',
+        reasons: reasons.map((r) => ({ stage: 'quality_gate', code: r, message: r })),
+      });
+
+      candidate._decisionV2 = evaluatedV2;
+      candidate.curationScore = candidate.curationScore !== undefined ? candidate.curationScore : evaluatedV2.score.total;
+      candidate.deterministicScore = candidate.deterministicScore !== undefined ? candidate.deterministicScore : evaluatedV2.score.total;
+
+      const finalGate = {
+        eligible,
+        reasons: reasons.length > 0 ? reasons : ['PASSED'],
+        warnings: [],
+      };
 
       return { product: candidate, gate: finalGate };
     })
@@ -521,8 +495,10 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     const { _gate, _familyKey, _familyEvidence, _familyConfidence, _selectedVariantReason, _variantScore, isDeferred, ...cleanProduct } = product;
     selected.push({
       ...cleanProduct,
-      curation: _gate || qualityGate(product),
+      curation: _gate || { eligible: true, reasons: ['PASSED'], warnings: [] },
       curationScore: queueScore(product),
+      deterministicScore: product.deterministicScore !== undefined ? Number(product.deterministicScore) : queueScore(product),
+      _decisionV2: product._decisionV2 || null,
       familyKey: _familyKey || null,
       familyEvidence: _familyEvidence || [],
       familyConfidence: _familyConfidence || 0,
@@ -560,7 +536,7 @@ function assertCandidateInput(product) {
   )) {
     throw new Error('Candidate V1 inválido: originalPrice');
   }
-  if (!Number.isFinite(Number(product.deterministicScore)) || product.deterministicScore < 0 || product.deterministicScore > 10) {
+  if (!Number.isFinite(Number(product.deterministicScore)) || product.deterministicScore < 0 || product.deterministicScore > 100) {
     throw new Error('Candidate V1 inválido: deterministicScore');
   }
 }
@@ -1019,23 +995,28 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           }
         }
 
-        preparedProduct = { ...preparedProduct, allowAccessory: allowsAccessoryByIntent(marketplace, preparedProduct) };
-        const gate = qualityGate(preparedProduct);
+        const v2Candidate = normalizeCandidateToV2(preparedProduct);
         const titleQuality = validateProductTitle(preparedProduct.title);
-        const urlValid = /^https:\/\//i.test(String(preparedProduct.sourceUrl || ''));
+        const urlValid = validateCanonicalUrl(preparedProduct.sourceUrl);
         const imgValid = /^https:\/\//i.test(String(preparedProduct.imageUrl || ''));
-        const isAccessory = gate.reasons.includes('ACESSORIO_OU_CONSUMIVEL');
-        const isPriceInvalid = gate.reasons.includes('PRECO_INVALIDO');
-        if (!titleQuality.valid || !urlValid || !imgValid || isPriceInvalid || isAccessory) {
+        const currentPriceNum = Number(preparedProduct.currentPrice);
+        const originalPriceNum = preparedProduct.originalPrice != null ? Number(preparedProduct.originalPrice) : null;
+        const priceValid = Number.isFinite(currentPriceNum) && currentPriceNum > 0 &&
+          (originalPriceNum == null || !Number.isFinite(originalPriceNum) || originalPriceNum >= currentPriceNum);
+
+        if (!titleQuality.valid || !urlValid || !imgValid || !priceValid) {
           technicalRejections += 1;
           if (!titleQuality.valid) countRejection(titleQuality.reason || 'invalid_title');
           if (!urlValid) countRejection('invalid_source_url');
           if (!imgValid) countRejection('invalid_image_url');
-          if (isPriceInvalid) countRejection('invalid_price');
-          if (isAccessory) countRejection('accessory_or_consumable');
-          for (const reason of gate.reasons || []) countRejection(reason);
+          if (!priceValid) countRejection('invalid_price');
           continue;
         }
+
+        const evaluatedV2 = computeCalibratedScoreV2(v2Candidate);
+        preparedProduct._decisionV2 = evaluatedV2;
+        preparedProduct.curationScore = preparedProduct.curationScore !== undefined ? preparedProduct.curationScore : evaluatedV2.score.total;
+        preparedProduct.deterministicScore = preparedProduct.deterministicScore !== undefined ? preparedProduct.deterministicScore : evaluatedV2.score.total;
 
         if (firstDiscoveryMode !== 'off') {
           const matchingIntent = firstDiscoveryPlan?.intents?.find((i) => matchesFirstDiscoveryIntent(i, preparedProduct.title));
@@ -1078,7 +1059,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
 
         const existing = uniqueProductsMap.get(groupKey);
         if (existing) {
-           const scoreDiff = scoreCandidate(product) - scoreCandidate(existing);
+           const scoreDiff = queueScore(product) - queueScore(existing);
            const pDisc = (product.originalPrice || product.currentPrice) - product.currentPrice;
            const eDisc = (existing.originalPrice || existing.currentPrice) - existing.currentPrice;
            const discDiff = pDisc - eDisc;
@@ -1210,79 +1191,10 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         ? { ...(copyQueueOptions || {}), maxTotal: noCommercialCap, maxPerMarketplace: noCommercialCap, maxPerCategory: noCommercialCap }
         : (copyQueueOptions || {});
 
-      // Active V2 is an explicit opt-in. The default and shadow paths keep the
-      // exact V1 candidate set and queue behavior.
-      if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'active' && typeof qualityAdmission !== 'function') {
-        const missingAdmissionError = new Error('Admissão Offer Quality V2 indisponível');
-        await safeObserve('discovery.quality.active.failed', {
-          marketplace,
-          error: missingAdmissionError.message,
-        });
-        throw missingAdmissionError;
-      }
-
-      if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'active' && typeof qualityAdmission === 'function') {
-        try {
-          const admission = await qualityAdmission(
-            Object.freeze([...candidatesToPersist, ...previouslyDeferred]),
-            marketplace,
-            { maxAccepted: effectiveCopyQueueOptions.maxPerMarketplace ?? COPY_QUEUE_DEFAULTS.maxPerMarketplace },
-          );
-          const admitted = Array.isArray(admission?.accepted) ? admission.accepted : [];
-          const admittedIds = new Set(admitted.map((product) => String(product?.sourceItemId || '')));
-          candidatesToPersist = uniqueProducts.filter((product) => admittedIds.has(String(product.sourceItemId)));
-          deferredForQueue = previouslyDeferred.filter((product) => admittedIds.has(String(product?.sourceItemId || '')));
-          technicalRejections += Array.isArray(admission?.rejected) ? admission.rejected.length : 0;
-          for (const item of admission?.rejected || []) for (const reason of item.reasons || ['quality_admission_rejected']) countRejection(reason);
-          await safeObserve('discovery.quality.active.completed', {
-            marketplace,
-            candidates: candidatesToPersist.length,
-            admitted: candidatesToPersist.length,
-            rejected: Array.isArray(admission?.rejected) ? admission.rejected.length : 0,
-          });
-        } catch (qualityError) {
-          await safeObserve('discovery.quality.active.failed', {
-            marketplace,
-            error: qualityError?.message || String(qualityError),
-          });
-          throw qualityError;
-        }
-      }
-
       const queue = selectCopyQueue(candidatesToPersist, { ...effectiveCopyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
       funnel.count('queueSelected', queue.selected.length);
       funnel.recordQueueSelection(queue.selectionTelemetry);
       for (const item of queue.skipped || []) countRejection(item.reason || 'queue_rejected');
-
-      // Shadow mode is observational only. It is deliberately opt-in and never
-      // changes queue selection or persistence while the flag is not "shadow".
-      if (process.env.OFFER_QUALITY_PIPELINE_V2 === 'shadow' && typeof qualityShadow === 'function') {
-        try {
-          const shadowResult = await qualityShadow(Object.freeze({
-            correlationId,
-            marketplace,
-            candidates: Object.freeze([...candidatesToPersist]),
-            queue: Object.freeze({
-              selected: Object.freeze([...(queue.selected || [])]),
-              skipped: Object.freeze([...(queue.skipped || [])]),
-              deferred: Object.freeze([...(queue.deferred || [])]),
-              limits: Object.freeze({ ...(queue.limits || {}) }),
-            }),
-          }));
-          await safeObserve('discovery.quality.shadow.completed', {
-            marketplace,
-            candidates: candidatesToPersist.length,
-            selected: queue.selected.length,
-            rejected: queue.skipped.length,
-            ...(shadowResult && typeof shadowResult === 'object' ? shadowResult : {}),
-          });
-        } catch (shadowError) {
-          await safeObserve('discovery.quality.shadow.failed', {
-            marketplace,
-            error: shadowError?.message || String(shadowError),
-          });
-        }
-      }
 
       let persistedAll = { accepted: 0, inserted: 0, updated: 0, state: FINAL_STATE, offerIds: [] };
 
@@ -1448,5 +1360,4 @@ module.exports = {
   runDiscoveryOnlyCycle,
   validateCanonicalUrl,
   validateNativeIdentity,
-  safeEvaluateShopeeOracleCandidate,
 };

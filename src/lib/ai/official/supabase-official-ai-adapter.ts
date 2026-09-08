@@ -86,7 +86,7 @@ export class SupabaseOfficialAIAdapter extends LegacySupabaseOfficialAIAdapter {
     const postsQuery = this.v4Client?.from ? this.v4Client.from("posts") : null;
     if (postsQuery?.update) {
       const { error } = await postsQuery
-        .update({ content: facebookContent })
+        .update({ content: facebookContent, status: "draft" })
         .eq("user_id", this.v4TenantId)
         .eq("offer_id", input.offer.id)
         .eq("channel", "facebook")

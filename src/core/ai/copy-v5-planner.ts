@@ -253,7 +253,10 @@ export async function planCommercialCopyV5(
       model: "copy-v5-fallback",
     });
     return buildDeterministicFallbackPlan(facts);
-  } catch {
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === "OFFICIAL_AI_PROVIDERS_COOLING_DOWN") {
+      throw error;
+    }
     reportOutcome(options?.onOutcome, {
       source: "deterministic-fallback",
       fallback: true,

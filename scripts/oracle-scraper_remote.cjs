@@ -794,10 +794,57 @@ async function persistDiscoveryV2Metadata({ tenantId, correlationId, requestedAt
       const groupKey = discoveryGroupKey(product, productType);
       const groupKind = groupKey.includes('||') ? 'family' : 'exact';
       const titleQuality = validateProductTitle(product.title);
-      const intelligence = { score: Number(product.deterministicScore || 0), marketplace, queueSelected: Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId)), reasons: [] };
+      const decisionV2 = product._decisionV2 || null;
+      const score = decisionV2?.score || {
+        total: Number(product.deterministicScore || product.curationScore || 0),
+        semantic: 0,
+        evidence: 0,
+        value: 0,
+        logistics: 0,
+        freshness: 0,
+        version: 'candidate-decision/v2',
+      };
+      const freshness = decisionV2?.freshness || product.freshness || {
+        state: 'new',
+        eligible: true,
+        reason: 'initial_admission',
+      };
+      const reasons = decisionV2?.reasons || product.reasons || [];
+      const isQueueSelected = Boolean(queue?.selected?.some((entry) => entry.sourceItemId === product.sourceItemId));
+      const intelligence = {
+        score: score.total,
+        score_breakdown: score,
+        freshness,
+        marketplace,
+        queueSelected: isQueueSelected,
+        decision: decisionV2?.decision || (isQueueSelected ? 'selected' : 'rejected'),
+        reasons,
+      };
       const classificationStatus = !titleQuality.valid || classification.status !== 'classified' ? 'review_required' : 'classified';
       
-      const p1 = supabase.from('offer_classifications').upsert({ user_id: tenantId, discovery_item_id: discoveryItemId, classifier_version: `oracle-worker-v4-${String(marketplace).toLowerCase().replace(/\s+/g, '-')}`, classification_status: classificationStatus, product_type: productType, product_role: 'main_product', attributes: { marketplace_intelligence: intelligence, classification: classification.evidence || {}, quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason } }, rule_trace: [`correlation:${correlationId}`, `requested_at:${requestedAt}`, `classifier:${classification.source}`, ...(titleQuality.valid ? [] : ['quality_gate:INVALID_PRODUCT_TITLE'])] }, { onConflict: 'discovery_item_id' });
+      const p1 = supabase.from('offer_classifications').upsert({
+        user_id: tenantId,
+        discovery_item_id: discoveryItemId,
+        classifier_version: `oracle-worker-v5-${String(marketplace).toLowerCase().replace(/\s+/g, '-')}`,
+        classification_status: classificationStatus,
+        product_type: productType,
+        product_role: decisionV2?.productRole || 'main_product',
+        attributes: {
+          marketplace_intelligence: intelligence,
+          classification: classification.evidence || {},
+          quality_gate: { status: titleQuality.valid ? 'passed' : 'review_required', reason: titleQuality.reason }
+        },
+        rule_trace: [
+          `correlation:${correlationId}`,
+          `requested_at:${requestedAt}`,
+          `classifier:${classification.source}`,
+          `contract:candidate-decision/v2`,
+          `freshness:${freshness.state}`,
+          `score_total:${score.total}`,
+          ...(titleQuality.valid ? [] : [`quality_gate:${titleQuality.reason || 'INVALID_PRODUCT_TITLE'}`]),
+          ...reasons.map(r => `reason:${typeof r === 'object' ? (r.code || r.stage || JSON.stringify(r)) : String(r)}`)
+        ]
+      }, { onConflict: 'discovery_item_id' });
       await withTimeout(p1, Number(process.env.EXTERNAL_REQUEST_TIMEOUT_MS || 30000), `persistV2Metadata_upsertClassification`);
       
       const p2 = supabase.from('product_groups').upsert({ user_id: tenantId, group_kind: groupKind, group_key: groupKey, product_type: productType, attributes: { marketplace } }, { onConflict: 'user_id,group_kind,group_key' }).select('id').single();

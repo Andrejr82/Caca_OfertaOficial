@@ -76,7 +76,7 @@ test('workspace usa identidade do job e não compartilha artefatos', () => {
 
 test('Oracle passa o mesmo jobId para o dubber e o storage', () => {
   const oracleSource = fs.readFileSync(path.join(__dirname, '..', 'oracle-api.cjs'), 'utf8');
-  assert.match(oracleSource, /processShopeeVideoDubbing\(videoUrl, title, price \|\| 'Não informado', \{ jobId \}\)/u);
+  assert.match(oracleSource, /processShopeeVideoDubbing\(videoUrl, title, (?:effectivePrice|price \|\| 'Não informado'), \{ jobId \}\)/u);
   assert.match(oracleSource, /const storagePath = `\$\{tenantId\}\/\$\{jobId\}\.mp4`/u);
 });
 

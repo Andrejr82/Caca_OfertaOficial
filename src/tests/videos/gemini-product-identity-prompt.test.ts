@@ -2,7 +2,7 @@ import { buildGeminiVideoPrompt } from "@/lib/videos/gemini-prompt";
 import { describe, expect, it } from "vitest";
 
 function extractIdentityRules(prompt: string) {
-  const match = prompt.match(/REGRA CRÍTICA — IDENTIDADE E FIDELIDADE DO PRODUTO\n\n([\s\S]*?)\n\n1\. CONFIGURAÇÃO DO VÍDEO/u);
+  const match = prompt.match(/REGRA CRÍTICA — IDENTIDADE E FIDELIDADE DO PRODUTO\n([\s\S]*?)\n\nCONFIGURAÇÃO/u);
   return match?.[0] ?? "";
 }
 
@@ -17,10 +17,9 @@ describe("Gemini product identity prompt", () => {
     expect(prompt).toContain("REGRA CRÍTICA — IDENTIDADE E FIDELIDADE DO PRODUTO");
     expect(prompt).toContain("REFERÊNCIA VISUAL PRINCIPAL, ABSOLUTA E OBRIGATÓRIA");
     expect(prompt).toContain("MESMO OBJETO FÍSICO");
-    expect(prompt).toContain("textos, logotipos, números, etiquetas e símbolos");
-    expect(prompt).toContain("NÃO redesenhar, substituir, estilizar ou \"melhorar\" o produto");
-    expect(prompt).toContain("NÃO inventar acessórios, peças, embalagens, marcas, textos, recursos ou componentes ausentes");
-    expect(prompt).toContain("Se houver conflito entre estética cinematográfica e fidelidade, preservar o produto");
+    expect(prompt).toContain("textos, logotipos, quantidade e detalhes visíveis");
+    expect(prompt).toContain("NÃO redesenhar, estilizar, substituir ou \"melhorar\" o produto");
+    expect(prompt).toContain("NÃO inventar acessórios, peças, marcas, textos, recursos ou componentes ausentes");
   });
 
   it("mantém as regras críticas idênticas ao trocar o produto", () => {

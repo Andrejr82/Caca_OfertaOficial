@@ -1,8 +1,8 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: cffd8dd3e783538e78a28a0450475fe140414a78 -->
-<!-- verified-on: 2026-08-27 -->
+<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
+<!-- verified-on: 2026-09-07 -->
 
 ## Princípios
 
@@ -10,11 +10,15 @@
 - Flags novas entram desligadas/fail-closed quando controlam discovery, persistência, IA ou publicação.
 - O default do código não substitui o estado operacional do ambiente; documentação de produção deve registrar ambos.
 
+## Multimarketplace Selection Engine V2
+
+O motor de seleção V2 (`CandidateDecisionV2`) unifica Amazon, Mercado Livre e Shopee com avaliação determinística em 5 pilares (discount, absoluteDiscount, salesVolume, rating, reviewCount), ciclo explícito de freshness, deduplicação por identidade de produto (`identityGroupKey`) e rastreabilidade canônica (`correlationId`). As flags e caminhos legados de shadow/curation foram descontinuados em favor do pipeline canônico.
+
 ## First Discovery Quality V1
 
 `FIRST_DISCOVERY_QUALITY_V1_MODE` aceita:
 
-- `off`: comportamento legado;
+- `off`: comportamento padrão;
 - `shadow`: calcula plano, candidate quality e readiness sem alterar fila/persistência;
 - `active`: aplica intents refinadas, gate de elegibilidade e prioridade absoluta para candidatos fortes.
 

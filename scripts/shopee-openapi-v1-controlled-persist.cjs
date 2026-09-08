@@ -55,26 +55,26 @@ function controlledCandidateQuality(product) {
 }
 
 function selectControlledPersistCandidates(top, { existingItemIds = [], maxNewCandidates, maxCandidates, maxExistingCandidates = CONTROLLED_PERSIST_MAX_EXISTING_CANDIDATES } = {}) {
-  const totalLimit = Number(maxCandidates ?? maxNewCandidates ?? 10);
-  if (!Number.isInteger(totalLimit) || totalLimit < 1) return [];
+  const newLimit = Number(maxCandidates ?? maxNewCandidates);
+  if (!Number.isInteger(newLimit) || newLimit < 1) return [];
   const existing = new Set((Array.isArray(existingItemIds) ? existingItemIds : []).map((itemId) => String(itemId).trim()).filter(Boolean));
   const selected = [];
-  let newCount = 0, existingCount = 0;
-  const newLimit = maxCandidates != null ? totalLimit : Number(maxNewCandidates || totalLimit);
+  let newCount = 0;
+  let existingCount = 0;
 
   for (const product of Array.isArray(top) ? top : []) {
     if (!controlledCandidateQuality(product).eligible) continue;
     const itemId = String(product?.itemId || '').trim();
     const isExisting = existing.has(itemId);
     if (isExisting) {
-      if (existingCount >= maxExistingCandidates && maxCandidates == null) continue;
+      if (existingCount >= maxExistingCandidates) continue;
       existingCount += 1;
     } else {
-      if (newCount >= newLimit && maxCandidates == null) continue;
+      if (newCount >= newLimit) continue;
       newCount += 1;
     }
     selected.push(product);
-    if (selected.length >= totalLimit) break;
+    if (newCount >= newLimit && existingCount >= maxExistingCandidates) break;
   }
   return selected;
 }

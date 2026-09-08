@@ -5,9 +5,9 @@ import { buildCampaignTrackingKey, type CampaignOfficialLinks } from "@/lib/camp
 
 describe("campaign sale metrics", () => {
   it("attributes only sales with the exact campaign tracking key", () => {
-    const campaignId = "campaign-12345678";
+    const campaignId = "c11111111-12345678";
     const key = buildCampaignTrackingKey(campaignId, "instagram_reel");
-    const other = buildCampaignTrackingKey("campaign-other", "instagram_reel");
+    const other = buildCampaignTrackingKey("c22222222-other", "instagram_reel");
     const metric = summarizeCampaignSales(campaignId, {}, [], [
       { id: "sale-1", affiliate_link_id: null, source_sub_id: key, status: "confirmed", commission_value: 2.4 },
       { id: "sale-2", affiliate_link_id: null, source_sub_id: other, status: "confirmed", commission_value: 9 },

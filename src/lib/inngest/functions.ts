@@ -6,8 +6,7 @@ import { createOfficialPublicationServiceDependencies, publicationIdempotencyKey
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { buildTelegramEditorialPublicationPlan, selectEnabledTelegramAutomationUserIds } from "./telegram-editorial-publication";
 import { inngest } from "./client";
-import { TELEGRAM_CYCLE_INTROS } from "@/config/cycle-intros";
-import { sendTelegramMessage } from "@/lib/telegram/client";
+import { executeTelegramCycleIntro } from "@/lib/telegram/cycle-intro";
 import { loadEditorialTop30TelegramSelection } from "@/lib/telegram/select-editorial-top30-telegram-drafts";
 
 function adminClient() {
@@ -44,15 +43,7 @@ export const sendTelegramCycleIntro = inngest.createFunction(
     triggers: [{ cron: "0 6-21 * * *", tz: "America/Sao_Paulo" }] 
   },
   async ({ step }: any) => {
-    return step.run("send-intro-message", async () => {
-      const currentHour = new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo", hour: "numeric", hour12: false });
-      const message = TELEGRAM_CYCLE_INTROS[Number(currentHour)];
-      if (message) {
-        await sendTelegramMessage(message);
-        return { success: true, hour: currentHour };
-      }
-      return { success: false, reason: "No message configured for this hour", hour: currentHour };
-    });
+    return step.run("send-intro-message", () => executeTelegramCycleIntro());
   }
 );
 

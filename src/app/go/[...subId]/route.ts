@@ -50,7 +50,7 @@ function buildOgDescription(offer: any) {
   return "Aproveite esta oferta imperdível antes que acabe.";
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ subId: string[] }> | { subId: string[] } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ subId: string[] }> }) {
   const resolvedParams = await params;
   const subIdString = Array.isArray(resolvedParams.subId) ? resolvedParams.subId[0] : resolvedParams.subId;
   const subId = decodeURIComponent(subIdString);

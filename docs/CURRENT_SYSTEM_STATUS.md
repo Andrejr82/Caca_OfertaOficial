@@ -1,10 +1,10 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 467fd2f3 -->
-<!-- verified-on: 2026-08-28 -->
+<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
+<!-- verified-on: 2026-09-07 -->
 
-Baseado na `main` em `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`, no ciclo controlado de `informatica_editorial` de 28/08/2026 e na revisão do PR #187. O PR #187 permanece isolado até merge e alinhamento explícito da Oracle.
+Baseado na branch `feature/multimarketplace-selection-v2`, com motor de seleção multimarketplace V2 unificado (Amazon, Mercado Livre, Shopee), 5 pilares determinísticos e trace canônico de persistência.
 
 ## Runtime
 

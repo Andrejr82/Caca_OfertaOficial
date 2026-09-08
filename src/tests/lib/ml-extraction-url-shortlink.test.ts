@@ -22,7 +22,7 @@ describe("chooseMLExtractionUrl shortlinks do Mercado Livre", () => {
         true,
         "MLB5826790582",
       ),
-    ).toBe("https://produto.mercadolivre.com.br/MLB-5826790582");
+    ).toBe("https://produto.mercadolivre.com.br/MLB-5826790582?__express_ml_source=https%3A%2F%2Fmeli.la%2F1qkZssd");
   });
 
   it("continua usando resolvedUrl quando a identidade não está confirmada", () => {

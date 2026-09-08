@@ -29,7 +29,14 @@ const postsQuery = {
 const client = {
   from(table: string) {
     if (table === "posts") return postsQuery;
-    return { async select() { return { data: [] }; } };
+    return {
+      select() {
+        return {
+          in: async () => ({ data: [] }),
+          eq: () => this,
+        };
+      },
+    };
   },
 };
 

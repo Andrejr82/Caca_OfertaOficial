@@ -71,13 +71,13 @@ describe("Messages compatibility façade on Copy V5", () => {
 
   it("Facebook mantém body sem URL direta", () => {
     const copy = generateFacebookMessage(offer, facebook);
-    expect(copy).toContain("Link da oferta no primeiro comentário");
+    expect(copy.toLowerCase()).toContain("primeiro comentário");
     expect(copy).not.toContain("https://");
   });
 
   it("Instagram mantém feed sem URL direta", () => {
     const copy = generateInstagramMessage(offer, instagram);
-    expect(copy.feed).toContain("Link da oferta na bio");
+    expect(copy.feed.toLowerCase()).toContain("link da bio");
     expect(copy.feed).not.toContain("https://");
     expect(copy.stories).toEqual([]);
     expect(copy.reels).toEqual([]);

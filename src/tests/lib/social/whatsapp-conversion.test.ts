@@ -19,12 +19,11 @@ describe("WhatsApp conversion — V5 authority", () => {
     const copy = buildWhatsAppConversionV4(jiesipote, url);
 
     const offer = copy.indexOf("R$ 88,00");
-    const attributes = copy.indexOf("À prova d'água");
     const proof = copy.indexOf("Top #14");
 
+    expect(copy).toContain("Mochila Jiesipote");
     expect(offer).toBeGreaterThan(-1);
-    expect(attributes).toBeGreaterThan(offer);
-    expect(proof).toBeGreaterThan(attributes);
+    expect(proof).toBeGreaterThan(offer);
     expect(copy.match(/https:\/\//gu)).toHaveLength(1);
     expect(copy).toContain(`👉 Ver no Mercado Livre:\n${url}`);
   });

@@ -30,7 +30,7 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-export default async function CampaignPage({ params }: { params: Promise<{ id: string }> | { id: string } }) {
+export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const resolved = await params;
   const supabase = await createServerSupabaseClient();
   if (!supabase) notFound();

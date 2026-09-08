@@ -27,13 +27,14 @@ describe("Telegram editorial function path", () => {
     delete process.env.NO_PUBLISH;
     approveOfficialOfferForPublication.mockResolvedValue({ status: "approved", auditId: "approval-1" });
     publishOfficialPost.mockResolvedValue({ status: "published", receiptId: "receipt-1" });
+    const nowIso = new Date().toISOString();
     const offer = {
       id: "offer-1", user_id: "tenant-1", platform: "Shopee", product_name: "Jogo De Talheres inox Faqueiro",
       category: "casa_cozinha_editorial", original_url: "https://s.shopee.com.br/offer-1", image_url: "https://cf.shopee.com.br/offer-1.jpg",
       current_price: 19.9, old_price: null, coupon: null, rating: null, estimated_commission: null, commission_rate: null,
-      score: 6.1, status: "approved", notes: null, seasonality: null, created_at: "2026-08-13T20:59:19.213434+00:00",
-      updated_at: "2026-08-13T21:11:07.585+00:00", marketplace_metrics: { sales: 27, rating: 4.8 },
-      explainability: { correlation_id: "38743d23-96df-41d6-863c-667ec9567ad4", scenarioId: "casa_cozinha_editorial", discovery_evidence: { discoveredAt: "2026-08-13T20:59:06.357Z" } },
+      score: 6.1, status: "approved", notes: null, seasonality: null, created_at: nowIso,
+      updated_at: nowIso, marketplace_metrics: { sales: 27, rating: 4.8 },
+      explainability: { correlation_id: "38743d23-96df-41d6-863c-667ec9567ad4", scenarioId: "casa_cozinha_editorial", discovery_evidence: { discoveredAt: nowIso } },
     };
     client.from.mockImplementation((table: string) => {
       const query: any = {
@@ -46,10 +47,10 @@ describe("Telegram editorial function path", () => {
         then: (resolve: (value: unknown) => unknown) => Promise.resolve(table === "app_settings"
           ? { data: [{ user_id: "tenant-1", value: { telegram_automation_enabled: true } }], error: null }
           : query.fields.includes("offers(*)")
-            ? { data: [{ id: "post-1", offer_id: "offer-1", user_id: "tenant-1", channel: "telegram", status: "draft", content: "real", created_at: "2026-08-13T21:00:00.022767+00:00", posted_at: null, external_id: null, offers: offer }], error: null }
+            ? { data: [{ id: "post-1", offer_id: "offer-1", user_id: "tenant-1", channel: "telegram", status: "draft", content: "real", created_at: nowIso, posted_at: null, external_id: null, offers: offer }], error: null }
             : query.fields.includes("posted_at")
               ? { data: [], error: null }
-              : { data: [{ id: "post-1", offer_id: "offer-1", user_id: "tenant-1", status: "draft", created_at: "2026-08-13T21:00:00.022767+00:00" }], error: null }).then(resolve),
+              : { data: [{ id: "post-1", offer_id: "offer-1", user_id: "tenant-1", status: "draft", created_at: nowIso }], error: null }).then(resolve),
       };
       return query;
     });

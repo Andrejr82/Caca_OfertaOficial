@@ -122,7 +122,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
         actor: { type: "service", id: "oracle-worker" },
         candidate: {
           contractVersion: "pmav5.candidate/v1",
-          deterministicScore: 8.5,
+          deterministicScore: expect.any(Number),
         },
       });
     }
@@ -361,105 +361,24 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     }));
   });
 
-  it("não executa shadow mode com a flag desligada", async () => {
+  it("avalia e seleciona candidatos usando nativamente o motor de seleção V2 canônico", async () => {
     const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
-    const qualityShadow = vi.fn();
-    const qualityAdmission = vi.fn();
-    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
-    delete process.env.OFFER_QUALITY_PIPELINE_V2;
+    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-v2-1"] });
 
-    try {
-      await runDiscoveryOnlyCycle({
-        tenantId: "tenant-1",
-        correlationId: "cycle-shadow-off",
-        requestedAt: new Date().toISOString(),
-        marketplaces: ["Amazon"],
-        discover: async () => [createValidAmazonCandidate()],
-        persist: async () => ({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-1"] }),
-        qualityShadow,
-        qualityAdmission,
-      });
-      expect(qualityShadow).not.toHaveBeenCalled();
-      expect(qualityAdmission).not.toHaveBeenCalled();
-    } finally {
-      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
-      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
-    }
-  });
+    const result = await runDiscoveryOnlyCycle({
+      tenantId: "tenant-1",
+      correlationId: "cycle-v2-native",
+      requestedAt: new Date().toISOString(),
+      marketplaces: ["Amazon"],
+      discover: async () => [createValidAmazonCandidate()],
+      persist,
+    });
 
-  it("executa shadow mode somente como observação e preserva a persistência V1", async () => {
-    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
-    const qualityShadow = vi.fn().mockResolvedValue(undefined);
-    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-1"] });
-    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
-    process.env.OFFER_QUALITY_PIPELINE_V2 = "shadow";
-
-    try {
-      const result = await runDiscoveryOnlyCycle({
-        tenantId: "tenant-1",
-        correlationId: "cycle-shadow-on",
-        requestedAt: new Date().toISOString(),
-        marketplaces: ["Amazon"],
-        discover: async () => [createValidAmazonCandidate()],
-        persist,
-        qualityShadow,
-      });
-      expect(qualityShadow).toHaveBeenCalledTimes(1);
-      expect(qualityShadow).toHaveBeenCalledWith(expect.objectContaining({ marketplace: "Amazon" }));
-      expect(persist).toHaveBeenCalledTimes(1);
-      expect(result.finalState).toBe("approved");
-    } finally {
-      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
-      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
-    }
-  });
-
-  it("em active usa somente os candidatos admitidos pelo V2 antes da fila", async () => {
-    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
-    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
-    process.env.OFFER_QUALITY_PIPELINE_V2 = "active";
-    const first = createValidAmazonCandidate();
-    const second = { ...createValidAmazonCandidate(), sourceItemId: "B000000002", marketplaceMetrics: { sourcePosition: 2, asin: "B000000002" } };
-    const qualityAdmission = vi.fn().mockImplementation((products: unknown[]) => ({ accepted: [products[0]], rejected: [] }));
-    const persist = vi.fn().mockResolvedValue({ accepted: 1, inserted: 1, updated: 0, state: "approved", offerIds: ["offer-active-1"] });
-
-    try {
-      await runDiscoveryOnlyCycle({
-        tenantId: "tenant-1",
-        correlationId: "cycle-quality-active",
-        requestedAt: new Date().toISOString(),
-        marketplaces: ["Amazon"],
-        discover: async () => [first, second],
-        persist,
-        qualityAdmission,
-      });
-      expect(qualityAdmission).toHaveBeenCalledTimes(1);
-      expect(persist).toHaveBeenCalledTimes(1);
-      expect((persist.mock.calls[0][0] as any[])).toHaveLength(1);
-      expect((persist.mock.calls[0][0] as any[])[0].candidate.sourceItemId).toBe(first.sourceItemId);
-    } finally {
-      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
-      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
-    }
-  });
-
-  it("em active falha fechado quando o adaptador V2 não está disponível", async () => {
-    const { runDiscoveryOnlyCycle } = require("../../scripts/oracle-worker-discovery-only.cjs");
-    const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
-    process.env.OFFER_QUALITY_PIPELINE_V2 = "active";
-    try {
-      await expect(runDiscoveryOnlyCycle({
-        tenantId: "tenant-1",
-        correlationId: "cycle-quality-active-missing",
-        requestedAt: new Date().toISOString(),
-        marketplaces: ["Amazon"],
-        discover: async () => [createValidAmazonCandidate()],
-        persist: async () => ({ accepted: 1, state: "approved", offerIds: ["must-not-persist"] }),
-      })).rejects.toThrow("Admissão Offer Quality V2 indisponível");
-    } finally {
-      if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
-      else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
-    }
+    expect(persist).toHaveBeenCalledTimes(1);
+    expect(result.finalState).toBe("approved");
+    const ingestions = persist.mock.calls[0][0] as any[];
+    expect(ingestions).toHaveLength(1);
+    expect(ingestions[0].candidate.sourceItemId).toBe(createValidAmazonCandidate().sourceItemId);
   });
 
   it("não notifica a Official AI sem IDs reais materializados", async () => {

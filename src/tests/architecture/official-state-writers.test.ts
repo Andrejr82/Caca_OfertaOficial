@@ -34,7 +34,7 @@ describe("official state writers", () => {
   });
 
   it.each(["whatsapp", "telegram", "instagram"])("keeps deleted posts out of the %s panel query", (channel) => {
-    const page = source(`src/app/(dashboard)/${channel}/page.tsx`);
+    const page = source(channel === "whatsapp" ? "src/lib/offers/whatsapp-dashboard-loader.ts" : `src/app/(dashboard)/${channel}/page.tsx`);
     expect(page).toContain(`.eq("channel", "${channel}")`);
     expect(page).toContain('.eq("status", "draft")');
   });

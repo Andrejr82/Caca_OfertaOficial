@@ -1,6 +1,7 @@
 import { extractEvidence } from "./evidence";
 import type {
   CandidateDecisionV2,
+  FreshnessStateV2,
   MarketplaceV2,
   RawCandidateInput,
 } from "./types";
@@ -74,7 +75,7 @@ export function normalizeCandidateToV2(
     },
     evidence,
     freshness: {
-      state: "new",
+      state: "new" as FreshnessStateV2,
       eligible: true,
       reason: "initial_admission",
     },

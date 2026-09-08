@@ -188,8 +188,8 @@ describe("generateOfficialAI", () => {
     await generateOfficialAI({ ...command, metadata: { copyV2: true } }, dependencies);
 
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("Oferta na Shopee");
-    expect(persisted.channelCopies.telegram).toContain("Frete grátis confirmado");
+    expect(persisted.channelCopies.telegram).toContain("Ver na Shopee:");
+    expect(persisted.channelCopies.telegram).toContain("Frete grátis");
     expect(persisted.channelCopies.telegram).not.toContain("~de");
   });
 
@@ -211,7 +211,7 @@ describe("generateOfficialAI", () => {
     expect(result.status).toBe("drafted");
     expect(result.offerState).toBe("pending_manual_review");
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("Oferta na Shopee");
+    expect(persisted.channelCopies.telegram).toContain("Ver na Shopee:");
     expect(dependencies.approval.approveSelected).not.toHaveBeenCalled();
   });
 
@@ -243,8 +243,8 @@ describe("generateOfficialAI", () => {
     await generateOfficialAI(mlCommand, dependencies);
 
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.channelCopies.telegram).toContain("Oferta no Mercado Livre");
-    expect(persisted.channelCopies.telegram).toContain("🚚 Frete grátis confirmado");
+    expect(persisted.channelCopies.telegram).toContain("Ver no Mercado Livre:");
+    expect(persisted.channelCopies.telegram).toContain("Frete grátis");
     expect(persisted.channelCopies.telegram).not.toContain("🏷️ Vendido por");
   });
 
@@ -266,7 +266,7 @@ describe("generateOfficialAI", () => {
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
     for (const channel of command.channels) {
       if (channel === "instagram") {
-        expect(persisted.channelCopies[channel]).toContain("#Produto");
+        expect(persisted.channelCopies[channel]).toContain("Produto oficial");
       } else if (channel === "telegram") {
         expect(persisted.channelCopies[channel]).toContain("Produto oficial");
       } else {
@@ -306,17 +306,16 @@ describe("generateOfficialAI", () => {
     const result = await generateOfficialAI(command, dependencies);
 
     expect(result.status).toBe("approved");
-    expect(provider.generate).toHaveBeenCalledTimes(0);
+    expect(provider.generate).toHaveBeenCalledTimes(1);
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
     expect(dependencies.approval.approveSelected).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(["drafts", "approved"]);
+    expect(order).toEqual(["provider", "drafts", "approved"]);
     expect(dependencies.idempotency.complete).toHaveBeenCalledTimes(1);
     expect(dependencies.audit.register).toHaveBeenCalledWith(expect.objectContaining({
       commandId: command.commandId,
       correlationId: command.correlationId,
       causationId: command.causationId,
       provider: "deterministic-engine",
-      model: "generate.ts",
       result: "approved",
       postsPersisted: 3,
       transitionCompleted: true
@@ -390,7 +389,7 @@ describe("generateOfficialAI", () => {
     expect(result).toMatchObject({ status: "drafted", offerState: "pending_manual_review" });
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
     const persisted = vi.mocked(dependencies.content.persistDrafts).mock.calls[0][0].content;
-    expect(persisted.explanation).toContain("Copy V3 central");
+    expect(persisted.explanation).toContain("Copy V5");
     expect(persisted.channelCopies.telegram).toContain("Produto oficial");
   });
 

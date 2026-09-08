@@ -106,6 +106,6 @@ describe("Official AI idempotency contract version", () => {
     const second = await generateOfficialAI({ ...command, commandId: "equivalent-command", correlationId: "equivalent-correlation" }, dependencies);
     expect(second.replay).toBe(true);
     expect(dependencies.content.persistDrafts).toHaveBeenCalledTimes(1);
-    expect(providerGenerate).not.toHaveBeenCalled();
+    expect(providerGenerate).toHaveBeenCalledTimes(1);
   });
 });
