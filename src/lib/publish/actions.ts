@@ -195,7 +195,8 @@ export async function fetchShopeeOfficialProduct(shopId: string, itemId: string,
       const data = await response.json();
       const nodes = data?.data?.productOfferV2?.nodes;
       if (Array.isArray(nodes) && nodes.length > 0) {
-        const product = nodes.find((node: any) => !node.itemId || String(node.itemId) === String(itemId)) || nodes[0];
+        const product = nodes.find((node: any) => String(node.itemId) === String(itemId));
+        if (!product) continue;
         const price = parseMarketplacePrice(product.priceMin);
         const imageUrl = typeof product.imageUrl === "string" && product.imageUrl.startsWith("//")
           ? `https:${product.imageUrl}`

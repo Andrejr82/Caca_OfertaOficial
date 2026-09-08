@@ -89,3 +89,5 @@ Depois de deploy/alteração operacional, validar `/api/health`, `/api/readiness
 ## Vercel Preview
 
 O `vercel.json` permite build de Preview para `feature/multimarketplace-selection-v2`. `VERCEL_FORCE_BUILD=1` pode ser usado como override no ambiente Preview quando um build precisar ser forçado.
+
+Entradas de seleção com marketplace desconhecido são rejeitadas durante a normalização, sem conversão silenciosa para Mercado Livre.

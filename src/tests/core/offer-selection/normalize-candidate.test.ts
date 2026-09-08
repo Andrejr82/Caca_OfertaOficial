@@ -128,6 +128,15 @@ describe("Sprint 2 — Contrato Canônico CandidateDecisionV2 e Normalização",
     expect(candidate.evidence.sales).toBeNull();
   });
 
+  it("rejeita marketplace desconhecido em vez de convertê-lo em Mercado Livre", () => {
+    expect(() => normalizeCandidateToV2({
+      marketplace: "Marketplace inexistente",
+      sourceItemId: "unknown-1",
+      title: "Produto desconhecido",
+      currentPrice: 10,
+    })).toThrow(/marketplace/i);
+  });
+
   it("neutraliza preço de referência implausível sem descartar o produto válido", () => {
     const candidateWithBadRef = {
       marketplace: "Mercado Livre",

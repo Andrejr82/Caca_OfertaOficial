@@ -25,6 +25,8 @@ Validar build, `/api/health` e `/api/readiness` após deploy.
 
 Branches de trabalho não geram Preview por padrão. A branch `feature/multimarketplace-selection-v2` é uma exceção explícita no `ignoreCommand` do `vercel.json`; confirme o deployment como `Ready` antes dos smoke tests. Deploys de `main` permanecem em Production.
 
+Na Publicação Expressa, valide a identidade nativa do produto antes de aceitar metadados retornados por adaptadores externos.
+
 ## Oracle
 
 Estado confirmado em 27/08/2026:

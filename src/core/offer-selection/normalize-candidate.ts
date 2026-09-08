@@ -11,7 +11,7 @@ function normalizeMarketplaceName(value: unknown): MarketplaceV2 {
   if (text === "amazon") return "Amazon";
   if (text === "shopee") return "Shopee";
   if (text === "mercado livre" || text === "mercadolivre") return "Mercado Livre";
-  return "Mercado Livre";
+  throw new Error(`Marketplace desconhecido: ${value ?? "ausente"}`);
 }
 
 function resolveNativeIdentity(marketplace: MarketplaceV2, input: RawCandidateInput): string {
