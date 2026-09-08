@@ -59,3 +59,22 @@
 5. **Seleção de Portfólio**:
    - Limites de cotas respeitados (`maxTotal`, `maxPerMarketplace`, `maxPerCategory`, `maxPerFamily`, `maxPerSeller`).
    - Zero padding artificial com produtos fracos.
+
+---
+
+## 4. Manifesto de Entrega para Pull Request
+
+```text
+BASE_SHA=ea44c615
+BRANCH=feature/multimarketplace-selection-v2
+FINAL_SHA=a3e2e2222b1019030f39592db6a617f489201321
+MAIN_MERGED=NO
+ORACLE_TOUCHED=NO
+VERCEL_PREVIEW=READY_FOR_PR
+SUPABASE_MIGRATIONS=NONE_REQUIRED
+GOLDEN_SET=PASS (60/60)
+VERIFY_RESULT=PASS (lint: 0 errors, typecheck: pass, tests: 401 CJS + vitest all pass, build: 61/61 routes pass, security:check: pass)
+DOCS_AUDIT_RESULT=PASS
+LEGACY_PATHS_REMOVED=YES (selectCopyQueue, createCandidateV1, createIngestionV1, qualityShadow/Admission, curation-policy ranking)
+ROLLBACK_PLAN=Preservar branch main@ea44c615 intocada até aprovação e merge
+```
