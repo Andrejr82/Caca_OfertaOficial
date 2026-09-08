@@ -261,8 +261,8 @@ test('8. ACTIVE Shopee: ineligible não persiste e strong tem prioridade real', 
   assert.equal(result.marketplaces[0].queueSelected, persistedPayload.candidates.length);
 });
 
-test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak em selectCopyQueue', () => {
-  const { selectCopyQueue } = require('../oracle-worker-discovery-only.cjs');
+test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak na fila V2', () => {
+  const { selectCommercialPortfolioQueue } = require('../oracle-worker-discovery-only.cjs');
 
   const weakHighQueueScore = {
     sourceItemId: 'MLB-WEAK',
@@ -291,12 +291,12 @@ test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak em selectCopyQu
 
   // Teste no modo OFF: queueScore dita a ordem (weakHighQueueScore tem score muito maior)
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'off';
-  const queueOff = selectCopyQueue([weakHighQueueScore, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
+  const queueOff = selectCommercialPortfolioQueue([weakHighQueueScore, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
   assert.equal(queueOff.selected[0].sourceItemId, 'MLB-WEAK');
 
   // Teste no modo ACTIVE: strong tem prioridade e encabeça a fila (MLB-STRONG selecionado sobre MLB-WEAK)
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'active';
-  const queueActive = selectCopyQueue([weakHighQueueScore, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
+  const queueActive = selectCommercialPortfolioQueue([weakHighQueueScore, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
   assert.equal(queueActive.selected[0].sourceItemId, 'MLB-STRONG', 'Strong deve ser o primeiro selecionado no modo active');
 
   // Teste no modo ACTIVE com produtos de grupos distintos: ambos selecionados, com strong em primeiro
@@ -311,25 +311,17 @@ test('9. ACTIVE Amazon/ML: strong vem antes de eligible-but-weak em selectCopyQu
     _firstDiscoveryQuality: { eligible: true, strong: false },
     category: { name: 'secadores_editorial' },
   };
-  const queueDistinct = selectCopyQueue([distinctGroupCandidate, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
+  const queueDistinct = selectCommercialPortfolioQueue([distinctGroupCandidate, strongLowerQueueScore], { marketplace: 'Mercado Livre', maxPerMarketplace: 10 });
   assert.equal(queueDistinct.selected[0].sourceItemId, 'MLB-STRONG', 'Strong vem antes do candidato de outro grupo');
   assert.equal(queueDistinct.selected.length, 2, 'Grupos distintos são ambos selecionados');
 
   process.env.FIRST_DISCOVERY_QUALITY_V1_MODE = 'off';
 });
 
-test('10. OFFER_QUALITY_PIPELINE_V2=shadow continua usando evaluateDiscoveryShadow', () => {
-  const shadowRuntime = require('../offer-quality-shadow-runtime.cjs');
-  assert.equal(typeof shadowRuntime.evaluateDiscoveryShadow, 'function');
-
-  const dummyRaw = [{ sourceItemId: 'AMZ-1', title: 'Produto Teste', currentPrice: 50, sourceUrl: 'https://amazon.com.br/dp/B001', imageUrl: 'https://amazon.com.br/img.jpg', nativeIdentity: 'B001' }];
-  const dummyQueue = { selected: [{ sourceItemId: 'AMZ-1' }], limits: { maxPerMarketplace: 5 } };
-
-  const shadowResult = shadowRuntime.evaluateDiscoveryShadow(dummyRaw, dummyQueue, { marketplace: 'Amazon' });
-  assert.equal(typeof shadowResult, 'object');
-  assert.ok('recordCount' in shadowResult);
-  assert.ok('v1Selected' in shadowResult);
-  assert.ok('v2Winners' in shadowResult);
+test('10. O Oracle não expõe mais runtime de score paralelo', () => {
+  const scraper = require('../oracle-scraper.cjs');
+  assert.equal(scraper.createQualityShadowRunner, undefined);
+  assert.equal(scraper.createQualityAdmissionRunner, undefined);
 });
 
 test('11. Efficacy harness: strongCandidates usa intent compatível', () => {

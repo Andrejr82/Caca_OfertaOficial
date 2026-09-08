@@ -70,3 +70,19 @@ test('Sprint 9 — Ausência de Caminhos Legados de Seleção e Ranking Paralelo
     `Nenhum arquivo em src/app pode importar ranking-engine. Encontrados: ${legacyRankingImports.join(', ')}`
   );
 });
+
+test('Sprint 9 — O fluxo Oracle não mantém fila, score ou flags legadas', () => {
+  const root = path.resolve(__dirname, '../..');
+  const worker = fs.readFileSync(path.join(root, 'scripts/oracle-worker-discovery-only.cjs'), 'utf8');
+  const scraper = fs.readFileSync(path.join(root, 'scripts/oracle-scraper.cjs'), 'utf8');
+  const remoteScraper = fs.readFileSync(path.join(root, 'scripts/oracle-scraper_remote.cjs'), 'utf8');
+  const familySelector = fs.readFileSync(path.join(root, 'scripts/family-variant-selector.cjs'), 'utf8');
+  const publicationQueue = fs.readFileSync(path.join(root, 'scripts/publication-queue.cjs'), 'utf8');
+
+  assert.equal(/selectCopyQueue|createCandidateV1|createIngestionV1/.test(worker), false);
+  assert.equal(/qualityShadow|qualityAdmission|OFFER_QUALITY_PIPELINE_V2/.test(worker), false);
+  assert.equal(/qualityShadow|qualityAdmission|OFFER_QUALITY_PIPELINE_V2/.test(scraper), false);
+  assert.equal(/qualityShadow|qualityAdmission|OFFER_QUALITY_PIPELINE_V2/.test(remoteScraper), false);
+  assert.equal(/curation-policy\.cjs|scoreCandidate|qualityGate/.test(familySelector), false);
+  assert.equal(/curation-policy\.cjs/.test(publicationQueue), false);
+});

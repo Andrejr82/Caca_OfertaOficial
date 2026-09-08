@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   runDiscoveryOnlyCycle,
-  selectCopyQueue,
+  selectCommercialPortfolioQueue,
   validateCanonicalUrl,
   validateNativeIdentity
 } from '../../scripts/oracle-worker-discovery-only.cjs';
@@ -80,7 +80,7 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
         })),
       );
 
-      const queue = selectCopyQueue([
+      const queue = selectCommercialPortfolioQueue([
         ...candidates,
         { ...candidates[0], deterministicScore: 1 },
         { ...candidates[0], sourceItemId: 'invalida', sourceUrl: 'http://example.com/invalida' },
@@ -118,31 +118,10 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       mockDiscover = vi.fn();
     });
 
-    it('carrega a admissão V2 somente quando a flag está active', async () => {
+    it('não expõe runtimes paralelos de qualidade', async () => {
       const scraper = require('../../scripts/oracle-scraper.cjs');
-      const previous = process.env.OFFER_QUALITY_PIPELINE_V2;
-      delete process.env.OFFER_QUALITY_PIPELINE_V2;
-      expect(scraper.createQualityAdmissionRunner()).toBeNull();
-
-      process.env.OFFER_QUALITY_PIPELINE_V2 = 'active';
-      try {
-        const runner = scraper.createQualityAdmissionRunner();
-        expect(typeof runner).toBe('function');
-        const result = await runner([{
-          sourceItemId: 'B0ABC12345',
-          sourceUrl: 'https://www.amazon.com.br/dp/B0ABC12345',
-          title: 'Cafeteira Espresso Compacta',
-          imageUrl: 'https://images.example/cafe.jpg',
-          currentPrice: 99,
-          originalPrice: 129,
-          marketplaceMetrics: { asin: 'B0ABC12345', rating: 4.8, sales: 1000 },
-          monetization: { valid: true },
-        }], 'Amazon');
-        expect(result.accepted).toHaveLength(1);
-      } finally {
-        if (previous === undefined) delete process.env.OFFER_QUALITY_PIPELINE_V2;
-        else process.env.OFFER_QUALITY_PIPELINE_V2 = previous;
-      }
+      expect(scraper.createQualityAdmissionRunner).toBeUndefined();
+      expect(scraper.createQualityShadowRunner).toBeUndefined();
     });
 
     const baseContext = {
@@ -355,7 +334,9 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
         sourceUrl: `https://produto.mercadolivre.com.br/MLB-${index}`,
         currentPrice: 100,
         deterministicScore: index === 200 ? 10 : 1,
-        marketplaceMetrics: { item_id: `MLB-${index}`, sourcePosition: index + 1 }
+        marketplaceMetrics: index === 200
+          ? { item_id: `MLB-${index}`, sourcePosition: index + 1, rating: 5, reviewCount: 10000, sales: 10000, shippingFree: true, officialStore: true }
+          : { item_id: `MLB-${index}`, sourcePosition: index + 1 }
       }));
       mockDiscover.mockResolvedValue(candidates);
 

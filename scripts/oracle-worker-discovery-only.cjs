@@ -97,6 +97,9 @@ function normalizeQueueText(value) {
 }
 
 function queueGroupKey(product) {
+  const v2Candidate = product._decisionV2 || computeCalibratedScoreV2(normalizeProductToV2(product));
+  const identity = computeIdentityGroups(v2Candidate);
+  if (identity.familyKey && identity.confidence >= 90) return identity.familyKey;
   const title = normalizeQueueText(product.title);
   const type = normalizeQueueText(product.classification?.productType || product.category?.name) || title.split(' ').slice(0, 3).join(' ');
   const model = title.match(/\b(?:[a-z]{1,5}\s*)?\d{2,5}[a-z0-9-]*\b/i)?.[0] || '';
@@ -114,6 +117,16 @@ function queueScore(product) {
   if (product._decisionV2?.score?.total !== undefined) return Number(product._decisionV2.score.total);
   if (product.curationScore !== undefined && Number.isFinite(Number(product.curationScore))) return Number(product.curationScore);
   return 0;
+}
+
+function normalizeProductToV2(product, options = {}) {
+  return normalizeCandidateToV2({
+    ...product,
+    classification: product.classification || {
+      status: 'classified',
+      productType: product.category?.name || null,
+    },
+  }, options);
 }
 
 const SHOPEE_GROUP_KEY_VERSION = 'shopee-family-v1';
@@ -299,9 +312,9 @@ function buildQueueSelectionTelemetry({ products, allCandidates, ranked, selecte
   };
 }
 
-function selectCopyQueue(products, options = {}, cycleState = null, previouslyDeferred = [], stageLogger = null) {
+function selectCommercialPortfolioQueue(products, options = {}, cycleState = null, previouslyDeferred = [], stageLogger = null) {
   let stageStartedAt;
-  if (stageLogger) stageStartedAt = stageLogger.start('selectCopyQueue', products.length);
+  if (stageLogger) stageStartedAt = stageLogger.start('selectCommercialPortfolioQueue', products.length);
 
   const limits = { ...COPY_QUEUE_DEFAULTS, ...options };
   const marketplaceCounts = cycleState?.marketplaceCounts || new Map();
@@ -342,7 +355,7 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
   const ranked = Array.from(allCandidates.values())
     .map((product) => {
       const candidate = product.marketplace ? product : { ...product, marketplace: limits.marketplace };
-      const v2Candidate = normalizeCandidateToV2(candidate);
+      const v2Candidate = normalizeProductToV2(candidate);
       const titleQuality = validateProductTitle(candidate.title);
       const urlValid = !candidate.sourceUrl || validateCanonicalUrl(candidate.sourceUrl);
 
@@ -391,8 +404,8 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     });
 
   // ─── Fase de seleção familiar (APÓS gate e scores) ─────────────────────────
-  // Ajuste #1: a agregação por família ocorre depois que os candidatos já
-  // passaram pelo qualityGate. Produtos inválidos não competem por família.
+  // A agregação por família ocorre depois do gate canônico. Produtos inválidos
+  // não competem por família.
   const eligibleForFamily = [];
   for (const entry of ranked) {
     const product = entry.product;
@@ -431,6 +444,21 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     return String(a.sourceItemId).localeCompare(String(b.sourceItemId));
   });
 
+  const v2Portfolio = selectCommercialPortfolioV2(
+    postFamilySelected.map((product) => product._decisionV2 || computeCalibratedScoreV2(normalizeProductToV2(product))),
+    {
+      maxTotal: limits.maxTotal,
+      maxPerMarketplace: limits.maxPerMarketplace,
+      maxPerCategory: limits.maxPerCategory,
+      maxPerFamily: Number.MAX_SAFE_INTEGER,
+      maxPerSeller: Number.MAX_SAFE_INTEGER,
+    },
+  );
+  const v2SelectedIds = new Set(v2Portfolio.selected.map((candidate) => candidate.sourceItemId));
+  for (const rejected of v2Portfolio.rejected) {
+    skipped.push({ sourceItemId: rejected.candidate.sourceItemId, reason: rejected.reason });
+  }
+
   // Variantes preteridas por família → deferred com motivo específico
   for (const fp of familyResult.familyDeferred) {
     const attempts = (fp.attempts || 0) + 1;
@@ -454,7 +482,7 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
   }
 
   // ─── Aplica limites de marketplace/categoria nos eleitos ──────────────────
-  for (const product of postFamilySelected) {
+  for (const product of postFamilySelected.filter((candidate) => v2SelectedIds.has(candidate.sourceItemId))) {
     const marketplace = String(product.marketplace || limits.marketplace || '').toLowerCase();
     const category = queueCategory(product);
     const group = queueGroupKey(product);
@@ -509,7 +537,7 @@ function selectCopyQueue(products, options = {}, cycleState = null, previouslyDe
     categoryCounts.set(category, categoryCount + 1);
   }
   if (cycleState) cycleState.selectedCount = Number(cycleState.selectedCount || 0) + selected.length;
-  if (stageLogger) stageLogger.end('selectCopyQueue', stageStartedAt, selected.length);
+  if (stageLogger) stageLogger.end('selectCommercialPortfolioQueue', stageStartedAt, selected.length);
   return { selected: interleavePublicationQueue(selected), skipped, deferred, limits, familySummary: familyResult.familySummary };
 }
 
@@ -520,33 +548,38 @@ function stableId(prefix, value) {
 function assertCandidateInput(product) {
   const required = ['sourceItemId', 'sourceUrl', 'title', 'imageUrl', 'currentPrice', 'category', 'deterministicScore', 'discoveredAt'];
   const missing = required.filter((field) => product?.[field] == null || product[field] === '');
-  if (missing.length) throw new Error(`Candidate V1 inválido: ${missing.join(', ')}`);
+  if (missing.length) throw new Error(`CandidateDecisionV2 inválido: ${missing.join(', ')}`);
   if (product.sourceItemId === 'null' || product.sourceItemId === 'undefined' || !product.sourceItemId) {
-    throw new Error('Candidate V1 inválido: sourceItemId nulo');
+    throw new Error('CandidateDecisionV2 inválido: sourceItemId nulo');
   }
   if (!/^https:\/\//i.test(product.sourceUrl) || !/^https:\/\//i.test(product.imageUrl)) {
-    throw new Error('Candidate V1 inválido: URLs devem usar HTTPS');
+    throw new Error('CandidateDecisionV2 inválido: URLs devem usar HTTPS');
   }
   if (!Number.isFinite(Number(product.currentPrice)) || Number(product.currentPrice) <= 0) {
-    throw new Error('Candidate V1 inválido: currentPrice');
+    throw new Error('CandidateDecisionV2 inválido: currentPrice');
   }
   if (product.originalPrice != null && (
     !Number.isFinite(Number(product.originalPrice))
     || Number(product.originalPrice) < Number(product.currentPrice)
   )) {
-    throw new Error('Candidate V1 inválido: originalPrice');
+    throw new Error('CandidateDecisionV2 inválido: originalPrice');
   }
   if (!Number.isFinite(Number(product.deterministicScore)) || product.deterministicScore < 0 || product.deterministicScore > 100) {
-    throw new Error('Candidate V1 inválido: deterministicScore');
+    throw new Error('CandidateDecisionV2 inválido: deterministicScore');
   }
 }
 
-function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
+function createCandidateDecisionV2({ marketplace, product, tenantId, correlationId }) {
   assertCandidateInput(product);
   const identity = `${tenantId}:${marketplace}:${product.sourceItemId}`;
   const marketplaceMetrics = product.marketplace_metrics || product.marketplaceMetrics || {};
+  const decisionV2 = product._decisionV2 || computeCalibratedScoreV2(normalizeProductToV2(product, {
+    correlationId,
+    discoveredAt: product.discoveredAt,
+  }));
   return Object.freeze({
-    contractVersion: 'pmav5.candidate/v1',
+    ...decisionV2,
+    contractVersion: 'candidate-decision/v2',
     candidateId: stableId('candidate', identity),
     idempotencyKey: stableId('oracle', identity),
     correlationId,
@@ -560,10 +593,10 @@ function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
     originalPrice: product.originalPrice == null ? null : Number(product.originalPrice),
     category: Object.freeze({ ...product.category }),
     marketplaceMetrics: Object.freeze({ ...marketplaceMetrics }),
-    deterministicScore: Number(product.deterministicScore),
+    deterministicScore: Number(decisionV2.score.total),
     strategyVersion: product.strategyVersion || null,
-    scoreBreakdown: product.scoreBreakdown ? Object.freeze({ ...product.scoreBreakdown }) : null,
-    determiningReasons: product.determiningReasons ? Object.freeze([...product.determiningReasons]) : null,
+    scoreBreakdown: Object.freeze({ ...decisionV2.score }),
+    determiningReasons: Object.freeze([...decisionV2.reasons]),
     discoveryEvidence: Object.freeze({
       position: marketplaceMetrics.sourcePosition ?? marketplaceMetrics.position ?? null,
       category: product.category.name,
@@ -577,10 +610,10 @@ function createCandidateV1({ marketplace, product, tenantId, correlationId }) {
   });
 }
 
-function createIngestionV1(candidate, requestedAt) {
+function createDecisionEnvelope(candidate, requestedAt) {
   return Object.freeze({
-    contractVersion: 'pmav5.ingestion/v1',
-    ingestionId: stableId('ingestion', candidate.idempotencyKey),
+    contractVersion: 'candidate-decision-envelope/v2',
+    envelopeId: stableId('decision', candidate.idempotencyKey),
     idempotencyKey: candidate.idempotencyKey,
     correlationId: candidate.correlationId,
     sourceType: 'oracle_candidate',
@@ -591,7 +624,7 @@ function createIngestionV1(candidate, requestedAt) {
   });
 }
 
-async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, shopeeDiscovery = null, persistShopee = null, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, qualityShadow = null, qualityAdmission = null, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null, scenarioResolver = null, scenarioRuntimeResolver = null }) {
+async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, discover, shopeeDiscovery = null, persistShopee = null, loadDeferred, loadHistory, persist, observe, persistV2Metadata, notifyWorkPending, prepareCandidate = null, copyQueueOptions = null, marketplaces = MARKETPLACES, stageLogger = null, scenarioResolver = null, scenarioRuntimeResolver = null }) {
   if (!tenantId || !correlationId || !requestedAt) throw new Error('Contexto do ciclo Discovery-Only inválido');
   if (typeof discover !== 'function' || typeof persist !== 'function') throw new Error('Dependências Discovery-Only inválidas');
 
@@ -995,7 +1028,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
           }
         }
 
-        const v2Candidate = normalizeCandidateToV2(preparedProduct);
+        const v2Candidate = normalizeProductToV2(preparedProduct);
         const titleQuality = validateProductTitle(preparedProduct.title);
         const urlValid = validateCanonicalUrl(preparedProduct.sourceUrl);
         const imgValid = /^https:\/\//i.test(String(preparedProduct.imageUrl || ''));
@@ -1191,7 +1224,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         ? { ...(copyQueueOptions || {}), maxTotal: noCommercialCap, maxPerMarketplace: noCommercialCap, maxPerCategory: noCommercialCap }
         : (copyQueueOptions || {});
 
-      const queue = selectCopyQueue(candidatesToPersist, { ...effectiveCopyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
+      const queue = selectCommercialPortfolioQueue(candidatesToPersist, { ...effectiveCopyQueueOptions, marketplace }, cycleQueueState, deferredForQueue, stageLogger);
       funnel.count('queueSelected', queue.selected.length);
       funnel.recordQueueSelection(queue.selectionTelemetry);
       for (const item of queue.skipped || []) countRejection(item.reason || 'queue_rejected');
@@ -1202,7 +1235,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
         const selectedIngestions = [];
         for (const product of queue.selected) {
           try {
-            selectedIngestions.push(createIngestionV1(createCandidateV1({
+            selectedIngestions.push(createDecisionEnvelope(createCandidateDecisionV2({
               marketplace,
               product,
               tenantId,
@@ -1351,12 +1384,12 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
 module.exports = {
   FINAL_STATE,
   MARKETPLACES,
-  createCandidateV1,
-  createIngestionV1,
+  createCandidateDecisionV2,
+  createDecisionEnvelope,
   buildShopeeQueueGroupKey,
   groupKeyForProduct,
   queueGroupKey,
-  selectCopyQueue,
+  selectCommercialPortfolioQueue,
   runDiscoveryOnlyCycle,
   validateCanonicalUrl,
   validateNativeIdentity,

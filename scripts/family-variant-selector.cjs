@@ -3,7 +3,7 @@
 /**
  * FamilyVariantSelector — Sprint V5
  *
- * Recebe lista de candidatos já filtrados pelo qualityGate e ranqueados.
+ * Recebe lista de candidatos já filtrados pelo motor V2 e ranqueados.
  * Agrupa por family_key e seleciona a melhor variante de cada família.
  * Os demais recebem deferralReason = 'SIMILAR_TO_BETTER_SELECTED_OFFER'.
  *
@@ -15,7 +15,7 @@
  * 5. Prime
  * 6. cupom
  * 7. valor percebido (quantidade/tamanho favorecem maior)
- * 8. qualityScore
+ * 8. score V2
  *
  * Regra: não assume que mais barato = melhor.
  * Kit 24 peças pode ter maior valor percebido que kit 4.
@@ -23,7 +23,7 @@
  */
 
 const { computeAllKeys, FAMILY_MIN_CONFIDENCE } = require('./family-key-engine.cjs');
-const { qualityGate, scoreCandidate } = require('./curation-policy.cjs');
+const { normalizeCandidateToV2, computeCalibratedScoreV2 } = require('./offer-selection-runtime.cjs');
 
 // Estados que bloqueiam promoção de deferred (família ainda ativa) — Ajuste #9
 const ACTIVE_FAMILY_STATES = new Set(['pending_manual_review', 'approved', 'selected', 'posted']);
@@ -44,10 +44,10 @@ function extractQuantityFromTitle(title) {
 /**
  * variant_selection_score — auditável.
  * Score composto para escolher a melhor variante dentro de uma família.
- * NÃO confunde com o score de qualidade da fila (scoreCandidate).
+ * Usa score V2 como sinal base, sem segundo motor de ranking.
  *
  * @param {object} product — candidato normalizado
- * @param {object} gate    — resultado de qualityGate(product)
+ * @param {object} gate    — resultado do gate V2
  * @returns {{ score: number, reasons: string[] }}
  */
 function variantSelectionScore(product, gate) {
@@ -100,9 +100,8 @@ function variantSelectionScore(product, gate) {
     reasons.push(`quantity=${quantity}`);
   }
 
-  // qualityScore como sinal base
-  const qs = scoreCandidate(product, gate);
-  score += qs * 0.3;
+  const decision = product._decisionV2 || computeCalibratedScoreV2(normalizeCandidateToV2(product));
+  score += decision.score.total * 0.3;
 
   return { score: Number(score.toFixed(2)), reasons };
 }
@@ -133,7 +132,7 @@ function checkFamilyHasActiveBetter(familyKey, activeFamilyMap, candidateSourceI
 /**
  * Agrupa candidatos elegíveis por family_key e seleciona a melhor variante.
  *
- * IMPORTANTE: Só deve ser chamado com candidatos que JÁ passaram pelo qualityGate.
+ * IMPORTANTE: Só deve ser chamado com candidatos que já passaram pelo gate V2.
  * Produtos inválidos não competem para representar uma família.
  *
  * @param {object[]} eligibleCandidates — candidatos pós-gate, com gate já computado
@@ -148,7 +147,12 @@ function checkFamilyHasActiveBetter(familyKey, activeFamilyMap, candidateSourceI
 function selectBestVariants(eligibleCandidates, activeFamilyMap = new Map()) {
   // Enriquecer cada candidato com identidade de família e variant_selection_score
   const enriched = eligibleCandidates.map((product) => {
-    const gate = product._gate || qualityGate(product);
+    const decision = product._decisionV2 || computeCalibratedScoreV2(normalizeCandidateToV2(product));
+    const gate = product._gate || {
+      eligible: decision.decision !== 'rejected',
+      reasons: decision.reasons.map((reason) => reason.code || reason.message),
+      warnings: [],
+    };
     const identity = computeAllKeys(product);
     const vs = variantSelectionScore(product, gate);
     return { product, gate, identity, variantScore: vs.score, variantReasons: vs.reasons };

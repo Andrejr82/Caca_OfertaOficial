@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { runDiscoveryOnlyCycle } = require('../oracle-worker-discovery-only.cjs');
-const { filterNovelNormalizedProducts, resolvePersistedOfferIds, persistDiscoveryIngestionV1 } = require('../oracle-scraper.cjs');
+const { filterNovelNormalizedProducts, resolvePersistedOfferIds, persistDiscoveryDecisionV2 } = require('../oracle-scraper.cjs');
 const { filterFreshCandidates } = require('../offer-freshness-gate.cjs');
 const { evaluateFirstDiscoveryCandidate } = require('../first-discovery-candidate-quality.cjs');
 const { controlledCandidateQuality, selectControlledPersistCandidates } = require('../shopee-openapi-v1-controlled-persist.cjs');

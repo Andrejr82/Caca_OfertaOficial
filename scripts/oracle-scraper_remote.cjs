@@ -122,46 +122,6 @@ const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-w
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
 
-function createQualityShadowRunner() {
-  if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'shadow') return null;
-  let runtime;
-  try {
-    runtime = require('./offer-quality-shadow-runtime.cjs');
-  } catch (error) {
-    return async () => { throw new Error(`Runtime de qualidade shadow indisponível: ${error.message}`); };
-  }
-  if (typeof runtime.evaluateDiscoveryShadow !== 'function') {
-    return async () => { throw new Error('Runtime de qualidade shadow sem avaliador'); };
-  }
-  return async (payload) => runtime.evaluateDiscoveryShadow(
-    payload.candidates || [],
-    payload.queue || {},
-    {
-      runId: `shadow-${payload.correlationId}-${payload.marketplace}`,
-      generatedAt: new Date().toISOString(),
-      marketplace: payload.marketplace,
-    },
-  );
-}
-
-function createQualityAdmissionRunner() {
-  if (process.env.OFFER_QUALITY_PIPELINE_V2 !== 'active') return null;
-  let runtime;
-  try {
-    runtime = require('./offer-quality-queue-runtime.cjs');
-  } catch (error) {
-    return async () => { throw new Error(`Runtime de qualidade active indisponível: ${error.message}`); };
-  }
-  if (typeof runtime.selectOfferQualityQueueProducts !== 'function') {
-    return async () => { throw new Error('Runtime de qualidade active sem adaptador de fila'); };
-  }
-  return async (products, marketplace, limits = {}) => runtime.selectOfferQualityQueueProducts(products, {
-    marketplace,
-    maxAccepted: limits.maxAccepted,
-    monetizationValid: (product) => product?.monetization?.valid === true,
-  });
-}
-
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 // Executa descoberta nos 7 horários canônicos dos nichos editoriais ativos (06h, 08h, 10h, 12h, 14h, 16h, 18h).
 // A fila de cupons das 22h permanece manual e não dispara busca de produtos.
@@ -676,8 +636,7 @@ function normalizeMercadoLivreCandidate(product, intent = null) {
 
 function normalizeAmazonCandidate(product, discoveredAt, intent = null) {
   // product.marketplaceMetrics é gerado por extractProductCommercials no parser.
-  // Antes desta correção, prime/coupon/promotion/rating/reviewCount ficavam
-  // apenas no rawPayload e nunca chegavam ao qualityGate nem ao scoreCandidate.
+  // Os sinais comerciais seguem no contrato canônico e alimentam a avaliação V2.
   const pm = product.marketplaceMetrics || {};
   return {
     intent: product.intent || intent,
@@ -936,25 +895,25 @@ async function scrapeStore(store, stageLogger = null) {
   throw new Error('Marketplace não autorizado no Oracle Worker: ' + store);
 }
 
-async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus = FINAL_STATE, stageLogger = null) {
+async function persistDiscoveryDecisionV2(ingestions, marketplace, targetStatus = FINAL_STATE, stageLogger = null) {
   let stageStartedAt;
-  if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryIngestionV1', ingestions.length);
+  if (stageLogger) stageStartedAt = stageLogger.start('persistDiscoveryDecisionV2', ingestions.length);
 
   try {
     if (!ingestions.length) {
-      if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
+      if (stageLogger) stageLogger.end('persistDiscoveryDecisionV2', stageStartedAt, 0);
       return { accepted: 0, offerIds: [], state: targetStatus };
     }
-  const rows = ingestions.map(({ candidate, ingestionId, correlationId }) => {
+  const rows = ingestions.map(({ candidate, envelopeId, correlationId }) => {
     const metrics = candidate.marketplaceMetrics;
     const isDeferred = targetStatus === 'deferred';
     const rawPayload = candidate.rawPayload || candidate;
     
     let explainability = {
       contract_version: candidate.contractVersion,
-      ingestion_contract_version: 'pmav5.ingestion/v1',
+      envelope_contract_version: 'candidate-decision-envelope/v2',
       candidate_id: candidate.candidateId,
-      ingestion_id: ingestionId,
+      envelope_id: envelopeId,
       correlation_id: correlationId,
       discovery_evidence: candidate.discoveryEvidence,
       marketplace_metrics: metrics,
@@ -1023,7 +982,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
   }).filter(Boolean);
 
   if (rows.length === 0) {
-    if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, 0);
+    if (stageLogger) stageLogger.end('persistDiscoveryDecisionV2', stageStartedAt, 0);
     return { accepted: 0, offerIds: [], state: targetStatus };
   }
 
@@ -1109,7 +1068,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
     }
     
     if (stageLogger) stageLogger.end('RPC_upsert_discovery_offers_v2', rpcStartedAt, data.inserted + data.updated);
-    if (stageLogger) stageLogger.end('persistDiscoveryIngestionV1', stageStartedAt, data.inserted + data.updated);
+    if (stageLogger) stageLogger.end('persistDiscoveryDecisionV2', stageStartedAt, data.inserted + data.updated);
     
     return { 
       accepted: data.inserted + data.updated,
@@ -1121,7 +1080,7 @@ async function persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus
       state: FINAL_STATE 
     };
   } catch (err) {
-    if (stageLogger) stageLogger.error('persistDiscoveryIngestionV1', stageStartedAt, err.message);
+    if (stageLogger) stageLogger.error('persistDiscoveryDecisionV2', stageStartedAt, err.message);
     throw err;
   }
 }
@@ -1298,10 +1257,8 @@ async function runManualMarketplaceScenarioRecording({ tenantId, category, marke
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
-    persist: persistDiscoveryIngestionV1,
+    persist: persistDiscoveryDecisionV2,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
-    qualityShadow: createQualityShadowRunner(),
-    qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: Math.min(30, perMarketplace * selectedMarketplaces.length), maxPerMarketplace: perMarketplace, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1336,10 +1293,8 @@ async function runScrapingCycleCore() {
     discover: (store) => scrapeStore(store, stageLogger),
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
-    persist: (ingestions, marketplace, targetStatus) => persistDiscoveryIngestionV1(ingestions, marketplace, targetStatus, stageLogger),
+    persist: (ingestions, marketplace, targetStatus) => persistDiscoveryDecisionV2(ingestions, marketplace, targetStatus, stageLogger),
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
-    qualityShadow: createQualityShadowRunner(),
-    qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
     copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1396,10 +1351,8 @@ async function runShopeeScenarioRecording(scenario) {
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
-    persist: persistDiscoveryIngestionV1,
+    persist: persistDiscoveryDecisionV2,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
-    qualityShadow: createQualityShadowRunner(),
-    qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1447,10 +1400,8 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     },
     loadDeferred: loadDeferredDiscoveryIngestions,
     loadHistory: loadRecentDiscoveryHistory,
-    persist: persistDiscoveryIngestionV1,
+    persist: persistDiscoveryDecisionV2,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
-    qualityShadow: createQualityShadowRunner(),
-    qualityAdmission: createQualityAdmissionRunner(),
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
@@ -1506,7 +1457,7 @@ module.exports = {
   fetchAmazonHtmlViaScrapedo,
   fetchMercadoLivreViaScrapedo: fetchAmazonHtmlViaScrapedo,
   notifyWorkPendingToOfficialAI,
-  persistDiscoveryIngestionV1,
+  persistDiscoveryDecisionV2,
   resolveOfficialAITriggerEndpoint,
   refreshShopeeNativeCatalog,
   lookupShopeeAffiliateProduct,
@@ -1519,7 +1470,6 @@ module.exports = {
   generateMLAffiliateLinkWithId,
   processMonetization,
   buildAffiliateLinkRows,
-  createQualityAdmissionRunner,
   mercadoLivreIdentityKey,
   isEquivalentMercadoLivreProduct,
 };

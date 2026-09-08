@@ -12,13 +12,13 @@ test('Legacy Amazon pipeline functions are removed from oracle-scraper.cjs', () 
 
 test('Oracle Worker no longer uses an Amazon feature flag', () => {
   const source = fs.readFileSync(path.join(__dirname, 'oracle-scraper.cjs'), 'utf8');
-  const runtime = source.slice(source.indexOf('async function scrapeStore(store)'), source.indexOf('async function persistDiscoveryIngestionV1'));
+  const runtime = source.slice(source.indexOf('async function scrapeStore(store)'), source.indexOf('async function persistDiscoveryDecisionV2'));
   assert.doesNotMatch(runtime, /AMAZON_NATIVE_TOP20_V5/);
 });
 
 test('Oracle Worker always routes Amazon to Native Top 20 V5', () => {
   const source = fs.readFileSync(path.join(__dirname, 'oracle-scraper.cjs'), 'utf8');
-  const runtime = source.slice(source.indexOf('async function scrapeStore(store)'), source.indexOf('async function persistDiscoveryIngestionV1'));
+  const runtime = source.slice(source.indexOf('async function scrapeStore(store)'), source.indexOf('async function persistDiscoveryDecisionV2'));
   assert.match(runtime, /runAmazonNativeTop20/);
   assert.doesNotMatch(runtime, /fetchAmazonDiscoveryV3/);
 });

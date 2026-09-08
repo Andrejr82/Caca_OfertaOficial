@@ -50,9 +50,9 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
     expect(events.every((event) => event.correlationId === "correlation-observed")).toBe(true);
   });
 
-  it("rejeita Candidate V1 com preço original inferior ao preço atual", () => {
-    const { createCandidateV1 } = require("../../scripts/oracle-worker-discovery-only.cjs");
-    expect(() => createCandidateV1({
+  it("rejeita CandidateDecisionV2 com preço original inferior ao preço atual", () => {
+    const { createCandidateDecisionV2 } = require("../../scripts/oracle-worker-discovery-only.cjs");
+    expect(() => createCandidateDecisionV2({
       marketplace: "Amazon",
       tenantId: "00000000-0000-4000-8000-000000000001",
       correlationId: "cycle-pmav5-005",
@@ -117,11 +117,11 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
       const ingestions = ingestionsRaw as any[];
       expect(ingestions).toHaveLength(1);
       expect(ingestions[0]).toMatchObject({
-        contractVersion: "pmav5.ingestion/v1",
+        contractVersion: "candidate-decision-envelope/v2",
         sourceType: "oracle_candidate",
         actor: { type: "service", id: "oracle-worker" },
         candidate: {
-          contractVersion: "pmav5.candidate/v1",
+          contractVersion: "candidate-decision/v2",
           deterministicScore: expect.any(Number),
         },
       });
@@ -406,7 +406,7 @@ describe("PMAV5-005 Oracle Worker Discovery-Only", () => {
   });
 
   it("persistência usa o RPC v2 e acumula os UUIDs materializados", () => {
-    const persist = functionSource("persistDiscoveryIngestionV1");
+    const persist = functionSource("persistDiscoveryDecisionV2");
     expect(persist).toContain("upsert_discovery_offers_v2");
     expect(persist).toContain("data.offer_ids");
     expect(persist).toContain("offerIds");

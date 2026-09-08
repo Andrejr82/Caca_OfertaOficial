@@ -1,7 +1,7 @@
 'use strict';
 
 process.env.ORACLE_SCRAPER_DISABLE_AUTORUN = '1';
-const { runOracleScraperShopeeShadowLocal, persistDiscoveryIngestionV1 } = require('../oracle-scraper.cjs');
+const { runOracleScraperShopeeShadowLocal, persistDiscoveryDecisionV2 } = require('../oracle-scraper.cjs');
 const { normalizeRpcOutcome } = require('../discovery-funnel-contract.cjs');
 
 it('não contabiliza como falha as mesmas linhas já inseridas pelo RPC', () => {
@@ -18,7 +18,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
     process.env.DRY_RUN = '1';
     process.env.NO_DB_WRITE = '1';
     try {
-      const result = await persistDiscoveryIngestionV1([{ candidate: {}, ingestionId: 'ing-1', correlationId: 'run-1' }], 'Amazon');
+      const result = await persistDiscoveryDecisionV2([{ candidate: {}, envelopeId: 'ing-1', correlationId: 'run-1' }], 'Amazon');
       expect(result).toMatchObject({ skipped: true, supabaseWrites: 0, accepted: 0 });
     } finally {
       if (previousDryRun === undefined) delete process.env.DRY_RUN; else process.env.DRY_RUN = previousDryRun;
