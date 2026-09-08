@@ -98,6 +98,8 @@ npm run docs:audit
 npm run verify
 ```
 
+Deploys de Preview da Vercel incluem a branch `feature/multimarketplace-selection-v2`; após um Preview pronto, valide `/api/health` e `/api/readiness` antes da revisão do PR.
+
 ### Validação API-first de marketplaces
 
 O discovery oficial usa as rotas autorizadas de catálogo/categoria do Mercado Livre e a OpenAPI oficial da Shopee. O endpoint legado de busca aberta do Mercado Livre (`/sites/{site_id}/search`) pode retornar `403` mesmo com OAuth válido; isso é uma restrição de rota, não motivo para relaxar autenticação ou criar fallback aberto.

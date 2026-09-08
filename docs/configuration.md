@@ -85,3 +85,7 @@ npm run docs:audit
 ```
 
 Depois de deploy/alteração operacional, validar `/api/health`, `/api/readiness`, PM2, flags efetivas e logs.
+
+## Vercel Preview
+
+O `vercel.json` permite build de Preview para `feature/multimarketplace-selection-v2`. `VERCEL_FORCE_BUILD=1` pode ser usado como override no ambiente Preview quando um build precisar ser forçado.

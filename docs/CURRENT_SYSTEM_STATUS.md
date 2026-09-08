@@ -14,6 +14,7 @@ Baseado na branch `feature/multimarketplace-selection-v2`, com motor de seleçã
 - Oracle: Discovery-Only, scheduler editorial, scraping auxiliar, Radar dedicado e serviços operacionais.
 - Scheduler: `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
 - O scraper não executa Discovery no startup; `--run-now` dispara execução manual explícita.
+- A branch `feature/multimarketplace-selection-v2` está configurada para gerar Preview na Vercel; produção continua vinculada à `main`.
 
 ## Matriz editorial ativa
 
