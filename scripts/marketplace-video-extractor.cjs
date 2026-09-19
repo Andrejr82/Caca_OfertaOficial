@@ -19,13 +19,18 @@ let cachedMlTokenExpiresAt = 0;
  */
 async function extractAmazonVideo(urlOrAsin, { timeoutMs = 15000 } = {}) {
   try {
-    let asin = urlOrAsin;
-    if (typeof urlOrAsin === 'string' && (urlOrAsin.includes('amazon.') || urlOrAsin.includes('/dp/') || urlOrAsin.includes('/gp/'))) {
-      const match = urlOrAsin.match(/(?:dp\/|gp\/product\/|d\/)([A-Z0-9]{10})/i);
-      if (match) asin = match[1];
+    let asin = null;
+    const input = String(urlOrAsin || '').trim();
+
+    // 1. Tentar extrair ASIN de URLs
+    const urlMatch = input.match(/(?:dp\/|gp\/product\/|d\/|\/)([A-Z0-9]{10})(?:[/?#]|$)/i);
+    if (urlMatch) {
+      asin = urlMatch[1].toUpperCase();
+    } else if (/^[A-Z0-9]{10}$/i.test(input)) {
+      asin = input.toUpperCase();
     }
-    asin = String(asin || '').trim().toUpperCase();
-    if (!asin || !/^[A-Z0-9]{10}$/.test(asin)) {
+
+    if (!asin) {
       return { found: false, reason: 'INVALID_ASIN' };
     }
 
@@ -147,52 +152,63 @@ async function getMercadoLivreToken({ env = process.env } = {}) {
 
 async function extractMercadoLivreVideo(itemIdOrUrl, { timeoutMs = 15000, env = process.env } = {}) {
   try {
-    let itemId = itemIdOrUrl;
-    if (typeof itemIdOrUrl === 'string' && (itemIdOrUrl.includes('mercadolivre.') || itemIdOrUrl.includes('mercadolibre.'))) {
-      const match = itemIdOrUrl.match(/MLB-?(\d+)/i);
-      if (match) itemId = 'MLB' + match[1];
-    }
-    itemId = String(itemId || '').trim();
-    if (!itemId.startsWith('MLB')) itemId = 'MLB' + itemId;
+    const input = String(itemIdOrUrl || '').trim();
+    const isCatalog = input.includes('/p/MLB') || /MLB\d{6,8}(?:[/?#]|$)/i.test(input);
+    const match = input.match(/MLB-?(\d+)/i);
+    if (!match) return { found: false, reason: 'INVALID_ML_ID' };
 
+    const mlId = 'MLB' + match[1];
     const token = await getMercadoLivreToken({ env });
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    const res = await fetch(`${ML_API_ROOT}/items?ids=${itemId}&attributes=id,title,video_id,status`, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Accept': 'application/json'
-      },
-      signal: controller.signal
-    }).finally(() => clearTimeout(timeout));
+    let videoId = null;
 
-    if (!res.ok) {
-      return { found: false, reason: `HTTP_${res.status}` };
+    if (isCatalog) {
+      // Catálogo /products/MLB...
+      const res = await fetch(`${ML_API_ROOT}/products/${mlId}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeout));
+
+      if (res.ok) {
+        const prodData = await res.json();
+        videoId = prodData.video_id;
+      }
+    } else {
+      // Item regular /items?ids=MLB...
+      const res = await fetch(`${ML_API_ROOT}/items?ids=${mlId}&attributes=id,title,video_id,status`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        signal: controller.signal
+      }).finally(() => clearTimeout(timeout));
+
+      if (res.ok) {
+        const data = await res.json();
+        const item = Array.isArray(data) ? data[0]?.body : data;
+        videoId = item?.video_id;
+      }
     }
 
-    const data = await res.json();
-    const item = Array.isArray(data) ? data[0]?.body : data;
-    if (!item || !item.video_id) {
+    if (!videoId) {
       return { found: false, reason: 'NO_VIDEO_ID' };
     }
 
-    const videoId = String(item.video_id).trim();
-    if (videoId.length === 11) {
+    const normVideoId = String(videoId).trim();
+    if (normVideoId.length === 11) {
       return {
         found: true,
-        videoUrl: `https://www.youtube.com/watch?v=${videoId}`,
+        videoUrl: `https://www.youtube.com/watch?v=${normVideoId}`,
         videoType: 'youtube',
-        videoId,
+        videoId: normVideoId,
         source: 'mercadolivre_youtube'
       };
     }
 
     return {
       found: true,
-      videoUrl: `https://api.mercadolibre.com/videos/${videoId}`,
+      videoUrl: `https://api.mercadolibre.com/videos/${normVideoId}`,
       videoType: 'ml_native',
-      videoId,
+      videoId: normVideoId,
       source: 'mercadolivre_native'
     };
   } catch (err) {
@@ -268,13 +284,13 @@ async function extractProductVideo({ marketplace, offer, url, timeoutMs = 25000 
   const targetUrl = url || offer?.sourceUrl || offer?.product_url || offer?.offerLink || offer?.productLink || '';
 
   if (normMarketplace.includes('amazon')) {
-    const asin = offer?.marketplaceMetrics?.asin || offer?.sourceItemId || targetUrl;
-    return extractAmazonVideo(asin, { timeoutMs });
+    const candidate = targetUrl || offer?.marketplaceMetrics?.asin || offer?.sourceItemId;
+    return extractAmazonVideo(candidate, { timeoutMs });
   }
 
   if (normMarketplace.includes('mercado') || normMarketplace.includes('ml')) {
-    const itemId = offer?.sourceItemId || offer?.marketplaceMetrics?.itemId || targetUrl;
-    return extractMercadoLivreVideo(itemId, { timeoutMs });
+    const candidate = targetUrl || offer?.marketplaceMetrics?.itemId || offer?.sourceItemId;
+    return extractMercadoLivreVideo(candidate, { timeoutMs });
   }
 
   if (normMarketplace.includes('shopee')) {
