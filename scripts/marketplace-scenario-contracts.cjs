@@ -5,6 +5,7 @@ const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
 const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 const {
   EDITORIAL_SCENARIOS,
+  EDITORIAL_SCENARIO_CATALOG,
   COMMON_BLOCKED,
   normalize,
   sanitizeBlockedTerms,
@@ -57,7 +58,7 @@ const AMAZON_ATTRIBUTES_BY_SCENARIO = Object.freeze({
 });
 
 for (const marketplace of MARKETPLACES) {
-  for (const [scenarioId, scenario] of Object.entries(EDITORIAL_SCENARIOS)) {
+  for (const [scenarioId, scenario] of Object.entries(EDITORIAL_SCENARIO_CATALOG || EDITORIAL_SCENARIOS)) {
     const source = marketplace === 'Amazon' ? (AMAZON_SCENARIOS[scenarioId] || scenario) : (SHOPEE_SCENARIOS[scenarioId] || scenario);
     const commercialPlan = commercialPlanForScenario(scenarioId, marketplace);
 
@@ -91,7 +92,7 @@ for (const marketplace of MARKETPLACES) {
 function getMarketplaceScenarioContract(scenarioId, marketplace) {
   if (!MARKETPLACES.includes(marketplace)) throw new Error('Marketplace não autorizado: ' + marketplace);
   const source = marketplace === 'Amazon' ? AMAZON_SCENARIOS : SHOPEE_SCENARIOS;
-  const base = source[scenarioId] || EDITORIAL_SCENARIOS[scenarioId] || SHOPEE_SCENARIOS[scenarioId];
+  const base = source[scenarioId] || EDITORIAL_SCENARIO_CATALOG[scenarioId] || EDITORIAL_SCENARIOS[scenarioId] || SHOPEE_SCENARIOS[scenarioId];
   if (!base) return null;
   const explicit = EXPLICIT[marketplace]?.[scenarioId];
   const terms = explicit?.terms || [...(base.keywords || [])];
