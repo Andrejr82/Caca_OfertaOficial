@@ -100,6 +100,9 @@ const FULL_DEPLOY_FILES = [
   'src/lib/shopee/ranking/score.ts',
   'src/lib/shopee/ranking/oracle-adapter.ts',
   'src/core/trends/commercial-opportunity-score-v3.cjs',
+  'scripts/marketplace-video-extractor.cjs',
+  'scripts/shopee-video-collector.cjs',
+  'extensions/shopee-video-extractor/video-parser.js',
 ];
 const DEPLOY_PROFILES = Object.freeze({
   'shopee-curated-v2': Object.freeze([
@@ -112,6 +115,9 @@ const DEPLOY_PROFILES = Object.freeze({
     'scripts/shopee-openapi-v1-adapter.cjs',
     'scripts/contracts/shopee-openapi-v1/listItemFeeds.cjs',
     'scripts/contracts/shopee-openapi-v1/productOfferV2.cjs',
+    'scripts/marketplace-video-extractor.cjs',
+    'scripts/shopee-video-collector.cjs',
+    'extensions/shopee-video-extractor/video-parser.js',
   ]),
   full: Object.freeze(FULL_DEPLOY_FILES),
 });

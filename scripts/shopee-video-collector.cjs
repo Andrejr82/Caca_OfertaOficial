@@ -11,10 +11,16 @@ function normalizeId(value, name) {
 function urlIdentity(url) {
   try {
     const parsed = new URL(url);
-    const product = parsed.pathname.match(/\/product\/(\d+)\/(\d+)/iu);
+    const product = parsed.pathname.match(/\/(?:product|opaanlp)\/(\d+)\/(\d+)/iu);
     if (product) return { shopId: product[1], itemId: product[2] };
+    const dashed = parsed.pathname.match(/-i\.(\d+)\.(\d+)/iu);
+    if (dashed) return { shopId: dashed[1], itemId: dashed[2] };
     const dotted = parsed.pathname.match(/\.([0-9]+)\.([0-9]+)(?:[/?]|$)/u);
-    return dotted ? { shopId: dotted[1], itemId: dotted[2] } : null;
+    if (dotted) return { shopId: dotted[1], itemId: dotted[2] };
+    const shopIdParam = parsed.searchParams.get('shopid') || parsed.searchParams.get('shopId') || parsed.searchParams.get('shop_id');
+    const itemIdParam = parsed.searchParams.get('itemid') || parsed.searchParams.get('itemId') || parsed.searchParams.get('item_id');
+    if (shopIdParam && itemIdParam) return { shopId: String(shopIdParam), itemId: String(itemIdParam) };
+    return null;
   } catch {
     return null;
   }
@@ -22,6 +28,7 @@ function urlIdentity(url) {
 
 function htmlHasIdentity(html, shopId, itemId) {
   const text = String(html || '');
+  if (text.includes(String(shopId)) && text.includes(String(itemId))) return true;
   const shopKey = '(?:"?shop(?:Id|_id)"?)';
   const itemKey = '(?:"?item(?:Id|_id)"?)';
   const shopValue = `(?:${shopKey})\\s*:\\s*"?${shopId}`;

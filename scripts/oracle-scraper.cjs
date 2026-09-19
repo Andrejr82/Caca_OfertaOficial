@@ -1351,6 +1351,31 @@ async function persistDiscoveryDecisionV2(ingestions, marketplace, targetStatus 
       rows,
       rpcOfferIds: Array.isArray(data.offer_ids) ? data.offer_ids : [],
     });
+
+    if (Array.isArray(resolvedOfferIds) && resolvedOfferIds.length > 0) {
+      try {
+        const { enrichOfferVideoAsync } = require('./marketplace-video-extractor.cjs');
+        const client = getSupabase();
+        Promise.allSettled(
+          resolvedOfferIds.map((offerId, idx) => {
+            const row = rows[idx] || {};
+            return enrichOfferVideoAsync(client, offerId, {
+              marketplace,
+              offer: {
+                sourceItemId: row.source_item_id || row.sourceItemId,
+                sourceUrl: row.product_url || row.sourceUrl,
+                marketplaceMetrics: row.marketplace_metrics || row.marketplaceMetrics,
+                shopId: row.marketplace_metrics?.shopId,
+                itemId: row.marketplace_metrics?.itemId || row.source_item_id
+              }
+            });
+          })
+        ).catch(() => {});
+      } catch (err) {
+        console.warn(`[VideoEnrichment] Falha ao iniciar enriquecimento assíncrono: ${err.message}`);
+      }
+    }
+
     const rpcOutcome = normalizeRpcOutcome({
       accepted: data.inserted + data.updated,
       inserted: data.inserted,
