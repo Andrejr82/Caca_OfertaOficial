@@ -1,8 +1,8 @@
 # Integrações atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
-<!-- verified-on: 2026-09-07 -->
+<!-- verified-against: 6dabe83f4ab6d4a28e235f28d66fd369d0f313ff -->
+<!-- verified-on: 2026-09-19 -->
 
 | Integração | Capacidade/estado atual |
 |---|---|
@@ -37,15 +37,16 @@ No PR #187:
 - aliases editoriais ampliam cobertura de Informática sem alterar endpoint, autenticação ou guardrails;
 - acessórios/peças, termos bloqueados, domínio proibido, família incompatível e produto sem classificação reconhecida continuam rejeitados.
 
-## Shopee — categoria nativa + intenção forte
+## Shopee — categoria nativa + intenção forte + rotação de catálogo
 
-Shopee preserva ProductCatIds/OpenAPI V1 e as fontes oficiais já validadas. O controlled persist reutiliza o gate de título/produto principal; `allowAccessory` não autoriza mais um cenário inteiro, apenas intenção explicitamente acessória pode permitir esse tipo de item.
+Shopee preserva ProductCatIds/OpenAPI V1 e as fontes oficiais já validadas. O controlled persist reutiliza o classificador contextual de título/produto principal (`PART_ONLY_PRODUCT`, `ACCESSORY_ONLY_PRODUCT`, `CONSUMABLE_ONLY_PRODUCT`).
+Cenários que não possuem mapeamento direto de catálogo Shopee no Brasil (como `informatica_editorial`) rotacionam deterministamente entre os nichos ativos certificados através de `resolveShopeeScenarioForCycle`.
 
 A política não altera credenciais, endpoints nem autenticação da OpenAPI.
 
 ## Amazon — Browse Node + evidência específica do produto
 
-Amazon mantém Browse Node + intenção forte. A classificação prioriza o produto principal no título/atributos em vez de deixar uma menção secundária definir a classe.
+Amazon mantém Browse Node + intenção forte. Browse nodes oficiais mapeados operam com `confidence: 1` em `classification-coverage.cjs`. A classificação contextual prioriza o produto principal no título/atributos e admite bundles/kits válidos (ex.: "Notebook + Capa + Mouse"), bloqueando apenas peças e acessórios isolados.
 
 As intenções `scanner` e `switch de rede` usam semântica específica para bloquear resultados ambíguos. O ranking legado reduz o peso do `deterministicScore` e aumenta o peso de sinais comerciais comprováveis.
 

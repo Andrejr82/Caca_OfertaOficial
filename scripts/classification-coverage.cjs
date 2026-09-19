@@ -127,7 +127,7 @@ function classifyCandidate(product, marketplace) {
     const browseNodeId = String(product?.category?.browseNodeId || product?.marketplaceMetrics?.browseNodeId || product?.rawPayload?.node_id || '');
     const browseType = AMAZON_BROWSE_TYPES[browseNodeId];
     if (browseType) {
-      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 0.75, evidence: { browseNodeId } };
+      return { productType: browseType, status: 'classified', source: `amazon:browse_node:${browseNodeId}`, confidence: 1, evidence: { browseNodeId } };
     }
   }
 

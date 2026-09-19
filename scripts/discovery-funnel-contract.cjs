@@ -47,6 +47,13 @@ const REJECTION_ALIASES = Object.freeze({
   limite_total: 'total_limit',
   FAMILY_STILL_HAS_BETTER_ACTIVE_OFFER: 'family_active',
   SIMILAR_TO_BETTER_SELECTED_OFFER: 'duplicate_queue_group',
+  ACESSORIO_OU_CONSUMIVEL: 'ACCESSORY_ONLY_PRODUCT',
+  acessorio_ou_consumivel: 'ACCESSORY_ONLY_PRODUCT',
+  accessory_only_product: 'ACCESSORY_ONLY_PRODUCT',
+  part_only_product: 'PART_ONLY_PRODUCT',
+  consumable_only_product: 'CONSUMABLE_ONLY_PRODUCT',
+  blocked_category: 'BLOCKED_CATEGORY',
+  product_class_mismatch: 'PRODUCT_CLASS_MISMATCH',
 });
 
 function emptyCounters() {

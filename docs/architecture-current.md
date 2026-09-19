@@ -1,10 +1,10 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
-<!-- verified-on: 2026-09-07 -->
+<!-- verified-against: 6dabe83f4ab6d4a28e235f28d66fd369d0f313ff -->
+<!-- verified-on: 2026-09-19 -->
 
-> Fonte canônica documental do runtime versionado. Motor de seleção V2 multimarketplace unificado com 5 pilares, deduplicação de identidade e rastreabilidade total.
+> Fonte canônica documental do runtime versionado. Motor de seleção V2 multimarketplace unificado com 5 pilares, classificador contextual (BLOCK/REVIEW/ALLOW), deduplicação de identidade e rastreabilidade total.
 
 ## Visão geral
 
@@ -60,7 +60,12 @@ A ordem de decisão permanece:
 6. ranking comercial;
 7. fila/persistência.
 
-O PR #187 endurece essa ordem sem criar motor paralelo.
+O PR #189 aprimora o funil com classificação contextual estruturada (`classifyProductContext`):
+- Estados determinísticos: `BLOCK`, `REVIEW` e `ALLOW`;
+- Separação contextual entre substantivo principal e modificadores via preposições/prefixo;
+- Bloqueio seletivo de peças de reposição (`PART_ONLY_PRODUCT`), acessórios isolados (`ACCESSORY_ONLY_PRODUCT`) e consumíveis (`CONSUMABLE_ONLY_PRODUCT`);
+- Preservação integral de produtos principais e kits compostos legítimos (`ALLOW`, `isBundle: true`);
+- Encaminhamento restritivo de casos ambíguos para `REVIEW` com bloqueio de auto-publicação.
 
 ### Amazon
 

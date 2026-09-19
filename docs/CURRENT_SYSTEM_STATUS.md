@@ -1,10 +1,10 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
-<!-- verified-on: 2026-09-07 -->
+<!-- verified-against: 6dabe83f4ab6d4a28e235f28d66fd369d0f313ff -->
+<!-- verified-on: 2026-09-19 -->
 
-Baseado na branch `feature/multimarketplace-selection-v2`, com motor de seleção multimarketplace V2 unificado (Amazon, Mercado Livre, Shopee), 5 pilares determinísticos e trace canônico de persistência.
+Baseado na branch `feat/discovery-quality-coverage-v1`, com classificador contextual estruturado de produtos (BLOCK/REVIEW/ALLOW), distinção de head noun vs modificadores, proteção a bundles legítimos e ampliação do pool de elegibilidade multimarketplace.
 
 ## Runtime
 
@@ -49,6 +49,17 @@ O PR #187 corrige os gargalos nos componentes existentes:
 - Mercado Livre: paginação oficial usa o tamanho bruto da página para decidir continuidade e pode avançar por offsets `0/30/60/90`; aliases editoriais ampliam a busca mantendo os guardrails existentes.
 
 Nenhuma dessas mudanças altera agenda, credenciais, Supabase ou publicação.
+
+## Discovery Quality & Coverage — PR #189
+
+Implementação do classificador contextual e ampliação do pool elegível:
+
+- `scripts/product-title-quality.cjs`: centraliza `classifyProductContext` com estados `BLOCK`, `REVIEW` e `ALLOW`;
+- contextualização de substantivo principal vs modificador (`hasLeadAccessoryOrPartBeforeMain` e `inspectMainProductPosition`), diferenciando ofertas isoladas ("Capa para Notebook" -> BLOCK) de bundles legítimos ("Notebook + Capa + Mouse" -> ALLOW; "Impressora 3D com bico extra e filamento incluso" -> ALLOW);
+- taxonomia canônica: `PART_ONLY_PRODUCT` (peças de reposição/manutenção), `ACCESSORY_ONLY_PRODUCT` (acessórios avulsos) e `CONSUMABLE_ONLY_PRODUCT` (consumíveis isolados);
+- `scripts/discovery-funnel-contract.cjs` e `scripts/shopee-openapi-v1-controlled-persist.cjs`: aliases e razões canônicas integrados;
+- `scripts/classification-coverage.cjs`: `confidence: 1` para browse nodes mapeados da Amazon;
+- `scripts/marketplace-scenario-contracts.cjs`: suporte ao catálogo editorial completo e rotação determinística de cenários.
 
 ## Mercado Livre
 

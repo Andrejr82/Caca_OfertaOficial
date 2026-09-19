@@ -47,7 +47,13 @@ function controlledCandidateQuality(product) {
   const title = String(product?.productName || product?.title || '').trim();
   if (title) {
     const titleQuality = validateProductTitle(title);
-    if (!titleQuality.valid) reasons.push(titleQuality.reason === 'ACCESSORY_ONLY_PRODUCT' ? 'accessory_only_product' : 'invalid_product_title');
+    if (!titleQuality.valid) {
+      if (['ACCESSORY_ONLY_PRODUCT', 'PART_ONLY_PRODUCT', 'CONSUMABLE_ONLY_PRODUCT'].includes(titleQuality.reason)) {
+        reasons.push('accessory_only_product');
+      } else {
+        reasons.push('invalid_product_title');
+      }
+    }
   }
   if (product?.safeForPublication === false) reasons.push('unsafe_price_for_publication');
   if (product?.priceRangeAmbiguous === true && min > 0 && max > min && max / min >= 2.5) reasons.push('extreme_price_range');

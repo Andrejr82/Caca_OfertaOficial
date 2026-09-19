@@ -42,17 +42,18 @@ test('1. Prova que legacy e new usam exatamente o mesmo executor Amazon e apenas
     amazonExecutor: mockAmazonExecutor,
   });
 
-  assert.equal(executedCalls.length, 2); // 1 legado (casa_cozinha_editorial) + 1 novo (casa_cozinha_organizacao)
+  assert.equal(executedCalls.length, 3); // 2 legados (casa_cozinha_editorial + organizacao_editorial) + 1 novo (casa_cozinha_organizacao)
   assert.equal(executedCalls[0].scenarioId, 'casa_cozinha_editorial');
-  assert.equal(executedCalls[1].scenarioId, 'casa_cozinha_organizacao');
+  assert.equal(executedCalls[1].scenarioId, 'organizacao_editorial');
+  assert.equal(executedCalls[2].scenarioId, 'casa_cozinha_organizacao');
 
   // Amazon novo recebe termos e browse nodes combinados
   const newPlan = buildNicheMarketplacePlan('casa_cozinha_organizacao', 'Amazon');
   const expectedNewKeywords = newPlan.firstDiscovery?.intents
     ? newPlan.firstDiscovery.intents.flatMap((i) => i.queries)
     : newPlan.terms.all;
-  assert.deepEqual(executedCalls[1].keywords, expectedNewKeywords);
-  assert.deepEqual(executedCalls[1].browseNodes, newPlan.contract.amazonBrowseNodes);
+  assert.deepEqual(executedCalls[2].keywords, expectedNewKeywords);
+  assert.deepEqual(executedCalls[2].browseNodes, newPlan.contract.amazonBrowseNodes);
 
   assert.ok(result.legacy.rawCount > 0);
   assert.ok(result.new.rawCount > 0);

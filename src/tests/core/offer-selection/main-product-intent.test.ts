@@ -59,7 +59,7 @@ describe("Sprint 3 — Produto Principal, Intenção e Classificação", () => {
 
       expect(isAccessory).toBe(true);
       expect(quality.valid).toBe(false);
-      expect(quality.reason).toBe("ACCESSORY_ONLY_PRODUCT");
+      expect(["ACCESSORY_ONLY_PRODUCT", "PART_ONLY_PRODUCT", "CONSUMABLE_ONLY_PRODUCT"]).toContain(quality.reason);
     }
   });
 
@@ -73,7 +73,7 @@ describe("Sprint 3 — Produto Principal, Intenção e Classificação", () => {
     for (const title of titles) {
       const quality = validateProductTitle(title);
       expect(quality.valid).toBe(false);
-      expect(quality.reason).toBe("ACCESSORY_ONLY_PRODUCT");
+      expect(["ACCESSORY_ONLY_PRODUCT", "PART_ONLY_PRODUCT", "CONSUMABLE_ONLY_PRODUCT"]).toContain(quality.reason);
     }
   });
 });
