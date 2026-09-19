@@ -318,6 +318,31 @@ async function enrichOfferVideoAsync(supabaseClient, offerId, { marketplace, off
         console.warn(`[VideoEnrichment] Falha ao atualizar offer ${offerId} com video_url: ${error.message}`);
       } else {
         console.log(`[VideoEnrichment] ✅ Offer ${offerId} enriquecida com video_url (${result.source}): ${result.videoUrl.slice(0, 70)}...`);
+        
+        // Criar registro correspondente em video_jobs para aparecer imediatamente em "Vídeos de ofertas"
+        try {
+          const defaultUserId = process.env.ADMIN_USER_ID || '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
+          await supabaseClient
+            .from('video_jobs')
+            .insert({
+              user_id: defaultUserId,
+              offer_id: offerId,
+              template_id: 'gemini-drive-v1',
+              status: 'ready',
+              stage: 'ready_for_review',
+              script: `Vídeo oficial extraído automaticamente de ${marketplace || 'marketplace'}.`,
+              video_url: result.videoUrl,
+              metadata: {
+                templateId: 'gemini-drive-v1',
+                source: 'marketplace_extracted',
+                videoType: result.videoType,
+                marketplace: marketplace,
+                extractedAt: new Date().toISOString()
+              }
+            });
+        } catch (jobErr) {
+          // Best effort para video_jobs
+        }
       }
     }
   } catch (err) {
