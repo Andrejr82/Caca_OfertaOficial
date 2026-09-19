@@ -1159,15 +1159,16 @@ async function persistDiscoveryDecisionV2(ingestions, marketplace, targetStatus 
       if (stageLogger) stageLogger.end('persistDiscoveryDecisionV2', stageStartedAt, 0);
       return { accepted: 0, offerIds: [], state: targetStatus };
     }
-  const rows = ingestions.map(({ candidate, envelopeId, correlationId }) => {
+  const rows = ingestions.map(({ candidate, envelopeId, correlationId, ingestionId }) => {
     const metrics = candidate.marketplaceMetrics;
     const isDeferred = targetStatus === 'deferred';
     const rawPayload = candidate.rawPayload || candidate;
     
     let explainability = {
-      contract_version: candidate.contractVersion,
+      contract_version: candidate.contractVersion || 'pmav5.candidate/v1',
       envelope_contract_version: 'candidate-decision-envelope/v2',
       candidate_id: candidate.candidateId,
+      ingestion_id: ingestionId || candidate.candidateId,
       envelope_id: envelopeId,
       correlation_id: correlationId,
       discovery_evidence: candidate.discoveryEvidence,

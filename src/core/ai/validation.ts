@@ -61,11 +61,17 @@ export function validateOfficialAICommand(command: OfficialAICommand): string | 
   return null;
 }
 
+const VALID_CANDIDATE_CONTRACTS = new Set([
+  "pmav5.candidate/v1",
+  "candidate-decision/v2",
+]);
+
 export function validateCandidateOffer(offer: OfficialAIOffer): string | null {
   const evidence = offer.explainability || {};
-  if (evidence.contract_version !== "pmav5.candidate/v1") return "Candidate contract version is invalid";
+  if (!VALID_CANDIDATE_CONTRACTS.has(evidence.contract_version)) return "Candidate contract version is invalid";
   const isManual = evidence.manual_source === true;
-  if (![evidence.candidate_id, evidence.ingestion_id, ...(isManual ? [] : [evidence.correlation_id])].every(nonEmpty)) {
+  const ingestionId = evidence.ingestion_id || evidence.candidate_id || evidence.envelope_id;
+  if (![evidence.candidate_id, ingestionId, ...(isManual ? [] : [evidence.correlation_id])].every(nonEmpty)) {
     return "Candidate identity evidence is incomplete";
   }
   if ((!isManual && !evidence.discovery_evidence) || !evidence.marketplace_metrics) return "Candidate evidence is incomplete";
