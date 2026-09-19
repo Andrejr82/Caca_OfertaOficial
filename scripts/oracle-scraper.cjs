@@ -1218,7 +1218,9 @@ async function persistDiscoveryDecisionV2(ingestions, marketplace, targetStatus 
       image_url: candidate.imageUrl,
       current_price: candidate.currentPrice,
       old_price: candidate.originalPrice,
-      score: candidate.deterministicScore,
+      score: Number.isFinite(Number(candidate.deterministicScore))
+        ? Math.max(0, Math.min(10, Number(candidate.deterministicScore) > 10 ? Number(candidate.deterministicScore) / 10 : Number(candidate.deterministicScore)))
+        : 0,
       status: targetStatus,
       explainability,
       notes: '[Oracle Discovery-Only V5] ' + marketplace + (isDeferred ? '; deferred' : '; aprovado após gates.'),

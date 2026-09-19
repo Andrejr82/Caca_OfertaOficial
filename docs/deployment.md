@@ -1,8 +1,8 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
-<!-- verified-on: 2026-09-07 -->
+<!-- verified-against: 047bcd939b0ea8939cf4529a82cb9560a9159b51 -->
+<!-- verified-on: 2026-09-19 -->
 
 ## Pré-deploy
 

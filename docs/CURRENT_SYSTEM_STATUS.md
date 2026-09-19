@@ -1,7 +1,7 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 6dabe83f4ab6d4a28e235f28d66fd369d0f313ff -->
+<!-- verified-against: 047bcd939b0ea8939cf4529a82cb9560a9159b51 -->
 <!-- verified-on: 2026-09-19 -->
 
 Baseado na branch `feat/discovery-quality-coverage-v1`, com classificador contextual estruturado de produtos (BLOCK/REVIEW/ALLOW), distinção de head noun vs modificadores, proteção a bundles legítimos e ampliação do pool de elegibilidade multimarketplace.
