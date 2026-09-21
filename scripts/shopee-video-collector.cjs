@@ -28,7 +28,6 @@ function urlIdentity(url) {
 
 function htmlHasIdentity(html, shopId, itemId) {
   const text = String(html || '');
-  if (text.includes(String(shopId)) && text.includes(String(itemId))) return true;
   const shopKey = '(?:"?shop(?:Id|_id)"?)';
   const itemKey = '(?:"?item(?:Id|_id)"?)';
   const shopValue = `(?:${shopKey})\\s*:\\s*"?${shopId}`;

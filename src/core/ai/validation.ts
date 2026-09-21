@@ -68,7 +68,9 @@ const VALID_CANDIDATE_CONTRACTS = new Set([
 
 export function validateCandidateOffer(offer: OfficialAIOffer): string | null {
   const evidence = offer.explainability || {};
-  if (!VALID_CANDIDATE_CONTRACTS.has(evidence.contract_version)) return "Candidate contract version is invalid";
+  if (typeof evidence.contract_version !== "string" || !VALID_CANDIDATE_CONTRACTS.has(evidence.contract_version)) {
+    return "Candidate contract version is invalid";
+  }
   const isManual = evidence.manual_source === true;
   const ingestionId = evidence.ingestion_id || evidence.candidate_id || evidence.envelope_id;
   if (![evidence.candidate_id, ingestionId, ...(isManual ? [] : [evidence.correlation_id])].every(nonEmpty)) {

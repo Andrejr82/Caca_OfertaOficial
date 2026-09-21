@@ -1,9 +1,11 @@
 import { StateServiceError, type StateServiceErrorCode } from "./errors";
-import type { AuditPort } from "./ports/audit-port";
-import type { ClockPort } from "./ports/clock-port";
-import type { IdempotencyPort } from "./ports/idempotency-port";
-import type { StateRepositoryPort } from "./ports/state-repository-port";
-import type { UUIDPort } from "./ports/uuid-port";
+import type {
+  AuditPort,
+  ClockPort,
+  IdempotencyPort,
+  StateRepositoryPort,
+  UUIDPort
+} from "./ports";
 import type {
   AuditRecord,
   EntityType,

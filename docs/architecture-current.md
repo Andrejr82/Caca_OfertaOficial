@@ -1,8 +1,8 @@
 # Arquitetura atual — Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 073facb485653c39af5e36b8a54a8d126673dba7 -->
-<!-- verified-on: 2026-09-19 -->
+<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
+<!-- verified-on: 2026-09-20 -->
 
 > Fonte canônica documental do runtime versionado. Motor de seleção V2 multimarketplace unificado com 5 pilares, classificador contextual (BLOCK/REVIEW/ALLOW), deduplicação de identidade e rastreabilidade total.
 

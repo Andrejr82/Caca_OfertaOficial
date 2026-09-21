@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MemoryStateAdapter } from "@/core/state/adapters/memory-state-adapter";
+import { MemoryStateAdapter } from "@/core/state";
 import type { OfficialPublicationCommand, OfficialPublicationReceipt, PublicationAuditRecord } from "@/core/publication";
 import {
   OfficialPublicationStateAdapter,

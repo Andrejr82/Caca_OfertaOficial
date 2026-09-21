@@ -1,3 +1,0 @@
-# Documento histórico
-
-Esta versão foi arquivada. Consulte [architecture-current.md](architecture-current.md) e [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md).

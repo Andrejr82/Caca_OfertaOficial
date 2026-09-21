@@ -1,8 +1,8 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
-<!-- verified-on: 2026-09-07 -->
+<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
+<!-- verified-on: 2026-09-20 -->
 
 ## Princípios
 

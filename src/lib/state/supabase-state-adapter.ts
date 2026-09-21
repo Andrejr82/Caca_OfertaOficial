@@ -8,7 +8,7 @@ import type {
   StateTransitionResult
 } from "@/core/state";
 import type { CompareAndSetInput } from "@/core/state/types";
-import type { IdempotencyBeginResult } from "@/core/state/ports/idempotency-port";
+import type { IdempotencyBeginResult } from "@/core/state";
 import { offerStateVersion, postStateVersion } from "./official-state-service";
 import { createServerObservabilityDependencies, StateObservabilityAuditAdapter } from "@/lib/observability";
 

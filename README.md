@@ -1,8 +1,8 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 2f57bab96ac5c61e5639a3f3f992e4d7452c0a39 -->
-<!-- verified-on: 2026-09-07 -->
+<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
+<!-- verified-on: 2026-09-20 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase, com motor de seleção multimarketplace V2 unificado (Amazon, Mercado Livre, Shopee).
 
@@ -62,13 +62,10 @@ O ciclo Discovery-Only materializa candidatos de Shopee, Mercado Livre e Amazon;
 
 - [Arquitetura atual](docs/architecture-current.md)
 - [Documentação oficial](docs/official.md)
-- [Instalação](docs/installation.md)
-- [Ambiente e variáveis](docs/ambiente.md)
+- [Estado atual](docs/CURRENT_SYSTEM_STATUS.md)
 - [Configuração](docs/configuration.md)
 - [APIs](docs/api.md)
-- [Banco de dados](docs/banco.md)
 - [Deploy](docs/deployment.md)
-- [Fluxos](docs/fluxos.md)
 - [Integrações](docs/integracoes.md)
 - [Oracle Cloud](docs/oracle.md)
 - [Runbook Oracle](docs/oracle-scripts-runbook.md)
@@ -76,10 +73,11 @@ O ciclo Discovery-Only materializa candidatos de Shopee, Mercado Livre e Amazon;
 - [Troubleshooting](docs/troubleshooting.md)
 - [Segurança](docs/SECURITY.md)
 - [Governança da documentação](docs/DOCUMENTATION_GOVERNANCE.md)
+- [Inteligência Comercial IA](docs/AI_COMMERCIAL_INTELLIGENCE.md)
 
 ## Desenvolvimento local
 
-Requer Node.js 20 ou superior. Configure as variáveis conforme [docs/ambiente.md](docs/ambiente.md) e mantenha os segredos apenas no `.env.local`.
+Requer Node.js 20 ou superior. Configure as variáveis conforme [docs/configuration.md](docs/configuration.md) e mantenha os segredos apenas no `.env.local`.
 
 ```bash
 npm install

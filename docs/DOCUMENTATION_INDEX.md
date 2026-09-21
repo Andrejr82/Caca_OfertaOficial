@@ -27,8 +27,9 @@ Quando houver divergência, prevalecem o código e o runtime validado. Documento
 | Troubleshooting | [troubleshooting.md](troubleshooting.md) |
 | Segurança | [SECURITY.md](SECURITY.md) |
 | Governança | [DOCUMENTATION_GOVERNANCE.md](DOCUMENTATION_GOVERNANCE.md) |
-| Marketplaces | [scenario-router-marketplace-contracts.md](scenario-router-marketplace-contracts.md) |
-| Vídeos | [VIDEO_WORKER_CURRENT.md](VIDEO_WORKER_CURRENT.md) |
+| APIs | [api.md](api.md) |
+| Scripts | [scripts.md](scripts.md) |
+| Inteligência Comercial IA | [AI_COMMERCIAL_INTELLIGENCE.md](AI_COMMERCIAL_INTELLIGENCE.md) |
 
 ## Regra de manutenção
 

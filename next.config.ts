@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['sharp', 'crawlee', 'playwright-extra', 'puppeteer-extra-plugin-stealth', 'playwright', '@playwright/test', '@crawlee/puppeteer', 'cron'],
+  serverExternalPackages: ['sharp', 'playwright-extra', 'puppeteer-extra-plugin-stealth', 'playwright', '@playwright/test', 'cron'],
   outputFileTracingIncludes: {
     '/api/images/og-test': [
       './node_modules/sharp/**/*',

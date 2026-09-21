@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { CompatibilityStateAdapter } from "@/core/state/adapters/compatibility-adapter";
-import { FutureSupabaseStateAdapter } from "@/core/state/adapters/future-supabase-adapter";
+import { CompatibilityStateAdapter, FutureSupabaseStateAdapter } from "@/core/state";
 import type { StateEntity } from "@/core/state";
 
 const entity: StateEntity = {

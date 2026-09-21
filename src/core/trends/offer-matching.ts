@@ -1,7 +1,7 @@
-import type { TrendSignalClassification } from "@/core/trends/types";
+import type { TrendMatchStatus, TrendSignalClassification } from "./types";
 
+export type { TrendMatchStatus };
 export type TrendMatchingMarketplace = "Shopee" | "Mercado Livre";
-export type TrendMatchStatus = "matched" | "no_match";
 
 export interface TrendOfferCandidate {
   id: string;

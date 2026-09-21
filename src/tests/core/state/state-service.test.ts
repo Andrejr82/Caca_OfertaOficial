@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  MemoryStateAdapter,
   transitionOfferState,
   transitionPostState,
   type ClockPort,
@@ -8,7 +9,6 @@ import {
   type StateServiceDependencies,
   type UUIDPort
 } from "@/core/state";
-import { MemoryStateAdapter } from "@/core/state/adapters/memory-state-adapter";
 
 class FixedClock implements ClockPort {
   now(): string {

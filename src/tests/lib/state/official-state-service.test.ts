@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MemoryStateAdapter } from "@/core/state/adapters/memory-state-adapter";
+import { MemoryStateAdapter } from "@/core/state";
 import {
   transitionOfficialOfferState,
   transitionOfficialPostState

@@ -1,8 +1,0 @@
-const url = "https://shopee.com.br/Kit-3-Peneira-Coador-De-Peneiras-A%C3%A7o-Inoxid%C3%A1vel-Para-Cozinha-Peneira-De-Cozinha-i.389445892.21396349340";
-
-fetch(url)
-  .then((response) => response.text())
-  .then((html) => {
-    const match = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
-    console.log(match ? match[1] : "not found");
-  });
