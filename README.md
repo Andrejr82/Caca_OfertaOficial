@@ -1,12 +1,12 @@
 # Caça Oferta Oficial
 
 <!-- docs-status: current -->
-<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
-<!-- verified-on: 2026-09-20 -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
 
 Aplicação Next.js para descoberta, curadoria, geração de conteúdo com IA e publicação de ofertas em canais configurados. O estado das ofertas, posts, links e registros operacionais é mantido no Supabase, com motor de seleção multimarketplace V2 unificado (Amazon, Mercado Livre, Shopee).
 
-O runtime operacional atual está descrito em [docs/CURRENT_SYSTEM_STATUS.md](docs/CURRENT_SYSTEM_STATUS.md). A hierarquia documental está em [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md). Os documentos PMAV5 são registros históricos e contratuais; não substituem a verificação do código e do manifesto de release.
+O runtime operacional atual está descrito em [docs/CURRENT_SYSTEM_STATUS.md](docs/CURRENT_SYSTEM_STATUS.md). A hierarquia documental está em [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md). Os relatórios de auditoria estrutural e de infraestrutura estão disponíveis em [docs/PLANO_CONSOLIDACAO_SRC.md](docs/PLANO_CONSOLIDACAO_SRC.md), [docs/AUDITORIA_E_PLANO_ORACLE_VPS.md](docs/AUDITORIA_E_PLANO_ORACLE_VPS.md) e [docs/AUDITORIA_E_PLANO_VERCEL.md](docs/AUDITORIA_E_PLANO_VERCEL.md).
 
 ## Arquitetura atual
 
@@ -17,7 +17,7 @@ flowchart LR
   A["Shopee / Mercado Livre / Amazon"] --> B["Oracle Worker\nDiscovery-Only"]
   B --> C[("Supabase")]
   B --> D["Official AI\n/api/ai/generate"]
-  C --> E["Painel Next.js"]
+  C --> E["Painel Next.js 15 (Vercel)"]
   E --> F["Curadoria e drafts"]
   F --> G["Telegram / Instagram / WhatsApp / Facebook"]
 ```
@@ -25,9 +25,9 @@ flowchart LR
 Fluxo principal:
 
 1. O Oracle Worker descobre candidatos nos marketplaces.
-2. Os candidatos são persistidos no Supabase para revisão manual.
-3. A Official AI gera drafts de copy e links rastreáveis.
-4. O painel permite curadoria, aprovação e rejeição.
+2. Os candidatos são persistidos no Supabase para revisão manual e curadoria comercial.
+3. A Official AI gera drafts de copy e links rastreáveis por canal.
+4. O painel Next.js permite curadoria, aprovação e rejeição.
 5. As publicações aprovadas são enviadas pelos transportes oficiais configurados.
 
 O Oracle agenda Discovery em sete horários canônicos (`06:00`, `08:00`, `09:00`, `11:00`, `12:00`, `14:00` e `18:00`, `America/Sao_Paulo`) para os sete nichos ativos: Casa/Cozinha/Organização, Ferramentas, Informática, Beleza, Moda, Pet e Eletrodomésticos. Cupons permanece `manual_only` às 22h e não participa do cron de Discovery.
@@ -45,17 +45,17 @@ O ciclo Discovery-Only materializa candidatos de Shopee, Mercado Livre e Amazon;
 
 ## Estrutura do repositório
 
-- `src/app/`: páginas do painel e rotas da API Next.js.
+- `src/app/`: páginas do painel e rotas da API Next.js 15 App Router.
 - `src/components/`: componentes visuais e de layout.
 - `src/core/`: regras de domínio, IA, estado, publicação e observabilidade.
 - `src/lib/`: adaptadores, integrações, ambiente e serviços auxiliares.
-- `src/tests/`: testes automatizados Vitest.
-- `scripts/`: workers Oracle, WhatsApp, publicação, vídeo e utilitários operacionais.
+- `src/tests/`: testes automatizados Vitest (2.121 testes).
+- `scripts/`: workers Oracle, WhatsApp, publicação, vídeo e utilitários operacionais (401 testes CJS).
 - `supabase/`: schema e migrations do banco.
 - `apps/oracle-capacity-hunter/`: monitoramento operacional do ambiente Oracle.
 - `src/remotion/`: composições e templates de vídeos promocionais.
 - `public/`: assets estáticos usados pelo painel e pelo Remotion.
-- `docs/`: documentação atual, contratos, PMAV5, operação e históricos.
+- `docs/`: documentação atual, contratos, operação e auditorias consolidadas.
 - `docs/archive/`: documentação legada e registros históricos; não é fonte de verdade do runtime.
 
 ## Documentação principal
@@ -74,6 +74,9 @@ O ciclo Discovery-Only materializa candidatos de Shopee, Mercado Livre e Amazon;
 - [Segurança](docs/SECURITY.md)
 - [Governança da documentação](docs/DOCUMENTATION_GOVERNANCE.md)
 - [Inteligência Comercial IA](docs/AI_COMMERCIAL_INTELLIGENCE.md)
+- [Auditoria e Otimização VPS Oracle](docs/AUDITORIA_E_PLANO_ORACLE_VPS.md)
+- [Auditoria e Higienização Vercel](docs/AUDITORIA_E_PLANO_VERCEL.md)
+- [Plano de Consolidação de Código](docs/PLANO_CONSOLIDACAO_SRC.md)
 
 ## Desenvolvimento local
 
@@ -96,7 +99,7 @@ npm run docs:audit
 npm run verify
 ```
 
-Deploys de Preview da Vercel incluem a branch `feature/multimarketplace-selection-v2`; após um Preview pronto, valide `/api/health` e `/api/readiness` antes da revisão do PR.
+Deploys de Produção na Vercel são disparados a partir da branch `main`. Após o deploy, valide `/api/health` e `/api/readiness`.
 
 O fluxo de publicação expressa Shopee exige correspondência exata do `itemId` antes de aceitar metadados.
 
@@ -104,13 +107,13 @@ O fluxo de publicação expressa Shopee exige correspondência exata do `itemId`
 
 O discovery oficial usa as rotas autorizadas de catálogo/categoria do Mercado Livre e a OpenAPI oficial da Shopee. O endpoint legado de busca aberta do Mercado Livre (`/sites/{site_id}/search`) pode retornar `403` mesmo com OAuth válido; isso é uma restrição de rota, não motivo para relaxar autenticação ou criar fallback aberto.
 
-Antes de qualquer alteração no runtime, execute os gates específicos e o golden set compartilhado:
+Antes de qualquer alteração no runtime, execute a suite completa de 2.522 testes automatizados:
 
 ```bash
-node --test scripts/tests/amazon-curation.test.cjs scripts/tests/amazon-diagnostic.test.cjs scripts/tests/marketplace-api-first-golden-set.test.cjs scripts/tests/mercadolivre-domain-category-search-v1.test.cjs scripts/tests/shopee-commercial-persist-quality.test.cjs scripts/tests/shopee-openapi-v1-contract.test.cjs scripts/tests/discovery-funnel-accounting.test.cjs
+npm test
 ```
 
-O golden set contém 20 casos por marketplace. Candidatos sem sinal comercial suficiente devem permanecer fora da seleção; dados ausentes continuam `null` e não são fabricados.
+Candidatos sem sinal comercial suficiente devem permanecer fora da seleção; dados ausentes continuam `null` e não são fabricados.
 
 ## Serviços e scripts principais
 
@@ -121,7 +124,7 @@ O golden set contém 20 casos por marketplace. Candidatos sem sinal comercial su
 - `scripts/oracle-trends-radar-worker.cjs`: worker dedicado do Radar, separado do ciclo editorial.
 - `scripts/video-worker.py` e `scripts/video_worker_runtime.py`: processamento de vídeo quando configurado.
 
-Auditoria read-only da VPS em 25/08/2026 confirmou `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online no PM2; `TRENDS_RADAR_DEDICATED_RUNTIME=true`; `TREND_EXECUTIVE_MODE=off`; scheduler único com `noOverlap`; e Capacity Hunter passivo a cada 30 minutos. O checkout da VPS auditado estava em `febe66abb28bd47c738d925befc50ad365c59371`, portanto o SHA implantado deve sempre ser comparado com a `main` antes de qualquer operação.
+Auditoria da VPS Oracle (`193.122.242.178`) em 21/09/2026 confirmou `oracle-scraper`, `oracle-api`, `whatsapp-bot`, `oracle-trends-radar`, `authorized-reel-verifier` e `video-worker` online no PM2; `TRENDS_RADAR_DEDICATED_RUNTIME=true`; `TREND_EXECUTIVE_MODE=off`; scheduler único com `noOverlap`; e Capacity Hunter passivo. O checkout da VPS está 100% alinhado com o commit canônico `5df6fe73` da `main`.
 
 ## IA Executiva de Tendências
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-09-21] — Consolidação Estrutural, Auditoria VPS Oracle e Higienização Vercel
+- **Consolidação Estrutural de `src/`**: Unificação dos módulos centrais em `src/core/`, `src/lib/`, `src/types/` e `src/tests/`. Eliminação de duplicações, consolidação dos motores de inteligência e ranking, e arquivamento seguro de material legado.
+- **Suíte de Testes Automatizados 100% Verde**: 2.522 testes automatizados unificados (2.121 Vitest + 401 CommonJS) executando com aprovação total.
+- **Auditoria e Otimização da Oracle Cloud VPS (`193.122.242.178`)**: Liberação de ~1GB de espaço em disco, compactação e arquivamento seguro em `/home/ubuntu/archive_vps_legacy_20260921.tar.gz`, mantendo todos os 6 processos PM2 operacionais (`oracle-api :3002`, `whatsapp-bot :3001`, `oracle-scraper`, `oracle-trends-radar`, `video-worker`, `authorized-reel-verifier`).
+- **Auditoria Forense e Higienização da Vercel (`caca-oferta-oficial`)**: Exclusão via API de 25 variáveis de ambiente obsoletas e duplicadas (Cloudinary, Magalu, Firecrawl, Inngest, chaves `_2`), remoção de `typescript.ignoreBuildErrors: true` no `next.config.ts`, otimização do `ignoreCommand` no `vercel.json` e deploy oficial em produção `READY` com validação de tipos TypeScript estrita.
+- **Alinhamento Git Global**: Sincronização unificada do repositório local, GitHub (`origin/main`), Oracle Cloud VPS e Vercel Production.
+
 ## [2026-07-28]
 - Discovery: filtragem de monetização antes da fila, verificação de links e prevenção de persistência inválida.
 - Tracking e copys: links persistidos por canal, UUID completo, isolamento de prefixos e prevenção de links duplicados na copy.

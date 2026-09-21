@@ -1,8 +1,8 @@
 # Governança da documentação
 
 <!-- docs-status: current -->
-<!-- verified-against: e16ce0d1ae525b3f0f9fd95e6554cc62b5c6a0d7 -->
-<!-- verified-on: 2026-08-25 -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
 
 ## Autoridade
 

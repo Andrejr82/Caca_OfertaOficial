@@ -1,7 +1,7 @@
 # Auditoria Forense Completa e Plano de Consolidação — Oracle VPS
 
 <!-- docs-status: current -->
-<!-- verified-against: 3dee68b36563a0a46f3c43b497d66e62ff6933b4 -->
+<!-- verified-against: 5df6fe73 -->
 <!-- verified-on: 2026-09-21 -->
 
 Documento canônico contendo o diagnóstico forense completo e o plano operacional de manutenção, limpeza de storage e consolidação da VPS Oracle Cloud (`193.122.242.178`).

@@ -31,3 +31,13 @@ Uma rotação premium é um cenário experimental fora da grade oficial. Ela pod
 `AchadinhoScore` é a pontuação de priorização baseada somente em sinais disponíveis no runtime. Ele ordena candidatos, mas não representa conversão comprovada.
 
 `manualReviewRequired` é a barreira editorial que impede copy ou seleção automática quando preço, risco, categoria ou evidência comercial exigem conferência humana.
+
+## Motor de Seleção Multimarketplace V2
+
+`CandidateDecisionV2` é a estrutura de decisão unificada para candidatos de Amazon, Mercado Livre e Shopee baseada em 5 pilares determinísticos (desconto percentual, desconto absoluto, volume de vendas, rating e número de reviews).
+
+`identityGroupKey` é a chave de agrupamento por identidade canônica de produto para prevenir repetições e canibalização entre marketplaces no mesmo ciclo editorial.
+
+## Radar Executivo de Tendências
+
+O `TrendsRadar` é o subsistema autônomo de inteligência de mercado executado via worker dedicado na VPS Oracle (`oracle-trends-radar`), calculando Score V2 de tendências a partir de sinais de demanda e integrando sugestões ao pipeline de curadoria sem concorrência com o scheduler editorial.

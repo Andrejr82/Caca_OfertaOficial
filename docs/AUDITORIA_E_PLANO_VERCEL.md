@@ -1,9 +1,13 @@
 # Relatório de Auditoria Forense e Plano de Melhorias — Vercel
 
+<!-- docs-status: current -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
+
 **Data da Auditoria:** 21 de Setembro de 2026  
 **Status do Projeto:** 🟢 Operacional e Sincronizado  
 **Repositório:** `Caca_OfertaOficial` (Branch: `main`)  
-**Commit Ativo:** `ba1ddd9cba2f5c4320e4d7f0ee75e9980ff15cae`
+**Commit Ativo:** `5df6fe73`
 
 ---
 

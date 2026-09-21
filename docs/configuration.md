@@ -1,12 +1,13 @@
 # Configuração
 
 <!-- docs-status: current -->
-<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
-<!-- verified-on: 2026-09-20 -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
 
 ## Princípios
 
-- `.env.example` é o inventário seguro; valores reais ficam em `.env.local`, Vercel, Oracle/PM2 ou secret store.
+- `.env.example` é o inventário seguro; valores reais ficam em `.env.local`, Vercel (51 variáveis ativas em produção), Oracle/PM2 ou secret store.
+- Variáveis obsoletas ou descontinuadas (Cloudinary, Magalu, Firecrawl, Inngest, chaves duplicadas `_2`) foram removidas do painel da Vercel.
 - Flags novas entram desligadas/fail-closed quando controlam discovery, persistência, IA ou publicação.
 - O default do código não substitui o estado operacional do ambiente; documentação de produção deve registrar ambos.
 
@@ -86,8 +87,8 @@ npm run docs:audit
 
 Depois de deploy/alteração operacional, validar `/api/health`, `/api/readiness`, PM2, flags efetivas e logs.
 
-## Vercel Preview
+## Vercel Build & Environment
 
-O `vercel.json` permite build de Preview para `feature/multimarketplace-selection-v2`. `VERCEL_FORCE_BUILD=1` pode ser usado como override no ambiente Preview quando um build precisar ser forçado.
+O `vercel.json` monitora a branch `main`. `VERCEL_FORCE_BUILD=1` pode ser usado como override quando um build manual precisar ser forçado sem alteração de branch. O build executa com verificação rigorosa de TypeScript (0 erros de tipagem).
 
 Entradas de seleção com marketplace desconhecido são rejeitadas durante a normalização, sem conversão silenciosa para Mercado Livre.

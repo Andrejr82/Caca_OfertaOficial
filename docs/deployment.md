@@ -1,14 +1,16 @@
 # Deploy e operação atuais
 
 <!-- docs-status: current -->
-<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
-<!-- verified-on: 2026-09-20 -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
 
 ## Pré-deploy
 
 ```bash
 npm ci
 npm run docs:audit
+npm test
+npm run build
 npm run verify
 ```
 
@@ -16,40 +18,46 @@ Confirme migrations, variáveis por ambiente, overlays Oracle e compatibilidade 
 
 ## Vercel
 
-A `main` contém:
+A branch `main` é a fonte canônica de produção.
 
-- `f68512c56617680247f73d7cc3523f1e9de92892` — correção da Publicação Expressa após Copy V5;
-- `7f35e0d2c0ca22e118b8163a73d18a1c7d995439` — First Discovery Quality V1.
+- Build Next.js 15 App Router com verificação rigorosa de TypeScript (0 erros).
+- `vercel.json` configurado com `ignoreCommand` para focar na `main`.
+- 51 variáveis ativas no painel da Vercel (25 obsoletas excluídas).
+- Deployment de produção verificado: `dpl_EqbJs2EYFdjZd1f1mLVVMtKnCYwa` em status `READY`.
 
 Validar build, `/api/health` e `/api/readiness` após deploy.
 
-Branches de trabalho não geram Preview por padrão. A branch `feature/multimarketplace-selection-v2` é uma exceção explícita no `ignoreCommand` do `vercel.json`; confirme o deployment como `Ready` antes dos smoke tests. Deploys de `main` permanecem em Production.
-
 Na Publicação Expressa, valide a identidade nativa do produto antes de aceitar metadados retornados por adaptadores externos.
 
-## Oracle
+## Oracle Cloud VPS (`193.122.242.178`)
 
-Estado confirmado em 27/08/2026:
+Estado confirmado em 21/09/2026:
 
 ```text
 branch=main
-HEAD=7f35e0d2c0ca22e118b8163a73d18a1c7d995439
+HEAD=5df6fe73
 working-tree=clean
 FIRST_DISCOVERY_QUALITY_V1_MODE=active
-oracle-scraper=online
-crash-loop=false
-startup-errors=none
+pm2-processes=6 online
+storage-free=29 GB (+1.0 GB liberado)
 ```
 
-A ativação foi feita com um único restart do `oracle-scraper`. Nenhum outro processo precisou ser reiniciado.
+Processos operacionais no PM2:
+1. `oracle-api` (Porta `:3002`) — Gateway REST para automações e Vercel.
+2. `whatsapp-bot` (Porta `:3001`) — Motor Baileys estável.
+3. `oracle-scraper` — Scheduler de discovery dos 7 nichos canônicos.
+4. `oracle-trends-radar` — Radar autônomo de tendências.
+5. `video-worker` — Worker de renderização/dublagem.
+6. `authorized-reel-verifier` — Verificador de autorização.
 
-Antes de qualquer nova alteração:
+Procedimento de atualização:
 
-1. comparar SHA da VPS com `origin/main`;
-2. confirmar working tree limpa;
-3. validar PM2 e flags efetivas;
-4. preservar logs;
-5. evitar ciclos manuais concorrentes.
+```bash
+cd /home/ubuntu/Caca_OfertaOficial
+git pull origin main
+git log -n 1 --oneline
+pm2 restart oracle-scraper oracle-api oracle-trends-radar video-worker
+```
 
 ## Scheduler
 
@@ -70,12 +78,6 @@ Guardrails:
 - zero strong não faz backfill artificial;
 - readiness insuficiente não dispara adaptive discovery automaticamente.
 
-### Lacuna atual de operação
-
-A proteção de qualidade já está ativa, mas o aprofundamento automático de discovery ainda não está ligado ao executor. Em cenários de cobertura insuficiente, ML/Shopee podem terminar zerados antes de esgotar alternativas reais do marketplace.
-
-Essa condição deve ser observada como falha de cobertura/discovery, não como evidência de ausência de produtos.
-
 ## Radar
 
 - `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
@@ -85,4 +87,4 @@ Essa condição deve ser observada como falha de cobertura/discovery, não como 
 
 ## Rollback geral
 
-Para regressão relacionada à First Discovery, a contenção inicial é retornar a flag a `off` e reiniciar somente `oracle-scraper`. Rollback de código deve ser decidido separadamente após diagnóstico.
+Para regressão relacionada à First Discovery, a contenção inicial é retornar a flag a `off` e reiniciar somente `oracle-scraper`. Rollback de código deve ser decidido separadamente após diagnóstico. Snapshot de segurança da VPS salvo em `/home/ubuntu/backup_caca_oferta_pre_sync_20260921.tar.gz`.

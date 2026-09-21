@@ -1,8 +1,8 @@
 # Plano de Consolidação e Enxugamento Estrutural da Pasta `src/`
 
 <!-- docs-status: current -->
-<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
-<!-- verified-on: 2026-09-20 -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
 
 ## 1. Visão Geral e Objetivo
 

@@ -1,21 +1,18 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 9335c0b2ff7a7500e7870cdea7e92a800890de84 -->
-<!-- verified-on: 2026-09-20 -->
+<!-- verified-against: 5df6fe73 -->
+<!-- verified-on: 2026-09-21 -->
 
-Baseado na branch `feat/discovery-quality-coverage-v1`, com classificador contextual estruturado de produtos (BLOCK/REVIEW/ALLOW), distinção de head noun vs modificadores, proteção a bundles legítimos e ampliação do pool de elegibilidade multimarketplace.
+Baseado na branch `main` consolidada (commit `5df6fe73`), com motor de seleção multimarketplace V2 unificado, classificador contextual de produtos (BLOCK/REVIEW/ALLOW), infraestrutura híbrida Vercel + Supabase + Oracle Cloud VPS e suíte de 2.522 testes automatizados 100% verde.
 
-## Runtime
+## Runtime e Infraestrutura Híbrida
 
-- Next.js 16/React 19: painel, APIs, Official AI, Publicação Expressa, vídeos e transportes sociais.
-- Auto-Reel: o painel consulta jobs ativos por polling, evita requisições simultâneas e exibe falhas estruturadas sem avançar automaticamente para publicação.
-- Supabase: ofertas, posts, links, auditoria, classificação, jobs e Storage.
-- Oracle: Discovery-Only, scheduler editorial, scraping auxiliar, Radar dedicado e serviços operacionais.
-- Scheduler: `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
-- O scraper não executa Discovery no startup; `--run-now` dispara execução manual explícita.
-- A branch `feature/multimarketplace-selection-v2` está configurada para gerar Preview na Vercel; produção continua vinculada à `main`.
-- A publicação expressa Shopee rejeita respostas da API sem correspondência exata do `itemId` solicitado.
+- **Vercel Frontend & Serverless Edge**: Next.js 15 / React 19 App Router, rotas de API (`/api/*`), Official AI, Publicação Expressa e motor de vídeo. Build rigoroso com TypeScript (0 erros) e 51 variáveis ativas (25 obsoletas excluídas).
+- **Oracle Cloud VPS (`193.122.242.178`)**: 6 processos PM2 online (`oracle-api :3002`, `whatsapp-bot :3001`, `oracle-scraper`, `oracle-trends-radar`, `video-worker`, `authorized-reel-verifier`). ~1GB liberado e sincronizado em `5df6fe73`.
+- **Supabase Cloud**: Banco PostgreSQL com RLS, Realtime Subscriptions, tabelas de ofertas, posts, auditoria, tracking e Buckets de Storage para mídias.
+- **Scheduler**: `0 6,8,10,12,14,16,18 * * *`, timezone `America/Sao_Paulo`, `noOverlap=true`.
+- **Auto-Reel & Vídeos**: Painel consulta jobs ativos por polling, evita requisições simultâneas e exibe falhas estruturadas sem avançar automaticamente para publicação sem aprovação.
 
 ## Matriz editorial ativa
 
@@ -27,74 +24,36 @@ Baseado na branch `feat/discovery-quality-coverage-v1`, com classificador contex
 6. 16h → `pet_editorial`
 7. 18h → `eletrodomesticos_editorial`
 
-`cupons_aprovados_editorial` permanece `manual_only`.
+`cupons_aprovados_editorial` permanece `manual_only` às 22h.
 
 ## First Discovery Quality V1
 
-`FIRST_DISCOVERY_QUALITY_V1_MODE=active` na Oracle auditada. O fluxo trabalha com Core/Expansion/Opportunity e não deve preencher volume artificialmente com candidatos fracos.
+`FIRST_DISCOVERY_QUALITY_V1_MODE=active` na Oracle auditada. O fluxo trabalha com Core/Expansion/Opportunity e não preenche volume artificialmente com candidatos fracos.
 
 A política `adaptive-catalog-depth/v1` permanece disponível como contrato de profundidade; cada marketplace preserva seus próprios mecanismos seguros de busca.
 
-## Qualidade do funil — PR #187
+## Motor de Seleção Multimarketplace V2
 
-O ciclo controlado de Informática comprovou: ML classificou 5/5 sem `review_required`, mas ficou concentrado em roteadores; Amazon ainda promoveu acessórios; Shopee ainda apresentou repetição e vazamento semântico.
+Unificação de Amazon, Mercado Livre e Shopee sob o motor determinístico `CandidateDecisionV2`, avaliando 5 pilares:
+1. `discount`: desconto percentual real;
+2. `absoluteDiscount`: valor monetário economizado;
+3. `salesVolume`: volume de vendas comprovado;
+4. `rating`: avaliação dos compradores;
+5. `reviewCount`: massa crítica de avaliações.
 
-O PR #187 corrige os gargalos nos componentes existentes:
+A integridade do pipeline previne duplicidade através de `identityGroupKey` e garante rastreabilidade com `correlationId`.
 
-- `product-title-quality`: bloqueio mais forte de acessórios/consumíveis antes do ranking;
-- `curation-policy`: `allowAccessory` deixa de liberar um cenário inteiro; somente intenção explicitamente acessória pode autorizar o item;
-- classificação: o produto principal do título precede menções secundárias, evitando casos como webcam→notebook e mini-PC→SSD;
-- Amazon: filtros específicos para resultados ambíguos de `scanner` e `switch de rede`;
-- ranking legado: menor influência de `deterministicScore`, com maior peso para confiança, desconto real, prova social, loja oficial e frete;
-- Mercado Livre: paginação oficial usa o tamanho bruto da página para decidir continuidade e pode avançar por offsets `0/30/60/90`; aliases editoriais ampliam a busca mantendo os guardrails existentes.
+## Radar Executivo de Tendências
 
-Nenhuma dessas mudanças altera agenda, credenciais, Supabase ou publicação.
-
-## Discovery Quality & Coverage — PR #189
-
-Implementação do classificador contextual e ampliação do pool elegível:
-
-- `scripts/product-title-quality.cjs`: centraliza `classifyProductContext` com estados `BLOCK`, `REVIEW` e `ALLOW`;
-- contextualização de substantivo principal vs modificador (`hasLeadAccessoryOrPartBeforeMain` e `inspectMainProductPosition`), diferenciando ofertas isoladas ("Capa para Notebook" -> BLOCK) de bundles legítimos ("Notebook + Capa + Mouse" -> ALLOW; "Impressora 3D com bico extra e filamento incluso" -> ALLOW);
-- taxonomia canônica: `PART_ONLY_PRODUCT` (peças de reposição/manutenção), `ACCESSORY_ONLY_PRODUCT` (acessórios avulsos) e `CONSUMABLE_ONLY_PRODUCT` (consumíveis isolados);
-- `scripts/discovery-funnel-contract.cjs` e `scripts/shopee-openapi-v1-controlled-persist.cjs`: aliases e razões canônicas integrados;
-- `scripts/classification-coverage.cjs`: `confidence: 1` para browse nodes mapeados da Amazon;
-- `scripts/marketplace-scenario-contracts.cjs`: suporte ao catálogo editorial completo e rotação determinística de cenários.
-
-## Mercado Livre
-
-A `main` já usa certified-first e catálogo editorial ampliado. O PR #187 corrige o encerramento prematuro da paginação: uma página cheia não pode ser tratada como “fim” apenas porque poucos itens sobreviveram ao filtro semântico.
-
-O mapa certificado continua sendo a camada de maior confiança; famílias editoriais adicionais usam busca oficial estrita, sem se tornarem automaticamente certificadas.
-
-## Qualidade comercial
-
-Produto persistido não é automaticamente “achadinho”. A carteira deve combinar aderência editorial, produto principal, desconto plausível, rating/reviews, vendas, loja oficial, logística e economia real conforme o marketplace.
-
-## Oracle — estado operacional confirmado antes do PR #187
-
-- branch: `main`;
-- HEAD/runtime: `bd62fbf4784ce6ad1f5c123240e51c7815aaafb1`;
-- working tree: limpa na última checagem;
-- `oracle-scraper`: online;
-- alinhamento com a `main`: confirmado.
-
-O PR #187 não deve ser considerado carregado pela Oracle enquanto não houver merge e novo alinhamento explícito.
-
-## Radar
-
-- `oracle-trends-radar` dedicado;
+- Worker dedicado: `oracle-trends-radar` no PM2;
 - `TRENDS_RADAR_DEDICATED_RUNTIME=true`;
 - `TREND_EXECUTIVE_MODE=off`;
-- polling de 30s e lock `/tmp/caca-oferta-trends-radar.lock`;
+- Polling de 30s e lock `/tmp/caca-oferta-trends-radar.lock`;
 - `oracle-scraper` não consome Radar no ciclo editorial.
 
-## Validação
+## Validação e Conformidade
 
-- `npm run verify`
-- `npm run docs:audit`
-- testes de regressão de qualidade/classificação
-- `/api/health`
-- `/api/readiness`
-
-Antes de qualquer intervenção de produção, comparar o SHA da Oracle com a `main`, confirmar working tree limpa, PM2 e flags efetivas.
+- `npm test`: 2.522 testes automatizados aprovados (2.121 Vitest + 401 CJS);
+- `npm run build`: Compilação limpa do Next.js com 0 erros de TypeScript;
+- `npm run docs:audit`: Auditoria de governança documental seletiva;
+- `npm run security:check`: Verificação de segurança e conformidade de segredos.
