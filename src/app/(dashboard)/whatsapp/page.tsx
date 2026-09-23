@@ -16,24 +16,26 @@ export default async function WhatsappDashboardPage() {
   const { data: { user } } = authClient ? await authClient.auth.getUser() : { data: { user: null } };
 
   async function fetchDraftPosts(): Promise<PostWithOffer[]> {
-    if (!supabase || !user?.id) return [];
+    if (!supabase) return [];
 
     // O Top30 continua autoritativo somente para os drafts editoriais.
     // Drafts Express são carregados separadamente pelo loader e nunca entram no ranking.
     let selectedOfferIds = new Set<string>();
-    try {
-      const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
-      selectedOfferIds = new Set(top30.selectedOfferIds);
-    } catch {
-      // Falha na preparação editorial não deve esconder um draft Express já existente.
-      selectedOfferIds = new Set<string>();
+    if (user?.id) {
+      try {
+        const top30 = await prepareTop30WhatsappLegacyDrafts(new SupabaseTop30WhatsappRepository(supabase, user.id));
+        selectedOfferIds = new Set(top30.selectedOfferIds);
+      } catch {
+        // Falha na preparação editorial não deve esconder um draft Express já existente.
+        selectedOfferIds = new Set<string>();
+      }
     }
 
     return loadWhatsappDashboardDrafts({
       supabase,
-      userId: user.id,
+      userId: user?.id,
       selectedOfferIds,
-      limit: 30,
+      limit: 100,
     });
   }
 

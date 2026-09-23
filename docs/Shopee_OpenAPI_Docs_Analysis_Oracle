@@ -1,0 +1,119 @@
+# 🎯 Shopee Open API: Análise Profunda para a Extração Geral (Oracle)
+
+A análise da documentação revela que podemos revolucionar a forma como a **Oracle** extrai dados da Shopee. Atualmente, a nossa extração geral baseia-se em varrer a Shopee buscando links/ofertas um a um e tentando validar comícios na API usando `productOfferV2` (método que acabamos de blindar com `itemId`).
+
+No entanto, a Open API oferece métodos de **extração massiva** e **enriquecimento de metadados** muito superiores ao que temos hoje. A seguir, mostro as propostas e exemplos de como a extração geral pode ser transformada, sem depender da Publicação Expressa.
+
+---
+
+## 1. Enriquecimento da Extração Base (Oportunidade Imediata)
+
+Hoje, nossos *Workers* (como o `oracle-scraper.cjs` e `shopee-native-discovery-v5.cjs`) capturam basicamente: *ID, Nome, Preço, Imagem, Link e Taxa de Comissão*.
+
+**A API disponibiliza nativamente:**
+- `ratingStar`: Avaliação do produto (Prova social instantânea).
+- `sales`: Quantidade de vendas oficiais (Identificador de produtos virais/validados).
+- `priceDiscountRate`: % real de desconto oficial (Ex: "10% OFF").
+- `sellerCommissionRate`: A comissão extra paga pelo lojista (Comissão Xtra).
+- `shopType`: Identificador se a loja é Oficial (`1`), Indicada (`2`) ou Indicada+ (`4`).
+
+### Exemplo do que podemos fazer no `oracle-scraper.cjs`:
+Nós apenas precisaríamos atualizar a query GraphQL atual para trazer esses dados.
+
+```graphql
+# Exemplo de Query Melhorada para a Extração Geral da Oracle
+{
+  productOfferV2(itemId: 17979995178, page: 1, limit: 1) {
+    nodes {
+      itemId
+      productName
+      priceMin
+      imageUrl
+      productLink
+      offerLink
+      # Novos campos poderosos para a Oracle extrair:
+      ratingStar           # Ex: "4.7"
+      sales                # Ex: 25000 (Nos ajuda a achar os campeões de venda)
+      priceDiscountRate    # Ex: 10 (10% de desconto)
+      commissionRate       # Comissão Base Shopee
+      sellerCommissionRate # Comissão Xtra do Lojista
+      shopType             # Array ex: [1] (Oficial) ou [2] (Indicado)
+    }
+  }
+}
+```
+**O que isso melhora?** A Oracle passa a guardar no banco de dados não só a oferta, mas **quão boa ela é**. O Caça Ofertas pode passar a filtrar: *"Só quero que o robô envie ofertas com nota maior que 4.5 e comissão total (Base + Xtra) maior que 5%"*.
+
+---
+
+## 2. Extração de Catálogo Massivo via Feed (A Revolução)
+
+Atualmente, nossos *Scrapers* (`shopee-trends-miner.cjs`) precisam "garimpar" o site ou o app para achar produtos. Essa é uma extração passiva ou de busca cega.
+
+**A nova API traz os "Data Feeds" (`listItemFeeds` e `getItemFeedData`)**. 
+Isso permite que a Oracle **baixe arquivos de lote direto da Shopee com todas as ofertas válidas do Brasil**, de uma vez só!
+
+### Como a Oracle funcionaria:
+1. O robô roda de madrugada e consulta os Feeds da Shopee:
+```graphql
+# Oracle pergunta à Shopee: "Quais os lotes de produtos disponíveis?"
+query {
+  listItemFeeds(feedMode: DELTA) {
+    feeds {
+      datafeedId      # Ex: "12345_DELTA_20260205"
+      datafeedName    # Ex: "Home Appliance - Preferred"
+      totalCount      # Quantos produtos mudaram hoje
+    }
+  }
+}
+```
+
+2. A Oracle faz o download apenas das atualizações do dia:
+```graphql
+# Oracle baixa os dados massivos
+query {
+  getItemFeedData(datafeedId: "12345_DELTA_20260205", offset: 0, limit: 500) {
+    rows {
+      columns    # JSON com todos os dados do produto (Comissão, Link, etc)
+      updateType # "NEW" (Novo), "UPDATE" (Atualizou preço/estoque) ou "DELETE" (Saiu da campanha)
+    }
+  }
+}
+```
+**O que isso melhora?**
+A extração não será mais um robô navegando e catando milho. A Oracle terá uma **cópia fiel do catálogo da Shopee no banco de dados**, atualizada diariamente por lotes (`DELTA`). Você saberá no minuto que um produto entrou na campanha de comissão ou se ele esgotou, sem precisar que um usuário mande o link para checar.
+
+---
+
+## 3. Mineração de Lojas Específicas (`shopOfferV2`)
+
+Se o objetivo é extrair **apenas ofertas das melhores lojas** (Shopee Oficial ou Vendedores Indicados), a documentação mostra a query `shopOfferV2`.
+
+**O que isso melhora?**
+Você pode dar à Oracle uma lista de `shopIds` das maiores lojas da Shopee (ex: Loja da Xiaomi, Samsung, Mondial). A Oracle usa essa query passando `isKeySeller: true` e `shopType: [1]` (Loja Oficial).
+Em uma única chamada, a Oracle extrai **todas** as ofertas dessa loja que pagam comissão, ordenadas por `SHOP_LIST_SORT_TYPE_HIGHEST_COMMISSION_DESC` (A maior comissão primeiro).
+
+```graphql
+# Oracle extraindo o "Top Comissões" de uma loja oficial
+query {
+  shopOfferV2(shopId: 84499012, shopType: [1], sortType: 2, limit: 50) {
+    nodes {
+      itemId
+      productName
+      commissionRate
+      offerLink
+    }
+  }
+}
+```
+
+---
+
+## Resumo Estratégico
+
+Sim, a melhoria é 100% focada na **Extração Geral (Oracle)**. 
+
+Se adotarmos essas funções da API:
+1. **O Scraper ficará mais inteligente:** Extraindo métricas que dizem se o produto "vende bem" (Rating/Sales).
+2. **Menos bloqueios/IP Bans:** Em vez de fazer requisições constantes para "descobrir" ofertas, usaríamos o **Feed de Lote (`getItemFeedData`)** para sincronizar milhares de produtos com apenas 2 ou 3 requisições pesadas à API.
+3. **Curadoria Fina:** Focar a mineração usando filtros nativos de Lojas Oficiais e Comissões mais altas.

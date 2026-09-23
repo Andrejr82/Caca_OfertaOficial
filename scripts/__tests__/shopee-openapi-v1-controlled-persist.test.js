@@ -110,7 +110,7 @@ describe('Shopee OpenAPI V1 controlled persistence', () => {
       requestedAt: '2026-08-08T00:00:00.000Z', existingItemIds: ['9400', '9401', '9402', '9403', '9404', '9405'], maxNewCandidates: CONTROLLED_TEST_LIMIT,
     });
 
-    expect(ingestions).toHaveLength(6);
+    expect(ingestions).toHaveLength(7);
     expect(ingestions.at(-1).candidate.sourceItemId).toBe('9406');
     expect(ingestions.at(-1).candidate.discoveryEvidence.position).toBe(7);
   });

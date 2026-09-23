@@ -133,7 +133,6 @@ export async function loadWhatsappDashboardDrafts({
       .eq("user_id", userId)
       .eq("channel", "whatsapp")
       .eq("status", "draft")
-      .gte("created_at", todayStart.toISOString())
       .order("created_at", { ascending: false })
       .limit(Math.max(requestedLimit, 100));
 

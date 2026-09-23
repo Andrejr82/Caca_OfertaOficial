@@ -12,31 +12,17 @@ export default async function FacebookPage() {
   let draftPosts: any[] = [];
 
   if (supabase) {
-    const [{ data }, { data: videoJobs }] = await Promise.all([
-      supabase
-        .from("posts")
-        .select("*, offers(*), affiliate_links(tracked_url)")
-        .eq("channel", "facebook")
-        .eq("status", "draft")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("video_jobs")
-        .select("id,status,offer_id,metadata")
-        .in("status", ["ready", "approved"]),
-    ]);
+    const { data } = await supabase
+      .from("posts")
+      .select("*, offers(*), affiliate_links(tracked_url)")
+      .eq("channel", "facebook")
+      .eq("status", "draft")
+      .order("created_at", { ascending: false });
 
-    const videoDraftIds = new Set<string>();
-    const videoOfferIds = new Set<string>();
-
-    for (const job of videoJobs ?? []) {
-      const draftId = (job.metadata as { draftIds?: { facebook?: string } } | null)?.draftIds?.facebook;
-      if (draftId) videoDraftIds.add(draftId);
-      if (job.offer_id) videoOfferIds.add(job.offer_id);
-    }
-
-    draftPosts = (data ?? []).filter(
-      (post) => !videoDraftIds.has(post.id) && !videoOfferIds.has(post.offer_id),
-    );
+    draftPosts = (data ?? []).filter((post) => {
+      const offerStatus = String(post.offers?.status || "").toLowerCase();
+      return !["posted", "rejected", "deferred", "deleted"].includes(offerStatus);
+    });
   }
 
   const historyData = await getPostHistory("facebook");

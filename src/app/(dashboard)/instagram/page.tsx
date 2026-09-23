@@ -71,14 +71,13 @@ export default async function InstagramDashboardPage() {
           videoJobId: videoJob?.status === "approved" ? videoJob.id : null,
           videoUrl: videoJob?.status === "approved" ? videoJob.video_url : null,
         };
+      })
+      .filter((post) => {
+        const offerStatus = String((post.offers as any)?.status || "").toLowerCase();
+        return !["posted", "rejected", "deferred", "deleted"].includes(offerStatus);
       });
   }
 
-  const manualFeedDrafts = draftPosts.filter((post) =>
-    !post.videoJobId &&
-    !isInstagramStoriesV4Handoff(post.content) &&
-    !isInstagramReelsDraft(post.content)
-  );
   const historyData = await getPostHistory("instagram");
 
   return (
@@ -89,14 +88,14 @@ export default async function InstagramDashboardPage() {
         </span>
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white">Instagram</h1>
-          <p className="text-xs text-white/35">Posts manuais e histórico. Stories e Reels ficam em páginas próprias.</p>
+          <p className="text-xs text-white/35">Posts, criativos e histórico de publicações.</p>
         </div>
       </header>
 
       <SocialChannelPostsView
         channel="instagram"
         accentClassName="bg-pink-500/15 text-pink-300"
-        draftPosts={manualFeedDrafts}
+        draftPosts={draftPosts}
         historyData={historyData as any}
       />
     </div>

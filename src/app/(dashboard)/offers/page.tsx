@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 export default async function OffersPage() {
   const offers = await listOffersWithDraftStatus();
-  const commercialCandidates = selectOperationalPanelTop30(offers);
+  const commercialCandidates = selectOperationalPanelTop30(offers, 30, new Date(), { allowApproved: true, allowRecentFallback: true });
   const operationalOfferIds = new Set(commercialCandidates.map((candidate) => candidate.id));
   const operationalOffers = offers.filter((offer) => operationalOfferIds.has(offer.id));
 

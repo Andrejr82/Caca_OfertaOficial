@@ -108,7 +108,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
       }),
       persistRunner: async (ingestions) => {
         persisted.push(...ingestions);
-        return { accepted: ingestions.length, inserted: 3, updated: 5, offerIds: ingestions.map((item) => item.candidate.sourceItemId), writeAudit: { supabaseWrites: ingestions.length, offersWrites: ingestions.length, postsWrites: 0, publishCalls: 0, oracleCalls: 0 } };
+        return { accepted: ingestions.length, inserted: 3, updated: 6, offerIds: ingestions.map((item) => item.candidate.sourceItemId), writeAudit: { supabaseWrites: ingestions.length, offersWrites: ingestions.length, postsWrites: 0, publishCalls: 0, oracleCalls: 0 } };
       },
       lookupExistingItemIds: async () => existingItemIds,
       copyQueueOptions: { maxPerMarketplace: 3 },
@@ -116,7 +116,7 @@ describe('Oracle Scraper Shopee OpenAPI local shadow entrypoint', () => {
     });
 
     expect(result.controlledPersist).toMatchObject({ enabled: true, maxCandidates: 3 });
-    expect(persisted).toHaveLength(8);
+    expect(persisted).toHaveLength(9);
     expect(persisted.slice(-3).map((item) => item.candidate.sourceItemId)).toEqual(['706', '707', '708']);
   });
 });

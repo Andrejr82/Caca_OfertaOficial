@@ -161,7 +161,7 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
       expect(plan.categoryIds.length).toBeGreaterThan(0);
       expect(plan.shopTypes).toEqual(expect.arrayContaining([1]));
       expect(plan.sources).toEqual(expect.arrayContaining(['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2']));
-      expect(plan.limits.productOfferV2PerQuery).toBeLessThanOrEqual(20);
+      expect(plan.limits.productOfferV2PerQuery).toBeLessThanOrEqual(50);
       expect(plan.limits.maxFeedRows).toBeLessThanOrEqual(100);
     }
   });
@@ -434,7 +434,7 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
     });
     const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
     expect(result.queryEvidence.calls).toHaveLength(2);
-    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('page_limit');
+    expect(result.queryEvidence.calls.at(-1).stopReason).toBe('cursor_repeated');
   });
 
   it('encerra uma fonte em página vazia mesmo quando a API informa próxima página', async () => {
@@ -447,10 +447,10 @@ describe('Shopee OpenAPI Shadow Engine V1', () => {
   it('encerra no limite seguro mesmo quando o cursor continua avançando', async () => {
     const request = async (operation, query, variables) => ({
       status: 200,
-      data: { data: { productOfferV2: { nodes: [product({ itemId: String(8200 + variables.page), shopId: String(9200 + variables.page), productLink: `https://shopee.com.br/product/${9200 + variables.page}/${8200 + variables.page}`, offerLink: `https://s.shopee.com.br/${8200 + variables.page}` })], pageInfo: { hasNextPage: variables.page < 3, endCursor: `cursor-${variables.page}` } } } },
+      data: { data: { productOfferV2: { nodes: [product({ itemId: String(8200 + variables.page), shopId: String(9200 + variables.page), productLink: `https://shopee.com.br/product/${9200 + variables.page}/${8200 + variables.page}`, offerLink: `https://s.shopee.com.br/${8200 + variables.page}` })], pageInfo: { hasNextPage: true, endCursor: `cursor-${variables.page}` } } } },
     });
     const result = await runScenarioPlan('casa_cozinha_editorial', { request, maxKeywords: 1, maxCategories: 0, includeDelta: false, includeAuxiliary: false });
-    expect(result.queryEvidence.calls).toHaveLength(2);
+    expect(result.queryEvidence.calls).toHaveLength(3);
     expect(result.queryEvidence.calls.at(-1).stopReason).toBe('page_limit');
   });
 

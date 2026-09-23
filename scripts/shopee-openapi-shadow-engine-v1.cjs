@@ -19,39 +19,52 @@ const {
 } = require('./shopee-productcatids-map-v1.cjs');
 
 function queryPlan(keywords, categoryIds, overrides = {}) {
-  return Object.freeze({ keywords, categoryIds, shopTypes: [1, 2, 4], sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'], limits: { productOfferV2PerQuery: 20, maxPagesPerQuery: 2, maxFeedRows: 50, shopOfferV2: 20, shopeeOfferV2: 20, ...overrides } });
+  return Object.freeze({
+    keywords,
+    categoryIds,
+    shopTypes: [1, 2, 4],
+    sources: ['productOfferV2', 'DELTA', 'shopOfferV2', 'shopeeOfferV2'],
+    limits: {
+      productOfferV2PerQuery: 50,
+      maxPagesPerQuery: 3,
+      maxFeedRows: 100,
+      shopOfferV2: 30,
+      shopeeOfferV2: 30,
+      ...overrides,
+    },
+  });
 }
 
 const SCENARIO_CONTRACTS = Object.freeze({
-  casa_cozinha_editorial: scenario(['casa','cozinha'], ['liquidificador','panela','cafeteira','air fryer','organizador','utensilio','jantar','cama','toalha','faqueiro'], ['pet','automotivo','celular','beleza'], ['kit generico'], [100010,100636]),
-  organizacao_editorial: scenario(['organiz','casa','cozinha'], ['organizador','caixa','cesto','cabide','sapateira','lixeira','mop','varal'], ['pet','bebe','automotivo','industrial'], ['suporte'], [100010,100636]),
-  ferramentas_editorial: scenario(['ferrament','oficina'], ['furadeira','parafusadeira','lixadeira','esmerilhadeira','serra','kit ferramentas','jogo de ferramentas'], ['infantil','brinquedo','automotivo','cosmetico','unha'], ['kit sem ferramenta'], [100636]),
-  informatica_editorial: scenario(['informatic','computador','notebook','teclado','mouse','monitor','webcam','ssd','roteador','pc'], ['notebook','computador','mini pc','teclado','mouse','monitor','webcam','ssd','roteador','impressora'], ['saude','pressao','arterial','smartwatch','pet','automotivo','capa'], ['smartwatch','monitor de saude'], [100644,100013], { negativeClasses: ['generic_accessory','weak_accessory','compatibility_only'] }),
-  celulares_editorial: scenario(['celular','smartphone','iphone','galaxy','redmi','mobile'], ['smartphone','celular','iphone','galaxy','redmi'], ['notebook','monitor','cabo avulso','pelicula avulsa'], [], [100013]),
-  beleza_editorial: scenario(['beleza','cabelo','capilar','maquiagem','perfume','skincare','hidratante','shampoo','secador','chapinha','serum'], ['cosmetico','mascara','cabelo','capilar','maquiagem','perfume','shampoo','secador','chapinha'], ['varal','centrifuga de salada','suporte de shampoo','cozinha','banheiro','lixeira','panela','liquidificador','pet','automotivo','monitor de pressao'], ['promessa terapeutica'], [100630,100001]),
-  moda_editorial: scenario(['moda','roupa','vestuario','camiseta','camisa','calca','bermuda','tenis','sapato','bolsa','mochila','relogio','oculos'], ['roupa','camiseta','camisa','calca','bermuda','tenis','sapato','bolsa','mochila','relogio','oculos'], ['bebe','infantil','pet'], ['tamanho ausente'], [100009,100011,100012,100534], { negativeClasses: ['weak_accessory','generic_accessory'] }),
-  esporte_editorial: scenario(['esporte','fitness','treino','academia','yoga','corrida'], ['tenis','legging','whey','creatina','tapete','halter','corda','faixa','luva'], ['pet','bebe','moda social','automotivo'], ['suplemento medicamentoso'], [100637,100001]),
-  pet_editorial: scenario(['pet','cachorro','gato','animal'], ['racao','tapete higienico','cama pet','brinquedo pet','areia','coleira','transporte pet','shampoo pet'], ['bebe','humano','automotivo'], ['medicamento veterinario'], [100631]),
+  casa_cozinha_editorial: scenario(['casa','cozinha'], ['liquidificador','panela','cafeteira','air fryer','fritadeira','organizador','utensilio','jantar','cama','lencol','edredom','toalha','faqueiro','batedeira','mixer','mop','chaleira','sanduicheira','grill','aspirador'], ['pet','automotivo','celular','beleza'], ['kit generico'], [100010,100636]),
+  organizacao_editorial: scenario(['organiz','casa','cozinha'], ['organizador','caixa','cesto','cabide','sapateira','lixeira','mop','varal','prateleira','porta tempero'], ['pet','bebe','automotivo','industrial'], ['suporte'], [100010,100636]),
+  ferramentas_editorial: scenario(['ferrament','oficina'], ['furadeira','parafusadeira','lixadeira','esmerilhadeira','serra','kit ferramentas','jogo de ferramentas','alicate','trena','soquete','inversora','solda','maleta'], ['infantil','brinquedo','automotivo','cosmetico','unha'], ['kit sem ferramenta'], [100636]),
+  informatica_editorial: scenario(['informatic','computador','notebook','teclado','mouse','monitor','webcam','ssd','roteador','pc'], ['notebook','computador','mini pc','teclado','mouse','monitor','webcam','ssd','roteador','impressora','headset','cadeira gamer'], ['saude','pressao','arterial','smartwatch','pet','automotivo','capa'], ['smartwatch','monitor de saude'], [100644,100013], { negativeClasses: ['generic_accessory','weak_accessory','compatibility_only'] }),
+  celulares_editorial: scenario(['celular','smartphone','iphone','galaxy','redmi','mobile'], ['smartphone','celular','iphone','galaxy','redmi','power bank','carregador'], ['notebook','monitor','cabo avulso','pelicula avulsa'], [], [100013]),
+  beleza_editorial: scenario(['beleza','cabelo','capilar','maquiagem','perfume','skincare','hidratante','shampoo','secador','chapinha','serum'], ['cosmetico','mascara','cabelo','capilar','maquiagem','perfume','shampoo','secador','chapinha','escova secadora','serum','protetor solar','prancha'], ['varal','centrifuga de salada','suporte de shampoo','cozinha','banheiro','lixeira','panela','liquidificador','pet','automotivo','monitor de pressao'], ['promessa terapeutica'], [100630,100001]),
+  moda_editorial: scenario(['moda','roupa','vestuario','camiseta','camisa','calca','bermuda','tenis','sapato','bolsa','mochila','relogio','oculos'], ['roupa','camiseta','camisa','calca','bermuda','tenis','sapato','bolsa','mochila','relogio','oculos','vestido','polo'], ['bebe','infantil','pet'], ['tamanho ausente'], [100009,100011,100012,100534], { negativeClasses: ['weak_accessory','generic_accessory'] }),
+  esporte_editorial: scenario(['esporte','fitness','treino','academia','yoga','corrida'], ['tenis','legging','whey','creatina','tapete','halter','corda','faixa','luva','garrafa termica'], ['pet','bebe','moda social','automotivo'], ['suplemento medicamentoso'], [100637,100001]),
+  pet_editorial: scenario(['pet','cachorro','gato','animal'], ['racao','tapete higienico','cama pet','brinquedo pet','areia','coleira','transporte pet','shampoo pet','fonte','bebedouro','arranhador','peitoral'], ['bebe','humano','automotivo'], ['medicamento veterinario'], [100631]),
   tv_audio_editorial: scenario(['tv','audio','smart tv','soundbar','caixa de som','speaker','fone','headphone','earbuds','home theater','projetor','microfone','receiver','amplificador'], ['smart tv','televisao','tv','soundbar','caixa de som','speaker','home theater','fone bluetooth','fone','headphone','earbuds','projetor','microfone','receiver','amplificador'], ['pet','bebe'], ['acessorio sem aparelho'], [100535,100578,100013,100644], { negativeClasses: ['generic_accessory','compatibility_only','weak_accessory','computer_peripheral_in_tv_audio'] }),
-  eletrodomesticos_editorial: scenario(['eletrodomestico','geladeira','refrigerador','freezer','fogao','cooktop','lavadora','ar condicionado','air fryer','liquidificador','cafeteira','aspirador','ferro de passar','ventilador'], ['geladeira','refrigerador','freezer','fogao','cooktop','micro ondas','maquina de lavar','lava e seca','lava loucas','ar condicionado','air fryer','liquidificador','cafeteira','aspirador','ferro de passar','ventilador'], ['pet','bebe'], ['grande porte fora do frete'], [100010], { negativeClasses: ['spare_part','replacement_part','generic_accessory'] }),
+  eletrodomesticos_editorial: scenario(['eletrodomestico','geladeira','refrigerador','freezer','fogao','cooktop','lavadora','ar condicionado','air fryer','liquidificador','cafeteira','aspirador','ferro de passar','ventilador'], ['geladeira','refrigerador','freezer','fogao','cooktop','micro ondas','maquina de lavar','lava e seca','lava loucas','ar condicionado','air fryer','fritadeira','liquidificador','cafeteira','aspirador','ferro de passar','ventilador','purificador','adega'], ['pet','bebe'], ['grande porte fora do frete'], [100010], { negativeClasses: ['spare_part','replacement_part','generic_accessory'] }),
   moveis_editorial: scenario(['moveis','casa','quarto','sala','mesa','cadeira','armario','sofa'], ['sofa','guarda roupa','cama','colchao','mesa','escrivaninha','cadeira','rack','comoda'], ['pet','bebe','peca avulsa','capa isolada'], ['dimensoes ausentes'], [100636]),
   grandes_ofertas_editorial: scenario(['smartphone','notebook','tablet','smart tv','soundbar','air fryer','liquidificador','cafeteira','aspirador','geladeira','fogao','cooktop','maquina de lavar','furadeira','parafusadeira','cadeira de escritorio','sofa','armario'], ['smartphone','celular','notebook','tablet','smart tv','soundbar','air fryer','liquidificador','cafeteira','aspirador','geladeira','fogao','cooktop','maquina de lavar','furadeira','parafusadeira','cadeira de escritorio','sofa','armario'], ['usado','recondicionado','servico','cupom sem aprovacao'], [], [100013,100010,100644,100636], { negativeClasses: ['spare_part','replacement_part','generic_accessory','weak_accessory','compatibility_only','small_school_item'], minDiscount: 20, minSales: 50, minRating: 4.7, minCommission: 5, maxFamilyPerScenario: 30, maxShopPerScenario: 8 }),
 });
 
 const SCENARIO_QUERY_PLANS = Object.freeze({
-  casa_cozinha_editorial: queryPlan(['liquidificador','air fryer','jogo de cama','faqueiro','panela elétrica'], [100010,100636]),
-  organizacao_editorial: queryPlan(['organizador de cozinha','caixa organizadora','cesto organizador','cabide','lixeira'], [100010,100636]),
-  ferramentas_editorial: queryPlan(['furadeira','parafusadeira','kit ferramentas','alicate','trena'], [100636]),
-  informatica_editorial: queryPlan(['teclado','mouse','headset','monitor gamer','ssd','roteador'], [100644,100013]),
-  celulares_editorial: queryPlan(['smartphone','celular','iphone','galaxy','redmi'], [100013]),
-  beleza_editorial: queryPlan(['skincare','perfume','shampoo','escova secadora','maquiagem'], [100630,100001]),
-  moda_editorial: queryPlan(['camiseta masculina','calça jeans','tênis casual','bolsa feminina','mochila'], [100009,100011,100012,100534]),
-  esporte_editorial: queryPlan(['tênis de corrida','legging fitness','tapete de yoga','halter','corda de pular'], [100637,100001]),
-  pet_editorial: queryPlan(['ração cachorro','cama pet','brinquedo pet','guia cachorro','bebedouro pet'], [100631]),
-  tv_audio_editorial: queryPlan(['smart tv','soundbar','caixa de som bluetooth','fone bluetooth','headphone bluetooth','projetor portátil','home theater','microfone sem fio'], [100535,100578,100013,100644]),
-  eletrodomesticos_editorial: queryPlan(['geladeira','fogão','cooktop','máquina de lavar','ar condicionado'], [100010]),
-  moveis_editorial: queryPlan(['sofá','guarda roupa','cama','mesa de jantar','cadeira de escritório'], [100636]),
-  grandes_ofertas_editorial: queryPlan(['smartphone','notebook','smart tv','air fryer','geladeira','máquina de lavar','furadeira','aspirador robô','cadeira escritório'], [100013,100010,100644,100636]),
+  casa_cozinha_editorial: queryPlan(['liquidificador','air fryer','jogo de cama','faqueiro','panela eletrica'], [100010,100636]),
+  organizacao_editorial: queryPlan(['organizador de cozinha','caixa organizadora','cesto organizador','cabide','sapateira','lixeira automática','mop','varal retrátil','prateleira organizadora','porta tempero','organizador gaveta','cesto de roupa'], [100010,100636]),
+  ferramentas_editorial: queryPlan(['furadeira de impacto','parafusadeira sem fio','kit ferramentas','esmerilhadeira angular','lixadeira orbital','serra circular','serra tico tico','maleta de ferramentas','jogo de soquetes','trena laser','alicate de pressão','inversora de solda'], [100636]),
+  informatica_editorial: queryPlan(['teclado mecânico','mouse sem fio','headset gamer','monitor gamer','ssd nvme','roteador gigabit','notebook','webcam full hd','mini pc','mousepad gamer','cadeira gamer','suporte articulado monitor'], [100644,100013]),
+  celulares_editorial: queryPlan(['smartphone xiaomi','celular samsung','iphone 13','iphone 14','galaxy a55','redmi note 13','carregador por indução','power bank 20000mah','fone bluetooth tws'], [100013]),
+  beleza_editorial: queryPlan(['skincare facial','perfume importado','shampoo profissional','escova secadora taiff','maquiagem','máscara capilar reconstrutora','sérum facial retinol','protetor solar facial','óleo capilar extraordinário','prancha alisadora'], [100630,100001]),
+  moda_editorial: queryPlan(['camiseta 100 algodão','calça jeans masculina','tênis casual feminino','bolsa feminina transversal','mochila antifurto executiva','relógio masculino social','óculos de sol polarizado','vestido casual elegante','camisa polo masculina'], [100009,100011,100012,100534]),
+  esporte_editorial: queryPlan(['tênis de corrida masculino','whey protein concentrado','creatina monohidratada','legging fitness feminina','tapete de yoga antiderrapante','halter sextavado emborrachado','corda de pular crossfit','faixa elástica treino','garrafa térmica inox 1l'], [100637,100001]),
+  pet_editorial: queryPlan(['ração cães premium','ração gatos castrados','tapete higiênico cães 60x60','cama pet lavável','brinquedo interativo pet','fonte bebedouro automática pet','caixa de areia gatos fechada','arranhador gato com casinha','coleira peitoral anti puxão'], [100631]),
+  tv_audio_editorial: queryPlan(['smart tv 4k 50','soundbar bluetooth com subwoofer','caixa de som bluetooth potente','fone bluetooth com microfone','headphone cancelamento ruído','projetor smart 4k','microfone sem fio profissional','earbuds tws sem fio','home theater 5.1'], [100535,100578,100013,100644]),
+  eletrodomesticos_editorial: queryPlan(['geladeira frost free duplex','fogão 4 bocas automático','cooktop 5 bocas vidro','máquina de lavar 11kg','lava e seca inverter','ar condicionado split inverter','micro ondas 30l','fritadeira air fryer 4l','aspirador de pó vertical 2 em 1','ventilador de teto silencioso','ventilador de mesa 40cm','purificador de água natural e gelada','adega climatizada','freezer horizontal'], [100010]),
+  moveis_editorial: queryPlan(['sofá retrátil e reclinável','guarda roupa casal com espelho','cama box casal com colchão','mesa de jantar 4 cadeiras','cadeira de escritório ergonômica','rack para tv com painel','escrivaninha home office','cômoda 4 gavetas quarto'], [100636]),
+  grandes_ofertas_editorial: queryPlan(['smartphone 5g','notebook i5','smart tv 50 polegadas 4k','air fryer digital','geladeira frost free','máquina de lavar 12kg','furadeira parafusadeira impacto','aspirador robô inteligente','cadeira gamer ergonômica','soundbar bluetooth','micro ondas 30 litros'], [100013,100010,100644,100636]),
 });
 
 function scenario(positiveDomain, requiredProductClass, negativeDomain, ambiguousTerms, allowedApiCategories, overrides = {}) {
@@ -634,7 +647,7 @@ async function runScenarioPlan(scenarioId, { request, signal, maxKeywords, maxCa
         }
         let response;
         try {
-          response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: 2, isAMSOffer: true }, { signal: requestSignal });
+          response = await request('ShopeePromotionOffers', GRAPHQL_CONTRACTS.productOfferV2.query, { ...variables, page, limit: pageSize, sortType: variables.sortType ?? 1, isAMSOffer: true }, { signal: requestSignal });
         } catch (error) {
           calls.push({ source: sourcePlan, page, requested: variables, returned: 0, acceptedShopType: 0, stopReason: stopState.reason || signal?.aborted ? (stopState.reason || 'aborted') : controller.signal.aborted ? 'source_timeout' : 'source_error', error: error?.message || String(error) });
           break;
@@ -1037,4 +1050,4 @@ if (require.main === module) {
   runCli().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => { console.error(`[Shopee Shadow V1] ${error.message}`); process.exitCode = 1; });
 }
 
-module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, classifyCuratedFeedCandidate, selectCuratedFamilyRepresentatives, processDeltaRows, runShadow, runScenarioPlan, runCuratedScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, resolveCanonicalIntent, buildShopeeDimensionTelemetry, buildFixtureSources, collectLiveSources, runCli };
+module.exports = { GRAPHQL_CONTRACTS, SCENARIO_CONTRACTS, SCENARIO_QUERY_PLANS, CURATED_SHOPEE_SCENARIOS, normalizeCommission, normalizePriceIntegrity, matchesRequiredProductIdentity, evaluateIntent, normalizeProductOffer, normalizeFeedColumns, classifyCuratedFeedCandidate, selectCuratedFamilyRepresentatives, processDeltaRows, runShadow, runScenarioPlan, runCuratedScenarioPlan, resolveAuxiliaryOffers, collectScenarioCoverage, createSignedRequest, familyKey, resolveCanonicalIntent, buildShopeeDimensionTelemetry, buildFixtureSources, collectLiveSources, runCli };

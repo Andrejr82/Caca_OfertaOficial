@@ -27,6 +27,7 @@ export default async function TelegramDashboardPage() {
       id: string;
       product_name: string;
       platform: string;
+      status?: string | null;
       marketplace?: string | null;
       category?: string | null;
       current_price: number;
@@ -49,12 +50,20 @@ export default async function TelegramDashboardPage() {
       .eq("status", "draft")
       .order("created_at", { ascending: false });
 
-    const rawDrafts = drafts || [];
-    // The normal cycle has already approved this cohort. Do not run the
-    // editorial score/diversity selector again in the Telegram panel: keep
-    // active drafts of approved offers visible until an explicit publication
-    // or rejection changes their state.
-    draftPosts = mergePanelDrafts(rawDrafts as any, new Set<string>(), getTodayBrtStart(), undefined, true) as unknown as PostWithOffer[];
+    const seenOfferIds = new Set<string>();
+    draftPosts = ((drafts || []) as unknown as PostWithOffer[]).filter((post) => {
+      const offerStatus = String(post.offers?.status || "").toLowerCase();
+      const isActive = post.status === "draft"
+        && !(post as any).deleted_at
+        && !post.posted_at
+        && !post.external_id
+        && !["posted", "rejected", "deferred", "deleted"].includes(offerStatus);
+      if (!isActive) return false;
+      const offerKey = post.offers?.id || post.id;
+      if (seenOfferIds.has(offerKey)) return false;
+      seenOfferIds.add(offerKey);
+      return true;
+    });
   }
 
   const historyData = await getPostHistory("telegram");

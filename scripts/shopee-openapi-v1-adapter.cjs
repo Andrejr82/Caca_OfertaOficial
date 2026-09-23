@@ -1,6 +1,6 @@
 'use strict';
 
-const { runScenarioPlan } = require('./shopee-openapi-shadow-engine-v1.cjs');
+const { runScenarioPlan, CURATED_SHOPEE_SCENARIOS } = require('./shopee-openapi-shadow-engine-v1.cjs');
 const { getShopeeV1Flags } = require('./shopee-v1-flags.cjs');
 
 const APPROVED_SHOPEE_OPENAPI_V1_SCENARIOS = Object.freeze([
@@ -133,7 +133,7 @@ async function runShopeeOpenApiV1OfficialForScenario(scenarioId, options = {}) {
     ...options,
     includeDelta: true,
     includeAuxiliary: true,
-    curatedMode: true,
+    curatedMode: CURATED_SHOPEE_SCENARIOS.has(scenarioId),
   });
 }
 
