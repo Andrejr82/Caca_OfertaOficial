@@ -5,7 +5,9 @@ const EDITORIAL_SCHEDULE_TIMEZONE = 'America/Sao_Paulo';
 
 const COMMON_BLOCKED = Object.freeze([
   'adulto', 'infantil', 'usado', 'recondicionado', 'peça avulsa', 'peca avulsa',
-  'réplica', 'replica', 'download', 'ebook', 'serviço', 'servico',
+  'peça de reposição', 'peca de reposicao', 'réplica', 'replica', 'download', 'ebook', 'serviço', 'servico',
+  'cabo avulso', 'cabo usb avulso', 'adaptador avulso', 'capa protetora', 'suporte avulso',
+  'fonte avulsa', 'bateria avulsa', 'parafuso avulso', 'porca avulsa', 'refil avulso',
 ]);
 
 function normalize(value) {
@@ -72,7 +74,7 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
   casa_cozinha_editorial: scenario('casa_cozinha_editorial', 'Casa e Cozinha', 7,
     ['jogo de cama', 'toalha de banho', 'aparelho de jantar', 'faqueiro', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
     ['jogo de cama', 'lençol', 'toalha', 'faqueiro', 'aparelho de jantar', 'cafeteira', 'air fryer', 'liquidificador', 'batedeira', 'sanduicheira', 'panela elétrica', 'aspirador vertical', 'forno elétrico', 'grill elétrico', 'chaleira elétrica', 'mixer', 'máquina de café'],
-    ['pet', 'cachorro', 'gato', 'automotivo', 'celular', 'tênis'],
+    ['pet', 'cachorro', 'gato', 'automotivo', 'celular', 'tênis', 'cabo', 'adaptador', 'peça de reposição', 'peca de reposicao', 'suporte avulso', 'refil avulso', 'capa protetora'],
     ['size', 'material', 'pieces', 'capacity', 'voltage'], { apiCategories: [100010, 100636], amazonBrowseNodes: ['17100532011', '17124722011', '17124716011'] }),
 
   organizacao_editorial: scenario('organizacao_editorial', 'Organização', 8,
@@ -84,13 +86,13 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
   ferramentas_editorial: scenario('ferramentas_editorial', 'Ferramentas', 15,
     ['furadeira', 'parafusadeira', 'kit ferramentas', 'chave de fenda', 'alicate', 'serra', 'trena', 'maleta ferramentas', 'ferramenta elétrica', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
     ['furadeira', 'parafusadeira', 'kit ferramentas', 'ferramenta elétrica', 'chave de fenda', 'alicate', 'serra', 'trena', 'maleta ferramentas', 'esmerilhadeira', 'martelete', 'serra circular', 'serra tico-tico', 'chave de impacto', 'lixadeira'],
-    ['infantil', 'brinquedo', 'automotivo', 'cosmético', 'cosmetico'],
+    ['infantil', 'brinquedo', 'automotivo', 'cosmético', 'cosmetico', 'cinto para rocadeira', 'cinto para roçadeira', 'cinto de roçadeira', 'fio de nylon', 'parafuso avulso', 'porca avulsa', 'broca avulsa', 'disco avulso', 'carvao motor', 'escova de carvao', 'peca de reposicao', 'peça de reposição'],
     ['brand', 'model', 'voltage', 'power', 'pieces'], { apiCategories: [100636], amazonBrowseNodes: ['165793011', '165796011'] }),
 
   informatica_editorial: scenario('informatica_editorial', 'Informática', 11,
     ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd externo', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
     ['notebook', 'computador', 'pc gamer', 'monitor', 'impressora', 'teclado', 'mouse', 'webcam', 'ssd', 'hd externo', 'roteador', 'mini pc', 'all in one', 'scanner', 'nobreak', 'switch de rede'],
-    ['celular', 'smartphone', 'tablet infantil', 'cabo isolado', 'suporte'],
+    ['celular', 'smartphone', 'tablet infantil', 'cabo isolado', 'suporte', 'leitor de codigo', 'leitor de código', 'leitor de codigo de barras', 'cabo de impressora', 'cabo scanner', 'case vazia', 'gaveta de hd', 'pelicula avulsa', 'adesivo para teclado'],
     ['brand', 'model', 'memory', 'screen', 'connectivity'], { apiCategories: [100644, 100013], amazonBrowseNodes: ['16243803011', '16243794011', '24035344011'] }),
 
   celulares_editorial: scenario('celulares_editorial', 'Celulares', 11,
@@ -102,13 +104,13 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
   beleza_editorial: scenario('beleza_editorial', 'Beleza', 9,
     ['protetor solar', 'hidratante facial', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova secadora', 'aparador', 'máquina de cortar cabelo', 'modelador', 'escova alisadora', 'depilador'],
     ['protetor solar', 'hidratante', 'serum', 'sérum', 'shampoo', 'secador', 'chapinha', 'perfume', 'maquiagem', 'escova secadora', 'escova alisadora', 'aparador', 'máquina de cortar cabelo', 'modelador', 'depilador'],
-    ['pet', 'bebê', 'suplemento', 'medicamento', 'alimento'],
+    ['pet', 'bebê', 'suplemento', 'medicamento', 'alimento', 'amostra gratis', 'sache avulso', 'cinto de roçadeira', 'cinto para roçadeira', 'aparador de grama', 'rocadeira', 'roçadeira'],
     ['brand', 'volume', 'function', 'skin_type', 'fragrance'], { apiCategories: [100630, 100001], amazonBrowseNodes: ['16754345011', '16754346011', '16754347011'] }),
 
   moda_editorial: scenario('moda_editorial', 'Moda', 13,
     ['tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'sandália feminina', 'bota feminina', 'calça jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino', 'relógio masculino', 'óculos de sol'],
     ['tênis masculino', 'tênis feminino', 'tênis casual', 'camiseta masculina', 'sandália feminina', 'bota feminina', 'calça jeans masculina', 'pijama feminino', 'cinto masculino', 'bolsa transversal', 'mochila escolar', 'sapato masculino', 'bermuda masculina', 'moletom masculino', 'relógio masculino', 'óculos de sol'],
-    ['bebê', 'bebe', 'infantil', 'fitness específico', 'pet'],
+    ['bebê', 'bebe', 'infantil', 'fitness específico', 'pet', 'alça avulsa', 'alca avulsa', 'cabo usb'],
     ['brand', 'size', 'color', 'material', 'gender'], { apiCategories: [100009, 100011, 100012, 100534], amazonBrowseNodes: ['17681970011', '17681966011', '23577004011'] }),
 
   esporte_editorial: scenario('esporte_editorial', 'Esporte', 14,
@@ -120,7 +122,7 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
   pet_editorial: scenario('pet_editorial', 'Pet', 17,
     ['ração cachorro', 'ração gato', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia gato', 'coleira', 'caixa transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
     ['ração', 'tapete higiênico', 'cama pet', 'brinquedo pet', 'areia gato', 'coleira', 'caixa transporte pet', 'shampoo pet', 'bebedouro automático', 'comedouro automático', 'fonte pet', 'arranhador', 'caixa de areia fechada', 'casinha pet'],
-    ['bebê', 'bebe', 'humano', 'automotivo'],
+    ['bebê', 'bebe', 'humano', 'automotivo', 'refil avulso', 'peça avulsa', 'peca avulsa'],
     ['species', 'size', 'weight', 'material', 'flavor'], { apiCategories: [100631], amazonBrowseNodes: ['19653951011', '19653950011', '19653948011'] }),
 
   tv_audio_editorial: scenario('tv_audio_editorial', 'TV e Áudio', 18,
@@ -132,7 +134,7 @@ const EDITORIAL_SCENARIO_CATALOG = Object.freeze({
   eletrodomesticos_editorial: scenario('eletrodomesticos_editorial', 'Eletrodomésticos', 19,
     ['geladeira', 'refrigerador', 'freezer', 'fogão', 'cooktop', 'micro-ondas', 'máquina de lavar', 'lava e seca', 'lava-louças', 'ar condicionado', 'aspirador', 'forno elétrico', 'coifa', 'depurador', 'frigobar', 'adega climatizada'],
     ['geladeira', 'refrigerador', 'freezer', 'fogão', 'cooktop', 'micro-ondas', 'máquina de lavar', 'lava e seca', 'lava louças', 'ar condicionado', 'aspirador', 'forno elétrico', 'coifa', 'depurador', 'frigobar', 'adega climatizada'],
-    ['acessório', 'acessorio', 'cabo', 'peça', 'refil', 'pet', 'bebê'],
+    ['acessório', 'acessorio', 'cabo', 'peça', 'refil', 'pet', 'bebê', 'capa de maquina', 'capa lava e seca', 'capa de lavadora', 'capa maquina de lavar', 'capa protetora', 'mangueira avulsa', 'borracha avulsa', 'filtro avulso', 'pes de geladeira', 'pes niveladores', 'salva gabinete', 'atuador de freio', 'bico fogao'],
     ['brand', 'model', 'capacity', 'dimensions', 'voltage'], { apiCategories: [100010], amazonBrowseNodes: ['16745371011', '17124786011', '16745366011'] }),
 
   moveis_editorial: scenario('moveis_editorial', 'Móveis', 20,
