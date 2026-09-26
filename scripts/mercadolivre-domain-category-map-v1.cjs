@@ -234,6 +234,20 @@ const MERCADOLIVRE_DOMAIN_CATEGORY_MAP_V1 = Object.freeze({
       [...COMMON_NEGATIVE_TERMS, 'placa lavadora', 'agitador avulso', 'correia lavadora', 'valvula lavadora', 'mangueira lavadora', 'pes lavadora', 'capa para maquina', 'filtro lavadora'],
       800
     ),
+    'lava e seca': familyEntry(
+      'Eletrodomésticos', 'lava e seca', 'alta', 'domain_discovery_highlights',
+      ['MLB-WASHING_MACHINES_AND_DRYERS', 'MLB-WASHING_MACHINES'], ['MLB9188'],
+      ['lava e seca', 'lavadora e secadora', 'lava e seca 11kg', 'lava e seca 12kg', 'lava e seca 13kg', 'lava e seca midea', 'lava e seca brastemp', 'lava e seca samsung', 'lava e seca lg'],
+      [...COMMON_NEGATIVE_TERMS, 'capa para lava e seca', 'capa de maquina', 'suporte lava e seca', 'pes niveladores', 'mangueira', 'placa'],
+      1200
+    ),
+    'geladeira': familyEntry(
+      'Eletrodomésticos', 'geladeira', 'alta', 'domain_discovery_highlights',
+      ['MLB-REFRIGERATORS'], ['MLB9188'],
+      ['geladeira', 'refrigerador', 'geladeira frost free', 'geladeira duplex', 'geladeira inverter', 'geladeira brastemp', 'geladeira consul', 'geladeira electrolux'],
+      [...COMMON_NEGATIVE_TERMS, 'prateleira avulsa', 'termostato', 'motor', 'compressor', 'borracha de geladeira', 'gaveta de legumes avulsa', 'pe nivelador'],
+      1000
+    ),
     'freezer': familyEntry(
       'Eletrodomésticos', 'freezer', 'alta', 'domain_discovery_highlights',
       ['MLB-FREEZERS'], ['MLB9188'],
