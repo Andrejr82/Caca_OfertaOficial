@@ -1972,6 +1972,8 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     persistV2Metadata: persistDiscoveryV2Metadata,
     copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
+    scenarioResolver: () => scenarioId,
+    scenarioRuntimeResolver: () => ({ scenarioId, mode: 'multi-marketplace-recording' }),
   });
 }
 
