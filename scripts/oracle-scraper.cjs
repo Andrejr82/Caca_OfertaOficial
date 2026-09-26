@@ -1815,7 +1815,7 @@ async function runScrapingCycleCore() {
     persist: (ingestions, marketplace, targetStatus) => persistDiscoveryDecisionV2(ingestions, marketplace, targetStatus, stageLogger),
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     persistV2Metadata: (args) => persistDiscoveryV2Metadata(args, stageLogger),
-    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
+    copyQueueOptions: { maxTotal: 60, maxPerMarketplace: 20, maxPerCategory: 20 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
     scenarioResolver: (marketplace) => {
       const activeScenario = getActiveMarketplaceScenario(marketplace);
@@ -1970,7 +1970,7 @@ async function runMultiMarketplaceScenarioRecording(scenarioId) {
     persist: persistDiscoveryDecisionV2,
     prepareCandidate: (product, marketplace) => prepareDiscoveryCandidate(marketplace, product),
     persistV2Metadata: persistDiscoveryV2Metadata,
-    copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 },
+    copyQueueOptions: { maxTotal: 60, maxPerMarketplace: 20, maxPerCategory: 20 },
     notifyWorkPending: notifyWorkPendingToOfficialAI,
     scenarioResolver: () => scenarioId,
     scenarioRuntimeResolver: () => ({ scenarioId, mode: 'multi-marketplace-recording' }),

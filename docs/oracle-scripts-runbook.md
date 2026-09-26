@@ -1,8 +1,8 @@
 # Runbook de scripts da Oracle
 
 <!-- docs-status: current -->
-<!-- verified-against: 5df6fe73 -->
-<!-- verified-on: 2026-09-21 -->
+<!-- verified-against: bc115b10 -->
+<!-- verified-on: 2026-09-26 -->
 
 Guia operacional da VPS Oracle. Não coloque tokens, chaves ou valores de `.env` neste arquivo.
 

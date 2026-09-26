@@ -95,10 +95,10 @@ describe('Oracle Worker Ingestion (Discovery Only)', () => {
       expect(queue.selected.map((candidate) => candidate.sourceItemId)).not.toContain('invalida');
     });
 
-    it('configura o ciclo agendado para no máximo 30 ofertas, 10 por marketplace e 10 por categoria', () => {
+    it('configura o ciclo agendado para no máximo 60 ofertas, 20 por marketplace e 20 por categoria', () => {
       const scraperSource = readFileSync(resolve(process.cwd(), 'scripts/oracle-scraper.cjs'), 'utf8');
 
-      expect(scraperSource).toContain('copyQueueOptions: { maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 }');
+      expect(scraperSource).toContain('copyQueueOptions: { maxTotal: 60, maxPerMarketplace: 20, maxPerCategory: 20 }');
     });
 
     it('registra a comparação shadow no log do ciclo Oracle', () => {

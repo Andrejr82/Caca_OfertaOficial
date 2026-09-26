@@ -1,10 +1,10 @@
 # Estado atual do sistema
 
 <!-- docs-status: current -->
-<!-- verified-against: 5df6fe73 -->
-<!-- verified-on: 2026-09-21 -->
+<!-- verified-against: bc115b10 -->
+<!-- verified-on: 2026-09-26 -->
 
-Baseado na branch `main` consolidada (commit `5df6fe73`), com motor de seleção multimarketplace V2 unificado, classificador contextual de produtos (BLOCK/REVIEW/ALLOW), infraestrutura híbrida Vercel + Supabase + Oracle Cloud VPS e suíte de 2.522 testes automatizados 100% verde.
+Baseado na branch `main` consolidada, com motor de seleção multimarketplace V2 unificado (com teto expandido para 20 ofertas por marketplace e 60 total por ciclo), classificador contextual de produtos (BLOCK/REVIEW/ALLOW), suporte a rotação de rascunhos de ofertas approved no WhatsApp, infraestrutura híbrida Vercel + Supabase + Oracle Cloud VPS.
 
 ## Runtime e Infraestrutura Híbrida
 

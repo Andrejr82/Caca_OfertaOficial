@@ -261,7 +261,7 @@ export async function rotateNextWhatsappEditorialBatch(repository: Top30Whatsapp
     const createdAt = new Date(offer.created_at).getTime();
     if (isManualExpressOffer(offer) || !Number.isFinite(createdAt) || createdAt < todayStart.getTime() || createdAt > now.getTime()) return false;
     if (active.has(offer.id) || seen.has(offer.id) || protectedIds.has(offer.id) || historicalIds.has(offer.id)) return false;
-    if (["posted", "approved", "rejected", "deferred", "deleted"].includes(String(offer.status))) return false;
+    if (["posted", "rejected", "deferred", "deleted"].includes(String(offer.status))) return false;
     if (protectedIdentities.has(offerIdentity(offer))) return false;
     return true;
   });
@@ -310,10 +310,6 @@ function filterAndRoute(
   const eligibleOffers = offers.filter((offer) => {
     if (offer.status === "posted") {
       context.postedOfferIds.add(offer.id);
-      return false;
-    }
-    if (offer.status === "approved") {
-      context.approvedOfferIds.add(offer.id);
       return false;
     }
     if (offer.status === "rejected" || offer.status === "deferred") return false;

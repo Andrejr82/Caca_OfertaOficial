@@ -90,7 +90,7 @@ function allowsAccessoryByIntent(marketplace, product) {
 }
 
 
-const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 30, maxPerMarketplace: 10, maxPerCategory: 10 });
+const COPY_QUEUE_DEFAULTS = Object.freeze({ maxTotal: 60, maxPerMarketplace: 20, maxPerCategory: 20 });
 
 function normalizeQueueText(value) {
   return String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
