@@ -32,11 +32,11 @@ function productFields() {
   return 'itemId productName priceMin priceMax imageUrl productLink offerLink sales commissionRate sellerCommissionRate shopeeCommissionRate ratingStar priceDiscountRate shopId shopName productCatIds shopType';
 }
 
-function buildProductOfferPayload(keyword = null, productCatId = null, page = 1, limit = DEFAULT_PAGE_SIZE) {
+function buildProductOfferPayload(keyword = null, productCatId = null, page = 1, limit = DEFAULT_PAGE_SIZE, sortType = 2) {
   return {
     operationName: 'ShopeePromotionOffers',
     query: `query ShopeePromotionOffers($keyword: String, $productCatId: Int, $page: Int, $limit: Int, $sortType: Int, $isAMSOffer: Boolean) { productOfferV2(keyword: $keyword, productCatId: $productCatId, page: $page, limit: $limit, sortType: $sortType, isAMSOffer: $isAMSOffer) { nodes { ${productFields()} } pageInfo { page limit hasNextPage } } }`,
-    variables: { keyword, productCatId, page, limit, sortType: 2, isAMSOffer: true }
+    variables: { keyword, productCatId, page, limit, sortType, isAMSOffer: true }
   };
 }
 
@@ -61,9 +61,16 @@ function sanitizeProduct(node, category) {
   const price = number(node?.priceMin) || number(node?.priceMax);
   if (!node?.itemId || !String(node?.productName || '').trim() || !node?.productLink || price <= 0) return null;
 
-  // Filtro: Lojas Oficiais (3 = Mall) ou Indicadas (2, 1)
-  const isOfficial = Array.isArray(node.shopType) && (node.shopType.includes(3) || node.shopType.includes(2) || node.shopType.includes(1));
-  if (!isOfficial) return null; // Aborta processamento de vendedores comuns
+  const sales = number(node?.sales);
+  const rating = number(node?.ratingStar);
+
+  // Filtro: Lojas Oficiais (3 = Mall), Indicadas (2, 1) OU Vendedores com boa reputação (rating >= 4.5 e sales >= 50)
+  const hasOfficialTag = Array.isArray(node.shopType) && (node.shopType.includes(3) || node.shopType.includes(2) || node.shopType.includes(1));
+  const isTrustedCommunitySeller = (rating >= 4.5 || rating === 0) && sales >= 50;
+
+  if (!hasOfficialTag && !isTrustedCommunitySeller) return null; // Aborta vendedores de reputação duvidosa ou sem vendas
+
+  const isOfficial = hasOfficialTag;
 
   return {
     itemId: String(node.itemId),
@@ -75,8 +82,8 @@ function sanitizeProduct(node, category) {
     price,
     originalPrice: number(node.priceMax) > price ? number(node.priceMax) : null,
     discount: number(node.priceDiscountRate),
-    sales: number(node.sales),
-    rating: number(node.ratingStar),
+    sales,
+    rating,
     commissionRate: number(node.commissionRate),
     sellerCommissionRate: number(node.sellerCommissionRate),
     shopeeCommissionRate: number(node.shopeeCommissionRate),
