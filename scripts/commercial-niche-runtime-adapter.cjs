@@ -7,7 +7,7 @@ const {
 } = require('./commercial-niche-config.cjs');
 const { getMarketplaceNicheContract } = require('./commercial-niche-contracts.cjs');
 const { buildFirstDiscoveryPlan } = require('./first-discovery-quality.cjs');
-const { getMercadoLivreCertifiedFamilies } = require('./mercadolivre-domain-category-map-v1.cjs');
+const { getMercadoLivreCertifiedFamilies } = require('./mercadolivre-engine.cjs');
 
 function normalizeNicheKey(value) {
   return String(value || '')

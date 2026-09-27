@@ -1,7 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { runAmazonScenarioDryRun } = require('../amazon-native-top20-v5.cjs');
+const { it } = require('node:test');
+const { runAmazonScenarioDryRun } = require('../amazon-engine.cjs');
 const { runDiscoveryOnlyCycle } = require('../oracle-worker-discovery-only.cjs');
 
 const scenario = {

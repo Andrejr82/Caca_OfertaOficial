@@ -17,7 +17,7 @@ function createRadarAdminClient(env = process.env) {
 
 function buildDefaultDependencies() {
   const engine = require('./oracle-trends-radar-engine.cjs');
-  const amazon = require('./amazon-native-top20-v5.cjs');
+  const amazon = require('./amazon-engine.cjs');
   const runtime = require('./oracle-trends-radar-seven-niches-runtime.cjs');
   const contracts = require('./commercial-niche-contracts.cjs');
   const nicheConfig = require('./commercial-niche-config.cjs');

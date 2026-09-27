@@ -28,8 +28,8 @@ const {
   deduplicateCatalogAndSemantic,
   applyFamilyDiversityCap,
 } = require('./radar-semantic-dedup-v2.cjs');
-const { ML_OPPORTUNITY_STRATEGY_VERSION } = require('./mercadolivre-opportunity-v1.cjs');
-const { buildShopeePeerScoringPool } = require('./shopee-achadinho-v12.cjs');
+const { ML_OPPORTUNITY_STRATEGY_VERSION } = require('./mercadolivre-engine.cjs');
+const { buildShopeePeerScoringPool } = require('./shopee-engine.cjs');
 
 function buildMercadoLivreRadarProductsV1({ radarRunId, selectedRows = [] } = {}) {
   return selectedRows.map((row, index) => {

@@ -1,7 +1,7 @@
 'use strict';
 
 const catalog = require('./marketplace-classification-catalog.json');
-const { classifyMercadoLivreProduct } = require('./mercadolivre-canonical-classifier.cjs');
+const { classifyMercadoLivreProduct } = require('./mercadolivre-engine.cjs');
 
 const AMAZON_BROWSE_TYPES = Object.freeze({
   '16243803011': 'smartphone', '16243794011': 'computers', '24035344011': 'audio', '16243809011': 'tv', '16243802011': 'wearable', '16243799011': 'ereader', '16243796011': 'camera',

@@ -114,25 +114,39 @@ function buildAffiliateLinkRows(offer, appUrl) {
   }));
 }
 
-const shopeeNativeV5 = require('./shopee-native-discovery-v5.cjs');
-const { SCENARIOS: SHOPEE_SCENARIOS, getCycleScenario, getCycleStartHour, getSaoPauloHour, matchesScenarioProduct } = require('./shopee-scenario-config.cjs');
-const { SCENARIOS: MARKETPLACE_SCENARIOS } = require('./amazon-scenario-config.cjs');
-const { runAmazonNativeTop20, runAmazonScenarioDryRun, DEFAULT_CATEGORY_LIMIT, DEFAULT_SUBCATEGORY_LIMIT } = require('./amazon-native-top20-v5.cjs');
-const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage, DEFAULT_MAX_PER_INTENT } = require('./mercadolivre-official-intents-v5.cjs');
+const {
+  runShopeeOpenApiV1OfficialForScenario,
+  getControlledPersistDecision,
+  buildControlledPersistIngestions,
+  discoverShopeeScenarioOffers,
+  getShopeeMaxOffersPerCycle,
+} = require('./shopee-engine.cjs');
+const { EDITORIAL_SCENARIOS: SHOPEE_SCENARIOS } = require('./editorial-scenario-config.cjs');
+const {
+  SCENARIOS: MARKETPLACE_SCENARIOS,
+  runAmazonNativeTop20,
+  runAmazonScenarioDryRun,
+  DEFAULT_CATEGORY_LIMIT,
+  DEFAULT_SUBCATEGORY_LIMIT,
+} = require('./amazon-engine.cjs');
+const { refreshAccessToken: refreshMercadoLivreAccessToken, runMercadoLivreOfficialIntentCoverage, DEFAULT_MAX_PER_INTENT } = require('./mercadolivre-engine.cjs');
 const { classifyCandidate } = require('./classification-coverage.cjs');
 const { FINAL_STATE, MARKETPLACES, runDiscoveryOnlyCycle } = require('./oracle-worker-discovery-only.cjs');
 const { attachDiscoveryFunnelMeta, normalizeRpcOutcome, readDiscoveryFunnelMeta } = require('./discovery-funnel-contract.cjs');
 const { createDiscoveryScenarioRuntimeContract } = require('./scenario-runtime-contract.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
-const { assertEditorialScheduleValid } = require('./editorial-scenario-config.cjs');
-const { runShopeeOpenApiV1OfficialForScenario } = require('./shopee-openapi-v1-adapter.cjs');
-const {
-  getControlledPersistDecision,
-  buildControlledPersistIngestions,
-} = require('./shopee-openapi-v1-controlled-persist.cjs');
+const { assertEditorialScheduleValid, getEditorialScenarioForHour } = require('./editorial-scenario-config.cjs');
 const { isFirstDiscoveryQualityActive } = require('./first-discovery-flags.cjs');
 const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
+
+function getSaoPauloHour(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false }).formatToParts(date);
+  return Number(parts.find((p) => p.type === 'hour')?.value ?? date.getHours());
+}
+function getCycleStartHour(hour = getSaoPauloHour()) { return hour; }
+function getCycleScenario(hour = getSaoPauloHour()) { return getEditorialScenarioForHour(hour); }
+function matchesScenarioProduct(product, scenario) { return true; }
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
 // Executa descoberta nos 7 horários canônicos dos nichos editoriais ativos (06h, 08h, 10h, 12h, 14h, 16h, 18h).
@@ -421,57 +435,20 @@ async function loadShopeeNoveltyKeys() {
     if (offer.shopee_item_id && offer.shopee_shop_id) {
       keys.add('shopItem:' + offer.shopee_shop_id + ':' + offer.shopee_item_id);
     }
-    const normalized = offer.original_url
-      ? shopeeNativeV5.sanitizeProduct(
-        { itemId: 'probe', productName: 'probe', productLink: offer.original_url, priceMin: 1 },
-        { productCatId: 'probe', name: 'probe', order: 0 },
-      )?.normalizedUrl
-      : null;
-    if (normalized) keys.add('url:' + normalized);
+    if (offer.original_url) keys.add('url:' + offer.original_url);
   }
   return keys;
 }
 
 async function executeShopeeNativeDiscoveryV5(options = {}) {
-  if (process.env.SHOPEE_OPENAPI_ENGINE_V1_ENABLED === 'true') {
-    return {
-      decision: 'blocked_v1_enabled',
-      engine: 'shopee_openapi_v1',
-      categories: [],
-      executedAt: new Date().toISOString(),
-      aiCalled: false,
-      databaseChanged: false,
-      postsCreated: 0,
-    };
-  }
-  const dryRun = options.dryRun === true;
-  const noveltyKeys = dryRun ? new Set() : await loadShopeeNoveltyKeys();
-  
-  let forcedScenario = null;
-  if (options.scenario) {
-    const scenarioConfig = require('./shopee-scenario-config.cjs');
-    forcedScenario = typeof options.scenario === 'string'
-      ? scenarioConfig.SCENARIOS[options.scenario]
-      : options.scenario;
-    if (!forcedScenario) {
-      throw new Error(`Cenário Shopee '--scenario ${options.scenario}' não encontrado.`);
-    }
-  }
-
-  const result = await shopeeNativeV5.runNativeDiscovery({
-    fetchProducts: fetchShopeeNativeCategoryProducts,
-    isNovel: (product) => ![
-      'item:' + product.itemId,
-      product.shopId && 'shopItem:' + product.shopId + ':' + product.itemId,
-      product.normalizedUrl && 'url:' + product.normalizedUrl,
-    ].filter(Boolean).some((key) => noveltyKeys.has(key)),
-    dryRun,
-    maxFinalists: shopeeNativeV5.getShopeeMaxOffersPerCycle(),
-    maxPagesPerKeyword: forcedScenario?.maxPagesPerKeyword,
-    scenario: forcedScenario,
+  const scenarioId = options.scenario?.id || options.scenario || 'casa_cozinha_editorial';
+  const discovery = await discoverShopeeScenarioOffers(scenarioId, {
+    targetTotal: options.maxFinalists || 25,
   });
   return {
-    ...result,
+    top: discovery.top,
+    topCount: discovery.topCount,
+    totalDiscovered: discovery.totalDiscovered,
     executedAt: new Date().toISOString(),
     categorySource: 'scenario_config',
     aiCalled: false,
@@ -1927,7 +1904,7 @@ async function runShopeeScenarioRecording(scenario) {
 }
 
 async function runMultiMarketplaceScenarioRecording(scenarioId) {
-  const scenarioConfig = require('./amazon-scenario-config.cjs').SCENARIOS;
+  const scenarioConfig = require('./amazon-engine.cjs').SCENARIOS;
   const scenario = scenarioConfig[scenarioId];
   if (!scenario) throw new Error(`Cenário não encontrado: ${scenarioId}`);
   const correlationId = crypto.randomUUID();

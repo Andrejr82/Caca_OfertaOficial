@@ -1,7 +1,7 @@
 'use strict';
 const {isDedicatedTrendRadarRuntimeEnabled,createRadarAdminClient}=require('./oracle-trends-radar-runner-seven-niches.cjs');
 const engineDefault=require('./oracle-trends-radar-engine.cjs');
-const amazonDefault=require('./amazon-native-top20-v5.cjs');
+const amazonDefault=require('./amazon-engine.cjs');
 const runtimeDefault=require('./oracle-trends-radar-seven-niches-runtime.cjs');
 const contractsDefault=require('./commercial-niche-contracts.cjs');
 const nicheConfigDefault=require('./commercial-niche-config.cjs');

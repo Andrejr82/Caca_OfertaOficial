@@ -2,8 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { parseRankingPage, parseSearchPage, runAmazonScenarioDryRun } = require('../amazon-native-top20-v5.cjs');
-const { SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-scenario-config.cjs');
+const { parseRankingPage, parseSearchPage, runAmazonScenarioDryRun, SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-engine.cjs');
 const { getMarketplaceScenarioContract } = require('../marketplace-scenario-contracts.cjs');
 
 test('Discovery por browse node usa URL pública e não gera IDs sintéticos', async () => {

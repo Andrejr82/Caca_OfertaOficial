@@ -5,7 +5,7 @@ const {
   GRAPHQL_CONTRACTS,
   createSignedRequest,
   normalizePriceIntegrity,
-} = require('./shopee-openapi-shadow-engine-v1.cjs');
+} = require('./shopee-engine.cjs');
 
 function normalizeShopeeCommissionPercent(value) {
   const num = engine.parseOptionalNumber(value);

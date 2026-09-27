@@ -22,9 +22,8 @@ const {
   GRAPHQL_CONTRACTS,
   createSignedRequest,
   normalizePriceIntegrity,
-} = require('./shopee-openapi-shadow-engine-v1.cjs');
-const { runMercadoLivreNativeTop20 } = require('./mercadolivre-native-top20-v5.cjs');
-const { runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-official-intents-v5.cjs');
+} = require('./shopee-engine.cjs');
+const { runMercadoLivreNativeTop20, runMercadoLivreOfficialIntentCoverage, refreshAccessToken } = require('./mercadolivre-engine.cjs');
 const {
   COMMERCIAL_OPPORTUNITY_STRATEGY_VERSION,
   calculateCommercialOpportunityScoreV3,

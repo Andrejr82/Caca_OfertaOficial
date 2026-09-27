@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { buildAmazonDiagnostic, evaluateAmazonProductDiagnostics } = require('../amazon-diagnostic.cjs');
+const { buildAmazonDiagnostic, evaluateAmazonProductDiagnostics } = require('../amazon-engine.cjs');
 
 const scenario = {
   id: 'informatica_editorial',

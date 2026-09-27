@@ -1,8 +1,8 @@
 'use strict';
 
-const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
-const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
-const { SEARCH_ALIASES: ML_ALIASES } = require('./mercadolivre-official-intents-v5.cjs');
+const { EDITORIAL_SCENARIOS: SHOPEE_SCENARIOS } = require('./editorial-scenario-config.cjs');
+const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-engine.cjs');
+const { SEARCH_ALIASES: ML_ALIASES } = require('./mercadolivre-engine.cjs');
 const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 
 const MARKETPLACES = ['Shopee', 'Amazon', 'Mercado Livre'];

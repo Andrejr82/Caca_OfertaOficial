@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { SCENARIOS } = require('../shopee-scenario-config.cjs');
-const { SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-scenario-config.cjs');
+const { SCENARIOS } = require('../shopee-engine.cjs');
+const { SCENARIOS: AMAZON_SCENARIOS } = require('../amazon-engine.cjs');
 const {
   MARKETPLACES,
   getMarketplaceScenarioContract,

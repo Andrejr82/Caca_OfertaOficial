@@ -1,7 +1,7 @@
 'use strict';
 
-const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-scenario-config.cjs');
-const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-scenario-config.cjs');
+const { SCENARIOS: SHOPEE_SCENARIOS } = require('./shopee-engine.cjs');
+const { SCENARIOS: AMAZON_SCENARIOS } = require('./amazon-engine.cjs');
 const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 const {
   EDITORIAL_SCENARIOS,

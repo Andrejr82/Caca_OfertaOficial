@@ -11,7 +11,7 @@ const { validateProductTitle } = require('./product-title-quality.cjs');
 const { interleavePublicationQueue } = require('./publication-queue.cjs');
 const { selectBestVariants } = require('./family-variant-selector.cjs');
 const { filterFreshCandidates } = require('./offer-freshness-gate.cjs');
-const { selectCuratedFamilyRepresentatives } = require('./shopee-curated-family-selection.cjs');
+const { selectCuratedFamilyRepresentatives } = require('./shopee-engine.cjs');
 const { evaluateSearchQuality } = require('./marketplace-search-quality.cjs');
 const { classifyCandidate, buildClassificationCoverage } = require('./classification-coverage.cjs');
 const {

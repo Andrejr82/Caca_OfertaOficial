@@ -2,7 +2,7 @@ const os = require('os');
 os.freemem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 os.totalmem = () => 4 * 1024 * 1024 * 1024; // 4 GB
 const express = require('express');
-const { resolvePriceAuthority } = require('./shopee-price-authority.cjs');
+const { resolvePriceAuthority } = require('./shopee-engine.cjs');
 const axios = require('axios');
 require('dotenv').config({ path: '.env.local' });
 const {
