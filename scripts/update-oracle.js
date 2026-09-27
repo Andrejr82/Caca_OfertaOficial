@@ -82,14 +82,7 @@ async function runUpdate() {
 
   // Passo 3: Gravar manifesto .runtime-release.json
   console.log('\n[Passo 3/5] Gravando manifesto .runtime-release.json...');
-  const manifest = {
-    commit: remoteCommit,
-    deployed_at: new Date().toISOString(),
-    deployed_by: 'update-oracle-script',
-  };
-  const manifestJson = JSON.stringify(manifest, null, 2);
-  const base64Manifest = Buffer.from(manifestJson).toString('base64');
-  sshExec(`echo "${base64Manifest}" | base64 -d > "${PROJECT_DIR}/.runtime-release.json"`);
+  sshExec(`cd "${PROJECT_DIR}" && node -e 'require("fs").writeFileSync(".runtime-release.json", JSON.stringify({commit: process.argv[1], deployed_at: new Date().toISOString()}, null, 2))' "${remoteCommit}"`);
 
   // Passo 4: Reiniciar processos PM2
   console.log('\n[Passo 4/5] Reiniciando processos PM2 na VPS...');
