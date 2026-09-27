@@ -505,12 +505,33 @@ async function runMercadoLivreOfficialIntentCoverage(options = {}) {
     fetchImpl: options.fetchImpl,
   });
 
+  const products = (discovery.top || []).map((p) => ({
+    item_id: p.itemId,
+    title: p.productName,
+    current_price: p.currentPrice,
+    old_price: p.oldPrice,
+    discount_percent: p.discountPercent,
+    permalink: p.permalink,
+    thumbnail: p.imageUrl,
+    image_url: p.imageUrl,
+    sold_quantity: p.sales,
+    rating_average: p.ratingStar,
+    is_full: p.isFull,
+    official_store: p.officialStore,
+    category_id: p.categoryId,
+    category_name: p.categoryName,
+    source_position: p.sourcePosition || 1,
+  }));
+
   return {
     scenarioId,
+    keywords: options.keywords || [],
     candidates: discovery.top,
     top: discovery.top,
+    products,
     totalDiscovered: discovery.totalDiscovered,
     calls: discovery.calls,
+    generated_at: new Date().toISOString(),
   };
 }
 
