@@ -22,6 +22,7 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const cheerio = require('cheerio');
 const { validateProductTitle } = require('./product-title-quality.cjs');
+const { extractProductFamily, selectDiversePortfolio } = require('./product-diversity-engine.cjs');
 const { EDITORIAL_SCENARIOS } = require('./editorial-scenario-config.cjs');
 const { buildCommercialScenarioMap } = require('./commercial-niche-scenario-bridge.cjs');
 
@@ -517,7 +518,7 @@ async function discoverAmazonScenarioOffers(scenarioId, options = {}) {
   const seenAsins = new Set();
   const collected = [];
 
-  for (const keyword of keywords.slice(0, 4)) {
+  for (const keyword of keywords) {
     try {
       const res = await searchAmazonOffers({
         keyword,
@@ -541,7 +542,10 @@ async function discoverAmazonScenarioOffers(scenarioId, options = {}) {
   }
 
   collected.sort((a, b) => b.score - a.score);
-  const topProducts = collected.slice(0, targetTotal);
+  const topProducts = selectDiversePortfolio(collected, {
+    maxPerFamily: options.maxPerFamily || 3,
+    targetTotal,
+  });
 
   return {
     scenarioId,
@@ -970,4 +974,6 @@ module.exports = {
   buildAmazonDiagnostic,
   evaluateAmazonProductDiagnostics,
   matchingTerms,
+  extractProductFamily,
+  selectDiversePortfolio,
 };

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const { createClient } = require('@supabase/supabase-js');
 const { validateProductTitle } = require('./product-title-quality.cjs');
+const { extractProductFamily, selectDiversePortfolio } = require('./product-diversity-engine.cjs');
 const { EDITORIAL_SCENARIOS, EDITORIAL_SCENARIO_CATALOG } = require('./editorial-scenario-config.cjs');
 
 const API_ROOT = 'https://api.mercadolibre.com';
@@ -394,8 +395,9 @@ async function searchMercadoLivreOffers({
 
 async function discoverMercadoLivreScenarioOffers(
   scenarioId,
-  { targetTotal = 25, env = process.env, fetchImpl = global.fetch } = {}
+  options = {}
 ) {
+  const { targetTotal = 25, env = process.env, fetchImpl = global.fetch, maxPerFamily = 3 } = options;
   const scenario =
     EDITORIAL_SCENARIOS[scenarioId] ||
     EDITORIAL_SCENARIO_CATALOG[scenarioId] ||
@@ -418,8 +420,6 @@ async function discoverMercadoLivreScenarioOffers(
           pool.set(prod.itemId, prod);
         }
       }
-
-      if (pool.size >= targetTotal * 2) break;
     } catch (err) {
       calls.push({ keyword: kw, error: err.message, status: 500 });
     }
@@ -427,7 +427,10 @@ async function discoverMercadoLivreScenarioOffers(
 
   const allCandidates = Array.from(pool.values());
   allCandidates.sort((a, b) => b.score - a.score);
-  const top = allCandidates.slice(0, targetTotal);
+  const top = selectDiversePortfolio(allCandidates, {
+    maxPerFamily: options.maxPerFamily || maxPerFamily,
+    targetTotal,
+  });
 
   return {
     scenarioId: scenario.id,
@@ -735,4 +738,6 @@ module.exports = {
   runMercadoLivreNativeTop20,
   classifyMercadoLivreProduct,
   getMercadoLivreCertifiedFamilies,
+  extractProductFamily,
+  selectDiversePortfolio,
 };

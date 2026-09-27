@@ -3,6 +3,10 @@
 const crypto = require('node:crypto');
 const { validateProductTitle } = require('./product-title-quality.cjs');
 const {
+  extractProductFamily,
+  selectDiversePortfolio,
+} = require('./product-diversity-engine.cjs');
+const {
   EDITORIAL_SCENARIOS,
   EDITORIAL_SCENARIO_CATALOG,
   getEditorialScenarioForHour,
@@ -74,13 +78,20 @@ function createSignedHeaders(bodyString, { appId, appSecret }) {
 }
 
 async function callShopeeGraphQL(operationName, query, variables = {}, options = {}) {
-  const { appId, appSecret } = getShopeeCredentials(options.env || process.env);
+  const fetchImpl = options.fetchImpl || globalThis.fetch || fetch;
+  let headers = { 'Content-Type': 'application/json' };
+  try {
+    const { appId, appSecret } = getShopeeCredentials(options.env || process.env);
+    const body = JSON.stringify({ operationName, query, variables });
+    headers = createSignedHeaders(body, { appId, appSecret });
+  } catch (err) {
+    if (!options.fetchImpl) throw err;
+  }
   const body = JSON.stringify({ operationName, query, variables });
-  const headers = createSignedHeaders(body, { appId, appSecret });
   const timeoutMs = options.timeoutMs || 25000;
   const signal = options.signal || AbortSignal.timeout(timeoutMs);
 
-  const response = await fetch(SHOPEE_GRAPHQL_URL, {
+  const response = await fetchImpl(SHOPEE_GRAPHQL_URL, {
     method: 'POST',
     headers,
     body,
@@ -258,8 +269,8 @@ async function discoverShopeeScenarioOffers(scenarioId, options = {}) {
   const seenItemIds = new Set();
   const calls = [];
 
-  // Busca concorrente controlada por palavras-chave
-  const concurrency = 3;
+  // Busca concorrente controlada por palavras-chave (sem parada prematura para cobrir 100% do catálogo)
+  const concurrency = 4;
   for (let i = 0; i < keywords.length; i += concurrency) {
     const batch = keywords.slice(i, i + concurrency);
     const results = await Promise.allSettled(
@@ -278,7 +289,7 @@ async function discoverShopeeScenarioOffers(scenarioId, options = {}) {
     );
 
     for (const result of results) {
-      if (result.status === 'fulfilled') {
+      if (result.status === 'fulfilled' && Array.isArray(result.value)) {
         for (const item of result.value) {
           if (!seenItemIds.has(item.itemId)) {
             seenItemIds.add(item.itemId);
@@ -287,23 +298,16 @@ async function discoverShopeeScenarioOffers(scenarioId, options = {}) {
         }
       }
     }
-
-    if (allDiscovered.length >= targetTotal * 2) break;
   }
 
   // Ordenação por relevância e oportunidade comercial
   const sorted = [...allDiscovered].sort((a, b) => b.score - a.score || b.sales - a.sales);
 
-  // Aplicação de diversidade por loja (máximo 4 itens da mesma loja)
-  const shopCounts = new Map();
-  const top = [];
-  for (const item of sorted) {
-    const count = shopCounts.get(item.shopId) || 0;
-    if (count >= 4) continue;
-    shopCounts.set(item.shopId, count + 1);
-    top.push(item);
-    if (top.length >= targetTotal) break;
-  }
+  // Aplicação de diversidade por família de produtos (evita monopólio de uma só subcategoria)
+  const top = selectDiversePortfolio(sorted, {
+    maxPerFamily: options.maxPerFamily || 3,
+    targetTotal,
+  });
 
   return {
     scenarioId,
@@ -701,6 +705,8 @@ module.exports = {
   getCycleScenario,
   getScenarioWindow,
   getSaoPauloHour,
+  extractProductFamily,
+  selectDiversePortfolio,
   buildProductOfferPayload,
   sanitizeProduct,
   calculateObjectiveScore,
