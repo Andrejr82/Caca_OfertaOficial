@@ -4,7 +4,7 @@ const {
   buildProductOfferPayload,
   sanitizeProduct,
   calculateObjectiveScore,
-} = require("../../scripts/shopee-native-discovery-v5.cjs");
+} = require("../../scripts/shopee-engine.cjs");
 
 describe("Shopee Dynamic GraphQL Discovery V5", () => {
   it("buildProductOfferPayload supports dynamic page and sortType", () => {

@@ -7,8 +7,8 @@ const {
   ML_RADAR_INTENT_MACRO_GROUPS,
   collectMercadoLivreRadarDiscoveryV1,
   normalizeMercadoLivreDiscoveryProduct,
-} = require("../../../scripts/mercadolivre-radar-discovery-v1.cjs");
-const { SEARCH_ALIASES } = require("../../../scripts/mercadolivre-official-intents-v5.cjs");
+  SEARCH_ALIASES,
+} = require("../../../scripts/mercadolivre-engine.cjs");
 
 describe("Mercado Livre Radar Discovery V1", () => {
   it("uses a compact official intent set covering at least five macro groups", () => {

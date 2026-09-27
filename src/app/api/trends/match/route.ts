@@ -16,8 +16,7 @@ export async function POST() {
     const { data: { user } } = await client.auth.getUser();
     if (!user) return NextResponse.json({ ok: false, message: "Não autenticado." }, { status: 401 });
     const accessToken = await getValidMLAccessToken(user.id) || process.env.MERCADO_LIVRE_ACCESS_TOKEN || await getAppMLAccessToken();
-    // The maintained official intent service remains the ML client boundary.
-    const mercadoLivre = require("../../../../../scripts/mercadolivre-official-intents-v5.cjs") as {
+    const mercadoLivre = require("../../../../../scripts/mercadolivre-engine.cjs") as {
       runMercadoLivreOfficialIntentCoverage(input: { keywords: string[]; accessToken: string; maxPerIntent: number; delayMs: number }): Promise<{ products?: ExistingMercadoLivreProduct[] }>;
     };
     const summary = await matchTrendSignalsForUser(client, user.id, async (classification) => {

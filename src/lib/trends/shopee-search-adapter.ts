@@ -107,7 +107,7 @@ export async function searchShopeeOfficialV1(query: string, categoryKey: string 
   
   if (!appId || !appSecret) throw new Error("Shopee OpenAPI V1 não configurada.");
   
-  const shopeeV1 = require("../../../scripts/shopee-openapi-shadow-engine-v1.cjs") as {
+  const shopeeV1 = require("../../../scripts/shopee-engine.cjs") as {
     createSignedRequest(input: { appId: string; appSecret: string; request: (input: { body: string; headers: Record<string, string> }) => Promise<{ status: number; data: unknown }> }): (operation: string, query: string, variables: Record<string, unknown>) => Promise<{ status: number; data: any }>;
     GRAPHQL_CONTRACTS: { productOfferV2: { query: string } };
   };

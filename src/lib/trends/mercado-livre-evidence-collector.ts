@@ -375,7 +375,7 @@ export async function normalizeMercadoLivreBestSellerEvidence(
 }
 
 function officialService(): MercadoLivreOfficialService {
-  return require("../../../scripts/mercadolivre-official-intents-v5.cjs") as MercadoLivreOfficialService;
+  return require("../../../scripts/mercadolivre-engine.cjs") as MercadoLivreOfficialService;
 }
 
 async function loadHighlights(categoryId: string, accessToken: string): Promise<unknown> {

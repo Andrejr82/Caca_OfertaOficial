@@ -603,6 +603,78 @@ function getCycleScenario(startHour, durationHours = 4) {
   };
 }
 
+function buildProductOfferPayload(keyword, productCatId, page = 1, limit = 20, sortType = 5) {
+  return {
+    operationName: 'ShopeePromotionOffers',
+    query: PRODUCT_OFFER_QUERY,
+    variables: {
+      keyword,
+      productCatId,
+      page,
+      limit,
+      sortType,
+    },
+  };
+}
+
+function sanitizeProduct(node, options = {}) {
+  if (!node || !node.itemId || !node.productName) return null;
+  const rating = parseFloat(node.ratingStar) || 0;
+  const sales = parseInt(node.sales, 10) || 0;
+  const shopTypes = Array.isArray(node.shopType) ? node.shopType.map(Number) : [];
+  const isOfficialOrPreferred = shopTypes.some((t) => [1, 2, 3].includes(t));
+  const isTrustedSeller = rating >= 4.5 && sales >= 50;
+
+  if (!isOfficialOrPreferred && !isTrustedSeller) {
+    return null;
+  }
+
+  const price = parseFloat(node.priceMin || node.price || 0);
+  const discount = parseFloat(node.priceDiscountRate || node.discount || 0);
+
+  return {
+    itemId: String(node.itemId),
+    productName: String(node.productName),
+    productLink: node.productLink || '',
+    price,
+    discount,
+    sales,
+    ratingStar: rating,
+    commissionRate: parseFloat(node.commissionRate || 0),
+    category: options.name || '',
+    categoryId: options.productCatId || null,
+  };
+}
+
+function calculateObjectiveScore(product) {
+  if (!product) return 0;
+  const discount = product.discount || product.discountPercent || 0;
+  const rating = product.ratingStar || product.rating || 0;
+  const sales = product.sales || 0;
+  return Number((discount * 0.4 + rating * 10 + Math.min(sales, 1000) * 0.05).toFixed(2));
+}
+
+function normalizeProductOffer(rawNode, options = {}) {
+  const norm = normalizeShopeeProduct(rawNode, options);
+  const price = norm.currentPrice || Number(rawNode.price || 0);
+  const priceMin = Number(rawNode.priceMin || 0);
+  const ratingStar = norm.ratingStar || 0;
+  const commissionPercent = norm.commissionPercent || 0;
+
+  return {
+    accepted: true,
+    product: {
+      ...norm,
+      itemId: String(rawNode.itemId || norm.itemId),
+      price,
+      priceMin,
+      ratingStar,
+      commissionPercent,
+      commissionUnresolved: commissionPercent === 0,
+    },
+  };
+}
+
 module.exports = {
   GRAPHQL_CONTRACTS,
   PRODUCT_OFFER_QUERY,
@@ -611,6 +683,7 @@ module.exports = {
   createSignedRequest,
   normalizePriceIntegrity,
   normalizeShopeeProduct,
+  normalizeProductOffer,
   isEligibleShopeeCandidate,
   selectCuratedFamilyRepresentatives,
   resolvePriceAuthority,
@@ -628,5 +701,8 @@ module.exports = {
   getCycleScenario,
   getScenarioWindow,
   getSaoPauloHour,
+  buildProductOfferPayload,
+  sanitizeProduct,
+  calculateObjectiveScore,
 };
 

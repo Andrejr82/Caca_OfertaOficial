@@ -1217,8 +1217,7 @@ async function runDiscoveryOnlyCycle({ tenantId, correlationId, requestedAt, dis
       }
 
       let deferredForQueue = previouslyDeferred;
-    const shopeeV1Enabled = marketplace === 'Shopee'
-        && require('./shopee-v1-flags.cjs').getShopeeV1Flags().engine;
+      const shopeeV1Enabled = marketplace === 'Shopee';
       const noCommercialCap = Number.MAX_SAFE_INTEGER;
       const effectiveCopyQueueOptions = shopeeV1Enabled
         ? { ...(copyQueueOptions || {}), maxTotal: noCommercialCap, maxPerMarketplace: noCommercialCap, maxPerCategory: noCommercialCap }

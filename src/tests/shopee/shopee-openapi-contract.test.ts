@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createSignedRequest, GRAPHQL_CONTRACTS, normalizeProductOffer } from '../../../scripts/shopee-openapi-shadow-engine-v1.cjs';
+import { createSignedRequest, GRAPHQL_CONTRACTS, normalizeProductOffer } from '../../../scripts/shopee-engine.cjs';
 
 describe('Shopee OpenAPI V1 Contract Tests (T41)', () => {
   it('assinatura HMAC com relógio controlado, operação e variáveis corretas', async () => {

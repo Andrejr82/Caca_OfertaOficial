@@ -1,6 +1,6 @@
 import type { TrendDirectEvidence, TrendSignal } from "@/core/trends/types";
 import { processRawOffers, RawShopeeOffer } from "@/lib/shopee/ranking/search-service";
-import * as shopeeEngineModule from "../../../scripts/shopee-openapi-shadow-engine-v1.cjs";
+import * as shopeeEngineModule from "../../../scripts/shopee-engine.cjs";
 
 export type ShopeeEvidenceSource = "shopee_product_offer" | "shopee_campaign";
 export type ShopeeEvidenceStatus = "ok" | "empty" | "failed";

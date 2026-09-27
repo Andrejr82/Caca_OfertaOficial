@@ -528,7 +528,104 @@ function classifyMercadoLivreProduct(item) {
 
 const DEFAULT_MAX_PER_INTENT = 30;
 const ML_OPPORTUNITY_STRATEGY_VERSION = 'mercadolivre-opportunity/v1';
-const SEARCH_ALIASES = Object.freeze({});
+
+const ML_RADAR_DISCOVERY_INTENTS = Object.freeze([
+  'lixeira inox pedal',
+  'mop giratorio',
+  'jogo de lencol percal',
+  'protetor solar facial',
+  'vitamina c facial',
+  'secador de cabelo profissional',
+  'mouse sem fio',
+  'teclado mecanico',
+  'mochila impermeavel notebook',
+  'tenis masculino caminhada',
+  'mala de bordo 10kg',
+]);
+
+const ML_RADAR_INTENT_MACRO_GROUPS = Object.freeze({
+  'lixeira inox pedal': 'casa_cozinha',
+  'mop giratorio': 'casa_cozinha',
+  'jogo de lencol percal': 'casa_cozinha',
+  'protetor solar facial': 'beleza_cuidados',
+  'vitamina c facial': 'beleza_cuidados',
+  'secador de cabelo profissional': 'beleza_cuidados',
+  'mouse sem fio': 'informatica',
+  'teclado mecanico': 'informatica',
+  'mochila impermeavel notebook': 'moda_acessorios',
+  'tenis masculino caminhada': 'moda_acessorios',
+  'mala de bordo 10kg': 'viagem',
+});
+
+const SEARCH_ALIASES = Object.freeze({
+  'lixeira inox pedal': ['lixeira inox pedal', 'lixeira automatica inox'],
+  'mop giratorio': ['mop giratorio', 'esfregao mop'],
+  'jogo de lencol percal': ['jogo de lencol percal', 'jogo lencol casal'],
+  'protetor solar facial': ['protetor solar facial', 'protetor solar'],
+  'vitamina c facial': ['vitamina c facial', 'serum vitamina c'],
+  'secador de cabelo profissional': ['secador de cabelo profissional', 'secador cabelo'],
+  'mouse sem fio': ['mouse sem fio', 'mouse wireless'],
+  'teclado mecanico': ['teclado mecanico', 'teclado gamer mecanico'],
+  'mochila impermeavel notebook': ['mochila impermeavel notebook', 'mochila notebook'],
+  'tenis masculino caminhada': ['tenis masculino caminhada', 'tenis caminhada'],
+  'mala de bordo 10kg': ['mala de bordo 10kg', 'mala de bordo'],
+});
+
+function normalizeMercadoLivreDiscoveryProduct(product) {
+  const currentPrice = Number(product.current_price || product.price || 0);
+  const oldPrice = product.old_price != null ? Number(product.old_price) : (product.original_price != null ? Number(product.original_price) : null);
+  const sourceIntent = product.intent || product.subcategory || 'geral';
+  const macroGroup = ML_RADAR_INTENT_MACRO_GROUPS[sourceIntent] || 'geral';
+
+  return {
+    itemId: product.item_id || product.id || null,
+    productId: product.product_id || null,
+    productName: product.product_name || product.title || '',
+    categoryName: product.category_name || null,
+    currentPrice,
+    oldPrice,
+    discountPercent: product.discount_percent || 0,
+    sourceIntent,
+    macroGroup,
+    domainId: product.domain_id || null,
+    categoryId: product.category_id || null,
+    imageUrl: product.image_url || product.image || null,
+    productUrl: product.product_url || product.canonical_url || null,
+    sourcePosition: product.source_position || product.rank || null,
+    commissionPercent: 0,
+    sales: null,
+    rating: null,
+  };
+}
+
+async function collectMercadoLivreRadarDiscoveryV1({ accessToken, tokenProvider, coverageRunner, env } = {}) {
+  let token = accessToken;
+  if (!token && typeof tokenProvider === 'function') {
+    token = await tokenProvider({ env, persist: false });
+  }
+
+  const runner = coverageRunner || (async (input) => runMercadoLivreOfficialIntentCoverage({ ...input, env }));
+  const result = await runner({
+    keywords: ML_RADAR_DISCOVERY_INTENTS,
+    accessToken: token,
+    maxPerIntent: 4,
+    delayMs: 200,
+  });
+
+  const rawProducts = result?.products || result?.top || [];
+  const seenIds = new Set();
+  const validProducts = [];
+
+  for (const p of rawProducts) {
+    const id = p.item_id || p.id;
+    const price = Number(p.current_price || p.price || 0);
+    if (!id || seenIds.has(id) || price <= 0) continue;
+    seenIds.add(id);
+    validProducts.push(normalizeMercadoLivreDiscoveryProduct(p));
+  }
+
+  return validProducts;
+}
 
 function getMercadoLivreCertifiedFamilies() {
   return [];
@@ -597,11 +694,15 @@ module.exports = {
   API_ROOT,
   DEFAULT_MAX_PER_INTENT,
   ML_OPPORTUNITY_STRATEGY_VERSION,
+  ML_RADAR_DISCOVERY_INTENTS,
+  ML_RADAR_INTENT_MACRO_GROUPS,
   SEARCH_ALIASES,
   refreshAccessToken,
   persistRefreshedCredentials,
   apiGet,
   normalizeMercadoLivreProduct,
+  normalizeMercadoLivreDiscoveryProduct,
+  collectMercadoLivreRadarDiscoveryV1,
   isEligibleMercadoLivreCandidate,
   calculateMercadoLivreScore,
   searchMercadoLivreOffers,
