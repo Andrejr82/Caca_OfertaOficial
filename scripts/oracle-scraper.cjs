@@ -770,8 +770,8 @@ function normalizeMercadoLivreCandidate(product, intent = null) {
   });
   return {
     intent: product.intent || intent,
-    sourceItemId: product.item_id || product.product_id || product.product_url,
-    sourceUrl: product.product_url,
+    sourceItemId: product.item_id || product.product_id || product.product_url || product.permalink,
+    sourceUrl: product.product_url || product.permalink || product.source_url,
     title: product.title,
     imageUrl: product.image_url,
     currentPrice,

@@ -512,6 +512,8 @@ async function runMercadoLivreOfficialIntentCoverage(options = {}) {
     old_price: p.oldPrice,
     discount_percent: p.discountPercent,
     permalink: p.permalink,
+    product_url: p.permalink,
+    source_url: p.permalink,
     thumbnail: p.imageUrl,
     image_url: p.imageUrl,
     sold_quantity: p.sales,
