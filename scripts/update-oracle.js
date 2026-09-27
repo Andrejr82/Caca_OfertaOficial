@@ -88,7 +88,8 @@ async function runUpdate() {
     deployed_by: 'update-oracle-script',
   };
   const manifestJson = JSON.stringify(manifest, null, 2);
-  sshExec(`cat << 'EOF' > "${PROJECT_DIR}/.runtime-release.json"\n${manifestJson}\nEOF`);
+  const base64Manifest = Buffer.from(manifestJson).toString('base64');
+  sshExec(`echo "${base64Manifest}" | base64 -d > "${PROJECT_DIR}/.runtime-release.json"`);
 
   // Passo 4: Reiniciar processos PM2
   console.log('\n[Passo 4/5] Reiniciando processos PM2 na VPS...');
