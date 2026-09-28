@@ -597,7 +597,7 @@ function getScenarioWindow(currentHour) {
   const hour = ((Number(currentHour) % 24) + 24) % 24;
   const window = SCENARIO_WINDOWS.find((w) => hour >= w.start && hour < w.end);
   if (window) return window;
-  const scenario = getEditorialScenarioForHour(hour);
+  const scenario = getEditorialScenarioForDiscoveryHour(hour) || getEditorialScenarioForHour(hour);
   if (!scenario) return null;
   return { start: hour, end: hour + 1, scenarioId: scenario.id, label: scenario.name };
 }

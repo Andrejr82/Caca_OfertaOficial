@@ -136,7 +136,7 @@ const { attachDiscoveryFunnelMeta, normalizeRpcOutcome, readDiscoveryFunnelMeta 
 const { createDiscoveryScenarioRuntimeContract } = require('./scenario-runtime-contract.cjs');
 const { withTimeout, runWithWatchdog, createStageLogger } = require('./oracle-resilience.cjs');
 const { getMarketplaceScenarioContract, matchesMarketplaceContract } = require('./marketplace-scenario-contracts.cjs');
-const { assertEditorialScheduleValid, getEditorialScenarioForHour } = require('./editorial-scenario-config.cjs');
+const { assertEditorialScheduleValid, getEditorialScenarioForHour, getEditorialScenarioForDiscoveryHour } = require('./editorial-scenario-config.cjs');
 const { isFirstDiscoveryQualityActive } = require('./first-discovery-flags.cjs');
 const { resolveNichePlanFromLegacyScenario } = require('./commercial-niche-runtime-adapter.cjs');
 
@@ -145,7 +145,7 @@ function getSaoPauloHour(date = new Date()) {
   return Number(parts.find((p) => p.type === 'hour')?.value ?? date.getHours());
 }
 function getCycleStartHour(hour = getSaoPauloHour()) { return hour; }
-function getCycleScenario(hour = getSaoPauloHour()) { return getEditorialScenarioForHour(hour); }
+function getCycleScenario(hour = getSaoPauloHour()) { return getEditorialScenarioForDiscoveryHour(hour); }
 function matchesScenarioProduct(product, scenario) { return true; }
 
 const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
@@ -177,7 +177,7 @@ function selectOracleReleaseId({ gitHead = '', env = process.env, releaseData = 
 function getActiveMarketplaceScenario(marketplace = 'Shopee') {
   const routed = CLI_SCENARIO_ID
     ? (MARKETPLACE_SCENARIOS[CLI_SCENARIO_ID] || SHOPEE_SCENARIOS[CLI_SCENARIO_ID])
-    : getCycleScenario(getSaoPauloHour(), 1);
+    : getCycleScenario(getSaoPauloHour());
   const scenarioId = routed?.scenarioId || routed?.id;
   const contract = getMarketplaceScenarioContract(scenarioId, marketplace) || routed || null;
   if (isFirstDiscoveryQualityActive() && contract) {
@@ -1760,7 +1760,7 @@ async function runScrapingCycleCore() {
   const routedScenario = CLI_SCENARIO_ID
     ? (MARKETPLACE_SCENARIOS[CLI_SCENARIO_ID] || SHOPEE_SCENARIOS[CLI_SCENARIO_ID])
     : null;
-  const cycleScenario = routedScenario || getCycleScenario(discoveryHour, 1);
+  const cycleScenario = routedScenario || getCycleScenario(discoveryHour);
   const plannedScenarioId = cycleScenario?.scenarioId || cycleScenario?.id || null;
 
   let releaseData = {};
