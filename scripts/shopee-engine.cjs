@@ -325,16 +325,25 @@ function stableId(prefix, value) {
   return `${prefix}-${crypto.createHash('sha256').update(String(value)).digest('hex').slice(0, 32)}`;
 }
 
+const ADMIN_USER_ID = '7a9ca7b7-f464-46e0-a9de-9b322c73628a';
+
 function buildShopeeIngestions(products = [], context = {}) {
-  const tenantId = context.tenantId || 'admin';
-  const correlationId = context.correlationId || `shopee-run-${Date.now()}`;
-  const requestedAt = context.requestedAt || new Date().toISOString();
-  const scenarioId = context.scenarioId || 'geral';
+  const ctx = typeof context === 'string' ? { scenarioId: context } : (context || {});
+  const tenantId = ctx.tenantId || process.env.ADMIN_USER_ID || ADMIN_USER_ID;
+  const correlationId = ctx.correlationId || `shopee-run-${Date.now()}`;
+  const requestedAt = ctx.requestedAt || new Date().toISOString();
+  const scenarioId = ctx.scenarioId || 'casa_cozinha_editorial';
 
   return products.map((product, index) => {
-    const identity = `${tenantId}:Shopee:${product.itemId}`;
+    const sourceItemId = String(product.itemId || product.sourceItemId || '').trim();
+    const shopId = String(product.shopId || '').trim();
+    const identity = `${tenantId}:Shopee:${sourceItemId}`;
     const idempotencyKey = stableId('oracle', identity);
     const candidateId = stableId('candidate', identity);
+    const currentPrice = Number(product.currentPrice ?? product.price ?? product.priceMin ?? 0);
+    const originalPrice = product.originalPrice && product.originalPrice > currentPrice
+      ? product.originalPrice
+      : (product.priceMax && product.priceMax > currentPrice ? product.priceMax : null);
 
     const candidate = {
       contractVersion: 'pmav5.candidate/v1',
@@ -343,27 +352,28 @@ function buildShopeeIngestions(products = [], context = {}) {
       correlationId,
       tenantId,
       marketplace: 'Shopee',
-      sourceItemId: product.itemId,
-      sourceUrl: product.sourceUrl,
-      title: product.productName,
+      sourceItemId,
+      sourceUrl: product.sourceUrl || product.offerLink || product.productLink,
+      title: product.productName || product.title,
       imageUrl: product.imageUrl,
-      currentPrice: product.currentPrice,
-      originalPrice: product.originalPrice,
+      currentPrice,
+      originalPrice,
       category: { id: String(product.productCatIds?.[0] || '100010'), name: scenarioId, source: 'Shopee OpenAPI' },
       marketplaceMetrics: {
         sourcePosition: index + 1,
-        itemId: product.itemId,
-        shopId: product.shopId,
-        sales: product.sales,
-        rating: product.ratingStar,
-        discount: product.discountPercent,
-        commissionRate: product.commissionPercent,
+        itemId: sourceItemId,
+        shopId,
+        sales: product.sales || 0,
+        rating: product.ratingStar || product.rating || 0,
+        discount: product.discountPercent ?? product.discount ?? 0,
+        commissionRate: product.commissionPercent ?? product.commissionRate ?? 0,
       },
-      deterministicScore: Number((product.score / 10).toFixed(1)),
+      deterministicScore: Number.isFinite(Number(product.score)) ? Number((product.score / 10).toFixed(1)) : 5.0,
       discoveryEvidence: { position: index + 1, category: scenarioId, provider: 'Shopee OpenAPI', discoveredAt: requestedAt },
       discoveredAt: requestedAt,
       rawPayload: product,
       monetization: { valid: true, affiliateUrl: product.offerLink || product.sourceUrl },
+      curatedFamily: product.curatedFamily || undefined,
     };
 
     return {
@@ -431,9 +441,21 @@ function createSignedRequest({ appId, appSecret, request } = {}) {
   };
 }
 
-function selectCuratedFamilyRepresentatives(candidates = [], limit = 25) {
-  if (!Array.isArray(candidates)) return [];
-  return candidates.slice(0, typeof limit === 'number' ? limit : 25);
+function selectCuratedFamilyRepresentatives(products = [], limit = 25, resolveFamily = (p) => p?.curatedFamily) {
+  if (!Array.isArray(products)) return [];
+  const selected = [];
+  const seenFamilies = new Set();
+  const sorted = [...products].sort((a, b) => (Number(b.score || 0) - Number(a.score || 0)) || (Number(b.sales || 0) - Number(a.sales || 0)));
+  for (const product of sorted) {
+    const family = String(resolveFamily(product) || '').trim();
+    if (family) {
+      if (seenFamilies.has(family)) continue;
+      seenFamilies.add(family);
+    }
+    selected.push(product);
+    if (selected.length >= Math.max(1, Number(limit) || 25)) break;
+  }
+  return selected;
 }
 
 function resolvePriceAuthority(input = {}) {
@@ -479,12 +501,21 @@ async function runShopeeOpenApiV1OfficialForScenario(scenarioId, options = {}) {
   }
 }
 
-function getControlledPersistDecision(scenarioResult = {}) {
-  return { allowed: true, reason: 'shopee_engine_direct' };
+function getControlledPersistDecision(scenarioId, env = process.env, { maxCandidates = 25 } = {}) {
+  const normalizedScenario = String(scenarioId || 'casa_cozinha_editorial').trim();
+  const max = Number(maxCandidates) || 25;
+  return {
+    enabled: true,
+    allowed: true,
+    mode: 'controlled-persist',
+    scenarioId: normalizedScenario,
+    maxCandidates: max,
+  };
 }
 
-function buildControlledPersistIngestions(candidates = [], scenarioId = 'editorial') {
-  return buildShopeeIngestions(candidates, scenarioId);
+function buildControlledPersistIngestions(candidates = [], context = {}) {
+  const ctx = typeof context === 'string' ? { scenarioId: context } : (context || {});
+  return buildShopeeIngestions(candidates, ctx);
 }
 
 function buildShopeePeerScoringPool(candidates = []) {

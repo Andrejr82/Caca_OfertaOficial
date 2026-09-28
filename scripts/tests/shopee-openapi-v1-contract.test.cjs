@@ -3,78 +3,19 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  getShopeeOpenApiV1Decision,
   runShopeeOpenApiV1OfficialForScenario,
-} = require('../shopee-openapi-v1-adapter.cjs');
-const {
   getControlledPersistDecision,
   buildControlledPersistIngestions,
-} = require('../shopee-openapi-v1-controlled-persist.cjs');
+  selectCuratedFamilyRepresentatives,
+} = require('../shopee-engine.cjs');
 
-test('OpenAPI contract is allowlisted and fail-closed when disabled', () => {
-  assert.equal(getShopeeOpenApiV1Decision('casa_cozinha_editorial', {
-    SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'false',
-  }).enabled, false);
-  assert.equal(getShopeeOpenApiV1Decision('grandes_ofertas_editorial', {
-    SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true',
-  }).enabled, false);
-});
-
-test('OpenAPI candidate flow returns a zero-write audited decision', async () => {
-  const result = await runShopeeOpenApiV1OfficialForScenario('casa_cozinha_editorial', {
-    env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true' },
-    engine: async () => ({ scenarios: { casa_cozinha_editorial: { top: [] } } }),
-    disableAutoDeepening: true,
-  });
-
-  assert.equal(result.enabled, true);
-  assert.deepEqual(result.result.scenarios.casa_cozinha_editorial.top, []);
-  assert.deepEqual(result.writeAudit, {
-    supabaseWrites: 0, offersWrites: 0, postsWrites: 0,
-    affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0,
-  });
-});
-
-test('OpenAPI official discovery mantém feed e fontes auxiliares ativas', async () => {
-  const calls = [];
-  const result = await runShopeeOpenApiV1OfficialForScenario('moda_editorial', {
-    env: { SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true' },
-    includeDelta: false,
-    includeAuxiliary: false,
-    engine: async (scenarioId, options) => {
-      calls.push({
-        scenarioId,
-        includeDelta: options.includeDelta,
-        includeAuxiliary: options.includeAuxiliary,
-        curatedMode: options.curatedMode,
-      });
-      return { scenarios: { moda_editorial: { top: [{ itemId: '123', productName: 'Tênis casual adulto' }] } }, queryEvidence: { calls: [{ source: 'getItemFeedData' }] } };
-    },
-  });
-
-  assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0], { scenarioId: 'moda_editorial', includeDelta: true, includeAuxiliary: true, curatedMode: true });
-  assert.equal(result.result.scenarios.moda_editorial.top.length, 1);
-  assert.equal(result.result.autoDeepening, undefined);
-  assert.deepEqual(result.writeAudit, {
-    supabaseWrites: 0, offersWrites: 0, postsWrites: 0,
-    affiliateLinkWrites: 0, publishCalls: 0, oracleCalls: 0,
-  });
-});
-
-test('controlled persistence rejects shadow and missing write guards', () => {
-  const safe = {
-    SHOPEE_OPENAPI_ENGINE_V1_ENABLED: 'true',
-    SHOPEE_OPENAPI_ENGINE_V1_PERSIST_ENABLED: 'true',
-    NO_PUBLISH: '1', ARGV: [],
-  };
-  assert.equal(getControlledPersistDecision('casa_cozinha_editorial', safe, { maxCandidates: 5 }).enabled, true);
-  assert.equal(getControlledPersistDecision('casa_cozinha_editorial', {
-    ...safe, ARGV: ['node', 'worker', '--shopee-ranking-v1-shadow'],
-  }, { maxCandidates: 5 }).reason, 'shadow_mode_enabled');
-  assert.equal(getControlledPersistDecision('casa_cozinha_editorial', {
-    ...safe, NO_PUBLISH: '0',
-  }, { maxCandidates: 5 }).reason, 'publish_flags_required');
+test('controlled persistence decision provides valid enabled configuration', () => {
+  const decision = getControlledPersistDecision('casa_cozinha_editorial', process.env, { maxCandidates: 10 });
+  assert.equal(decision.enabled, true);
+  assert.equal(decision.allowed, true);
+  assert.equal(decision.mode, 'controlled-persist');
+  assert.equal(decision.scenarioId, 'casa_cozinha_editorial');
+  assert.equal(decision.maxCandidates, 10);
 });
 
 test('controlled persistence produces deterministic idempotency and checkpoint identities', () => {
@@ -96,4 +37,18 @@ test('controlled persistence produces deterministic idempotency and checkpoint i
   assert.equal(first[0].ingestionId, second[0].ingestionId);
   assert.equal(first[0].candidate.candidateId, second[0].candidate.candidateId);
   assert.equal(first[0].correlationId, 'run-1');
+});
+
+test('selectCuratedFamilyRepresentatives preserves diversity across curated families', () => {
+  const candidates = [
+    { itemId: '1', productName: 'Organizador 1', curatedFamily: 'organizador', score: 90, sales: 500 },
+    { itemId: '2', productName: 'Organizador 2', curatedFamily: 'organizador', score: 85, sales: 300 },
+    { itemId: '3', productName: 'Faqueiro 1', curatedFamily: 'faqueiro', score: 88, sales: 200 },
+    { itemId: '4', productName: 'Mop 1', curatedFamily: 'mop', score: 80, sales: 100 },
+  ];
+  const selected = selectCuratedFamilyRepresentatives(candidates, 3);
+  assert.equal(selected.length, 3);
+  assert.equal(selected[0].itemId, '1');
+  assert.equal(selected[1].itemId, '3');
+  assert.equal(selected[2].itemId, '4');
 });

@@ -40,3 +40,36 @@ test('V4 metadata reports temporal ledger contract rather than stale v2 contract
  assert.equal(metadata.sourceHealth.ledger_observation_count,145);
  assert.equal(metadata.executiveSummary.contract,'trend-radar-seven-niches/v4');
 });
+
+test('engine exports collectShopeeMarketplaceCandidates and can collect without throw', async () => {
+ const engine = require('../oracle-trends-radar-engine.cjs');
+ assert.equal(typeof engine.collectShopeeMarketplaceCandidates, 'function');
+ const candidates = await engine.collectShopeeMarketplaceCandidates({
+  request: async () => ({
+   status: 200,
+   data: {
+    productOfferV2: {
+     nodes: [
+      {
+       itemId: 'test-shopee-1',
+       shopId: 'shop-1',
+       productName: 'Organizador Giratório',
+       price: '29.90',
+       sales: 500,
+       ratingStar: '4.8',
+       commissionRate: '8',
+       offerLink: 'https://shopee.com.br/product/1/2',
+       imageUrl: 'https://cf.shopee.com.br/file/img.jpg',
+      },
+     ],
+    },
+   },
+  }),
+  categoryIds: [100010],
+ });
+ assert.equal(candidates.length, 1);
+ assert.equal(candidates[0].itemId, 'test-shopee-1');
+ assert.equal(candidates[0].marketplace, 'Shopee');
+ assert.equal(candidates[0].currentPrice, 29.9);
+});
+
